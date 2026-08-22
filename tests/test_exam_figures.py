@@ -51,17 +51,22 @@ def test_linjar_ger_tikz():
     assert "plot coordinates" in tikz
 
 
-def test_funktionsgraf_har_tydligt_rutnat_och_flyttad_etikett():
-    """Funktionsgraferna ska ha ett TYDLIGT rutnät (minor- + majorlinjer, inte
-    den gamla svaga gray!30-ramen) och y=f(x)-etiketten placeras dynamiskt (inte
-    längre hårdkodad i övre högra hörnet) så den inte tangerar kurvan."""
+def test_funktionsgraf_foljer_forlagans_axelrecept():
+    """Lärarens egen förlaga sätter grafen som `width = 10cm, height = 8cm,
+    grid = both, axis lines = center` och UTAN kurvetikett. Receptet är hennes
+    och gäller alla funktionsgrafer: tydligt rutnät (minor- + majorlinjer, inte
+    den gamla svaga gray!30-ramen), ingen låda runt rutnätet, ingen $y=f(x)$."""
     tikz = exam_figures.render_figur(_bygg({"typ": "linjar", "k": 1, "m": 0}))
     assert "black!50" in tikz              # majorlinjer, klart synliga
     assert "black!30" in tikz              # minorlinjer, klart synliga
     assert "gray!30" not in tikz           # den gamla svaga ramen är borta
-    assert "$y=f(x)$" in tikz
-    # etiketten är inte längre låst till north east-hörnet
-    assert r"anchor=north east] at (6.85,4.85)" not in tikz
+    # axis lines = center: ingen ram runt rutnätet, bara axlarna genom origo
+    assert "rectangle" not in tikz.split(r"\begin{scope}")[0]
+    assert "--(10.3," in tikz               # x-axelns pil, 10 cm bred ruta
+    assert ",8.3)" in tikz                  # y-axelns pil, 8 cm hög ruta
+    # kurvetiketten är borta — uppgiftstexten säger redan vilken funktion det är
+    assert "$y=f(x)$" not in tikz
+    assert (10.0, 8.0) == (exam_figures.BOXW, exam_figures.BOXH)
 
 
 def test_ickekoordinatfigur_saknar_rutnat():

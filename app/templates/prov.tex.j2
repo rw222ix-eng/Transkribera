@@ -190,6 +190,21 @@ Provet kan ge totalt \textbf{((( forsatt.total ))) poäng}.
 
 ((( former.delfraga(d) )))
 ((( former.stycken(d.stycken) )))
+((# FIGUREN INNE I DELUPPGIFTEN — förlagans 1(a) har grafen här, mellan frågan
+    och svarsraden, medan b)–e) är rena räknefrågor. Samma sättning som på
+    uppgiften: 4 mm luft, centrerad, 2 mm efter. #))
+((* if d.bild_fil *))
+\begin{center}
+  \includegraphics[width=0.7\textwidth]{((( d.bild_fil )))}
+\end{center}
+((* endif *))
+((* if d.figur_tex *))
+\vspace{4mm}
+\begin{center}
+((( d.figur_tex )))
+\end{center}
+\vspace{2mm}
+((* endif *))
 ((( former.tabellbok(d.tabell) )))((( former.steg(d.stegtabell) )))((( former.rutor(d.svarsrutor) )))
 ((* if d.notis *))\pftips{((( d.notis )))}
 ((* endif *))

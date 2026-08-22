@@ -394,8 +394,25 @@ window.BladBygg = (() => {
        uppgifter saknar delp; då står den gamla uppskattningen kvar. */
     const delpoang = k => (u.delp && u.delp[k] != null
       ? u.delp[k] : Math.max(1, Math.round(u.p / u.del.length)));
+    /* FIGUREN INNE I DELUPPGIFTEN. Förlagans 1(a) har grafen där frågan står,
+       inte ovanför hela kortsvarssamlingen (exam_spec.SubItem.figur). Samma
+       ruta som uppgiftens .prfig, bara ett steg in. */
+    const delfigur = k => {
+      const f = (u.delfig || [])[k];
+      if (f) return `<div class="prfig" data-vantar="" data-figur="${attr(JSON.stringify(f))}"></div>`;
+      const b = (u.delbild || [])[k];
+      return b ? `<div class="prbild gufigur" data-bild="${Number(b)}" style="min-height:110px"><span class="gufigtext">bild ${Number(b)} ur underlaget — läggs in i canvas</span></div>` : '';
+    };
+    /* EN SVARSRAD PER DELUPPGIFT på kortsvaren — pappret sätter \svarsrad{Svar:}
+       under varje a), b), c) (förlagans uppgift 1), och skärmen visade ingen
+       alls: `behoverRad` nedan stänger av uppgiftens egen rad så fort det finns
+       deluppgifter, och deluppgifterna hade ingen. Förhandsvisningen lovade
+       alltså ett papper utan svarsplats. Bara kortsvar får raden; det som
+       redovisas på lösblad ska inte ha en linje som inbjuder till motsatsen. */
+    const delsvar = () => (u.ut === 'kort'
+      ? '<div class="prsvar"><b class="prsvarnamn">Svar:</b><span class="prlinje"></span></div>' : '');
     const del = u.del && u.del.length
-      ? `<ul class="prdel" data-avdelad="">${u.del.map((d, k) => `<li><i>${'abcdef'[k]})</i><span>${brodtext(d)}</span><span class="prpo">${delpoang(k)} p</span></li>`).join('')}</ul>` : '';
+      ? `<ul class="prdel" data-avdelad="">${u.del.map((d, k) => `<li><i>${'abcdef'[k]})</i><span>${brodtext(d)}</span><span class="prpo">${delpoang(k)} p</span>${delfigur(k)}${delsvar()}</li>`).join('')}</ul>` : '';
     /* FIGUREN. Provets uppgift kan bära en ritad figur (exam_spec figur) — en
        graf, en triangel, en enhetscirkel — och den ritas i PDF:en av
        exam_figures. På skärmarket saknades den helt: uppgiften hänvisade till

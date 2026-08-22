@@ -79,22 +79,23 @@
 \part((* if d.poang_tal *))[((( d.poang_tal )))]((* endif *))
 ((* endmacro *))
 
-((# Svarsplatsen under ett kortsvar. #))
+((# Svarsplatsen under ett kortsvar. Ledet före linjen, enheten efter — se
+    exam_latex._ar_led. «Svar: ………… x =» stod på ett skarpt prov innan
+    skillnaden gjordes: ett likhetstecken efter den tomma linjen. #))
 ((* macro svarsplats(u) *))
-((* if u.enhet *))\par\svarsradmed{}{((( u.enhet )))}
+((* if u.led *))\par\svarsradmed{((( u.led )))}{}
+((* elif u.enhet *))\par\svarsradmed{}{((( u.enhet )))}
 ((* else *))\par\svarsrad{Svar:}
 ((* endif *))
 ((* endmacro *))
 
-((# De namngivna ifyllnadsraderna. En \svarsrad per etikett, back-to-back utan
-    \par emellan — då hamnar de på SAMMA rad och delar bredden lika, som
-    förlagans «Svar $p =$ ______  Svar andra lösningen: ______». #))
-((# Mellanslaget mellan två \svarsrad är INTE kosmetik: i förlagans källa står
-    anropen på var sin rad, och radbrytningen blir ett mellanslag som skiljer
-    första linjen från nästa etikett («Svar (i): ____  Svar (ii): ____»). Utan
-    det klistras de ihop till «Svar (i): ____Svar (ii):». #))
+((# De namngivna ifyllnadsraderna. EN RAD PER SVAR — lärarens dom: «Ett svar per
+    rad; nästa svar på raden under.» Förlagans \svarsrad saknade \par och lade
+    dem bredvid varandra; makrot i _preamble.tex.j2 rättar det, så den här
+    makron behöver inte göra något annat än att anropa det en gång per
+    etikett. #))
 ((* macro svarsrader(f) *))
-((* if f *))\par((* for e in f *))\svarsrad{((( e )))} ((* endfor *))
+((* if f *))((* for e in f *))\svarsrad{((( e )))}((* endfor *))
 ((* endif *))
 ((* endmacro *))
 

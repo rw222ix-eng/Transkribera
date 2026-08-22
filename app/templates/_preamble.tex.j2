@@ -195,15 +195,23 @@
 \newcommand{\poang}[1]{%
   \makebox[0pt][l]{\hspace{\dimexpr\linewidth+\pfpoangskjut\relax}#1}}
 ((* if med_svarsrad *))
-((# FÖRLAGANS EGET MAKRO, ordagrant. Notera att det saknar \par: två svarsrader
-    i rad hamnar därför på SAMMA rad och delar den lediga bredden lika — det är
-    så «Svar $p =$ ______  Svar andra lösningen: ______» och «Svar (i): ___
-    Svar (ii): ___» blir till. Ett \par här hade brutit isär dem, och det tog
-    en mätning i hennes PDF att förstå att det var meningen. #))
+((# FÖRLAGANS MAKRO — MED EN RÄTTELSE, och den är lärarens egen.
+    Hennes \svarsrad saknar \par, så två svarsrader i rad hamnar på SAMMA rad
+    och delar bredden: «Svar $p =$ ______  Svar andra lösningen: ______»,
+    «Svar (i): ___ Svar (ii): ___». Vi kopierade det troget, visade det för
+    henne, och domen var kort: «När det står Svar = ___ och sen Svar ___ igen
+    bredvid — så ska det INTE se ut. Ett svar per rad; nästa svar på raden
+    under.»
+
+    Det är alltså ett av förlagans småfel och inte en form, precis som
+    betygstabellens överlappande spann. \par avslutar raden; luften är hennes
+    2 mm före och efter. Skärmen gör samma sak (blad-bygg.js, prov.css
+    .svarsrad) — ett papper och en förhandsvisning ska inte bryta rader
+    olika. #))
 \newcommand{\svarsrad}[1]{%
-  \vspace{2mm}%
+  \par\vspace{2mm}%
   \noindent #1 \hrulefill%
-  \vspace{2mm}%
+  \par\vspace{2mm}%
 }
 ((* endif *))
 ((* else *))
@@ -369,11 +377,12 @@
     «Svar $f'(x) =$ ______» och «Svar: ______ kr». Enheten är appens tillägg —
     förlagan har ingen uppgift som ber om ett svar med enhet — men den sätts i
     samma rad och med samma linje. #))
+((# \par som i \svarsrad ovan, och av samma skäl: ett svar per rad. #))
 \newcommand{\svarsradmed}[2]{%
-  \vspace{2mm}%
+  \par\vspace{2mm}%
   \noindent\if\relax\detokenize{#1}\relax Svar:\else Svar #1\fi\ \hrulefill
   \if\relax\detokenize{#2}\relax\else\ #2\fi
-  \vspace{2mm}}
+  \par\vspace{2mm}}
 ((* else *))
 \newcommand{\svarsradmed}[2]{%
   \par\vspace{4mm}%

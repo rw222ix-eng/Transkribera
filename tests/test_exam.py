@@ -791,6 +791,29 @@ def test_blad_bygg_speglar_delnamnsoversattningen():
     assert "DELNAMN_REDAN.test(s) ? s :" in js
 
 
+def test_forhandsvisningen_ger_deluppgiften_svarsrad_och_figur():
+    """Samma vakt, nya former. Pappret sätter \\svarsrad{Svar:} under VARJE
+    kortsvarsdeluppgift (förlagans uppgift 1) och ritar deluppgiftens egen
+    figur där frågan står — skärmen gjorde varken det ena eller det andra:
+    `behoverRad` stänger av uppgiftens svarsrad så fort det finns
+    deluppgifter, och deluppgifterna hade ingen. Förhandsvisningen lovade
+    alltså ett papper utan svarsplats."""
+    ui = Path(__file__).resolve().parent.parent / "app" / "web" / "ui"
+    js = (ui / "blad-bygg.js").read_text(encoding="utf-8")
+    plan = (ui / "plan.js").read_text(encoding="utf-8")
+    css = (ui / "prov.css").read_text(encoding="utf-8")
+    assert "delsvar" in js and "delfigur" in js
+    # Raden bara på kortsvaren — det som redovisas på lösblad ska inte ha en
+    # linje som inbjuder till motsatsen.
+    assert "u.ut === 'kort'" in js
+    # Figuren måste FÖLJA MED från prov-JSON:en, annars finns inget att rita.
+    assert "ut.delfig" in plan and "ut.delbild" in plan
+    # …och den får inte hamna i poängspalten: raden är ett rutnät med tre
+    # spalter, och varje nytt barn tar nästa ruta.
+    assert ".prdel[data-avdelad]>li>.prsvar" in css
+    assert "grid-column:2/-1" in css
+
+
 def test_render_prov_golden_markers():
     """PROVET ÄR LÄRARENS EGEN FÖRLAGA. Hon lämnade in LaTeX-källan till sitt
     Overleaf-prov (Ma 2c, kapitel 2, NA25) och sa «typ exakt så här vill jag
@@ -1894,25 +1917,38 @@ def test_balanced_skeleton_kapas_inte_vid_16(antal):
     assert k_slots and all(s["poang"][0] == 0 for s in k_slots)
 
 
+def _los(schema: dict, nod):
+    """Följ en $ref till sin definition. Schemat hyvlas (exam_spec._hyvla):
+    delscheman som står på flera ställen bor i $defs och pekas ut med $ref, så
+    en test som läser en constraint måste följa pekaren."""
+    while isinstance(nod, dict) and "$ref" in nod:
+        nod = schema["$defs"][nod["$ref"].rsplit("/", 1)[-1]]
+    return nod
+
+
 def test_to_response_format_skeleton_last_per_index():
     """Med skeleton ska del/formaga/typ/poang låsas per uppgift via prefixItems
     (llama.cpp hedrar det — bekräftat i skarp körning)."""
     sk = exam_spec.balanced_skeleton(8, "prov")
-    upp = exam_spec.to_response_format(skeleton=sk)["json_schema"]["schema"] \
-        ["properties"]["uppgifter"]
+    schema = exam_spec.to_response_format(skeleton=sk)["json_schema"]["schema"]
+    upp = schema["properties"]["uppgifter"]
     assert upp["maxItems"] == 8 and len(upp["prefixItems"]) == 8
-    it0 = upp["prefixItems"][0]["properties"]
-    assert it0["del"] == {"const": sk[0]["del"]}
-    assert it0["formaga"] == {"const": sk[0]["formaga"]}
-    assert it0["typ"] == {"const": sk[0]["typ"]}
-    assert it0["poang"]["prefixItems"] == [{"const": p} for p in sk[0]["poang"]]
+    # Den första PLATTA raden — en rad med deluppgifter bär sin poäng i barnen
+    # och prövas i test_skelettets_deluppgifter_tvingas_av_grammatiken.
+    i = next(i for i, s in enumerate(sk) if not s.get("delar"))
+    it0 = upp["prefixItems"][i]["properties"]
+    assert it0["del"] == {"const": sk[i]["del"]}
+    assert it0["formaga"] == {"const": sk[i]["formaga"]}
+    assert it0["typ"] == {"const": sk[i]["typ"]}
+    assert _los(schema, it0["poang"])["prefixItems"] == \
+        [{"const": p} for p in sk[i]["poang"]]
     # icke-tom text/losning/bedomning: minLength≥1 OCH required, annars kunde
     # modellen utelämna/null:a losning (den har default "" → ej required) och
     # falla på valideringen.
-    assert it0["text"]["minLength"] == 1
-    assert it0["losning"]["minLength"] == 1
-    assert it0["bedomning"]["minLength"] == 1
-    req = upp["prefixItems"][0].get("required", [])
+    assert _los(schema, it0["text"])["minLength"] == 1
+    assert _los(schema, it0["losning"])["minLength"] == 1
+    assert _los(schema, it0["bedomning"])["minLength"] == 1
+    req = upp["prefixItems"][i].get("required", [])
     assert "losning" in req and "bedomning" in req
 
 
@@ -2167,3 +2203,238 @@ def test_refine_exam_mater_mot_dokumentets_nivaval():
                                 model="m", llm=llm2)
     assert any(e["code"] == "nivabalans" for e in res2["errors"])
     assert res2["exam"] == fore, "riktad ändring utan mål-band ska backas"
+
+
+# ══════════════ DELUPPGIFTERNA I SKELETTET ══════════════
+# «Tänk på hur jag har strukturerat deluppgifterna», sa läraren om sitt eget
+# prov. Generatorn kunde aldrig leverera dem: skelettet låste `poang` per
+# uppgift med `const`, och en uppgift med poäng får per schemat inga
+# deluppgifter. Mallen bar formen; ingenting fyllde den.
+
+
+def _doc_med_delar(sk: list[dict]) -> exam_spec.ExamDoc:
+    """Skelettet som ett FÄRDIGT dokument, deluppgifter och allt — det som
+    modellen ska svara med. `_skeleton_doc` bygger den platta versionen (bara
+    aggregaten), och skillnaden mellan de två är hela frågan: delningen får
+    inte flytta en enda poäng."""
+    uppgifter = []
+    for s in sk:
+        if s.get("delar"):
+            uppgifter.append(exam_spec.ExamItem(
+                del_=s["del"], formaga=s["formaga"], typ=s["typ"],
+                poang=(0, 0, 0), text="_", deluppgifter=[
+                    exam_spec.SubItem(poang=tuple(d), text="_", losning="_",
+                                      bedomning="_") for d in s["delar"]]))
+        else:
+            uppgifter.append(exam_spec.ExamItem(
+                del_=s["del"], formaga=s["formaga"], typ=s["typ"],
+                poang=tuple(s["poang"]), text="_", losning="_",
+                bedomning="_"))
+    return exam_spec.ExamDoc(titel="_", kurs="_", hjalpmedel="_",
+                             uppgifter=uppgifter)
+
+
+@pytest.mark.parametrize("antal", [6, 8, 10, 12, 16, 20])
+def test_skelettet_ger_provet_deluppgifter(antal):
+    """Provet SKA få deluppgifter, och de ska summera till radens poäng.
+
+    Två mönster, båda lärarens: kortsvarssamlingen (en rutinrad blir a), b),
+    c) à en poäng — förlagans uppgift 1 och 3) och stegringen inne i uppgiften
+    (a) tar de lägre nivåerna, b) den högsta — förlagans uppgift 5)."""
+    sk = exam_spec.balanced_skeleton(antal, "prov")
+    delade = [s for s in sk if s.get("delar")]
+    assert delade, f"antal={antal}: inte en enda uppgift fick deluppgifter"
+    for s in delade:
+        summa = [sum(d[i] for d in s["delar"]) for i in range(3)]
+        assert summa == list(s["poang"]), \
+            f"{s['delar']} summerar till {summa}, inte {s['poang']}"
+        assert all(sum(d) > 0 for d in s["delar"]), "en deluppgift utan poäng"
+        assert len(s["delar"]) >= 2, "en ensam deluppgift är ingen deluppgift"
+    # Kortsvarssamlingen: bara enpoängsfrågor, alla på E.
+    for s in delade:
+        if s["typ"] == "rutin":
+            assert all(d == [1, 0, 0] for d in s["delar"]), s["delar"]
+
+
+@pytest.mark.parametrize("antal", [6, 8, 10, 12, 16, 20])
+def test_delningen_flyttar_inga_poang(antal):
+    """DELNINGEN ÄR EN OMFÖRDELNING, INTE ETT TILLSKOTT.
+
+    Nivåsummor, förmågesummor och totalen ska vara exakt desamma med och utan
+    deluppgifter — annars räknar nivåbalansen, kravgränserna och tidsmodellen
+    på ett annat prov än det som skrivs ut. Deluppgifterna ärver förälderns
+    förmåga (de deklarerar ingen egen), så förmågefördelningen står stilla."""
+    sk = exam_spec.balanced_skeleton(antal, "prov")
+    platt = exam_spec.poangsummor(exam_spec._skeleton_doc(sk))
+    delat = exam_spec.poangsummor(_doc_med_delar(sk))
+    assert platt == delat
+    # TIDEN MÄTS PÅ HUVUDUPPGIFTER. NP-kalibreringen räknades så: vt17 delprov
+    # B+C har 15 huvuduppgifter och 22 deluppgifter, och MIN_PER_UPPGIFT sattes
+    # mot de 15. Antalet huvuduppgifter är orört av delningen, så tiden är det
+    # också.
+    doc = _doc_med_delar(sk)
+    assert len(doc.uppgifter) == antal
+    assert exam_spec.tidsatgang(delat, len(doc.uppgifter)) == \
+        exam_spec.tidsatgang(platt, antal)
+    # Och balansen håller på det RIKTIGA dokumentet, inte bara på aggregaten.
+    assert exam_spec.validate_balance(doc, profil="prov") == []
+    assert exam_spec.validate_ordning(doc) == []
+
+
+@pytest.mark.parametrize("antal", [6, 8, 10, 12, 16, 20])
+def test_np_delordningen_kortsvar_i_del_a_fullstandiga_i_del_b(antal):
+    """NP:s egen delordning (NpMa2a vt17 och vt22, sidan 1):
+
+        delprov B — «Endast svar krävs», utan digitala verktyg
+        delprov C — «Fullständiga lösningar krävs», utan digitala verktyg
+        delprov D — fullständiga lösningar MED digitala verktyg
+
+    Lärarens Del A är NP:s B+C och hennes Del B är NP:s D. Alltså: kortsvaren
+    först i Del A, sedan de fullständiga — och inga kortsvar alls i Del B."""
+    sk = exam_spec.balanced_skeleton(antal, "prov")
+    del_a = [s for s in sk if s["del"] == "B"]
+    del_b = [s for s in sk if s["del"] == "C"]
+    assert del_a and del_b
+    assert not any(s["typ"] == "rutin" for s in del_b), \
+        "räknardelen har ett kortsvar — NP:s delprov D har inga"
+    typer = [s["typ"] == "rutin" for s in del_a]
+    assert typer[0], "Del A börjar inte med ett kortsvar"
+    # Ingen rutinrad efter den första fullständiga: blocket är sammanhängande.
+    assert typer == sorted(typer, reverse=True), \
+        f"kortsvaren ligger utspridda i Del A: {[s['typ'] for s in del_a]}"
+    assert 1 <= sum(typer) <= exam_spec.MAX_LIKA_I_RAD
+
+
+def test_skelettets_deluppgifter_tvingas_av_grammatiken():
+    """Grammatiken ska tvinga formen, inte bara tillåta den: föräldern låses
+    till [0, 0, 0], antalet deluppgifter till planens, och varje deluppgifts
+    poängtrippel till sin egen `const`. Utan det skrev modellen en platt
+    uppgift och kom undan med det."""
+    sk = exam_spec.balanced_skeleton(10, "prov")
+    schema = exam_spec.to_response_format(skeleton=sk)["json_schema"]["schema"]
+    prefix = schema["properties"]["uppgifter"]["prefixItems"]
+    delade = [(i, s) for i, s in enumerate(sk) if s.get("delar")]
+    assert delade
+    for i, s in delade:
+        props = prefix[i]["properties"]
+        assert _los(schema, props["poang"])["prefixItems"] == \
+            [{"const": 0}] * 3
+        d = _los(schema, props["deluppgifter"])
+        assert d["minItems"] == d["maxItems"] == len(s["delar"])
+        assert "deluppgifter" in prefix[i]["required"]
+        for gren, trippel in zip(d["prefixItems"], s["delar"]):
+            sub = _los(schema, gren)
+            assert _los(schema, sub["properties"]["poang"])["prefixItems"] == \
+                [{"const": p} for p in trippel]
+            # Deluppgiften BÄR lösningen och bedömningen när föräldern är tom.
+            for fält in ("text", "losning", "bedomning"):
+                assert fält in sub["required"]
+                assert _los(schema, sub["properties"][fält])["minLength"] == 1
+    # En PLATT rad får inga deluppgifter alls — poängen får inte delas två
+    # gånger, och `const: null` säger det på en tiondel av tecknen.
+    for i, s in enumerate(sk):
+        if not s.get("delar"):
+            assert prefix[i]["properties"]["deluppgifter"] == {"const": None}
+
+
+def test_kortsvarssamlingen_behover_ingen_stam():
+    r"""Förlagans uppgift 1 går rakt från «\question \emph{Endast svar krävs.}»
+    till a) — de fem frågorna handlar om olika saker och har ingen gemensam
+    stam. Grammatiken tvingar därför ingen text på just den formen, och
+    prompten ber uttryckligen om en tom."""
+    sk = exam_spec.balanced_skeleton(10, "prov")
+    schema = exam_spec.to_response_format(skeleton=sk)["json_schema"]["schema"]
+    prefix = schema["properties"]["uppgifter"]["prefixItems"]
+    kort = [i for i, s in enumerate(sk)
+            if s.get("delar") and s["typ"] == "rutin"]
+    assert kort
+    for i in kort:
+        assert "minLength" not in _los(schema, prefix[i]["properties"]["text"])
+    plan = exam_gen._skelett_plan(sk)
+    assert "KORTSVARSSAMLING" in plan and 'text TOM' in plan
+    # Deluppgifternas poäng står i planen — grammatiken låser dem, men bara
+    # planen säger vad de ska handla om.
+    assert "deluppgifter: a) [1, 0, 0]" in plan
+
+
+def test_deluppgift_far_bara_egen_figur_eller_bild():
+    """Figuren sitter DÄR DEN FRÅGAS OM (exam_spec.SubItem). Förlagans 1(a) har
+    grafen inne i deluppgiften medan b)–e) är rena räknefrågor; på föräldern
+    hade den sett ut att gälla alla fem."""
+    d = exam_spec.SubItem(poang=(1, 0, 0), text="Bestäm symmetrilinjen.",
+                          losning="$x = 3$.", bedomning="+1 E.",
+                          figur={"typ": "andragrad", "a": -1, "b": 6, "c": -5})
+    assert d.figur is not None
+    with pytest.raises(Exception):
+        exam_spec.SubItem(poang=(1, 0, 0), text="_", losning="_",
+                          bedomning="_", bild=1,
+                          figur={"typ": "linjar", "k": 1, "m": 0})
+
+
+def test_klockslagen_ar_lararens_och_star_inte_i_grammatiken():
+    """«Provtid: kl. 12.45–14.15 (90 minuter).» — förlagans form. Klockslagen
+    kommer ur panelen (plan.js provNar), inte ur modellen, och står därför inte
+    i schemat alls: ett fält modellen ser är ett fält modellen fyller i."""
+    schema = exam_spec.to_response_format()["json_schema"]["schema"]
+    assert "klockslag" not in schema["properties"]
+    doc = exam_spec.ExamDoc(titel="Kapitel 2", kurs="Matematik 2c",
+                            tid_min=90, klockslag="12:45–14:15",
+                            hjalpmedel="Formelblad.",
+                            uppgifter=[exam_spec.ExamItem(
+                                formaga="P", typ="rutin", poang=(1, 0, 0),
+                                text="_", losning="_", bedomning="_")])
+    vy = exam_latex._forsatt_vy(doc, [])
+    assert vy["provtid"] == r"kl.\ 12.45\textendash{}14.15 (90 minuter)."
+    utan = doc.model_copy(update={"klockslag": None})
+    assert exam_latex._forsatt_vy(utan, [])["provtid"] == "90 minuter."
+
+
+@pytest.mark.parametrize("titel,kurs,vantad", [
+    # Modellens egen långa titel — 58 tecken, tryckt rakt igenom delnamnet i
+    # sidhuvudet innan rubriken byggdes här. Kursen faller före momentet.
+    ("Prov: Potenser, rötter och algebraiska uttryck", "Matematik 1c",
+     "Prov Potenser, rötter och algebraiska…"),
+    # 43 tecken med kursen — ett för mycket för sidhuvudet, så kursen faller
+    # och momentet står helt. På försättsbladet (taket 60) står båda, se
+    # test_forsattsbladets_rubrik_far_plats_med_kursen.
+    ("Derivata och gränsvärden", "Matematik 3c",
+     "Prov Derivata och gränsvärden"),
+    # Lärarens egen: rörs inte.
+    ("Kapitel 2", "Matematik 2c", "Prov Kapitel 2 – Matematik 2c"),
+    # Kursen står redan i titeln — den ska inte tryckas två gånger.
+    ("Prov Kapitel 2 – Matematik 2c", "Matematik 2c",
+     "Prov Kapitel 2 – Matematik 2c"),
+    # Appens interna kursform («Matematik, nivå 2c») är kursväljarens, inte
+    # papprets.
+    ("Derivata", "Matematik, nivå 3c", "Prov Derivata – Matematik 3c"),
+])
+def test_provrubriken_ar_forlagans_korta_form(titel, kurs, vantad):
+    """«Prov Kapitel 2 – Matematik 2c» — 29 tecken. Rubriken BYGGS ur momentet
+    och kursen i stället för att klistras ihop ur modellens titel."""
+    assert exam_latex._provrubrik(titel, kurs) == vantad
+    assert len(vantad) <= exam_latex._RUBRIK_TAK
+
+
+def test_forsattsbladets_rubrik_far_plats_med_kursen():
+    """Två tak, och de mäter olika saker: sidhuvudet är smalt därför att
+    delrutan står bredvid, försättsbladets rubrik står centrerad i \\LARGE över
+    hela satsytan. En titel som inte ryms i sidhuvudet ska alltså ändå bära
+    kursen på försättsbladet."""
+    doc = exam_spec.ExamDoc(
+        titel="Derivata och gränsvärden", kurs="Matematik 3c", tid_min=90,
+        hjalpmedel="Formelblad.",
+        uppgifter=[exam_spec.ExamItem(formaga="P", typ="rutin",
+                                      poang=(1, 0, 0), text="_",
+                                      losning="_", bedomning="_")])
+    vy = exam_latex._forsatt_vy(doc, [])
+    assert vy["titelrad"] == "Prov Derivata och gränsvärden"
+    assert vy["sidhuvud"] == "Prov Derivata och gränsvärden"
+    # Kursen försvinner inte från pappret, den flyttar till underraden.
+    assert vy["underrad"] == "Matematik 3c"
+    # Och rymmer rubriken både momentet och kursen står båda kvar — det är
+    # förlagans egen form («Prov Kapitel 2 – Matematik 2c»). Tankstrecket är
+    # ett KOMMANDO i utdatan: Computer Modern har ingen glyf på U+2013.
+    kort = doc.model_copy(update={"titel": "Kapitel 2", "kurs": "Matematik 2c"})
+    vy2 = exam_latex._forsatt_vy(kort, [])
+    assert vy2["titelrad"] == r"Prov Kapitel 2 \textendash{} Matematik 2c"
+    assert vy2["underrad"] is None

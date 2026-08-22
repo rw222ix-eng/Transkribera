@@ -118,6 +118,13 @@
    delprov B, så att en elev läser bladen på samma sätt. */
 .prdel[data-avdelad]>li{grid-template-columns:20px minmax(0,1fr) auto;align-items:baseline}
 .prdel[data-avdelad]>li>.prpo{min-width:44px}
+/* Deluppgiftens egen figur och egen svarslinje går under frågan och över hela
+   textspalten — inte in i poängspalten. Utan den här raden hamnade grafen i
+   1(a) i marginalen bredvid «1 p», eftersom raden är ett rutnät med tre
+   spalter och varje nytt barn tar nästa ruta. */
+.prdel[data-avdelad]>li>.prsvar,
+.prdel[data-avdelad]>li>.prfig,
+.prdel[data-avdelad]>li>.prbild{grid-column:2/-1}
 
 /* ── Datatabellen ──
    Provets egen tabell: hårlinjer, ingen grå platta. Arbetsbladens tabell hör

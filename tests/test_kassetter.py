@@ -234,9 +234,23 @@ def test_auto_laget_lagger_i_bandet_prompten_ber_om(fejk_claude):
         brott = [e for e in res["errors"] if e["code"] in ("schema", "json")]
         assert brott == [], (profil, brott)
         assert res["exam"]["titel"], profil
-        # Rätt band, inte bara ETT band: profilerna har olika balansregler och
+        # RÄTT BAND, inte bara ETT band: profilerna har olika balansregler och
         # provets kassett faller igenom arbetsbladets.
-        assert profil.split("upp")[0] in res["exam"]["titel"].lower(), profil
+        #
+        # Kännetecknet var förut titeln («prov» i provets, «arbetsblad» i
+        # arbetsbladets). Den bär det inte längre: provets titel ska vara
+        # momentets namn KORT och utan ordet «Prov» — mallen sätter själv «Prov
+        # <titel> – <kurs>» (exam_gen.INSTRUCTION, exam_latex._provrubrik). Ett
+        # test som håller fast vid den gamla titeln hade tvingat tillbaka den
+        # långa formen. Formen skiljer banden lika säkert: bara provet har
+        # delar, bara gruppuppgiften har `grupp`.
+        uppg = res["exam"]["uppgifter"]
+        if profil == "prov":
+            assert all(u.get("del") for u in uppg), "provbandet saknar delar"
+        else:
+            assert not any(u.get("del") for u in uppg), profil
+            assert (res["exam"].get("grupp") is not None) == \
+                (profil == "gruppuppgift"), profil
 
     # Anteckningarna hör till lärardagen de också — och deras prompt bär ett
     # helt mötestranskript, alltså den text som mest sannolikt råkar innehålla

@@ -109,9 +109,16 @@ def test_grammatiken_lascer_innehall_till_de_valda_koderna():
     koder = ["G25-M1C-ALG-1", "G25-M1C-ALG-4"]
     skelett = exam_spec.balanced_skeleton(4, "prov")
     rf = exam_spec.to_response_format(4, skelett, koder)
-    for it in rf["json_schema"]["schema"]["properties"]["uppgifter"]["prefixItems"]:
-        fältet = it["properties"]["innehall"]
-        assert fältet["items"]["enum"] == koder
+    schema = rf["json_schema"]["schema"]
+    # Schemat hyvlas (exam_spec._hyvla): ett delschema som står på var och en av
+    # uppgifterna bor i $defs och pekas ut med $ref. Följ pekaren.
+    def los(nod):
+        while isinstance(nod, dict) and "$ref" in nod:
+            nod = schema["$defs"][nod["$ref"].rsplit("/", 1)[-1]]
+        return nod
+    for it in schema["properties"]["uppgifter"]["prefixItems"]:
+        fältet = los(it["properties"]["innehall"])
+        assert los(fältet["items"])["enum"] == koder
         assert fältet["minItems"] == 1
         assert fältet["maxItems"] == exam_spec.MAX_CI_PER_UPPGIFT
         assert "innehall" in it["required"]

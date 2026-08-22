@@ -127,8 +127,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
         finally:
             conn.close()
 
-    def _satt_lararens_datum(exam: dict | None, datum: str | None) -> None:
-        """Pappersdatumet är LÄRARENS, aldrig modellens.
+    def _satt_lararens_datum(exam: dict | None, datum: str | None,
+                             klockslag: str | None = None) -> None:
+        """Pappersdatumet — och klockslagen — är LÄRARENS, aldrig modellens.
 
         `datum` står i INSTRUCTION:s fältlista men har ingen källa där, så
         modellen fyllde i den dag den råkade skriva. Lärarens dag ligger i
@@ -139,9 +140,19 @@ def create_router(base: Path, arbiter) -> APIRouter:
         Kolumnen vinner alltid. Har läraren inte satt någon dag bär pappret
         ingen: ett hittepådatum i huvudet är värre än inget, för det är det
         eleverna skriver av. Samma idiom som `grupp` och `elev` nedan — det
-        läraren valde skrivs in i dokumentet även om modellen tyckte annat."""
+        läraren valde skrivs in i dokumentet även om modellen tyckte annat.
+
+        KLOCKSLAGEN följer samma regel och kommer samma väg: panelens
+        nartidstart plus provminuter (plan.js provNar) ger ett spann, spannet
+        skrivs på försättsbladet som «kl. 12.45–14.15 (90 minuter)», och
+        modellen har ingenting med det att göra. `None` betyder «rör inte
+        fältet» — de anrop som bara stämplar dagen på ett sparat dokument ska
+        inte råka nolla en tid som redan står där.
+        """
         if isinstance(exam, dict):
             exam["datum"] = (datum or "").strip() or None
+            if klockslag is not None:
+                exam["klockslag"] = (klockslag or "").strip() or None
 
     def _peka_pa_versionen(exam_id: int, version) -> None:
         """Låt provet peka på den version klienten SER innan något byggs.
@@ -276,6 +287,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
         tid_min = int(body.get("tid_min") or 120)
         delar = bool(body.get("delar", True))
         datum = (body.get("datum") or "").strip() or None
+        # Klockslagen ur panelens narfalt («12:45–14:15»). Tomt betyder att
+        # läraren inte valt någon starttid — då skriver pappret minuterna
+        # ensamma, som förut.
+        klockslag = (body.get("klockslag") or "").strip() or None
         typ = body.get("typ") if body.get("typ") in _TYPER else "prov"
         # Lärarens nivåval (exam_spec.NIVAVAL): «Poängnivåer» på provet,
         # «Nivå» på arbetsbladet. Fältet skickas BARA när det inte står i
@@ -487,7 +502,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # minuter, kl. …» — pappret och skärmen om samma prov.
                 if res["exam"] is not None:
                     res["exam"]["tid_min"] = tid_min
-                _satt_lararens_datum(res["exam"], datum)
+                _satt_lararens_datum(res["exam"], datum, klockslag or "")
                 if res["exam"] is None:
                     return {"id": None, "exam": None,
                             "errors": res["errors"], "rounds": res["rounds"]}
@@ -618,7 +633,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     profil=view.get("typ") or "prov",
                     niva_mal=nivaval["mal"] if nivaval else None,
                     log_cb=lambda m: emit({"type": "log", "msg": m}))
-                _satt_lararens_datum(res["exam"], view.get("datum"))
+                # Klockslagen överlever omskrivningen: modellen skriver om
+                # hela dokumentet och känner inte fältet, så tiden hämtas ur
+                # den version som låg framme.
+                _satt_lararens_datum(
+                    res["exam"], view.get("datum"),
+                    (view.get("exam") or {}).get("klockslag") or "")
                 if res["exam"] is not None and res["exam"] != view["exam"]:
                     # ── LYSSNAR NÅGON ÄN? ────────────────────────
                     # Läraren som tryckte Avbryt eller stängde fliken fick

@@ -28,7 +28,7 @@ ROT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROT))
 
 from app import (claude_code, exam_gen, exam_spec, lesson_board,   # noqa: E402
-                 notes_gen, postprocess)
+                 llm_client, notes_gen, postprocess)
 from tests import fejk                                             # noqa: E402
 
 TRANSKRIPT = (
@@ -57,6 +57,12 @@ MOTESTRANSKRIPT = (
     "första lektionen så slipper ni diskussionen resten av terminen."
 )
 
+# Provets skelett räknas EN gång och delas av prompten och grammatiken. Två
+# anrop till balanced_skeleton ger visserligen samma svar (den är
+# deterministisk), men planen i prompten och const-låsningen i schemat MÅSTE
+# vara samma rader — annars ber bandet om en uppgift och tvingar en annan.
+_PROVSKELETT = exam_spec.balanced_skeleton(6, "prov")
+
 SCENARIER = {
     "tavla": {
         "vad": "lesson_board.generate_board — en lektionstavla i wb-json-v1",
@@ -69,9 +75,14 @@ SCENARIER = {
         "vad": "exam_gen.generate_exam — ett prov med balanserat skelett",
         "prompt": lambda: exam_gen.build_prompt(
             "Matematik 3c", "NA25", ["Derivata", "Gränsvärden"],
-            antal=6, tid_min=90),
+            antal=6, tid_min=90, skeleton=_PROVSKELETT),
         "system": lambda: exam_gen.SYSTEM,
-        "schema": lambda: None,
+        # GRAMMATIKEN MED. Bandet spelades förut in utan schema, och då mätte
+        # det bara om modellen följde prompten. Provets form bärs numera lika
+        # mycket av grammatiken — deluppgifternas antal och poäng är const-låsta
+        # (exam_spec.to_response_format) — så ett band utan schema är ett band
+        # av något annat än det appen gör.
+        "schema": lambda: exam_spec.to_response_format(skeleton=_PROVSKELETT),
     },
     # Arbetsbladet och gruppuppgiften. Parametrarna speglar de konstruerade
     # band de ersätter (Matematik nivå 2c, NA25, sex respektive fyra uppgifter)
@@ -171,7 +182,9 @@ def _bandets_dokument(namn: str) -> dict:
 
 def _domarprompt(profil: str) -> str:
     bandnamn, antal = _DOMARENS_BAND[profil]
-    skelett = exam_spec.balanced_skeleton(antal) if profil == "prov" else None
+    # Provets skala måste vara SAMMA rader som bandet skrevs mot — därför
+    # _PROVSKELETT och inte ett nytt anrop med samma argument.
+    skelett = _PROVSKELETT if profil == "prov" else None
     return exam_gen.build_domar_prompt(
         exam_gen.domarenheter(_bandets_dokument(bandnamn)),
         skala=exam_gen._skala(profil, "", skelett))
@@ -182,10 +195,23 @@ def spela_in(namn: str) -> Path:
     exe = claude_code.binar()
     if not exe:
         raise SystemExit("claude hittades inte — installera Claude Code först.")
-    argv = claude_code._argv(exe, system=s["system"](), schema=s["schema"](),
+    prompt = s["prompt"]()
+    schema = s["schema"]()
+    # Scenarier som lämnar ett helt response_format-objekt (provet) packas upp
+    # som llm_client gör: CLI:n vill ha själva schemat, inte omslaget.
+    if isinstance(schema, dict) and "json_schema" in schema:
+        schema = llm_client._schema_ur(schema)
+    # SAMMA FÖRBEHANDLING SOM APPEN. claude_code.generate lägger tillbaka
+    # schemats beskrivningar i prompten och minifierar schemat innan det går på
+    # kommandoraden; ett band inspelat utan de två stegen är inspelat mot en
+    # annan fråga än den appen ställer.
+    if schema is not None:
+        prompt += claude_code._formatsammanfattning(schema)
+        schema = claude_code._minifiera(schema)
+    argv = claude_code._argv(exe, system=s["system"](), schema=schema,
                              modell="", verktyg="", extra_dirs=[])
     print(f"Spelar in «{namn}» … (riktigt anrop, kostar några ören)")
-    proc = subprocess.run(argv, input=s["prompt"](), capture_output=True,
+    proc = subprocess.run(argv, input=prompt, capture_output=True,
                           text=True, encoding="utf-8", errors="replace",
                           cwd=claude_code._neutral_cwd())
     rader = [r for r in (proc.stdout or "").splitlines() if r.strip()]

@@ -51,6 +51,16 @@ INSTRUCTION = (
     "uppgifter — "
     "hjalpmedel KRÄVS (t.ex. \"Formelblad och digitala verktyg\"), och lägg "
     "inte till egna toppnycklar. Fältregler:\n"
+    # TITELN ÄR EN RUBRIK, INTE EN INNEHÅLLSFÖRTECKNING. Modellen skrev
+    # «Prov: Potenser, rötter och algebraiska uttryck – Matematik 1c» — 58
+    # tecken, dubbelt så långt som lärarens egen «Prov Kapitel 2 – Matematik
+    # 2c». Sidhuvudet kortar vid 42 tecken (exam_latex._korta), så hennes titel
+    # ryms och modellens ströks mitt i ett ord. Kortare bes det om här; kursen
+    # och «Prov» läggs på av mallen och ska inte skrivas två gånger.
+    "- titel: momentets namn, KORT — högst 35 tecken, ett till tre ord "
+    "(\"Kapitel 2\", \"Derivata\", \"Andragradsfunktioner\"). Skriv INTE "
+    "\"Prov\", \"Prov:\" eller kursens namn i titeln: pappret sätter själv "
+    "«Prov <titel> – <kurs>» i sidhuvudet och på försättsbladet.\n"
     "- tid_min: skrivtiden i minuter som ett heltal. Står på försättsbladet "
     "och i förhandsvisningens provtabell.\n"
     "- hjalpmedel: hjälpmedelsregeln i klartext, EN mening för hela provet — "
@@ -153,9 +163,16 @@ INSTRUCTION = (
     "redovisnings-, problem- och resonemangsuppgifter. En nivå djupt.\n"
     "  En deluppgift får BARA bära fälten poang, text, losning, bedomning, "
     "formaga, typ, enhet, notis, alternativ, ratt_alternativ, tabell, "
-    "stegtabell och svarsrutor. Fälten del, innehall, sekundara, bild, figur, "
+    "stegtabell, svarsrutor, figur och bild. Fälten del, innehall, sekundara, "
     "elevlosningar och deluppgifter hör till UPPGIFTEN och får aldrig stå inne "
     "i en deluppgift — de gäller hela uppgiften, inte en av dess frågor.\n"
+    # Figuren flyttade IN i deluppgiften (exam_spec.SubItem). Lärarens förlaga
+    # har grafen inne i sin 1(a) medan 1(b)–(e) är rena räknefrågor; låg
+    # figuren på föräldern stod den ovanför hela samlingen och såg ut att gälla
+    # alla fem.
+    "  FIGUREN SITTER DÄR DEN FRÅGAS OM: gäller grafen bara deluppgift a) "
+    "sätts figur på DEN, inte på uppgiften. Läser alla deluppgifter samma "
+    "figur sitter den på uppgiften.\n"
     "- alternativ + ratt_alternativ: gör en uppgift ELLER deluppgift till "
     "flervalsfråga med minst tre alternativ (matte inom $…$) och "
     "ratt_alternativ som 0-baserat index på det rätta — aldrig på en uppgift "
@@ -652,6 +669,19 @@ def _skelett_plan(skeleton: list[dict], last: bool = True) -> str:
         # om vad — grammatiken låser fältet men säger ingenting om texten.
         ci_txt = (f", centralt innehåll {', '.join(s['ci'])}"
                   if s.get("ci") else "")
+        # DELUPPGIFTERNA STÅR I PLANEN. Grammatiken tvingar dem (const-låst
+        # poäng per deluppgift), men grammatiken säger ingenting om vad de ska
+        # HANDLA om — och en rad som säger «poäng [0, 0, 0]» utan att förklara
+        # var poängen tog vägen läser som ett fel. Bokstäverna skrivs ut därför
+        # att pappret sätter dem: a), b), c) i marginalen.
+        if s.get("delar"):
+            delar_txt = ", ".join(
+                f"{'abcdefghijkl'[j]}) {d}" for j, d in enumerate(s["delar"]))
+            rader.append(
+                f"{i}. {del_txt}{exam_spec.FORMAGA_NAMN[s['formaga']]} "
+                f"({s['formaga']}), {s['typ']}, poäng [0, 0, 0] — uppgiften "
+                f"delas i {len(s['delar'])} deluppgifter: {delar_txt}{ci_txt}")
+            continue
         rader.append(f"{i}. {del_txt}{exam_spec.FORMAGA_NAMN[s['formaga']]} "
                      f"({s['formaga']}), {s['typ']}, poäng {s['poang']}{ci_txt}")
     huvud = ("Uppgiftsplan — del, förmåga, typ och poäng är LÅSTA per uppgift "
@@ -662,10 +692,22 @@ def _skelett_plan(skeleton: list[dict], last: bool = True) -> str:
              "fördelas rätt. Har en uppgift deluppgifter ska DERAS poäng summera "
              "till radens, och de ska ärva radens förmåga (utelämna formaga på "
              "dem). Skriv en uppgift vars innehåll matchar varje rad: ")
+    # Kortsvarssamlingen förklaras bara när planen HAR en: en instruktion om en
+    # form som inte finns på det här pappret är en instruktion att bryta mot.
+    kort = any(s.get("delar") and s["typ"] == "rutin" for s in skeleton)
+    kortrad = (
+        " En rutin-rad som delas i deluppgifter är en KORTSVARSSAMLING: varje "
+        "deluppgift är en egen fristående fråga värd en poäng — «Lös ekvationen "
+        "…», «Beräkna …», «Teckna …» — och de behöver inte handla om samma sak. "
+        "Skriv då ingen gemensam stam: lämna uppgiftens text TOM (\"\"), så "
+        "börjar pappret direkt på a). En stam som «Lös följande uppgifter» "
+        "säger ingenting och tar en rad."
+        if kort else "")
     return (huvud +
             "en R-rad avgör/motiverar ('Avgör om … Motivera.'), en K-rad "
             "förklarar med ord och representation ('Förklara/Redogör med ord och "
-            "graf …'), en rutin-rad kräver bara svar.\n" + "\n".join(rader))
+            "graf …'), en rutin-rad kräver bara svar." + kortrad + "\n"
+            + "\n".join(rader))
 
 
 def build_prompt(kurs: str, klass: str, punkter: list[str], *,
@@ -910,8 +952,24 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
         block.append(niva_rubrik.build_niva_block(
             sorted({s["typ"] for s in skeleton}) if skeleton else None,
             sorted({s["formaga"] for s in skeleton}) if skeleton else None))
-        delar_txt = ("Dela provet i Del B (utan räknare) och Del C (med räknare)."
-                     if delar else "Provet har inga delar (del: null på alla uppgifter).")
+        # ── NP:S DELMÖNSTER, SAGT TILL MODELLEN ──────────────────────────
+        # Källa: NpMa2a vt 2017 och vt 2022, sidan 1. Delprov B «Endast svar
+        # krävs», delprov C «Fullständiga lösningar krävs» — båda utan digitala
+        # verktyg — och delprov D med digitala verktyg, fullständiga lösningar
+        # PLUS «visa hur du använder ditt digitala verktyg». Lärarens Del B är
+        # alltså NP:s B+C och hennes Del C är NP:s D. Skelettet lägger redan
+        # kortsvaren i Del B (exam_spec, NP:S DELORDNING); den här raden säger
+        # vad räknardelen ska INNEHÅLLA, och det kan ingen grammatik göra.
+        delar_txt = (
+            "Dela provet i Del B (utan räknare) och Del C (med räknare). "
+            "Del B börjar med kortsvaren och fortsätter med uppgifter som "
+            "kräver fullständig lösning. Del C har BARA uppgifter med "
+            "fullständig lösning, och minst en av dem ska KRÄVA det digitala "
+            "verktyget — en regression, en graf att avläsa, en ekvation som "
+            "bara går att lösa numeriskt. Skriv i den uppgiftens text att "
+            "eleven ska visa hur hon använt sitt digitala verktyg."
+            if delar else
+            "Provet har inga delar (del: null på alla uppgifter).")
         # ── PAPPRETS FORM, SAGD TILL MODELLEN ────────────────────────────
         # Provet sätts efter lärarens egen Overleaf-förlaga (se
         # app/templates/prov.tex.j2). Formen är alltså given; det som avgör om
@@ -925,9 +983,12 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             "på uppgiften, poängen i högermarginalen, och kortsvaren får en "
             "«Svar: ______»-linje. Skriv innehållet så att det passar den "
             "formen:\n"
-            "- KORTSVAREN FÖRST. De första uppgifterna i varje del är korta "
-            "frågor med ett entydigt svar — en ekvation att lösa, ett värde "
-            "att beräkna, en formel att teckna. En rad text, ingen berättelse.\n"
+            "- KORTSVAREN FÖRST, och de är samlade. Provets första uppgifter "
+            "är korta frågor med ett entydigt svar — en ekvation att lösa, ett "
+            "värde att beräkna, en formel att teckna. En rad text, ingen "
+            "berättelse. Uppgiftsplanen säger vilka som delas i a), b), c): "
+            "varje sådan bokstav är en EGEN fråga värd en poäng, precis som i "
+            "nationella provets räknarfria inledning.\n"
             "- Ber en kortsvarsuppgift om TVÅ värden: skriv fältnamnen i "
             "svarsfalt (t.ex. [\"Svar $p =$\", \"Svar andra lösningen\"]) i "
             "stället för att be om båda på en enda svarsrad.\n"

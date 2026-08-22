@@ -77,6 +77,17 @@ def _prov() -> dict:
              "text": "En rektangel har omkretsen 24 cm.\n"
                      "Bestäm den största möjliga arean.",
              "losning": "36 cm$^2$.", "bedomning": "+1 E, +2 C."},
+            # Två namngivna svarsrader på SAMMA uppgift — formen läraren dömde
+            # om (se test_ett_svar_per_rad). Typen är «redovisning» och inte
+            # «rutin» med flit: _y() sorterar träffarna på y utan att bry sig om
+            # sidan, så en tredje «Endast svar krävs» på sida 2 hade flyttat
+            # index åt de andra måtten.
+            {"del": "C", "formaga": "P", "typ": "redovisning",
+             "poang": [2, 0, 0],
+             "text": "En andragradsekvation $x^2 + px - 15 = 0$ har lösningen "
+                     "$x = 3$.",
+             "svarsfalt": ["Svar $p =$", "Svar andra lösningen"],
+             "losning": "$p = 2$, $x = -5$.", "bedomning": "+2 E."},
         ],
     }
 
@@ -227,3 +238,24 @@ def test_forsattsbladet_har_forlagans_ordning(rader):
                 default=None)
         assert y is not None, f"«{fras}» saknas eller står i fel ordning"
         sedd = y
+
+
+@pytest.mark.tectonic
+def test_ett_svar_per_rad(rader):
+    """«När det står Svar = ___ och sen Svar ___ igen bredvid — så ska det INTE
+    se ut. Ett svar per rad; nästa svar på raden under.»
+
+    Förlagans eget \\svarsrad saknar \\par och lägger två svarsrader BREDVID
+    varandra på samma rad. Det är ett av hennes småfel — som betygstabellens
+    överlappande spann — och rättas i _preamble.tex.j2. Testet låser
+    rättelsen: två namngivna svarsrader på samma uppgift ska ha olika y och
+    samma x (båda börjar vid satsytans vänsterkant)."""
+    rad, _ = rader
+    ett = [(x, y) for _s, x, y, txt in rad if txt.startswith("Svar p =")]
+    tva = [(x, y) for _s, x, y, txt in rad if txt.startswith("Svar andra")]
+    assert len(ett) == 1 and len(tva) == 1, f"{ett} {tva}"
+    (x1, y1), (x2, y2) = ett[0], tva[0]
+    assert y2 > y1 + 5, f"svarsraderna delar rad (y {y1:.1f} och {y2:.1f})"
+    assert abs(x1 - x2) < TAL, (
+        f"andra svarsraden börjar på x={x2:.1f}, inte vid vänsterkanten "
+        f"{x1:.1f}")

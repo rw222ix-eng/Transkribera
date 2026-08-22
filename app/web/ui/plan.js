@@ -1847,6 +1847,15 @@
         /* Deluppgifternas EGNA poäng — arket ska inte dela totalen jämnt. */
         ut.delp = delar.map(d => provSumma(d.poang));
         ut.delpeca = delar.map(d => (d.poang || [0, 0, 0]).slice(0, 3));
+        /* Deluppgiftens EGEN figur (exam_spec.SubItem). Lärarens förlaga har
+           grafen inne i sin 1(a) medan b)–e) är rena räknefrågor; låg figuren
+           på föräldern stod den ovanför hela samlingen och såg ut att gälla
+           alla fem. Skickas bara när någon deluppgift faktiskt har en — ett
+           fält med bara null i vore brus i varje sparat dokument. */
+        if (delar.some(d => d.figur || d.bild)) {
+          ut.delfig = delar.map(d => d.figur || null);
+          ut.delbild = delar.map(d => d.bild || null);
+        }
         /* Facitbladets poängsatta väg: varje deluppgift är ett steg med sin
            egen poäng — samma form som prototypens `vag`. */
         ut.vag = delar.map((d, k) => [`${'abcdef'[k]}) ${d.losning || ''}`,
@@ -2399,6 +2408,11 @@
         tid_min: Number(i0.provminuter) || undefined,
         delar: i0.delprov !== 'En del',
         datum: utkast.datum || '',
+        /* Klockslagen står på försättsbladet i förlagans form («Provtid: kl.
+           12.45–14.15 (90 minuter).»). De räknas i provNar() ur starttiden och
+           provminuterna och följer med dokumentet — utan dem skriver pappret
+           bara minuterna, som förut. */
+        klockslag: utkast.tid || '',
         typ: typ === 'Arbetsblad' ? 'arbetsblad' : 'prov',
         /* «Poängnivåer» når pappret (exam_spec.NIVAVAL) — men BARA när den
            inte står i defaultläget: en orörd väljare ska ge exakt samma

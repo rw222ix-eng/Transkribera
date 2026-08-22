@@ -59,6 +59,30 @@ _LATEX_SPECIALS = {
     "…": r"\ldots{}",               # …
     "«": r"\guillemotleft{}",       # «
     "»": r"\guillemotright{}",      # »
+    # GRADTECKNET OCH DE ANDRA TS1-TECKNEN. Samma fälla som tankstrecket, och
+    # den satt kvar: en skarp körning 2026-08-22 gav «T mäts i řC» på elevens
+    # papper. Latin Modern har ingen glyf på U+00B0 i T1, så XeTeX slog upp
+    # kodpunkten i T1-tabellen och fick ř — inte ett fel tecken utan ETT ANNAT
+    # tecken, vilket är värre: det ser ut att vara meningen. Temperatur,
+    # vinklar och enheter är vardag i matteuppgifter, så det kommer att skrivas
+    # igen.
+    #
+    # Kommandona finns i TS1, och TS1 har egna fontfiler per grad och snitt —
+    # de måste därför också kompileras i Tectonic-seeden
+    # (tools/seed_tectonic_cache, \tsprov), annars byter tyst krasch plats med
+    # fel glyf.
+    "°": r"\textdegree{}",          # °
+    "±": r"\textpm{}",              # ±
+    "×": r"\texttimes{}",           # ×
+    "÷": r"\textdiv{}",             # ÷
+    "µ": r"\textmu{}",              # µ
+    "‰": r"\textperthousand{}",     # ‰
+    "€": r"\texteuro{}",            # €
+    "½": r"\textonehalf{}",         # ½
+    "¼": r"\textonequarter{}",      # ¼
+    "¾": r"\textthreequarters{}",   # ¾
+    "²": r"\textsuperscript{2}",    # ²
+    "³": r"\textsuperscript{3}",    # ³
     " ": "~",                       # hårt mellanslag
 }
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
@@ -125,8 +149,12 @@ def _environment() -> Environment:
 # namnen («Del B utan räknare …») — den översätts i _delnamn_visning nedan.
 _DEL_INSTRUKTION = {
     "B": "Del A löses utan räknare. Endast svar krävs om inget annat anges.",
-    "C": "Del B löses med räknare. Fullständig redovisning krävs.",
-    "D": "Del C löses med räknare. Fullständig redovisning krävs.",
+    # NP:s egen formulering för delprovet med digitala verktyg (NpMa2a vt17 och
+    # vt22, sidan 1): fullständiga lösningar OCH att verktyget redovisas.
+    "C": "Del B löses med räknare. Fullständig redovisning krävs, och du ska "
+         "visa hur du använder ditt digitala verktyg.",
+    "D": "Del C löses med räknare. Fullständig redovisning krävs, och du ska "
+         "visa hur du använder ditt digitala verktyg.",
 }
 
 _DELNAMN_RE = [(re.compile(r"\b([Dd]el)\s+B\b"), r"\1 A"),
@@ -312,6 +340,15 @@ def _svarsrutor_vy(r, *, facit: bool):
     }
 
 
+def _ar_led(enhet) -> bool:
+    """Är `enhet` ett LED («$f'(x) =$», «x =») och inte en enhet («kr»)?
+
+    Ledet slutar på ett likhetstecken — det är hela kännetecknet, och det är
+    modellens eget språk: prompten ber om «enheten svaret ska anges i ELLER
+    ledet det skrivs efter»."""
+    return str(enhet or "").strip().rstrip("$ ").endswith("=")
+
+
 def _enhet_vy(*, poang, typ, formaga, text, losning, bedomning,
              alternativ, ratt_alternativ, notis, bild_fil,
              enhet=None, tabell=None, svarsrutor=None, stegtabell=None,
@@ -319,7 +356,13 @@ def _enhet_vy(*, poang, typ, formaga, text, losning, bedomning,
     """Delad vy för ett löv och för en deluppgift."""
     flerval, ratt_bokstav = _flerval_vy(alternativ, ratt_alternativ)
     return {
-        "enhet": escape_mixed(enhet) if enhet else None,
+        "enhet": escape_mixed(enhet) if enhet and not _ar_led(enhet) else None,
+        # LEDET STÅR FÖRE LINJEN, ENHETEN EFTER. Fältet `enhet` bär båda
+        # (exam_spec: «kr», «laddpunkter/år», «$f'(x) =$»), och skillnaden är
+        # inte kosmetisk: den skarpa körningen 2026-08-22 gav «Svar: ………… x =»,
+        # alltså ett likhetstecken EFTER den tomma linjen. Ett led är början på
+        # svaret och måste stå där eleven börjar skriva.
+        "led": escape_mixed(enhet) if enhet and _ar_led(enhet) else None,
         "svarsfalt": [escape_mixed(e) for e in svarsfalt] if svarsfalt else None,
         # Förlagans egen variant: samma etiketter, men med kolon där de behövs
         # och avsedda att sättas på EN rad (prov.tex.j2). Den gamla listan står
@@ -350,6 +393,65 @@ def _enhet_vy(*, poang, typ, formaga, text, losning, bedomning,
     }
 
 
+# ── PROVETS RUBRIK: «Prov Kapitel 2 – Matematik 2c» ────────────────────
+# Lärarens egen rubrik är 29 tecken. Appens var 58 — «Prov: Potenser, rötter
+# och algebraiska uttryck – Matematik 1c» — därför att modellen skrev hela
+# momentets innehållsförteckning i `titel` OCH kursen en gång till. Sidhuvudet
+# får plats med 42 tecken innan det krockar med den centrerade delrutan, så den
+# långa titeln trycktes RAKT IGENOM delnamnet: «… algebraiska uttDelckA
+# Matematik 1c».
+#
+# Prompten ber numera om en kort titel (app/exam_gen.py), men pappret kan inte
+# lita på det: alla prov som redan ligger i basen bär den långa formen, och
+# läraren kan skriva vad hon vill i granskningen. Rubriken byggs därför HÄR,
+# ur momentet och kursen, varje gång.
+_RUBRIK_TAK = 42                 # sidhuvudets bredd, mätt (se `sidhuvud`)
+# Försättsbladets rubrik står centrerad i \LARGE över hela satsytan. Taket är
+# MÄTT och inte gissat: «Prov Derivata och gränsvärden – Matematik 3c» (43
+# tecken) bröt raden och lade «3c» ensamt på rad två — förlagans rubrik är en
+# rad. Fyrtiotvå tecken i 12 pt (sidhuvudet) och trettioåtta i \LARGE över hela
+# bredden råkar ligga nära varandra; det är två olika mätningar av två olika
+# rader, och de ska hållas isär.
+#
+# Faller kursen bort ur rubriken här hamnar den på underraden i stället (se
+# _forsatt_vy) — den får inte försvinna från pappret, bara flytta.
+_FORSATT_TAK = 38
+_PROV_PREFIX_RE = re.compile(r"^\s*prov(et)?\b[\s:–—-]*(i\b[\s:]*)?", re.I)
+_KURSNIVA_RE = re.compile(r",\s*niv[åa]\s+", re.I)
+
+
+def _kort_kurs(kurs: str) -> str:
+    """Kursens namn som det står på ett prov: «Matematik, nivå 2c» är appens
+    interna form (kursväljaren), «Matematik 2c» är lärarens."""
+    return _KURSNIVA_RE.sub(" ", str(kurs or "").strip()).strip()
+
+
+def _provrubrik(titel: str, kurs: str, tak: int = _RUBRIK_TAK) -> str:
+    """«Prov <moment> – <kurs>», byggd så att den ryms i `tak` tecken.
+
+    KURSEN FALLER FÖRE MOMENTET. Ryms inte båda stryks kursen — den står ändå
+    på försättsbladet, i provtabellen och på varje delsida — och först när
+    momentet ensamt är för långt kapas det med ellips. Omvänd ordning gav
+    «Prov Derivata och… – Matematik 3c» i sidhuvudet: kursen kvar, momentet
+    avhugget, och momentet är det enda som skiljer det här provet från nästa."""
+    moment = _PROV_PREFIX_RE.sub("", str(titel or "").strip())
+    kurs = _kort_kurs(kurs)
+    if kurs:
+        # Kursen bort ur momentet oavsett var den står («… – Matematik 1c»,
+        # «Matematik 1c: potenser»), annars trycks den två gånger på raden.
+        i = _kort_kurs(moment).lower().find(kurs.lower())
+        moment = _kort_kurs(moment)
+        if i >= 0:
+            moment = moment[:i] + moment[i + len(kurs):]
+        moment = moment.strip(" :–—-,")
+    moment = moment or "provet"
+    svans = f" – {kurs}" if kurs else ""
+    rum = tak - len("Prov ") - len(svans)
+    if len(moment) > rum:        # kursen får gå innan momentet kapas
+        svans, rum = "", tak - len("Prov ")
+    return f"Prov {_korta(moment, max(4, rum))}{svans}"
+
+
 def _korta(text: str, tecken: int) -> str:
     """Korta av vid ordgränsen och sätt ut ellips. Används bara för sidhuvudet
     — pappret självt kortar aldrig en text läraren skrivit."""
@@ -360,6 +462,27 @@ def _korta(text: str, tecken: int) -> str:
     return f"{kapad}…"
 
 
+# Klockslag skrivs med PUNKT på svenska papper: «kl. 12.45–14.15». Panelen
+# lagrar dem med kolon (plan.js provNar) därför att HTML:s tidsfält gör det.
+_KOLON_TID_RE = re.compile(r"(?<=\d):(?=\d)")
+
+
+def _provtid(doc: exam_spec.ExamDoc) -> str | None:
+    """Provtidsraden i förlagans form: «kl. 12.45–14.15 (90 minuter).»
+
+    Klockslagen står först därför att de är det eleven behöver — minuterna är
+    en kontrollräkning. Saknas de skrivs minuterna ensamma, som förut; saknas
+    båda står ingen rad alls."""
+    minuter = f"{doc.tid_min} minuter" if doc.tid_min else ""
+    kl = _KOLON_TID_RE.sub(".", str(doc.klockslag or "").strip())
+    if not kl:
+        return escape_latex(f"{minuter}.") if minuter else None
+    # «kl.» följs av ett hårt, smalt mellanrum (förlagans «kl.\ 12.45») så att
+    # LaTeX inte tar punkten för ett meningsslut och sätter mening-mellanrum.
+    return (r"kl.\ " + escape_latex(kl)
+            + (escape_latex(f" ({minuter})") if minuter else "") + ".")
+
+
 def _forsatt_vy(doc: exam_spec.ExamDoc, delar: list[dict]) -> dict:
     """Försättsbladet, rad för rad i förlagans ordning.
 
@@ -367,13 +490,16 @@ def _forsatt_vy(doc: exam_spec.ExamDoc, delar: list[dict]) -> dict:
     inlämningsregeln, totalpoängen, betygstabellen, instruktionerna och
     namnraderna. Ordningen är förlagans och inget annat: det är den läraren
     känner igen pappret på."""
-    titel = doc.titel.strip()
-    kurs = (doc.kurs or "").strip()
-    # «Prov Kapitel 2 – Matematik 2c». Kursen läggs till bara när titeln inte
-    # redan bär den — annars står «Matematik 2c» två gånger på samma rad.
-    titelrad = titel if (not kurs or kurs.lower() in titel.lower()) \
-        else f"{titel} – {kurs}"
+    # «Prov Kapitel 2 – Matematik 2c» — förlagans rubrik, BYGGD ur momentet och
+    # kursen i stället för hopklistrad ur modellens titel. Se _provrubrik.
+    titelrad = _provrubrik(doc.titel, doc.kurs, _FORSATT_TAK)
     under = []
+    # Rymdes kursen inte i rubriken står den här i stället. Förlagans underrad
+    # är bara «Klass: NA25» — och den ser precis så ut så länge titeln är kort
+    # nog att bära kursen, alltså i normalfallet.
+    kort_kurs = _kort_kurs(doc.kurs)
+    if kort_kurs and kort_kurs.lower() not in titelrad.lower():
+        under.append(kort_kurs)
     if doc.klass:
         under.append(f"Klass: {doc.klass}")
     if doc.datum:
@@ -425,10 +551,15 @@ def _forsatt_vy(doc: exam_spec.ExamDoc, delar: list[dict]) -> dict:
         # 1c», alltså titeln tryckt RAKT IGENOM delnamnet. Taket är mätt: 42
         # tecken i 12 pt Computer Modern slutar strax före delrutans vänsterkant
         # (x = 282,7 pt).
-        "sidhuvud": escape_latex(_korta(titelrad, 42)),
+        #
+        # BYGGD OM, inte kapad. Att korta den färdiga raden gav «Prov Derivata
+        # och… – Matematik 3c» — kursen kvar och momentet avhugget. _provrubrik
+        # med sidhuvudets tak stryker i stället kursen och behåller momentet
+        # helt, vilket är det enda som skiljer det här provet från nästa.
+        "sidhuvud": escape_latex(_provrubrik(doc.titel, doc.kurs)),
         "underrad": escape_latex(" · ".join(under)) if under else None,
         "delrader": delrader,
-        "provtid": escape_latex(f"{doc.tid_min} minuter.") if doc.tid_min else None,
+        "provtid": _provtid(doc),
         "inlamningsrad": inlamning,
         "total": total,
         "betyg": betyg,
@@ -470,16 +601,31 @@ def _build_view(doc: exam_spec.ExamDoc,
                         formaga=d.formaga or it.formaga, text=d.text,
                         losning=d.losning, bedomning=d.bedomning,
                         alternativ=d.alternativ, ratt_alternativ=d.ratt_alternativ,
-                        notis=d.notis, bild_fil=None, enhet=d.enhet,
+                        notis=d.notis,
+                        # Deluppgiftens EGEN bild. Lärarens egna inlagda bilder
+                        # (`egna`) nycklas på uppgiftens nummer och hör därför
+                        # hemma på föräldern — deluppgiften får bara den bild
+                        # modellen pekade ut i underlaget.
+                        bild_fil=((bilder or {}).get(d.bild) if d.bild
+                                  else None),
+                        enhet=d.enhet,
                         tabell=d.tabell, svarsrutor=d.svarsrutor,
                         stegtabell=d.stegtabell, svarsfalt=d.svarsfalt,
                         facit=facit)
                     ev["bokstav"] = _BOKSTAV[j]
+                    # Figuren där den frågas om: förlagans 1(a) har grafen inne
+                    # i deluppgiften medan b)–e) är rena räknefrågor. Rå TikZ,
+                    # oescapad — samma regel som på uppgiften nedan.
+                    ev["figur_tex"] = (exam_figures.render_figur(d.figur)
+                                       if d.figur is not None else None)
                     deluppg.append(ev)
                 item_vy = {
                     "har_deluppgifter": True,
                     "text": escape_mixed(it.text),
-                    "enhet": escape_mixed(it.enhet) if it.enhet else None,
+                    "enhet": (escape_mixed(it.enhet)
+                              if it.enhet and not _ar_led(it.enhet) else None),
+                    "led": (escape_mixed(it.enhet)
+                            if it.enhet and _ar_led(it.enhet) else None),
                     "tabell": _tabell_vy(it.tabell),
                     "svarsrutor": _svarsrutor_vy(it.svarsrutor, facit=facit),
                     "stegtabell": _stegtabell_vy(it.stegtabell, facit=facit),
@@ -564,9 +710,16 @@ def _build_view(doc: exam_spec.ExamDoc,
             # det STÄMMER. Delen som också bär en kortsvarsuppgift får den inte:
             # då säger sidhuvudet en sak och uppgift 7 en annan, och det är
             # uppgiften eleven tror på.
-            "kravrad": (None if nagot_kortsvar else
-                        escape_latex("Fullständiga lösningar krävs på "
-                                     "samtliga uppgifter.")),
+            #
+            # RÄKNARDELEN får NP:s andra mening också. NpMa2a vt17 och vt22,
+            # sidan 1, delprov D: «Fullständiga lösningar krävs» och «visa hur
+            # du använder ditt digitala verktyg». Den andra halvan är inte
+            # kosmetik — utan den kan en elev skriva ett svar räknaren gav och
+            # ingen kan bedöma vägen dit.
+            "kravrad": (None if nagot_kortsvar else escape_latex(
+                "Fullständiga lösningar krävs på samtliga uppgifter."
+                + ("" if utan_raknare else
+                   " Visa också hur du använder ditt digitala verktyg."))),
             "instruktion": escape_latex(_DEL_INSTRUKTION.get(del_kod or "", "")) or None,
             "uppgifter": vy_items,
             # exam-klassens räknare sätts till numret FÖRE delens första
@@ -615,7 +768,13 @@ def _build_view(doc: exam_spec.ExamDoc,
                      rf"{escape_latex(doc.titel)}"),
         # PR 4: tikz + angles/quotes laddas bara när provet har minst en
         # figur (jfr med_grafik/med_svarsrad-mönstret för includegraphics).
-        "med_tikz": any(it.figur is not None for it in doc.uppgifter),
+        # Deluppgifternas figurer räknas med. Vakten tänds annars inte när den
+        # enda grafen på provet sitter i en deluppgift, och då kompilerar
+        # dokumentet inte alls: \begin{tikzpicture} utan \usepackage{tikz}.
+        "med_tikz": any(it.figur is not None
+                        or any(d.figur is not None
+                               for d in (it.deluppgifter or []))
+                        for it in doc.uppgifter),
         # Gruppuppgiftens upplägg, färdigt att sätta: redovisningsformen i
         # klartext och instruktionsbandet är samma texter som webbversionen
         # skriver (app/web/ui/blad.js, grupphuvud) — ett papper och en skärm

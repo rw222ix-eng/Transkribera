@@ -208,11 +208,17 @@ def test_escapad_text_lamnar_inga_oskyddade_specialtecken(text):
 @settings(max_examples=400, deadline=None)
 def test_escapningen_tappar_aldrig_bokstaver(text):
     """Escapning får skydda, aldrig radera: bokstäverna som fanns ska finnas
-    kvar (kontrolltecken undantagna — de strippas med flit)."""
+    kvar (kontrolltecken undantagna — de strippas med flit).
+
+    «Kvar» betyder som TECKEN eller som KOMMANDO. Ett par bokstäver saknar glyf
+    i T1 och måste skrivas som ett TS1-kommando i stället — mikrotecknet µ är en
+    sådan (Unicode kallar den en gemen bokstav), och utan kommandot trycktes ett
+    helt annat tecken på pappret. \\textmu{} är alltså inte en förlust utan
+    samma bokstav sagd på LaTeX."""
     kvar = "".join(c for c in text if c.isalpha())
     ut = exam_latex.escape_latex(text)
     for c in kvar:
-        assert c in ut
+        assert c in ut or exam_latex._LATEX_SPECIALS.get(c, "\0") in ut
 
 
 def test_matten_bevaras_men_texten_runt_omkring_escapas():

@@ -123,9 +123,16 @@ $\left(\frac{n(n+1)}{2}\right)$ och $\sqrt{\frac{x}{2}}$.
 % En titel som «Prov · former» fällde --only-cached på exakt det: «Font
 % TS1/lmr/bx/n/20.74=ts1-lmbx12 at 20.74pt not loadable». Alla grader och
 % snitt mallarna använder måste därför kompileras HÄR en gång.
+% Gradtecknet och dess syskon kom till 2026-08-22 (app/exam_latex escapar dem
+% numera i stället för att låta XeTeX slå upp kodpunkten och trycka ř för °).
+% De ligger i TS1 precis som tankstrecket och måste därför stå här, i varje
+% grad och varje snitt.
 \newcommand{\tsprov}{\textendash{} \textemdash{} \textperiodcentered{}
   \textquotedblleft x\textquotedblright{} \textquoteleft x\textquoteright{}
-  \textquotedbl{} \guillemotleft x\guillemotright{} \ldots}
+  \textquotedbl{} \guillemotleft x\guillemotright{} \ldots
+  \textdegree{} \textpm{} \texttimes{} \textdiv{} \textmu{}
+  \textperthousand{} \texteuro{} \textonehalf{} \textonequarter{}
+  \textthreequarters{} \textsuperscript{2}\textsuperscript{3}}
 {\LARGE\bfseries\tsprov}\par {\LARGE\tsprov}\par
 {\Large\bfseries\tsprov}\par {\Large\tsprov}\par
 {\large\bfseries\tsprov}\par {\large\tsprov}\par
@@ -242,7 +249,19 @@ def _representative_doc() -> exam_spec.ExamDoc:
                      r"Beräkna även $\sum_{i=1}^{n} i^2$ och "
                      r"$\int_0^1 f(x)\,dx$ samt förenkla "
                      r"$\left(\frac{n(n+1)}{2}\right)$ och "
-                     r"$\sqrt{\frac{x}{2}}$.",
+                     r"$\sqrt{\frac{x}{2}}$. "
+                     # SIFFROR OCH BOKSTÄVER PÅ SCRIPTSCRIPT-NIVÅ, i CM.
+                     # Provmallen sätts i Computer Modern (lärarens förlaga),
+                     # inte i newtx som PROBE_TEX — och CM slår upp sina
+                     # matematikfonter på NAMN med storleken i namnet: cmr12,
+                     # cmr8, cmr6. Stegen ovan når scriptscript med SYMBOLER
+                     # (\cdot, \frac) men aldrig med en siffra, så cmr6 hämtades
+                     # aldrig. Ett skarpt prov med $2^{3^{4}}$-liknande
+                     # uttryck — eller bara ett gränsvärde med ett tal i ett
+                     # dubbelt index — fällde då --only-cached med «Could not
+                     # locate a virtual/physical font for TFM cmr6».
+                     r"Kontrollera slutligen $2^{3^{4}}$, $x^{y^{z}}$ och "
+                     r"$\left(1 + \frac{1}{n}\right)^{n^{2}}$.",
                 losning="", bedomning="",
                 deluppgifter=[
                     exam_spec.SubItem(
@@ -259,6 +278,16 @@ def _representative_doc() -> exam_spec.ExamDoc:
                     ),
                     exam_spec.SubItem(
                         poang=(0, 0, 1),
+                        # FIGUR PÅ EN DELUPPGIFT. Förlagans 1(a) har grafen
+                        # inne i deluppgiften, och mallens gren för det
+                        # (prov.tex.j2, inuti \begin{parts}) är en egen
+                        # kodväg — den kompilerades aldrig under seedningen så
+                        # länge figurerna bara satt på uppgifter. Typen är en
+                        # FUNKTIONSGRAF och inte enhetscirkeln nedan: graferna
+                        # ritar rutnät och \footnotesize-siffror på axlarna,
+                        # och det är den vanligaste figuren på ett riktigt
+                        # prov.
+                        figur={"typ": "andragrad", "a": -1, "b": 6, "c": -5},
                         text=r"Visa att $\alpha \cdot \beta \leq \Sigma$ "
                              r"gäller även då $x \to \pm\infty$.",
                         losning=r"Gränsvärdet $\pm\infty$ hanteras separat "
@@ -333,7 +362,15 @@ def _representative_doc() -> exam_spec.ExamDoc:
                 # PROBE_TEX ovan). figur och bild utesluter varandra i
                 # schemat, så uppgiften får INTE ha bild=... samtidigt.
                 del_="C", formaga="B", typ="rutin", poang=(1, 0, 0),
-                text=r"Figuren visar vinkeln $v$ i enhetscirkeln.",
+                # TS1-TECKNEN GENOM PROVMALLEN, alltså i Computer Modern.
+                # PROBE_TEX:s \tsprov kompileras i newtx och seedar därför
+                # ts1-ntx*, inte ts1-lmr* — och provet är lärarens förlaga och
+                # sätts i CM. «T mäts i 20 °C» på ett skarpt prov hade fällt
+                # --only-cached på ts1-lmr12 om escapningen kommit utan den här
+                # raden.
+                text=r"Figuren visar vinkeln $v$ i enhetscirkeln. "
+                     "Temperaturen är 20 °C ± 2 °C, arean 3 cm² och "
+                     "andelen ½ ‰ (µm, 4 × 5 ÷ 2, 3 m³, ¼, ¾, 5 €).",
                 figur={"typ": "enhetscirkel", "vinkel": 40},
                 losning=r"Vinkeln är $v = 40^\circ$.",
                 bedomning=r"+1 E för korrekt avläsning av vinkeln.",

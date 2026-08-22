@@ -17,6 +17,7 @@ Uppgifterna är alltid egenformulerade; endast strukturen efterliknar NP.
 from __future__ import annotations
 
 import copy
+import json
 import math
 import re
 from typing import Annotated, Literal, Union
@@ -182,19 +183,6 @@ class _Uppgiftsbas(_Model):
         return self
 
 
-class SubItem(_Uppgiftsbas):
-    formaga: Formaga | None = None       # ärver förälderns när None
-    typ: Uppgiftstyp | None = None       # ärver förälderns när None
-    losning: str
-    bedomning: str
-
-    @model_validator(mode="after")
-    def _kontrollera_lov(self):
-        if not self.losning.strip() or not self.bedomning.strip():
-            raise ValueError("deluppgift måste ha lösning och bedömning")
-        return self
-
-
 # ── Figurrecept ────────────────────────────────────────────────────────
 # Diskriminerad union på "typ": llama-servers grammatiktvång låser modellen
 # till giltiga parametrar per figurtyp. Python (app/exam_figures.py) bygger
@@ -294,6 +282,33 @@ Figur = Annotated[
 ]
 
 
+class SubItem(_Uppgiftsbas):
+    formaga: Formaga | None = None       # ärver förälderns när None
+    typ: Uppgiftstyp | None = None       # ärver förälderns när None
+    losning: str
+    bedomning: str
+    # FIGUREN SITTER DÄR DEN FRÅGAS OM. Fälten låg först bara på uppgiften, och
+    # lärarens egen förlaga visar varför det var fel: hennes uppgift 1 är en
+    # kortsvarssamling där BARA a) har en graf («Grafen till en andragrads-
+    # funktion visas i figuren nedan»), medan b)–e) är rena räknefrågor. Med
+    # figuren på föräldern hade grafen stått ovanför hela samlingen och sett ut
+    # att gälla alla fem — och en figur som ser ut att gälla en fråga den inte
+    # gäller är sämre än ingen figur alls.
+    #
+    # Uppgiften får dem fortfarande: en stam med EN figur som alla deluppgifter
+    # läser är förlagans uppgift 5 (raketbilden ovanför a) och b)).
+    bild: int | None = None              # 1-baserat index i bildunderlaget
+    figur: "Figur | None" = None
+
+    @model_validator(mode="after")
+    def _kontrollera_lov(self):
+        if not self.losning.strip() or not self.bedomning.strip():
+            raise ValueError("deluppgift måste ha lösning och bedömning")
+        if self.figur is not None and self.bild is not None:
+            raise ValueError("figur och bild utesluter varandra — välj en")
+        return self
+
+
 class ExamItem(_Uppgiftsbas):
     del_: Del | None = Field(default=None, alias="del")
     formaga: Formaga
@@ -364,6 +379,17 @@ class ExamDoc(_Model):
     elev: str | None = None
     datum: str | None = None
     tid_min: int | None = None
+    # KLOCKSLAGEN, när läraren valt dem. Förlagan skriver «Provtid: kl.
+    # 12.45–14.15 (90 minuter).» och inte «Provtid: 90 minuter.» — eleven som
+    # sitter i salen vill veta när pennan ska ner, inte hur länge hon får hålla
+    # på. Panelen har fälten (plan.js narfalt: nardatum + nartidstart plus
+    # provminuter) och räknar ut spannet; det följer med hit och skrivs av
+    # mallen. Saknas det står minuterna ensamma, som förut.
+    #
+    # Sätts av LÄRARENS val i routen (routes_exam._satt_lararens_datum),
+    # aldrig av modellen — samma regel som `datum` och av samma skäl: modellen
+    # fyllde i den tid den råkade skriva.
+    klockslag: str | None = None         # «12:45–14:15»
     hjalpmedel: str
     # Metodregeln som ETT beslut, överst på pappret: «Ställ upp ekvationen. Var
     # sitter den okända? I exponenten → logaritmera. I basen → upphöj till 1/n.»
@@ -429,6 +455,11 @@ def to_response_format(antal: int | None = None,
     Med enum är taggen antingen en riktig punkt eller inget alls — och då går
     det att säga vad en elev är svag på."""
     schema = ExamDoc.model_json_schema()
+    # KLOCKSLAGEN STÅR INTE I GRAMMATIKEN. Fältet är lärarens (routen skriver
+    # det efter genereringen, som `datum`), och ett fält modellen ser är ett
+    # fält modellen fyller i — den skulle hitta på en starttid precis som den
+    # hittade på ett datum. Bort ur schemat, kvar i modellen.
+    schema["properties"].pop("klockslag", None)
     if koder:
         item_def = schema["$defs"]["ExamItem"]
         item_def["properties"]["innehall"] = {
@@ -446,9 +477,27 @@ def to_response_format(antal: int | None = None,
             it["properties"]["del"] = {"const": slot["del"]}
             it["properties"]["formaga"] = {"const": slot["formaga"]}
             it["properties"]["typ"] = {"const": slot["typ"]}
-            it["properties"]["poang"] = {
-                "type": "array", "minItems": 3, "maxItems": 3,
-                "prefixItems": [{"const": p} for p in slot["poang"]]}
+            # DELUPPGIFTERNA TVINGAS FRAM, inte bara tillåts. Bär raden `delar`
+            # låses förälderns poäng till [0, 0, 0] (exam_spec kräver det av en
+            # uppgift med deluppgifter) och `deluppgifter` blir en tupel med
+            # exakt så många element som planen har — var och en med sin egen
+            # poängtrippel som `const`. Bär raden inga delar STÄNGS fältet med
+            # `const: null`: en uppgift som bär poäng själv får inte dela dem en
+            # gång till, och den korta formen kostar en tiondel av den anyOf
+            # Pydantic annars genererar (schemat har ett tak — se
+            # claude_code.SCHEMA_TAK_EXE).
+            if slot.get("delar"):
+                it["properties"]["poang"] = _tupel_const([0, 0, 0])
+                it["properties"]["deluppgifter"] = {
+                    "type": "array", "minItems": len(slot["delar"]),
+                    "maxItems": len(slot["delar"]),
+                    "prefixItems": [{"$ref": _delref(schema, d)}
+                                    for d in slot["delar"]]}
+                it["required"] = sorted(set(it.get("required", []))
+                                        | {"deluppgifter"})
+            else:
+                it["properties"]["poang"] = _tupel_const(slot["poang"])
+                it["properties"]["deluppgifter"] = {"const": None}
             # Diagnosen dimensioneras PER innehållspunkt: platsen i skelettet
             # bär redan vilka punkter uppgiften ska pröva, och då ska modellen
             # inte få välja. Samma const-mekanism som poängtripeln — enum hade
@@ -460,15 +509,29 @@ def to_response_format(antal: int | None = None,
                     "prefixItems": [{"const": k} for k in slot["ci"]]}
                 it["required"] = sorted(set(it.get("required", []))
                                         | {"innehall"})
-            # Skelettuppgifter är platta (nonzero poäng) → text/losning/bedomning
+            # En PLATT skelettuppgift (nonzero poäng) → text/losning/bedomning
             # MÅSTE vara ifyllda. losning/bedomning har default "" och är därför
             # INTE required → grammatiken lät modellen utelämna/null:a dem (föll
-            # sedan på valideringen). Gör dem required + minLength≥1 så
+            # sedan på valideringen). Gör dem required + minLength>=1 så
             # grammatiken tvingar en icke-tom lösning och bedömning.
-            for fld in ("text", "losning", "bedomning"):
-                it["properties"][fld]["minLength"] = 1
-            it["required"] = sorted(set(it.get("required", []))
-                                    | {"losning", "bedomning"})
+            #
+            # En uppgift MED deluppgifter tvingas bara på stammen: dess egen
+            # losning/bedomning SKA få vara tom, för lösningsgången bor i
+            # deluppgifterna (prompten säger det, och skrivs den ändå en gång
+            # till står facit två gånger på samma papper).
+            #
+            # KORTSVARSSAMLINGEN har ingen stam alls. Förlagans uppgift 1 går
+            # rakt från «\question \emph{Endast svar krävs.}» till a) — de fem
+            # frågorna handlar om olika saker och har ingenting gemensamt att
+            # säga. Därför tvingas ingen text på just den formen; på alla andra
+            # rader är en tom text ett fel.
+            if not (slot.get("delar") and slot["typ"] == "rutin"):
+                it["properties"]["text"]["minLength"] = 1
+            if not slot.get("delar"):
+                for fld in ("losning", "bedomning"):
+                    it["properties"][fld]["minLength"] = 1
+                it["required"] = sorted(set(it.get("required", []))
+                                        | {"losning", "bedomning"})
             prefix.append(it)
         upp.clear()
         upp.update({"type": "array", "prefixItems": prefix,
@@ -476,10 +539,81 @@ def to_response_format(antal: int | None = None,
     elif antal is not None:
         upp["minItems"] = antal
         upp["maxItems"] = antal
+    _stada_defs(schema)
+    _hyvla(schema)
+    _stada_defs(schema)          # hyveln kan lämna en död definition efter sig
     return {
         "type": "json_schema",
         "json_schema": {"name": "matteprov", "schema": schema},
     }
+
+
+def _tupel_const(poang) -> dict:
+    """Poängtripeln som grammatik: tre låsta positioner, inget annat."""
+    return {"type": "array", "minItems": 3, "maxItems": 3,
+            "prefixItems": [{"const": int(p)} for p in poang]}
+
+
+def _delref(schema: dict, poang) -> str:
+    """En deluppgiftsdefinition PER POÄNGTRIPPEL, delad av alla rader som
+    använder den.
+
+    Att baka in en egen kopia av SubItem på varje deluppgift vore rakare — men
+    schemat skickas som ett kommandoradsargument och har ett hårt tak
+    (claude_code.SCHEMA_TAK_EXE); en kopia per deluppgift spränger det redan vid
+    tolv uppgifter, och då tappas grammatiktvånget för HELA provet. Tripplarna
+    är få — [1, 0, 0] går igen i varenda kortsvar — så en definition per trippel
+    kostar några hundra tecken i stället för några tusen."""
+    namn = "Del_" + "_".join(str(int(p)) for p in poang)
+    if namn not in schema["$defs"]:
+        d = copy.deepcopy(schema["$defs"]["SubItem"])
+        d["properties"]["poang"] = _tupel_const(poang)
+        for fld in ("text", "losning", "bedomning"):
+            d["properties"][fld]["minLength"] = 1
+        d["required"] = sorted(set(d.get("required", []))
+                               | {"poang", "text", "losning", "bedomning"})
+        schema["$defs"][namn] = d
+    return f"#/$defs/{namn}"
+
+
+_REF_RE = re.compile(r"^#/\$defs/(.+)$")
+
+
+def _stada_defs(schema: dict) -> None:
+    """Släng de $defs ingen längre pekar på.
+
+    Skelettvägen bakar in en egen kopia av ExamItem per uppgift, och då är
+    $defs/ExamItem (1,8 kB minifierat) dött viktutrymme — liksom $defs/SubItem
+    när varje deluppgift fått sin egen trippeldefinition. Utrymmet är inte
+    gratis: ryms schemat inte på kommandoraden går det i prompten i stället, och
+    då faller grammatiktvånget bort (claude_code.generate)."""
+    defs = schema.get("$defs") or {}
+
+    def refs(nod, ut: set) -> set:
+        if isinstance(nod, dict):
+            m = _REF_RE.match(str(nod.get("$ref", "")))
+            if m:
+                ut.add(m.group(1))
+            for k, v in nod.items():
+                if k != "$ref":
+                    refs(v, ut)
+        elif isinstance(nod, list):
+            for v in nod:
+                refs(v, ut)
+        return ut
+
+    levande = refs({k: v for k, v in schema.items() if k != "$defs"}, set())
+    while True:
+        nasta = set(levande)
+        for namn in levande:
+            if namn in defs:
+                refs(defs[namn], nasta)
+        if nasta == levande:
+            break
+        levande = nasta
+    for namn in list(defs):
+        if namn not in levande:
+            del defs[namn]
 
 
 # ------------------------------------------------------------ balansmål ----
@@ -583,6 +717,85 @@ SVARIGHET_SLACK = 0.15          # hur mycket andra halvan får understiga först
 MIN_START_E = 1                 # minsta E-poäng på delens första uppgift
 MAX_LIKA_I_RAD = 3              # max uppgifter i rad med samma typ/förmåga
 MIN_DELPROV_FOR_ORDNING = 4     # kortare delar mäts inte på ordning
+
+
+# Minsta delschema som är värt en egen definition. Under den gränsen kostar
+# $ref:en (≈30 tecken) nästan lika mycket som den sparar.
+_HYVEL_MIN = 70
+
+
+def _hyvla(schema: dict) -> None:
+    """Identiska delscheman som står på flera ställen → EN definition och en
+    $ref till den. Samma constraints, färre tecken.
+
+    Skelettvägen bakar in en egen kopia av ExamItem per uppgift, och kopiorna
+    skiljer sig bara i de fyra fält som är låsta (del, formaga, typ, poang) plus
+    deluppgifterna. Allt annat står ordagrant lika många gånger som provet har
+    uppgifter — `figur`-unionen ensam är 316 tecken × tolv uppgifter. Det spelar
+    roll därför att schemat är ett KOMMANDORADSARGUMENT med ett hårt tak
+    (claude_code.SCHEMA_TAK_EXE): ryms det inte går det i prompten i stället och
+    grammatiktvånget faller bort för hela provet.
+
+    Störst först, och en hyvlad nod hyvlas inte igen inifrån — annars byter en
+    definition ut sin egen kropp mot en referens till sig själv.
+
+    `discriminator` lämnas i fred. CLI:ns validerare STRYKER nyckelordet
+    (claude_code._METADATA), och en definition som bara pekas ut därifrån blir
+    då en föräldralös definition ingen refererar — dött viktutrymme igen."""
+    defs = schema.setdefault("$defs", {})
+
+    def kanon(nod) -> str:
+        return json.dumps(nod, sort_keys=True, separators=(",", ":"),
+                          ensure_ascii=False)
+
+    rakning: dict[str, int] = {}
+
+    def rakna(nod, rot: bool = False):
+        if isinstance(nod, dict):
+            if not rot and "$ref" not in nod:
+                nyckel = kanon(nod)
+                if len(nyckel) >= _HYVEL_MIN:
+                    rakning[nyckel] = rakning.get(nyckel, 0) + 1
+            for k, v in nod.items():
+                if k != "discriminator":
+                    rakna(v)
+        elif isinstance(nod, list):
+            for v in nod:
+                rakna(v)
+
+    for k, v in schema.items():
+        if k != "$defs":
+            rakna(v)
+    for d in defs.values():
+        rakna(d, rot=True)
+
+    valda = sorted((n for n, c in rakning.items() if c >= 2),
+                   key=len, reverse=True)
+    if not valda:
+        return
+    namn: dict[str, str] = {}
+    for i, nyckel in enumerate(valda):
+        namn[nyckel] = f"D{i}"
+
+    def byt(nod, rot: bool = False):
+        if isinstance(nod, dict):
+            if not rot and "$ref" not in nod:
+                n = namn.get(kanon(nod))
+                if n is not None:
+                    if n not in defs:
+                        defs[n] = {k: (v if k == "discriminator" else byt(v))
+                                   for k, v in nod.items()}
+                    return {"$ref": f"#/$defs/{n}"}
+            return {k: (v if k == "discriminator" else byt(v))
+                    for k, v in nod.items()}
+        if isinstance(nod, list):
+            return [byt(v) for v in nod]
+        return nod
+
+    for k in [k for k in schema if k != "$defs"]:
+        schema[k] = byt(schema[k])
+    for k in list(defs):
+        defs[k] = byt(defs[k], rot=True)
 
 
 def _svarighet(poang: tuple[int, int, int]) -> float:
@@ -1018,6 +1231,11 @@ def _varva(kandidater: list[dict]) -> list[dict]:
     return ut
 
 
+# Uppgiftstypen när raden INTE är ett kortsvar. Följer förmågan, så att typen
+# varierar som förmågorna gör.
+_EJ_RUTIN: dict[str, str] = {"R": "resonemang", "PL": "problem", "M": "problem"}
+
+
 def _skelett_typ(formaga: str, karaktar: str) -> str:
     """Uppgiftstyp ur förmåga och karaktär. Typen följer förmågan (så att den
     varierar som förmågorna gör), utom för E-uppgifter i Begrepp och Procedur:
@@ -1026,8 +1244,30 @@ def _skelett_typ(formaga: str, karaktar: str) -> str:
     validate_balance kräver av alla tre profilerna."""
     if karaktar == "E" and formaga in ("B", "P"):
         return "rutin"
-    return {"R": "resonemang", "PL": "problem",
-            "M": "problem"}.get(formaga, "redovisning")
+    return _EJ_RUTIN.get(formaga, "redovisning")
+
+
+# ── NP:S DELORDNING, OCH DÄRMED LÄRARENS ────────────────────────────────
+# Källa: NpMa2a vt 2017 och vt 2022, sidan 1 i respektive uppgiftshäfte. Samma
+# mönster båda åren:
+#
+#   UTAN digitala verktyg
+#     Delprov B — «Endast svar krävs», kortsvaren skrivs direkt i häftet.
+#     Delprov C — «Fullständiga lösningar krävs», redovisas på separat papper.
+#     B och C skrivs tillsammans på 120 minuter.
+#   MED digitala verktyg
+#     Delprov D — «Fullständiga lösningar krävs», och dessutom «visa hur du
+#     använder ditt digitala verktyg».
+#
+# Lärarens prov har TVÅ delar, inte tre, och de faller ihop så här:
+#   hennes Del A = NP:s B + C  → kortsvaren FÖRST, sedan de fullständiga
+#   hennes Del B = NP:s D      → bara fullständiga lösningar, räknaren tillåten
+#
+# Det är därför rutinraderna sorteras först i varje karaktärsgrupp här nedan
+# (så de hamnar i Del A), står först i Del A:s ordning, och skrivs om till en
+# redovisningsrad om någon ändå råkar hamna i Del B. Delarnas kravrader sätts i
+# app/exam_latex.py (_DEL_INSTRUKTION, kravrad) — det är samma dom, uttryckt på
+# pappret.
 
 
 def balanced_skeleton(antal: int, profil: str = "prov",
@@ -1092,7 +1332,11 @@ def balanced_skeleton(antal: int, profil: str = "prov",
         del_b: list[dict] = []
         del_c: list[dict] = []
         for kar in NIVAER_STORA:
+            # KORTSVAREN FÖRST I GRUPPEN, och det är NP:s ordning och inte en
+            # smaksak: rutinraderna ska hamna i Del A (se NP:S DELORDNING).
+            # Sorteringen är stabil, så allt annat behåller sin plats.
             grupp = [s for s in slots if s["karaktar"] == kar]
+            grupp.sort(key=lambda s: s["typ"] != "rutin")
             skiljelinje = round(DEL_B_ANDEL * len(grupp))
             del_b += grupp[:skiljelinje]
             del_c += grupp[skiljelinje:]
@@ -1100,7 +1344,25 @@ def balanced_skeleton(antal: int, profil: str = "prov",
             s["del"] = "B"
         for s in del_c:
             s["del"] = "C"
-        slots = _varva(del_b) + _varva(del_c)
+            # Rök en rutinrad ändå över till Del B (fler kortsvar än
+            # skiljelinjen rymde) skrivs den om till en redovisningsuppgift.
+            # NP:s delprov D har inga kortsvar alls, och en «Endast svar
+            # krävs»-rad i räknardelen säger emot delens egen kravrad.
+            if s["typ"] == "rutin":
+                s["typ"] = _EJ_RUTIN.get(s["formaga"], "redovisning")
+        # Kortsvaren står först i Del A, som i NP:s delprov B. Blocket kapas
+        # vid MAX_LIKA_I_RAD: antiklumpningen gäller provet, och fyra rutinrader
+        # i följd fäller sin egen del. Kapningen kostar ingenting i praktiken —
+        # varje kortsvarsrad blir en SAMLING med två eller tre frågor (se
+        # _dela_i_deluppgifter), så tre rader är sex till nio kortsvar, och
+        # förlagan har åtta.
+        del_b_kort = [s for s in del_b if s["typ"] == "rutin"]
+        for s in del_b_kort[MAX_LIKA_I_RAD:]:
+            s["typ"] = _EJ_RUTIN.get(s["formaga"], "redovisning")
+        del_b_kort = del_b_kort[:MAX_LIKA_I_RAD]
+        slots = (del_b_kort
+                 + _varva([s for s in del_b if s["typ"] != "rutin"])
+                 + _varva(del_c))
     else:
         # Platt dokument: samma stigande ordning, ingen delindelning.
         # Gruppuppgiften mäts inte på stigande svårighet (fyra ingångar, inte en
@@ -1121,7 +1383,74 @@ def balanced_skeleton(antal: int, profil: str = "prov",
         s.pop("karaktar")
 
     _justera_skelett(slots, profil, niva_mal=niva_mal)
+    if profil == "prov":
+        _dela_i_deluppgifter(slots)
     return slots
+
+
+# ── DELUPPGIFTERNA ─────────────────────────────────────────────────────
+# «Typ exakt så här vill jag att mina prov ska se ut», sa läraren och lämnade in
+# sitt eget prov. Den formen har deluppgifter, och tills nu kunde generatorn
+# aldrig leverera dem: skelettet låste `poang` per uppgift med `const`, och en
+# uppgift med poäng får per schemat inga deluppgifter. Mallen bar dem; ingenting
+# fyllde den.
+#
+# DELNINGEN ÄR EN OMFÖRDELNING, INTE ETT TILLSKOTT. Uppgiftens trippel styckas i
+# delar som summerar till exakt den — inte en poäng mer. Därför räknar allt
+# nedströms precis som förut:
+#   * nivåbalansen (poangsummor summerar löv OCH deluppgifter),
+#   * förmågebalansen (deluppgifterna ärver förälderns förmåga; formagebarare
+#     räknar dem inte som egna bärare),
+#   * tidsmodellen (tidsatgang tar poängsummorna plus antalet HUVUDuppgifter,
+#     och antalet huvuduppgifter är orört — se MIN_PER_UPPGIFT).
+#
+# SAMMANSLAGNING PRÖVADES OCH VALDES BORT. Förlagans uppgift 1 har fem kortsvar
+# och uppgift 3 har sex; för att komma dit hade två eller tre skelettrader
+# behövt smälta ihop till en uppgift. Det hade brutit två löften på en gång:
+# antalet uppgifter läraren bad om i panelen, och tidsmodellens uppgiftsterm
+# (som är mätt på NP:s HUVUDuppgifter — vt17 15 uppgifter / 22 deluppgifter,
+# vt22 17/28). En kortsvarssamling med två eller tre frågor är förlagans form,
+# bara kortare; ett prov som tyst blir två uppgifter mindre är det inte.
+def _dela_i_deluppgifter(slots: list[dict]) -> None:
+    """Sätt `delar` — deluppgifternas poängtripplar — på de rader som ska bära
+    dem. Muterar `slots` på plats; en rad utan `delar` är en vanlig uppgift.
+
+    Två mönster, båda lärarens egna:
+
+    1. KORTSVARSSAMLINGEN. En rutinrad vars poäng ligger helt på E och är värd
+       mer än en poäng blir a), b), c) … à en poäng styck — förlagans uppgift 1
+       och 3, och NP:s delprov B. Ett kortsvar är värt en poäng; en rutinrad på
+       tre poäng är alltså tre frågor, inte en fråga som ger tre.
+
+    2. STEGRINGEN INNE I UPPGIFTEN. En fullständig uppgift vars trippel bär mer
+       än en nivå delas i två: a) tar de lägre nivåernas poäng, b) den högsta.
+       Det är förlagans uppgift 5 — a) «Bestäm raketens maximala höjd» (3 p),
+       b) «Visa algebraiskt att …» (2 p) — och det är också hur nationella
+       provets flerpoängsuppgifter är byggda: räkningen först, lyftet sedan.
+
+    Allt annat lämnas odelat. Förlagans uppgift 2, 4, 6 och 7 har inga
+    deluppgifter, och ett prov där VARJE uppgift har a) och b) är inte hennes."""
+    for s in slots:
+        s["delar"] = _dela_poang(s["poang"], s["typ"])
+        if s["delar"] is None:
+            s.pop("delar")
+
+
+def _dela_poang(poang: list[int], typ: str) -> list[list[int]] | None:
+    """Trippeln → deluppgifternas tripplar, eller None när raden inte delas."""
+    e, c, a = poang
+    if typ == "rutin":
+        # Bara E-poäng kan bli kortsvar: ett kortsvar prövar att man KAN göra
+        # det, och det är E-nivåns fråga. En rutinrad som (efter nivåsökningen)
+        # bär C- eller A-poäng delas därför inte alls.
+        return [[1, 0, 0]] * e if e >= 2 and not c and not a else None
+    nivaer = [i for i, p in enumerate(poang) if p]
+    if len(nivaer) < 2:
+        return None                      # en nivå = en fråga
+    hogst = nivaer[-1]
+    forsta = [p if i != hogst else 0 for i, p in enumerate(poang)]
+    andra = [p if i == hogst else 0 for i, p in enumerate(poang)]
+    return [forsta, andra]
 
 
 # ══════════════════════════ TIDEN PAPPRET TAR ══════════════════════════

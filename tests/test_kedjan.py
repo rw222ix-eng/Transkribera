@@ -43,15 +43,28 @@ def _done(resp):
 
 def _fran_prov(exam: dict) -> list[dict]:
     """plan.js franProv i korthet — prov-JSON till arkets uppgifter. Tappas
-    `peca` eller `ci` här går resten av kedjan inte att räkna."""
+    `peca` eller `ci` här går resten av kedjan inte att räkna.
+
+    DELUPPGIFTERNA räknas som i originalet: föräldern bär [0, 0, 0] och
+    poängen ligger på barnen, så uppgiftens nivåvektor är deras SUMMA. Utan den
+    raden blev ett prov med kortsvarssamlingar värt noll poäng på skärmen och
+    fullt på pappret."""
     ut = []
     for i, u in enumerate(exam.get("uppgifter") or [], 1):
-        vek = list(u.get("poang") or [0, 0, 0])
-        ut.append({"nr": i, "p": sum(vek), "t": u.get("text") or "",
-                   "niva": "A" if vek[2] else ("C" if vek[1] else "E"),
-                   "ut": "kort" if u.get("typ") == "rutin" else "rakna",
-                   "f": u.get("losning") or "", "formaga": u.get("formaga") or "",
-                   "peca": vek, "ci": list(u.get("innehall") or [])})
+        delar = u.get("deluppgifter") or []
+        vek = ([sum((d.get("poang") or [0, 0, 0])[k] for d in delar)
+                for k in range(3)] if delar
+               else list(u.get("poang") or [0, 0, 0]))
+        rad = {"nr": i, "p": sum(vek), "t": u.get("text") or "",
+               "niva": "A" if vek[2] else ("C" if vek[1] else "E"),
+               "ut": "kort" if u.get("typ") == "rutin" else "rakna",
+               "f": u.get("losning") or "", "formaga": u.get("formaga") or "",
+               "peca": vek, "ci": list(u.get("innehall") or [])}
+        if delar:
+            rad["del"] = [d.get("text") or "" for d in delar]
+            rad["delp"] = [sum(d.get("poang") or [0, 0, 0]) for d in delar]
+            rad["delpeca"] = [list(d.get("poang") or [0, 0, 0]) for d in delar]
+        ut.append(rad)
     return ut
 
 
@@ -184,3 +197,95 @@ def test_kedjan_talar_om_nar_det_inte_gar_att_mata(client, monkeypatch):
     assert prof["punkter"] == []
     assert prof["matt"] is False
     assert prof["utan_ci"] == 1
+
+
+# ══════════════ POÄNGEN GENOM DELUPPGIFTERNA ══════════════
+# Provet får deluppgifter från generatorn (exam_spec.balanced_skeleton), och då
+# ligger poängen på BARNEN medan föräldern bär [0, 0, 0]. Varje led i kedjan
+# måste veta det, annars är provet värt noll poäng på ett av ställena — och det
+# stället upptäcks först när en lärare rättar.
+
+
+def _prov_med_delar() -> dict:
+    """Ett prov byggt PÅ skelettet, deluppgifter och allt — samma form som
+    grammatiken tvingar fram."""
+    sk = exam_spec.balanced_skeleton(10, "prov")
+    assert any(s.get("delar") for s in sk), "skelettet delade ingen uppgift"
+    uppgifter = []
+    for i, s in enumerate(sk, 1):
+        u = {"del": s["del"], "formaga": s["formaga"], "typ": s["typ"],
+             "text": f"Uppgift {i}", "innehall": ["G25-M1C-ALG-1"]}
+        if s.get("delar"):
+            u["poang"] = [0, 0, 0]
+            u["losning"] = ""
+            u["bedomning"] = ""
+            u["deluppgifter"] = [
+                {"poang": list(d), "text": f"Deluppgift {i}{k}",
+                 "losning": "Svar.", "bedomning": "+1."}
+                for k, d in zip("abcdef", s["delar"])]
+        else:
+            u["poang"] = list(s["poang"])
+            u["losning"] = "Svar."
+            u["bedomning"] = "+1."
+        uppgifter.append(u)
+    return {"titel": "Kapitel 2", "kurs": "Matematik 2c", "klass": KLASS,
+            "hjalpmedel": "Formelblad.", "tid_min": 90,
+            "uppgifter": uppgifter}
+
+
+def test_deluppgifternas_poang_overlever_hela_kedjan():
+    """Prov-JSON → dokumentets balans → skärmens ark → rättningens rader.
+
+    Samma totalsumma i varje led, och deluppgiftens EGNA poäng ända ner i
+    rättningsraden — inte totalen delad jämnt, vilket var den gamla
+    reservregeln för handskrivna papper."""
+    from app import exam_latex, rattning
+
+    exam = _prov_med_delar()
+    doc, fel = exam_spec.validate_exam_json(exam, "prov")
+    assert doc is not None, fel
+
+    # 1. BALANSEN räknar på de poängbärande enheterna, alltså på barnen.
+    summor = exam_spec.poangsummor(doc)
+    delade = [u for u in exam["uppgifter"] if u.get("deluppgifter")]
+    assert delade
+    assert summor["total"] == sum(
+        sum(d["poang"]) for u in exam["uppgifter"]
+        for d in (u.get("deluppgifter") or [{"poang": u["poang"]}]))
+    # Föräldern bär noll och ska ändå INTE nolla sin förmåga.
+    assert all(v > 0 for v in summor["formagor"].values())
+
+    # 2. PAPPRET sätter uppgiftens summa i marginalen och barnens vid a), b).
+    vy = exam_latex._build_view(doc)
+    poster = [u for d in vy["delar"] for u in d["uppgifter"]]
+    forald = next(u for u in poster if u["har_deluppgifter"])
+    assert forald["poang_tal"] == sum(
+        d["poang_tal"] for d in forald["deluppgifter"])
+    assert forald["poang_tal"] > 0, "uppgiften trycktes som värd 0 p"
+
+    # 3. SKÄRMEN (plan.js franProv) — nivåvektorn är barnens summa.
+    ark = _fran_prov(exam)
+    assert sum(r["p"] for r in ark) == summor["total"]
+    med_delar = [r for r in ark if r.get("del")]
+    assert med_delar
+    for r in med_delar:
+        assert r["p"] == sum(r["delp"])
+        assert r["peca"] == [sum(p[k] for p in r["delpeca"]) for k in range(3)]
+
+    # 4. TIDEN räknas på HUVUDuppgifterna, precis som NP-kalibreringen mättes.
+    assert len(ark) == len(exam["uppgifter"])
+    assert exam_spec.tidsatgang(summor, len(ark)) > 0
+
+    # 5. RÄTTNINGEN får en rad per deluppgift med DESS poäng.
+    rader = rattning.bygg(ark)
+    tak = sum(r["p"] for r in rader if not r.get("grupp"))
+    assert tak == summor["total"], "rättningens maxpoäng är inte provets"
+    forsta = med_delar[0]
+    # Nycklarna är «1a», «1b» … — och `startswith("1")` hade träffat uppgift 10
+    # också, så mängden byggs uttryckligen.
+    vantade = {f"{forsta['nr']}{b}" for b in "abcdef"[:len(forsta["delp"])]}
+    delrader = [r for r in rader if r.get("nyckel") in vantade]
+    assert [r["p"] for r in delrader] == forsta["delp"]
+    assert [r["peca"] for r in delrader] == forsta["delpeca"]
+    # CI-taggen ärvs ner till deluppgiften — provet taggar uppgiften.
+    assert all(r["ci"] == ["G25-M1C-ALG-1"] for r in delrader)

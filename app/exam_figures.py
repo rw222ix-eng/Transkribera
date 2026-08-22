@@ -28,7 +28,14 @@ def _flabel(x: float) -> str:
     return f"{x:.4f}".rstrip("0").rstrip(".").replace(".", ",")
 
 
-BOXW, BOXH = 7.0, 5.0        # funktionsgrafernas fasta ritruta (cm)
+# ── FUNKTIONSGRAFENS MÅTT ÄR LÄRARENS, INTE VÅRA ──────────────────────
+# Hennes egen förlaga sätter grafen i uppgift 1(a) som en pgfplots-axel med
+# `width = 10cm, height = 8cm, grid = both, axis lines = center` och INGEN
+# kurvetikett. Ritrutan var 7×5 cm här, och skillnaden är inte kosmetisk: en
+# graf som ska läsas av (symmetrilinjen, ett nollställe) behöver rutor som är
+# stora nog att peka på. Måtten är därför hennes, satta här en gång, och
+# recepten nedan ritar ren tikz i samma ruta.
+BOXW, BOXH = 10.0, 8.0       # funktionsgrafernas fasta ritruta (cm)
 TRIW = 5.0                   # triangelns längsta sida normaliseras till (cm)
 
 
@@ -105,20 +112,29 @@ def _funktionsgraf(fn, xlo: float, xhi: float, samples: int = 80) -> str:
     for gy in ymaj:
         rader.append(rf"\draw[black!50,thin] (0,{_f(gy)})--({_f(BOXW)},{_f(gy)});")
     rader += [
-        rf"\draw[black!65] (0,0) rectangle ({_f(BOXW)},{_f(BOXH)});",
+        # INGEN RAM. Förlagan sätter `axis lines = center`: axlarna går genom
+        # origo och det finns ingen låda runt rutnätet. Ramen ritades förut med
+        # black!65 och gjorde grafen till ett diagram i en ruta i stället för
+        # ett koordinatsystem.
         rf"\draw[->] (0,{_f(y0)})--({_f(BOXW + 0.3)},{_f(y0)}) node[right]{{$x$}};",
         rf"\draw[->] ({_f(x0)},0)--({_f(x0)},{_f(BOXH + 0.3)}) node[above]{{$y$}};",
     ]
+    # TICK-ETIKETTERNA LIGGER PÅ RUTNÄTET, inte utanför det: med
+    # `axis lines = center` går axlarna genom origo och etiketterna hamnar mitt
+    # i rutnätet. Utan en vit platta bakom drar major-linjen ett streck rakt
+    # genom «-10», och en avläsningsuppgift blir omöjlig att läsa av. Plattan
+    # är precis så stor som siffran (inner sep=1pt) och flyttar ingenting.
+    _PLATTA = "fill=white,inner sep=1pt"
     for xt, gx in zip(xticks, xmaj):
         if abs(xt) < 1e-9:
             continue
         rader.append(rf"\draw ({_f(gx)},{_f(y0 - 0.08)})--({_f(gx)},{_f(y0 + 0.08)}) "
-                     rf"node[below]{{\footnotesize {_flabel(xt)}}};")
+                     rf"node[below,{_PLATTA}]{{\footnotesize {_flabel(xt)}}};")
     for yt, gy in zip(yticks, ymaj):
         if abs(yt) < 1e-9:
             continue
         rader.append(rf"\draw ({_f(x0 - 0.08)},{_f(gy)})--({_f(x0 + 0.08)},{_f(gy)}) "
-                     rf"node[left]{{\footnotesize {_flabel(yt)}}};")
+                     rf"node[left,{_PLATTA}]{{\footnotesize {_flabel(yt)}}};")
     pts = " ".join(f"({_f(X(x))},{_f(Y(y))})" for x, y in zip(xs, ys))
     rader += [
         rf"\begin{{scope}}\clip (0,0) rectangle ({_f(BOXW)},{_f(BOXH)});",
@@ -129,17 +145,11 @@ def _funktionsgraf(fn, xlo: float, xhi: float, samples: int = 80) -> str:
         rf"\draw[blue,very thick] plot coordinates {{{pts}}};",
         r"\end{scope}",
     ]
-    # y=f(x)-etiketten placeras i den övre kant-region (vänster/mitt/höger) som
-    # ligger längst från kurvan, så den aldrig tangerar kurvan.
-    curve = [(X(x), Y(y)) for x, y in zip(xs, ys)]
-    ly = BOXH - 0.25
-    # vänsterkandidaten läggs strax till HÖGER om y-axeln så etiketten inte
-    # krockar med y-axelns tick-etiketter (som står till vänster om axeln).
-    lxw = min(max(0.35, x0 + 0.35), BOXW - 0.3)
-    cands = [(lxw, "north west"), (BOXW / 2, "north"), (BOXW - 0.3, "north east")]
-    lx, anchor = max(cands, key=lambda c: min((c[0] - px) ** 2 + (ly - py) ** 2
-                                              for px, py in curve))
-    rader.append(rf"\node[anchor={anchor}] at ({_f(lx)},{_f(ly)}) {{$y=f(x)$}};")
+    # INGEN KURVETIKETT. Här satt förut ett «$y=f(x)$» som placerades i den
+    # kantregion som låg längst från kurvan. Förlagans graf har ingen — och det
+    # är rätt: uppgiftstexten säger redan vilken funktion det är («Grafen till
+    # en andragradsfunktion visas i figuren nedan»), och en etikett som
+    # upprepar det tar plats i den ände där eleven ska kunna läsa av.
     rader.append(r"\end{tikzpicture}")
     return "\n".join(rader)
 
