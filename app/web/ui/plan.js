@@ -745,7 +745,7 @@
            utan siffran syns är det en svart låda: två prov på samma tid får
            olika många uppgifter och läraren ser inte varför. Fältet är
            redigerbart — takten är hennes val, inte husets (se PROV_TAKT). */
-        ? `<span class="narfalt">${typ === 'Diagnos' ? '' : `<label class="minitakt" data-tip="Minuter per poäng — provets täthet. NP ligger på 4,4, din egen förlaga på 2,4.">Takt <input type="text" inputmode="decimal" maxlength="4" class="taktfalt" value="${String(Number(s.takt) || 3.5).replace('.', ',')}" aria-label="Takt i minuter per poäng" /> min/p</label>`}<button class="ghost minitid" type="button" data-uppskatta data-tip="${typ === 'Diagnos' ? 'Räknar arbetstiden ur diagnosens uppgifter' : 'Räknar arbetstiden ur uppgifterna och sätter provtiden'}">${typ === 'Diagnos' ? 'Kolla tiden' : 'Uppskatta tiden'}</button><span class="valj nartidvalj"><button class="valjknapp" type="button" aria-haspopup="dialog" aria-expanded="false"><span class="valjtext"></span><span class="valjpil"></span></button></span><input type="hidden" class="nardatum" value="${s.narDatum || (($('#p-datum') || {}).value || '')}" /><input type="hidden" class="nartidstart" value="${s.narTid || (($('#p-tid') || {}).value || '').split('–')[0].trim() || '08:15'}" /></span>`
+        ? `<span class="narfalt">${typ === 'Diagnos' ? '' : `<label class="minitakt" data-tip="Minuter per poäng — provets täthet. NP ligger på 4,4, din egen förlaga på 2,4.">Takt <input type="text" inputmode="decimal" maxlength="4" class="taktfalt" value="${String(Number(s.takt) || 3.5).replace('.', ',')}" aria-label="Takt i minuter per poäng" /> min/p</label>`}<button class="ghost minitid" type="button" data-uppskatta data-tip="${typ === 'Diagnos' ? 'Räknar arbetstiden ur diagnosens uppgifter' : 'Räknar arbetstiden ur uppgifterna och jämför med provtiden'}">${typ === 'Diagnos' ? 'Kolla tiden' : 'Uppskatta tiden'}</button><span class="valj nartidvalj"><button class="valjknapp" type="button" aria-haspopup="dialog" aria-expanded="false"><span class="valjtext"></span><span class="valjpil"></span></button></span><input type="hidden" class="nardatum" value="${s.narDatum || (($('#p-datum') || {}).value || '')}" /><input type="hidden" class="nartidstart" value="${s.narTid || (($('#p-tid') || {}).value || '').split('–')[0].trim() || '08:15'}" /></span>`
         : k.typ === 'minuter'
         ? `<span class="minutval"><span class="minutchips">${k.snabb.map(m => `<button class="minutchip" type="button" aria-pressed="${Number(s[k.id]) === m}">${m}</button>`).join('')}</span><span class="minutfalt"><input type="text" inputmode="numeric" maxlength="3" value="${s[k.id]}" aria-label="${k.namn} i minuter" /><span class="minutenhet">min</span></span></span>`
         : k.typ === 'seg'
@@ -969,7 +969,12 @@
                  försätta raden i ett läge där ingen dag ännu är vald. */
               { namn: 'Välj en annan dag', gor: () => knapp.click() },
               { namn: `Korta till ${lekt} min`, gor: () => { s.provminuter = lekt; s.provtid = lekt + ' min'; ritaTypval(); planKoll(); } }
-            ] : null);
+            ] : (min < lekt && !arDiagnos ? [
+              /* Vägen tillbaka: ett prov som kortats (förr av «Uppskatta tiden»,
+                 nu bara av läraren själv) ska kunna ta hela lektionen igen utan
+                 att minuterna skrivs för hand i väljaren. */
+              { namn: `Använd hela lektionen (${lekt} min)`, gor: () => { s.provminuter = lekt; s.provtid = lekt + ' min'; ritaTypval(); planKoll(); } }
+            ] : null));
         };
         if (window.Dagvaljare) window.Dagvaljare(wrap, knapp, dagFalt, tidFalt, {
           tom: 'Välj dag och klockslag',
@@ -3030,15 +3035,23 @@
     if (typ !== 'Prov') return;
     const v = nyVersion(null);
     const u = uppskatta(v);
-    const forr = Number(inst.Prov.provminuter) || parseInt(inst.Prov.provtid, 10) || 90;
-    sattProvtid(u.min);
+    /* PROVTIDEN ÄR LEKTIONEN, INTE UPPSKATTNINGEN. Förr SATTE knappen provtiden
+       till uppskattningen — och läraren (2026-08-22) fick «08:10–09:00 · 50 min»
+       på en 90-minuterslektion utan att förstå varför: fem uppgifter tog 50
+       min, så provet kortades. Hon tänker tvärtom: tiden är given av
+       lektionen, knappen ska säga om uppgifterna RYMS — precis som diagnosens
+       «Kolla tiden». Att sätta provtiden till uppskattningen finns kvar som
+       ett klick i toasten, för den som vill ha ett kortare prov. */
+    const ram = Number(inst.Prov.provminuter) || parseInt(inst.Prov.provtid, 10) || 90;
     const skal = $('#tidsskal');
     if (skal) { skal.hidden = true; skal.textContent = ''; }
     /* Takten står i toasten av samma skäl som i panelen: samma prov ger olika
        tid med olika takt, och siffran är det enda som förklarar varför. */
-    const text = `Provtiden satt till ${u.min} min — ${u.antal} uppgifter · ${u.poang} p · ${u.e}/${u.c}/${u.a} E/C/A · takt ${String(taktFor(v)).replace('.', ',')} min/p.`;
+    const takt = String(taktFor(v)).replace('.', ',');
+    const lage = u.min > ram ? `ryms inte på provtidens ${ram} min` : `av provtidens ${ram} min`;
+    const text = `Uppgifterna tar ca ${u.min} min ${lage} — ${u.antal} uppgifter · ${u.poang} p · ${u.e}/${u.c}/${u.a} E/C/A · takt ${takt} min/p.`;
     if (!window.toast) return;
-    if (forr !== u.min) window.toast(text, `Ångra (${forr} min)`, () => sattProvtid(forr));
+    if (u.min !== ram) window.toast(text, `Sätt provtiden till ${u.min} min`, () => sattProvtid(u.min));
     else window.toast(text);
   }
 
