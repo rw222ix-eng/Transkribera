@@ -1937,7 +1937,8 @@ def build_bedomning_prompt(underlag: dict, *, skala: str = "") -> str:
         "meningar: vilken rad i trappan lösningen fick, och varför den inte "
         "fick nästa. Till exempel «Får +1 C för korrekt potens i täljaren, "
         "men förenklar aldrig efter potensregeln.» Lösningen på noll poäng "
-        "säger «Inga poäng» och sedan varför.\n"
+        "skriver BARA varför — pappret sätter rubriken «Inga poäng» självt, "
+        "och kommentaren ska inte börja om med samma två ord.\n"
         "Svara med enbart JSON."
     )
 

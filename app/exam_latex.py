@@ -409,6 +409,28 @@ def _fickrader(rader: list[dict], poang) -> list[dict]:
     return ut
 
 
+# NOLLRADEN SÄGER «INGA POÄNG» EN GÅNG. Rubriken i högerspalten står redan
+# där (bedomning.tex.j2, elevrad), och modellen skriver ofta kommentaren som en
+# hel mening som börjar likadant: «Inga poäng» / «Inga poäng. Svaret är rätt,
+# men eleven använder deriveringsreglerna …». På pappret blev det två rader
+# efter varandra som båda började med samma två ord.
+#
+# Prompten ber om det också (exam_gen.build_bedomning_prompt), men prompten är
+# ett önskemål och renderaren en regel — och alla papper som redan ligger i
+# basen skrevs innan önskemålet fanns. Skärmen mäter samma sak
+# (app/web/ui/blad-bygg.js, UTAN_POANG).
+_UTAN_POANG_RE = re.compile(r"^\s*inga\s+po[äa]ng\s*[.:;,—–-]*\s*", re.I)
+
+
+def _utan_rubriken(dom: str) -> str:
+    """Kommentaren utan den inledande «Inga poäng» — rubriken bär den redan."""
+    kvar = _UTAN_POANG_RE.sub("", dom or "").strip()
+    # Blev det ingenting kvar VAR kommentaren bara rubriken, och då är tomt
+    # rätt svar. Annars versaliseras första bokstaven: meningen fortsatte i
+    # gemener efter punkten som togs bort.
+    return (kvar[0].upper() + kvar[1:]) if kvar else ""
+
+
 def _elevrader(it, trappa: list[dict]) -> list[dict]:
     """Elevlösningarna som rader i bedömningstabellen: etikett («0 p», «1 p»),
     elevens egna rader, de trappsteg lösningen fick, och kommentaren.
@@ -428,8 +450,9 @@ def _elevrader(it, trappa: list[dict]) -> list[dict]:
             "utan": total == 0,
             "rader": [escape_mixed(r) for pa in e.partier for r in pa.rader],
             "trappa": _fickrader(trappa, poang) if total else [],
-            "kommentar": escape_mixed(
-                " ".join(pa.dom for pa in e.partier if pa.dom)),
+            "kommentar": escape_mixed(_utan_rubriken(
+                " ".join(pa.dom for pa in e.partier if pa.dom)) if total == 0
+                else " ".join(pa.dom for pa in e.partier if pa.dom)),
         })
     return ut
 

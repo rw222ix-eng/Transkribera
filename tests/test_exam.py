@@ -2925,7 +2925,9 @@ def test_elevraderna_bar_steg_poang_och_skal_i_pdfen():
     tex = exam_latex.render_bedomning(doc)
     assert r"\bedrad{0 p}" in tex and r"\bedrad{1 p}" in tex
     assert r"{\small\bfseries Inga poäng}" in tex
-    assert "ingen ansats" in tex and "tecknar men löser inte" in tex
+    # Nollradens kommentar versaliseras: den fortsatte förut efter «Inga
+    # poäng.», och det ledet ströks (exam_latex._utan_rubriken).
+    assert "Ingen ansats" in tex and "tecknar men löser inte" in tex
     # Ettpoängsraden fick uppgiftens FÖRSTA E-rad — det räknas ur trappan
     # (exam_latex._fickrader), aldrig av modellen en gång till. E-raden står
     # alltså två gånger på uppgiften: hel i facitraden, och en gång till i
@@ -3172,3 +3174,62 @@ def test_ts1_tecknen_satts_alltid_magert_och_uppratt():
     # själv — den fällde ts1-lmbx10 första gången.
     assert tex.count(r"\textperiodcentered") == 2 + tex.count(
         r"{\normalfont\textperiodcentered} full pott")
+
+
+def test_nollraden_upprepar_inte_rubriken_i_pdfen():
+    """«Inga poäng» stod två gånger på lärarens papper: en gång som rubrik i
+    högerspalten och en gång till som kommentarens första två ord, för det är
+    så modellen skriver en hel mening. Rubriken bär den, kommentaren säger
+    varför."""
+    exam = _exam()
+    exam["uppgifter"][2]["elevlosningar"] = [
+        {"etikett": "0 p",
+         "partier": [{"rader": ["fel"], "poang": [0, 0, 0],
+                      "dom": "Inga poäng. Svaret är rätt av fel skäl."}]},
+        {"etikett": "1 p",
+         "partier": [{"rader": ["halvt"], "poang": [1, 0, 0],
+                      "dom": "Får +1 E, men stannar där."}]},
+    ]
+    doc, _fel = exam_spec.validate_exam_json(exam)
+    tex = exam_latex.render_bedomning(doc)
+    assert tex.count("Inga poäng") == 1
+    assert "Svaret är rätt av fel skäl." in tex
+    # Bara nollraden strippas — en poängsatt rad rörs inte.
+    assert "Får +1 E, men stannar där." in tex
+
+
+def test_nollraden_utan_egen_kommentar_far_ingen_tom_rad():
+    """Skrev modellen bara «Inga poäng» är hela kommentaren rubriken, och då
+    ska ingenting stå under den."""
+    exam = _exam()
+    exam["uppgifter"][2]["elevlosningar"] = [
+        {"etikett": "0 p",
+         "partier": [{"rader": ["fel"], "poang": [0, 0, 0],
+                      "dom": "Inga poäng."}]}]
+    doc, _fel = exam_spec.validate_exam_json(exam)
+    tex = exam_latex.render_bedomning(doc)
+    assert tex.count("Inga poäng") == 1
+    assert r"{\small\bfseries Inga poäng}\par " in tex
+
+
+def test_trappstegets_niva_star_forst_pa_fast_position():
+    """Nivåmärket låg förut sist på raden via \\hfill — nationella provets egen
+    sättning, som fungerar när kriteriet har hela sidbredden. I
+    bedömningstabellens högerspalt (41 % av satsytan) bröts ett långt kriterium
+    över fyra rader och «+1 E» hamnade mitt inne i textflödet på den sista.
+
+    Nu står nivån FÖRST i en egen smal spalt med hängande indrag, precis som på
+    skärmen (losning.css .lotrappa är en grid med nivån i första spalten)."""
+    preamble = (Path(__file__).resolve().parent.parent / "app" / "templates"
+                / "_preamble.tex.j2").read_text(encoding="utf-8")
+    bit = preamble[preamble.index(r"\newcommand{\bedsteg}"):]
+    bit = bit[:bit.index("\n\n")]
+    assert r"\makebox[\bednivabredd]" in bit and r"\hangindent" in bit
+    assert r"\hfill" not in bit, "nivån flyter fortfarande med texten"
+    # Argumentordningen är oförändrad: \bedsteg{kriterium}{nivå}.
+    doc, _fel = exam_spec.validate_exam_json(_exam())
+    tex = exam_latex.render_bedomning(doc)
+    assert r"\bedsteg{anger det ena nollstället}{+1 E}" in tex
+    # En rad per poäng även när kriterierna är långa — raderna är egna stycken
+    # och bryts som löptext inne i sin spalt.
+    assert tex.count(r"\bedsteg{") == exam_spec.poangsummor(doc)["total"]

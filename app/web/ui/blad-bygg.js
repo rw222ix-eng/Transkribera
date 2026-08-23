@@ -777,6 +777,8 @@ window.BladBygg = (() => {
     return ut;
   }
 
+  const UTAN_POANG = /^\s*inga\s+po[äa]ng\s*[.:;,—–-]*\s*/i;
+
   function bedrader(u) {
     const rader = [], vag = u.vag || [], beddel = u.beddel || [];
     /* Facitraden — en per poängbärande enhet. En uppgift med deluppgifter har
@@ -797,7 +799,18 @@ window.BladBygg = (() => {
     (u.elever || []).forEach(e => {
       const poang = elevpoang(e), total = poang[0] + poang[1] + poang[2];
       const skrivna = (e.partier || []).reduce((a, p) => a.concat(p.rader || []), []);
-      const dom = (e.partier || []).map(p => p.dom).filter(Boolean).join(' ');
+      /* NOLLRADEN SÄGER «INGA POÄNG» EN GÅNG. Rubriken står redan i
+         högerspalten, och modellen skriver ofta kommentaren som en hel mening
+         som börjar likadant: «Inga poäng. Svaret är rätt, men …». Två rader
+         efter varandra som båda börjar med samma två ord. Prompten ber om det
+         också (exam_gen.build_bedomning_prompt) — men prompten är ett önskemål
+         och renderaren en regel, och papperen i basen skrevs innan önskemålet
+         fanns. Spegel av app/exam_latex._utan_rubriken. */
+      let dom = (e.partier || []).map(p => p.dom).filter(Boolean).join(' ');
+      if (!total) {
+        dom = dom.replace(UTAN_POANG, '').trim();
+        if (dom) dom = dom[0].toUpperCase() + dom.slice(1);
+      }
       rader.push({
         utan: !total, etikett: `${total} p`,
         vanster: `<div class="loskann">${skrivna.map(

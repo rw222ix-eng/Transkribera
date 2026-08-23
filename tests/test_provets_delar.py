@@ -567,7 +567,9 @@ def test_nollpoangsraden_sager_inga_poang_och_varfor():
                    delB=0)
     assert '<b class="lobedsteg">0 p</b>' in html
     assert '<p class="lobedinga">Inga poäng</p>' in html
-    assert '<p class="lobedvarfor">ingen ansats</p>' in html
+    # Versalen: kommentaren fortsatte förut efter «Inga poäng.» och det
+    # ledet ströks (blad-bygg.js UTAN_POANG).
+    assert '<p class="lobedvarfor">Ingen ansats</p>' in html
     # Nollraden får inga trappsteg — den fick inga poäng.
     assert html.count("lotrappa") == 1        # bara facitradens
 
@@ -639,3 +641,37 @@ def test_arbetsbladets_facit_heter_fortfarande_losningsforslag():
     assert "['Gruppuppgiften', 'Facit']" in plan
     bygg = (UI / "blad-boklos.js").read_text(encoding="utf-8")
     assert "Lösningsförslag · boken" in bygg
+
+
+def test_nollraden_upprepar_inte_rubriken_pa_skarmen():
+    """Spegel av app/exam_latex._utan_rubriken: «Inga poäng» står en gång, som
+    rubrik. Kommentaren säger varför."""
+    html = _losark([_uppg(p=2, f="$x = 4$", bed="+1 E a\n+1 C b",
+                          elever=[{"etikett": "0 p",
+                                   "partier": [{"rader": ["fel"],
+                                                "poang": [0, 0, 0],
+                                                "dom": "Inga poäng. Eleven "
+                                                       "deriverar aldrig."}]}])])
+    assert html.count("Inga poäng") == 1
+    assert '<p class="lobedvarfor">Eleven deriverar aldrig.</p>' in html
+    # Var kommentaren BARA rubriken blir det ingen rad alls under den.
+    tom = _losark([_uppg(p=2, f="$x = 4$", bed="+1 E a\n+1 C b",
+                         elever=[{"etikett": "0 p",
+                                  "partier": [{"rader": ["fel"],
+                                               "poang": [0, 0, 0],
+                                               "dom": "Inga poäng"}]}])])
+    assert "lobedvarfor" not in tom
+
+
+def test_trappstegets_niva_har_en_egen_spalt_pa_skarmen():
+    """Nivåmärket ska stå på samma plats hur långt kriteriet än är — annars går
+    trappan inte att läsa av som en trappa. Griden ger den en egen spalt, och
+    kriteriet bryts inuti sin."""
+    css = (UI / "losning.css").read_text(encoding="utf-8")
+    assert ".lotrappa>li{display:grid;grid-template-columns:calc(" in css
+    html = _losark([_uppg(p=1, f="$x = 4$",
+                          bed="+1 E deriverar och får $A\'(10) = 10$ "
+                              "m$^2$/dygn samt tolkar det som hur snabbt "
+                              "algarean växer efter 10 dygn")])
+    # Nivån är ett eget element FÖRE kriteriet, inte en svans på texten.
+    assert "<i>+1 E</i><span>deriverar och får" in html
