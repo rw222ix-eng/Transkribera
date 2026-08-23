@@ -458,6 +458,9 @@ test("tavlans nedladdning ger lösningsbladen som EGNA filer", async ({ page }) 
   expect(namn.some(n => /Lösningsförslag · boken/.test(n))).toBe(true);
   expect(namn.some(n => /Lösningsförslag · nivå 3/.test(n))).toBe(true);
   expect(new Set(filer).size).toBe(3);   // ingen fil skriver över en annan
+  /* Löpnumret först: Hämtat sorterar på namnet, och utan numret låg
+     «uppg 12» före «uppg 3» och tavlan mitt i bunten. */
+  expect(namn.map(n => n.slice(0, 3))).toEqual(["01 ", "02 ", "03 "]);
 });
 
 test("lösningsbladet laddar ner sin EGEN fil, inte originalets", async ({ page }) => {

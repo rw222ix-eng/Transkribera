@@ -4387,6 +4387,14 @@
        därför när avritningen vet, i stället för att räkna «5/4». */
     let totalt = (vag ? 1 : 0) + bok;
     const av = i => (totalt > 1 ? ` ${i}/${totalt} ` : ' ');
+    /* LÖPNUMRET FÖRST I FILNAMNET när det blir flera filer: «01 Tavla …»,
+       «02 Svarsfacit …», «03 Lösningsförslag · uppg 3». Utan det sorterade
+       Hämtat bladen alfabetiskt («uppg 12» före «uppg 3»), och två blad med
+       samma huvud hette samma sak — läraren skrev ut dem i fel ordning och
+       fick filer som skrev över varandra. Numret följer travens ordning, som
+       är uppgifternas. */
+    const flera = totalt > 1;
+    const numrera = (i, n) => (flera ? `${String(i).padStart(2, '0')} ${n}` : n);
     const ater = klart => {
       b.dataset.lage = klart ? 'klar' : '';
       b.textContent = klart ? 'Sparad' : text;
@@ -4400,7 +4408,7 @@
     if (!vag) forst = Promise.resolve();
     else if (!tavla) {
       b.textContent = 'Hämtar' + av(1) + '…';
-      forst = fetch(vag).then(blobEller).then(blob => laggIHamtat(blob, namn));
+      forst = fetch(vag).then(blobEller).then(blob => laggIHamtat(blob, numrera(1, namn)));
     } else if (window.TavlaBild) {
       b.textContent = 'Ritar av' + av(1) + '…';
       /* Bräde för bräde, EN fil: tavlan är ett papper i lärarens huvud, men
@@ -4408,7 +4416,7 @@
          ska inte bli fyra nedladdningar. */
       forst = window.TavlaBild.sidor(v).then(sidorna => {
         b.textContent = 'Sätter sidan' + av(1) + '…';
-        return sattPaSida(namn, sidorna);
+        return sattPaSida(numrera(1, namn), sidorna);
       });
     } else forst = Promise.reject(new Error('Tavelmotorn är inte laddad.'));
 
@@ -4420,7 +4428,7 @@
       .then(ark => { totalt = gjorda + ark.length; return ark; })
       .then(ark => ark.reduce((kedja, a, i) => kedja.then(() => {
         b.textContent = 'Sätter sidan' + av(gjorda + i + 1) + '…';
-        return sattPaSida(a.namn, a.png);
+        return sattPaSida(numrera(gjorda + i + 1, a.namn), a.png);
       }), Promise.resolve()))
       .then(() => {
         ater(true);
