@@ -269,16 +269,18 @@ window.BokLosning = (() => {
       const latta = riktiga.filter(p => p.niva < 3);
       const svara = riktiga.filter(p => p.niva === 3);
       /* ── DE SOM INTE FICK NÅGON LÖSNING ────────────────
-         En vald uppgift kan komma tillbaka tom: fler än servern skriver i ett
-         anrop (bok_losning.MAX_UPPGIFTER), en sida som inte är inläst, eller
-         en post modellen hoppade över. Filtret ovan tar bort dem, och FÖRR
-         försvann de spårlöst — läraren valde tjugo uppgifter, fick tolv poster
-         på arket och hade inget sätt att se vilka åtta som fattades. Numren
-         står därför sist på det sista arket: ett papper som säger vad det inte
-         täcker är värt mer än ett som tiger. */
+         En vald uppgift kan komma tillbaka tom: den ligger på en sida som
+         inte är inläst, eller så hoppade modellen över den. (En tredje orsak
+         fanns förut — servern skrev högst tolv uppgifter i ett anrop och
+         kapade resten. Taket är borta; urvalet delas i omgångar.) Filtret
+         ovan tar bort de tomma posterna, och FÖRR försvann de spårlöst:
+         läraren valde tjugo uppgifter, fick tolv poster på arket och hade
+         inget sätt att se vilka åtta som fattades. Numren står därför sist på
+         det sista arket — ett papper som säger vad det inte täcker är värt
+         mer än ett som tiger. */
       const utan = l.poster.filter(p => !(p.text && p.svar)).map(p => p.nr);
       const notrad = utan.length
-        ? `<p class="lokomm"><b>Utan lösning här:</b> uppgift ${esc(utan.join(', '))} — ${utan.length === 1 ? 'den' : 'de'} rymdes inte i skrivningen eller ligger på sidor som inte är inlästa.</p>`
+        ? `<p class="lokomm"><b>Utan lösning här:</b> uppgift ${esc(utan.join(', '))} — ${utan.length === 1 ? 'den ligger' : 'de ligger'} på sidor som inte är inlästa, eller hoppades över när lösningarna skrevs.</p>`
         : '';
       if (latta.length) ut2.push(`<div class="ark" data-form="lo-bok" data-brytbar="">
         <div class="lohuvud"><b>Lösningsförslag · boken</b><span>${esc(b.bok)} · s. ${esc(b.sidor)} · ${latta.length} ${latta.length === 1 ? 'uppgift' : 'uppgifter'}</span></div>

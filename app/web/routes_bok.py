@@ -189,12 +189,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
         (app/bok_losning.py). Uppgifter på olästa sidor gissas ALDRIG fram —
         de returneras i `olasta_uppg` och arket säger det i stället.
 
-        TRE sorters uppgift kommer tillbaka utan lösning, och alla tre måste
-        nämnas vid namn: `okanda` (numret finns inte i boken), `olasta_uppg`
-        (sidan är inte inläst) och `over_taket` (fler än bok_losning tar i ett
-        anrop). Den sista saknades, och då var kapningen tyst hela vägen ut:
-        klienten gjorde platshållare av dem och arket ritade inte
-        platshållare."""
+        TVÅ sorters uppgift kommer tillbaka utan lösning, och båda måste
+        nämnas vid namn: `okanda` (numret finns inte i boken) och
+        `olasta_uppg` (sidan är inte inläst). En tredje fanns förut,
+        `over_taket` — allt över tolv kapades i ett svep, och tyst: klienten
+        gjorde platshållare av dem och arket ritade inte platshållare. Taket
+        är borta (bok_losning delar i stället urvalet i omgångar och kör dem
+        parallellt), så ALLA valda uppgifter på lästa sidor prövas nu."""
         body = await req.json()
         try:
             begarda = [int(n) for n in (body.get("uppg") or [])]
@@ -240,7 +241,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 olasta_uppg = [u["nr"] for u in val if u["sida"] not in lasta]
                 if not kan:
                     return {"poster": [], "olasta_uppg": olasta_uppg,
-                            "okanda": okanda, "over_taket": []}
+                            "okanda": okanda}
                 avsnitt = next((s.get("avsnitt") or s.get("rubrik")
                                 for s in med_text
                                 if s.get("avsnitt") or s.get("rubrik")), "")
@@ -248,8 +249,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     b["namn"], avsnitt, med_text, kan,
                     log_cb=lambda m: emit({"type": "log", "msg": m}))
                 return {"poster": res["poster"],
-                        "olasta_uppg": olasta_uppg, "okanda": okanda,
-                        "over_taket": res.get("over_taket") or []}
+                        "olasta_uppg": olasta_uppg, "okanda": okanda}
             finally:
                 arbiter.release_llm(llm)
 

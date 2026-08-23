@@ -21,14 +21,28 @@ from __future__ import annotations
 
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
 
 from app import llm_client
 
-# Taket är arkets, inte modellens: fler poster än så bryter ändå till nya
-# blad, och ett anrop med fyrtio uppgifter blir ett svar ingen hinner läsa
-# igenom innan lektionen.
-MAX_UPPGIFTER = 12
+# ── ALLA VALDA UPPGIFTER FÅR EN LÖSNING ────────────────────────────────────
+# Här satt förut MAX_UPPGIFTER = 12: ett HÅRT tak. Läraren som valde tjugo
+# uppgifter fick tolv lösningar, och åtta platshållare — taket fanns bara för
+# att allt skrevs i ETT anrop, och ett anrop med fyrtio uppgifter blir ett
+# svar där posterna tunnar ut mot slutet. Taket var alltså aldrig lärarens
+# gräns utan promptens, och en promptgräns löses med fler prompter.
+#
+# Tolv är därför inte längre ett tak utan en OMGÅNGS storlek: urvalet delas i
+# jämna omgångar om högst så många, och omgångarna körs parallellt.
+BATCH_UPPGIFTER = 12
+
+# Fyra trådar och inte en per omgång: varje anrop är en egen claude-process
+# (claude_code startar CLI:t per anrop), samma resonemang som vid
+# BEDOMNING_TRADAR i app/exam_gen.py — samtidiga processer är samtidiga
+# modellkörningar på lärarens kvot. Fyra räcker gott: fyrtioåtta valda
+# uppgifter är fyra omgångar, och det är fler än ett lösningsark rymmer.
+LOSNING_TRADAR = 4
 
 # Postens form-version, stämplad av servern (aldrig av modellen). Höjs när
 # prompten ändrats så att redan skrivna poster är sämre än en omskrivning —
@@ -91,17 +105,42 @@ SCHEMA = {
 }
 
 
-def dela_pa_taket(uppgifter: list[dict]) -> tuple[list[dict], list]:
-    """(de som ryms under taket, NUMREN på dem som inte gör det).
+def _omgangar(uppgifter: list[dict]) -> list[list[dict]]:
+    """Uppgifterna i nummerordning, delade i JÄMNA omgångar om högst
+    BATCH_UPPGIFTER.
 
-    Taket är avsiktligt (se MAX_UPPGIFTER) — det som inte var det är att
-    överskottet försvann tyst. Kapningen skedde här, rutten svarade varken
-    `olasta_uppg` eller `okanda` för de kapade, klienten nollade dem till
-    platshållare och arket filtrerade bort platshållare. Läraren som valde
-    tjugo uppgifter fick tolv, och ingenstans stod det. Numren åker därför
-    hem samma väg som `okanda`, och sägs i klartext."""
-    return (list(uppgifter[:MAX_UPPGIFTER]),
-            [u.get("nr") for u in uppgifter[MAX_UPPGIFTER:]])
+    Jämnt, inte «fyll upp till taket»: tjugofem uppgifter blir 9/8/8 och inte
+    12/12/1. Antalet anrop är detsamma, men en ensam uppgift i en egen omgång
+    kostar lika mycket som nio och ger ett tunnare svar — modellen har då sett
+    en sida i stället för tre och har mindre av bokens språk att härma."""
+    val = sorted(uppgifter, key=lambda u: u.get("nr") or 0)
+    if not val:
+        return []
+    if len(val) <= BATCH_UPPGIFTER:
+        return [val]
+    antal = -(-len(val) // BATCH_UPPGIFTER)          # tak-division
+    bas, rest = divmod(len(val), antal)
+    ut, i = [], 0
+    for k in range(antal):
+        stor = bas + (1 if k < rest else 0)
+        ut.append(val[i:i + stor])
+        i += stor
+    return ut
+
+
+def _sidor_for(sidor: list[dict], val: list[dict]) -> list[dict]:
+    """Bara sidorna omgångens uppgifter faktiskt sitter på.
+
+    En omgång som får hela urvalets sidtext betalar för sex sidor den inte
+    ska lösa något ur — och sidtexten är promptens tyngsta del. Filtret är
+    samma semantik som förut, när allt gick i ett anrop: rutten skickar redan
+    bara de valda uppgifternas sidor.
+
+    Saknar uppgifterna `sida` (kallaren har bara nr och nivå) finns inget att
+    filtrera på, och då är alla sidor rätt svar — hellre för mycket text än en
+    prompt utan boken i."""
+    vill = {u.get("sida") for u in val if u.get("sida") is not None}
+    return [s for s in sidor if s.get("sida") in vill] or list(sidor)
 
 
 def build_prompt(bok_namn: str, avsnitt: str,
@@ -210,37 +249,89 @@ def _json_objekt(raw: str) -> dict | None:
     return data if isinstance(data, dict) else None
 
 
+def _en_omgang(bok_namn: str, avsnitt: str, sidor: list[dict],
+               val: list[dict], *, model: str, llm) -> dict:
+    """Ett anrop. Sväljer sitt eget fel: en omgång som faller får inte fälla
+    de andra. Dess uppgifter kommer hem utan lösning — samma utgång som en
+    post modellen hoppade över — och läraren ser dem på arket i stället för
+    att stå med ett papper som inte blev till alls."""
+    try:
+        raw = llm(model,
+                  build_prompt(bok_namn, avsnitt, _sidor_for(sidor, val), val),
+                  system=SYSTEM,
+                  response_format={"type": "json_schema",
+                                   "json_schema": {"schema": SCHEMA}})
+        return _json_objekt(raw) or {}
+    except Exception:                               # noqa: BLE001
+        return {}
+
+
 def generate_losningar(bok_namn: str, avsnitt: str, sidor: list[dict],
                        uppgifter: list[dict], *, model: str = "",
                        llm=llm_client.generate,
                        log_cb: Callable[[str], None] | None = None) -> dict:
-    """{poster: […], over_taket: […]} för de uppgifter som gick att lösa.
+    """{poster: […]} för de uppgifter som gick att lösa — ALLA valda prövas.
 
-    Poster vars nummer inte fanns bland de begärda kastas — modellen ska
-    inte kunna smyga in en uppgift läraren inte bad om — och nivån sätts ur
-    DATABASENS uppgiftsrad, inte ur modellens svar: nivån styr vilket ark
-    posten hamnar på, och den är ett faktum om boken.
+    Poster vars nummer inte fanns i den egna omgången kastas — modellen ska
+    inte kunna smyga in en uppgift läraren inte bad om, och inte heller svara
+    två gånger för samma — och nivån sätts ur DATABASENS uppgiftsrad, inte ur
+    modellens svar: nivån styr vilket ark posten hamnar på, och den är ett
+    faktum om boken.
 
-    `over_taket` är numren som kapades av MAX_UPPGIFTER (se dela_pa_taket).
-    Fältet är alltid med, också tomt: rutten och toasten ska kunna räkna på
-    det utan att först fråga om det finns."""
+    AVBRYT STOPPAR SKRIVNINGEN. Loggraden är livstecknet strömmen avbryter vid
+    (app/web/sse.py: `emit` kastar KlientBorta), och den ligger i HUVUDTRÅDEN
+    efter varje färdig omgång — omgångarna loggar aldrig själva, för då hade
+    avbrottet fastnat i fail-open-fällan i `_en_omgang` och svalts som «en
+    omgång som föll». Samma mönster som bedomningspass i app/exam_gen.py."""
     log = log_cb or (lambda _m: None)
-    val, over = dela_pa_taket(uppgifter)
-    log(f"Skriver lösningar till {len(val)} uppgifter ur boken …"
-        + (f" — och {len(over)} uppgifter till fick inte plats." if over else ""))
-    raw = llm(model, build_prompt(bok_namn, avsnitt, sidor, val),
-              system=SYSTEM,
-              response_format={"type": "json_schema",
-                               "json_schema": {"schema": SCHEMA}})
-    data = _json_objekt(raw) or {}
-    niva_for = {int(u["nr"]): u.get("niva") for u in val}
-    poster = []
-    for p in data.get("poster") or []:
-        rensad = _rensa(p)
-        if rensad is None or rensad["nr"] not in niva_for:
-            continue
-        rensad["niva"] = niva_for[rensad["nr"]] or 1
-        rensad["skriven"] = SKRIVEN
-        poster.append(rensad)
+    omgangar = _omgangar(uppgifter)
+    if not omgangar:
+        return {"poster": []}
+    n, m = sum(len(o) for o in omgangar), len(omgangar)
+    # Raden räknar FÄRDIGA omgångar och inte vilken som just startade: de går
+    # parallellt och blir klara i den ordning modellen råkar svara.
+    rad = (lambda i: f"Skriver lösningar till {n} uppgifter ur boken"
+           + (f" (omgång {i} av {m})" if m > 1 else "") + " …")
+    svaren: list[tuple[list[dict], dict]] = []
+    log(rad(1))
+    if m == 1:
+        # En enda omgång går utan pool: ett urval som ryms i ett anrop ska gå
+        # precis som förut, utan en trådpool som ändå bara har en sak att göra.
+        svaren.append((omgangar[0], _en_omgang(bok_namn, avsnitt, sidor,
+                                               omgangar[0], model=model, llm=llm)))
+    else:
+        pool = ThreadPoolExecutor(max_workers=min(LOSNING_TRADAR, m))
+        try:
+            futures = {pool.submit(_en_omgang, bok_namn, avsnitt, sidor, o,
+                                   model=model, llm=llm): o for o in omgangar}
+            klara = 0
+            for fut in as_completed(futures):
+                o = futures[fut]
+                klara += 1
+                try:
+                    svaren.append((o, fut.result()))
+                except Exception:                   # noqa: BLE001
+                    svaren.append((o, {}))
+                log(rad(min(klara + 1, m)))
+        finally:
+            # wait=False + cancel_futures: ett avbrott ska släppa läraren
+            # direkt, inte vänta in tre anrop till som ingen längre väntar på.
+            pool.shutdown(wait=False, cancel_futures=True)
+
+    poster, sedda = [], set()
+    for val, data in svaren:
+        niva_for = {int(u["nr"]): u.get("niva") for u in val}
+        for p in data.get("poster") or []:
+            rensad = _rensa(p)
+            if rensad is None or rensad["nr"] not in niva_for:
+                continue
+            if rensad["nr"] in sedda:
+                continue
+            sedda.add(rensad["nr"])
+            rensad["niva"] = niva_for[rensad["nr"]] or 1
+            rensad["skriven"] = SKRIVEN
+            poster.append(rensad)
+    # Sorteringen är arkets: omgångarna kom hem i huller om buller, och
+    # posterna ska stå i nummerordning på pappret oavsett vem som svarade först.
     poster.sort(key=lambda p: p["nr"])
-    return {"poster": poster, "over_taket": over}
+    return {"poster": poster}

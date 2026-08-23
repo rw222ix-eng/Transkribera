@@ -984,36 +984,98 @@ def test_boklosningarnas_prompt_bar_sidtexten_ordagrant():
     assert "Hitta ALDRIG på en uppgift" in p
 
 
-# ── TAKET FÅR INTE VARA TYST ────────────────────────────────────────────────
-# MAX_UPPGIFTER kapade urvalet inne i generate_losningar, och överskottet fanns
-# sedan varken i `olasta_uppg` eller i `okanda`. Klienten gjorde platshållare av
-# posterna, arket ritade inte platshållare, och läraren som valt tjugo uppgifter
-# fick tolv utan ett ord om de åtta. Kapningen är rätt — tystnaden var buggen.
+# ── ALLA VALDA UPPGIFTER FÅR EN LÖSNING ─────────────────────────────────────
+# MAX_UPPGIFTER = 12 kapade urvalet inne i generate_losningar: läraren som valde
+# tjugo uppgifter fick tolv lösningar och åtta platshållare. Taket var promptens,
+# inte lärarens — allt skrevs i ETT anrop — och en promptgräns löses med fler
+# prompter. Urvalet delas nu i jämna omgångar om högst BATCH_UPPGIFTER, körda
+# parallellt, och ingenting kapas.
 
-def test_overskottet_over_taket_kommer_hem_med_namn():
+def test_stort_urval_delas_i_jamna_omgangar_och_alla_kommer_hem():
     from app import bok_losning
-    valda = [{"nr": 1100 + i, "niva": 1} for i in range(bok_losning.MAX_UPPGIFTER + 3)]
-    inom, over = bok_losning.dela_pa_taket(valda)
-    assert len(inom) == bok_losning.MAX_UPPGIFTER
-    assert over == [1112, 1113, 1114]
+    # Femton uppgifter på fem sidor, tre per sida.
+    valda = [{"nr": 1100 + i, "niva": 1 + i % 3, "sida": 10 + i // 3}
+             for i in range(15)]
+    sidor = [{"sida": 10 + k, "text": f"SIDTEXT {10 + k}"} for k in range(5)]
+    prompter = []
 
-    # Och samma sanning ur hela vägen: modellen svarar på ALLA, men bara de som
-    # ryms är begärda — resten står namngivna i `over_taket`.
-    fejk = json.dumps({"poster": [
-        {"nr": u["nr"], "text": f"Uppgift {u['nr']}.", "svar": "$1$", "vag": []}
-        for u in valda]})
+    def fejk_llm(model, prompt, **k):
+        prompter.append(prompt)
+        # Modellen svarar bara på det den blev tillfrågad om — precis som en
+        # riktig omgång gör, och det är just det som gör delningen synlig.
+        nrn = [u["nr"] for u in valda if str(u["nr"]) in prompt]
+        return json.dumps({"poster": [
+            {"nr": nr, "text": f"Uppgift {nr}.", "svar": "$1$", "vag": []}
+            for nr in nrn]})
+
     res = bok_losning.generate_losningar(
-        "Liber Ma 1c", "1.1", [{"sida": 4, "text": "…"}], valda,
-        llm=lambda *a, **k: fejk)
-    assert len(res["poster"]) == bok_losning.MAX_UPPGIFTER
-    assert res["over_taket"] == [1112, 1113, 1114]
+        "Liber Ma 1c", "1.1", sidor, valda, llm=fejk_llm)
+
+    # TVÅ anrop (15 > 12), och jämnt delade: 8/7, inte 12/3. En ensam uppgift i
+    # en egen omgång kostar lika mycket som åtta och ger ett tunnare svar.
+    assert len(prompter) == 2
+    delar = sorted((len([u for u in valda if str(u["nr"]) in p]) for p in prompter),
+                   reverse=True)
+    assert delar == [8, 7]
+    # Varje omgång ser BARA sina egna sidor: sidtexten är promptens tyngsta del,
+    # och en omgång som får hela urvalets sidor betalar för sidor den inte ska
+    # lösa något ur. Uppgift 1100–1107 sitter på s. 10–12, resten på s. 12–14.
+    forsta = next(p for p in prompter if "1100" in p)
+    assert "SIDTEXT 10" in forsta and "SIDTEXT 14" not in forsta
+
+    # ALLA femton kommer hem, i nummerordning (omgångarna blir klara huller om
+    # buller), med nivån ur databasens rad och inte ur modellens svar.
+    assert [p["nr"] for p in res["poster"]] == [u["nr"] for u in valda]
+    assert [p["niva"] for p in res["poster"]] == [u["niva"] for u in valda]
+    assert "over_taket" not in res
+
+
+def test_urval_som_ryms_i_ett_anrop_gar_i_ett_anrop():
+    """Tolv eller färre ska gå precis som förut — en omgång, ingen trådpool."""
+    from app import bok_losning
+    valda = [{"nr": 1100 + i, "niva": 1, "sida": 10} for i in range(12)]
+    anrop = []
+
+    def fejk_llm(model, prompt, **k):
+        anrop.append(prompt)
+        return json.dumps({"poster": [
+            {"nr": u["nr"], "text": f"Uppgift {u['nr']}.", "svar": "$1$",
+             "vag": []} for u in valda]})
+
+    res = bok_losning.generate_losningar(
+        "Liber Ma 1c", "1.1", [{"sida": 10, "text": "…"}], valda, llm=fejk_llm)
+    assert len(anrop) == 1
+    assert len(res["poster"]) == 12
+
+
+def test_en_omgang_som_faller_faller_inte_de_andra():
+    """Fail-open per omgång: uppgifterna i den omgång som kastade kommer hem
+    utan lösning (platshållare), precis som en post modellen hoppade över —
+    de andra omgångarnas lösningar hade annars gått förlorade med den."""
+    from app import bok_losning
+    valda = [{"nr": 1100 + i, "niva": 1, "sida": 10 + i // 3} for i in range(15)]
+
+    def fejk_llm(model, prompt, **k):
+        if "1100" in prompt:
+            raise RuntimeError("modellen svarade inte")
+        nrn = [u["nr"] for u in valda if str(u["nr"]) in prompt]
+        return json.dumps({"poster": [
+            {"nr": nr, "text": f"Uppgift {nr}.", "svar": "$1$", "vag": []}
+            for nr in nrn]})
+
+    res = bok_losning.generate_losningar(
+        "Liber Ma 1c", "1.1", [{"sida": 10 + k, "text": "…"} for k in range(5)],
+        valda, llm=fejk_llm)
+    hem = [p["nr"] for p in res["poster"]]
+    assert 1100 not in hem                      # omgången som föll
+    assert hem == sorted(hem) and len(hem) == 7  # den andra omgången kom hem
 
 
 def test_losningsrutten_sager_vilka_uppgifter_som_inte_fick_plats(
         client, ocr, monkeypatch):
-    """Rutten svarar för TRE sorters uppgift utan lösning: okänd, oläst — och
-    över taket. Den sista saknades helt, och då var kapningen tyst hela vägen
-    ut till arket."""
+    """Rutten svarar för TVÅ sorters uppgift utan lösning: okänd och oläst.
+    En tredje fanns — över taket — och den var dessutom tyst hela vägen ut till
+    arket. Taket är borta: arton valda uppgifter ger arton lösningar."""
     from app import bok_losning
 
     b = _importera(client)
@@ -1024,7 +1086,7 @@ def test_losningsrutten_sager_vilka_uppgifter_som_inte_fick_plats(
             .json()["uppgifter"]]
     assert len(uppg) == 18
 
-    # Bara modellen stubbas — kapningen och rapporteringen körs på riktigt.
+    # Bara modellen stubbas — delningen och rapporteringen körs på riktigt.
     riktig = bok_losning.generate_losningar
     prompter = []
 
@@ -1032,24 +1094,23 @@ def test_losningsrutten_sager_vilka_uppgifter_som_inte_fick_plats(
         prompter.append(prompt)
         return json.dumps({"poster": [
             {"nr": nr, "text": f"Uppgift {nr}.", "svar": "$1$", "vag": []}
-            for nr in uppg]})
+            for nr in uppg if str(nr) in prompt]})
 
     monkeypatch.setattr(bok_losning, "generate_losningar",
                         lambda *a, **k: riktig(*a, **dict(k, llm=fejk_llm)))
     res = _done(client.post(f"/api/bocker/{b['id']}/losningar",
                             json={"uppg": uppg + [99999]}))
-    # Modellen ombads aldrig lösa fler än taket — men de andra ska sägas.
-    assert str(uppg[0]) in prompter[0]
-    assert str(uppg[-1]) not in prompter[0]
-    assert [p["nr"] for p in res["poster"]] == uppg[:bok_losning.MAX_UPPGIFTER]
-    assert res["over_taket"] == uppg[bok_losning.MAX_UPPGIFTER:]
+    # Arton uppgifter blev två omgångar om nio — och varje uppgift låg i EN.
+    assert len(prompter) == 2
+    assert [p["nr"] for p in res["poster"]] == uppg
+    assert "over_taket" not in res
     assert res["okanda"] == [99999]
     assert res["olasta_uppg"] == []
 
 
-def test_losningsrutten_svarar_med_taket_ocksa_nar_sidorna_ar_olasta(client, ocr):
-    """Fältet är alltid med — toasten räknar på det utan att först fråga om det
-    finns."""
+def test_losningsrutten_sager_ifran_nar_sidorna_ar_olasta(client, ocr):
+    """En oläst sida ger inga lösningar — och numren måste ändå hem: klienten
+    stämplar posterna på pappret så att nästa öppning inte frågar igen."""
     b = _importera(client)
     _done(client.post(f"/api/bocker/{b['id']}/las",
                       json={"fran": 10, "till": 11, "bara": "fakta"}))
@@ -1058,8 +1119,9 @@ def test_losningsrutten_svarar_med_taket_ocksa_nar_sidorna_ar_olasta(client, ocr
             .json()["uppgifter"]]
     res = _done(client.post(f"/api/bocker/{b['id']}/losningar",
                             json={"uppg": uppg}))
-    assert res["poster"] == [] and res["over_taket"] == []
+    assert res["poster"] == []
     assert res["olasta_uppg"] == uppg
+    assert "over_taket" not in res
 
 
 # ── MARKDOWN-STÄDNINGEN FÅR INTE RÖRA MATTEN ────────────────────────────────

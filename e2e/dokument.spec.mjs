@@ -735,6 +735,10 @@ test("«Börja om» utan utkast påstår inte att något slängdes", async ({ pa
 // överskottet över serverns tak försvann, PATCH:en kunde skriva över en
 // omskrivning som skedde under minuten, och «en skrivning pågår»-flaggan
 // hamnade i dokumentets JSON och blev därmed permanent.
+//
+// Taket självt är sedan borta: servern delar urvalet i omgångar och kör dem
+// parallellt (bok_losning.BATCH_UPPGIFTER), så klienten begär ALLA uppgifter
+// som saknar en lösning — också på ett papper som skrevs medan taket fanns.
 
 /* Urvalet som Uppgifter.urval lämnar det INNAN någon lösning är skriven:
    posterna bär nummer och nivå, ingenting mer. `bokId` är satt — utan det är
@@ -753,6 +757,13 @@ const skriven = nr => ({
   nr, niva: 1, skriven: 3, text: `Bestäm $f'(x)$ när $f(x) = ${nr}x$.`,
   svar: `$${nr}$`, vag: [["derivera", "potensregeln"]],
 });
+
+/** Papperen som PATCH:ats till raden. Skrivningen lägger sitt resultat rakt på
+    dokumentet (inte som ett varv), så det är HÄR posterna går att läsa —
+    klienten har ingen väg utåt till versionen som ligger framme. */
+const patchat = anrop => anrop
+  .filter(a => a.metod === "PATCH" && a.kropp && a.kropp.dokument)
+  .map(a => a.kropp.dokument);
 
 /** Fejkar lösningsrutten (bocker → losningar) som en SSE-ström. `grind` (en
     Promise) håller svaret öppet tills testet släpper det. */
@@ -784,8 +795,7 @@ test("en kvarglömd «skriver»-flagga hindrar inte lösningarna för alltid", a
   bok.losning.skriver = true;               // arvet från en skrivning som dog
   const v = papper({ typ: "Tavla", bokuppg: bok });
   const anrop = await fejkaLosningar(page, {
-    poster: [skriven(3101), skriven(3102)],
-    olasta_uppg: [], okanda: [], over_taket: [] });
+    poster: [skriven(3101), skriven(3102)], olasta_uppg: [], okanda: [] });
   await fejka(page, { utkast: utkastMed([v]) });
   await page.goto("/");
   await hydrerad(page);
@@ -796,23 +806,75 @@ test("en kvarglömd «skriver»-flagga hindrar inte lösningarna för alltid", a
   expect(anrop[0].uppg).toEqual([3101, 3102]);
 });
 
-test("uppgifterna som inte fick plats sägs i klartext", async ({ page }) => {
-  /* Servern skriver högst bok_losning.MAX_UPPGIFTER i ett anrop. Överskottet
-     kom hem varken som `okanda` eller som `olasta_uppg`, nollades till
-     platshållare i klienten och filtrerades bort av arket — läraren valde
-     femton uppgifter, fick tolv och fick inget veta. */
+test("femton valda uppgifter begärs allihop och ritas allihop", async ({ page }) => {
+  /* Servern skrev förut högst tolv uppgifter i ETT anrop och kapade resten:
+     överskottet kom hem varken som `okanda` eller som `olasta_uppg`, nollades
+     till platshållare i klienten och filtrerades bort av arket — läraren valde
+     femton uppgifter, fick tolv och fick inget veta. Nu delar servern urvalet
+     i omgångar, klienten begär hela urvalet, och inget «rymdes inte» finns
+     kvar att säga. */
   const nr = Array.from({ length: 15 }, (_, i) => 3101 + i);
   const v = papper({ typ: "Tavla", bokuppg: oskrivetBokurval(nr) });
-  await fejkaLosningar(page, {
-    poster: nr.slice(0, 12).map(skriven),
-    olasta_uppg: [], okanda: [], over_taket: nr.slice(12) });
+  const skrivningar = await fejkaLosningar(page, {
+    poster: nr.map(skriven), olasta_uppg: [], okanda: [] });
+  const anrop = await fejka(page, { utkast: utkastMed([v]) });
+  await page.goto("/");
+  await hydrerad(page);
+  await page.getByRole("tab", { name: "Planering" }).click();
+
+  await expect.poll(() => skrivningar.length).toBe(1);
+  expect(skrivningar[0].uppg).toEqual(nr);
+  await expect(page.locator(".toast").last())
+    .toContainText("Lösningsförslagen är skrivna ur bokens sidor");
+  await expect(page.locator(".toast").last()).not.toContainText("rymdes inte");
+
+  // Och alla femton står på arket, ingen som platshållare. Pappret läses ur
+  // PATCH:en — det är den versionen som faktiskt hamnar på raden.
+  await expect.poll(() => patchat(anrop).length).toBe(1);
+  const html = await page.evaluate(
+    d => window.BokLosning.blad(d).join(""), patchat(anrop)[0]);
+  expect(html).not.toContain("Utan lösning här");
+});
+
+test("ett papper som skrevs under det gamla taket läker sig självt", async ({ page }) => {
+  /* Spärren var förr «någon post är skriven → hoppa över anropet». Ett papper
+     som gjordes medan taket fanns bär tolv skrivna poster och resten
+     platshållare — och den spärren gjorde kapningen permanent: pappret kunde
+     aldrig få de sista tre. Nu räknas behovet per post, och BARA de tre
+     begärs. */
+  const nr = Array.from({ length: 15 }, (_, i) => 3101 + i);
+  const bok = oskrivetBokurval(nr);
+  bok.losning.poster = nr.map((n, i) => (i < 12 ? skriven(n) : { nr: n, niva: 2 }));
+  const v = papper({ typ: "Tavla", bokuppg: bok });
+  const anrop = await fejkaLosningar(page, {
+    poster: nr.slice(12).map(skriven), olasta_uppg: [], okanda: [] });
   await fejka(page, { utkast: utkastMed([v]) });
   await page.goto("/");
   await hydrerad(page);
   await page.getByRole("tab", { name: "Planering" }).click();
 
-  await expect(page.locator(".toast").last())
-    .toContainText("3 uppgifter till rymdes inte i skrivningen");
+  await expect.poll(() => anrop.length).toBe(1);
+  expect(anrop[0].uppg).toEqual(nr.slice(12));
+});
+
+test("en post på en oläst sida stämplas och frågas inte om igen", async ({ page }) => {
+  /* Svaret är detsamma varje gång: sidan blir inte inläst av att pappret
+     öppnas. Utan stämpeln hade varje öppning avfyrat ett nytt anrop i onödan,
+     och det anropet kostar en modellkörning. */
+  const nr = [3101, 3102];
+  const v = papper({ typ: "Tavla", bokuppg: oskrivetBokurval(nr) });
+  const skrivningar = await fejkaLosningar(page, {
+    poster: [skriven(3101)], olasta_uppg: [3102], okanda: [] });
+  const anrop = await fejka(page, { utkast: utkastMed([v]) });
+  await page.goto("/");
+  await hydrerad(page);
+  await page.getByRole("tab", { name: "Planering" }).click();
+
+  await expect.poll(() => skrivningar.length).toBe(1);
+  await expect(page.locator(".toast").last()).toContainText("olästa sidor");
+  await expect.poll(() => patchat(anrop).length).toBe(1);
+  const poster = patchat(anrop)[0].bokuppg.losning.poster;
+  expect(poster.map(p => !!p.olast)).toEqual([false, true]);
 });
 
 test("arket räknar upp de uppgifter det inte har någon lösning till", async ({ page }) => {
@@ -845,8 +907,7 @@ test("lösningarna skriver inte över en omskrivning som skedde under tiden", as
   let slapp;
   const grind = new Promise(r => { slapp = r; });
   const skrivningar = await fejkaLosningar(page, {
-    poster: [skriven(3101), skriven(3102)],
-    olasta_uppg: [], okanda: [], over_taket: [] }, grind);
+    poster: [skriven(3101), skriven(3102)], olasta_uppg: [], okanda: [] }, grind);
   const anrop = await fejka(page, { utkast: utkastMed([v0, v1], 0) });
   await page.goto("/");
   await hydrerad(page);

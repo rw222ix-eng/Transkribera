@@ -58,10 +58,10 @@
       .forEach(r => {
         const l = r.v.bokuppg.losning;
         /* Antalet är de uppgifter arket FAKTISKT bär en lösning till, inte hela
-           urvalet. Allt över bok_losning.MAX_UPPGIFTER — och allt på olästa
-           sidor — kommer tillbaka utan innehåll, och BokLosning ritar inte
-           tomma poster. Raden lovade förr hela urvalet, så kvittot i handen sa
-           en annan sak än pappret i skrivaren. Utan server (Claude Design) är
+           urvalet. Allt på olästa sidor — och det modellen hoppade över —
+           kommer tillbaka utan innehåll, och BokLosning ritar inte tomma
+           poster. Raden lovade förr hela urvalet, så kvittot i handen sa en
+           annan sak än pappret i skrivaren. Utan server (Claude Design) är
            posterna prototypmallar och alla ritas: då gäller urvalet. */
         const skrivna = (window.API && window.API.pa)
           ? (l.poster || []).filter(p => p.text && p.svar).length

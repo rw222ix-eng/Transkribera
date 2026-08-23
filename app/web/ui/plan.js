@@ -882,16 +882,18 @@
         if (s.boklosniva === 'Inga') satNot(not, '', 'Bokens uppgifter står kvar i pappret — men utan skrivna lösningar.');
         else {
           const n = U && U.losningsantal ? U.losningsantal(s.boklosniva) : 0;
-          /* Taket är serverns (bok_losning.MAX_UPPGIFTER): fler än så får inte
-             lösningar i EN skrivning. Raden lovade förr hela urvalet, och
-             läraren som valt tjugo uppgifter upptäckte först på arket att åtta
-             saknades. Numret följer MAX_UPPGIFTER i app/bok_losning.py. */
-          const TAK = 12;
-          satNot(not, !n || n > TAK ? 'krock' : 'ok', !n
+          /* ALLA valda uppgifter får lösningar. Här stod förr en spärr: mer än
+             tolv och raden sa «krock», för servern kapade urvalet vid tolv i
+             ett enda anrop. Kapningen är borta — servern delar i stället
+             urvalet i omgångar om tolv och kör dem parallellt
+             (bok_losning.BATCH_UPPGIFTER) — så raden lovar hela urvalet igen.
+             Kvar är en UPPLYSNING, inte en varning: fler omgångar tar längre
+             tid, och läraren ska veta det innan hon står och väntar. */
+          const OMGANG = 12;
+          satNot(not, n ? 'ok' : 'krock', !n
             ? 'Ingen uppgift på den nivån är kvar i urvalet.'
-            : n > TAK
-              ? `${TAK} av ${n} uppgifter får lösningar — resten ryms inte i en skrivning.`
-              : `${n} ${n === 1 ? 'uppgift' : 'uppgifter'} — lösningar inom bokens metoder t.o.m. ${U.avsnittsnr()}`);
+            : `${n} ${n === 1 ? 'uppgift' : 'uppgifter'} — lösningar inom bokens metoder t.o.m. ${U.avsnittsnr()}`
+              + (n > OMGANG ? ' · flera omgångar, några minuter' : ''));
         }
       }
       /* Dagen, klockslagen och längden i EN panel — appens kalender, samma som
@@ -3679,18 +3681,33 @@
      tidens ände. En WeakSet på lösningsobjektet håller samma spärr utan att
      någonsin nå disken (och släpper minnet med pappret). */
   const skriverNu = new WeakSet();
+  /* ── VILKA POSTER SOM SAKNAR EN LÖSNING ────────────
+     Förr räckte det att NÅGON post var skriven för att hoppa över hela
+     anropet — rimligt när servern skrev allt i ett svep, men servern kapade
+     samtidigt urvalet vid tolv. Ett papper som gjordes då bär alltså tolv
+     skrivna poster och resten platshållare, och den gamla spärren gjorde
+     kapningen permanent: pappret kunde aldrig läka. Taket är borta, och
+     behovet räknas därför per post.
+
+     Stämpeln är serverns form-version (bok_losning.SKRIVEN): poster skrivna
+     före ett promptlyft — t.ex. de med «a) …» i stället för deluppgifternas
+     uttryck, eller utan delar-strukturen — skrivs om en gång, sedan bär
+     pappret de nya. Talet följer SKRIVEN i app/bok_losning.py.
+
+     `olast` och `okand` är klientens egna stämplar på poster servern sagt att
+     den inte kan lösa. De finns för att svaret är detsamma varje gång: sidan
+     blir inte inläst av att pappret öppnas igen, och numret finns inte i
+     boken hur många gånger vi än frågar. Utan stämplarna hade varje öppning
+     av pappret avfyrat ett nytt anrop i onödan. */
+  const behovet = poster => (poster || []).filter(
+    p => !(p.text && p.skriven >= 3) && !p.olast && !p.okand);
+
   function skrivBokLosningar(v) {
     const l = v && v.bokuppg && v.bokuppg.losning;
     if (!serverPa() || !l || !(l.poster || []).length) return;
     if (!v.bokuppg.bokId) return;                  // prototypens bok
-    /* Stämpeln är serverns form-version (bok_losning.SKRIVEN): poster skrivna
-       före ett promptlyft — t.ex. de med «a) …» i stället för deluppgifternas
-       uttryck, eller utan delar-strukturen — skrivs om en gång, sedan bär
-       pappret de nya. Talet följer SKRIVEN i app/bok_losning.py.
-       En post UTAN täckning (över taket, oläst sida) står kvar som platshållare
-       och ska inte utlösa ett nytt anrop: svaret blir detsamma nästa gång, och
-       att den saknas är sagt i toasten och på arket. */
-    if (l.poster.some(p => p.text && p.skriven >= 3)) return;
+    const behov = behovet(l.poster);
+    if (!behov.length) return;
     if (skriverNu.has(l)) return;
     skriverNu.add(l);
     /* Ett papper skrivet innan flaggan flyttade ut kan bära den i sin JSON.
@@ -3701,7 +3718,9 @@
        skrivit posterna: laddar man om mitt i skrivningen står den nya sidan
        med de gamla, dess eget anrop får semaforens 409, och det färdiga
        resultatet PATCH:as av en sida som inte längre finns. Därför läses
-       RADEN först: bär den färska poster tas de rakt av, utan LLM-anrop. */
+       RADEN först: har den ingenting kvar att skriva tas dess poster rakt av,
+       utan LLM-anrop. Samma behovsräkning som ovan — två olika mått på «är
+       den skriven?» hade förr eller senare sagt olika saker. */
     const id0 = v.id || utkastId;
     (id0 ? window.API.json('/api/dokument').catch(() => null)
          : Promise.resolve(null)).then(svar => {
@@ -3711,25 +3730,41 @@
         : null;
       const dok = rad && (rad.dokument || (rad.versioner || [])[rad.markor || 0]);
       const pa = (((dok || {}).bokuppg || {}).losning || {}).poster || [];
-      if (pa.some(p => p.text && p.skriven >= 3)) {
+      if (pa.length && !behovet(pa).length) {
         skriverNu.delete(l);
         l.poster = pa;
         visaNya();
         return;
       }
       window.toast && window.toast(
-        'Skriver bokens lösningsförslag ur de lästa sidorna — tar en minut eller två.');
+        `Skriver bokens lösningsförslag till ${behov.length} ${behov.length === 1 ? 'uppgift' : 'uppgifter'} ur de lästa sidorna — `
+        + (behov.length > 12 ? 'flera omgångar, tar några minuter.' : 'tar en minut eller två.'));
       window.API.strom(`/api/bocker/${v.bokuppg.bokId}/losningar`, {
-        uppg: l.poster.map(p => p.nr),
+        uppg: behov.map(p => p.nr),
       }, {}).then(r => {
         skriverNu.delete(l);
-        if (!r || !(r.poster || []).length) return;
-        const per = new Map(r.poster.map(p => [p.nr, p]));
-        /* En post utan täckning i svaret tappar sitt gamla innehåll — hellre
-           platshållarens ärlighet än en kvarbliven post ur en äldre skrivning. */
-        l.poster = l.poster.map(p => (per.get(p.nr)
-          ? Object.assign({}, p, per.get(p.nr))
-          : { nr: p.nr, niva: p.niva }));
+        if (!r) return;
+        const per = new Map((r.poster || []).map(p => [p.nr, p]));
+        const olast = new Set(r.olasta_uppg || []);
+        const okand = new Set(r.okanda || []);
+        const bad = new Set(behov.map(p => p.nr));
+        /* BARA de begärda rörs. Posterna utanför behovsmängden bär redan sina
+           lösningar (eller sin stämpel) och ska inte nollas av ett anrop som
+           aldrig gällde dem.
+           En begärd post utan täckning i svaret tappar sitt gamla innehåll —
+           hellre platshållarens ärlighet än en kvarbliven post ur en äldre
+           skrivning. Säger servern VARFÖR (oläst sida, okänt nummer) stämplas
+           den, och då frågar vi inte igen; svarade servern ingenting alls om
+           den hoppade modellen över posten, och då får den försöka på nytt
+           nästa gång pappret öppnas. */
+        l.poster = l.poster.map(p => {
+          if (!bad.has(p.nr)) return p;
+          if (per.get(p.nr)) return Object.assign({}, p, per.get(p.nr));
+          const tom = { nr: p.nr, niva: p.niva };
+          if (olast.has(p.nr)) tom.olast = true;
+          if (okand.has(p.nr)) tom.okand = true;
+          return tom;
+        });
         /* ── PAPPRET MÅSTE STÅ KVAR ────────────────────────
            Skrivningen tar en minut eller två. Skrev läraren om under tiden
            ligger ett NYARE varv på raden (utkastVersion → add_dokument_version
@@ -3752,17 +3787,21 @@
         const id = v.id || utkastId;
         if (id) skicka('/api/dokument/' + id, 'PATCH', { dokument: v }).catch(() => {});
         visaNya();
-        /* TRE sorters uppgift kom hem utan lösning, och alla tre ska sägas —
-           särskilt taket (`over_taket`, bok_losning.MAX_UPPGIFTER), som förr
-           kapades utan ett ord någonstans i kedjan. «… och N uppgifter till»
-           är repots ord för överskott (app/forlaga.py uppgifter_text). */
+        /* Uppgifterna som kom hem utan lösning ska sägas. Här stod förut också
+           överskottet över serverns tak (`over_taket`) — taket är borta, alla
+           valda uppgifter skrivs, och kvar är den oläst sida ingen kan lösa
+           något ur. Kom ingenting alls tillbaka (hela urvalet låg på olästa
+           sidor) säger toasten det rakt ut i stället för att påstå att
+           lösningarna är skrivna. */
+        const skrivna = (r.poster || []).length;
         const saknas = (r.olasta_uppg || []).length;
-        const over = (r.over_taket || []).length;
-        const delar = [];
-        if (saknas) delar.push(`${saknas} ${saknas === 1 ? 'uppgift' : 'uppgifter'} ligger på olästa sidor`);
-        if (over) delar.push(`${delar.length ? 'och ' : ''}${over} ${over === 1 ? 'uppgift' : 'uppgifter'} till rymdes inte i skrivningen`);
-        window.toast && window.toast('Lösningsförslagen är skrivna ur bokens sidor'
-          + (delar.length ? ` — ${delar.join(', ')}: de står utan lösning på arket` : '') + '.');
+        const svans = saknas
+          ? ` — ${saknas} ${saknas === 1 ? 'uppgift ligger' : 'uppgifter ligger'} på olästa sidor: `
+            + `${saknas === 1 ? 'den står' : 'de står'} utan lösning på arket`
+          : '';
+        window.toast && window.toast(skrivna
+          ? `Lösningsförslagen är skrivna ur bokens sidor${svans}.`
+          : `Inga lösningsförslag kunde skrivas${svans || ' den här gången'}.`);
       }).catch(e => {
         /* Tystnaden var buggen: ett 409 («en skrivning pågår redan») såg ut
            som ingenting alls, och läraren stod med gamla ark utan besked. */
