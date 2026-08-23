@@ -2000,7 +2000,13 @@ def _elevstegen(elever: list[dict], tak: int) -> list[dict]:
         s = sum(e["poang"])
         if 0 <= s < tak and s not in per_steg and min(e["poang"]) >= 0:
             per_steg[s] = e
-    return [per_steg[s] for s in sorted(per_steg)]
+    # Taket är SCHEMATS eget (exam_spec.ExamItem.elevlosningar). Passet skriver
+    # rakt in i dokumentet utan att validera om, och en uppgift värd tolv poäng
+    # hade annars fått tolv lösningar — ett dokument som går att spara men inte
+    # att läsa tillbaka.
+    tak_i_schemat = exam_spec.ExamItem.model_fields[
+        "elevlosningar"].metadata[0].max_length
+    return [per_steg[s] for s in sorted(per_steg)][:tak_i_schemat]
 
 
 def skriv_in_bedomning(uppgift: dict, svar: dict) -> bool:
