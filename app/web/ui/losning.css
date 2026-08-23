@@ -233,6 +233,15 @@
    satt i rak stil under den. */
 .lobedvarfor{margin:6px 0 0;font-size:calc(13px * var(--fsk, 1));line-height:1.42;color:#000}
 .lobed .loskann{margin-top:0}
+/* ── ELEVRADEN FLYTER SOM TEXT ──
+   `.loskannrad` är en FLEXRAD i förlagans lo4, och det är rätt där: dess rader
+   är korta och tvådelade («$2x = 8$» + «Svar: 4»), och flexgapet håller isär
+   dem. Bedömningspassets rader är hela meningar med matematik inuti — «b)
+   Grafen ligger ovanför $x$-axeln vid $x = 0$» — och flexen sprängde isär dem
+   i lådor med fjorton pixlars luft mellan varje, i den ordning de råkade brytas.
+   Inne i tabellen flyter raden som vanlig text i stället, med matematiken
+   inline där den står. */
+.lobed .loskannrad{display:block}
 
 /* Lösningsgången till delprov C bär tre fullständiga lösningar per blad. Den
    luft ett kortsvarsfacit har råd med finns inte här — måtten är stramare, och

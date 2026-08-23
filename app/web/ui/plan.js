@@ -2588,7 +2588,13 @@
          egna körningar landar på sju till tio minuter. Arbetsbladet, diagnosen,
          gruppuppgiften och tavlan har inga uppmätta spann — tavlan blev
          dessutom ungefär tre gånger snabbare 2026-08-21 och det gamla talet
-         hade varit direkt fel. Hellre ingen siffra än en påhittad. */
+         hade varit direkt fel. Hellre ingen siffra än en påhittad.
+
+         BEDÖMNINGSPASSET (2026-08-23) lägger till mindre än en minut och
+         spannet står därför kvar: sex uppgifter mättes till 28,5 sekunder
+         väggtid (112 sekunder modelltid, sex trådar), och ett tolvuppgifts
+         prov blir två sådana vågor. Nästa skarpa körning avgör om siffran
+         behöver flyttas — den här är mätt på ett band, inte på en lärardag. */
       brukar: jobb && typ === 'Prov' ? 'brukar ta 7–10 min' : '',
       omfang: underlag.length ? `${underlag.length} lektion${underlag.length === 1 ? '' : 'er'} ur arkivet` : 'Gy25 och kursplanen',
       antal: underlag.length || vald.size || 5,
