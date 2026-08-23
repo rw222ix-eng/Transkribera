@@ -322,22 +322,25 @@ def test_fixturen_ar_verkligen_giltig():
 def test_domarrundan_lagger_sina_fynd_i_reparationsloopen():
     dom = json.dumps({"domar": [{"nr": "2", "niva": "E", "motivering": "rutin"}]})
     battre = json.dumps(_giltigt_prov())
-    llm, anrop = _stub([json.dumps(_giltigt_prov()), dom, battre])
+    llm, anrop = _stub([json.dumps(_giltigt_prov()), dom, "{}", battre])
     res = exam_gen.generate_exam("Ma1a", "NA25", ["ekvationer"], model="m",
                                  antal=2, profil="arbetsblad", llm=llm)
-    # generering, dom, reparation — domen kostar inte en runda, reparationen gör det
-    assert len(anrop) == 3
-    assert "poängsatt C men bedöms som E" in anrop[2]
+    # generering, nivådom, räknedom, reparation — DOMARNA kostar ett anrop var
+    # men ingen runda; bara reparationen är en runda, och den delas av båda.
+    assert len(anrop) == 4
+    assert "poängsatt C men bedöms som E" in anrop[3]
     assert res["rounds"] == 2 and res["errors"] == []
 
 
 def test_utan_avvikelser_kostar_domaren_ingen_reparation():
     dom = json.dumps({"domar": [{"nr": "1", "niva": "E", "motivering": ""},
                                 {"nr": "2", "niva": "C", "motivering": ""}]})
-    llm, anrop = _stub([json.dumps(_giltigt_prov()), dom])
+    llm, anrop = _stub([json.dumps(_giltigt_prov()), dom, "{}"])
     res = exam_gen.generate_exam("Ma1a", "NA25", ["ekvationer"], model="m",
                                  antal=2, profil="arbetsblad", llm=llm)
-    assert len(anrop) == 2 and res["rounds"] == 1 and res["errors"] == []
+    # Två domaranrop, noll rundor: en domare som inte fäller får aldrig kosta
+    # läraren en omskrivning.
+    assert len(anrop) == 3 and res["rounds"] == 1 and res["errors"] == []
 
 
 def test_doma_false_stanger_av_hela_passet():
@@ -391,6 +394,255 @@ def test_signal_oppen_formulering_med_bara_e_poang():
 ])
 def test_signalerna_faller_inte_riktiga_np_uppgifter(text, poang):
     assert exam_gen.nivasignaler(_exam([_uppg(1, poang, text=text)])) == []
+
+
+# ──────────────────────────────── talvakterna och räknedomaren (2026-08-23) ──
+# Talen var det sista som skilde ett genererat prov från ett riktigt: nivån var
+# kalibrerad, men uppgifterna bar avrundade procentsatser och ingångstal
+# konstruerade baklänges. Vakterna nedan är RÄKNADE i samma tio nationella prov
+# som nivårubriken (exam_gen.TALREGLER), och samma lärdom gäller: en vakt som
+# fäller riktiga NP-uppgifter är värdelös — därför står frikänningstestet sist.
+
+def _b(**kw):
+    """En uppgift i den räknarfria delen."""
+    u = _uppg(1, (1, 0, 0), **{k: v for k, v in kw.items() if k != "delen"})
+    u["del"] = kw.get("delen", "B")
+    return u
+
+
+def test_talsignal_facit_utan_raknare_far_inte_vara_ett_narmevarde():
+    exam = _exam([_b(losning="$x \\approx 5{,}8480$")])
+    fel = exam_gen.talsignaler(exam)
+    assert [f["code"] for f in fel] == ["talsignal"]
+    assert "svaret ska vara exakt" in fel[0]["message"]
+
+
+def test_talsignal_exakt_facit_utan_raknare_passerar():
+    """Ett förkortat bråk ÄR svaret i nationella provets räknarfria del."""
+    assert exam_gen.talsignaler(_exam([_b(losning="$x = 10/7$")])) == []
+
+
+def test_talsignal_forandringsfaktorn_passerar_i_raknarfri_del():
+    """1,04 har två decimaler och är ändå rätt: den står som GIVET tal i kurs
+    1:s räknarfria del. Vakten fäller 3,75, inte förändringsfaktorn."""
+    ok = _exam([_b(text="Värdet ges av $y = 500 \\cdot 1{,}04^x$.")])
+    assert exam_gen.talsignaler(ok) == []
+    fel = exam_gen.talsignaler(_exam([_b(text="Beräkna $3{,}75 \\cdot 12{,}5$.")]))
+    assert any("EXAKT en decimal" in f["message"] for f in fel)
+
+
+def test_talsignal_blocktal_passerar_men_lost_stort_tal_falls():
+    """$4444^2 - 4443^2$ är en riktig NP-uppgift: talet är stort men en regel
+    gör aritmetiken onödig, och det syns på att talet återkommer i facit."""
+    block = _exam([_b(text="Beräkna $4444^2 - 4443^2$.",
+                      losning="$(4444 + 4443)(4444 - 4443) = 8887$")])
+    assert exam_gen.talsignaler(block) == []
+    fel = exam_gen.talsignaler(_exam([_b(text="Dividera $12\\,166$ med $79$.",
+                                         losning="$154$")]))
+    assert any("stora tal" in f["message"] for f in fel)
+
+
+def test_talsignal_avrunda_till_tva_decimaler_falls():
+    """Frasen finns inte i nationella provet — noll gånger i tio prov."""
+    fel = exam_gen.talsignaler(_exam([_b(text="Avrunda till två decimaler.")]))
+    assert any("finns inte i" in f["message"] for f in fel)
+
+
+def test_talsignal_procentsvar_med_tva_decimaler_falls():
+    """Det skarpa fyndet: «94,93 %» i räknardelen. Talet har fyra
+    värdesiffror och två decimaler och klarar därför slutsvarsvakten — men NP
+    anger procent med högst EN decimal, och toleransen står i facit."""
+    exam = _exam([_b(delen="C", text="Hur stor är andelen?",
+                     losning="Andelen blir $94{,}93$ %")])
+    fel = exam_gen.talsignaler(exam)
+    assert [f["code"] for f in fel] == ["talsignal"]
+    assert "högst en decimal" in fel[0]["message"]
+
+
+def test_talsignal_slutsvaret_med_raknare_men_inte_mellanleden():
+    """Mellanled får ha fler siffror (TALREGLER säger det) — bara slutsvaret
+    mäts. En vakt som läste hela facit hade fällt varje korrekt uträkning."""
+    ok = _exam([_b(delen="C", text="Beräkna volymen.",
+                   losning="Mellanledet $\\approx 12{,}16643$. Svar: $12$ dm")])
+    assert exam_gen.talsignaler(ok) == []
+    fel = exam_gen.talsignaler(_exam([_b(delen="C", text="Beräkna volymen.",
+                                         losning="Svaret är $12{,}166$ dm")]))
+    assert any("för många siffror" in f["message"] for f in fel)
+
+
+def test_talsignal_fraserna_hor_till_var_sin_del():
+    med = _exam([_b(delen="C", text="Lös ekvationen. Svara exakt.")])
+    assert any("räknarfria delen" in f["message"]
+               for f in exam_gen.talsignaler(med))
+    utan = _exam([_b(text="Lös ekvationen. Svara med minst en decimal.")])
+    assert any("aldrig ett närmevärde" in f["message"]
+               for f in exam_gen.talsignaler(utan))
+
+
+def test_talsignal_provovergripande_andel_avrundningsinstruktioner():
+    """En enstaka instruktion om svarets form är normal; ett papper där var
+    femte uppgift bär en har bytt genre. Flaggan sitter på PROVET."""
+    manga = _exam([_uppg(i, (1, 0, 0),
+                         text=f"Beräkna {i}. Avrunda till en decimal.")
+                   for i in range(1, 5)])
+    fel = [f for f in exam_gen.talsignaler(manga) if f["path"] == "prov"]
+    assert len(fel) == 1 and "av 4 uppgifter" in fel[0]["message"]
+
+
+@pytest.mark.parametrize("delen,text,losning", [
+    # Alla fem är skrivna som riktiga NP-uppgifter på sin sida av
+    # räknargränsen. Fäller någon vakt här har den blivit för ivrig.
+    ("B", "Lös ekvationen $x^2 - 4x + 3 = 0$.", "$x = 1$ och $x = 3$."),
+    ("B", "Förenkla $\\frac{2}{3} + \\frac{1}{6}$.", "$5/6$."),
+    ("B", "En vara kostar $1\\,200$ kr. Priset höjs 15 %.", "$1\\,380$ kr."),
+    ("C", "Värdet sjunker från $230\\,000$ kr till $157\\,000$ kr på 6 år.",
+     "Förändringsfaktorn $\\approx 0{,}9385$. Svar: $6{,}2$ % per år."),
+    ("C", "År 2020 fanns $1411$ tigrar och 2022 fanns $2967$.",
+     "Ökningen är $110$ %."),
+])
+def test_talvakterna_faller_inte_riktiga_np_uppgifter(delen, text, losning):
+    assert exam_gen.talsignaler(
+        _exam([_b(delen=delen, text=text, losning=losning)])) == []
+
+
+def test_raknedomaren_far_facit_men_aldrig_poang():
+    """Räknedomaren MÅSTE se facit — den ska jämföra mot det. Poängen och
+    bedömningsanvisningen är en annan sak: de säger vilken nivå uppgiften
+    påstås ligga på, och det ska inte färga räkningen."""
+    exam = _exam([_uppg(1, (0, 2, 0), losning="$x = 6$",
+                        bedomning="+1 C fullständig lösning")])
+    prompt = exam_gen.build_rakne_prompt(exam_gen.domarenheter(exam))
+    assert "räknedomare" in prompt          # kassettroutingens nyckelfras
+    assert "$x = 6$" in prompt
+    assert "poang" not in prompt and "+1 C" not in prompt
+
+
+def test_raknedomaren_ser_om_uppgiften_har_raknare():
+    enheter = exam_gen.domarenheter(_exam([
+        _uppg(1, (1, 0, 0)), _uppg(2, (1, 0, 0))]))
+    enheter[0]["del"] = "B"
+    prompt = exam_gen.build_rakne_prompt(enheter)
+    assert "utan digitala verktyg" in prompt and "med digitala verktyg" in prompt
+
+
+def test_raknedomen_faller_bara_pa_ett_uttryckligt_nej():
+    enheter = exam_gen.domarenheter(_exam([
+        _uppg(1, (1, 0, 0)), _uppg(2, (1, 0, 0)),
+        _uppg(3, (1, 0, 0)), _uppg(4, (1, 0, 0))]))
+    domar = exam_gen._parse_rakning(json.dumps({"domar": [
+        {"nr": "1", "berakning": "2+2", "stammer": "ja"},
+        {"nr": "2", "berakning": "figuren saknas", "stammer": "oklart"},
+        {"nr": "3", "berakning": "$x = 4$", "stammer": "nej",
+         "ratt_svar": "$x = 4$", "skal": "facit räknar med fel koefficient"},
+        # uppgift 4 nämns inte alls → tystnad tolkas aldrig
+    ]}))
+    fel = exam_gen.raknefel(enheter, domar)
+    assert [f["path"] for f in fel] == ["uppgift 3"]
+    assert fel[0]["code"] == "rakning"
+    # Åtgärden ska säga att BÅDA ändras — ett facit som skrivs om ensamt
+    # räknar på andra tal än uppgiften.
+    assert "ändras TILLSAMMANS" in fel[0]["message"]
+    assert "fel koefficient" in fel[0]["message"]
+
+
+def test_raknedomen_tar_emot_boolean_och_kapar_langa_listor():
+    """Schemat ber om en sträng, men en modell som svarar `true`/`false` ska
+    läsas rätt ändå — och taket delas med nivåfynden."""
+    n = exam_gen.MAX_DOMAR_PROBLEM + 3
+    enheter = exam_gen.domarenheter(
+        _exam([_uppg(i, (1, 0, 0)) for i in range(1, n + 1)]))
+    domar = exam_gen._parse_rakning(json.dumps({"domar": [
+        {"nr": str(i), "berakning": "…", "stammer": False, "ratt_svar": "7"}
+        for i in range(1, n + 1)]}))
+    assert all(d["stammer"] == "nej" for d in domar.values())
+    assert len(exam_gen.raknefel(enheter, domar)) == exam_gen.MAX_DOMAR_PROBLEM
+
+
+def test_raknedomarsvar_som_inte_gar_att_tolka_faller_ingenting():
+    """En trasig kontroll får aldrig underkänna ett papper som är rätt."""
+    assert exam_gen._parse_rakning("inte json alls") == {}
+    assert exam_gen._parse_rakning('{"domar": "fel form"}') == {}
+    enheter = exam_gen.domarenheter(_exam([_uppg(1, (1, 0, 0))]))
+    assert exam_gen.raknefel(enheter, exam_gen._parse_rakning("trasigt")) == []
+
+
+def test_raknedomaren_ar_fail_open():
+    """Faller anropet — modellen borta, kvoten slut — levereras pappret ändå."""
+    def llm(*a, **kw):
+        raise RuntimeError("kvoten är slut")
+
+    rader = []
+    assert exam_gen.doma_rakning(_exam([_uppg(1, (1, 0, 0))]), model="m",
+                                 llm=llm, log_cb=rader.append) == []
+    assert any("levereras ändå" in r for r in rader)
+
+
+def test_raknedomaren_kors_i_samma_pass_och_delar_reparationsrundan():
+    """Båda domarna i ETT pass och EN reparationsrunda — och talsignalerna
+    åker med in i den prompten fastän de aldrig fäller själva."""
+    nivadom = json.dumps({"domar": [{"nr": "2", "niva": "E",
+                                     "motivering": "rutin"}]})
+    raknedom = json.dumps({"domar": [{"nr": "1", "berakning": "$x = 2$",
+                                      "stammer": "nej", "ratt_svar": "$x = 2$",
+                                      "skal": "facit tappar en rot"}]})
+    prov = _giltigt_prov()
+    # En avrundningsfras som talvakten fäller — men som inte får kosta en runda
+    # på egen hand (se testet efter det här).
+    prov["uppgifter"][0]["text"] += " Avrunda till två decimaler."
+    llm, anrop = _stub([json.dumps(prov), nivadom, raknedom, json.dumps(prov)])
+    res = exam_gen.generate_exam("Ma1a", "NA25", ["ekvationer"], model="m",
+                                 antal=2, profil="arbetsblad", llm=llm)
+    assert len(anrop) == 4 and res["rounds"] == 2
+    # EN reparationsprompt, alla tre sorters fynd i den.
+    assert "poängsatt C men bedöms som E" in anrop[3]
+    assert "ändras TILLSAMMANS" in anrop[3]
+    assert "finns inte i nationella provet" in anrop[3]
+    # Domarnas fynd gick IN i reparationen och prövas aldrig om (passet körs en
+    # gång) — de står alltså inte kvar. Talsignalerna räknas däremot om på
+    # resultatet, och eftersom uppspelningen gav tillbaka samma papper står de
+    # kvar som varningar läraren ser.
+    assert {e["code"] for e in res["errors"]} == {"talsignal"}
+
+
+def test_talsignaler_ensamma_kostar_aldrig_en_runda():
+    """Talens smak är en varning, inte en dom. Fäller ingen domare får läraren
+    signalen att läsa — men inte en omskrivning hon inte bett om."""
+    prov = _giltigt_prov()
+    prov["uppgifter"][0]["text"] += " Avrunda till två decimaler."
+    llm, anrop = _stub([json.dumps(prov), "{}", "{}"])
+    res = exam_gen.generate_exam("Ma1a", "NA25", ["ekvationer"], model="m",
+                                 antal=2, profil="arbetsblad", llm=llm)
+    assert len(anrop) == 3 and res["rounds"] == 1
+    # Två signaler: frasen på uppgiften, och pappret som helhet (en av två
+    # uppgifter är över andelstaket).
+    assert [e["code"] for e in res["errors"]] == ["talsignal", "talsignal"]
+    assert [e["path"] for e in res["errors"]] == ["uppgift 1", "prov"]
+
+
+def test_doma_false_stanger_av_bada_domarna():
+    llm, anrop = _stub([json.dumps(_giltigt_prov())])
+    exam_gen.generate_exam("Ma1a", "NA25", ["ekvationer"], model="m", antal=2,
+                           profil="arbetsblad", llm=llm, doma=False)
+    assert len(anrop) == 1
+
+
+def test_talreglerna_star_i_prompten_for_alla_fyra_profilerna():
+    for profil in ("prov", "arbetsblad", "gruppuppgift", "diagnos"):
+        p = exam_gen.build_prompt("Matematik, nivå 2c", "NA25", [], antal=6,
+                                  profil=profil,
+                                  skeleton=exam_spec.balanced_skeleton(
+                                      6, profil if profil != "diagnos"
+                                      else "arbetsblad", delar=False))
+        assert exam_gen.TALREGLER in p, profil
+
+
+def test_np_frasen_om_tva_decimaler_ar_borta_ur_instruktionen():
+    """Den stod som FAST FRAS att använda, och kom ut på skarpa prov. Den som
+    sätter tillbaka den ska behöva stryka det här testet."""
+    assert "Avrunda till två decimaler.' där" not in exam_gen.INSTRUCTION
+    for fras in ("Svara exakt.", "Svara med minst en decimal.",
+                 "Avrunda svaret till ett heltal."):
+        assert fras in exam_gen.INSTRUCTION, fras
 
 
 # ─────────────────────────────────────────────── bokens nivåskala (C2) ────

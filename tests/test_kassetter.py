@@ -175,6 +175,58 @@ def test_nivadomen_ur_kassetten_gar_hela_vagen(fejk_claude, dokument, domarband)
         assert "höj svårigheten" in a["message"] or "sänk svårigheten" in a["message"]
 
 
+def test_raknedomen_ur_kassetten_gar_hela_vagen(fejk_claude):
+    """Räknedomaren (2026-08-23) genom hela kedjan: CLI → ström → JSON →
+    jämförelse mot facit. Bandet är SKARPT, inspelat på provbandets uppgifter.
+
+    Domen: sex enheter av åtta «ja», två «oklart» — båda deluppgifterna till
+    provets figuruppgift, som domaren inte kan räkna eftersom den hänvisar till
+    en graf den inte ser. Noll fällningar. Det är ETT dokument och säger
+    ingenting om hur ofta en riktig körning fäller; fällfrekvensen är alltså
+    INTE mätt, till skillnad från nivådomarens."""
+    fejk_claude(kassett="raknedomare")
+    exam = exam_gen._parse_exam(json.loads(
+        fejk.las_kassett("prov")["rader"][-1])["result"])
+    enheter = exam_gen.domarenheter(exam)
+    domar = exam_gen._parse_rakning(json.loads(
+        fejk.las_kassett("raknedomare")["rader"][-1])["result"])
+    # Varje poängbärande enhet ska ha fått en dom. Tystnad tolkas aldrig som
+    # medhåll, så en domare som hoppar över halva provet «godkänner» det.
+    assert {e["nr"] for e in enheter} <= set(domar), "domaren hoppade över uppgifter"
+    assert all(d["stammer"] in ("ja", "nej", "oklart") for d in domar.values())
+    # Domaren RÄKNADE — fältet är inte tomt. Är det tomt har den läst facit i
+    # stället för att räkna själv, och då mäter den ingenting.
+    assert all(d["berakning"] for d in domar.values())
+    # Uppspelningen genom appens egen söm ger samma svar som filen.
+    assert exam_gen.doma_rakning(exam, model="") == \
+        exam_gen.raknefel(enheter, domar) == []
+
+
+def test_provbandet_gar_genom_bada_domarna_och_talvakten(fejk_claude):
+    """Auto-läget lägger i räknedomarens band när prompten ber om en räknedom.
+    Två saker prövas, och båda är mätta på det SKARPA provbandet:
+
+    * räknedomaren fäller ingenting där, och lägger alltså ingen runda till —
+      den enda reparationen kommer ur nivådomen (uppgift 6 är poängsatt A och
+      bedöms som C i bandet), precis som före den här domaren fanns.
+    * talvakten tänder på uppgift 6, som ordagrant säger «Avrunda till två
+      decimaler.» Det är frasen som fick hela talarbetet skrivet — den finns
+      inte i något av de tio nationella prov underlaget vilar på, och den kom
+      ändå ut på ett riktigt prov. Bandet är alltså beviset på att vakten
+      behövs, och det står kvar tills ett nytt prov spelas in utan frasen."""
+    fejk_claude("auto")
+    loggat = []
+    res = exam_gen.generate_exam("Matematik 3c", "NA25",
+                                 ["Derivata", "Gränsvärden"], model="", antal=6,
+                                 log_cb=loggat.append)
+    assert any("Räknar igenom facit" in r for r in loggat), loggat
+    assert [e for e in res["errors"] if e["code"] == "rakning"] == []
+    assert res["rounds"] == 2, "en domare till kostade en extra runda"
+    tal = [e for e in res["errors"] if e["code"] == "talsignal"]
+    assert [e["path"] for e in tal] == ["uppgift 6"]
+    assert "avrunda till ett antal decimaler" in tal[0]["message"]
+
+
 def test_insikterna_ur_den_skarpa_kassetten_bar_inga_namn(fejk_claude):
     """Den riktiga körningen FÖLJDE integritetsregeln — inga fullständiga
     namn kom tillbaka. Det testet vaktar är att det förblir så."""

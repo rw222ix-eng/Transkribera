@@ -210,10 +210,18 @@ _DOMAR_VAL = [
 # «lektionstavla» och fått tavlan tillbaka som svar på en fråga om täckning.
 _TACKNING = "täckningsdomare"
 
+# Räknedomaren (exam_gen.doma_rakning) prövas av EXAKT samma skäl, och FÖRE
+# nivådomaren: dess prompt bär hela pappret med facit och matchar därför både
+# «matteprov» och nivådomarens nyckelfras. Ordet står bara i den prompten
+# (exam_gen.build_rakne_prompt) och ingen annanstans i appen.
+_RAKNING = "räknedomare"
+
 
 def _auto(prompt):
     if _TACKNING in prompt:
         return os.path.join(BAND, "tackningsdomare.json")
+    if _RAKNING in prompt:
+        return os.path.join(BAND, "raknedomare.json")
     if _DOMARE in prompt:
         for nyckel, namn in _DOMAR_VAL:
             if nyckel in prompt:

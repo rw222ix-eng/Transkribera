@@ -2114,7 +2114,12 @@ def test_prompt_har_skelettplan_for_alla_profiler():
         assert f"({f})" in p
     pa = exam_gen.build_prompt("Ma2b", "SA23", [], antal=6, profil="arbetsblad")
     assert "Uppgiftsplan" in pa and "LÅSTA" in pa
-    assert "Del B" not in pa                      # platt papper, inga delar
+    # Platt papper, inga delar. Vakten mätte förut på strängen «Del B», och den
+    # råkar numera stå i TALREGLER — som BESKRIVNING av vilka talregler som
+    # gäller utan räknare, inte som en begäran om delar. Mätningen sitter
+    # därför på uppdragsraden som faktiskt beställer delar, plus på fältkravet.
+    assert "Dela provet i Del B" not in pa
+    assert "del: null" in pa
     pg = exam_gen.build_prompt("Ma2b", "SA23", [], antal=6,
                                profil="gruppuppgift")
     assert "Uppgiftsplan" in pg and "LÅSTA" not in pg

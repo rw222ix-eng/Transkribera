@@ -165,6 +165,19 @@ SCENARIER = {
         "system": lambda: exam_gen.DOMAR_SYSTEM,
         "schema": lambda: exam_gen.DOMAR_SCHEMA,
     },
+    # Räknedomaren (2026-08-23) döms mot PROVBANDET, av samma skäl som
+    # nivådomaren döms mot ett färdigt dokument: en dom utan papper är ingen
+    # dom. ETT band räcker här — till skillnad från nivådomen är svaret inte
+    # kalibrerat mot en skala som skiljer sig per dokumenttyp, och uppspelningen
+    # av arbetsblads- eller gruppuppgiftsbandet får då en dom om uppgiftsnummer
+    # som inte finns hos dem. Tystnad fäller aldrig, så det kostar ingenting.
+    "raknedomare": {
+        "vad": "exam_gen.doma_rakning — räknar igenom provbandets facit",
+        "prompt": lambda: exam_gen.build_rakne_prompt(
+            exam_gen.domarenheter(_bandets_dokument("prov"))),
+        "system": lambda: exam_gen.RAKNE_SYSTEM,
+        "schema": lambda: exam_gen.RAKNE_SCHEMA,
+    },
 }
 
 # Vilket band varje domare läser, och hur många uppgifter dokumentet har. Det

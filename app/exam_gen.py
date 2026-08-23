@@ -381,9 +381,19 @@ INSTRUCTION = (
     # på varje uppgift (prov.tex.j2 \pfkrav) — skrivs de dessutom i texten står
     # de två gånger på samma uppgift. Kvar är de fraser som handlar om SVARET
     # och alltså hör till frågan.
-    "Fasta fraser (använd ordagrant där de passar): 'Svara exakt.' där ett "
-    "exakt värde efterfrågas, 'Avrunda till två decimaler.' där ett närmevärde "
-    "duger. Skriv aldrig emoji eller utropstecken.\n"
+    # «Avrunda till två decimaler.» stod här som den andra fasta frasen, och
+    # den finns inte i nationella provet — inte en enda gång i de tio prov som
+    # lästs (se TALREGLER). Den kom ändå ut på skarpa prov, senast som en
+    # procentsats avrundad till 94,93 %, vilket NP aldrig skriver. Kvar är NP:s
+    # egna fraser, och de är få med flit: ungefär EN uppgift av hundra bär en
+    # instruktion om svarets form alls.
+    "Fasta fraser om svarets form (använd ordagrant, och nästan aldrig — se "
+    "TALREGLER): 'Svara exakt.', 'Lös ekvationerna och svara exakt.', "
+    "'Förenkla svaret så långt som möjligt och svara exakt.' utan räknare; "
+    "'Svara med minst en decimal.', 'Svara med minst två decimaler.', "
+    "'Avrunda svaret till ett heltal.' med räknare. Skriv ALDRIG 'Avrunda "
+    "till två decimaler' — den frasen finns inte i nationella provet. Skriv "
+    "aldrig emoji eller utropstecken.\n"
 )
 
 
@@ -653,9 +663,14 @@ _TALRUM = {
        "enkelt heltal och SVARET är ett heltal — läraren skrev «svaret ska bli "
        "heltal» och «använd mindre tal så alla mellanled blir enkla heltal». "
        "En kvadrat som $16^2$ hör inte hemma på den här nivån.",
+    # «svaret är i regel ett heltal» stod här, och det sa emot TALREGLER: i
+    # nationella provet är svaret utan räknare ALLTID exakt, men lika ofta ett
+    # förkortat bråk eller en rot som ett heltal. Ordalaget är justerat, måttet
+    # är detsamma.
     2: "Talrummet är större, och bråk, procent och negativa tal hör hemma här. "
-       "Mellanleden ska ändå bli enkla, och svaret är i regel ett heltal eller "
-       "ett kort exakt uttryck — inte ett decimaltal med fyra siffror.",
+       "Mellanleden ska ändå bli enkla, och svaret är EXAKT — ett heltal, ett "
+       "förkortat bråk eller ett kort exakt uttryck, aldrig ett avrundat "
+       "decimaltal.",
     3: "Talen är underordnade: här bär uttrycken. Potenser, rötter och exakta "
        "svar ($2\\sqrt{3}$, $\\ln 5$) är normalfallet och svaret behöver inte "
        "vara ett heltal — men talen ska ändå väljas så att räkningen inte "
@@ -696,6 +711,73 @@ def _nivastegen(kurs: str) -> str:
             "- Mellanleden ska på ALLA nivåer gå att räkna utan räknare. "
             "«Talen är för svåra» var lärarens dom, och den gällde tanken som "
             "drunknade i räknandet — inte nybörjarkursen.")
+
+
+# ── TALEN, DESTILLERADE UR TIO NATIONELLA PROV ───────────────────────────
+# Underlaget: NpMa1a, 1b, 1c, 2a och 2c vt17–vt22 samt 3c vt22 — samma
+# material som nivårubriken vilar på (app/niva_rubrik.ANALYSERADE_PROV).
+#
+# Skälet att blocket finns: nivån var kalibrerad men TALEN var det inte, och
+# talen är det sista som skiljer ett genererat prov från ett riktigt. Två fynd
+# ur ett skarpt prov (exam_versions 22) fick det skrivet — «Avrunda till två
+# decimaler» på en procentsats (svaret blev 94,93 %, en form NP aldrig
+# skriver), och ett ingångstal konstruerat baklänges: 5 000 elbilar som blir
+# 6 962, valt så att $1{,}18^2 = 1{,}3924$ skulle gå jämnt ut. NP gör tvärtom:
+# utan räknare väljs SVARET först och talen därefter, med räknare tas talen ur
+# verkligheten och svaret får bli hur fult som helst.
+#
+# Blocket hör hemma i GENERERINGEN av samma skäl som FALLGROPAR: reparations-
+# och refine-prompterna får bara INSTRUCTION med sig, och en reparation som
+# får höra hela talläran skriver om uppgifter i stället för att laga det som
+# var trasigt. Det som MÅSTE följa med i en omskrivning — de tillåtna fraserna
+# — står därför i INSTRUCTION i stället.
+TALREGLER = (
+    "TALEN — mätta i tio nationella prov, och de ska se ut så här.\n"
+    "UTAN DIGITALA VERKTYG (Del B; ett papper utan delar räknas hit om inte "
+    "uppgiften uttryckligen kräver ett verktyg):\n"
+    "- Ingångstal: heltal inom ±30 (koefficienter i regel ±12), decimaltal "
+    "med EXAKT en decimal (3,5 · 0,2 · 1,2), bråk med nämnare högst 12, "
+    "procent i steg om 5. Pengar är runda: 500 kr, 1 200 kr, 20 000 kr.\n"
+    "- Svaret är ALLTID exakt: ett heltal, ett förkortat bråk ($10/7$, "
+    "$-1/2$, $2/9$ är typiska och bra), en exakt rot ($\\sqrt{34}$), en "
+    "logaritmkvot ($\\lg 7/\\lg 5$), en potens ($21^{1/5}$) eller ett "
+    "algebraiskt uttryck. ALDRIG ett avrundat tal, aldrig «≈», aldrig "
+    "«cirka».\n"
+    "- Andragradsekvationer: heltalsrötter, och diskriminanten ett "
+    "kvadrattal. Kurs 1 har inga andragradsekvationer alls.\n"
+    "- Stora eller fula tal förekommer BARA som block, där en regel gör "
+    "aritmetiken onödig ($4444^2 - 4443^2$, $(5987 - x)^2$) — aldrig två "
+    "flersiffriga tal som ska multipliceras eller divideras.\n"
+    "- Skriv baklänges: välj SVARET först, konstruera talen sedan.\n"
+    "MED DIGITALA VERKTYG (Del C och Del D):\n"
+    "- Ingångstalen är äkta verklighetstal, sådana som ser hämtade ur en "
+    "källa ut: 230 000 kr som är 157 000 kr efter sex år, 1411 tigrar som "
+    "blivit 2967, en lutning på 10,0°, förändringsfaktorn 1,101, formeln "
+    "$v = 0{,}8365 \\cdot B^{1{,}5}$. Konstruera ALDRIG ingångstalet "
+    "baklänges så att svaret blir snyggt — 5 000 bilar som blir 6 962 för att "
+    "kvadraten ska gå jämnt ut är fel sorts tal.\n"
+    "- Räknaren ska behövas för MODELLEN, inte för aritmetiken. Minst en "
+    "tredjedel av svaren får ändå bli heltal eller exakta.\n"
+    "- Slutsvaret har 2–3 värdesiffror, högst 2 decimaler, och en enhet. "
+    "Mellanled får ha fler siffror och skrivs då med «≈».\n"
+    "- TOLERANSEN BOR I FACIT, aldrig i uppgiften: facit ger ETT svar och "
+    "anger toleransen kort som nationella provet gör — «6 % (godtagbart: "
+    "6,2 %)», «127 m; 126,9 och 130 m godtas», «±0,1 vid avläsning», «svar i "
+    "intervallet 15–20 %» vid graf- eller tabellavläsning. Nämn alternativa "
+    "former av samma svar där de är naturliga (0,25 % = 1/400 = 0,0025).\n"
+    "- Ekvationssystem och modellering: facit svarar i VERKLIGHETEN («de röda "
+    "kostar 18 kr»), inte bara «x = …, y = …».\n"
+    "INSTRUKTIONER OM SVARETS FORM I UPPGIFTSTEXTEN: nästan aldrig — i "
+    "nationella provet ungefär en uppgift av hundra. Bara dessa fraser, "
+    "ordagrant: «Svara exakt.», «Lös ekvationerna och svara exakt.», "
+    "«Förenkla svaret så långt som möjligt och svara exakt.» (bara utan "
+    "räknare); «Svara med minst en decimal.», «Svara med minst två "
+    "decimaler.», «Avrunda svaret till ett heltal.» (bara med räknare, och "
+    "bara när svaret annars är instabilt: regression, tangeringspunkt, "
+    "exponentialekvation). «Avrunda till två decimaler» förekommer inte i "
+    "nationella provet — skriv den aldrig, och avrunda aldrig ett procenttal "
+    "till två decimaler.\n"
+)
 
 
 def build_referens(items: list[str]) -> str:
@@ -869,6 +951,12 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
     # Direkt efter innehållet: fallgroparna är innehållets fallgropar, och
     # kravet ska läsas i samma andetag som punkterna det gäller.
     block.append(FALLGROPAR)
+    # Talen står intill fallgroparna, och de gäller alla fyra profilerna: ett
+    # arbetsblad med ett avrundat svar är lika fel som ett prov med det. Vilken
+    # halva av blocket som gäller avgörs av `del` per uppgift, inte här —
+    # arbetsbladet, gruppuppgiften och diagnosen har inga delar och läser
+    # därför utan-räknare-halvan.
+    block.append(TALREGLER)
     # Lärarens egna ord om vad klassen hade svårt för står FÖRE minnet och
     # utfallet: de säger samma sak sett utifrån — vad klassen gick igenom, vad
     # den föll på — medan det här är hon som var i rummet. Blocket finns bara
@@ -1238,6 +1326,12 @@ def domarenheter(exam: dict) -> list[dict]:
                     continue
                 ut.append({
                     "nr": f"{i}{chr(ord('a') + j)}",
+                    # Delen är uppgiftens, inte deluppgiftens: hela uppgiften
+                    # ligger i samma del av provet. Fältet bär vilka talregler
+                    # som gäller (B utan räknare, C/D med) och står UTANFÖR
+                    # `kort` — nivådomaren ska inte veta något den inte fick
+                    # veta förut.
+                    "del": d.get("del") or u.get("del") or None,
                     "typ": d.get("typ") or u.get("typ") or "",
                     "formaga": d.get("formaga") or u.get("formaga") or "",
                     "poang": d.get("poang"),
@@ -1255,6 +1349,7 @@ def domarenheter(exam: dict) -> list[dict]:
             continue
         ut.append({
             "nr": str(i),
+            "del": u.get("del") or None,
             "typ": u.get("typ") or "",
             "formaga": u.get("formaga") or "",
             "poang": u.get("poang"),
@@ -1374,6 +1469,187 @@ def doma_nivaer(exam: dict, *, model: str, llm=llm_client.generate,
     return avvikelser(enheter, _parse_domar(raw))
 
 
+# ──────────────────────────────────────────────────── räknedomaren ────────
+# Nivådomaren frågar om uppgiften ligger rätt. Den här frågar om den STÄMMER:
+# räknar man ut den själv, blir det som facit säger? Ett facit som räknar på
+# andra tal än uppgiften är värre än inget facit alls — läraren upptäcker det
+# framför klassen — och ingen deterministisk vakt kan hitta det.
+#
+# Samma kontrakt som nivådomaren: eget anrop, temperature 0, fail-open (faller
+# anropet levereras pappret ändå), tystnad och «oklart» fäller aldrig, och
+# fynden går in i SAMMA reparationsrunda. Skillnaden är att den här domaren
+# får se facit — den ska ju jämföra mot det — men aldrig poängen eller
+# bedömningsanvisningen.
+#
+# TILLKOM 2026-08-23. Till skillnad från nivådomaren är dess fällfrekvens INTE
+# mätt över kassetterna: det finns ett band, inspelat på ett dokument, och det
+# säger ingenting om hur ofta en riktig körning fäller. Mät innan någon skruvar
+# på taket eller låter den kosta mer än en runda.
+RAKNE_MAX_TOKENS = 8_000
+
+RAKNE_SYSTEM = (
+    "Du är en noggrann matematiklärare som räknar efter ett facit. Du räknar "
+    "ut varje uppgift SJÄLV innan du jämför, och du svarar ALLTID med giltig "
+    "JSON enligt schemat, ingenting annat."
+)
+
+RAKNE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "domar": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "nr": {"type": "string"},
+                    # Beräkningen står FÖRE domen i schemat med flit: fältet är
+                    # domarens egen räkning, och en modell som får skriva den
+                    # först dömer på den i stället för på facit den läst.
+                    "berakning": {"type": "string"},
+                    # «oklart» är toleransen, precis som i nivådomen: en
+                    # uppgift domaren inte kan räkna ut ska inte kosta en
+                    # reparationsrunda.
+                    "stammer": {"type": "string",
+                                "enum": ["ja", "nej", "oklart"]},
+                    "ratt_svar": {"type": "string"},
+                    "skal": {"type": "string"},
+                },
+                "required": ["nr", "berakning", "stammer"],
+            },
+        },
+    },
+    "required": ["domar"],
+}
+
+
+def build_rakne_prompt(enheter: list[dict]) -> str:
+    """Räknedomarens prompt. Ordet «räknedomare» står här och ingen annanstans
+    i appen — uppspelningen väljer band på det (tests/fejk.py `_auto`), av
+    samma skäl som täckningsdomaren: prompten bär ett helt papper och skulle
+    annars matcha den generator som skrev det."""
+    kort = [{"nr": e["nr"],
+             "verktyg": ("med digitala verktyg"
+                         if (e.get("del") or "").upper() in ("C", "D")
+                         else "utan digitala verktyg"),
+             **{k: v for k, v in e["kort"].items()
+                if k in ("stam", "text", "losning")}}
+            for e in enheter]
+    return (
+        "Du är räknedomare för ett matematikpapper. Nedan står uppgifterna "
+        "med sitt facit (fältet losning), och «verktyg» säger om eleven har "
+        "räknare eller inte.\n"
+        f"{json.dumps(kort, ensure_ascii=False)}\n\n"
+        "RÄKNA UT VARJE UPPGIFT SJÄLV, steg för steg, innan du läser vad "
+        "facit säger — skriv din räkning kort i fältet berakning. Jämför "
+        "sedan:\n"
+        "- stammer \"ja\" när facit ger samma svar som din räkning (samma tal "
+        "i en annan form, $1/2$ mot $0{,}5$, är samma svar).\n"
+        "- stammer \"nej\" när facit ger ett annat svar än din räkning, när "
+        "uppgiften är omöjlig eller underbestämd (ett värde som behövs saknas "
+        "i texten), eller när facit inte svarar på det som frågas. Skriv då "
+        "ditt svar i ratt_svar och skälet i skal, båda korta.\n"
+        "- stammer \"oklart\" när du inte kan avgöra det — uppgiften hänvisar "
+        "till en figur eller en tabell du inte ser, eller kräver data som "
+        "inte står här. «oklart» är ett riktigt svar och bättre än en "
+        "gissning.\n"
+        "Döm bara på om räkningen stämmer. Talens smak — om de är runda nog "
+        "eller för fula — är någon annans sak. Svara med enbart JSON."
+    )
+
+
+def _stammer(varde) -> str:
+    """Domarens ja/nej/oklart, oavsett om modellen skrev det som sträng eller
+    boolean. Allt som inte är ett tydligt ja eller nej blir «oklart», och
+    «oklart» fäller aldrig."""
+    if isinstance(varde, bool):
+        return "ja" if varde else "nej"
+    s = str(varde or "").strip().lower()
+    if s in ("ja", "true", "yes", "stämmer", "stammer"):
+        return "ja"
+    if s in ("nej", "false", "no"):
+        return "nej"
+    return "oklart"
+
+
+def _parse_rakning(raw: str) -> dict[str, dict]:
+    """Räknedomens svar → {nr: {stammer, ratt_svar, skal, berakning}}. Ett svar
+    som inte går att tolka ger en tom dom — en trasig kontroll ska aldrig kunna
+    underkänna ett papper som är rätt."""
+    data = _json_objekt(raw)
+    if not isinstance(data, dict):
+        return {}
+    ut: dict[str, dict] = {}
+    for d in data.get("domar") or []:
+        if not isinstance(d, dict):
+            continue
+        nr = str(d.get("nr") or "").strip()
+        if not nr:
+            continue
+        ut[nr] = {"stammer": _stammer(d.get("stammer")),
+                  "ratt_svar": str(d.get("ratt_svar") or "").strip(),
+                  "skal": str(d.get("skal") or "").strip(),
+                  "berakning": str(d.get("berakning") or "").strip()}
+    return ut
+
+
+def _kort(text: str, tak: int = 90) -> str:
+    text = " ".join((text or "").split())
+    return text if len(text) <= tak else text[:tak - 1] + "…"
+
+
+def raknefel(enheter: list[dict], domar: dict[str, dict]) -> list[dict]:
+    """Domen mot facit. Bara ett uttryckligt «nej» fäller — tystnad och
+    «oklart» passerar, precis som i nivådomen."""
+    ut = []
+    for e in enheter:
+        dom = domar.get(e["nr"])
+        if not dom or dom["stammer"] != "nej":
+            continue
+        facit = _kort(e["kort"].get("losning", "")) or "ingenting"
+        ratt = _kort(dom["ratt_svar"], 60) or "ett annat svar"
+        # ÅTGÄRDEN, inte konstaterandet — och åtgärden är lärarens egen regel:
+        # uppgift och facit är samma sak sedd från två håll, så de ändras
+        # tillsammans. Ett facit som skrivs om ensamt räknar på andra tal än
+        # uppgiften, och det är precis felet vi försöker laga.
+        text = (f"uppgift {e['nr']}: facit säger «{facit}» men beräkningen ger "
+                f"{ratt} — rätta facit eller ändra uppgiftens tal så att de "
+                "stämmer överens; uppgift och facit ska ändras TILLSAMMANS.")
+        if dom["skal"]:
+            text += f" Räknedomarens skäl: {_kort(dom['skal'], 160)}"
+        ut.append(_err(f"uppgift {e['nr']}", "rakning", text))
+    # Samma tak som nivåfynden, och det DELAS: fler än så är inte en lista fel
+    # utan ett underkänt papper.
+    return ut[:MAX_DOMAR_PROBLEM]
+
+
+def doma_rakning(exam: dict, *, model: str, llm=llm_client.generate,
+                 log_cb: Callable[[str], None] | None = None) -> list[dict]:
+    """Ett räknedomaranrop → fynd där facit inte stämmer med uppgiften."""
+    log = log_cb or (lambda _m: None)
+    enheter = domarenheter(exam)
+    if not enheter:
+        return []
+    log("Räknar igenom facit …")
+    try:
+        raw = llm(
+            model, build_rakne_prompt(enheter),
+            system=RAKNE_SYSTEM,
+            options={"temperature": 0.0},
+            response_format={"type": "json_schema",
+                             "json_schema": {"name": "raknedom",
+                                             "schema": RAKNE_SCHEMA}},
+            max_tokens=RAKNE_MAX_TOKENS,
+            token_cb=None,
+        )
+    except Exception as e:                          # noqa: BLE001
+        # Fail-open, samma skäl som nivådomaren: pappret är färdigt och
+        # validerat, och att kasta det för att en frivillig kontroll inte gick
+        # igenom vore att straffa läraren för fel sak.
+        log(f"Räknekontrollen kunde inte köras ({e}) — provet levereras ändå.")
+        return []
+    return raknefel(enheter, _parse_rakning(raw))
+
+
 # ── Deterministiska nivåsignaler ──────────────────────────────────────────
 # Billiga, körs alltid, och de AVGÖR ALDRIG ensamma — de blir varningar läraren
 # ser, inte problem som skickas till reparationsloopen.
@@ -1423,6 +1699,203 @@ def nivasignaler(exam: dict) -> list[dict]:
                            f"uppgift {nr} är formulerad som en utredning men "
                            "ger bara E-poäng — den formen förekommer inte på "
                            "E-nivå i underlaget."))
+    return ut
+
+
+# ── Deterministiska talvakter ─────────────────────────────────────────────
+# Samma form och samma plats i kedjan som nivåsignalerna, och samma regel:
+# billiga, körs alltid, och de AVGÖR aldrig ensamma. Skillnaden är att de går
+# MED in i reparationsrundan när domarna ändå fällt något — talen är sällan
+# ensamma om att vara fel, och en runda som redan är betald ska laga allt den
+# kan.
+#
+# Varje siffra nedan är RÄKNAD i underlaget — tio nationella prov (1a, 1b, 1c,
+# 2a, 2c vt17–vt22 och 3c vt22, se TALREGLER) — inte gissad. Det är samma
+# lärdom som nivåsignalerna kostade: en vakt som fäller riktiga NP-uppgifter är
+# värdelös. Därför tillåter B-vakten mönstret 1,04 (förändringsfaktorn står som
+# GIVEN i kurs 1:s räknarfria del) och släpper igenom blocktal som återkommer i
+# facit ($4444^2 - 4443^2$), och därför är C/D-taket 3 decimaler och inte 2:
+# NP:s egna slutsvar går ända till två decimaler, men aldrig längre.
+
+# LaTeX skriver tal som 5{,}8480 och 12\,166, och svensk löptext skriver
+# tusentalen med mellanslag (1 200 kr). Utan normaliseringen läser regexen
+# «5» och «8480» som två små tal och missar båda vakterna. Bara SIFFRORNAS
+# mellanrum tas bort — resten av strängen måste stå kvar, för fras-vakterna
+# läser den också.
+_TUSENTAL_RE = re.compile(r"(?<=\d)[ \u00a0\u202f](?=\d{3}(?!\d))")
+
+
+def _normaltal(s: str) -> str:
+    s = (s or "").replace("{,}", ",").replace("\\,", "").replace("\\;", "")
+    return _TUSENTAL_RE.sub("", s)
+
+
+_TAL_RE = re.compile(r"(?<![\d,])(\d+(?:,\d+)?)")
+# Förändringsfaktorn: 1,04 och 0,85 står som GIVNA tal i uppgiftstexten även i
+# räknarfria delar (kurs 1). Två decimaler är alltså inte i sig ett fel — men
+# 3,75 eller 12,25 är det.
+_FAKTOR_RE = re.compile(r"^[01],\d\d$")
+# «Avrunda till två decimaler» och alla dess syskon. Frasen finns inte i NP;
+# den som vill ha ett närmevärde skriver «Svara med minst två decimaler.»
+_AVRUND_DECIMAL_RE = re.compile(r"avrunda[^.!?]{0,40}?decimal", re.I)
+# Vilken instruktion som helst om svarets form — för andelsvakten.
+_AVRUND_NAGON_RE = re.compile(r"avrunda|svara med minst|n[äa]rmev[äa]rde", re.I)
+_MINST_DECIMAL_RE = re.compile(r"minst\s+\S+\s+decimal", re.I)
+_EXAKT_RE = re.compile(r"svara\s+exakt|svaret?\s+exakt", re.I)
+_UNGEFAR_RE = re.compile(r"≈|\\approx|\bcirka\b|\bca\.?\s|\bungef[äa]r\b", re.I)
+# Procent med två decimaler i facit. NP anger procentsvar med högst EN decimal
+# — «94,93 %» kom ur ett skarpt prov och är formen den här vakten finns för.
+# Dollartecknen är LaTeX-matematikens gränser och står ofta MELLAN talet och
+# procenttecknet ($94{,}93$ %) — utan dem i mönstret missar vakten just den
+# form appen själv skriver.
+_PROCENT_DEC_RE = re.compile(r"\d+,\d{2,}[\s$]*(?:\\?%|procent)")
+# Uppgiftsnummer och sidhänvisningar är inga «stora tal».
+_NUMMER_RE = re.compile(r"(uppgift|nr|sida|sidan|kapitel)\s*$", re.I)
+# Hur stor andel av uppgifterna som får bära en avrundningsinstruktion innan
+# pappret som helhet flaggas. NP ligger på ungefär en av hundra; taket är satt
+# långt över det, för det som ska fångas är pappret där varannan uppgift säger
+# «avrunda».
+_AVRUND_ANDEL = 0.20
+
+
+def _decimaler(tal: str) -> int:
+    return len(tal.partition(",")[2])
+
+
+def _vardesiffror(tal: str) -> int:
+    """Värdesiffror. Ett heltals avslutande nollor räknas inte — 230 000 kr är
+    tre siffror och ett fullt normalt NP-ingångstal, medan 12 166 är fem."""
+    heltal, _, dec = tal.partition(",")
+    siffror = (heltal + dec).lstrip("0")
+    return len(siffror if dec else siffror.rstrip("0"))
+
+
+def _slutsvar(facit: str) -> str:
+    """Sista ledet i lösningen — det är DET som är svaret. Mellanled får ha
+    fler siffror (TALREGLER säger det uttryckligen), så en vakt som läste hela
+    facit hade fällt varje korrekt uträkning."""
+    bitar = [b.strip() for b in re.split(r"[\n.;]", facit) if b.strip()]
+    return bitar[-1] if bitar else ""
+
+
+def _stora_tal(text: str) -> list[str]:
+    """Tal ≥ 1000 som inte är jämna hundratal. Årtal och uppgiftsnummer
+    undantas — de är inga räknetal."""
+    ut = []
+    for m in _TAL_RE.finditer(text):
+        tal = m.group(1)
+        if "," in tal:
+            continue
+        n = int(tal)
+        if n < 1000 or n % 100 == 0 or 1900 <= n <= 2100:
+            continue
+        if _NUMMER_RE.search(text[max(0, m.start() - 12):m.start()]):
+            continue
+        if text[m.end():m.end() + 2].lstrip().startswith("%"):
+            continue
+        ut.append(tal)
+    return ut
+
+
+def talsignaler(exam: dict) -> list[dict]:
+    """Deterministiska varningar om tal som inte ser ut som nationella provets."""
+    ut: list[dict] = []
+    enheter = domarenheter(exam)
+    med_instruktion = 0
+    for e in enheter:
+        nr = e["nr"]
+        kort = e["kort"]
+        text = _normaltal(f"{kort.get('stam', '')} {kort.get('text', '')}")
+        facit = _normaltal(kort.get("losning", ""))
+        delen = (e.get("del") or "").upper()
+        utan, med = delen == "B", delen in ("C", "D")
+        if _AVRUND_NAGON_RE.search(text):
+            med_instruktion += 1
+
+        # 1. Facit utan räknare ska vara EXAKT. Ett avrundat tal eller ett «≈»
+        #    betyder att uppgiftens tal är valda så att svaret inte går jämnt
+        #    ut — och då är det talen som ska bytas, inte svaret som ska rundas.
+        if utan:
+            langa = [t for t in _TAL_RE.findall(facit) if _decimaler(t) >= 3]
+            if langa or _UNGEFAR_RE.search(facit):
+                ut.append(_err(f"uppgift {nr}", "talsignal",
+                               f"uppgift {nr} ligger i den räknarfria delen "
+                               "men facit är ett närmevärde "
+                               f"({', '.join(langa[:3]) or 'ungefärstecken'}) "
+                               "— svaret ska vara exakt: ett heltal, ett "
+                               "förkortat bråk, en rot eller ett uttryck. Välj "
+                               "svaret först och konstruera talen sedan."))
+        # 2. Ingångstalen utan räknare: en decimal, och inga flersiffriga tal
+        #    att räkna på för hand.
+        if utan:
+            fula = [t for t in _TAL_RE.findall(text)
+                    if _decimaler(t) >= 2 and not _FAKTOR_RE.match(t)]
+            if fula:
+                ut.append(_err(f"uppgift {nr}", "talsignal",
+                               f"uppgift {nr} är räknarfri men har "
+                               f"ingångstal med två decimaler "
+                               f"({', '.join(fula[:3])}) — utan räknare har "
+                               "decimaltal EXAKT en decimal (3,5 · 0,2 · 1,2). "
+                               "Förändringsfaktorn 1,04 är undantaget."))
+            # Blocktalsundantaget: ett stort tal som ÅTERKOMMER i facit är
+            # antagligen ett block ($4444^2 - 4443^2$) där en regel gör
+            # aritmetiken onödig, och sådana finns i nationella provet.
+            stora = [t for t in _stora_tal(text) if t not in facit]
+            if stora:
+                ut.append(_err(f"uppgift {nr}", "talsignal",
+                               f"uppgift {nr} är räknarfri men ber om räkning "
+                               f"på stora tal ({', '.join(stora[:3])}) — utan "
+                               "räknare är talen heltal inom ±30 eller runda "
+                               "pengabelopp. Stora tal förekommer bara som "
+                               "block där en regel gör aritmetiken onödig."))
+        # 3. Med räknare: slutsvaret har 2–3 värdesiffror och högst två
+        #    decimaler. Mellanleden räknas inte — de får vara hur långa som
+        #    helst så länge de skrivs med «≈».
+        if med:
+            svar = _slutsvar(facit)
+            langa = [t for t in _TAL_RE.findall(svar)
+                     if _decimaler(t) >= 3 or _vardesiffror(t) >= 5]
+            if langa:
+                ut.append(_err(f"uppgift {nr}", "talsignal",
+                               f"uppgift {nr} har ett slutsvar med för många "
+                               f"siffror ({', '.join(langa[:3])}) — med "
+                               "digitala verktyg har svaret 2–3 värdesiffror, "
+                               "högst två decimaler, och en enhet. Mellanled "
+                               "får vara längre och skrivs med «≈»."))
+        # 4. Procentsvar med två decimaler. Räknas i BÅDA delarna: det var den
+        #    här formen («94,93 %») som fick hela blocket skrivet.
+        if _PROCENT_DEC_RE.search(facit):
+            ut.append(_err(f"uppgift {nr}", "talsignal",
+                           f"uppgift {nr} anger ett procenttal med två "
+                           "decimaler i facit — nationella provet skriver "
+                           "procent med högst en decimal, och toleransen "
+                           "anges i stället i facit («6 % (godtagbart: "
+                           "6,2 %)»)."))
+        # 5. Fraser som inte finns i nationella provet, eller står i fel del.
+        if _AVRUND_DECIMAL_RE.search(text):
+            ut.append(_err(f"uppgift {nr}", "talsignal",
+                           f"uppgift {nr} säger åt eleven att avrunda till ett "
+                           "antal decimaler — den frasen finns inte i "
+                           "nationella provet. Stryk den, eller skriv «Svara "
+                           "med minst en decimal.» om svaret annars är "
+                           "instabilt."))
+        if med and _EXAKT_RE.search(text):
+            ut.append(_err(f"uppgift {nr}", "talsignal",
+                           f"uppgift {nr} ber om ett exakt svar i räknardelen "
+                           "— «Svara exakt.» hör till den räknarfria delen."))
+        if utan and _MINST_DECIMAL_RE.search(text):
+            ut.append(_err(f"uppgift {nr}", "talsignal",
+                           f"uppgift {nr} ber om ett antal decimaler i den "
+                           "räknarfria delen — där är svaret exakt, aldrig ett "
+                           "närmevärde."))
+    # 6. Pappret som helhet. En enstaka instruktion om svarets form är normal;
+    #    ett papper där var femte uppgift bär en har bytt genre.
+    if enheter and med_instruktion > _AVRUND_ANDEL * len(enheter):
+        ut.append(_err("prov", "talsignal",
+                       f"{med_instruktion} av {len(enheter)} uppgifter säger "
+                       "åt eleven hur svaret ska avrundas — i nationella "
+                       "provet bär ungefär en uppgift av hundra en sådan "
+                       "instruktion. Låt talen ge svarets form i stället."))
     return ut
 
 
@@ -1778,24 +2251,42 @@ def _skala(profil: str, boknivaer: str, skeleton: list[dict] | None,
         kurs=kurs)
 
 
-def _niva_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
-               skala: str, antal: int | None, skeleton: list[dict] | None,
-               rounds_used: int, max_rounds: int, koder: list[str] | None = None,
-               niva_mal: dict | None = None,
-               log_cb: Callable[[str], None] | None = None) -> dict:
-    """Domarrunda + högst EN reparationsrunda på dess fynd (C4).
+def _signaler(exam: dict) -> list[dict]:
+    """De deterministiska varningarna, samlade. Båda uppsättningarna räknas om
+    efter en reparation — ett fynd som lagats ska inte stå kvar som varning."""
+    return nivasignaler(exam) + talsignaler(exam)
 
-    Ligger efter balansreparationen med flit: domaren ska läsa det dokument
+
+def _domar_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
+                skala: str, antal: int | None, skeleton: list[dict] | None,
+                rounds_used: int, max_rounds: int, koder: list[str] | None = None,
+                niva_mal: dict | None = None,
+                log_cb: Callable[[str], None] | None = None) -> dict:
+    """Domarrundan + högst EN reparationsrunda på dess fynd (C4).
+
+    TVÅ domare, båda blinda, båda i SAMMA pass och samma reparationsrunda:
+    nivådomaren frågar om uppgiften ligger rätt, räknedomaren om facit stämmer
+    med uppgiftens tal. De kostar ett modellanrop var; reparationen kostar en
+    runda, och den delas.
+
+    Ligger efter balansreparationen med flit: domarna ska läsa det dokument
     läraren annars hade fått, inte ett halvfärdigt mellanläge.
 
     EN runda, och passet körs bara en gång — domen prövas alltså aldrig om.
     Det är avsiktligt: en andra runda kan kosta ännu en generering, och en loop
     som får spinna på nivåbedömningar spinner på subjektiva gränsdragningar.
-    Skruva inte upp det innan fällfrekvensen är MÄTT över kassetterna (planens
-    C7, punkt 4)."""
+    Nivådomarens fällfrekvens är MÄTT över kassetterna (planens C7, punkt 4);
+    RÄKNEDOMARENS ÄR DET INTE — den tillkom 2026-08-23 och har ett band, på ett
+    dokument. Skruva inte upp något innan båda är mätta.
+
+    Talsignalerna är varningar OCH reparationsunderlag: de fäller aldrig
+    ensamma (då hade en fråga om talens smak kunnat kosta en runda), men när
+    domarna ändå fällt något åker de med in i prompten — rundan är redan
+    betald, och talen är sällan ensamma om att vara fel."""
     log = log_cb or (lambda _m: None)
-    signaler = nivasignaler(exam)
-    avv = doma_nivaer(exam, model=model, llm=llm, skala=skala, log_cb=log_cb)
+    signaler = _signaler(exam)
+    avv = (doma_nivaer(exam, model=model, llm=llm, skala=skala, log_cb=log_cb)
+           + doma_rakning(exam, model=model, llm=llm, log_cb=log_cb))
     if not avv:
         return {"exam": exam, "errors": errors + signaler, "rounds": rounds_used}
     if rounds_used >= max_rounds:
@@ -1803,9 +2294,9 @@ def _niva_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
         # sista domare (planens C5), och en tyst nivåmiss är värre än en synlig.
         return {"exam": exam, "errors": errors + avv + signaler,
                 "rounds": rounds_used}
-    log(f"Justerar nivån på {len(avv)} uppgift(er) …")
-    kandidat = _llm_round(build_repair_prompt(exam, avv, profil), model, llm,
-                          antal, skeleton, koder)
+    log(f"Justerar {len(avv)} uppgift(er) …")
+    kandidat = _llm_round(build_repair_prompt(exam, avv + signaler, profil),
+                          model, llm, antal, skeleton, koder)
     rounds_used += 1
     if kandidat is None:
         return {"exam": exam, "errors": errors + avv + signaler,
@@ -1815,13 +2306,13 @@ def _niva_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                               rounds_used=rounds_used, max_rounds=max_rounds,
                               profil=profil, antal=antal, skeleton=skeleton,
                               koder=koder, niva_mal=niva_mal, log_cb=log_cb)
-    # Nivåhöjningen får inte kosta strukturen. Var dokumentet rent före domaren
+    # Nivåhöjningen får inte kosta strukturen. Var dokumentet rent före domarna
     # och trasigt efter är omskrivningen en försämring: behåll det gamla och
-    # visa nivåfynden som varningar i stället.
+    # visa fynden som varningar i stället.
     if res["errors"] and not errors:
         return {"exam": exam, "errors": avv + signaler, "rounds": res["rounds"]}
     return {"exam": res["exam"], "rounds": res["rounds"],
-            "errors": res["errors"] + nivasignaler(res["exam"] or exam)}
+            "errors": res["errors"] + _signaler(res["exam"] or exam)}
 
 
 def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
@@ -1849,8 +2340,9 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     reparation mäter annars mot profilens defaultband och river upp det
     skelettet garanterade.
 
-    `doma=False` stänger av nivådomaren (C4). Den kostar ett modellanrop och
-    körs annars alltid — nivån är inget som bara ska begäras i prompten.
+    `doma=False` stänger av HELA domarpasset (C4) — både nivådomaren och
+    räknedomaren. De kostar ett modellanrop var och körs annars alltid: nivån
+    och ett facit som stämmer är inget som bara ska begäras i prompten.
 
     `koder` är de centrala innehållspunkter läraren kryssade, som koder. De
     låser `innehall` per uppgift (grammatik + validering) så att varje uppgift
@@ -1908,13 +2400,13 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                               koder=koder, niva_mal=niva_mal, log_cb=log_cb)
     if not doma or res["exam"] is None:
         return res
-    return _niva_pass(res["exam"], res["errors"], model=model, llm=llm,
-                      profil=profil,
-                      skala=_skala(profil, boknivaer, skeleton, kurs),
-                      antal=antal, skeleton=grammatik, koder=koder,
-                      niva_mal=niva_mal,
-                      rounds_used=res["rounds"], max_rounds=max_rounds,
-                      log_cb=log_cb)
+    return _domar_pass(res["exam"], res["errors"], model=model, llm=llm,
+                       profil=profil,
+                       skala=_skala(profil, boknivaer, skeleton, kurs),
+                       antal=antal, skeleton=grammatik, koder=koder,
+                       niva_mal=niva_mal,
+                       rounds_used=res["rounds"], max_rounds=max_rounds,
+                       log_cb=log_cb)
 
 
 def refine_exam(exam: dict, instruction: str, *, model: str,

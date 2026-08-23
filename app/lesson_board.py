@@ -1546,7 +1546,7 @@ def _repair_until_valid(board: dict | None, errors: list, *, model: str, llm,
 # krävda av valda uppgifter, båda osynliga tills läraren själv jämförde med
 # boken. Domaren gör jämförelsen: ett extra pass som går uppgift för uppgift
 # genom URVALET mot tavlan och skickar tillbaka det som saknas som en
-# reparationsrunda. Samma kontrakt som nivådomaren (exam_gen._niva_pass):
+# reparationsrunda. Samma kontrakt som exam_gen._domar_pass (nivå + räkning):
 # EN dom, högst EN reparation, aldrig en loop — och ofixade fynd redovisas
 # som varningar i stället för att tystas.
 
