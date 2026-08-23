@@ -31,6 +31,14 @@ def _exam() -> dict:
         "kurs": "Ma2b", "klass": "SA23", "datum": "2026-10-05",
         "tid_min": 120,
         "hjalpmedel": "Del B utan räknare. Del C med räknare och formelblad.",
+        # Porträttet på försättsbladet: utan det skickar exam_gen.forsattsignaler
+        # provet till reparation, och fixturen ska vara det GILTIGA provet.
+        "forsattsbild": {"person": "Muhammad al-Khwarizmi (ca 780–850), som "
+                                   "gav algebran dess namn och metod.",
+                         "scene": "SCENE. A scholar in a ninth-century Baghdad "
+                                  "study, bent over a manuscript by lamplight, "
+                                  "dust motes in a shaft of morning sun. "
+                                  "Intended use: exam cover portrait."},
         "uppgifter": [
             {"del": "B", "formaga": "B", "typ": "rutin", "poang": [3, 0, 0],
              "text": "Ange nollställena till $f(x) = (x-1)(x+3)$.",

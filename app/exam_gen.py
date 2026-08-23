@@ -2914,6 +2914,22 @@ def _skala(profil: str, boknivaer: str, skeleton: list[dict] | None,
         kurs=kurs)
 
 
+def forsattsignaler(exam: dict, profil: str) -> list[dict]:
+    """Provet utan porträtt. Fältet är VALFRITT i schemat (gamla papper och
+    kassetter saknar det), så ordern i uppdragsblocket är det enda som ber om
+    det — och det första skarpa provet efter ec30741 kom utan. Då ska
+    reparationsrundan be om det, inte läraren stå med en tom bildplats."""
+    if profil != "prov":
+        return []
+    fb = exam.get("forsattsbild") or {}
+    if isinstance(fb, dict) and (fb.get("scene") or "").strip():
+        return []
+    return [_err("forsattsbild", "forsatt",
+                 "provet saknar forsattsbild — fyll person (namn, årtal, vad "
+                 "hen gjorde, en svensk mening) och scene (SCENE-stycket på "
+                 "engelska) med den som hör till provets innehåll.")]
+
+
 def _signaler(exam: dict) -> list[dict]:
     """De deterministiska varningarna, samlade. Alla räknas om efter en
     reparation — ett fynd som lagats ska inte stå kvar som varning."""
@@ -2948,8 +2964,11 @@ def _domar_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
     betald, och talen är sällan ensamma om att vara fel."""
     log = log_cb or (lambda _m: None)
     signaler = _signaler(exam)
+    # Det saknade porträttet FÄLLER, till skillnad från signalerna: en tom
+    # bildplats är inte en smaksak utan ett hål på försättsbladet.
     avv = (doma_nivaer(exam, model=model, llm=llm, skala=skala, log_cb=log_cb)
-           + doma_rakning(exam, model=model, llm=llm, log_cb=log_cb))
+           + doma_rakning(exam, model=model, llm=llm, log_cb=log_cb)
+           + forsattsignaler(exam, profil))
     if not avv:
         return {"exam": exam, "errors": errors + signaler, "rounds": rounds_used}
     if rounds_used >= max_rounds:

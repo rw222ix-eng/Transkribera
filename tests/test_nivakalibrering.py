@@ -789,3 +789,14 @@ def test_provet_domas_mot_samma_skala_som_det_skrevs_mot():
 def test_bokens_skala_ar_ocksa_domarens(monkeypatch):
     skala = exam_gen._skala("arbetsblad", "BOKENS NIVÅSKALA — hittepå", None)
     assert skala == "BOKENS NIVÅSKALA — hittepå"
+
+
+def test_provet_utan_portratt_gar_till_reparation():
+    """Fältet är valfritt i schemat, så bara vakten kan kräva det — och bara
+    för provet, som är det enda pappret med försättsblad."""
+    from app import exam_gen
+    assert exam_gen.forsattsignaler({"uppgifter": []}, "arbetsblad") == []
+    fel = exam_gen.forsattsignaler({"uppgifter": []}, "prov")
+    assert len(fel) == 1 and fel[0]["code"] == "forsatt"
+    ok = {"forsattsbild": {"person": "Euler", "scene": "SCENE. x"}}
+    assert exam_gen.forsattsignaler(ok, "prov") == []
