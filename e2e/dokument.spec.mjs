@@ -420,18 +420,20 @@ test("tavlan laddas ner som en PDF — inte som ett besked om att den är en bil
   await expect(page.locator("#fh-pdf")).toHaveText("Sparad");
 });
 
-test("tavlans nedladdning ger lösningsbladen som EGNA filer", async ({ page }) => {
+test("tavlans nedladdning ger EN PDF med lösningsbladen i", async ({ page }) => {
   /* «Ladda ner PDF» på en tavla gav tavlan — men bokens lösningsförslag, som
      läraren just sett i samma trav, följde inte med. De har ingen fil på
-     servern: de ritas i webbläsaren. Nu ritas de av och sätts på var sitt A4,
-     ett papper per fil. */
+     servern: de ritas i webbläsaren. De kom en tid som egna numrerade filer
+     bredvid tavlan; nu blir allt EN fil, tavlan först och arken i travens
+     ordning, ett per sida — högen skrivs ut och delas som en sak. */
   const skickat = [];
   await fejka(page, { sparade: [rad(1, papper({
     typ: "Tavla", wbId: "abc", wb: tavla(), bokuppg: bokuppg() }))] });
   await page.route("**/api/tavla/pdf", route => {
     skickat.push(route.request().postDataJSON());
     return route.fulfill({ status: 200, contentType: "application/pdf",
-                           body: Buffer.from("%PDF-1.7 en sida") });
+                           headers: { "X-Sidor": "3" },
+                           body: Buffer.from("%PDF-1.7 tre sidor") });
   });
   await page.goto("/");
   await hydrerad(page);
@@ -442,25 +444,73 @@ test("tavlans nedladdning ger lösningsbladen som EGNA filer", async ({ page }) 
   await page.locator("#fh-pdf").click();
   await expect(page.locator("#fh-pdf")).toHaveText("Sparad", { timeout: 60_000 });
 
-  // Tavlan + svarsfacit + nivå 3-arket: tre filer, tre anrop.
-  expect(skickat).toHaveLength(3);
-  expect(filer).toHaveLength(3);
-  /* Tavlan skickas som en lista (ett bräde per sida), bladen som var sin
-     sträng — ett ark är ett papper och delas inte. */
-  skickat.forEach(s => {
-    [].concat(s.png).forEach(p => {
-      expect(p.startsWith("data:image/png;base64,")).toBe(true);
-      expect(p.length).toBeGreaterThan(10_000);
-    });
+  // Tavlan + svarsfacit + nivå 3-arket: ETT anrop, EN fil.
+  expect(skickat).toHaveLength(1);
+  expect(filer).toHaveLength(1);
+  // Filen heter dokumentets namn — inte ett ark i den.
+  expect(filer[0]).toBe("Tavla — Primitiva funktioner.pdf");
+  /* Sidorna ligger i EN lista i travens ordning: tavlans bräde först, sedan
+     bokens ark. Inget original att foga in — tavlan har ingen fil på servern. */
+  expect(Array.isArray(skickat[0].png)).toBe(true);
+  expect(skickat[0].png).toHaveLength(3);
+  expect(skickat[0].forst).toBeUndefined();
+  skickat[0].png.forEach(p => {
+    expect(p.startsWith("data:image/png;base64,")).toBe(true);
+    expect(p.length).toBeGreaterThan(10_000);
   });
-  // Namnen kommer ur arkens egna huvuden, inte ur dokumentets.
-  const namn = skickat.map(s => s.namn);
-  expect(namn.some(n => /Lösningsförslag · boken/.test(n))).toBe(true);
-  expect(namn.some(n => /Lösningsförslag · nivå 3/.test(n))).toBe(true);
-  expect(new Set(filer).size).toBe(3);   // ingen fil skriver över en annan
-  /* Löpnumret först: Hämtat sorterar på namnet, och utan numret låg
-     «uppg 12» före «uppg 3» och tavlan mitt i bunten. */
-  expect(namn.map(n => n.slice(0, 3))).toEqual(["01 ", "02 ", "03 "]);
+  /* Proportionerna avslöjar ordningen OCH att inget ark trycks ihop: brädet är
+     bredare än högt (servern lägger det liggande), lösningsarken är A4 på
+     höjden. Blandade orienteringar i samma fil är fria — png_till_pdf sätter
+     sidstorleken per bild. */
+  const matt = p => {
+    const b = Buffer.from(p.split(",")[1].slice(0, 64), "base64");
+    return [b.readUInt32BE(16), b.readUInt32BE(20)];
+  };
+  const [brade, ...ark] = skickat[0].png.map(matt);
+  expect(brade[0]).toBeGreaterThan(brade[1]);
+  ark.forEach(([b, h]) => expect(h).toBeGreaterThan(b));
+  // Toasten säger vad läraren fick: en fil, med sidantalet ur serverns huvud.
+  await expect(page.locator(".toast")).toContainText("EN PDF, 3 sidor");
+});
+
+test("provets färdiga fil pekas ut åt servern i stället för att hämtas hem", async ({ page }) => {
+  /* Ett papper som inte är en tavla har redan en byggd PDF på servern — den
+     kan inte ritas om i webbläsaren. Klienten hämtade den förut och laddade
+     ner den som EGEN fil bredvid bokens ark. Nu skickar den bara en pekare
+     (`forst`) och servern fogar filen framför bildsidorna: en fil, provet
+     först. */
+  const skickat = [];
+  const hamtat = [];
+  await fejka(page, { sparade: [rad(1, papper({
+    typ: "Arbetsblad", provId: 42, bokuppg: bokuppg() }))] });
+  await page.route("**/api/exams/**", route => {
+    hamtat.push(new URL(route.request().url()).pathname);
+    return route.fulfill({ status: 200, contentType: "application/pdf",
+                           body: Buffer.from("%PDF-1.5 bladet") });
+  });
+  await page.route("**/api/tavla/pdf", route => {
+    skickat.push(route.request().postDataJSON());
+    return route.fulfill({ status: 200, contentType: "application/pdf",
+                           headers: { "X-Sidor": "5" },
+                           body: Buffer.from("%PDF-1.7 fem sidor") });
+  });
+  await page.goto("/");
+  await hydrerad(page);
+  await oppnaForhandsvisning(page);
+
+  const filer = [];
+  page.on("download", d => filer.push(d.suggestedFilename()));
+  await page.locator("#fh-pdf").click();
+  await expect(page.locator("#fh-pdf")).toHaveText("Sparad", { timeout: 60_000 });
+
+  expect(filer).toHaveLength(1);
+  expect(skickat).toHaveLength(1);
+  expect(skickat[0].forst).toEqual({ exam: 42, sort: "pdf" });
+  expect(skickat[0].png).toHaveLength(2);      // bokens två ark
+  // Originalet hämtas INTE hem för att sedan skickas tillbaka.
+  expect(hamtat).toEqual([]);
+  // Sidantalet är serverns: klienten ritade två ark men filen har fem sidor.
+  await expect(page.locator(".toast")).toContainText("EN PDF, 5 sidor");
 });
 
 test("lösningsbladet laddar ner sin EGEN fil, inte originalets", async ({ page }) => {

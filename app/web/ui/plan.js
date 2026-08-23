@@ -4348,27 +4348,37 @@
     /* Släpps direkt smiter webbläsaren ifrån sparandet i Chrome. */
     setTimeout(() => URL.revokeObjectURL(url), 30000);
   }
-  /* Bilden på ett A4, hos servern. Samma rutt som tavlan använder: {namn, png}
-     in, en PDF ut (routes_tryck → tryck.png_till_pdf, ingen LaTeX). `png` får
-     vara en LISTA — då blir det en fil med ett ark per bild, vilket är precis
-     vad tavlans bräden ska bli. */
-  const sattPaSida = (arknamn, png) => fetch('/api/tavla/pdf', {
+  /* Bilderna på var sitt A4, hos servern. Samma rutt som tavlan använder:
+     {namn, png} in, en PDF ut (routes_tryck → tryck.png_till_pdf, ingen
+     LaTeX). `png` är en LISTA — en fil med ett ark per bild, vilket är precis
+     vad tavlans bräden och bokens lösningsark ska bli.
+     `forst` pekar ut ett papper som redan ligger som färdig fil på servern
+     (provet, bladet, deras facit): det kan inte ritas om här, så servern
+     fogar in det som filens första sidor i stället.
+     Sidantalet läses ur svarets huvud och inte ur listan — originalets sidor
+     har klienten aldrig sett. */
+  const sattPaSida = (arknamn, png, forst) => fetch('/api/tavla/pdf', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ namn: arknamn, png }),
-  }).then(blobEller).then(blob => laggIHamtat(blob, arknamn));
+    body: JSON.stringify(forst ? { namn: arknamn, png, forst } : { namn: arknamn, png }),
+  }).then(r => {
+    const sidor = Number(r.headers.get('X-Sidor')) || 0;
+    return blobEller(r).then(blob => { laggIHamtat(blob, arknamn); return sidor; });
+  });
 
   function skrivUt(b, namn, v) {
     if (b.dataset.lage) return;
     const tavla = !!(v && v.typ === 'Tavla');
     const vag = tavla ? '/api/tavla/pdf' : pdfVag(v);
-    /* Bokens lösningsförslag ritas i webbläsaren (blad-boklos.js) och har ingen
-       fil på servern. De ligger sist i dokumentets trav, läraren SER dem i
-       förhandsvisningen — och hade ingen väg att få ut dem: tavlans knapp gav
-       tavlan, provets gav provet. De laddas nu ner som EGNA filer bredvid
-       originalet. Skilda filer och inte en hopslagen PDF, för de används vid
-       olika tillfällen: svarsfacit under genomgången, den bedömda elevlösningen
-       när någon frågar varför det blev fel. Chrome frågar en gång om «flera
-       filer» — det är ett billigare pris än en fil att klippa isär. */
+    /* EN PDF med allt, i travens ordning. Bokens lösningsförslag ritas i
+       webbläsaren (blad-boklos.js) och har ingen fil på servern; de ligger
+       sist i dokumentets trav och läraren SER dem i förhandsvisningen. De kom
+       en tid som EGNA filer bredvid originalet, numrerade för att Hämtat
+       sorterar alfabetiskt — men läraren skriver ut högen och delar den till
+       skoldatorn som EN sak, och fyra filer att öppna i tur och ordning var
+       priset. Nu blir det ett papper: tavlans bräden först, sedan arken, ett
+       per sida. Ingen sida trycks ihop av det — png_till_pdf ger varje bild
+       sitt eget A4 med bildens egen orientering, så blandade proportioner i
+       samma fil är fria. */
     const bok = (serverPa() && window.BladBild) ? window.BladBild.antal(v) : 0;
     if (!serverPa() || (!vag && !bok)) {
       window.toast && window.toast(tavla
@@ -4380,60 +4390,60 @@
     b.dataset.lage = 'skriver';
     /* Avritningen tar sina hundradelar och sker före anropet — knappen ska
        säga vad den gör, inte stå tyst (samma som i utskriftsrutan). Är det
-       flera filer räknar den också UPP: «Ritar av 2/4 …». En knapp som står på
+       flera sidor räknar den också UPP: «Ritar av 2/4 …». En knapp som står på
        samma ord i fem sekunder ser trasig ut. */
-    /* Nämnaren är en GISSNING tills arken är satta: BladBild.antal räknar de
-       ark BokLosning skriver, och ett av dem kan paginera till två. Den rättas
-       därför när avritningen vet, i stället för att räkna «5/4». */
-    let totalt = (vag ? 1 : 0) + bok;
-    const av = i => (totalt > 1 ? ` ${i}/${totalt} ` : ' ');
-    /* LÖPNUMRET FÖRST I FILNAMNET när det blir flera filer: «01 Tavla …»,
-       «02 Svarsfacit …», «03 Lösningsförslag · uppg 3». Utan det sorterade
-       Hämtat bladen alfabetiskt («uppg 12» före «uppg 3»), och två blad med
-       samma huvud hette samma sak — läraren skrev ut dem i fel ordning och
-       fick filer som skrev över varandra. Numret följer travens ordning, som
-       är uppgifternas. */
-    const flera = totalt > 1;
-    const numrera = (i, n) => (flera ? `${String(i).padStart(2, '0')} ${n}` : n);
+    /* Nämnaren är en GISSNING tills sidorna är ritade: TavlaBild.antal delar
+       tavlan i bräden och BladBild.antal räknar de ark BokLosning skriver, och
+       ett av dem kan paginera till två. Den rättas därför när avritningen vet,
+       i stället för att räkna «5/4». Originalets egna sidor räknas inte här —
+       de ritas inte av, servern lägger in filen som den är. */
+    let ritas = (tavla && window.TavlaBild ? window.TavlaBild.antal(v) : 0) + bok;
+    const av = i => (ritas > 1 ? ` ${i}/${ritas} ` : ' ');
     const ater = klart => {
       b.dataset.lage = klart ? 'klar' : '';
       b.textContent = klart ? 'Sparad' : text;
       if (klart) setTimeout(() => { b.removeAttribute('data-lage'); b.textContent = text; }, 1700);
       else b.removeAttribute('data-lage');
     };
-    /* Originalet först — det är det pappret läraren bad om. Tavlan skickas som
-       PNG och kommer tillbaka som ett A4; de andra ligger redan som filer. */
-    const gjorda = vag ? 1 : 0;
-    let forst;
-    if (!vag) forst = Promise.resolve();
-    else if (!tavla) {
-      b.textContent = 'Hämtar' + av(1) + '…';
-      forst = fetch(vag).then(blobEller).then(blob => laggIHamtat(blob, numrera(1, namn)));
-    } else if (window.TavlaBild) {
-      b.textContent = 'Ritar av' + av(1) + '…';
-      /* Bräde för bräde, EN fil: tavlan är ett papper i lärarens huvud, men
-         fyra bräden på ett A4 är en rand ingen kan läsa. Sidorna hör ihop och
-         ska inte bli fyra nedladdningar. */
-      forst = window.TavlaBild.sidor(v).then(sidorna => {
-        b.textContent = 'Sätter sidan' + av(1) + '…';
-        return sattPaSida(numrera(1, namn), sidorna);
-      });
-    } else forst = Promise.reject(new Error('Tavelmotorn är inte laddad.'));
+    /* Papperet som redan ligger som färdig fil på servern (prov, arbetsblad,
+       diagnos, anteckningar — och lösningsbladets egen fil). Det är satt i
+       LaTeX eller avritat vid godkännandet och kan inte ritas om i
+       webbläsaren; servern fogar in det som filens första sidor i stället. */
+    const fardig = (!tavla && vag) ? {
+      exam: pdfId(v),
+      sort: v.losningsblad ? (v.typ === 'Prov' ? 'losningar' : 'facit') : 'pdf',
+    } : null;
+    /* Tavlans bräden först — det är dokumentets egna sidor — sedan bokens
+       lösningsark i travens ordning. Bräde för bräde: fyra bräden på ett A4 är
+       en rand ingen kan läsa. */
+    const bradena = !tavla ? Promise.resolve([])
+      : (window.TavlaBild
+        ? window.TavlaBild.sidor(v, {
+          steg: i => { b.textContent = 'Ritar av' + av(i + 1) + '…'; },
+        })
+        : Promise.reject(new Error('Tavelmotorn är inte laddad.')));
 
-    forst
-      .then(() => (bok ? window.BladBild.boklos(v, {
-        steg: i => { b.textContent = 'Ritar av' + av(gjorda + i + 1) + '…'; },
-      }) : []))
-      /* Sekventiellt: varje ark blir sin egen sida och sin egen fil. */
-      .then(ark => { totalt = gjorda + ark.length; return ark; })
-      .then(ark => ark.reduce((kedja, a, i) => kedja.then(() => {
-        b.textContent = 'Sätter sidan' + av(gjorda + i + 1) + '…';
-        return sattPaSida(numrera(gjorda + i + 1, a.namn), a.png);
-      }), Promise.resolve()))
-      .then(() => {
+    bradena
+      .then(sidorna => (bok ? window.BladBild.boklos(v, {
+        steg: i => { b.textContent = 'Ritar av' + av(sidorna.length + i + 1) + '…'; },
+      }).then(ark => sidorna.concat(ark.map(a => a.png))) : sidorna))
+      .then(alla => {
+        ritas = alla.length;
+        /* Inget att rita av: den färdiga filen hämtas rakt av, som förut. Att
+           sätta om en PDF som redan är rätt vore ett anrop för mycket. */
+        if (!alla.length) {
+          if (!vag) throw new Error('Det blev inga sidor att lägga på ett papper.');
+          b.textContent = 'Hämtar …';
+          return fetch(vag).then(blobEller).then(blob => { laggIHamtat(blob, namn); return 0; });
+        }
+        b.textContent = 'Sätter sidorna …';
+        return sattPaSida(namn, alla, fardig);
+      })
+      .then(sidor => {
         ater(true);
-        window.toast && window.toast(totalt > 1
-          ? `${namn} · ${totalt} PDF:er ligger i Hämtat`
+        const n = sidor || ritas;
+        window.toast && window.toast(n > 1
+          ? `${namn} · EN PDF, ${n} sidor, ligger i Hämtat`
           : `${namn} · PDF:en ligger i Hämtat`);
       })
       .catch(e => { ater(false); window.toast && window.toast(e.message); });

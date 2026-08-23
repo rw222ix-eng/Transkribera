@@ -452,3 +452,55 @@ def test_en_avritning_som_inte_blev_en_bild_sags(client):
     assert r.status_code == 400
     assert "ingen bild" in r.json()["error"]
     assert client.post("/api/tavla/pdf", json={"namn": "Tavlan"}).status_code == 400
+
+
+# ------------------------------------------- allt i EN fil, originalet först --
+
+def test_originalet_laggs_forst_och_bladen_efter(client, monkeypatch, tmp_path):
+    """«Ladda ner PDF» gav flera filer: pappret som färdig fil och bokens
+    lösningsark var för sig. Läraren skriver ut och delar högen som EN sak.
+    Originalet kan inte ritas om — det är satt i LaTeX vid godkännandet — så
+    det fogas framför bildsidorna här."""
+    eid = _prov(client, monkeypatch, sidor=3)
+    r = client.post("/api/tavla/pdf", json={
+        "namn": "Arbetsblad — derivator", "forst": {"exam": eid, "sort": "pdf"},
+        "png": [_png(794, 1123), _png(794, 1123)]})
+    assert r.status_code == 200
+    # Sidantalet i huvudet är hela filens: klienten har aldrig sett originalet
+    # och kan inte räkna dess sidor själv.
+    assert r.headers["X-Sidor"] == "5"
+    fil = tmp_path / "allt.pdf"
+    fil.write_bytes(r.content)
+    assert _sidmatt(fil) == [(595, 842)] * 5
+
+
+def test_facit_bredvid_kan_vara_det_som_laggs_forst(client, monkeypatch, tmp_path):
+    """Lösningsbladet är en KLON av sitt original och bär samma provId — dess
+    egen fil ligger bredvid provets (`{stam} - losningar.pdf`). Det är DEN som
+    ska först i filen när läraren laddar ner lösningsbladet, inte provet."""
+    eid = _prov(client, monkeypatch, sidor=3, losningar=True)
+    r = client.post("/api/tavla/pdf", json={
+        "namn": "Facit", "forst": {"exam": eid, "sort": "losningar"},
+        "png": [_png(794, 1123)]})
+    assert r.status_code == 200
+    assert r.headers["X-Sidor"] == "5"          # lösningsarket är 4 sidor + 1
+
+
+def test_ett_original_utan_fil_sags_i_stallet_for_att_utelamnas(client):
+    """En halv PDF är värre än ett besked: hade originalet tyst fallit bort
+    hade läraren delat bokens lösningar utan pappret de hör till."""
+    r = client.post("/api/tavla/pdf", json={
+        "namn": "Blad", "forst": {"exam": 9999}, "png": [_png(794, 1123)]})
+    assert r.status_code == 404
+    assert "godkänn" in r.json()["error"]
+
+
+def test_hopfogningen_lamnar_ingen_halva_i_utskriftsmappen(client, monkeypatch):
+    """Bildsidorna är ett halvfabrikat på vägen till den hopfogade filen. De
+    ska städas med leveransen — inte ligga kvar som en fil med halva
+    dokumentet i."""
+    eid = _prov(client, monkeypatch, sidor=2)
+    assert client.post("/api/tavla/pdf", json={
+        "forst": {"exam": eid}, "png": [_png(794, 1123)]}).status_code == 200
+    mapp = client.base_dir / "Transkriberingar" / "utskrift" / ".tavla"
+    assert list(mapp.glob("*.pdf")) == []
