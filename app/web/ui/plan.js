@@ -2567,6 +2567,12 @@
          lektionschatten. Sidan följer med ner till raden i stället för att låta den
          poppa upp utanför synfältet. */
       smal: true,
+      /* Spannet står BARA för provet, och bara för att det är mätt: lärarens
+         egna körningar landar på sju till tio minuter. Arbetsbladet, diagnosen,
+         gruppuppgiften och tavlan har inga uppmätta spann — tavlan blev
+         dessutom ungefär tre gånger snabbare 2026-08-21 och det gamla talet
+         hade varit direkt fel. Hellre ingen siffra än en påhittad. */
+      brukar: jobb && typ === 'Prov' ? 'brukar ta 7–10 min' : '',
       omfang: underlag.length ? `${underlag.length} lektion${underlag.length === 1 ? '' : 'er'} ur arkivet` : 'Gy25 och kursplanen',
       antal: underlag.length || vald.size || 5,
       /* Svarstexten säger vad som FAKTISKT hände när det gick på riktigt: en

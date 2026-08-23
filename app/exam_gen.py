@@ -2102,9 +2102,86 @@ def _validate(exam: dict, profil: str, koder: list[str] | None = None,
     return doc, errors
 
 
+# ── Hur långt modellen kommit, räknat ur strömmen ──────────────────────────
+#
+# Under själva modellanropet skickade servern ingenting alls: `token_cb=None`
+# stod här, och läraren såg «Claude skriver provet» plus en klocka i sju till
+# tio minuter innan allt blev klart på en gång. Det finns ett förlopp att visa —
+# uppgifterna skrivs en i taget — och det här är det enda stället där det syns.
+#
+# Klammerdjup, inte ordräkning. `"poang"` går igen på varje deluppgift och
+# `"text":` står också i figurer och alternativ, så båda hade dubbelräknat de
+# uppgifter som har delar — och just de uppgifterna är de största. Räknas i
+# stället `{` på ARRAYENS egen nivå är siffran exakt densamma som numret på
+# pappret, oavsett hur uppgiften ser ut inuti. Strängspårningen finns för att en
+# uppgiftstext mycket väl kan innehålla `{` (LaTeX: `\frac{1}{2}`).
+_UPPGIFTER_START = re.compile(r'"uppgifter"\s*:\s*\[')
+
+
+class _Uppgiftsraknare:
+    """Strömmen in, «Skriver uppgift 4 av 12 …» ut — en gång per ny siffra.
+
+    Anropas som `token_cb` och rapporterar via `log`. Siffran är uppgiften som
+    PÅBÖRJATS, alltså den modellen skriver just nu."""
+
+    def __init__(self, antal: int | None, log, etikett: str):
+        self._antal = int(antal or 0)
+        self._log, self._etikett = log, etikett
+        self._fore = ""          # texten före arrayen, medan den letas
+        self._inne = self._klar = False
+        self._strang = self._flykt = False
+        self._djup = 0
+        self.skrivna = self._sagt = 0
+
+    def __call__(self, bit: str) -> None:
+        if self._klar or not bit:
+            return
+        if not self._inne:
+            self._fore += bit
+            m = _UPPGIFTER_START.search(self._fore)
+            if not m:
+                # Bara svansen sparas — nyckeln kan ha kapats mitt itu mellan
+                # två bitar, men den är sexton tecken lång.
+                self._fore = self._fore[-64:]
+                return
+            self._inne = True
+            bit, self._fore = self._fore[m.end():], ""
+        for c in bit:
+            if self._strang:
+                if self._flykt:
+                    self._flykt = False
+                elif c == "\\":
+                    self._flykt = True
+                elif c == '"':
+                    self._strang = False
+                continue
+            if c == '"':
+                self._strang = True
+            elif c == "{":
+                if self._djup == 0:
+                    self.skrivna += 1
+                self._djup += 1
+            elif c == "}":
+                self._djup -= 1
+            elif c == "]" and self._djup == 0:
+                self._klar = True       # arrayen är slut — resten är sidhuvud
+                break
+        self._rapportera()
+
+    def _rapportera(self) -> None:
+        n = self.skrivna
+        if n <= self._sagt or (self._antal and n > self._antal):
+            return
+        self._sagt = n
+        av = f" av {self._antal}" if self._antal else ""
+        self._log(f"{self._etikett} uppgift {n}{av} …")
+
+
 def _llm_round(prompt: str, model: str, llm, antal: int | None = None,
                skeleton: list[dict] | None = None,
-               koder: list[str] | None = None) -> dict | None:
+               koder: list[str] | None = None, *,
+               log_cb: Callable[[str], None] | None = None,
+               etikett: str = "Skriver") -> dict | None:
     raw = llm(
         model, prompt,
         system=SYSTEM,
@@ -2114,7 +2191,10 @@ def _llm_round(prompt: str, model: str, llm, antal: int | None = None,
         # CI-punkter. Gäller även reparationsrundorna.
         response_format=exam_spec.to_response_format(antal, skeleton, koder),
         max_tokens=EXAM_MAX_TOKENS,
-        token_cb=None,
+        # Ingen lyssnare → ingen räkning. Stubbade llm i testerna tar emot
+        # token_cb och struntar i det; kassetterna spelas upp genom
+        # claude_code.generate och matar den på riktigt.
+        token_cb=_Uppgiftsraknare(antal, log_cb, etikett) if log_cb else None,
     )
     return _parse_exam(raw)
 
@@ -2211,7 +2291,10 @@ def _repair_until_valid(exam: dict | None, errors: list, *, model: str, llm,
         log(f"Justerar provet (runda {rounds_used} av {max_rounds}) — "
             f"{len(errors)} problem …")
         candidate = _llm_round(build_repair_prompt(exam, errors, profil),
-                               model, llm, antal, skeleton, koder)
+                               model, llm, antal, skeleton, koder,
+                               log_cb=log_cb,
+                               etikett=f"Justerar provet (runda {rounds_used} "
+                                       f"av {max_rounds}) —")
         if candidate is None:
             errors = [{"path": "svar", "code": "json",
                        "message": "modellen svarade inte med giltig JSON"}]
@@ -2296,7 +2379,9 @@ def _domar_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                 "rounds": rounds_used}
     log(f"Justerar {len(avv)} uppgift(er) …")
     kandidat = _llm_round(build_repair_prompt(exam, avv + signaler, profil),
-                          model, llm, antal, skeleton, koder)
+                          model, llm, antal, skeleton, koder, log_cb=log_cb,
+                          etikett=f"Justerar provet (runda {rounds_used + 1} "
+                                  f"av {max_rounds}) —")
     rounds_used += 1
     if kandidat is None:
         return {"exam": exam, "errors": errors + avv + signaler,
@@ -2381,13 +2466,15 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                           svart=svart, fokus=fokus,
                           profil=profil, koder=koder, grupp=grupp,
                           riktat=riktat, skeleton=skeleton)
-    exam = _llm_round(prompt, model, llm, antal, grammatik, koder)
+    exam = _llm_round(prompt, model, llm, antal, grammatik, koder,
+                      log_cb=log_cb)
     rounds = 1
     while exam is None and rounds < max_rounds:
         rounds += 1
         log(f"Modellen svarade inte med giltig JSON — försöker igen "
             f"(runda {rounds} av {max_rounds}) …")
-        exam = _llm_round(prompt, model, llm, antal, grammatik, koder)
+        exam = _llm_round(prompt, model, llm, antal, grammatik, koder,
+                          log_cb=log_cb)
     if exam is None:
         return {"exam": None,
                 "errors": [{"path": "svar", "code": "json",
@@ -2426,7 +2513,7 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
     log("Uppdaterar provet …")
     candidate = _llm_round(
         build_refine_prompt(exam, instruction, nummer, mal, bok, historik),
-        model, llm)
+        model, llm, log_cb=log_cb, etikett="Uppdaterar")
     if candidate is None:
         return {"exam": exam,
                 "errors": [{"path": "svar", "code": "json",
@@ -2476,7 +2563,8 @@ def fix_latex(exam: dict, error_log: str, *, model: str,
                                           "message": error_log}],
                 "rounds": rounds_used}
     log("Rättar LaTeX-fel i provet …")
-    candidate = _llm_round(build_latexfix_prompt(exam, error_log), model, llm)
+    candidate = _llm_round(build_latexfix_prompt(exam, error_log), model, llm,
+                           log_cb=log_cb, etikett="Rättar LaTeX i")
     if candidate is None:
         return {"exam": exam, "errors": [{"path": "svar", "code": "json",
                                           "message": "modellen svarade inte med giltig JSON"}],

@@ -1522,6 +1522,77 @@ def _stub_llm(responses: list[str]):
     return llm, calls
 
 
+def _stub_strommande_llm(responses: list[str], *, bit: int = 7):
+    """Som _stub_llm, men matar svaret i småbitar till `token_cb` först — så
+    som claude_code gör med strömmen från CLI:t. Bitstorleken är med flit
+    obekväm: nycklar och klamrar KAPAS mitt itu, och räknaren måste tåla det."""
+    calls: list[dict] = []
+
+    def llm(model, prompt, system=None, options=None, response_format=None,
+            max_tokens=None, token_cb=None):
+        svar = responses[min(len(calls), len(responses) - 1)]
+        calls.append({"prompt": prompt})
+        for i in range(0, len(svar), bit):
+            if token_cb:
+                token_cb(svar[i:i + bit])
+        return svar
+
+    return llm, calls
+
+
+def test_stromraknaren_ger_en_rad_per_uppgift():
+    """«Skriver uppgift 4 av 12 …» ur strömmen — en rad per uppgift, i ordning.
+
+    Utan detta stod «Claude skriver provet» stilla i sju till tio minuter."""
+    exam = _exam()
+    n = len(exam["uppgifter"])
+    llm, _ = _stub_strommande_llm([json.dumps(exam, ensure_ascii=False)])
+    rader: list[str] = []
+    exam_gen.generate_exam("Ma2b", "SA23", ["pq-formeln"], antal=n, model="m",
+                           llm=llm, doma=False, log_cb=rader.append)
+    skrivna = [r for r in rader if r.startswith("Skriver uppgift ")]
+    assert skrivna == [f"Skriver uppgift {i} av {n} …" for i in range(1, n + 1)]
+
+
+def test_stromraknaren_dubbelraknar_inte_deluppgifter():
+    """Deluppgifterna är inte uppgifter. En uppgift med två delar bär tre
+    `"poang"` och fyra `"text"` — därför räknas klamrar på arrayens egen nivå
+    och inte nycklar."""
+    exam = _exam_med_deluppgifter()
+    text = json.dumps(exam, ensure_ascii=False)
+    rader: list[str] = []
+    raknare = exam_gen._Uppgiftsraknare(None, rader.append, "Skriver")
+    for i in range(0, len(text), 5):
+        raknare(text[i:i + 5])
+    assert raknare.skrivna == len(exam["uppgifter"])
+    assert rader[-1] == f"Skriver uppgift {len(exam['uppgifter'])} …"
+
+
+def test_stromraknaren_luras_inte_av_klamrar_i_latex():
+    """`\\frac{1}{2}` i en uppgiftstext är inga uppgifter — strängarna hoppas
+    över, flykttecknen med."""
+    rader: list[str] = []
+    raknare = exam_gen._Uppgiftsraknare(2, rader.append, "Skriver")
+    raknare('{"titel": "x", "uppgifter": [{"text": "$\\\\frac{1}{2}$ och \\" {"},')
+    raknare('{"text": "sista"}]}')
+    assert raknare.skrivna == 2
+    assert rader == ["Skriver uppgift 1 av 2 …", "Skriver uppgift 2 av 2 …"]
+
+
+def test_reparationsrundan_sager_vilken_runda_den_ar_pa():
+    """Reparationen är ett eget varv och ska säga det — annars ser läraren
+    «Skriver uppgift 3 av 8» två gånger och tror att den hakat upp sig."""
+    trasigt = _exam()
+    trasigt["uppgifter"][0]["poang"] = [0, 0, 0]      # faller på valideringen
+    llm, _ = _stub_strommande_llm([json.dumps(trasigt, ensure_ascii=False),
+                                   json.dumps(_exam(), ensure_ascii=False)])
+    rader: list[str] = []
+    exam_gen.generate_exam("Ma2b", "SA23", ["pq-formeln"], model="m", llm=llm,
+                           doma=False, log_cb=rader.append)
+    assert any(r.startswith("Justerar provet (runda 2 av ") and "uppgift 1" in r
+               for r in rader), rader
+
+
 def test_generate_exam_valid_first_try():
     llm, calls = _stub_llm([json.dumps(_exam())])
     res = exam_gen.generate_exam("Ma2b", "SA23", ["pq-formeln"], model="m", llm=llm)

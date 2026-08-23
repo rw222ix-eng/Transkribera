@@ -571,6 +571,17 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     svart=svart_block, fokus=fokus_block, profil=typ,
                     koder=koder, skeleton=skelett, niva_mal=niva_mal,
                     riktat=riktat_block, grupp=grupp,
+                    # ── TEXTEN ÄR KONTRAKTET, INTE ETT PROCENTTAL ──────
+                    # Generatorn skickar numera «Skriver uppgift 4 av 12 …» ur
+                    # strömmen (exam_gen._Uppgiftsraknare), och klienten läser
+                    # SIFFRORNA UR RADEN för att flytta sin mätare
+                    # (app/web/ui/fraga.js, stegAv). Alternativet — ett eget
+                    # {"type":"progress","pct":N} härifrån — hade krävt en
+                    # steg→procent-tabell på BÅDA sidor: samma sprödhet, dubbelt
+                    # så mycket kod, och två ställen att glömma när en loggrad
+                    # byter ordalydelse. Raden läraren läser och siffran mätaren
+                    # visar kommer nu ur samma mening, och kan inte säga emot
+                    # varandra.
                     log_cb=lambda m: emit({"type": "log", "msg": m}))
                 # Upplägget är lärarens val, inte modellens: skriv in det som
                 # valdes även om modellen råkade fylla i något annat. Samma sak

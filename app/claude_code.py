@@ -417,6 +417,18 @@ def generate(prompt: str, *, system: str | None = None,
                     token_cb(delta["text"])
             elif delta.get("type") == "thinking_delta" and reason_cb and delta.get("thinking"):
                 reason_cb(delta["thinking"])
+            # MED --json-schema kommer svaret ALDRIG som text_delta. CLI:t lägger
+            # det i ett StructuredOutput-verktygsblock, och blocket strömmar som
+            # input_json_delta.partial_json — se result-grenen nedan, som redan
+            # visste det ("Svaret kom aldrig som deltan"). Följden var att varje
+            # schematvingad generering (provet, tavlan, anteckningarna) var HELT
+            # tyst under modellanropet: läraren såg «Claude skriver provet» och
+            # en klocka i sju minuter. Bitarna går bara till token_cb, aldrig
+            # till `delar`: resultatraden bär hela texten, och en andra kopia här
+            # hade gett svaret två gånger.
+            elif (delta.get("type") == "input_json_delta" and token_cb
+                    and delta.get("partial_json")):
+                token_cb(delta["partial_json"])
         elif typ == "result":
             # modelUsage rymmer även Claude Codes egna småanrop (titlar, klassning).
             # Modellen som SKREV svaret är den som skrivit flest tokens.

@@ -54,6 +54,11 @@
 .fsmalinre{overflow:hidden;min-height:0}
 .fsmalrad{display:flex;align-items:center;gap:10px;padding:2px 0 7px;font-size:.82rem;color:var(--ink-2)}
 .fsmaltext{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Spannet står bredvid klockan och tystare än raden: klockan säger hur länge
+   det gått, den här säger vad det brukar landa på. Tom när spannet inte är mätt
+   (fraga.js, o.brukar) och tar då ingen plats. */
+.fsmalbrukar{font-size:.72rem;color:var(--ink-3);white-space:nowrap}
+.fsmalbrukar:empty{display:none}
 .fsmalklocka{font-family:var(--mono);font-size:.72rem;color:var(--ink-3);font-variant-numeric:tabular-nums}
 .fsmalrad .fstopp{font-size:.76rem}
 .fsmalspar{height:3px;border-radius:2px;background:var(--track);overflow:hidden}

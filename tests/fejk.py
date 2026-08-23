@@ -163,6 +163,7 @@ LAGE = os.environ.get("FEJK_CLAUDE", "ok")
 SVAR = os.environ.get("FEJK_CLAUDE_SVAR", "Det här är svaret.")
 KASSETT = os.environ.get("FEJK_KASSETT", "")
 BAND = os.environ.get("FEJK_KASSETTER", "")     # mappen, för auto-läget
+LANGSAM = float(os.environ.get("FEJK_LANGSAM") or 0)   # sekunder per rad
 
 # Auto-läget läser vad prompten BER om och lägger i rätt band. Det behövs för
 # e2e: där lever servern i en egen process och kan inte byta fixtur mellan två
@@ -256,6 +257,13 @@ if LAGE == "kassett":
         band = json.load(fh)
     for rad in band["rader"]:
         sys.stdout.write(rad + "\n")
+        # FEJK_LANGSAM=0.02 spelar bandet i något som liknar modellens egen
+        # takt. Uppspelningen är annars ögonblicklig, och då går det inte att
+        # SE ett förlopp — bara att mäta att det fanns. Sekunder per rad;
+        # tomt eller 0 = som förut, och inget test sätter den.
+        if LANGSAM:
+            sys.stdout.flush()
+            time.sleep(LANGSAM)
     sys.stdout.flush()
     sys.exit(0)
 

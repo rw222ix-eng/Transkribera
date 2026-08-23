@@ -18,6 +18,15 @@
   const fas = (namn, extra = '') =>
     `<div class="ffas" data-lage="vantar"><span class="fikon"></span><span class="fnamn">${namn}</span><span class="fdetalj"></span>${extra}</div>`;
 
+  /* Serverns loggrader är skrivna för EN rad, inte för ett stycke. De kortas
+     till det som ryms — och kapningen får aldrig ge «… …»: raderna slutar
+     nästan alltid på ett eget tankstreck («Skriver uppgift 4 av 12 …»). */
+  const kortRad = (s, tak = 60) => {
+    const t = String(s || '').replace(/\s+/g, ' ').trim();
+    return t.length <= tak ? t
+      : t.slice(0, tak - 1).replace(/[\s…]+$/, '') + '…';
+  };
+
   /* Svarstexten målas likadant i båda lägena: [[tid|text]] blir källmarkör,
      *ord* blir markerat. */
   function malaText(str, node) {
@@ -115,7 +124,10 @@
       Promise.resolve()
         .then(() => o.jobb({
           signal: styrning.signal,
-          log: m => { $('.fjobbtext', el).textContent = String(m || '').slice(0, 72); },
+          /* Samma rader som i det smala läget (se `serverrad` i kor): under
+             en iteration av provet är det de här som säger «Uppdaterar
+             uppgift 3 …» i stället för en oföränderlig jobbtext. */
+          log: m => { $('.fjobbtext', el).textContent = kortRad(m, 72); },
         }))
         .then(r => { svaret = r; klarna(); }, felade);
     } else {
@@ -154,7 +166,7 @@
     el.dataset.lage = 'kor';
     el.innerHTML = `<div class="fhuvud"><button class="lank fstopp" type="button">Avbryt</button></div>
       ${o.fraga ? '<p class="ffraga"></p>' : ''}
-      <div class="fsmal"><div class="fsmalinre"><div class="fsmalrad"><span class="fsmaltext"></span><span class="fsmalklocka"></span></div><div class="fsmalspar"><i></i></div></div></div>
+      <div class="fsmal"><div class="fsmalinre"><div class="fsmalrad"><span class="fsmaltext"></span><span class="fsmalbrukar"></span><span class="fsmalklocka"></span></div><div class="fsmalspar"><i></i></div></div></div>
       <div class="fvanta" hidden><div class="vtopp"><span class="vklocka">0:00</span><span class="vbrukar">brukar ta 1–2 min · Claude svarar allt på en gång</span></div><div class="vpuls"></div></div>
       <div class="ffaser">${fas('Läser igenom ' + (o.omfang || 'materialet'), '<span class="fsok"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>')}</div>
       <button class="ftankte" type="button" aria-expanded="true" hidden></button>
@@ -175,6 +187,11 @@
     if (smalt) {
       el.dataset.smal = '';
       $('.fsmaltext', el).textContent = 'Förbereder …';
+      /* «brukar ta 7–10 min» — MÄTT på lärarens egna körningar av provet, inte
+         gissat, och därför satt av anroparen och inte här (plan.js). En rad som
+         inte vet sitt spann skriver inget: ett påhittat spann är värre än
+         inget, för det är det man går och tittar på. */
+      if (o.brukar) $('.fsmalbrukar', el).textContent = o.brukar;
       $('.fsmalklocka', el).before($('.fstopp', el));
       /* setTimeout, inte rAF: raden ska vika ut även när fliken är i bakgrunden. */
       setTimeout(() => {
@@ -192,13 +209,73 @@
     } else {
       smalruta.remove();
     }
-    const smal = (namn, frac) => {
-      if (!smalt || !smalruta.isConnected) return;
-      $('.fsmaltext', el).textContent = namn;
-      smalfyll.style.width = Math.round(Math.max(4, Math.min(100, frac * 100))) + '%';
+    /* ── MÄTAREN ─────────────────────────────────────────────────────
+       Tre regler, och alla tre kommer ur vad raden gjorde fel:
+       1. Den går ALDRIG bakåt. Stegen når hit i den ordning servern råkar
+          skicka dem, och en mätare som hoppar tillbaka läses som ett fel.
+       2. Den kryper mellan stegen. Ett steg kan vara minuter långt (en
+          uppgift med fyra deluppgifter), och en mätare som står helt stilla
+          är inte att skilja från en hängd app.
+       3. Krypandet når ALDRIG nästa stegs golv. Det går asymptotiskt mot
+          takets kant, så procenten är alltid ett löfte appen redan hållit —
+          inte ett den hoppas hålla. `tak` är därför inte monotont: ett lägre
+          tak fryser krypandet i stället för att dra siffran bakåt. */
+    let golv = 0, tak = 0, nu = 0, kryp = null;
+    const rita = () => { smalfyll.style.width = Math.max(4, Math.min(100, nu)).toFixed(1) + '%'; };
+    const matare = (g, t) => {
+      golv = Math.max(golv, g * 100);
+      tak = Math.max(t * 100, nu);
+      nu = Math.max(nu, golv);
+      rita();
+      if (kryp) return;
+      kryp = setInterval(() => { nu += (tak - nu) * 0.05; rita(); }, 400);
+      timers.push(kryp);
     };
+    /* Har servern sagt något är DET raden. Faslistans egna namn får inte skriva
+       över den — molnraden heter «Claude skriver provet» hela vägen, och det
+       var precis den oföränderliga texten läraren satt och tittade på. */
+    let serverSagt = false;
+    const smal = (namn, g, t) => {
+      if (!smalt || !smalruta.isConnected) return;
+      if (namn) $('.fsmaltext', el).textContent = kortRad(namn);
+      matare(g, t);
+    };
+    /* ── SERVERNS RAD, DÄR LÄRAREN TITTAR ────────────────────────────
+       Loggraderna nådde klienten hela tiden — men skrevs bara i .fdetalj på
+       faslistan, som är HOPFÄLLD medan jobbet går. I praktiken ingenstans.
+       Här står de i den smala raden, och SIFFRAN I DEM flyttar mätaren:
+       samma mening bär både texten och procenten, så de två kan inte säga emot
+       varandra. Varför texten och inte ett eget pct-fält: se kommentaren vid
+       log_cb i app/web/routes_exam.py. */
+    const NUMMER = /uppgift (\d+)(?: av (\d+))?/i;
+    function stegAv(m) {
+      const d = NUMMER.exec(m);
+      /* Med «n av N» får uppgiften sin egen skiva av bandet. Utan siffror
+         räcker det till halva skivan — resten sparas åt det som faktiskt
+         kommer, för då VET vi inte hur långt det gått. */
+      const skiva = (a, b) => {
+        if (!d || !d[2]) return [a, a + (b - a) * 0.5];
+        const N = Math.max(1, +d[2]), n = Math.max(1, Math.min(N, +d[1]));
+        return [a + (b - a) * (n - 1) / N, a + (b - a) * n / N];
+      };
+      /* Sättningen och trycket ligger sist: de raderna kommer ur godkännandet
+         (routes_exam approve), som kroker sig på samma rad när den används. */
+      if (/latex|\bpdf\b|\bA4\b|kompilerar|renderar|^sparar/i.test(m)) return [0.90, 1];
+      if (/^(justerar|kontrollerar|räknar igenom|modellen svarade)/i.test(m)) return skiva(0.75, 0.90);
+      if (/^(skriver|uppdaterar)/i.test(m)) return skiva(0.25, 0.75);
+      return null;        // bokens sidor, faktapasset: text, men ingen procent
+    }
+    function serverrad(m) {
+      const t = String(m || '').trim();
+      if (!t || !smalt || !smalruta.isConnected) return;
+      serverSagt = true;
+      const s = stegAv(t);
+      if (s) smal(t, s[0], s[1]);
+      else $('.fsmaltext', el).textContent = kortRad(t);
+    }
     const smalUt = () => {
       if (!smalt || !smalruta.isConnected) return;
+      clearInterval(kryp);
       smalfyll.style.width = '100%';
       setTimeout(() => {
         smalruta.removeAttribute('data-in');
@@ -251,11 +328,14 @@
       f.dataset.lage = 'kor';
       const n = o.antal || 43;
       let i = 0;
-      smal('Läser igenom ' + (o.omfang || 'materialet'), 0.06);
+      /* Appens egna steg får bandets första sjundedel: läsningen sker här på
+         datorn och är över på ett par sekunder. Skrivfasen är den långa. */
+      smal('Läser igenom ' + (o.omfang || 'materialet'), 0.04, 0.06);
       const steg = setInterval(() => {
         i = Math.min(n, i + Math.max(1, Math.ceil(n / 9)));
         $('.fdetalj', f).textContent = `${i} av ${n}`;
-        smal('Läser igenom ' + (o.omfang || 'materialet'), 0.06 + (i / n) * 0.18);
+        if (!serverSagt) smal('Läser igenom ' + (o.omfang || 'materialet'),
+                              0.04 + (i / n) * 0.10, 0.14);
         if (i >= n) {
           clearInterval(steg);
           f.dataset.lage = 'klar';
@@ -296,19 +376,31 @@
         jobbet = Promise.resolve()
           .then(() => o.jobb({
             signal: styrning.signal,
-            /* Serverns loggrader står som detalj på molnraden: det enda som
-               finns att visa medan Claude skriver. */
+            /* Serverns loggrader står som detalj på molnraden — OCH i den
+               smala raden, som är den läraren faktiskt ser (serverrad ovan).
+               Faslistan är hopfälld medan jobbet går. */
             log: m => { const n = noder.find((x, i) => rader[i].vanta && x.dataset.lage === 'kor');
-                        if (n) $('.fdetalj', n).textContent = String(m || '').slice(0, 72); },
+                        if (n) $('.fdetalj', n).textContent = kortRad(m, 72);
+                        serverrad(m); },
           }))
           .then(r => { svaret = r; }, e => { jobbfel = e; });
       }
 
+      /* Bandet delas efter vad som TAR TID, inte efter hur många rader det
+         råkar bli: appens egna steg 14→25 %, molnets skrivning 25→75 % (den
+         som tar sju minuter, och den enda där servern kan säga hur långt det
+         gått), rundorna och domarna 75→90, appens avslutning 90→100. */
+      const molnet = rader.findIndex(r => r.vanta);
+      const efter = Math.max(1, rader.length - molnet - 1);
       for (let i = 0; i < rader.length; i++) {
         if (stoppad) return;
         const r = rader[i];
         noder[i].dataset.lage = 'kor';
-        smal(r.namn, 0.24 + ((i + 1) / rader.length) * 0.72);
+        if (i < molnet) smal(serverSagt ? null : r.namn,
+                             0.14 + 0.11 * (i / molnet), 0.14 + 0.11 * ((i + 1) / molnet));
+        else if (i === molnet) smal(serverSagt ? null : r.namn, 0.25, 0.30);
+        else smal(r.namn, 0.90 + 0.10 * ((i - molnet - 1) / efter),
+                  0.90 + 0.10 * ((i - molnet) / efter));
         vantelage(!!r.vanta);
         if (r.vanta && jobbet) await jobbet;
         else await paus(r.vanta ? 1500 : r.kort ? 260 : 340);
