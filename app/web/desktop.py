@@ -130,6 +130,12 @@ def main() -> None:
             break
         time.sleep(0.05)
 
+    # pywebview NEKAR nedladdningar som standard: WebView2 svalde klicket på
+    # blob-länken tyst medan sidan toastade «Ligger i Hämtat» — ingen fil,
+    # inget felmeddelande. Med flaggan på sparar WebView2 i Hämtat, som i en
+    # vanlig webbläsare. Måste sättas före create_window.
+    webview.settings["ALLOW_DOWNLOADS"] = True
+
     # The LLM is NOT started here — it starts lazily on the first correction/chat
     # (the GPU arbiter owns it; a transcription unloads it to free VRAM). This
     # keeps launch instant and the first transcription needs no unload.
