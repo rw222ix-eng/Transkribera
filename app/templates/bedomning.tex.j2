@@ -7,7 +7,13 @@
     de satta i två typsnitt med två uppgiftsrytmer fick hon leta efter uppgift
     7 i två olika layouter samtidigt. #))
 ((* set forlaga = true *))
-((* set sidhuvud = kurs ~ ' \textemdash{} ' ~ titel ~ ' \textperiodcentered{} Bedömningsanvisning' *))
+((# DUBBLA BAKSTRECK I EN JINJA-STRÄNG. Jinjas lexer tolkar strängliteralen
+    som Python gör: '\textemdash{}' blir TAB + «extemdash{}», och sidhuvudet
+    stod på det skarpa provets bedömningsanvisning som «Matematik 1c
+    extemdash Potenser extperiodcentered Bedömningsanvisning». Kommandona i
+    mallens BRÖDTEXT (utanför ((* … *))) rörs inte — det är bara de här
+    literalerna som behöver dubbleras. #))
+((* set sidhuvud = kurs ~ ' \\textemdash{} ' ~ titel ~ ' \\textperiodcentered{} Bedömningsanvisning' *))
 ((* include '_preamble.tex.j2' *))
 ((* import '_former.tex.j2' as former *))
 
@@ -97,8 +103,14 @@ av totalt ((( granser.total ))) poäng.}
 ((* for r in pa.rader *))((( r )))\par ((* endfor *))
 ((# «Kommentar:» som i NP:s bedömda elevlösningar — domen ska säga vilken rad
     i trappan partiet fick och varför inte nästa, och etiketten är det som
-    gör den till en kommentar och inte en till lösningsrad. #))
-{\small\itshape\textbf{Kommentar:} ((( pa.dom )))}
+    gör den till en kommentar och inte en till lösningsrad.
+
+    Etiketten står FÖRE kursiven och aldrig inuti den: \itshape\textbf ger
+    fet kursiv (ec-lmbxi10), en form Tectonic-cachen inte bär — hela
+    bedömningsanvisningen föll på «Font … not loadable» innan en enda sida
+    skrevs. Seeden speglar mallarna, alltså får mallarna inte hitta på nya
+    snittvarianter. #))
+{\small\textbf{Kommentar:}\enspace\itshape ((( pa.dom )))}
 \end{elevparti}
 ((* endfor *))
 ((* endfor *))

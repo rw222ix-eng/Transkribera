@@ -2862,6 +2862,17 @@ def test_facitets_typografi_ar_fragan_storre_och_svaret_mindre():
     assert '[data-form="lo-b"] .prtext' in css and "font-style:italic" in css
 
 
+def test_bedomningens_sidhuvud_bar_riktiga_tecken():
+    """Jinjas lexer tolkar strängliteraler som Python: '\\textemdash{}' i ett
+    ((* set *)) blir TAB + «extemdash{}». Det stod på lärarens skarpa papper —
+    «Matematik 1c extemdash Potenser extperiodcentered Bedömningsanvisning»."""
+    doc, _fel = exam_spec.validate_exam_json(_exam())
+    tex = exam_latex.render_bedomning(doc)
+    assert "extemdash" not in tex.replace(r"\textemdash", "")
+    assert "extperiodcentered" not in tex.replace(r"\textperiodcentered", "")
+    assert r"\textperiodcentered{} Bedömningsanvisning" in tex
+
+
 def test_elevlosningens_dom_bar_kommentarsetiketten_i_pdfen():
     exam = _exam()
     exam["uppgifter"][2]["elevlosningar"] = [
@@ -2874,4 +2885,6 @@ def test_elevlosningens_dom_bar_kommentarsetiketten_i_pdfen():
     ]
     doc, _fel = exam_spec.validate_exam_json(exam)
     tex = exam_latex.render_bedomning(doc)
-    assert r"\textbf{Kommentar:} ingen ansats" in tex
+    # Etiketten står FÖRE kursiven: fet kursiv (ec-lmbxi10) finns inte i
+    # Tectonic-seeden, och hela anvisningen föll på «Font … not loadable».
+    assert r"\textbf{Kommentar:}\enspace\itshape ingen ansats" in tex

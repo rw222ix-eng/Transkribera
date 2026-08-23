@@ -58,45 +58,52 @@
 .lokomm{margin:9px 0 0;font-size:calc(13.5px * var(--fsk, 1));line-height:1.5;color:#000}
 .lokomm b{font-weight:700}
 
-/* ══════════ 1 · KOMMENTERAD ELEVLÖSNING (långsvar) ══════════ */
+/* ══════════ 1 · KOMMENTERAD ELEVLÖSNING (långsvar) ══════════
+   PROVETS lösningsförslag (lo-c) står i varje regel nedan, och det gjorde det
+   inte förut: elevlösningarna renderas där (blad-bygg.losVag) men bara
+   förlagans lo4 och bokens fe-blad var satta. På lärarens skarpa prov blev
+   raden därför «Elevlösning 10 av 3 poäng» i ett stycke — etiketten och
+   utfallet utan flex emellan, faksimilen utan sitt papper och partierna utan
+   sina klämmare. Samma sättning på alla tre pappren; lo-b har inga
+   elevlösningar (kortsvar) och lo-bok är bokens eget. */
 
 /* Elevens rad: vem lösningen är och vad den fick, FÖRE lösningen. Utfallet ska
    vara känt innan man börjar läsa — därför står bedömningen här och inte som en
    summering längst ner. */
-#lo4 .loelev,[data-form="lo4"] .loelev,[data-form^="fe-"] .loelev{display:flex;align-items:baseline;justify-content:space-between;gap:18px;margin:16px 0 0;color:#000}
-#lo4 .loelev b,[data-form="lo4"] .loelev b,[data-form^="fe-"] .loelev b{font-size:calc(17.5px * var(--fsk, 1));font-weight:700}
-#lo4 .loelev span,[data-form="lo4"] .loelev span,[data-form^="fe-"] .loelev span{font-size:calc(15px * var(--fsk, 1));font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
-#lo4 .loelev span[data-utan],[data-form="lo4"] .loelev span[data-utan],[data-form^="fe-"] .loelev span[data-utan]{color:#C0392B}
-#lo4 .loelev span[data-full],[data-form="lo4"] .loelev span[data-full],[data-form^="fe-"] .loelev span[data-full]{color:#1B7A46}
+#lo4 .loelev,[data-form="lo4"] .loelev,[data-form^="fe-"] .loelev,[data-form="lo-c"] .loelev{display:flex;align-items:baseline;justify-content:space-between;gap:18px;margin:16px 0 0;color:#000}
+#lo4 .loelev b,[data-form="lo4"] .loelev b,[data-form^="fe-"] .loelev b,[data-form="lo-c"] .loelev b{font-size:calc(17.5px * var(--fsk, 1));font-weight:700}
+#lo4 .loelev span,[data-form="lo4"] .loelev span,[data-form^="fe-"] .loelev span,[data-form="lo-c"] .loelev span{font-size:calc(15px * var(--fsk, 1));font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+#lo4 .loelev span[data-utan],[data-form="lo4"] .loelev span[data-utan],[data-form^="fe-"] .loelev span[data-utan],[data-form="lo-c"] .loelev span[data-utan]{color:#C0392B}
+#lo4 .loelev span[data-full],[data-form="lo4"] .loelev span[data-full],[data-form^="fe-"] .loelev span[data-full],[data-form="lo-c"] .loelev span[data-full]{color:#1B7A46}
 
 /* Faksimilen: elevens egen hand, på papper som inte är bladets papper. */
-#lo4 .loskann,[data-form="lo4"] .loskann,[data-form^="fe-"] .loskann{position:relative;margin-top:9px;padding:12px 20px 12px 24px;background:#FBFAF7;border:1px solid #E2DFD8;font-family:Caveat,'Shadows Into Light Two',cursive;font-size:calc(22px * var(--fsk, 1));line-height:1.38;color:#22303F}
-#lo4 .loskann .katex,[data-form="lo4"] .loskann .katex,[data-form^="fe-"] .loskann .katex{font-size:1.02em}
-#lo4 .loskannrad,[data-form="lo4"] .loskannrad,[data-form^="fe-"] .loskannrad{display:flex;align-items:baseline;gap:14px}
+#lo4 .loskann,[data-form="lo4"] .loskann,[data-form^="fe-"] .loskann,[data-form="lo-c"] .loskann{position:relative;margin-top:9px;padding:12px 20px 12px 24px;background:#FBFAF7;border:1px solid #E2DFD8;font-family:Caveat,'Shadows Into Light Two',cursive;font-size:calc(22px * var(--fsk, 1));line-height:1.38;color:#22303F}
+#lo4 .loskann .katex,[data-form="lo4"] .loskann .katex,[data-form^="fe-"] .loskann .katex,[data-form="lo-c"] .loskann .katex{font-size:1.02em}
+#lo4 .loskannrad,[data-form="lo4"] .loskannrad,[data-form^="fe-"] .loskannrad,[data-form="lo-c"] .loskannrad{display:flex;align-items:baseline;gap:14px}
 
 /* Partiet: den klämmare läraren sätter i marginalen när en poäng gäller flera
    rader. Bricka och klämmare bär samma nummer som kommentarraden nedanför — det
    är det enda som gör att man hittar från bedömning till lösning utan att räkna
    rader. Grön klämmare = poäng gavs, röd = ingen poäng. Färgen är hela
    avläsningen: man ska kunna se utfallet innan man läst en rad. */
-#lo4 .loparti,[data-form="lo4"] .loparti,[data-form^="fe-"] .loparti{position:relative;padding:2px 0 4px 15px;border-left:3px solid #1B7A46}
-#lo4 .loparti+.loparti,[data-form="lo4"] .loparti+.loparti,[data-form^="fe-"] .loparti+.loparti{margin-top:10px}
+#lo4 .loparti,[data-form="lo4"] .loparti,[data-form^="fe-"] .loparti,[data-form="lo-c"] .loparti{position:relative;padding:2px 0 4px 15px;border-left:3px solid #1B7A46}
+#lo4 .loparti+.loparti,[data-form="lo4"] .loparti+.loparti,[data-form^="fe-"] .loparti+.loparti,[data-form="lo-c"] .loparti+.loparti{margin-top:10px}
 /* Domen: poängen och skälet står i partiet, satt — inte handskrivet. Den som
    rättar ser rad och bedömning i samma blick. */
 /* Domen sätts i BLADETS snitt. Förr stod här font-family:var(--sans) — inne i
    appen är det Switzer, och bedömningen blev då den enda texten på pappret som
    inte var Arimo. */
-#lo4 .lodom,[data-form="lo4"] .lodom,[data-form^="fe-"] .lodom{margin:7px 0 1px;display:grid;grid-template-columns:auto minmax(0,1fr);align-items:baseline;gap:0 10px;font-family:Arimo,Arial,'Helvetica Neue',Helvetica,sans-serif}
-#lo4 .lodom>i,[data-form="lo4"] .lodom>i,[data-form^="fe-"] .lodom>i{font-style:normal;font-weight:700;font-size:calc(13.5px * var(--fsk, 1));letter-spacing:.02em;color:#1B7A46;white-space:nowrap;font-variant-numeric:tabular-nums}
-#lo4 .lodom>i[data-utan],[data-form="lo4"] .lodom>i[data-utan],[data-form^="fe-"] .lodom>i[data-utan]{color:#C0392B}
-#lo4 .lodom>p,[data-form="lo4"] .lodom>p,[data-form^="fe-"] .lodom>p{margin:0;font-size:calc(13.5px * var(--fsk, 1));line-height:1.42;color:#000}
-#lo4 .lodom .katex,[data-form="lo4"] .lodom .katex,[data-form^="fe-"] .lodom .katex{font-size:1.06em}
-#lo4 .loparti[data-utan],[data-form="lo4"] .loparti[data-utan],[data-form^="fe-"] .loparti[data-utan]{border-left-color:#C0392B}
-#lo4 .loparti[data-utan]>b,[data-form="lo4"] .loparti[data-utan]>b,[data-form^="fe-"] .loparti[data-utan]>b,#lo4 .lomark[data-utan],[data-form="lo4"] .lomark[data-utan],[data-form^="fe-"] .lomark[data-utan]{background:#C0392B}
+#lo4 .lodom,[data-form="lo4"] .lodom,[data-form^="fe-"] .lodom,[data-form="lo-c"] .lodom{margin:7px 0 1px;display:grid;grid-template-columns:auto minmax(0,1fr);align-items:baseline;gap:0 10px;font-family:Arimo,Arial,'Helvetica Neue',Helvetica,sans-serif}
+#lo4 .lodom>i,[data-form="lo4"] .lodom>i,[data-form^="fe-"] .lodom>i,[data-form="lo-c"] .lodom>i{font-style:normal;font-weight:700;font-size:calc(13.5px * var(--fsk, 1));letter-spacing:.02em;color:#1B7A46;white-space:nowrap;font-variant-numeric:tabular-nums}
+#lo4 .lodom>i[data-utan],[data-form="lo4"] .lodom>i[data-utan],[data-form^="fe-"] .lodom>i[data-utan],[data-form="lo-c"] .lodom>i[data-utan]{color:#C0392B}
+#lo4 .lodom>p,[data-form="lo4"] .lodom>p,[data-form^="fe-"] .lodom>p,[data-form="lo-c"] .lodom>p{margin:0;font-size:calc(13.5px * var(--fsk, 1));line-height:1.42;color:#000}
+#lo4 .lodom .katex,[data-form="lo4"] .lodom .katex,[data-form^="fe-"] .lodom .katex,[data-form="lo-c"] .lodom .katex{font-size:1.06em}
+#lo4 .loparti[data-utan],[data-form="lo4"] .loparti[data-utan],[data-form^="fe-"] .loparti[data-utan],[data-form="lo-c"] .loparti[data-utan]{border-left-color:#C0392B}
+#lo4 .loparti[data-utan]>b,[data-form="lo4"] .loparti[data-utan]>b,[data-form^="fe-"] .loparti[data-utan]>b,#lo4 .lomark[data-utan],[data-form="lo4"] .lomark[data-utan],[data-form^="fe-"] .lomark[data-utan],[data-form="lo-c"] .loparti[data-utan]>b,[data-form="lo-c"] .lomark[data-utan]{background:#C0392B}
 
 /* Kommentarraden: brickan, skälet, poängen. Poängen sist och i svart — den är
    summan av skälet, inte en etikett på det. */
-#lo4 .lokomm,[data-form="lo4"] .lokomm,[data-form^="fe-"] .lokomm{margin-top:8px}
+#lo4 .lokomm,[data-form="lo4"] .lokomm,[data-form^="fe-"] .lokomm,[data-form="lo-c"] .lokomm{margin-top:8px}
 
 /* ══════════ 2 · KORTSVAR ══════════
    Facit ska läsas med provet bredvid sig, så det använder provets grammatik och
