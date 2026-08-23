@@ -2555,6 +2555,10 @@ function renderBoard(boardSpec, container) {
   requestAnimationFrame(() => {
     const boxes = [];
     const walk = (node) => {
+      // Föräldrarutan läses EN gång per nivå, inte en gång per barn: den
+      // ändras inte inne i loopen. Mätt 2026-08-23: en liten tavla gjorde 104
+      // getBoundingClientRect här (52 barn × 2) där 53 räcker.
+      const br = node.getBoundingClientRect();
       for (const child of node.children) {
         if (child.classList && child.classList.contains('wb-element')) {
           // Skip annotations — they're intentionally placed and often
@@ -2565,7 +2569,6 @@ function renderBoard(boardSpec, container) {
           // bounding rect so we're in board-local space regardless
           // of any scale transforms on ancestors.
           const r = child.getBoundingClientRect();
-          const br = node.getBoundingClientRect();
           boxes.push({
             node: child,
             x: r.left - br.left,

@@ -5173,10 +5173,24 @@
      sina syskon, sitt parkerade parförslag och sitt eventuella utkast.
 
      Schemat först (Kalender.redo): klassvyn ritas om här, och den läser veckan. */
+  /* HÄMTNINGEN STARTAR TIDIGT, BEHANDLINGEN VÄNTAR.
+     Högen behöver kalendern för att RITAS (klassvyn läser veckan), men inte för
+     att HÄMTAS. Förr låg anropet efter Kalender.redo, som i sin tur låg efter
+     API.redo — tre led i rad. MÄTT 2026-08-23, Chrome med processorn strypt
+     fyra gånger: /api/dokument gick i väg 762 ms efter navigeringen, medan
+     /api/schema — ledet före — startade vid 555. Anropet läggs nu i väg så snart
+     servern svarat, och svaret ligger och väntar på kalendern i stället för
+     tvärtom. */
+  const hogen = () => {
+    if (!serverPa()) return Promise.resolve(null);
+    return window.API.json('/api/dokument').catch(() => null);
+  };
+  let hogenPaVag = null;
+
   async function hydreraDokument() {
     if (!serverPa()) return;
-    let d;
-    try { d = await window.API.json('/api/dokument'); } catch (e) { return; }
+    const d = await (hogenPaVag || hogen());
+    if (!d) return;
     const rader = d.sparade || [];
     sparat = rader.map(x => x.dokument).filter(Boolean);
     /* Det parkerade parförslaget bor på pappret som väntar på sin följeslagare
@@ -5228,6 +5242,9 @@
     skrivBokLosningar(v);
     if (window.PlanSteg) { window.PlanSteg.las(4, false); window.PlanSteg.gaTill(4); }
   }
+  /* Anropet i väg så snart servern svarat på «var körs det?» — se hogen(). */
+  (window.API && window.API.redo ? window.API.redo : Promise.resolve())
+    .then(() => { hogenPaVag = hogen(); });
   (window.Kalender && window.Kalender.redo ? window.Kalender.redo : Promise.resolve())
     .then(hydreraDokument);
 })();

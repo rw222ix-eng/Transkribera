@@ -287,6 +287,12 @@ def create_app(base_dir: Path | None = None,
     except Exception:
         debug_log.get_logger().exception("Seedning av centralt innehåll misslyckades")
 
+    # Inloggningsstatusen hämtas medan servern ändå startar. Utan den här raden
+    # betalar FÖRSTA sidladdningen en nodeprocess (mätt 340 ms) i /api/var-kors —
+    # det anrop som grindar alla andra hämtningar vid start. Bakgrundstråd,
+    # daemon: den håller aldrig kvar en avstängning.
+    claude_code.varm()
+
     app = FastAPI(title="Transkribera Web")
 
     # Skydd för den lokala servern (binds på 127.0.0.1 med förutsägbara portar
@@ -438,7 +444,10 @@ def create_app(base_dir: Path | None = None,
     # härkomstraden vid varje knapp läser den här rutan.
     @app.get("/api/var-kors")
     def api_var_kors(request: Request):
-        cc = claude_code.status()
+        # Gammalt duger HÄR: rutan visar var arbetet körs, och sidladdningen står
+        # och väntar på svaret. Ett utgånget svar lämnas ut direkt och ett färskt
+        # hämtas i bakgrunden — se claude_code.status.
+        cc = claude_code.status(gammalt_duger=True)
         return {
             # Vilken server svarade? Frågan «var körs det här» gäller också
             # huset man står i — se _hus.

@@ -20,6 +20,54 @@
                        citerad ur boken.
      Matte.jamna(rot)  mäter om bråken. Kör den själv efter att du ändrat
                        storlek på något som innehåller ett bråk. */
+/* ── KaTeX-CACHEN ────────────────────────────────────────────────────────
+   Ligger här för att matte.js laddas direkt efter katex.min.js och före ALLA
+   som sätter formler (tavla-wb.js, blad.js via satt/tavla nedan). En lapp på
+   katex.render täcker dem alla utan att ett enda anropsställe ändras.
+
+   MÄTT 2026-08-23, Chrome, en liten tavla ur kassetten: 36 katex.render-anrop
+   för 6 UNIKA formler. Sex omritningar per formel, för
+   tavla-wb layoutFlowFit binärsöker skalan och river + ritar om varje sektion
+   en gång per prov (1 + upp till 10 halveringar + ett slutprov). Samma sak på
+   pappret: blad.js rita() bygger hela traven på nytt vid varje ångra,
+   göra-om, versionssteg och växling mellan Provet och Facit — och
+   blad-bygg skriver nya <span class="mat"> varje gång, så
+   `:not([data-satt])`-vakten nedan biter aldrig.
+
+   KaTeX gör exakt samma parsning och uppbyggnad varje gång och ger exakt
+   samma DOM. Vi renderar därför en gång per (TeX, displayMode) i en lös ruta
+   och klonar noden efteråt. cloneNode är en trädkopia i C++; parse + build är
+   det inte. Utseendet kan inte ändras — det är samma nod, kopierad.
+
+   Cachen förbigås om anroparen skickar andra flaggor än de två vi känner
+   (t.ex. macros, som KaTeX skriver i under körningen), och ett kast lagras
+   aldrig. */
+(function () {
+  if (!window.katex || !katex.render || katex.__cachad) return;
+  const original = katex.render;
+  const lada = new Map();
+  const RUTA = document.createElement('div');
+  const KANDA = ['throwOnError', 'displayMode'];
+  katex.__cachad = true;
+  katex.render = function (tex, el, opts) {
+    const flaggor = opts ? Object.keys(opts) : [];
+    if (flaggor.some(f => !KANDA.includes(f))) return original.apply(this, arguments);
+    const nyckel = (opts && opts.displayMode ? 'D' : 'I') + ':' + tex;
+    let nod = lada.get(nyckel);
+    if (nod === undefined) {
+      original.call(katex, tex, RUTA, opts);   // kastar → cachen rörs inte
+      nod = RUTA.firstChild;
+      RUTA.textContent = '';
+      /* Ett tak, inte en LRU: lärarens papper har hundratals formler, inte
+         hundratusentals, och en tom cache kostar bara första ritningen. */
+      if (lada.size > 2000) lada.clear();
+      lada.set(nyckel, nod);
+    }
+    el.textContent = '';
+    if (nod) el.appendChild(nod.cloneNode(true));
+  };
+})();
+
 (function () {
   const BGAP = 5;
   const FRAC = /\\[dt]?frac\s*\{/;

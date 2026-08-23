@@ -12,26 +12,53 @@
   const lagen = new WeakMap();
   const ut = t => 1 - Math.pow(1 - t, 3);
 
-  function rullbar(n) {
+  /* `s` är nodens redan hämtade stil. getComputedStyle är den dyra biten: den
+     tvingar fram en stilomräkning, och narmaste() frågade förr TVÅ gånger per
+     nod i kedjan (en i rullbar, en i golvkontrollen). */
+  function rullbar(n, s) {
     if (!(n instanceof Element)) return false;
-    const s = getComputedStyle(n);
     if (s.position === 'fixed' || n.offsetParent === null) return false;
     return /auto|scroll|overlay/.test(s.overflowY) && n.scrollHeight > n.clientHeight + 40;
   }
 
+  /* SVARET FRÅN FÖRRA HJULKNÄPPEN.
+     MÄTT 2026-08-23, Chrome: sexton hjulknäppar över dokumentvyn kostade 140
+     getComputedStyle och 194 stilomräkningar — nio per knäpp, för hela kedjan
+     från e.target upp till body gicks igenom varje gång. Ett hjul som rullar
+     skickar hundratals knäppar i sekunden, och lådan man rullar i byts inte
+     mitt i en rullning. Svaret sparas därför per målnod och återanvänds så
+     länge samma nod rullas; en ny nod, eller en låda som lämnat sidan, räknar
+     om. Rullningen blir densamma — bara mätningen försvinner. */
+  let senast = { mal: null, box: null, trosk: 0 };
+
   function narmaste(start) {
+    /* Svaret gäller bara så länge lådan FORTFARANDE hade blivit svaret: samma
+       mål, kvar i sidan, och lika rullbar som när den valdes (samma tröskel
+       som regeln nedan använde). Annars räknas kedjan om. */
+    if (senast.mal === start && senast.box && senast.box.isConnected
+        && senast.box.scrollHeight > senast.box.clientHeight + senast.trosk)
+      return senast.box;
+    const svar = sok(start);
+    senast = svar.box ? { mal: start, box: svar.box, trosk: svar.trosk }
+                      : { mal: null, box: null, trosk: 0 };
+    return svar.box;
+  }
+
+  function sok(start) {
     let n = start instanceof Element ? start : document.body;
     while (n && n !== document.body && n !== document.documentElement) {
-      if (rullbar(n)) return n;
+      const s = getComputedStyle(n);
+      if (rullbar(n, s)) return { box: n, trosk: 40 };
       /* Ett fast lager är ett golv. Ligger en modal uppe ska hjulet ALDRIG fästa i
        sidan bakom — hittas ingen rullbar låda inom lagret rullar ingenting.
        Utan det här gled hela planeringssidan bakom förhandsvisningen. */
-      if (getComputedStyle(n).position === 'fixed') return null;
+      if (s.position === 'fixed') return { box: null, trosk: 0 };
       n = n.parentElement;
     }
     const rot = document.scrollingElement || document.documentElement;
-    if (rot.scrollHeight > rot.clientHeight + 2) return rot;
-    return rullbar(document.body) ? document.body : rot;
+    if (rot.scrollHeight > rot.clientHeight + 2) return { box: rot, trosk: 2 };
+    return rullbar(document.body, getComputedStyle(document.body))
+      ? { box: document.body, trosk: 40 } : { box: rot, trosk: 2 };
   }
 
   function kor(box) {

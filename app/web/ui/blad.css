@@ -210,6 +210,11 @@
    exakta höjd, och SPILL-toleransen (blad.js) lät annars upp till 10 px sticka
    ut nedanför pappret på skärmen men försvinna i PDF:en. Mätningarna rörs
    inte — scrollHeight räknar innehållet oavsett. */
+/* PRÖVAT OCH FÖRKASTAT 2026-08-23: contain:layout här. Arket klipper redan sitt
+   innehåll och har fast höjd, så regeln var visuellt riskfri och sänkte antalet
+   omflödningar (678 → 620 på sex växlingar mellan Provet och
+   Bedömningsanvisningen) — men inte TIDEN de tog (649 mot 637 ms, samma sida,
+   av och på om vartannat i tre varv). Ingen mätt vinst, alltså ingen regel. */
 .bladtrav .ark,.bladtrav .gu{position:relative;left:auto;top:auto;margin:0;overflow:hidden}
 .bladlapp{width:794px;margin:0 auto;font:600 11px/1.3 var(--sans,Arimo),Arial,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
 /* Tavlan ritas i sin verkliga bredd och krymps efteråt med transform (se

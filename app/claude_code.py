@@ -36,6 +36,8 @@ from typing import Callable
 # startar en nodeprocess. Ett kort minne räcker för att det ska kännas direkt.
 _STATUS_CACHE: dict = {"tid": 0.0, "varde": None}
 _STATUS_LAS = threading.Lock()
+# En bakgrundshämtning i taget — se varm().
+_VARMER = threading.Event()
 STATUS_ALDER = 20.0
 
 # Sista körningens kostnad och modell, för «Var arbetet körs». Claude Code
@@ -81,8 +83,29 @@ def _neutral_cwd() -> str:
     return tempfile.gettempdir()
 
 
-def status(force: bool = False) -> dict:
-    """{finns, inloggad, epost, plan, fel} — det «Var arbetet körs» visar."""
+def status(force: bool = False, gammalt_duger: bool = False) -> dict:
+    """{finns, inloggad, epost, plan, fel} — det «Var arbetet körs» visar.
+
+    `gammalt_duger` lämnar ut ett utgånget svar DIREKT och hämtar ett färskt i
+    bakgrunden. MÄTT 2026-08-23: `claude auth status` startar en nodeprocess och
+    tar 340 ms på den här maskinen — och /api/var-kors är det anrop hela
+    sidladdningen står och väntar på (api.js API.redo grindar schemat, böckerna,
+    kalenderstatusen, och genom dem klassprofilen och dokumenthögen). En sida som
+    öppnas var tjugonde sekund betalade alltså en processtart varje gång, först i
+    kön. Bara den rutan får gammalt: `kravs()` före en riktig körning frågar
+    fortfarande på riktigt, så «inte inloggad» aldrig blir ett gammalt svar."""
+    # Minnet läses UTAN låset. Låset hålls under hela nodeprocessen, så en fråga
+    # som kunde ha svarat ur minnet stod ändå och väntade ut den som just då
+    # hämtade — mätt 316 ms på ett anrop som skulle ha kostat 2 ms. Ordningen är
+    # inte känslig: `varde` byts ut i ett svep, och ett svar som är en tiondels
+    # sekund gammalt är precis vad den här vägen ber om.
+    varde = _STATUS_CACHE["varde"]
+    if not force and varde:
+        farskt = time.time() - _STATUS_CACHE["tid"] < STATUS_ALDER
+        if farskt or gammalt_duger:
+            if not farskt:
+                varm()
+            return dict(varde)
     with _STATUS_LAS:
         nu = time.time()
         if not force and _STATUS_CACHE["varde"] and nu - _STATUS_CACHE["tid"] < STATUS_ALDER:
@@ -107,6 +130,31 @@ def status(force: bool = False) -> dict:
                         "fel": f"Kunde inte läsa inloggningen: {e}"}
         _STATUS_CACHE.update(tid=nu, varde=svar)
         return dict(svar)
+
+
+def varm() -> None:
+    """Hämta statusen i bakgrunden — utan att någon står och väntar.
+
+    Kallas dels när servern startar (så den FÖRSTA sidladdningen slipper
+    processtarten), dels av `status(gammalt_duger=True)` när svaret gått ut.
+    Aldrig mer än en tråd i taget: en sida som laddas om i rasande takt ska inte
+    starta en nodeprocess per omladdning. Själva funktionen väntar aldrig på
+    något — den lämnar processtarten till tråden och återvänder direkt."""
+    # Finns ingen CLI finns det ingen processtart att slippa — och ingen tråd
+    # ska då starta bakom ryggen på ett test som just satt sitt eget läge.
+    if binar() is None or _VARMER.is_set():
+        return
+    _VARMER.set()
+
+    def kor() -> None:
+        try:
+            status(force=True)
+        except Exception:                       # noqa: BLE001 — bakgrund, ingen att säga det till
+            pass
+        finally:
+            _VARMER.clear()
+
+    threading.Thread(target=kor, name="claude-status", daemon=True).start()
 
 
 def kravs() -> None:

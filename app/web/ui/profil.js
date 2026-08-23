@@ -129,8 +129,17 @@ window.Profil = (() => {
       body: JSON.stringify(minne),
     }).catch(() => { /* minnet står i vyn; nästa skrivning försöker igen */ });
   };
+  /* HÄMTNINGEN STARTAR TIDIGT, LÄKNINGEN VÄNTAR PÅ SCHEMAT.
+     `laka()` nedan behöver kalendern (det är schemat som avgör vilken kurs en
+     klass läser), men minnet självt behöver den inte för att HÄMTAS. Förr låg
+     anropet i tredje ledet: API.redo → Kalender.redo → hit. MÄTT 2026-08-23,
+     Chrome med processorn strypt fyra gånger: /api/klassprofil gick i väg 763 ms
+     efter navigeringen, ledet före startade vid 555. Nu ligger svaret och väntar
+     på kalendern i stället för tvärtom. */
+  const profilPaVag = (window.API && window.API.redo ? window.API.redo : Promise.resolve())
+    .then(() => (window.API && window.API.pa) ? window.API.json('/api/klassprofil') : null);
   (window.Kalender && window.Kalender.redo ? window.Kalender.redo : Promise.resolve())
-    .then(() => (window.API && window.API.pa) ? window.API.json('/api/klassprofil') : null)
+    .then(() => profilPaVag)
     .then(d => {
       if (!d) return;
       franServern = true;

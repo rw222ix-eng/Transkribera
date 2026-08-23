@@ -901,6 +901,31 @@ window.Blad = (() => {
      clientHeight är måttet: ett blad har fast höjd (794×1123), så noll betyder
      «ingen layout» och aldrig «tomt blad». */
   const matbar = el => !!(el && el.isConnected && el.clientHeight > 0);
+
+  /* Formens avtryck — se vakten i formge().
+     Precis de mått formgivningen själv räknar ur, per ark och blad:
+       · clientHeight och scrollHeight — `spiller`, alltså om arket flödar över.
+       · sista barnets underkant — samma mått som `ledigt()` nedan, och det enda
+         som skiljer «precis fullt» från «halvtomt». scrollHeight duger INTE
+         ensamt: ett ark som ryms rapporterar scrollHeight === clientHeight
+         oavsett hur mycket luft som är kvar (samma sak som kommentaren vid
+         `ledigt` säger), så ett typsnitt som växer inuti ett ark som ändå ryms
+         hade varit osynligt för vakten.
+       · antalet blad och ark — pagineringens eget svar.
+     Bara läsningar, i följd utan en enda skrivning emellan: hela avtrycket
+     kostar EN omflödning, mot över hundra för ett svep. */
+  function formmarke(trav) {
+    const ark = $$('.ark, .gu', trav);
+    if (!ark.length) return '';
+    let ut = ark.length + '/' + $$('.blad', trav).length;
+    for (const a of ark) {
+      const sist = a.lastElementChild;
+      ut += '|' + a.clientHeight + 'x' + a.scrollHeight + 'x' + a.childElementCount
+            + 'x' + (sist ? sist.offsetTop + sist.offsetHeight : -1);
+    }
+    return ut;
+  }
+
   function travMatbar(trav) {
     if (!matbar(trav)) return false;
     const ark = $$('.gu, .ark', trav);
@@ -1534,6 +1559,8 @@ window.Blad = (() => {
     /* Ångra, dela på de FULLA ytorna, passa sedan varje blad för sig. Delade man
        efter passningen såg delaArk ett blad som «nästan rymdes» — därför att
        passningen kastat ut alla skrivytor till lösblad. */
+    /* Traven som den SÅG UT när förra svepet var klart. Se vakten i formge. */
+    let formad = '';
     const formge = () => {
       /* GÖMD TRAV MÄTS INTE. Utkastet plockas upp medan planeringsvyn ännu är
          hidden, och en mätning där ger maxdelning — se MÄTBARHETEN. I stället
@@ -1545,12 +1572,35 @@ window.Blad = (() => {
         narMatbar(trav, () => { formge(); requestAnimationFrame(formge); });
         return;
       }
-      atervand(trav, v);
-      atervandProv(trav);
       /* Bilder som lagts in sedan förra svepet (underlagets sidor, lärarens
          egna) ska också få sitt eftersvep — annars gäller bevakningen bara de
-         bilder som fanns när traven ritades. */
+         bilder som fanns när traven ritades. Ligger FÖRE vakten nedan: en bild
+         som landat sedan sist ska bevakas även när formen redan står rätt. */
       matOmNarBilderna(trav, formge);
+      /* ── SVEPET SOM INTE BEHÖVS ─────────────────────
+         Svepen nedanför är fem: direkt, nästa bildruta, 260 ms, när typsnitten
+         är inne, när figurerna landat — och varje svep river hela formen och
+         bygger upp den igen. Var och en har sin dyrköpta anledning (se
+         kommentarerna vid anropen), men de flesta gånger har INGENTING hänt
+         mellan två svep, och då blir det ett identiskt svar för full kostnad.
+
+         MÄTT 2026-08-23, Chrome, sex växlingar mellan Provet och
+         Bedömningsanvisningen: 983 omflödningar på 1643 ms och tolv långa
+         uppgifter (2631 ms). Med vakten: 620 omflödningar på 1058 ms och sex
+         långa uppgifter (1585 ms). Det värsta ENSKILDA klicket står kvar på
+         ~600 ms — där ritas hela traven om från grunden, och det är en annan
+         sten att vända på (plan.js visa → ritaIn).
+
+         Vakten är formens avtryck (formmarke ovan) — precis de mått
+         formgivningen räknar ur. Är avtrycket detsamma som när vi formade sist
+         har ingen mätning ändrat sig, och svaret kan inte bli ett annat. Ett
+         typsnitt som landar, en figur som kompilerats, en bild som fått sin
+         höjd, ett ark som paginerats om: allt sådant flyttar ett mått, och då
+         görs svepet. */
+      const avtryck = formmarke(trav);
+      if (avtryck && avtryck === formad) return;
+      atervand(trav, v);
+      atervandProv(trav);
       /* Ratten nollas FÖRE pagineringen: den mäter i basgraden, aldrig i den
          uppskruvade från förra varvet. */
       nollskala(trav);
@@ -1558,6 +1608,7 @@ window.Blad = (() => {
       /* Fotnoterna sist: slutraden hör till delens sista blad, och vilket det
          är avgjordes av paginera på raden ovanför. */
       provfotter(trav, v);
+      formad = formmarke(trav);
     };
     formge();
     requestAnimationFrame(formge);
