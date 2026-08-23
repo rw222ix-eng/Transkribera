@@ -326,6 +326,18 @@ test("provets försättsblad bär avtalet — och ingen OBS-ruta upprepar det",
     const EXAM = {
       titel: "Prov · Derivator", kurs: "Matematik, nivå 3c", klass: "NA25",
       datum: "2026-09-03", tid_min: 100, hjalpmedel: "Formelblad och linjal.",
+      /* FÖRSÄTTSBLADETS PORTRÄTT (exam_spec.Forsattsbild). Provets halva tomma
+         sida under betygstabellen var husets enda bildruta utan beställning —
+         nu bär den ett SCENE-stycke som alla andra, med personen som rubrik. */
+      forsattsbild: {
+        person: "Isaac Newton (1642–1727), som formulerade derivatan för att "
+          + "kunna räkna på rörelse.",
+        scene: "SCENE. A dim seventeenth-century study lit by one candle. A "
+          + "young man in a plain coat sits bent over a wide desk by a tall "
+          + "leaded window. Cold night sky outside, warm gold light on his "
+          + "face. The far wall is lost in brown darkness.\n"
+          + "Intended use: Isaac Newton, derivata.",
+      },
       uppgifter: [
         { del: "B", formaga: "P", typ: "rutin", poang: [2, 0, 0],
           text: "Ange derivatan till $f(x) = 3x^2$.", losning: "$6x$",
@@ -390,6 +402,25 @@ test("provets försättsblad bär avtalet — och ingen OBS-ruta upprepar det",
     await expect(forsatt.locator(".prbetyg tfoot td").last()).toHaveText("5 poäng");
     // Försättsbladet har inga uppgifter — det läses innan provtiden börjar.
     await expect(forsatt.locator(".pruppg")).toHaveCount(0);
+
+    /* ── PORTRÄTTET ────────────────────────────────────
+       Bildrutan under betygstabellen sa förr bara «plats för bild — läggs in i
+       canvas». Nu står beställningen framme: personen som rubrik (den läraren
+       läser för att avgöra om hen hör hit) och SCENE-stycket att kopiera in i
+       hennes eget ChatGPT-projekt. Samma ruta och samma knapp som
+       uppgifternas scener — ingen andra sorts bildplats. */
+    const portratt = forsatt.locator(".prforsatt .prscen");
+    await expect(portratt).toHaveCount(1);
+    await expect(portratt.locator(".prscenrub")).toContainText("Isaac Newton");
+    await expect(portratt.locator(".prscentext")).toContainText("SCENE.");
+    await expect(portratt.locator(".prscentext")).toContainText("Intended use:");
+    await expect(portratt.locator("[data-plat-kopiera='forsatt']"))
+      .toHaveText("Kopiera scen");
+    // Platshållaren är borta när beställningen finns — inte båda.
+    await expect(forsatt.locator(".prforsatt .gufigtext")).toHaveCount(0);
+    // Rutan ÄR bildplatsen: lärarens egen släppta bild landar i samma nod
+    // (blad.js: [data-el="forsatt"] .prbild).
+    await expect(forsatt.locator("[data-el='forsatt'] .prbild")).toHaveCount(1);
 
     /* OBS-RUTAN ÄR BORTA (läraren 2026-08-22: «det framgår redan på
        försättsbladet vad som är tillåtet»). Den upprepade hjälpmedelsregeln,

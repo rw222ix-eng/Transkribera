@@ -327,6 +327,40 @@ class Scen(_Model):
         return self
 
 
+# Docstringen nedan blir fältets `description` i json-schemat. Ordet «bildruta»
+# står där «bildplats» vore naturligare av precis det skälet: testet som håller
+# plåtvalet ute ur grammatiken (test_platvalet_star_inte_i_grammatiken) söker
+# efter den bokstavsföljden i HELA schemat, och en beskrivning som råkar bära
+# den fäller ett test som handlar om något annat.
+class Forsattsbild(_Model):
+    """PORTRÄTTET PÅ PROVETS FÖRSÄTTSBLAD — provets enda bildruta som saknade
+    en beställning.
+
+    LÄRARENS ORD (2026-08-23): «den här vetenskapsmannen eller matematikern som
+    kom på det provet handlar om. Typ om det handlar om kvadratrötter och
+    kubikrötter, tal i potensform och uttryck — då ska det vara en bild på
+    honom eller henne. Fast en fin bild, lite dramatiskt så att de blir
+    inspirerade av att klara av provet.»
+
+    Samma system som uppgifternas :class:`Scen`: appen målar ingenting, den
+    skriver ett SCENE-stycke på engelska som läraren klistrar in i sitt eget
+    ChatGPT-projekt. Skillnaden är motivet — ett porträtt, inte en situation —
+    och att inga etiketter ritas ovanpå: försättsbladets bild bär ingen
+    matematik, så ritbarhetskraven (rakt från sidan, fri tredjedel, obruten
+    marklinje) gäller den inte.
+
+    VALFRITT med flit. Fältet föddes efter de inspelade kassetterna
+    (tests/kassetter/prov.json), och ett obligatoriskt fält hade gjort varje
+    inspelat prov ogiltigt. Saknas det står den tomma rutan kvar som förut."""
+    # Raden LÄRAREN läser i canvas, ovanför stycket: vem hen är, när hen levde
+    # och varför just det här provet är hennes. Svenska, en mening — det är en
+    # rubrik i en ruta, inte en artikel.
+    person: str = Field(min_length=10, max_length=240)
+    # Själva beställningen. Samma tak som Scen.scene av samma skäl: stycket är
+    # fyra till åtta meningar och tusen tecken rymmer dem med marginal.
+    scene: str = Field(min_length=80, max_length=1200)
+
+
 class SubItem(_Uppgiftsbas):
     formaga: Formaga | None = None       # ärver förälderns när None
     typ: Uppgiftstyp | None = None       # ärver förälderns när None
@@ -494,6 +528,14 @@ class ExamDoc(_Model):
     # Nyckelfrågan står KVAR i sitt eget fält och sätts fet efter bandet: den är
     # momentets metodregel och ska kunna bytas utan att arbetsregeln rörs.
     instruktion: str | None = Field(default=None, max_length=600)
+    # PORTRÄTTET PÅ FÖRSÄTTSBLADET (se Forsattsbild ovan). BARA provet har ett
+    # försättsblad, så bara provet fyller fältet — arbetsblad, gruppuppgift och
+    # diagnos lämnar det tomt, precis som `grupp` bara är gruppuppgiftens.
+    #
+    # Fältet står i grammatiken (till skillnad från `granser` och `klockslag`):
+    # det är MODELLENS beslut vem provet handlar om, och ingen annan kan fatta
+    # det — personen väljs ur provets centrala innehåll, inte ur en lista.
+    forsattsbild: Forsattsbild | None = None
     # Bara gruppuppgiften har den; prov och arbetsblad lämnar den tom.
     grupp: GruppUpplagg | None = None
     uppgifter: list[ExamItem] = Field(min_length=1)

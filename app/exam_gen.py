@@ -121,14 +121,80 @@ SCEN_REGEL = (
     "Intended use: optimering, största area vid given omkrets.\"\n"
 )
 
+# ── FÖRSÄTTSBLADETS PORTRÄTT ──────────────────────────────────────────────
+# Provets försättsblad var husets ENDA bildplats utan beställning: varenda
+# annan ruta bär ett SCENE-stycke (se SCEN_REGEL ovan), men den halva sida som
+# blir över under betygstabellen sa bara «plats för bild — läggs in i canvas».
+#
+# LÄRARENS ORD (2026-08-23): «den här vetenskapsmannen eller matematikern som
+# kom på det provet handlar om. Typ om det handlar om kvadratrötter och
+# kubikrötter, tal i potensform och uttryck — då ska det vara en bild på honom
+# eller henne. Fast en fin bild, lite dramatiskt så att de blir inspirerade av
+# att klara av provet.»
+#
+# Personen HÅRDKODAS inte. En tabell från moment till namn hade varit lätt att
+# skriva och fel i samma stund som ett prov ligger i skarven mellan två moment
+# — det är modellen som läst provets innehåll, och den ska välja OCH motivera
+# valet i `person`. Motiveringen är inte pynt: det är den läraren läser i
+# canvas för att avgöra om personen hör hit, och utan den kan hon bara se ett
+# namn hon får googla.
+#
+# Formen är SCEN_REGELNS, med två skillnader som står uttryckligen i texten:
+# motivet är ett PORTRÄTT och inte en mätbar situation, och ingen notation
+# ritas ovanpå — så kravet på en fri tredjedel och en obruten marklinje gäller
+# inte här. Textförbudet gäller däremot precis lika hårt: ett bildverktyg som
+# får skriva sätter fel årtal under fel ansikte.
+FORSATTSBILD_REGEL = (
+    "- forsattsbild {person, scene}: PORTRÄTTET PÅ FÖRSÄTTSBLADET, och BARA "
+    "provet har ett sådant — arbetsblad, gruppuppgift och diagnos lämnar "
+    "fältet tomt. Välj EN historisk matematiker eller vetenskapsperson som "
+    "hör till just det här provets centrala innehåll, och välj den som hör "
+    "NÄRMAST: potenser och algebraisk notation → Descartes eller Euler, "
+    "kvadrat- och kubikrötter → Pythagoras eller Heron, logaritmer → Napier, "
+    "derivata och gränsvärden → Newton eller Leibniz, sannolikhet → Pascal "
+    "eller Fermat, statistik → Florence Nightingale. Listan är exempel och "
+    "inget facit: handlar provet om något annat väljer du någon annan.\n"
+    "  person: EN mening på svenska — namn, årtal och vad hen gjorde som gör "
+    "hen till just det här provets person, t.ex. \"John Napier (1550–1617), "
+    "skotten som räknade fram de första logaritmtabellerna och gjorde "
+    "multiplikation till addition.\" Meningen visas för läraren, aldrig för "
+    "eleven, och det är den hon läser för att avgöra om personen hör hit.\n"
+    "  scene: bildbeskrivningen, på ENGELSKA, fyra till åtta meningar, och "
+    "den börjar med ordet SCENE — samma form som uppgifternas scene. Måla ett "
+    "PORTRÄTT av personen i sin egen tids miljö: arbetsrummet, verkstaden, "
+    "observatoriet, ljuset från ett fönster eller ett ljus. Det ska vara "
+    "vackert och lite dramatiskt — eleven som får pappret i handen ska bli "
+    "sugen på att klara provet — så säg var ljuset kommer ifrån, vilken "
+    "stämning rummet har och vad hen håller på med.\n"
+    "  SAMMA TEXTFÖRBUD som uppgifternas scene: ingen text, inga bokstäver, "
+    "siffror, formler, matematiska symboler, etiketter eller skyltar någonstans "
+    "i bilden — inte på en bok, inte på en tavla, inte i ett papper på bordet. "
+    "Ett bildverktyg som får skriva sätter fel årtal under fel ansikte.\n"
+    "  Här ritas däremot INGENTING ovanpå: bilden bär ingen matematik, så "
+    "kraven på rakt sidoläge, obruten marklinje och en fri tredjedel av "
+    "himlen gäller inte porträttet. Fyll bilden.\n"
+    "  Sista raden är svensk och lyder «Intended use: » följt av vem det är "
+    "och vilket moment provet handlar om.\n"
+    "  Ett exempel, och det är formen:\n"
+    "  \"SCENE. A dim stone study at night, seen from slightly to the side. "
+    "An elderly Scotsman in a dark high-collared robe sits at a heavy oak "
+    "table, half his face lit warm gold by a single tallow candle, the other "
+    "half in deep shadow. His hands rest on a spread of blank vellum sheets "
+    "and a pair of plain wooden rods lies beside them. Behind him a tall "
+    "leaded window shows a cold blue night sky and the faintest rim of "
+    "moonlight on the hills. The far wall is lost in warm brown darkness. The "
+    "whole picture is candlelight against night, calm and grave.\\n"
+    "Intended use: John Napier, logaritmer.\"\n"
+)
+
 INSTRUCTION = (
     "Skriv ett matteprov som JSON enligt schemat. Dokumentets egna fält är "
     # Fältet HETER tid_min. Här stod «tid_minuter», och det är inget fält i
     # ExamDoc: _rensa_toppnycklar slängde det som en påhittad toppnyckel, och
     # «ge dem tio minuter till» kunde alltså aldrig fastna i dokumentet —
     # instruktionen bad om ett namn appen själv städar bort.
-    "titel, kurs, klass, datum, tid_min, hjalpmedel, instruktion, grupp och "
-    "uppgifter — "
+    "titel, kurs, klass, datum, tid_min, hjalpmedel, instruktion, "
+    "forsattsbild, grupp och uppgifter — "
     "hjalpmedel KRÄVS (t.ex. \"Formelblad och digitala verktyg\"), och lägg "
     "inte till egna toppnycklar. Fältregler:\n"
     # TITELN ÄR EN RUBRIK, INTE EN INNEHÅLLSFÖRTECKNING. Modellen skrev
@@ -167,6 +233,13 @@ INSTRUCTION = (
     "appen sin egen standardtext; ber läraren om en ändring i rutan skriver du "
     "HELA bandets text i fältet, med hennes ändring införd. Provet har inget "
     "band — där lämnas fältet tomt, dess motsvarighet är hjalpmedel.\n"
+    # Regeln står i INSTRUCTION och inte bara i provets uppdragsblock, av samma
+    # skäl som instruktionsbandet ovan: omskrivningen (build_refine_prompt) får
+    # BARA den här texten med sig. Stod den enbart i uppdraget kunde modellen
+    # välja personen när provet föddes men aldrig byta hen efteråt — och «ta en
+    # annan matematiker» hade blivit ett svar utan verkan. Uppdragsblocket ger
+    # ORDERN att fylla fältet; den här texten säger vad fältet är.
+    + FORSATTSBILD_REGEL +
     "- del: \"B\" (utan räknare), \"C\" eller \"D\" (med räknare) — eller null "
     "om provet saknar delar.\n"
     "- formaga: primär förmåga per uppgift — B Begrepp, P Procedur, "
@@ -1211,6 +1284,15 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             "- Sist i varje del står den uppgift som kräver mest: ett "
             "resonemang, ett påstående att pröva, ett samband att visa "
             "algebraiskt.\n"
+            # ORDERN att fylla forsattsbild står HÄR och bara här: fältet finns
+            # i schemat för alla profiler (grammatiken är en, se
+            # exam_spec.to_response_format), men bara provet har ett
+            # försättsblad att lägga porträttet på. Fältregeln själv står i
+            # INSTRUCTION så att omskrivningen kan byta person — se
+            # FORSATTSBILD_REGEL.
+            "- FÖRSÄTTSBLADET ska ha sitt porträtt: fyll forsattsbild med "
+            "personen som hör till provets innehåll och skriv hennes eller "
+            "hans SCENE-stycke. Provet är det enda pappret som har fältet.\n"
             "Svara med enbart JSON.")
     return "\n\n".join(block)
 
@@ -2228,6 +2310,12 @@ _MALETS_FALT = {
     "namn": ("grupp",),
     # Provtabellen: skrivtiden och hjälpmedelsregeln.
     "avtal0": ("tid_min", "hjalpmedel"),
+    # FÖRSÄTTSBLADETS BILD. Läraren pekar på porträttrutan och säger «ta en
+    # annan matematiker» — då ska omskrivningen få röra det fältet och inget
+    # annat. Utan raden här blev hela provet spelplanen för ett önskemål om en
+    # bild, och nio uppgifter kunde bytas ut för att hon ville ha Euler i
+    # stället för Descartes.
+    "forsatt": ("forsattsbild",),
     # avtal1 (betygsgränserna) står INTE här, och ska inte göra det: gränserna
     # RÄKNAS ur poängen (exam_spec.kravgranser) och går bara att flytta genom
     # att uppgifternas poäng ändras. Målet är alltså hela dokumentet, inte ett

@@ -2676,6 +2676,11 @@
           utkast.grupp = res.exam.grupp || null;
           utkast.tid_min = res.exam.tid_min || null;
           utkast.hjalpmedel = res.exam.hjalpmedel || null;
+          /* FÖRSÄTTSBLADETS PORTRÄTT (exam_spec.Forsattsbild). Bilden hör till
+             DOKUMENTET och inte till en uppgift, så den reser som ett eget
+             fält — utan raden hade rutan på försättsbladet stått kvar som en
+             tom platshållare medan beställningen låg i provets JSON. */
+          utkast.forsattsbild = res.exam.forsattsbild || null;
           /* Diagnosen skrevs för att RYMMAS på en lektion, och det var servern
              som bestämde antalet uppgifter. Då är tiden det första läraren vill
              veta — och den ska stå kvar när statusraden är borta, så den blir en
@@ -3548,6 +3553,10 @@
       v.grupp = res.exam.grupp || v.grupp || null;
       v.tid_min = res.exam.tid_min || v.tid_min || null;
       v.hjalpmedel = res.exam.hjalpmedel || v.hjalpmedel || null;
+      /* Samma reserv för porträttet: skrev varvet inget nytt står förra
+         varvets person kvar. Bad läraren om en ANNAN matematiker är fältet
+         omskrivet och nålen sitter på bilden (dokumentdiff `forsatt`). */
+      v.forsattsbild = res.exam.forsattsbild || v.forsattsbild || null;
     }
     versioner = versioner.slice(0, nu + 1).concat([v]);
     visa(versioner.length - 1);
@@ -3833,9 +3842,17 @@
       : Promise.resolve([])).catch(() => []);
     return platkatalogen;
   }
-  function scenFor(nr) {
+  /* `nyckel` är ett uppgiftsnummer — eller strängen 'forsatt' för
+     försättsbladets porträtt, som hör till DOKUMENTET och inte till en uppgift
+     (exam_spec.Forsattsbild). Samma ruta, samma kopieringsknapp, samma
+     släppyta; bara ägaren skiljer. Porträttet har ingen plåt att välja bland:
+     katalogen är målade SITUATIONER (app/platar MATCHBARA_SPAR), inte
+     ansikten, så sattPlat och plåtväljaren nedan rör bara uppgifter. */
+  function scenFor(nyckel) {
     const v = versioner[nu];
-    const u = v && (v.uppg || [])[nr - 1];
+    if (!v) return null;
+    if (nyckel === 'forsatt') return v.forsattsbild || null;
+    const u = (v.uppg || [])[nyckel - 1];
     return u && u.scen ? u.scen : null;
   }
   function sattPlat(nr, namn) {
@@ -3878,16 +3895,21 @@
       sel.focus();
     });
   }
-  function kopieraScen(nr) {
-    const s = scenFor(nr);
+  function kopieraScen(nyckel) {
+    const s = scenFor(nyckel);
     if (!s) return;
     /* BARA SCENE-STYCKET. Lärarens ChatGPT-projekt lägger basprompten framför
        själv (hennes projektinstruktion, steg 4) — skickar vi med något eget
        runt omkring blir basprompten citerad två gånger eller inte alls, och
        det är negationerna i den som håller text och pilar borta ur bilden. */
     const text = s.scene || '';
+    /* Filnamnsförslaget finns bara på uppgifternas scener — försättsbladets
+       porträtt bär person och stycke, inget filnamn (det är ETT papper och en
+       bild, inte en katalogpost). Utan villkoret slutade toasten på ett naket
+       «Filnamn: ». */
     const klart = () => window.toast && window.toast(
-      `Scenen kopierad — klistra in i plåtprojektet. Filnamn: ${s.filnamn || ''}`);
+      'Scenen kopierad — klistra in i plåtprojektet.'
+      + (s.filnamn ? ` Filnamn: ${s.filnamn}` : ''));
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(klart, () => reservkopia(text, klart));
     } else reservkopia(text, klart);
@@ -3911,11 +3933,21 @@
     const bort = e.target.closest && e.target.closest('[data-plat-bort]');
     if (bort) { e.preventDefault(); return sattPlat(+bort.dataset.platBort, ''); }
     const kop = e.target.closest && e.target.closest('[data-plat-kopiera]');
-    if (kop) { e.preventDefault(); return kopieraScen(+kop.dataset.platKopiera); }
+    /* 'forsatt' är försättsbladets porträtt, allt annat ett uppgiftsnummer. */
+    if (kop) {
+      e.preventDefault();
+      const k = kop.dataset.platKopiera;
+      return kopieraScen(k === 'forsatt' ? k : +k);
+    }
     /* Släppytan: klick på scenrutan öppnar filväljaren för uppgiften — samma
-       väg som alla andra bilder går (v.bilder), inte en ny. */
+       väg som alla andra bilder går (v.bilder), inte en ny. Försättsbladets
+       ruta släpper under nyckeln `forsatt`, som är den blad.js markera() salt
+       den med — annars hade bilden landat på en uppgift som inte finns. */
     const scen = e.target.closest && e.target.closest('.prscen');
-    if (scen && !e.target.closest('button')) valjBild('uppg' + scen.dataset.plat);
+    if (scen && !e.target.closest('button')) {
+      const k = scen.dataset.plat;
+      valjBild(k === 'forsatt' ? k : 'uppg' + k);
+    }
   });
 
   const arkNamn = v => v.typ === 'Prov' ? ['Provet', 'Lösningsförslag'] : v.typ === 'Gruppuppgift' ? ['Gruppuppgiften', 'Facit'] : v.typ === 'Diagnos' ? ['Diagnosen', 'Rättning'] : ['Arbetsbladet', 'Facit'];

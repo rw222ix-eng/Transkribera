@@ -539,6 +539,39 @@ window.BladBygg = (() => {
       <p class="prscenhint">Släpp bilden här när den är klar — eller klicka.</p>
     </div>`;
   }
+  /* ══════════ FÖRSÄTTSBLADETS PORTRÄTT ══════════
+     Försättsbladet slutar i en halv sida tomt papper under betygstabellen, och
+     den ytan var husets ENDA bildplats utan beställning: varenda annan ruta bär
+     ett SCENE-stycke, den här sa bara «plats för bild — läggs in i canvas».
+
+     LÄRARENS ORD (2026-08-23): «den här vetenskapsmannen eller matematikern som
+     kom på det provet handlar om … Fast en fin bild, lite dramatiskt så att de
+     blir inspirerade av att klara av provet.» Dokumentet bär personen och
+     stycket (exam_spec.Forsattsbild), och rutan visar dem på EXAKT samma sätt
+     som uppgifternas scener: samma .prscen-markup, samma «Kopiera scen», samma
+     släppyta. Ingen egen CSS och ingen andra sorts bildruta — hade porträttet
+     fått sin egen form vore det två system att hålla i synk för samma sak.
+
+     Nyckeln är 'forsatt' och inte ett uppgiftsnummer: bilden hör till
+     DOKUMENTET, inte till en uppgift. Den är också nyckeln lärarens egen
+     släppta bild landar under (blad.js markera → data-el="forsatt", v.bilder).
+
+     Saknas fältet — prototypens papper, ett prov skrivet innan fältet fanns —
+     står platshållaren kvar precis som förut. Ingen migrering. */
+  function forsattsbild(v) {
+    const f = (v || {}).forsattsbild;
+    if (!f || !(f.scene || '').trim()) {
+      return '<div class="prbild gufigur"><span class="gufigtext">plats för bild — läggs in i canvas</span></div>';
+    }
+    return `<div class="prbild gufigur prscen" data-plat="forsatt">
+      <p class="prscenrub">Bild att skapa — ${esc(f.person || '')}</p>
+      <pre class="prscentext">${esc(f.scene || '')}</pre>
+      <div class="prplatfot">
+        <button type="button" class="prscenkopiera" data-plat-kopiera="forsatt">Kopiera scen</button>
+      </div>
+      <p class="prscenhint">Släpp bilden här när den är klar — eller klicka.</p>
+    </div>`;
+  }
   /* Provets rubrik, med dokumentets egen först. Samma regel som arkets: skrev
      modellen en titel är det den som står på pappret, annars appens «Prov —
      momentet». blad.js planvalProv skriver om raden efter planeringen och
@@ -696,5 +729,5 @@ window.BladBygg = (() => {
   /* `kortref` delas med blad-boklos.js: bokens lösningsark ska korta på samma
      sätt som provets och arbetsbladets, annars är det två olika facit. */
   return { mat, kortref, ref, ark, arkfacit, anteckningar, provforsatt, provblad,
-           losning, provtitel, BOKSTAV, delnamnVisning };
+           forsattsbild, losning, provtitel, BOKSTAV, delnamnVisning };
 })();

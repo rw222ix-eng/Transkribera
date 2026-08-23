@@ -359,14 +359,18 @@ window.Blad = (() => {
       if (fot) fot.textContent = `${gr.total != null ? gr.total : summa} poäng`;
     }
 
-    /* Försättsbladet slutar i en halv sida tomt papper. Där hör lektionens bild
-       hemma — omslagsfiguren, skolans märke, en formelruta — och den läggs in i
-       canvas som vilken annan bild som helst. */
+    /* Försättsbladet slutar i en halv sida tomt papper. Där hör provets bild
+       hemma, och sedan dokumentet bär en beställning för den
+       (exam_spec.Forsattsbild) är det ett PORTRÄTT av personen provet handlar
+       om — SCENE-stycket står framme med «Kopiera scen» precis som
+       uppgifternas scener (blad-bygg forsattsbild). Utan fältet: platshållaren
+       som förut, och bilden läggs in i canvas som vilken annan bild som helst. */
     const forsta = $('.ark[data-form="pr1"]', trav);
     if (forsta && !$('.prforsatt', forsta)) {
       const p = document.createElement('div');
       p.className = 'prforsatt';
-      p.innerHTML = '<div class="prbild gufigur"><span class="gufigtext">plats för bild — läggs in i canvas</span></div>';
+      p.innerHTML = B() ? B().forsattsbild(v)
+        : '<div class="prbild gufigur"><span class="gufigtext">plats för bild — läggs in i canvas</span></div>';
       forsta.appendChild(p);
     }
   }

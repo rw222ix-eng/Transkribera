@@ -126,6 +126,12 @@ def _prov(fore: dict, efter: dict) -> list[str]:
     # och båda noderna ändrar sig när fältet gör det.
     if _falt(fore, efter, ("hjalpmedel", "nyckelfraga", "instruktion")):
         ut.append("instr")
+    # FÖRSÄTTSBLADETS PORTRÄTT (`forsatt`). Rutan är dokumentets sedan
+    # exam_spec.Forsattsbild finns, och bytte modellen person ska nålen sitta
+    # på bilden — inte på rubriken och inte ingenstans. Utan raden sa panelen
+    # «ingenting ändrades» om precis det läraren bett om.
+    if _falt(fore, efter, ("forsattsbild",)):
+        ut.append("forsatt")
     ut += _lista(fore.get("uppgifter") or [], efter.get("uppgifter") or [],
                  lambda j: f"uppg{j + 1}")
     return ut

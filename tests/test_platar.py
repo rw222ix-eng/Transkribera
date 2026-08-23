@@ -411,3 +411,123 @@ def test_kopieringen_tar_bara_scenstycket():
     js = (_UI / "plan.js").read_text(encoding="utf-8")
     rad = next(r for r in js.splitlines() if "const text = s.scene" in r)
     assert rad.strip() == "const text = s.scene || '';", rad
+
+
+# ── FÖRSÄTTSBLADETS PORTRÄTT ──────────────────────────────────────────
+# Provets försättsblad var husets ENDA bildplats utan beställning: varenda
+# annan ruta bar ett SCENE-stycke, den här sa bara «plats för bild — läggs in i
+# canvas». Lärarens ord (2026-08-23): «den här vetenskapsmannen eller
+# matematikern som kom på det provet handlar om … Fast en fin bild, lite
+# dramatiskt så att de blir inspirerade av att klara av provet.»
+
+def test_forsattsbilden_ar_valfri_och_gamla_prov_star_kvar():
+    """Fältet föddes efter kassetterna (tests/kassetter/prov.json). Ett
+    OBLIGATORISKT fält hade gjort varje inspelat prov ogiltigt — och varje
+    papper läraren redan har i basen med det."""
+    assert "forsattsbild" in exam_spec.ExamDoc.model_fields
+    utan = exam_spec.ExamDoc.model_validate(
+        {"titel": "Potenser", "kurs": "Matematik 1c", "hjalpmedel": "Formelblad.",
+         "uppgifter": [{"poang": [1, 0, 0], "formaga": "P", "typ": "rutin",
+                        "text": "Beräkna $2^3$.", "losning": "8",
+                        "bedomning": "1 E"}]})
+    assert utan.forsattsbild is None
+    med = exam_spec.ExamDoc.model_validate(
+        utan.model_dump(by_alias=True)
+        | {"forsattsbild": {
+            "person": "John Napier (1550–1617), skotten som räknade fram de "
+                      "första logaritmtabellerna.",
+            "scene": "SCENE. A dim stone study at night. " + "x" * 80}})
+    assert med.forsattsbild.person.startswith("John Napier")
+    # Ett tomt stycke är ingen beställning — det ska falla, inte tryckas.
+    with pytest.raises(Exception):
+        exam_spec.Forsattsbild(person="John Napier (1550–1617), logaritmer.",
+                               scene="SCENE.")
+
+
+def test_forsattsbilden_sitter_pa_dokumentet_aldrig_pa_en_uppgift():
+    """EN bild på EN försättssida. Ett fält per uppgift hade dessutom kostat
+    en definition per uppgift i grammatiken, på ett schema som har ett tak."""
+    assert "forsattsbild" not in exam_spec.ExamItem.model_fields
+    assert "forsattsbild" not in exam_spec.SubItem.model_fields
+
+
+def test_forsattsbildens_regel_bar_lararens_ord():
+    """Formen är SCEN_REGELNS, med två uttalade skillnader: motivet är ett
+    PORTRÄTT, och ingenting ritas ovanpå — så ritbarhetskraven (rakt från
+    sidan, fri tredjedel) gäller inte här. Textförbudet gäller lika hårt."""
+    r = exam_gen.FORSATTSBILD_REGEL
+    # Regeln står i INSTRUCTION och inte bara i provets uppdrag: omskrivningen
+    # (build_refine_prompt) får BARA den texten med sig, och utan den kunde
+    # modellen välja personen en gång men aldrig byta hen.
+    assert r in exam_gen.INSTRUCTION
+    assert r in exam_gen.build_refine_prompt({"titel": "Prov"},
+                                             "ta en annan matematiker")
+    for krav in ("ENGELSKA", "Intended use:", "SCENE", "PORTRÄTT",
+                 "dramatiskt", "historisk matematiker", "person", "scene"):
+        assert krav in r, krav
+    # Personen HÅRDKODAS inte — exemplen är exempel, och modellen ska välja
+    # OCH motivera i `person`. Utan motiveringen ser läraren bara ett namn.
+    assert "Listan är exempel och inget facit" in r
+    assert "namn, årtal och vad hen gjorde" in r
+    # Textförbudet är samma riktighetsfråga som på uppgifternas scener.
+    assert "ingen text, inga bokstäver" in r
+    # … men den fria tredjedelen och sidoläget gäller INTE porträttet.
+    assert "gäller inte porträttet" in r
+
+
+def test_ordern_om_forsattsbilden_star_bara_i_provets_uppdrag():
+    """Bara provet har ett försättsblad. Fältet finns i schemat för alla
+    profiler (grammatiken är en), men ORDERN att fylla det ges bara provet —
+    och regeln i INSTRUCTION säger själv att de andra lämnar det tomt."""
+    order = "FÖRSÄTTSBLADET ska ha sitt porträtt"
+    args = ("Matematik 1c", "NA25", ["Potenser och rötter"])
+    assert order in exam_gen.build_prompt(*args, antal=6, profil="prov")
+    for profil in ("arbetsblad", "gruppuppgift"):
+        assert order not in exam_gen.build_prompt(*args, antal=6,
+                                                  profil=profil), profil
+    assert "arbetsblad, gruppuppgift och diagnos lämnar" \
+        in exam_gen.FORSATTSBILD_REGEL
+
+
+def test_omskrivningen_far_byta_person_utan_att_rora_uppgifterna():
+    """Läraren pekar på porträttrutan i canvas och säger «ta Euler i stället».
+    Utan målet i _MALETS_FALT var HELA provet spelplanen, och nio uppgifter
+    kunde bytas ut för en bild."""
+    assert exam_gen.riktat_mal(None, {"el": "forsatt"}) \
+        == ("falt", ("forsattsbild",))
+    original = {"titel": "Potenser", "hjalpmedel": "Formelblad.",
+                "forsattsbild": {"person": "Napier", "scene": "SCENE. a"},
+                "uppgifter": [{"text": "Beräkna $2^3$."}]}
+    kandidat = {"titel": "Ett annat namn",
+                "forsattsbild": {"person": "Euler", "scene": "SCENE. b"},
+                "uppgifter": [{"text": "Något helt annat"}]}
+    ihop, skal = exam_gen.sammanfoga_riktat(
+        original, kandidat, exam_gen.riktat_mal(None, {"el": "forsatt"}))
+    assert skal == ""
+    assert ihop["forsattsbild"]["person"] == "Euler"
+    # Allt annat står ordagrant kvar.
+    assert ihop["titel"] == "Potenser"
+    assert ihop["uppgifter"] == original["uppgifter"]
+
+
+def test_canvas_visar_forsattsbildens_scen_som_uppgifternas():
+    """Samma ruta, samma knapp, samma släppyta — ingen andra sorts bildplats.
+    Två system för samma sak glider isär på ett av dem."""
+    bygg = (_UI / "blad-bygg.js").read_text(encoding="utf-8")
+    assert "function forsattsbild(v)" in bygg
+    assert "class=\"prbild gufigur prscen\" data-plat=\"forsatt\"" in bygg
+    assert "data-plat-kopiera=\"forsatt\"" in bygg
+    # Saknas fältet står platshållaren kvar — ingen migrering av gamla papper.
+    assert "plats för bild — läggs in i canvas" in bygg
+    # Och bladet ritar rutan i stället för platshållaren.
+    blad = (_UI / "blad.js").read_text(encoding="utf-8")
+    assert "B().forsattsbild(v)" in blad
+    # Nyckeln är den blad.js redan salt:ar bildplatsen med, så lärarens egen
+    # släppta bild landar i samma ruta (v.bilder['forsatt']).
+    assert "salt(el, 'forsatt', 'Bilden på försättsbladet')" in blad
+    plan = (_UI / "plan.js").read_text(encoding="utf-8")
+    # Dokumentets fält reser till arket vid både generering och omskrivning.
+    assert "utkast.forsattsbild = res.exam.forsattsbild || null;" in plan
+    assert "v.forsattsbild = res.exam.forsattsbild || v.forsattsbild || null;" in plan
+    # Porträttet hör till DOKUMENTET, inte till en uppgift.
+    assert "if (nyckel === 'forsatt') return v.forsattsbild || null;" in plan

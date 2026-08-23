@@ -58,6 +58,24 @@ def test_provtiden_och_hjalpmedlen_sitter_i_provtabellen():
         == ["avtal0", "instr"]
 
 
+def test_forsattsbildens_portratt_har_eget_id():
+    """Läraren ber om «en annan matematiker», modellen byter person — och nålen
+    ska sitta på BILDEN på försättsbladet (blad.js markera: `forsatt`), inte på
+    rubriken och inte ingenstans. Utan raden i _prov sa panelen «ingenting
+    ändrades» om precis det hon bett om."""
+    fore = _prov("a")
+    napier = {"person": "John Napier (1550–1617), logaritmernas man.",
+              "scene": "SCENE. A dim stone study at night. " + "x" * 80}
+    euler = dict(napier, person="Leonhard Euler (1707–1783), potensernas man.")
+    assert dd.andrade_element("prov", fore, _prov("a") | {"forsattsbild": napier}) \
+        == ["forsatt"]
+    assert dd.andrade_element(
+        "prov", _prov("a") | {"forsattsbild": napier},
+        _prov("a") | {"forsattsbild": euler}) == ["forsatt"]
+    # Två prov UTAN porträtt är lika — ett valfritt fält får inte märka något.
+    assert dd.andrade_element("prov", fore, _prov("a")) == []
+
+
 def _giltigt(*poang, **extra):
     """Ett dokument som ExamDoc verkligen kan läsa — kravgränserna räknas ur
     poängen, så de går inte att pröva på ett skelett."""
