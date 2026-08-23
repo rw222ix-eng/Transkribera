@@ -182,7 +182,7 @@ def test_nedladdningen_lamnar_delarna_som_egna_filer(client, monkeypatch):
             {"namn": "Tavla — derivator", "typ": "Tavla", "png": _DATA_URL,
              "kopior": 1},
             {"namn": "Prov — derivator", "exam_id": eid, "kopior": 22},
-            {"namn": "Lösningsförslag", "exam_id": eid, "bedomning": True,
+            {"namn": "Bedömningsanvisning", "exam_id": eid, "bedomning": True,
              "kopior": 1}]}))
     mapp = Path(res["path"])
     assert res["mapp"] is True
@@ -191,7 +191,7 @@ def test_nedladdningen_lamnar_delarna_som_egna_filer(client, monkeypatch):
     # det hamnar facit före provet.
     assert res["filer"] == ["01 Tavla — derivator.pdf",
                             "02 Prov — derivator.pdf",
-                            "03 Lösningsförslag.pdf"]
+                            "03 Bedömningsanvisning.pdf"]
     assert sorted(p.name for p in mapp.glob("*.pdf")) == sorted(res["filer"])
     assert [d["fil"] for d in res["dokument"]] == res["filer"]
     # Kopieantalet följer INTE med — 22 exemplar av samma fil i en mapp är 21
