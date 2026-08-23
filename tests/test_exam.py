@@ -1874,6 +1874,154 @@ def test_svar_utan_maluppgiften_ror_ingenting():
     assert "uppgift 4" in res["errors"][0]["message"]
 
 
+# ── Flera mål i samma önskemål ──────────────────────────────────────────────
+# Läraren markerar uppgift 4 OCH uppgift 6 i canvasen och skriver en mening för
+# båda. Grinden är densamma som för ett mål, men spelplanen är unionen: allt
+# hon pekade på får ändras, och ingenting annat.
+
+def _skriv_om_allt_med_tva_sammanhang() -> dict:
+    """Som _skriv_om_allt, men uppgift 6 får ett EGET sammanhang: tas två av
+    pizzauppgifterna in på samma papper är de för lika varandra, och det är
+    variationsvakten som svarar — inte målgrinden vi mäter här."""
+    d = _skriv_om_allt()
+    d["uppgifter"][5]["text"] = ("Ett tåg kör i 80 km/h. Hur långt hinner det "
+                                 "på 45 minuter?")
+    d["uppgifter"][5]["losning"] = "$80 \\cdot 0{,}75 = 60$ km."
+    return d
+
+
+def test_flera_mal_slapper_igenom_alla_de_markerade_uppgifterna():
+    llm, _calls = _stub_llm([json.dumps(_skriv_om_allt_med_tva_sammanhang())])
+    fore = _exam()
+    res = exam_gen.refine_exam(
+        fore, "gör dem kortare", nummer=[4, 6], model="m", llm=llm,
+        malen=[{"el": "uppg4", "namn": "Uppgift 4"},
+               {"el": "uppg6", "namn": "Uppgift 6"}])
+    assert res["errors"] == []
+    efter = res["exam"]
+    assert efter["uppgifter"][3]["text"].startswith("På pizzerian")
+    assert efter["uppgifter"][5]["text"].startswith("Ett tåg")
+    for i, u in enumerate(fore["uppgifter"]):
+        if i not in (3, 5):
+            assert efter["uppgifter"][i] == u, f"uppgift {i + 1} rördes"
+    assert efter["titel"] == fore["titel"]
+
+
+def test_flera_mal_kan_blanda_uppgift_och_falt():
+    """Rubriken och en uppgift på en gång: båda ändras, resten står kvar.
+    Numret ensamt hade dolt rubriken (den vägen släpper ingen målrad igenom),
+    och rubriken ensam hade dolt uppgiften."""
+    llm, _calls = _stub_llm([json.dumps(_skriv_om_allt(titel="Prov — Pizzor",
+                                                       klass="XX99"))])
+    fore = _exam()
+    res = exam_gen.refine_exam(
+        fore, "byt sammanhang", nummer=4, model="m", llm=llm,
+        malen=[{"el": "uppg4", "namn": "Uppgift 4"},
+               {"el": "rubrik", "namn": "Sidhuvudet"}])
+    efter = res["exam"]
+    assert efter["titel"] == "Prov — Pizzor"
+    assert efter["klass"] == fore["klass"], "klassen är lärarens, inte modellens"
+    assert efter["uppgifter"][3]["text"].startswith("På pizzerian")
+    assert efter["uppgifter"][0] == fore["uppgifter"][0]
+
+
+def test_ett_okant_mal_bland_flera_gor_hela_dokumentet_till_spelplan():
+    """Betygsgränserna avgränsar inget fält. Att låsa till de mål vi RÅKAR
+    känna igen hade tyst tappat bort den delen av önskemålet."""
+    assert exam_gen.riktat_mal(None, None,
+                               [{"el": "uppg4"}, {"el": "avtal1"}]) is None
+    kandidat = _skriv_om_allt()
+    llm, _calls = _stub_llm([json.dumps(kandidat)])
+    res = exam_gen.refine_exam(
+        _exam(), "höj gränsen och gör 4 svårare", model="m", llm=llm,
+        malen=[{"el": "uppg4", "namn": "Uppgift 4"},
+               {"el": "avtal1", "namn": "Betygsgränserna"}])
+    assert res["exam"]["uppgifter"] == kandidat["uppgifter"]
+
+
+def test_riktningen_ar_unionen_av_alla_mal():
+    assert exam_gen.riktat_mal([6, 4], None,
+                               [{"el": "uppg4"}, {"el": "uppg6"}]) \
+        == {"uppgifter": [4, 6], "falt": ()}
+    # Blandat: numret från klienten och fälten ur elementen.
+    assert exam_gen.riktat_mal(4, None, [{"el": "uppg4"}, {"el": "rubrik"}]) \
+        == {"uppgifter": [4], "falt": ("titel",)}
+    # Två fältmål: nycklarna läggs ihop utan dubbletter.
+    assert exam_gen.riktat_mal(None, None,
+                               [{"el": "instr"}, {"el": "forsatt"}]) \
+        == {"uppgifter": [], "falt": ("instruktion", "nyckelfraga",
+                                      "forsattsbild")}
+    # ETT mål är inte flerval: dagens par kommer tillbaka, oförändrat.
+    assert exam_gen.riktat_mal(4, {"el": "uppg4"}) == ("uppgift", 4)
+    assert exam_gen.riktat_mal(None, {"el": "rubrik"},
+                               [{"el": "rubrik"}]) == ("falt", ("titel",))
+
+
+def test_sammanfogningen_tar_unionen_ur_kandidaten():
+    original = {"titel": "Potenser", "instruktion": "Skriv tydligt.",
+                "uppgifter": [{"text": "ett"}, {"text": "två"},
+                              {"text": "tre"}]}
+    kandidat = {"titel": "Något annat", "instruktion": "Läs ihop först.",
+                "uppgifter": [{"text": "ETT"}, {"text": "TVÅ"},
+                              {"text": "TRE"}]}
+    ihop, skal = exam_gen.sammanfoga_riktat(
+        original, kandidat, {"uppgifter": [1, 3], "falt": ("instruktion",)})
+    assert skal == ""
+    assert [u["text"] for u in ihop["uppgifter"]] == ["ETT", "två", "TRE"]
+    assert ihop["instruktion"] == "Läs ihop först."
+    assert ihop["titel"] == "Potenser"        # inte pekat på → orört
+
+
+def test_ett_saknat_mal_faller_hela_sammanfogningen():
+    """Fyra genomförda ändringar av fem är den halvfärdiga sortens papper som
+    upptäcks framför klassen."""
+    original = {"uppgifter": [{"text": "ett"}, {"text": "två"},
+                              {"text": "tre"}]}
+    kandidat = {"uppgifter": [{"text": "ETT"}]}
+    ihop, skal = exam_gen.sammanfoga_riktat(
+        original, kandidat, {"uppgifter": [1, 3], "falt": ()})
+    assert ihop is None and "uppgift 3" in skal
+
+
+def test_flera_andrade_uppgifter_bedoms_var_for_sig():
+    """Bedömningspasset kostar ett anrop per ÄNDRAD uppgift — två mål ska ge
+    två, inte ett och inte elva."""
+    llm, calls = _stub_llm([json.dumps(_skriv_om_allt_med_tva_sammanhang())])
+    exam_gen.refine_exam(_exam(), "gör dem kortare", nummer=[4, 6],
+                         model="m", llm=llm,
+                         malen=[{"el": "uppg4", "namn": "Uppgift 4"},
+                                {"el": "uppg6", "namn": "Uppgift 6"}])
+    assert sum("bedömningsskrivare" in c["prompt"] for c in calls) == 2
+
+
+def test_enkelmalets_prompt_ar_orord_av_flervalet():
+    """KASSETTERNA. Banden i sviten är nycklade på promptens text: ett mål (och
+    inget mål) måste ge exakt samma prompt som innan flervalet fanns."""
+    doc = {"titel": "Prov", "uppgifter": [{"text": "ett"}]}
+    mal = {"el": "rubrik", "namn": "Sidhuvudet", "innehall": "Ma2b · SA23"}
+    for nummer, mal_in in ((None, None), (3, None), (None, mal), (3, mal)):
+        utan = exam_gen.build_refine_prompt(doc, "gör om", nummer, mal_in)
+        med = exam_gen.build_refine_prompt(doc, "gör om", nummer, mal_in,
+                                           "", None, None)
+        assert utan == med
+        # En lista med ETT mål är inte heller flerval.
+        assert utan == exam_gen.build_refine_prompt(
+            doc, "gör om", nummer, mal_in, "", None, [mal])
+        assert "flera element" not in utan
+
+
+def test_flervalets_prompt_raknar_upp_malen():
+    doc = {"titel": "Prov", "uppgifter": [{"text": "ett"}]}
+    p = exam_gen.build_refine_prompt(
+        doc, "gör dem kortare", [4, 6], None, "", None,
+        [{"el": "uppg4", "namn": "Uppgift 4", "innehall": "Beräkna arean."},
+         {"el": "uppg6", "namn": "Uppgift 6"}])
+    assert "«Uppgift 4» och «Uppgift 6»" in p
+    assert "Beräkna arean." in p
+    assert "gäller uppgift 4 och uppgift 6: gör dem kortare" in p
+    assert "låt allt annat i dokumentet stå oförändrat" in p
+
+
 def test_fix_latex_rounds_cap():
     llm, calls = _stub_llm([json.dumps(_exam())])
     res = exam_gen.fix_latex(_exam(), "! Missing $ inserted.", model="m", llm=llm)

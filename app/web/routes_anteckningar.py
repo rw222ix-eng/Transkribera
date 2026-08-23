@@ -26,7 +26,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from app import (db, dokumentdiff, exam_latex, exam_pdf, gpu_arbiter,
-                 notes_gen, postprocess, tryck)
+                 llm_client, notes_gen, postprocess, tryck)
 from app.web import routes_planning
 from app.web.sse import sse_response
 
@@ -239,6 +239,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
                                 status_code=400)
         # Avsnittet läraren pekade på i granskningen (llm_client.malrad).
         mal = body.get("mal") if isinstance(body.get("mal"), dict) else None
+        # Se routes_exam: flervalet följer med bara när läraren markerat minst
+        # två avsnitt, och ett ensamt mål går som förut ner i minsta byte.
+        malen = llm_client.flera_mal(body.get("malen")) or None
         # Bokdörren följer med omskrivningen som med genereringen.
         bok_block = routes_planning.bok_text(db_file, body)
         # Se routes_exam: lärarens tidigare önskemål för utkastet.
@@ -261,7 +264,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     raise RuntimeError("Språkmodellen är inte installerad.")
                 res = notes_gen.refine_notes(
                     view["exam"], message, model=_model_name(), mal=mal,
-                    bok=bok_block, historik=historik,
+                    malen=malen, bok=bok_block, historik=historik,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 if res["notes"] is not None and res["notes"] != view["exam"]:

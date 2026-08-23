@@ -144,10 +144,14 @@ async function be(page, text) {
   await page.locator("#g-form").evaluate(f => f.requestSubmit());
 }
 
-test("ett varv i taget: fältet står stilla medan pappret skrivs om", async ({ page }) => {
+test("ett varv i taget — men meningen tas emot ändå och läggs i kö", async ({ page }) => {
   /* Två meningar efter varandra blev två omskrivningar av samma text. Båda
      läste dokumentet innan någon sparat, den som kom sist vann, och den förstas
-     ändring fanns sedan varken på pappret eller i ångra-historiken. */
+     ändring fanns sedan varken på pappret eller i ångra-historiken.
+     Svaret var först ett LÅS: fältet gick i disabled medan varvet gick. Nu är
+     det en kö — fältet tar emot, posten väntar på sin tur, och bara ETT varv
+     är i luften åt gången. Regeln som skyddar pappret är alltså densamma; det
+     är lärarens mening som inte längre tappas. */
   let slapp;
   const grind = new Promise(r => { slapp = r; });
   const anrop = await fejka(page, { grind });
@@ -157,20 +161,24 @@ test("ett varv i taget: fältet står stilla medan pappret skrivs om", async ({ 
   await oppnaCanvas(page);
 
   await be(page, "Gör uppgift 4 kortare");
-  await expect(page.locator("#g-falt")).toBeDisabled({ timeout: 10_000 });
-  await expect(page.locator("#g-form button[type=submit]")).toHaveText("Skriver …");
+  await expect(page.locator("#g-form button[type=submit]"))
+    .toHaveText("Lägg i kö", { timeout: 10_000 });
+  await expect(page.locator("#g-falt")).toBeEnabled();
 
-  // Andra meningen går inte i väg — och inte som ett tyst tapp: rutan är låst.
-  await page.locator("#g-form").evaluate(f => f.requestSubmit());
+  // Andra meningen går inte i väg medan grinden är stängd — den står i kön.
+  await be(page, "Gör uppgift 4 svårare");
+  await expect(page.locator(".gvarv[data-i-ko]")).toHaveCount(1);
   await page.waitForTimeout(300);
   expect(refines(anrop)).toHaveLength(1);
 
   slapp();
-  await expect(page.locator("#g-falt")).toBeEnabled({ timeout: 20_000 });
-  await expect(page.locator("#g-form button[type=submit]")).toHaveText("Ändra");
-  // Och nu går nästa mening fram.
-  await be(page, "Gör uppgift 4 svårare");
+  // Och när det första varvet är klart avfyras det köade — av sig självt.
   await expect.poll(() => refines(anrop).length, { timeout: 20_000 }).toBe(2);
+  expect(refines(anrop).map(a => a.kropp.message))
+    .toEqual(["Gör uppgift 4 kortare", "Gör uppgift 4 svårare"]);
+  await expect(page.locator(".gvarv[data-i-ko]")).toHaveCount(0);
+  await expect(page.locator("#g-form button[type=submit]"))
+    .toHaveText("Ändra", { timeout: 20_000 });
 });
 
 test("ett svar som landar när ett annat papper ligger framme slängs", async ({ page }) => {
@@ -185,7 +193,9 @@ test("ett svar som landar när ett annat papper ligger framme slängs", async ({
   await skrivProv(page);
   await oppnaCanvas(page);
   await be(page, "Gör uppgift 4 kortare");
-  await expect(page.locator("#g-falt")).toBeDisabled({ timeout: 10_000 });
+  // Varvet GÅR — knappen säger att nästa mening skulle hamna i kö.
+  await expect(page.locator("#g-form button[type=submit]"))
+    .toHaveText("Lägg i kö", { timeout: 10_000 });
 
   await page.locator("#g-stang").click();
   await expect(page.locator("#granskaskal")).toBeHidden();

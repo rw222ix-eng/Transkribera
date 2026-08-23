@@ -186,6 +186,90 @@ def test_riktad_omskrivning_slapper_bara_igenom_malet(client, monkeypatch):
             assert res["exam"]["uppgifter"][i] == u
 
 
+def test_refine_tar_emot_flera_mal_och_en_nummerlista(client, monkeypatch):
+    """Flervalet: läraren markerade två uppgifter och skrev EN mening. Rutten
+    bär listan och målen vidare — och ett ensamt mål går exakt som förut."""
+    result, _ = _make_exam(client, monkeypatch)
+    fangat = {}
+
+    def fake_refine(exam, message, *, model, nummer=None, mal=None, malen=None,
+                    **_kw):
+        fangat["nummer"] = nummer
+        fangat["malen"] = malen
+        fangat["mal"] = mal
+        return {"exam": exam, "errors": [], "rounds": 1}
+    monkeypatch.setattr(exam_gen, "refine_exam", fake_refine)
+
+    malen = [{"el": "uppg3", "namn": "Uppgift 3", "innehall": "Beräkna arean."},
+             {"el": "uppg5", "namn": "Uppgift 5", "innehall": "Lös den."}]
+    _done(client.post(f"/api/exams/{result['id']}/refine",
+                      json={"message": "gör dem kortare", "nummer": [3, 5],
+                            "mal": malen[0], "malen": malen}))
+    assert fangat["nummer"] == [3, 5]
+    assert [m["el"] for m in fangat["malen"]] == ["uppg3", "uppg5"]
+
+    # ETT mål: dagens payload, dagens värden — int och inget `malen`.
+    _done(client.post(f"/api/exams/{result['id']}/refine",
+                      json={"message": "gör den kortare", "nummer": 3,
+                            "mal": malen[0]}))
+    assert fangat["nummer"] == 3 and fangat["malen"] is None
+    # En lista med ett enda mål är inte heller flerval.
+    _done(client.post(f"/api/exams/{result['id']}/refine",
+                      json={"message": "gör den kortare", "nummer": [3],
+                            "malen": [malen[0]]}))
+    assert fangat["nummer"] == 3 and fangat["malen"] is None
+
+
+def test_refine_tal_skrap_i_nummer_och_malen(client, monkeypatch):
+    """Ett rått int() på klientens värde blev en 500. Silen släpper igenom det
+    som är nummer och mål, och struntar i resten."""
+    result, _ = _make_exam(client, monkeypatch)
+    fangat = {}
+
+    def fake_refine(exam, message, *, model, nummer=None, malen=None, **_kw):
+        fangat["nummer"] = nummer
+        fangat["malen"] = malen
+        return {"exam": exam, "errors": [], "rounds": 1}
+    monkeypatch.setattr(exam_gen, "refine_exam", fake_refine)
+
+    _done(client.post(f"/api/exams/{result['id']}/refine",
+                      json={"message": "x", "nummer": "abc",
+                            "malen": "inte en lista"}))
+    assert fangat["nummer"] is None and fangat["malen"] is None
+    _done(client.post(f"/api/exams/{result['id']}/refine",
+                      json={"message": "x", "nummer": [4, "5", 0, 4],
+                            "malen": [{"el": f"uppg{i}"} for i in range(1, 9)]}))
+    assert fangat["nummer"] == [4, 5]
+    assert len(fangat["malen"]) == 6           # taket, se llm_client.MAX_MALEN
+
+
+def test_flervalet_slapper_igenom_bada_uppgifterna_genom_rutten(client,
+                                                                monkeypatch):
+    """Hela vägen med den RIKTIGA sammanfogningen: modellen skriver om allt,
+    servern släpper igenom de två uppgifterna läraren pekade på."""
+    result, _ = _make_exam(client, monkeypatch)
+    allt_omskrivet = _exam_doc()
+    for i, u in enumerate(allt_omskrivet["uppgifter"], start=1):
+        u["text"] = f"På pizzerian säljs {i} pizzor. Beräkna intäkten."
+        u["losning"] = f"Svaret är {i}."
+    allt_omskrivet["uppgifter"][5]["text"] = "Ett tåg kör i 80 km/h i 45 min."
+    allt_omskrivet["uppgifter"][5]["losning"] = "60 km."
+    allt_omskrivet["titel"] = "Prov — Pizzor"
+    monkeypatch.setattr(exam_gen, "_llm_round",
+                        lambda *a, **k: copy.deepcopy(allt_omskrivet))
+
+    res = _done(client.post(
+        f"/api/exams/{result['id']}/refine",
+        json={"message": "byt sammanhang i båda", "nummer": [4, 6],
+              "malen": [{"el": "uppg4", "namn": "Uppgift 4"},
+                        {"el": "uppg6", "namn": "Uppgift 6"}]}))
+    assert res["andrade"] == ["uppg4", "uppg6"]
+    assert res["exam"]["titel"] == _exam_doc()["titel"]
+    for i, u in enumerate(_exam_doc()["uppgifter"]):
+        if i not in (3, 5):
+            assert res["exam"]["uppgifter"][i] == u
+
+
 def test_refine_requires_message(client, monkeypatch):
     result, _ = _make_exam(client, monkeypatch)
     assert client.post(f"/api/exams/{result['id']}/refine",

@@ -820,6 +820,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # Rutan läraren pekade på i granskningen — {"namn", "innehall"}, se
         # llm_client.malrad. Saknas den gäller önskemålet hela tavlan, som förut.
         mal = body.get("mal") if isinstance(body.get("mal"), dict) else None
+        # FLERVALET: markerar läraren flera rutor i canvasen gäller ETT önskemål
+        # dem alla, och då — bara då — följer `malen` med. Silen släpper igenom
+        # den först vid två mål (högst sex), så ett ensamt mål går exakt som
+        # förut: samma payload, samma prompt, byte för byte.
+        malen = llm_client.flera_mal(body.get("malen")) or None
         # Bokdörren följer med omskrivningen, precis som med genereringen —
         # sidorna, uppgiftsnumren och LÄRARENS URVAL. Utan det kunde «lägg till
         # vilka uppgifter vi ska göra» bara bli en allmän mening: numren stod
@@ -842,7 +847,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     raise RuntimeError("Språkmodellen är inte installerad.")
                 res = lesson_board.refine_board(
                     st["board"], message, model=_model_name(), mal=mal,
-                    bok=bok_txt, historik=historik,
+                    malen=malen, bok=bok_txt, historik=historik,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 # Lyssnar någon än? Läraren som tryckte Avbryt eller stängde

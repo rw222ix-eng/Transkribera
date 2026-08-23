@@ -289,7 +289,8 @@ def test_refine_updates_board(llm_ready, monkeypatch):
     updated["title"] = "Uppdaterad"
     captured = {}
 
-    def fake_refine(board, instruction, *, model, mal=None, bok="", historik=None,
+    def fake_refine(board, instruction, *, model, mal=None, malen=None,
+                    bok="", historik=None,
                     llm=None, max_rounds=lesson_board.MAX_ROUNDS, log_cb=None,
                     token_cb=None):
         captured["instruction"] = instruction
@@ -772,7 +773,8 @@ def test_refine_far_hela_meddelandet_inklusive_kallviktningen(llm_ready, monkeyp
 
     sett = {}
 
-    def fake_refine(board, message, *, model, mal=None, bok="", historik=None,
+    def fake_refine(board, message, *, model, mal=None, malen=None,
+                    bok="", historik=None,
                     llm=None, max_rounds=lesson_board.MAX_ROUNDS, log_cb=None,
                     token_cb=None):
         sett["message"] = message
@@ -840,7 +842,8 @@ def test_tavlan_gar_att_andra_efter_en_omstart(llm_ready, monkeypatch):
     uppdaterad["title"] = "Efter omstarten"
     sett = {}
 
-    def fake_refine(board, instruction, *, model, mal=None, bok="", historik=None,
+    def fake_refine(board, instruction, *, model, mal=None, malen=None,
+                    bok="", historik=None,
                     llm=None, max_rounds=lesson_board.MAX_ROUNDS, log_cb=None,
                     token_cb=None):
         sett["board"] = board
@@ -991,6 +994,37 @@ def test_prompten_bar_hela_tavlan_historiken_och_skarmtexten():
     assert "1. Gör den kortare" in p
     assert "a2 a^2" in p
     assert "kortare än så" in p
+
+
+def test_flera_rutor_i_samma_onskemal_nar_prompten(llm_ready, monkeypatch):
+    """Tavlan har inget mål-lås — prompten ÄR löftet. Då måste den åtminstone
+    säga vilka rutor det gäller, annars ändrar modellen en av dem och lämnar
+    resten (samma fel som ett enda mål en gång led av)."""
+    pid = _make_planning(llm_ready, monkeypatch)
+    sett = {}
+    monkeypatch.setattr(lesson_board, "refine_board",
+                        lambda *a, malen=None, **k: sett.update(m=malen)
+                        or {"board": _valid_board(), "errors": [], "rounds": 1})
+    malen = [{"el": "b1", "namn": "Formel 3", "innehall": "a^2"},
+             {"el": "b2", "namn": "Exempel 1", "innehall": "Lös $x+1=3$"}]
+    _done(llm_ready.post(f"/api/planning/{pid}/refine",
+                         json={"message": "kortare", "mal": malen[0],
+                               "malen": malen}))
+    assert [m["namn"] for m in sett["m"]] == ["Formel 3", "Exempel 1"]
+    # Ett ensamt mål är inte flerval: då skickas inget alls vidare.
+    _done(llm_ready.post(f"/api/planning/{pid}/refine",
+                         json={"message": "kortare", "mal": malen[0],
+                               "malen": [malen[0]]}))
+    assert sett["m"] is None
+
+    board = _valid_board()
+    p = lesson_board.build_refine_prompt(board, "kortare", mal=malen[0],
+                                         malen=malen)
+    assert "«Formel 3» och «Exempel 1»" in p
+    # Och utan flerval är prompten byte för byte densamma som förut.
+    assert lesson_board.build_refine_prompt(board, "kortare", mal=malen[0]) \
+        == lesson_board.build_refine_prompt(board, "kortare", mal=malen[0],
+                                            malen=[malen[0]])
 
 
 # ── Sidorna ur bildunderlaget ────────────────────────────────────────────

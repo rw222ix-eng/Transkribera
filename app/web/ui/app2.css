@@ -507,6 +507,22 @@
 .gvarv[data-pa]{background:var(--accent-weak);border-color:var(--sky-deep);padding:12px 14px;margin-left:-2px;box-shadow:inset 2px 0 0 var(--sky-deep)}
 .gvarv[data-pekad]{background:var(--accent-weak)}
 .gvarvhuvud{display:flex;align-items:center;gap:8px}
+/* ── KÖADE ÖNSKEMÅL ────────────────────────────────
+   En post som väntar på tur är ännu ingen ändring: dämpad, med sitt LÄGE i
+   stället för sitt nummer, och en streckad kant som säger att den inte är
+   skriven än. När turen kommer byts huvudet mot nummer och namn — samma rad,
+   ingen dubblering. */
+.gvarv[data-i-ko]{opacity:.6;border-left-style:dashed;border-left-color:var(--ink-3);transition:opacity var(--dur-2) var(--ease)}
+.gvarv[data-i-ko]:hover{opacity:.9}
+.gkonot{flex:0 0 auto;font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);border:1px solid var(--line);border-radius:var(--r-pill);padding:2px 9px;white-space:nowrap}
+.gkokryss{margin-left:auto;flex:0 0 auto;border:none;background:transparent;color:var(--ink-3);font-size:.74rem;line-height:1;cursor:pointer;padding:3px 5px;border-radius:6px;transition:color var(--dur-2) var(--ease),background-color var(--dur-2) var(--ease)}
+.gkokryss:hover{color:var(--ink);background:var(--sunken)}
+.gkokryss:focus-visible{outline:2px solid var(--sky-deep);outline-offset:1px}
+/* Ett önskemål vars rutor hunnit försvinna ur pappret. Raden står kvar som
+   BESKED — inte som en ändring, för ingen ändring skedde. */
+.gvarv[data-borta]{border-left-color:var(--line);cursor:default}
+.gvarv[data-borta]:hover{background:transparent}
+.gbortatext{margin:0;font-size:.9rem;line-height:1.55;color:var(--ink-2)}
 .gnotnr{width:19px;height:19px;flex:0 0 auto;border-radius:50%;background:var(--sky-deep);color:#fff;font-size:.72rem;font-weight:600;display:grid;place-items:center}
 .gvarvel{font-size:.74rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--sky-deep);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gfraga{margin:8px 0 0;font-size:.94rem;line-height:1.5;color:var(--ink)}
@@ -540,6 +556,23 @@
 .gmal[data-satt]{background:var(--accent-weak);color:var(--sky-deep)}
 .gmalx{border:none;background:transparent;color:inherit;font-size:.74rem;cursor:pointer;padding:0 2px;opacity:.7}
 .gmalx:hover{opacity:1}
+/* ── FLERA MÅL ─────────────────────────────────────
+   Målrutan bär ett chip per vald ruta. Med ETT val ska den se ut precis som
+   förut — chipet är då bara sin text, utan egen platta — och det är först vid
+   två (`data-flera`) som pillren skiljer dem åt. Ingen ny färg: samma blå
+   dis som markeringen i pappret, så chipet och rutan hör ihop. */
+.gmal{flex-wrap:wrap;max-width:100%}
+.gmalchips{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0}
+.gmalchip{display:inline-flex;align-items:center;gap:5px;min-width:0}
+.gmalchip .gmaltext{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gmal[data-flera] .gmalchip{border-radius:var(--r-pill);padding:2px 4px 2px 10px;background:color-mix(in srgb,var(--atmosphere) 18%,transparent)}
+/* Krysset i ETT chip. Det syns bara när det finns flera att välja mellan —
+   med ett enda val är det målrutans eget kryss som tömmer, och två kryss
+   bredvid varandra som gör samma sak är ett val läraren inte ska behöva göra. */
+.gmalkryss{display:none;border:none;background:transparent;color:inherit;font-size:.68rem;line-height:1;cursor:pointer;padding:3px;border-radius:50%;opacity:.6;transition:opacity var(--dur-2) var(--ease),background-color var(--dur-2) var(--ease)}
+.gmal[data-flera] .gmalkryss{display:inline-flex}
+.gmalkryss:hover{opacity:1;background:color-mix(in srgb,var(--sky-deep) 14%,transparent)}
+.gmalkryss:focus-visible{outline:2px solid var(--sky-deep);outline-offset:1px}
 .gform{display:flex;flex-direction:column;gap:12px}
 .gform textarea{width:100%;resize:none;border:1px solid var(--line);border-radius:16px;background:var(--surface);padding:13px 15px;font-family:inherit;font-size:.98rem;line-height:1.5;color:var(--ink);max-height:150px;transition:border-color var(--dur-2) var(--ease),box-shadow var(--dur-2) var(--ease)}
 .gform textarea:focus{outline:none;border-color:var(--atmosphere);box-shadow:0 0 0 3px rgba(96,168,221,.25)}

@@ -74,7 +74,77 @@ _CHAT_SYSTEM_CITED = (
 # ut elementet. Delas av tavlan, provet och anteckningarna: alla tre skriver om
 # ett helt JSON-dokument och behöver samma mening om vad som ska röras.
 
-def malrad(mal: dict | None) -> str:
+# Taket på hur många element ett önskemål får gälla. Sex ryms i prompten utan
+# att tränga ut dokumentet den ska skrivas om; fler mål än så är dessutom
+# sällan ETT önskemål, utan flera som borde skickas var för sig.
+MAX_MALEN = 6
+
+
+def _malbit(mal) -> tuple[str, str, str] | None:
+    """Ett måls tre delar — namn, JSON-innehåll, skärmtext — kapade som
+    prompten ändå kapar dem. ``None`` när målet inte säger något alls.
+
+    `text` läses som ett andra namn på `innehall`: canvasens lager har hetat
+    båda, och ett mål som tappar sitt innehåll på vägen blir bara ett namn i
+    prompten. Ett mål med `innehall` går exakt som förut."""
+    if not isinstance(mal, dict):
+        return None
+    namn = str(mal.get("namn") or "").strip()
+    innehall = " ".join(str(mal.get("innehall") or mal.get("text")
+                            or "").split())[:300].strip()
+    renderat = " ".join(str(mal.get("renderat") or "").split())[:600].strip()
+    if not namn and not innehall and not renderat:
+        return None
+    return namn, innehall, renderat
+
+
+def flera_mal(malen) -> list[dict]:
+    """Målen när läraren markerat FLER ÄN ETT element — annars tom lista.
+
+    Ett ensamt mål är inte flerval: då gäller enkelmålsvägen, och den ska bli
+    byte för byte som förut hela vägen ut i prompten (testsvitens inspelade
+    band är nycklade på promptens text). Därför är tröskeln två, och därför är
+    den samma funktion i rutterna som i prompterna — ett andra ställe att
+    räkna på hade glidit isär från det första."""
+    if not isinstance(malen, (list, tuple)):
+        return []
+    ut = []
+    for m in malen:
+        if not isinstance(m, dict):
+            continue
+        bit = _malbit(m)
+        if bit is None and not str(m.get("el") or "").strip():
+            continue
+        namn, innehall, renderat = bit or ("", "", "")
+        ut.append({"el": str(m.get("el") or "").strip()[:60],
+                   "namn": namn[:120], "innehall": innehall,
+                   "renderat": renderat})
+        if len(ut) >= MAX_MALEN:
+            break
+    return ut if len(ut) >= 2 else []
+
+
+def uppradning(delar) -> str:
+    """«a», «a och b», «a, b och c» — svensk uppräkning, inte en JSON-lista.
+    Modellen läser en mening, och en mening med kommatecken och «och» i sig
+    säger tydligare att det är FLERA saker som ska ändras."""
+    delar = [d for d in delar if d]
+    if len(delar) <= 1:
+        return delar[0] if delar else ""
+    return ", ".join(delar[:-1]) + " och " + delar[-1]
+
+
+# Skärmtextens förklaring står EN gång även när målen är flera: den handlar om
+# sättningen, inte om det enskilda elementet, och sex kopior av samma stycke är
+# sex gånger promptutrymme för samma upplysning.
+_SKARMEN_FLERA = (
+    "Skärmtexten är rutan så som den STÅR PÅ SKÄRMEN. Det är den bilden läraren "
+    "beskriver. Sättningen kan upprepa matematiken — en gång satt och en gång "
+    "som LaTeX-källa — så dubbla formler och lösa dollartecken där behöver inte "
+    "finnas i JSON-fältet.\n")
+
+
+def malrad(mal: dict | None = None, malen=None) -> str:
     """En rad om elementet läraren pekade på, eller "" när hon inte pekade.
 
     `renderat` är rutans text SÅ SOM DEN STÅR PÅ SKÄRMEN. Den behövs för att
@@ -82,14 +152,24 @@ def malrad(mal: dict | None) -> str:
     KaTeX lämnar kvar sin egen källa i en MathML-annotation, så en formel står
     där två gånger — en gång satt och en gång som «x^2». «Det står ett
     dollartecken mitt i raden» gäller alltså något som inte finns i fältet, och
-    utan den här raden letade modellen efter ett tecken som aldrig fanns."""
-    if not isinstance(mal, dict):
+    utan den här raden letade modellen efter ett tecken som aldrig fanns.
+
+    `malen` är flervalets lista: läraren kan markera flera element i canvasen
+    och skicka ETT önskemål för dem alla. Först vid två mål byter raden form —
+    ett ensamt mål ger exakt samma text som förut, byte för byte."""
+    flera = flera_mal(malen)
+    if flera:
+        return _flera_malrader([_malbit(m) or ("", "", "") for m in flera])
+    # Ett mål: kom det i listan (och `mal` saknas) duger det lika bra.
+    en = _malbit(mal)
+    if en is None and isinstance(malen, (list, tuple)):
+        for m in malen:
+            en = _malbit(m)
+            if en is not None:
+                break
+    if en is None:
         return ""
-    namn = str(mal.get("namn") or "").strip()
-    innehall = " ".join(str(mal.get("innehall") or "").split())[:300].strip()
-    renderat = " ".join(str(mal.get("renderat") or "").split())[:600].strip()
-    if not namn and not innehall and not renderat:
-        return ""
+    namn, innehall, renderat = en
     vad = f"«{namn}»" if namn else "ett element"
     om = f' — som innehåller: "{innehall}"' if innehall else ""
     # Bara när den säger något NYTT: är skärmtexten densamma som innehållet är
@@ -102,6 +182,34 @@ def malrad(mal: dict | None) -> str:
                 "dollartecken där behöver inte finnas i JSON-fältet.")
     return (f"Läraren PEKADE PÅ {vad}{om}.{sett} Önskemålet gäller det elementet: "
             "ändra det och låt allt annat i dokumentet stå oförändrat.\n")
+
+
+def _flera_malrader(bitar) -> str:
+    """Flervalets form: målen räknas upp i en mening och står sedan var för sig
+    med sitt innehåll.
+
+    En enda hopklistrad rad om fem element gick inte att läsa — modellen tog det
+    första och lämnade resten. Numrerade rader är samma sak som listan läraren
+    ser i canvasen, och löftet på slutet är HÅRT av samma skäl som i
+    enkelmålsformen: prompten säger «låt allt annat stå», och provets väg håller
+    det dessutom på riktigt (exam_gen.sammanfoga_riktat)."""
+    namnen = uppradning([f"«{namn}»" if namn else "ett element"
+                          for namn, _i, _r in bitar])
+    rader = []
+    skarm = False
+    for i, (namn, innehall, renderat) in enumerate(bitar, 1):
+        vad = f"«{namn}»" if namn else "ett element"
+        om = f' — som innehåller: "{innehall}"' if innehall else ""
+        sett = ""
+        if renderat and renderat != innehall:
+            sett = f' På skärmen: "{renderat}".'
+            skarm = True
+        rader.append(f"{i}. {vad}{om}.{sett}")
+    return (f"Läraren PEKADE PÅ {namnen} — flera element på en gång:\n"
+            + "\n".join(rader) + "\n"
+            + (_SKARMEN_FLERA if skarm else "")
+            + "Önskemålet gäller ALLA de elementen: genomför det i vart och ett "
+              "av dem, och låt allt annat i dokumentet stå oförändrat.\n")
 
 
 # Varvhistoriken — vad läraren redan bett om för DET HÄR utkastet.

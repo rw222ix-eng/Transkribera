@@ -532,6 +532,35 @@ def test_refine_ger_en_ny_version(client, monkeypatch):
     assert ny["andrade"] == ["sekt1"]
 
 
+def test_refine_bar_flera_markerade_avsnitt(client, monkeypatch):
+    """Läraren markerar två avsnitt och skriver EN mening. Anteckningarna har
+    inget mål-lås (prompten är löftet), så flervalet måste synas i målraden."""
+    _stubba(monkeypatch)
+    res = _done(client.post("/api/anteckningar/generate",
+                            json={"onskemal": "x", "kurs": "Matematik 3c"}))
+    sett = {}
+    monkeypatch.setattr(
+        routes_anteckningar.notes_gen, "refine_notes",
+        lambda notes, message, malen=None, **kw: sett.update(m=malen)
+        or {"notes": notes, "errors": [], "rounds": 1})
+    malen = [{"el": "sekt1", "namn": "Boken", "innehall": "Vi arbetar i …"},
+             {"el": "sekt2", "namn": "Läxan", "innehall": "Blå uppgifter"}]
+    _done(client.post(f"/api/anteckningar/{res['id']}/refine",
+                      json={"message": "kortare", "malen": malen}))
+    assert [m["namn"] for m in sett["m"]] == ["Boken", "Läxan"]
+    # Ett ensamt mål går som förut — inget `malen` vidare.
+    _done(client.post(f"/api/anteckningar/{res['id']}/refine",
+                      json={"message": "kortare", "mal": malen[0]}))
+    assert sett["m"] is None
+
+    p = notes_gen.build_refine_prompt(_anteckningar(), "kortare", malen[0],
+                                      "", None, malen)
+    assert "«Boken» och «Läxan»" in p
+    assert notes_gen.build_refine_prompt(_anteckningar(), "kortare", malen[0]) \
+        == notes_gen.build_refine_prompt(_anteckningar(), "kortare", malen[0],
+                                         "", None, [malen[0]])
+
+
 def test_refine_kraver_ett_onskemal(client, monkeypatch):
     _stubba(monkeypatch)
     res = _done(client.post("/api/anteckningar/generate",

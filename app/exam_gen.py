@@ -2511,20 +2511,66 @@ def build_repair_prompt(exam: dict, problems: list, profil: str = "prov") -> str
     )
 
 
+def nummerlista(nummer) -> list[int]:
+    """`nummer` som en lista av uppgiftsnummer.
+
+    Klienten skickar ETT nummer som int — precis som förut — och en LISTA först
+    när läraren markerat flera uppgifter på en gång. Båda formerna passerar
+    här, så resten av vägen slipper fråga vilken det var. Skräp och nollor
+    faller bort (ett `int("abc")` mitt i rutten blev en 500), och ordningen är
+    lärarens egen."""
+    if isinstance(nummer, (list, tuple, set)):
+        rader = list(nummer)
+    elif nummer:
+        rader = [nummer]
+    else:
+        return []
+    ut: list[int] = []
+    for n in rader:
+        try:
+            i = int(n)
+        except (TypeError, ValueError):
+            continue
+        if i > 0 and i not in ut:
+            ut.append(i)
+    return ut
+
+
 def build_refine_prompt(exam: dict, instruction: str,
-                        nummer: int | None = None,
+                        nummer=None,
                         mal: dict | None = None, bok: str = "",
-                        historik=None) -> str:
+                        historik=None, malen=None) -> str:
     """Riktad omgenerering: 'byt uppgift 4', 'gör 7 svårare' …
 
-    `nummer` är uppgiften önskemålet gäller. `mal` är det läraren PEKADE PÅ i
+    `nummer` är uppgiften önskemålet gäller — en int, eller en LISTA av int när
+    läraren markerat flera uppgifter. `mal` är det läraren PEKADE PÅ i
     granskningen när det inte är en uppgift — sidhuvudet, instruktionen,
-    namnraderna, en post i facit (llm_client.malrad). `bok` är bokdörrens block:
+    namnraderna, en post i facit (llm_client.malrad), och `malen` är samma sak
+    för flera element samtidigt. `bok` är bokdörrens block:
     genereringen har alltid fått det, iterationen fick det inte, och därför
     kunde ett önskemål om bokens uppgifter bara besvaras allmänt. `historik` är
-    lärarens tidigare önskemål för utkastet (llm_client.varvrad)."""
-    onskemal = (f"Lärarens önskemål gäller uppgift {nummer}: {instruction}"
-                if nummer else f"Lärarens önskemål: {instruction}")
+    lärarens tidigare önskemål för utkastet (llm_client.varvrad).
+
+    ETT mål ger exakt samma prompt som förut, byte för byte: den nya texten
+    uppstår bara när flervalet faktiskt skickats."""
+    numren = nummerlista(nummer)
+    flera = llm_client.flera_mal(malen)
+    if flera or len(numren) > 1:
+        # Flervalet. Numren står i önskemålsraden som förut (fast uppräknade),
+        # och pekar läraren dessutom på något som inte är en uppgift räknar
+        # målraden upp alltihop — annars hade rubriken tappats bort så fort ett
+        # enda uppgiftsnummer följde med.
+        onskemal = (
+            f"Lärarens önskemål gäller "
+            f"{llm_client.uppradning([f'uppgift {n}' for n in numren])}: "
+            f"{instruction}"
+            if numren else f"Lärarens önskemål: {instruction}")
+        pekat = llm_client.malrad(mal, malen) if flera else ""
+    else:
+        ett = numren[0] if numren else None
+        onskemal = (f"Lärarens önskemål gäller uppgift {ett}: {instruction}"
+                    if ett else f"Lärarens önskemål: {instruction}")
+        pekat = "" if ett else llm_client.malrad(mal)
     kallor = f"{bok.strip()}\n\n" if bok and bok.strip() else ""
     return (
         f"{INSTRUCTION}\n"
@@ -2532,7 +2578,7 @@ def build_refine_prompt(exam: dict, instruction: str,
         "Här är det nuvarande provet:\n"
         f"{json.dumps(exam, ensure_ascii=False)}\n\n"
         f"{llm_client.varvrad(historik)}"
-        f"{'' if nummer else llm_client.malrad(mal)}{onskemal}\n\n"
+        f"{pekat}{onskemal}\n\n"
         "Skriv om HELA provet som JSON med önskemålet genomfört. Övriga "
         "uppgifter lämnas oförändrade. Ändrar du en uppgifts text eller tal "
         "ska uppgiftens losning, bedomning och deluppgifternas lösningar "
@@ -2815,46 +2861,105 @@ _MALETS_FALT = {
 }
 
 
-def riktat_mal(nummer: int | None, mal: dict | None):
+# Uppgiftens eget element-id på bladet (blad.js markera(): `uppg3`). Bokens
+# lösningsark bär med flit ett ANNAT prefix (`bokuppg…`) — dess nummer finns
+# inte i dokumentet — så mönstret är förankrat i båda ändar.
+_UPPG_EL = re.compile(r"^uppg(\d+)$")
+
+
+def riktat_mal(nummer=None, mal: dict | None = None, malen=None):
     """Vad omskrivningen får röra.
 
     ``("uppgift", n)`` — bara uppgift n. ``("falt", nycklar)`` — bara de
     toppnycklarna. ``None`` — hela dokumentet, som förut. Numret vinner över
     elementet: det är precisare, och klienten skickar båda när läraren pekat
-    på en uppgift."""
-    if nummer:
-        return ("uppgift", int(nummer))
-    falt = _MALETS_FALT.get(str((mal or {}).get("el") or "").strip())
-    return ("falt", falt) if falt else None
+    på en uppgift.
+
+    Har läraren markerat FLERA element blir svaret i stället unionen av dem:
+    ``{"uppgifter": [3, 5], "falt": ("titel",)}``. Ett enda okänt id bland dem
+    (betygsgränserna, en tabell, ett avsnitt i anteckningarna) gör hela
+    dokumentet till spelplan igen — precis som ett okänt id gör i enkelfallet.
+    Att låsa till de mål vi RÅKAR känna igen vore värre: önskemålet gällde även
+    det vi inte förstod, och den delen hade tyst fallit bort."""
+    numren = nummerlista(nummer)
+    flera = llm_client.flera_mal(malen)
+    if not flera and len(numren) <= 1:
+        if numren:
+            return ("uppgift", numren[0])
+        falt = _MALETS_FALT.get(str((mal or {}).get("el") or "").strip())
+        return ("falt", falt) if falt else None
+    uppgifter = list(numren)
+    nycklar: list[str] = []
+    for m in flera:
+        el = str(m.get("el") or "").strip()
+        traff = _UPPG_EL.match(el)
+        if traff:
+            n = int(traff.group(1))
+            if n > 0 and n not in uppgifter:
+                uppgifter.append(n)
+            continue
+        egna = _MALETS_FALT.get(el)
+        if not egna:
+            return None
+        for nyckel in egna:
+            if nyckel not in nycklar:
+                nycklar.append(nyckel)
+    if not uppgifter and not nycklar:
+        return None
+    return {"uppgifter": sorted(uppgifter), "falt": tuple(nycklar)}
 
 
-def sammanfoga_riktat(original: dict, kandidat: dict,
-                      riktning) -> tuple[dict | None, str]:
-    """Originalet med kandidatens MÅL inskrivet. ``(dokument, "")`` eller
-    ``(None, skäl)`` när kandidaten inte bär målet alls."""
-    sort, vad = riktning
-    ihop = copy.deepcopy(original)
-    if sort == "uppgift":
-        kandidatens = kandidat.get("uppgifter")
-        egna = ihop.get("uppgifter")
-        if not isinstance(kandidatens, list) or not isinstance(egna, list):
-            return None, "svaret bar inga uppgifter"
-        if not 1 <= vad <= len(kandidatens) or vad > len(egna):
-            return None, f"svaret bar ingen uppgift {vad}"
-        # HELA uppgiften följer med: texten, poängen, deluppgifterna, lösningen
-        # och bedömningen är samma sak sedd från olika håll och hör ihop med
-        # målet. Härledda tal (gränser, summor) räknas om ur poängen där de
-        # visas (exam_spec.kravgranser/poangsummor) och behöver inget eget
-        # bokföringssteg här.
-        egna[vad - 1] = copy.deepcopy(kandidatens[vad - 1])
-        return ihop, ""
-    for nyckel in vad:
+def _skriv_in_uppgift(ihop: dict, kandidat: dict, n: int) -> str:
+    """Kandidatens uppgift n in i `ihop`. "" när det gick, annars skälet."""
+    kandidatens = kandidat.get("uppgifter")
+    egna = ihop.get("uppgifter")
+    if not isinstance(kandidatens, list) or not isinstance(egna, list):
+        return "svaret bar inga uppgifter"
+    if not 1 <= n <= len(kandidatens) or n > len(egna):
+        return f"svaret bar ingen uppgift {n}"
+    # HELA uppgiften följer med: texten, poängen, deluppgifterna, lösningen
+    # och bedömningen är samma sak sedd från olika håll och hör ihop med
+    # målet. Härledda tal (gränser, summor) räknas om ur poängen där de
+    # visas (exam_spec.kravgranser/poangsummor) och behöver inget eget
+    # bokföringssteg här.
+    egna[n - 1] = copy.deepcopy(kandidatens[n - 1])
+    return ""
+
+
+def _skriv_in_falt(ihop: dict, kandidat: dict, nycklar) -> None:
+    for nyckel in nycklar:
         # Bara fält kandidaten FAKTISKT skickade skrivs över. Utelämnar den ett
         # fält är det inget beslut om att ta bort det — och `hjalpmedel` är
         # obligatoriskt, så en utelämning hade gjort dokumentet ogiltigt för att
         # modellen råkade tiga. Ett uttalat null tas däremot på orden.
         if nyckel in kandidat:
             ihop[nyckel] = copy.deepcopy(kandidat[nyckel])
+
+
+def sammanfoga_riktat(original: dict, kandidat: dict,
+                      riktning) -> tuple[dict | None, str]:
+    """Originalet med kandidatens MÅL inskrivet. ``(dokument, "")`` eller
+    ``(None, skäl)`` när kandidaten inte bär målet alls.
+
+    `riktning` är antingen enkelmålets par (``("uppgift", n)`` /
+    ``("falt", nycklar)``) eller flervalets union
+    (``{"uppgifter": [...], "falt": (...)}``). Ett mål som kandidaten inte bär
+    fäller HELA sammanfogningen, också i flervalet: läraren bad om en sak för
+    fem element, och fyra genomförda ändringar av fem är just den halvfärdiga
+    sortens papper som upptäcks framför klassen."""
+    ihop = copy.deepcopy(original)
+    if isinstance(riktning, dict):
+        for n in riktning.get("uppgifter") or ():
+            skal = _skriv_in_uppgift(ihop, kandidat, n)
+            if skal:
+                return None, skal
+        _skriv_in_falt(ihop, kandidat, riktning.get("falt") or ())
+        return ihop, ""
+    sort, vad = riktning
+    if sort == "uppgift":
+        skal = _skriv_in_uppgift(ihop, kandidat, vad)
+        return (None, skal) if skal else (ihop, "")
+    _skriv_in_falt(ihop, kandidat, vad)
     return ihop, ""
 
 
@@ -3116,8 +3221,9 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
 
 
 def refine_exam(exam: dict, instruction: str, *, model: str,
-                nummer: int | None = None, profil: str = "prov",
-                mal: dict | None = None, bok: str = "", historik=None,
+                nummer=None, profil: str = "prov",
+                mal: dict | None = None, malen=None,
+                bok: str = "", historik=None,
                 niva_mal: dict | None = None,
                 llm=llm_client.generate,
                 max_rounds: int = MAX_ROUNDS,
@@ -3127,11 +3233,16 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
     `niva_mal` är dokumentets PERSISTERADE nivåval (exams.nivaval →
     exam_spec.NIVAVAL) — utan det mäts ett «Bara E»-prov mot NP-banden i
     varje varv: nivabalansfel jämt, och riktade ändringar vägras med
-    «ingenting ändrades» fast pappret är precis som läraren bad om det."""
+    «ingenting ändrades» fast pappret är precis som läraren bad om det.
+
+    `nummer` är en int eller en lista av int, och `malen` de element läraren
+    markerat när de är flera — då gäller önskemålet dem alla, och grinden
+    nedan släpper igenom unionen av dem i stället för ett enda mål."""
     log = log_cb or (lambda _m: None)
     log("Uppdaterar provet …")
     candidate = _llm_round(
-        build_refine_prompt(exam, instruction, nummer, mal, bok, historik),
+        build_refine_prompt(exam, instruction, nummer, mal, bok, historik,
+                            malen),
         model, llm, log_cb=log_cb, etikett="Uppdaterar")
     if candidate is None:
         return {"exam": exam,
@@ -3141,7 +3252,7 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
     # Är önskemålet riktat är det bara målet som får resa med tillbaka —
     # se _MALETS_FALT. Valideringen körs på SAMMANFOGNINGEN, för det är den
     # som blir papper.
-    riktning = riktat_mal(nummer, mal)
+    riktning = riktat_mal(nummer, mal, malen)
     if riktning is not None:
         candidate, skal = sammanfoga_riktat(exam, candidate, riktning)
         if candidate is None:

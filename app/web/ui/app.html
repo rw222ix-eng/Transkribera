@@ -1673,7 +1673,11 @@
              egen kodväg, ingen egen prompt. Visas bara när ett element är valt,
              för «Kortare» om HELA pappret är något annat än en snabbknapp. -->
         <div class="gsnabb" id="g-snabb" hidden></div>
-        <div class="gmal" id="g-mal"><span class="gmaltext">Hela dokumentet</span><button class="gmalx" id="g-malx" type="button" aria-label="Välj hela dokumentet i stället" hidden>✕</button></div>
+        <!-- Målrutan bär FLERA val: ett chip per ruta läraren pekat på, med
+             eget kryss. Chipsen ritas av granska.js (ritaMal) — med ett enda
+             val ser raden ut precis som förut, och krysset längst ut tömmer
+             hela urvalet på en gång. -->
+        <div class="gmal" id="g-mal"><span class="gmalchips" id="g-malchips"><span class="gmaltext">Hela dokumentet</span></span><button class="gmalx" id="g-malx" type="button" aria-label="Välj hela dokumentet i stället" hidden>✕</button></div>
         <form class="gform" id="g-form">
           <textarea id="g-falt" rows="2" placeholder="Skriv vad som ska ändras …"></textarea>
           <div class="gformrad">

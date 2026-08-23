@@ -8,10 +8,13 @@
   if (!skal) return;
   const duk = $('#g-duk'), plan = $('#g-plan'), lista = $('#g-lista');
   let vy = { x: 0, y: 0, z: 1 }, valjLage = false, kommentarer = [], nr = 0, host = null, forraOverflow = '';
-  /* Går ett varv just nu? Se `skicka` — ett dokument skrivs om en gång i taget,
-     och medan det pågår är formuläret låst i stället för att skicka en mening
-     som bygger på ett papper som håller på att ändras. */
+  /* Går ett varv just nu? Ett dokument skrivs om en gång i taget: servern låser
+     per dokument och versionerar optimistiskt, så två varv mot samma papper kan
+     aldrig sparas båda. Det läraren skriver medan varvet går hamnar därför i
+     `ko` och avfyras när varvet är över — se KÖN nedan. */
   let skickarNu = false;
+  /* KÖN — lärarens önskemål som väntar på tur, i den ordning hon skrev dem. */
+  let ko = [];
 
   const satVy = () => {
     plan.style.transform = `translate3d(${vy.x}px,${vy.y}px,0) scale(${vy.z})`;
@@ -94,7 +97,17 @@
 
   /* ── elementval och chatt ── */
   const etikett = el => el.dataset.namn || 'Element';
-  let mal = null;
+  /* ── URVALET ───────────────────────────────────────
+     Flera rutor, i den ordning läraren pekade på dem. Förr var det EN ruta och
+     ett klick ersatte den — men önskemålen kommer sällan en ruta i taget. «Gör
+     3 och 5 kortare» blev två varv, två väntor, och två chanser för det andra
+     varvet att skriva om det förstas grund. Nu VÄXLAR klicket rutan i urvalet:
+     ingen modifierartangent, för läraren sitter ofta med pekplatta. */
+  let malen = [];
+  /* Sex är taket, och det är en promptbudget snarare än en teknisk gräns: varje
+     mål bär både sin JSON-text och sin renderade bild, och tio rutor lämnar
+     inget utrymme åt själva önskemålet. */
+  const MAXMAL = 6;
 
   function satValj(pa) {
     valjLage = pa;
@@ -107,12 +120,16 @@
   /* Utan valt element gäller ändringen ARKET man tittar på, inte «dokumentet»:
      provet och lösningsförslaget är två ark i samma canvas, och en ändring i det
      ena är sällan en ändring i det andra. */
-  function arkNamn() {
+  /* Arkets namn, uppslaget på INDEX och inte på vilken flik som råkar vara
+     nedtryckt: en köad post bär arket den skrevs på, och hann läraren byta flik
+     medan den låg i kön ska raden ändå heta det arket den gäller. */
+  function arkNamnFor(i) {
     const a = $('#g-arkval');
     if (!a || a.hidden) return 'Hela dokumentet';
-    const pa = $('button[aria-pressed="true"]', a);
-    return pa ? pa.textContent.trim() : 'Hela dokumentet';
+    const b = $$('button', a)[i || 0];
+    return b ? b.textContent.trim() : 'Hela dokumentet';
   }
+  const arkNamn = () => arkNamnFor(arkIndex());
   /* VILKET ark som ligger framme, som index. Ett dokument utan växlare har
      bara ett ark och är alltid 0. Nålarna, diffen och ögonblicksbilderna
      stämplas med det: uppgiftsarket och facitarket bär SAMMA element-id:n
@@ -143,54 +160,124 @@
      gånger — och det är DEN bilden läraren beskriver när hon skriver «det står
      ett dollartecken mitt i raden». Går med som `mal.renderat`. */
   const renderat = el => (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 600);
-  function satMal(el) {
-    mal = el ? { el: el.dataset.el, namn: etikett(el), text: innehall(el),
-                 renderat: renderat(el) } : null;
-    satSnabb(!!mal);
-    const bred = arkNamn();
-    $('.gmaltext', $('#g-mal')).textContent = mal ? mal.namn : bred;
-    $('#g-mal').toggleAttribute('data-satt', !!mal);
-    $('#g-malx').hidden = !mal;
-    $$('.gdok [data-el]', plan).forEach(x => x.toggleAttribute('data-mal', !!mal && x.dataset.el === mal.el));
-    const f = $('#g-falt');
-    f.placeholder = faltPlaceholder();
-    f.focus({ preventScroll: true });
+  /* Ett mål så som det ser ut i urvalet och i kroppen till servern. */
+  const malAv = el => ({ el: el.dataset.el, namn: etikett(el), text: innehall(el),
+                         renderat: renderat(el) });
+  /* Målrutan: ett chip per vald ruta, med lärarens egen etikett och ett eget
+     kryss. Med ETT val ser raden ut precis som förr — det är först vid två den
+     blir en lista, och `data-flera` är det enda CSS behöver veta om saken. */
+  function ritaMal() {
+    satSnabb(!!malen.length);
+    const ruta = $('#g-mal'), chips = $('#g-malchips');
+    chips.innerHTML = '';
+    if (!malen.length) {
+      const t = document.createElement('span');
+      t.className = 'gmaltext';
+      t.textContent = arkNamn();
+      chips.appendChild(t);
+    } else malen.forEach(m => {
+      const c = document.createElement('span');
+      c.className = 'gmalchip';
+      c.innerHTML = '<span class="gmaltext"></span><button class="gmalkryss" type="button">✕</button>';
+      $('.gmaltext', c).textContent = m.namn;
+      const x = $('.gmalkryss', c);
+      x.setAttribute('aria-label', `Ta bort ${m.namn} ur urvalet`);
+      x.addEventListener('click', () => taBortMal(m.el));
+      chips.appendChild(c);
+    });
+    ruta.toggleAttribute('data-satt', !!malen.length);
+    ruta.toggleAttribute('data-flera', malen.length > 1);
+    $('#g-malx').hidden = !malen.length;
+    markeraMalen();
+    /* Placeholdern går genom skrivläget och inte förbi det: går ett varv, eller
+       väntar en kö, är det «Skriv nästa — läggs i kö» som gäller — inte frågan
+       om urvalet. */
+    ritaFalt();
+    $('#g-falt').focus({ preventScroll: true });
+  }
+  /* `[data-mal]` på ALLA valda rutor — CSS:en är densamma som när det bara
+     kunde vara en. */
+  const markeraMalen = () => $$('.gdok [data-el]', plan).forEach(x =>
+    x.toggleAttribute('data-mal', malen.some(m => m.el === x.dataset.el)));
+  const taBortMal = id => { malen = malen.filter(m => m.el !== id); ritaMal(); };
+  const nollaMal = () => { malen = []; ritaMal(); };
+  function vaxlaMal(el) {
+    const id = el.dataset.el;
+    if (malen.some(m => m.el === id)) return taBortMal(id);
+    /* Taket sägs, det tigs inte bort: ett klick som inte gör något är ett fel
+       läraren letar efter i sin egen hand. */
+    if (malen.length >= MAXMAL) {
+      window.toast && window.toast(`${MAXMAL} rutor är taket — ta bort en först.`);
+      return;
+    }
+    malen.push(malAv(el));
+    ritaMal();
   }
   /* Frågan i fältet, på ett ställe: målrutan sätter den när valet ändras, och
-     låset nedan sätter tillbaka den när varvet är över. */
+     skrivläget nedan sätter tillbaka den när kön är tom. Flera val räknas upp
+     på svenska («Vad ska ändras i uppgift 3 och uppgift 5?») med samma
+     uppräkning och samma bestämda former som svaren i tråden använder. */
   const faltPlaceholder = () =>
-    `Vad ska ändras i ${bestamd(mal ? mal.namn : arkNamn())}?`;
-  /* ── LÅSET MEDAN ETT VARV GÅR ──────────────────────
-     Inte en kö: en kö hade betytt att lärarens andra mening skrivs mot ett
-     papper hon inte sett. Fältet står stilla, knappen säger vad som pågår, och
-     så fort svaret landat är rutan hennes igen. */
-  function satSkickar(pa) {
-    skickarNu = !!pa;
+    `Vad ska ändras i ${malen.length ? raknaUpp(malen.map(m => bestamd(m.namn)))
+                                     : bestamd(arkNamn())}?`;
+  /* ── KÖN, I STÄLLET FÖR ETT LÅS ────────────────────
+     Här stod ett lås: fältet gick i disabled medan varvet gick, med
+     motiveringen att lärarens nästa mening annars skrivs mot ett papper hon
+     inte sett. Det var sant om meningen SKICKATS med en gång — men det är inte
+     det som händer nu. Posten läggs i kö, och när den avfyras läses målens
+     innehåll OM ur färska dokumentet (se korOnskan): meningen möter alltså
+     pappret som det ser ut när den skickas, inte som det såg ut när den skrevs.
+     Och ångra/gör om är låsta så länge något står i kön, så basen under den kan
+     inte dras undan.
+     Parallellt vore fel form av samma skäl som förut: servern låser per
+     dokument och versionerar optimistiskt, så av två varv mot samma papper kan
+     bara det ena sparas. Kön är den ärliga formen. */
+  function satSkickar(pa) { skickarNu = !!pa; ritaSkrivlage(); }
+  /* Varvet är över — hur det än slutade. Historikens knappar släpps HELT ett
+     ögonblick, så att plan.js (ritaHistorik) hinner räkna om deras eget läge
+     innan nästa post ur kön låser dem igen med rätt värde sparat. */
+  function varvetOver() { skickarNu = false; slappHistorik(); ritaFalt(); }
+  function ritaSkrivlage() { ritaFalt(); satHistoriklas(); }
+  function ritaFalt() {
+    const koar = skickarNu || ko.length > 0;
     const form = $('#g-form');
     if (form) form.toggleAttribute('data-vantar', skickarNu);
     const f = $('#g-falt');
     if (f) {
-      f.disabled = skickarNu;
-      f.placeholder = skickarNu
-        ? 'Ett varv i taget — pappret skrivs om just nu …' : faltPlaceholder();
+      /* ALDRIG disabled. En låst ruta är en tanke som tappas bort. */
+      f.disabled = false;
+      f.placeholder = koar ? 'Skriv nästa — läggs i kö' : faltPlaceholder();
     }
     const knapp = form && $('button[type="submit"]', form);
     if (knapp) {
-      knapp.disabled = skickarNu;
-      knapp.textContent = skickarNu ? 'Skriver …' : 'Ändra';
+      knapp.disabled = false;
+      knapp.textContent = koar ? 'Lägg i kö' : 'Ändra';
     }
-    $$('.gsnabbknapp').forEach(b => { b.disabled = skickarNu; });
-    /* Ångra/gör om låses också: backar läraren mitt i ett varv byggs svaret
-       in i fel bas — servern skrev om den version som var framme när
-       meningen skickades, inte den hon backat till. */
+    $$('.gsnabbknapp').forEach(b => { b.disabled = false; });
+  }
+  /* Ångra/gör om är låsta så länge det finns något som ska skrivas — ett varv
+     som går ELLER en kö som väntar. Backar läraren mitt i byggs nästa post på
+     en bas hon just kastat: servern skriver om den version som ligger framme
+     när posten avfyras, inte den hon såg när hon skrev meningen.
+     Knapparnas EGET läge (plan.js vet om det finns något att ångra) sparas
+     undan medan låset sitter och lämnas tillbaka efteråt. */
+  function satHistoriklas() {
+    if (!(skickarNu || ko.length)) return slappHistorik();
     ['#g-angra', '#g-gorom'].forEach(id => {
       const b = $(id);
       if (!b) return;
-      if (skickarNu) { b.dataset.lastVarv = b.disabled ? '' : '1'; b.disabled = true; }
-      else if (b.dataset.lastVarv !== undefined) {
-        if (b.dataset.lastVarv === '1') b.disabled = false;
-        delete b.dataset.lastVarv;
-      }
+      /* Bara FÖRSTA låsningen sparar undan läget — kön låser om och om igen,
+         och en andra sparning hade sparat vårt eget lås. */
+      if (b.dataset.lastVarv === undefined) b.dataset.lastVarv = b.disabled ? '' : '1';
+      b.disabled = true;
+    });
+  }
+  function slappHistorik() {
+    ['#g-angra', '#g-gorom'].forEach(id => {
+      const b = $(id);
+      if (!b || b.dataset.lastVarv === undefined) return;
+      b.disabled = b.dataset.lastVarv !== '1';
+      delete b.dataset.lastVarv;
     });
   }
   /* ── SNABBKNAPPARNA ───────────────────────────────────────
@@ -231,16 +318,17 @@
   function satSnabb(pa) {
     if (snabbrad) snabbrad.hidden = !pa;
   }
-  $('#g-malx').addEventListener('click', () => satMal(null));
+  $('#g-malx').addEventListener('click', () => nollaMal());
   plan.addEventListener('click', e => {
     if (!valjLage) return;
     const el = e.target.closest('[data-el]');
     if (!el) return;
     e.stopPropagation();
-    /* Samma element igen betyder «inte det här heller». Utan det satt
-       markeringen kvar hur mycket man än klickade, och enda vägen ur den var
-       krysset i målrutan — som man ska behöva hitta först. */
-    satMal(mal && mal.el === el.dataset.el ? null : el);
+    /* Klicket VÄXLAR: en ny ruta läggs till urvalet, samma ruta igen betyder
+       «inte den här heller». Utan växlingen satt markeringen kvar hur mycket
+       man än klickade, och enda vägen ur den var krysset i målrutan — som man
+       ska behöva hitta först. */
+    vaxlaMal(el);
   });
 
   /* en nål per skickad ändring, numrerad i trådens ordning — och bara på det
@@ -420,8 +508,8 @@
   }
   /* Vad panelen SÄGER att som hände, byggt ur serverns diff. Se kommentaren
      vid `svar:` nedan — det här är hela poängen med den. */
-  function svarText(post, text, res) {
-    const gjort = `Skrivet om. ${post.namn} följer nu ”${text.trim()}” — ändringen är markerad i pappret.`;
+  function svarText(post, res) {
+    const gjort = `Skrivet om. ${post.namn} följer nu ”${post.text}” — ändringen är markerad i pappret.`;
     /* `Array.isArray` och inte sanningsvärde: en TOM lista är ett svar
        («ingenting på pappret ändrades»), inte ett saknat fält. Samma regel som
        plan.js iterera följer när den avgör vilka rutor som märks. */
@@ -433,7 +521,10 @@
         ? `Ingenting på pappret ändrades: ${skal} ${post.namn} står alltså kvar som förut — formulera om önskemålet, eller låt det stå.`
         : `Ingenting på pappret ändrades. ${post.namn} står kvar som förut — säg gärna vad som ska stå i stället, eller peka på en annan del av pappret.`;
     }
-    if (!post.el || sagt.includes(post.el)) return gjort;
+    /* NÅGOT av målen räcker: pekade läraren på tre rutor och servern skrev om
+       en av dem är önskemålet uppfyllt i den mån det gick, och «ingenting av
+       ditt ändrades» hade varit fel besked. */
+    if (!post.elen.length || post.elen.some(id => sagt.includes(id))) return gjort;
     /* Servern ändrade något — men inte det läraren pekade på. Då är det den
        skillnaden som är beskedet, och inget annat. */
     const namn = [...new Set(sagt.map(namnFor).filter(Boolean))];
@@ -442,44 +533,186 @@
       : `${post.namn} står kvar oförändrad. Något annat på pappret skrevs om i stället, och det är markerat.`;
   }
 
+  /* Vad varvet HETER — i tråden, i jobbtexten och i svaren: rutornas egna
+     etiketter, uppräknade på svenska. Utan valda rutor är det arket som gäller,
+     och det slås upp på postens eget ark (se arkNamnFor). */
+  const malNamn = (mal, ark) => mal.length ? raknaUpp(mal.map(m => m.namn)) : arkNamnFor(ark);
+
+  /* ── EN POST BLIR TILL ──────────────────────────────
+     Vad posten bär med sig: meningen, målens id och etiketter, och arket de
+     valdes på. Innehållet står med flit inte här — det läses om när posten
+     avfyras (korOnskan). Texten som fångades när läraren skrev meningen följer
+     ändå med som reserv, för det enda fall där avläsningen inte går att lita
+     på: att hon hunnit byta ark. */
   function skicka(text) {
     if (!text.trim()) return;
-    /* ── ETT VARV I TAGET ──────────────────────────────
-       Två meningar efter varandra blev två omskrivningar av SAMMA text: båda
-       läste dokumentet innan någon sparat, och den som kom sist vann. Den
-       förstas ändring fanns sedan varken på pappret eller i ångra-historiken.
-       Servern säger numera nej (409), men ett nej läraren aldrig borde få se
-       är ett sämre svar än en ruta som väntar: fältet är låst medan varvet går,
-       och det står varför. */
-    if (skickarNu) return;
-    const fore = ogonblick(), foreArk = arkIndex();
+    const onskan = { text: text.trim(), ark: arkIndex(),
+                     mal: malen.map(m => Object.assign({}, m)) };
+    /* Urvalet nollställs så fort meningen är avskickad — nästa klick och nästa
+       mening börjar rent, precis som förut. */
+    nollaMal();
+    /* Går ett varv, eller står redan något i kön? Då bakom det. FIFO: läraren
+       skrev meningarna i en ordning, och den ordningen är hennes. */
+    if (skickarNu || ko.length) return koa(onskan);
+    korOnskan(onskan);
+  }
+
+  /* Raden i tråden. Byggs EN gång — en köad post och det varv den blir är samma
+     rad, den dubbleras inte när turen kommer. */
+  function nyRad(onskan) {
+    const rad = document.createElement('div');
+    rad.className = 'gvarv';
+    rad.innerHTML = '<div class="gvarvhuvud"></div><p class="gfraga"></p><div class="gsvar"></div>';
+    $('.gfraga', rad).textContent = onskan.text;
     const tom = $('#g-tom');
     if (tom) tom.hidden = true;
+    lista.appendChild(rad);
+    onskan.rad = rad;
+    (window.rullaLada || ((b, y) => { b.scrollTop = y; }))(lista, lista.scrollHeight);
+    return rad;
+  }
+  /* En köad post syns MED EN GÅNG: en dämpad rad med sitt läge i stället för
+     ett nummer. Numret får den när den avfyras, för det är då den blir en
+     ändring — och först då räknas den i «3 ändringar». */
+  function koa(onskan) {
+    const rad = nyRad(onskan);
+    rad.setAttribute('data-i-ko', '');
+    $('.gvarvhuvud', rad).innerHTML = '<span class="gkonot">I kö</span><span class="gvarvel"></span><button class="gkokryss" type="button" aria-label="Ta bort ur kön">✕</button>';
+    $('.gvarvel', rad).textContent = malNamn(onskan.mal, onskan.ark);
+    $('.gkokryss', rad).addEventListener('click', ev => { ev.stopPropagation(); taUrKo(onskan); });
+    /* Klick på raden lägger tillbaka meningen — OCH urvalet — i skrivrutan och
+       tar posten ur kön: redigera och skicka om. Att bara lämna tillbaka texten
+       hade tappat rutorna hon pekat ut, och nästa Enter hade gällt hela arket i
+       stället utan att någon sagt det. Vakten mot `data-i-ko` behövs för att
+       raden lever vidare som varvets egen rad, med sin egen klicklyssnare. */
+    rad.addEventListener('click', () => {
+      if (!rad.hasAttribute('data-i-ko')) return;
+      taUrKo(onskan);
+      aterta(onskan);
+    });
+    ko.push(onskan);
+    ritaSkrivlage();
+  }
+  function taUrKo(onskan) {
+    ko = ko.filter(x => x !== onskan);
+    if (onskan.rad) onskan.rad.remove();
+    ritaSkrivlage();
+    /* Tog hon bort det enda som stod i tråden är tråden tom igen — och då ska
+       raden som förklarar canvasen stå där, precis som när pappret öppnades. */
+    if (!$('.gvarv', lista) && $('#g-tom')) $('#g-tom').hidden = false;
+  }
+  function aterta(onskan) {
+    const f = $('#g-falt');
+    f.value = onskan.text;
+    /* Rutor som hunnit försvinna ur pappret återtas inte — de finns inte att
+       peka på längre. Ligger ett ANNAT ark framme går urvalet tillbaka orört:
+       arken bär samma id:n, och en kontroll här hade läst fel papper. */
+    malen = (onskan.ark || 0) !== arkIndex() ? onskan.mal.slice(0, MAXMAL)
+      : onskan.mal.filter(m => $(`.gdok [data-el="${m.el}"]`, plan)).slice(0, MAXMAL);
+    ritaMal();
+    f.style.height = 'auto';
+    f.style.height = Math.min(120, f.scrollHeight) + 'px';
+    f.focus({ preventScroll: true });
+    f.setSelectionRange(f.value.length, f.value.length);
+  }
+
+  /* ── AVFYRNING ─────────────────────────────────────
+     Här läses målen OM ur pappret. Posten kan ha legat i kö medan ett annat
+     varv skrev om dokumentet, och då är texten läraren såg när hon skrev
+     meningen inte längre den som står där. Id:na är stabila över omritningar
+     (blad.js markera() sätter samma id varje varv), så rutan går att hitta
+     igen — det är innehållet som ska hämtas på nytt. */
+  function korOnskan(onskan) {
+    const sammaArk = (onskan.ark || 0) === arkIndex();
+    const funna = [], borta = [];
+    onskan.mal.forEach(m => {
+      /* Fel ark framme? Då går texten som lästes när meningen skrevs. Provet
+         och lösningsförslaget bär SAMMA id:n (uppg3 finns på båda), så en
+         avläsning här hade skickat facitets text som om den var provets — och
+         en ruta som «saknas» hade bara saknats på fel papper. */
+      if (!sammaArk) return funna.push(m);
+      const el = $(`.gdok [data-el="${m.el}"]`, plan);
+      if (!el) return borta.push(m);
+      funna.push(malAv(el));
+    });
+    /* Ett mål som försvunnit droppas, men de andra går: läraren bad om något
+       för var och en av rutorna, och att slänga hela önskemålet för att en av
+       tre är borta är att kasta två uppfyllbara önskemål. */
+    if (onskan.mal.length && !funna.length) return bortaRad(onskan, borta);
+    kor(onskan, funna);
+  }
+  /* Alla rutorna borta — då finns önskemålet inte att uppfylla. Att skicka det
+     ändå hade betytt att modellen skriver om något annat och att panelen kallar
+     det gjort. Raden säger vad som hände i stället, och räknas inte som en
+     ändring: ingen ändring skedde. */
+  function bortaRad(onskan, borta) {
+    const rad = onskan.rad || nyRad(onskan);
+    rad.removeAttribute('data-i-ko');
+    rad.setAttribute('data-borta', '');
+    const namn = raknaUpp(borta.map(m => m.namn));
+    $('.gvarvhuvud', rad).innerHTML = '<span class="gkonot">Togs bort</span><span class="gvarvel"></span>';
+    $('.gvarvel', rad).textContent = namn;
+    const p = document.createElement('p');
+    p.className = 'gbortatext';
+    p.textContent = `${namn} finns inte längre på pappret — önskemålet togs bort.`;
+    $('.gsvar', rad).appendChild(p);
+    (window.rullaLada || ((b, y) => { b.scrollTop = y; }))(lista, lista.scrollHeight);
+    naste(null, 0);
+  }
+  /* Nästa post ur kön — FIFO, och först när pappret ritats om. Målen läses om
+     vid avfyrningen, och en avfyrning i samma andetag som svaret hade läst den
+     GAMLA texten: omritningen sker ett ögonblick senare. Samma väntan som
+     diffen gör, med samma tak — ritas ingenting om (servern ändrade inget)
+     skickas posten ändå. Timer och inte bildrutor: i en bakgrundsflik ritas
+     inga bildrutor alls, och en kö som stannar för att läraren tittade i en
+     annan flik är värre än en som skickar en aning för tidigt. */
+  function naste(fore, n) {
+    if (skickarNu || !ko.length) return;
+    if (fore && (n || 0) < 40 && !nagotAndrat(fore)) {
+      return setTimeout(() => naste(fore, (n || 0) + 1), 30);
+    }
+    const onskan = ko.shift();
+    if (onskan.rad) onskan.rad.removeAttribute('data-i-ko');
+    ritaFalt();
+    korOnskan(onskan);
+  }
+  const nagotAndrat = fore => {
+    const efter = ogonblick();
+    return Object.keys(efter).some(id => fore[id] !== undefined && fore[id] !== efter[id]);
+  };
+
+  function kor(onskan, funna) {
+    const fore = ogonblick(), foreArk = arkIndex();
     nr++;
-    const post = { id: nr, el: mal ? mal.el : '', namn: mal ? mal.namn : arkNamn(),
+    const post = { id: nr,
                    /* Vilket ARK önskemålet gällde. Provet och lösningsförslaget
                       bär samma id:n (uppg3 finns på båda), så en nål utan ark
                       hamnade på det ark som råkade ligga framme. */
-                   ark: foreArk,
-                   /* Vad elementet FAKTISKT innehåller. Följer med till servern
-                      så att omskrivningen gäller det läraren pekade på. */
-                   innehall: mal ? mal.text : '',
-                   renderat: mal ? mal.renderat : '', text };
+                   ark: onskan.ark || 0,
+                   /* `el` är FÖRSTA målet och står kvar för nålarnas och
+                      hovringens skull — `elen` är alla, och det är den listan
+                      koden nedan går på. */
+                   el: funna.length ? funna[0].el : '',
+                   elen: funna.map(m => m.el),
+                   namn: malNamn(funna, onskan.ark),
+                   /* Vad rutorna FAKTISKT innehåller, läst nyss. Följer med
+                      till servern så att omskrivningen gäller det läraren
+                      pekade på. */
+                   malen: funna, text: onskan.text };
     kommentarer.push(post);
-    const varv = document.createElement('div');
-    varv.className = 'gvarv';
+    const varv = onskan.rad || nyRad(onskan);
+    varv.removeAttribute('data-i-ko');
     varv.dataset.id = String(nr);
-    varv.innerHTML = `<div class="gvarvhuvud"><span class="gnotnr">${nr}</span><span class="gvarvel"></span></div><p class="gfraga"></p><div class="gsvar"></div>`;
+    $('.gvarvhuvud', varv).innerHTML = '<span class="gnotnr"></span><span class="gvarvel"></span>';
+    $('.gnotnr', varv).textContent = String(nr);
     $('.gvarvel', varv).textContent = post.namn;
-    $('.gfraga', varv).textContent = text;
-    /* hovra ett meddelande — elementet lyser upp i pappret, men bara när det
-       är dess eget ark som ligger framme */
-    const pekbart = () => (post.ark || 0) === arkIndex();
-    varv.addEventListener('pointerenter', () => pekbart() && markera(post.el, true));
-    varv.addEventListener('pointerleave', () => markera(post.el, false));
+    /* hovra ett meddelande — ALLA dess element lyser upp i pappret, men bara när
+       det är deras eget ark som ligger framme */
+    const pekbart = () => post.ark === arkIndex();
+    varv.addEventListener('pointerenter', () => pekbart() && post.elen.forEach(id => markera(id, true)));
+    varv.addEventListener('pointerleave', () => post.elen.forEach(id => markera(id, false)));
     varv.addEventListener('click', () => fokusera(post.id));
-    lista.appendChild(varv);
-    if (post.el) satNal(post.el, nr, post.ark);
+    post.elen.forEach(id => satNal(id, post.id, post.ark));
     (window.rullaLada || ((b, y) => { b.scrollTop = y; }))(lista, lista.scrollHeight);
 
     window.Fraga.kor($('.gsvar', varv), {
@@ -495,9 +728,12 @@
          i plan.js: det är granskningen som håller samtalet. Den nya meningen är
          redan påskjuten, så den räknas bort — den står som önskemål längre ner
          i prompten och ska inte också stå som «redan gjort». */
-      jobb: host && host.onJobb ? k => host.onJobb(text, post.namn, post.el, k,
-        post.el ? { el: post.el, namn: post.namn, innehall: post.innehall,
-                    renderat: post.renderat } : null,
+      /* MÅLEN är en LISTA sedan flervalet — plan.js avgör formen på kroppen ur
+         den: ett mål ger exakt dagens kropp (kassetterna hänger på det), flera
+         ger `malen` därutöver. Tom lista = önskemålet gäller hela arket. */
+      jobb: host && host.onJobb ? k => host.onJobb(post.text, post.namn, post.elen, k,
+        post.malen.map(m => ({ el: m.el, namn: m.namn, innehall: m.text,
+                               renderat: m.renderat })),
         kommentarer.filter(x => x.id !== post.id).map(x => x.text))
         /* Inget riktigt anrop — prototypen, eller ett papper appen skrev själv.
            Då är väntan prototypens egen, precis som förut. */
@@ -515,19 +751,26 @@
          den är TOM. Saknas fältet — prototypens papper, gamla utkast,
          kassettsvar — står dagens fras kvar; den är inte sann, men det är det
          enda vi vet där, och att börja gissa åt andra hållet vore lika illa. */
-      svar: res => svarText(post, text, res),
+      svar: res => svarText(post, res),
       efterKlar: (_el, res) => {
-        satSkickar(false);
-        if (host && host.onAndra) host.onAndra(text, post.namn, post.el, res);
+        /* Ordningen är inte fri. Varvet släpps FÖRST (historikens knappar får
+           tillbaka sitt eget läge), sedan tillämpas svaret — då räknar plan.js
+           om vad som går att ångra — och SIST går nästa post ur kön, som låser
+           igen med det nyss uträknade läget sparat. */
+        varvetOver();
+        if (host && host.onAndra) host.onAndra(post.text, post.namn, post.elen, res);
         vantaDiff(varv, fore, 0, foreArk);
         (window.rullaLada || ((b, y) => { b.scrollTop = y; }))(lista, lista.scrollHeight);
-        fokusera(nr);
+        fokusera(post.id);
+        naste(fore, 0);
       },
-      /* Låset släpps oavsett hur varvet slutade: klart, fel eller avbrutet. En
+      /* Varvet släpps oavsett hur det slutade: klart, fel eller avbrutet. En
          ruta som står låst för att servern svarade fel är ett andra fel ovanpå
-         det första. */
-      efterFel: () => satSkickar(false),
-      efterStopp: () => satSkickar(false)
+         det första — och kön ska rulla vidare, för nästa önskemål kan mycket
+         väl vara det som går igenom. Avbryt-knappen på det AKTIVA varvet rör
+         bara det varvet; kön står kvar (kryssen tar posterna en och en). */
+      efterFel: () => { varvetOver(); naste(null, 0); },
+      efterStopp: () => { varvetOver(); naste(null, 0); }
     });
     satSkickar(true);
     $('#g-antal').textContent = kommentarer.length === 1 ? '1 ändring' : `${kommentarer.length} ändringar`;
@@ -547,7 +790,9 @@
   $('#g-falt').addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#g-form').requestSubmit(); }
   });
-  $('#g-bild').addEventListener('click', () => { if (host && host.onBild) host.onBild(mal ? mal.el : 'rubrik'); });
+  /* Bilden hör till EN ruta — den läggs på ett ställe i pappret. Med flera valda
+     är det den första, alltså den läraren pekade på först. */
+  $('#g-bild').addEventListener('click', () => { if (host && host.onBild) host.onBild(malen.length ? malen[0].el : 'rubrik'); });
 
   /* ── öppna och stäng ── */
   /* Provet och lösningsförslaget är två ark av samma dokument — växlaren
@@ -558,7 +803,10 @@
     if (host && host.ark && host.ark.byt) host.ark.byt(j);
     /* Byter man ark byter också det man skriver om — elementvalet hörde till
        det förra arket. */
-    satMal(null);
+    nollaMal();
+    /* Arkbytet ritar om dokumentet, och plan.js räknar då om historikknapparna
+       ur versionslistan — utan att veta om kön. Låset sätts tillbaka här. */
+    satHistoriklas();
   }));
   function satArkval(ark) {
     arkval.hidden = !(ark && ark.tva);
@@ -567,7 +815,7 @@
       b.textContent = (ark.namn || ['Provet', 'Bedömningsanvisning'])[j];
       b.setAttribute('aria-pressed', String(j === (ark.vald || 0)));
     });
-    if (!mal) satMal(null);
+    if (!malen.length) ritaMal();
   }
 
   function oppna(o) {
@@ -583,15 +831,17 @@
     if (window.Prickar) window.Prickar.pa(klon);
     $('#g-titel').textContent = o.titel || 'Utkast';
     $('#g-meta').textContent = o.meta || '';
-    kommentarer = []; nr = 0; mal = null; senaste = { varv: 0, ark: 0, par: {} };
+    kommentarer = []; nr = 0; malen = []; senaste = { varv: 0, ark: 0, par: {} };
     satSnabb(false);          // nytt papper, inget element valt än
-    /* Nytt papper, nytt lås. Ett varv som fortfarande går hör till det förra
-       pappret — plan.js slänger dess svar (se sammaPapper där). */
+    /* Nytt papper, tom kö. Ett varv som fortfarande går hör till det förra
+       pappret — plan.js slänger dess svar (se sammaPapper där) — och de köade
+       önskemålen gällde rutor på ett papper som inte ligger framme längre. */
+    ko = [];
     satSkickar(false);
     $$('.gvarv', lista).forEach(v => v.remove());
     $('#g-tom').hidden = false;
     $('#g-antal').textContent = 'Inga ändringar än';
-    satMal(null);
+    ritaMal();
     satValj(false);
     ritaUnderlag();
     skal.hidden = false;
@@ -645,8 +895,8 @@
       const post = kommentarer.find(k => k.id === Number(v.dataset.id));
       /* Arket måste stämma: uppg3 finns på båda arken, och att hovra facitets
          uppgift 3 lyste annars upp en kommentar som gällde provets. */
-      v.toggleAttribute('data-pekad', !!(el && post && post.el === el.dataset.el
-        && (post.ark || 0) === ark));
+      v.toggleAttribute('data-pekad', !!(el && post
+        && post.elen.includes(el.dataset.el) && (post.ark || 0) === ark));
     });
   });
   plan.addEventListener('pointerleave', () => $$('.gvarv', lista).forEach(v => v.removeAttribute('data-pekad')));
@@ -668,8 +918,8 @@
     /* Nålarna sätts tillbaka på SITT ark. Raden satte förut alla nålar på det
        ark som råkade ritas, så ett byte till lösningsförslaget flyttade dit
        hela trådens markeringar — och de pekade på uppgifter ingen kommenterat. */
-    kommentarer.forEach(k => { if (k.el) satNal(k.el, k.id, k.ark); });
-    if (mal) $$('.gdok [data-el]', plan).forEach(x => x.toggleAttribute('data-mal', x.dataset.el === mal.el));
+    kommentarer.forEach(k => k.elen.forEach(id => satNal(id, k.id, k.ark)));
+    markeraMalen();
     satVy();
   }
   /* Vad prickarna i pappret behöver av granskningen: paret att visa, och vägen
@@ -690,6 +940,9 @@
   }
   window.Granska = { oppna, stang, sattOm, diffFor, visaVarv,
                      get oppen() { return !skal.hidden; },
+                     /* Kön utåt, som text: e2e ska kunna fråga vad som väntar
+                        utan att gräva i panelens DOM. */
+                     get koad() { return ko.map(x => x.text); },
                      get senasteVarv() { return senaste.varv; },
                      get kommentarer() { return kommentarer; } };
 })();

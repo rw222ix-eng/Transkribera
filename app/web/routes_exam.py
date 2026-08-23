@@ -25,7 +25,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from app import (ci_profil, course_data, db, dokumentdiff, exam_gen,
-                 exam_latex, exam_pdf, exam_spec, gpu_arbiter, platar, tryck)
+                 exam_latex, exam_pdf, exam_spec, gpu_arbiter, llm_client,
+                 platar, tryck)
 from app.web import routes_planning
 from app.web.sse import sse_response
 
@@ -649,11 +650,21 @@ def create_router(base: Path, arbiter) -> APIRouter:
         if not message:
             return JSONResponse({"error": "skriv vad som ska ändras"},
                                 status_code=400)
-        nummer = body.get("nummer")
+        # `nummer` är en int när läraren pekat på EN uppgift och en lista när
+        # hon markerat flera. Läses genom samma sil i båda fallen — ett rått
+        # int() på klientens värde blev en 500 så fort något annat kom in — och
+        # ETT nummer skickas vidare som int, precis som förut.
+        nummer = exam_gen.nummerlista(body.get("nummer")) or None
         # Elementet läraren pekade på när det INTE är en uppgift: sidhuvudet,
         # instruktionen, en post i facit (llm_client.malrad). Bär önskemålet ett
         # uppgiftsnummer är det numret som gäller — det är precisare.
         mal = body.get("mal") if isinstance(body.get("mal"), dict) else None
+        # FLERVALET: läraren kan markera flera element i canvasen och skicka ETT
+        # önskemål för dem alla. `malen` följer med bara då (klienten skickar
+        # exakt dagens payload vid ett mål), och silen släpper igenom den bara
+        # när den bär minst två mål — högst sex, med fälten kapade som `mal`
+        # kapas i prompten. Enkelmålsvägen blir därmed byte för byte som förut.
+        malen = llm_client.flera_mal(body.get("malen")) or None
         # Bokdörren följer med omskrivningen som med genereringen: sidorna,
         # uppgiftsnumren och lärarens urval — och SAMMA urval som skrivningen
         # fick, annars byter modellen bok mitt i arbetspasset. Läser inga sidor.
@@ -737,7 +748,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     raise RuntimeError("Språkmodellen är inte installerad.")
                 res = exam_gen.refine_exam(
                     view["exam"], message, model=_model_name(),
-                    nummer=int(nummer) if nummer else None, mal=mal,
+                    nummer=nummer[0] if nummer and len(nummer) == 1 else nummer,
+                    mal=mal, malen=malen,
                     bok=bok_block, historik=historik,
                     profil=view.get("typ") or "prov",
                     niva_mal=nivaval["mal"] if nivaval else None,

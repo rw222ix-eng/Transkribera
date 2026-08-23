@@ -374,10 +374,15 @@ def build_repair_prompt(notes: dict, problems: list) -> str:
 
 def build_refine_prompt(notes: dict, instruction: str,
                         mal: dict | None = None, bok: str = "",
-                        historik=None) -> str:
+                        historik=None, malen=None) -> str:
     """`mal` är avsnittet läraren pekade på i granskningen (llm_client.malrad),
     `bok` bokdörrens block — sidorna och lärarens uppgiftsurval, och `historik`
-    lärarens tidigare önskemål för utkastet (llm_client.varvrad)."""
+    lärarens tidigare önskemål för utkastet (llm_client.varvrad).
+
+    `malen` är flervalet: markerar läraren flera avsnitt gäller önskemålet dem
+    alla. Anteckningarna har inget mål-lås (prompten är hela löftet, som på
+    tavlan), så flervalet syns bara i målraden. Ett ensamt mål ger exakt samma
+    prompt som förut."""
     kallor = f"{bok.strip()}\n\n" if bok and bok.strip() else ""
     return (
         f"{INSTRUCTION}\n"
@@ -385,7 +390,7 @@ def build_refine_prompt(notes: dict, instruction: str,
         "Här är de nuvarande anteckningarna:\n"
         f"{json.dumps(notes, ensure_ascii=False)}\n\n"
         f"{llm_client.varvrad(historik)}"
-        f"{llm_client.malrad(mal)}Lärarens önskemål: {instruction}\n\n"
+        f"{llm_client.malrad(mal, malen)}Lärarens önskemål: {instruction}\n\n"
         "Skriv om HELA pappret som JSON med önskemålet genomfört. Ändra så "
         "lite som möjligt i övrigt. Svara med enbart JSON."
     )
@@ -481,15 +486,18 @@ def generate_notes(kurs: str, klass: str, moment: str, *, model: str,
 
 
 def refine_notes(notes: dict, instruction: str, *, model: str,
-                 mal: dict | None = None, bok: str = "", historik=None,
+                 mal: dict | None = None, malen=None,
+                 bok: str = "", historik=None,
                  llm=llm_client.generate, max_rounds: int = MAX_ROUNDS,
                  log_cb: Callable[[str], None] | None = None,
                  token_cb: Callable[[str], None] | None = None) -> dict:
-    """Chatt-iteration: «lägg till en rad om miniräknarna»."""
+    """Chatt-iteration: «lägg till en rad om miniräknarna».
+
+    `malen` är avsnitten läraren markerat när de är flera (llm_client.malrad)."""
     log = log_cb or (lambda _m: None)
     log("Uppdaterar anteckningarna …")
     kandidat = _llm_round(
-        build_refine_prompt(notes, instruction, mal, bok, historik),
+        build_refine_prompt(notes, instruction, mal, bok, historik, malen),
         model, llm, token_cb=token_cb)
     if kandidat is None:
         return {"notes": notes,

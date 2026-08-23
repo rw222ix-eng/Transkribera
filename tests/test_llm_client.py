@@ -182,6 +182,77 @@ def test_malraden_klarar_ett_mal_som_bara_har_skarmtext():
     assert lc.malrad({"namn": "", "innehall": "", "renderat": "x"}) != ""
 
 
+# ── Flera element i samma önskemål ──────────────────────────────────────────
+# Läraren markerar uppgift 3 och uppgift 5 och skriver en mening för båda.
+# Raden byter form först vid TVÅ mål: ett mål ska ge exakt samma text som förut,
+# byte för byte, för sviten spelar upp inspelade svar nycklade på prompten.
+
+def test_malraden_raknar_upp_flera_mal():
+    rad = lc.malrad(None, [{"el": "uppg3", "namn": "Uppgift 3",
+                            "innehall": "Beräkna arean."},
+                           {"el": "uppg5", "namn": "Uppgift 5",
+                            "innehall": "Lös ekvationen."}])
+    assert "PEKADE PÅ «Uppgift 3» och «Uppgift 5»" in rad
+    assert "1. «Uppgift 3»" in rad and "2. «Uppgift 5»" in rad
+    assert "Beräkna arean." in rad and "Lös ekvationen." in rad
+    # Löftet är hårt åt båda håll: alla målen ändras, resten står stilla.
+    assert "ALLA de elementen" in rad
+    assert "låt allt annat i dokumentet stå oförändrat" in rad
+
+
+def test_malraden_med_ett_enda_mal_ar_orord():
+    mal = {"el": "rubrik", "namn": "Sidhuvudet", "innehall": "Ma2b · SA23"}
+    forut = lc.malrad(mal)
+    assert lc.malrad(mal, None) == forut
+    assert lc.malrad(mal, []) == forut
+    assert lc.malrad(mal, [mal]) == forut          # en lista med ETT mål
+    assert "flera element" not in forut
+
+
+def test_flervalet_borjar_vid_tva_mal_och_slutar_vid_sex():
+    assert lc.flera_mal([{"namn": "Uppgift 3"}]) == []
+    assert lc.flera_mal("Uppgift 3") == [] and lc.flera_mal(None) == []
+    assert len(lc.flera_mal([{"namn": f"Uppgift {i}"} for i in range(1, 10)])) \
+        == lc.MAX_MALEN
+    # Skräp i listan tas bort, och ett mål som bara bär sitt id får vara kvar:
+    # id:t är det servern låser omskrivningen med (exam_gen.riktat_mal).
+    assert [m["el"] for m in lc.flera_mal([{"el": "uppg3"}, "x", None,
+                                           {"namn": "Sidhuvudet"}])] \
+        == ["uppg3", ""]
+
+
+def test_flervalet_kapar_falten_som_prompten_kapar_dem():
+    malen = lc.flera_mal([{"namn": "Blocket", "innehall": "x" * 900,
+                           "renderat": "y" * 900},
+                          {"namn": "Rutan", "innehall": "kort"}])
+    assert len(malen[0]["innehall"]) == 300
+    assert len(malen[0]["renderat"]) == 600
+    rad = lc.malrad(None, malen)
+    assert "x" * 300 in rad and "x" * 301 not in rad
+
+
+def test_skarmtexten_forklaras_en_gang_for_alla_malen():
+    """Förklaringen handlar om sättningen, inte om det enskilda elementet.
+    Sex kopior av samma stycke är sex gånger promptutrymme för en upplysning."""
+    rad = lc.malrad(None, [{"namn": "Formel 1", "innehall": "$x^2$",
+                            "renderat": "x2 x^2"},
+                           {"namn": "Formel 2", "innehall": "$y^2$",
+                            "renderat": "y2 y^2"}])
+    assert rad.count("STÅR PÅ SKÄRMEN") == 1
+    assert "x2 x^2" in rad and "y2 y^2" in rad
+    # Säger skärmtexten inget nytt står den inte med alls.
+    utan = lc.malrad(None, [{"namn": "Ett", "innehall": "lika", "renderat": "lika"},
+                            {"namn": "Två", "innehall": "annat"}])
+    assert "SKÄRMEN" not in utan
+
+
+def test_uppradningen_ar_en_svensk_mening():
+    assert lc.uppradning(["a"]) == "a"
+    assert lc.uppradning(["a", "b"]) == "a och b"
+    assert lc.uppradning(["a", "b", "c"]) == "a, b och c"
+    assert lc.uppradning([]) == ""
+
+
 def test_varvraden_listar_lararens_tidigare_onskemal_i_ordning():
     rad = lc.varvrad(["Gör den kortare", "Byt till fysik"])
     assert "1. Gör den kortare" in rad

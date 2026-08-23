@@ -1337,8 +1337,14 @@ def _lapp_runda(board: dict, problems: list, *, model: str, llm) -> tuple | None
 
 def build_refine_prompt(board_json: dict, instruction: str,
                         mal: dict | None = None, bok: str = "",
-                        historik=None) -> str:
+                        historik=None, malen=None) -> str:
     """Chatt-iteration: lärarens ändringsönskemål ovanpå befintlig tavla.
+
+    `malen` är flervalet: markerar läraren flera rutor i canvasen gäller
+    önskemålet dem alla, och målraden räknar upp dem. Tavlan har inget mål-lås
+    som provets (llm_client.malrad är hela löftet här), så flervalet är just
+    det: en prompt som säger vilka rutor det gäller. Ett ensamt mål ger exakt
+    samma prompt som förut.
 
     `mal` är elementet läraren PEKADE PÅ i granskningen: {"namn", "innehall"}.
     Utan det gick bara meningen ut, och «gör den kortare» kunde gälla vilken
@@ -1360,7 +1366,7 @@ def build_refine_prompt(board_json: dict, instruction: str,
         "Här är den nuvarande lektionstavlan:\n"
         f"{json.dumps(board_json, ensure_ascii=False)}\n\n"
         f"{llm_client.varvrad(historik)}"
-        f"{llm_client.malrad(mal)}Lärarens önskemål: {instruction}\n\n"
+        f"{llm_client.malrad(mal, malen)}Lärarens önskemål: {instruction}\n\n"
         "Skriv om HELA tavlan som JSON med önskemålet genomfört. Ändra så "
         "lite som möjligt i övrigt. Svara med enbart JSON."
     )
@@ -1781,19 +1787,21 @@ def repair_board(board: dict, warnings: list[str], *, model: str,
 
 
 def refine_board(board: dict, instruction: str, *, model: str,
-                 mal: dict | None = None, bok: str = "", historik=None,
+                 mal: dict | None = None, malen=None,
+                 bok: str = "", historik=None,
                  llm=llm_client.generate,
                  max_rounds: int = MAX_ROUNDS,
                  log_cb: Callable[[str], None] | None = None,
                  token_cb: Callable[[str], None] | None = None) -> dict:
     """Chatt-iteration: genomför lärarens önskemål, validera, auto-reparera.
 
-    `mal` är rutan läraren pekade på i granskningen (llm_client.malrad) och
-    `bok` bokdörrens block — sidorna och lärarens uppgiftsurval."""
+    `mal` är rutan läraren pekade på i granskningen (llm_client.malrad), `malen`
+    rutorna när de är flera, och `bok` bokdörrens block — sidorna och lärarens
+    uppgiftsurval."""
     log = log_cb or (lambda _m: None)
     log("Uppdaterar tavlan …")
     candidate = _llm_round(
-        build_refine_prompt(board, instruction, mal, bok, historik),
+        build_refine_prompt(board, instruction, mal, bok, historik, malen),
         model, llm, token_cb=token_cb)
     if candidate is None:
         return {"board": board,

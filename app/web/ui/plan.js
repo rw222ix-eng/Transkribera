@@ -3504,7 +3504,9 @@
     && (a.provId || null) === (b.provId || null)
     && (a.antId || null) === (b.antId || null)
     && (a.wbId || null) === (b.wbId || null);
-  function iterera(text, etikett, elId, res) {
+  /* `elIds` är en LISTA sedan flervalet i canvas — läraren kan peka på flera
+     rutor och skicka en mening om dem alla. */
+  function iterera(text, etikett, elIds, res) {
     if (nu < 0) return;
     /* ── SVARET GÄLLER SITT EGET PAPPER ────────────────
        Omskrivningen tar tid. Hann läraren stänga canvasen och öppna ett annat
@@ -3524,11 +3526,13 @@
     const sagt = res && Array.isArray(res.andrade) ? res.andrade : null;
     const v = nyVersion(versioner[nu], x => {
       x.anteckning = etikett ? `${etikett}: ${text}` : text;
-      /* Elementet canvas pekade på är det som ska märkas — en uppgift som heter
+      /* Elementen canvas pekade på är de som ska märkas — en uppgift som heter
          «B» har inget nummer att läsa ut ur etiketten. */
-      if (elId) x.andrat.push(elId);
-      const traff = (etikett || '').match(/uppgift\s*(\d+)/i);
-      if (traff) x.andrat.push('uppg' + traff[1]);
+      (elIds || []).forEach(id => { if (id) x.andrat.push(id); });
+      /* Etiketten kan räkna upp flera rutor («Uppgift 3 och Uppgift 5») —
+         reserven ska märka dem alla, inte bara den första. */
+      ((etikett || '').match(/uppgift\s*\d+/gi) || [])
+        .forEach(t => x.andrat.push('uppg' + t.match(/\d+/)[0]));
       if (/sidhuvud/i.test(etikett || '')) x.andrat.push('rubrik');
       if (/instruktion/i.test(etikett || '')) x.andrat.push('instr');
       const block = (etikett || '').match(/(Ing\u00e5ng|Genomg\u00e5ng|Par-uppgift|\u00c5tersamling|Avslut)/i);
@@ -3588,10 +3592,22 @@
     utkastVersion(v);
   }
 
+  /* «uppg3» → 3. ETT mål ger ett TAL — dagens kropp, byte för byte — och flera
+     ger en LISTA. Kan något av målen inte läsas som en uppgift (en rubrik, en
+     instruktionsruta) utelämnas `nummer` helt: servern skriver då om hela
+     provet med målen som löfte i prompten, i stället för att låsa omskrivningen
+     till de uppgifter som råkade gå att tolka. Samma regel som förut, bara
+     utsträckt till flera. */
+  function provNummer(mal) {
+    if (!mal.length) return null;
+    const nr = mal.map(m => (String(m.el || '').match(/^uppg(\d+)$/) || [])[1]);
+    if (nr.some(x => !x)) return null;
+    return nr.length === 1 ? Number(nr[0]) : nr.map(Number);
+  }
   /* Anropet bakom en ändring i canvas. Hela meddelandet går som prompt — också
      det ett klick på en källa la till («Ta mer ur boken …»), för viktningen ÄR
      en mening läraren skrev. */
-  function iterationsJobb(text, _etikett, elId, krokar, valt, historik) {
+  function iterationsJobb(text, _etikett, _elIds, krokar, valda, historik) {
     const v = versioner[nu];
     if (!serverPa() || !v) return null;
     /* Vilket papper önskemålet gällde NÄR det skickades. Stämpeln följer med
@@ -3620,9 +3636,18 @@
        i stället för att lita på att modellen håller promptens löfte om att
        låta resten vara. Det gjorde den inte: «ta bort deluppgift b)» skrev om
        alla fyra uppgifterna. */
-    const mal = valt && valt.namn
-      ? { el: valt.el || '', namn: valt.namn, innehall: valt.innehall || '',
-          renderat: valt.renderat || '' } : null;
+    /* FLERA MÅL är samma sak en gång till, inte något nytt: läraren pekade på
+       tre rutor och skrev en mening om dem. Det som INTE får ändras är formen
+       på kroppen när hon pekade på EN — kassetterna i tests/ är inspelade mot
+       den, byte för byte, och en extra nyckel gör varenda inspelning obrukbar.
+       Därför: ett mål ⇒ `mal` ensamt, som förut. Flera ⇒ `mal` (första målet,
+       så en server som inte känner till listan ändå får ett mål) PLUS `malen`
+       med alla. */
+    const mal = (valda || []).filter(m => m && m.namn).map(m => ({
+      el: m.el || '', namn: m.namn, innehall: m.innehall || '',
+      renderat: m.renderat || '' }));
+    const malDel = !mal.length ? {}
+      : mal.length === 1 ? { mal: mal[0] } : { mal: mal[0], malen: mal };
     /* KÄLLORNA MÅSTE OCKSÅ MED. Genereringen skickar boken, urvalet och de
        uppslagna sidorna; omskrivningen skickade bara meningen, och därför kunde
        «lägg till vilka uppgifter vi ska göra under lektionen» bara bli en allmän
@@ -3632,8 +3657,7 @@
        varvets «kortare än så» hade inget «så» att gå efter, och villkor från
        varv ett revs i varv två utan att någon bett om det. Meningarna är
        lärarens egna — modellens svar står redan i dokumentet. */
-    const kropp = Object.assign({ message: text }, bokKalla(),
-                                mal ? { mal } : {},
+    const kropp = Object.assign({ message: text }, bokKalla(), malDel,
                                 historik && historik.length ? { historik } : {});
     if (v.wbId) {
       return window.API.strom(`/api/planning/${v.wbId}/refine`,
@@ -3641,14 +3665,15 @@
     }
     if (v.provId) {
       /* Provet har en riktad väg sedan tidigare: `nummer` låser omskrivningen
-         till EN uppgift. Elementets id bär numret («uppg3»), så klicket kan
-         använda den i stället för att modellen ska läsa ut det ur meningen. */
-      const nr = (String(elId || '').match(/^uppg(\d+)$/) || [])[1];
+         till uppgifterna det pekar ut. Elementens id bär numret («uppg3»), så
+         klicket kan använda dem i stället för att modellen ska läsa ut dem ur
+         meningen. */
+      const nummer = provNummer(mal);
       /* Varvet som SKRIVS OM är det läraren ser. Utan versionen byggde ett
          önskemål efter en ångring vidare på det varv hon nyss kastade. */
       const bas = Object.assign(v.provVersion ? { version: v.provVersion } : {}, kropp);
       return window.API.strom(`/api/exams/${v.provId}/refine`,
-                              nr ? Object.assign({ nummer: Number(nr) }, bas) : bas,
+                              nummer === null ? bas : Object.assign({ nummer }, bas),
                               krokar).then(krav).then(r => {
         if (!r.exam) throw new Error('Omskrivningen gick inte igenom. Försök igen.');
         return r;
@@ -4029,12 +4054,13 @@
       titel: `${v.typ} — ${versal(v.moment)}`,
       meta: $('#dokmeta').textContent,
       ark: arkLage(v),
-      onAndra: (text, etikett, elId, res) => iterera(text, etikett, elId, res),
+      onAndra: (text, etikett, elIds, res) => iterera(text, etikett, elIds, res),
       /* Finns ingen server, eller är pappret prototypens, returneras null och
          canvas kör sin egen takt precis som förut. */
-      /* `valt` är elementet läraren pekade på i pappret — det MÅSTE hela vägen
-         fram, annars gissar modellen vad «gör den kortare» gäller. */
-      onJobb: (text, etikett, elId, krokar, valt, historik) => iterationsJobb(text, etikett, elId, krokar, valt, historik),
+      /* `valda` är rutorna läraren pekade på i pappret — en LISTA sedan
+         flervalet, och den MÅSTE hela vägen fram, annars gissar modellen vad
+         «gör den kortare» gäller. Listan är tom när önskemålet gäller arket. */
+      onJobb: (text, etikett, elIds, krokar, valda, historik) => iterationsJobb(text, etikett, elIds, krokar, valda, historik),
       onBild: elId => valjBild(elId)
     });
   });
