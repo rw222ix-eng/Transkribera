@@ -36,43 +36,63 @@ def _exam() -> dict:
              "text": "Ange nollställena till $f(x) = (x-1)(x+3)$.",
              "innehall": ["nollställen"],
              "losning": "$x = 1$ och $x = -3$.",
-             "bedomning": "+3 E för båda nollställena."},
+             # Bedömningen är en TRAPPA: en rad per poäng med sin nivå, som i
+             # nationella provets anvisningar (exam_spec.bedomningsrader).
+             # Fixturen är den kanoniskt giltiga och måste hålla också den
+             # formen — exam_gen.bedomningssignaler räknar raderna mot poängen.
+             "bedomning": "+1 E anger det ena nollstället\n"
+                          "+1 E anger det andra nollstället\n"
+                          "+1 E korrekt svar med båda nollställena",
+             },
             {"del": "B", "formaga": "P", "typ": "rutin", "poang": [2, 0, 0],
              "text": "Lös ekvationen $x^2 - 4x + 3 = 0$.",
              "innehall": ["pq-formeln"],
              "losning": "$x = 1$ eller $x = 3$.",
-             "bedomning": "+1 E per korrekt rot."},
+             "bedomning": "+1 E en korrekt rot\n+1 E båda rötterna korrekta"},
             {"del": "C", "formaga": "P", "typ": "redovisning", "poang": [1, 1, 1],
              "text": "Lös ekvationen $x^2 + 6x - 7 = 0$ med kvadratkomplettering.",
              "innehall": ["kvadratkomplettering"],
              "losning": "$(x+3)^2 = 16$ ger $x = 1$ eller $x = -7$.",
-             "bedomning": "+1 E ansats, +1 C metod, +1 A generalisering."},
+             "bedomning": "+1 E ansats\n+1 C korrekt kvadratkomplettering\n"
+                          "+1 A generell metod"},
             {"del": "C", "formaga": "PL", "typ": "problem", "poang": [1, 1, 1],
              "text": "En rektangulär hage har omkretsen 60 m. Bestäm de mått "
                      "som maximerar arean.",
              "innehall": ["optimering", "andragradsfunktioner"],
              "losning": "Kvadrat $15 \\times 15$ m ger max.",
-             "bedomning": "+1 E modell, +1 C lösning, +1 A motivering av max."},
+             "bedomning": "+1 E tecknar arean\n+1 C löser ut måtten\n"
+                          "+1 A motiverat maximum"},
             {"del": "C", "formaga": "M", "typ": "problem", "poang": [1, 0, 1],
              "text": "En population beskrivs av $N(t) = 200 \\cdot 1{,}05^t$. "
                      "Bestäm när populationen har fördubblats.",
              "innehall": ["exponentiell modell"],
              "losning": "$1{,}05^t = 2$ ger $t \\approx 14{,}2$ år.",
-             "bedomning": "+1 E ansats, +1 A korrekt tolkning av modellen."},
+             "bedomning": "+1 E tecknar ekvationen\n"
+                          "+1 A korrekt tolkning av modellen"},
             {"del": "C", "formaga": "R", "typ": "resonemang", "poang": [1, 1, 1],
              "text": "Avgör om påståendet stämmer: en andragradsfunktion med "
                      "$a < 0$ saknar minsta värde. Motivera.",
              "innehall": ["andragradsfunktioner"],
              "losning": "Sant — grafen är en nedåtriktad parabel.",
-             "bedomning": "+1 E ställningstagande, +1 C motivering, +1 A stringens."},
+             "bedomning": "+1 E ställningstagande\n+1 C motivering\n"
+                          "+1 A stringent resonemang"},
             {"del": "C", "formaga": "K", "typ": "redovisning", "poang": [0, 3, 1],
              "text": "Förklara med graf och ord hur symmetrilinjen bestäms "
                      "för $f(x) = x^2 - 6x + 5$.",
              "innehall": ["symmetrilinje"],
              "losning": "$x = 3$ via $-b/(2a)$ eller nollställenas mittpunkt.",
-             "bedomning": "+3 C tydlig förklaring, +1 A flera representationer."},
+             "bedomning": "+1 C anger symmetrilinjen\n+1 C förklarar metoden\n"
+                          "+1 C tydlig förklaring i ord\n+1 A flera representationer"},
         ],
     }
+
+
+def _trappa(poang) -> str:
+    """Bedömningstrappan för en poängtrippel: en rad per poäng, i ordning
+    E→C→A — nationella provets form (exam_spec.bedomningsrader)."""
+    return "\n".join(f"+1 {niva} steg {i + 1}"
+                     for niva, antal in zip("ECA", poang)
+                     for i in range(antal))
 
 
 def _exam_med_deluppgifter() -> dict:
@@ -88,11 +108,11 @@ def _exam_med_deluppgifter() -> dict:
             {"poang": [0, 2, 0],
              "text": "Bestäm symmetrilinjens ekvation.",
              "losning": "$x = 3$ via $-b/(2a)$.",
-             "bedomning": "+2 C korrekt linje med metod."},
+             "bedomning": "+1 C korrekt linje\n+1 C redovisad metod"},
             {"poang": [0, 1, 1],
              "text": "Förklara med graf och ord varför den ligger där.",
              "losning": "Mittpunkt mellan nollställena; grafen är symmetrisk.",
-             "bedomning": "+1 C förklaring, +1 A flera representationer."},
+             "bedomning": "+1 C förklaring\n+1 A flera representationer"},
         ],
     }
     return data
@@ -108,7 +128,7 @@ def _exam_med_flerval() -> dict:
         "alternativ": ["$x = 0$", "$x = 1$", "$x = 2$", "$x = 4$"],
         "ratt_alternativ": 1,
         "losning": "$x = 1$ ger $f(1) = 0$.",
-        "bedomning": "+2 E för rätt alternativ (B)."}
+        "bedomning": "+1 E rätt alternativ (B)\n+1 E motiverat val"}
     return data
 
 
@@ -1868,20 +1888,23 @@ def _arbetsblad() -> dict:
         "uppgifter": [
             {"del": None, "formaga": "P", "typ": "rutin", "poang": [2, 0, 0],
              "text": "Lös $x^2 - 5x + 6 = 0$.", "innehall": ["pq-formeln"],
-             "losning": "$x = 2$ eller $x = 3$.", "bedomning": "+2 E."},
+             "losning": "$x = 2$ eller $x = 3$.",
+             # Trappan: en rad per poäng (exam_gen.bedomningssignaler).
+             "bedomning": "+1 E en korrekt rot\n+1 E båda rötterna"},
             {"del": None, "formaga": "M", "typ": "rutin", "poang": [2, 0, 0],
              "text": "En rektangel har arean 8 och är 2 längre än den är bred. "
                      "Teckna en ekvation för bredden.",
              "innehall": ["pq-formeln"], "losning": "$b(b + 2) = 8$.",
-             "bedomning": "+2 E."},
+             "bedomning": "+1 E inför en beteckning\n+1 E korrekt ekvation"},
             {"del": None, "formaga": "B", "typ": "rutin", "poang": [1, 1, 0],
              "text": "Vad kallas talet under rottecknet i pq-formeln?",
              "innehall": ["pq-formeln"], "losning": "Diskriminantuttrycket.",
-             "bedomning": "+1 E, +1 C."},
+             "bedomning": "+1 E namnger uttrycket\n+1 C förklarar dess roll"},
             {"del": None, "formaga": "PL", "typ": "rutin", "poang": [1, 1, 1],
              "text": "Hitta två tal med summan 7 och produkten 12.",
              "innehall": ["ekvationer"], "losning": "3 och 4.",
-             "bedomning": "+1 E, +1 C, +1 A."},
+             "bedomning": "+1 E ett par tal\n+1 C systematisk prövning\n"
+                          "+1 A generell metod"},
         ],
     }
 
@@ -2328,6 +2351,10 @@ def _bara_e_prov() -> dict:
                         [[3, 0, 0], [2, 0, 0], [2, 0, 0], [3, 0, 0],
                          [2, 0, 0], [2, 0, 0], [0, 2, 0]]):
         u["poang"] = poang
+        # Poängen flyttades, alltså flyttas trappan med: en rad per poäng, på
+        # den nivå poängen faktiskt ligger (exam_gen.bedomningssignaler mäter
+        # just det, och en fixtur som säger emot sig själv mäter ingenting).
+        u["bedomning"] = _trappa(poang)
     return data
 
 
@@ -2721,3 +2748,130 @@ def test_forsattsbladets_rubrik_far_plats_med_kursen():
     vy2 = exam_latex._forsatt_vy(kort, [])
     assert vy2["titelrad"] == r"Prov Kapitel 2 \textendash{} Matematik 2c"
     assert vy2["underrad"] is None
+
+
+# ══════════════ BEDÖMNINGSTRAPPAN ══════════════
+#
+# Lärarens granskning av det skarpa provet 2026-08-23: «på fleruppgifter
+# framgår inte vad varje poäng ges för», och «elevlösningarna hoppar över
+# steg». Formen är nationella provets bedömningsanvisningar (Ma 1c vt22,
+# Ma 2c vt22): godtagbart svar överst, sedan EN RAD PER POÄNG med nivån.
+
+
+def test_bedomningsrader_delar_trappan():
+    rader = exam_spec.bedomningsrader(
+        "+1 E tecknar sambandet\n+1 C lösning med korrekt svar")
+    assert [(r["poang"], r["niva"], r["krav"]) for r in rader] == [
+        (1, "E", "tecknar sambandet"), (1, "C", "lösning med korrekt svar")]
+
+
+def test_bedomningsrader_laser_de_gamla_dokumentens_enradare():
+    """Proven som redan ligger i basen skrev trappan på EN rad med komman.
+    De ska fortsätta gå att läsa — men decimalkommat i «25,6» får inte klippa
+    raden, och notraden (det väntade felet) är ingen poäng."""
+    rader = exam_spec.bedomningsrader(
+        "+1 E korrekt svar 25,6 mm, +1 C fullständig lösning; "
+        "vanligt fel: basen multipliceras först")
+    assert [r["poang"] for r in rader] == [1, 1, 0]
+    assert rader[0]["krav"] == "korrekt svar 25,6 mm"
+    assert rader[-1]["not"] and rader[-1]["krav"].startswith("Vanligt fel")
+
+
+def test_bedomningssignal_faller_flera_poang_pa_samma_rad():
+    """«+3 E för båda nollställena» är en rad för tre poäng — och då syns inte
+    var gränsen mellan 1 p, 2 p och 3 p går."""
+    exam = _exam()
+    exam["uppgifter"][0]["bedomning"] = "+3 E för båda nollställena."
+    fel = exam_gen.bedomningssignaler(exam)
+    assert [f["code"] for f in fel] == ["bedomningssignal"]
+    assert "EN rad per poäng" in fel[0]["message"]
+
+
+def test_bedomningssignal_faller_niva_som_sager_emot_poangen():
+    """Poängtripplen är den som räknas till betyget; en C-uppgift vars trappa
+    delar ut E-poäng säger emot sitt eget dokument."""
+    exam = _exam()
+    exam["uppgifter"][2]["bedomning"] = "+1 E a\n+1 E b\n+1 E c"   # är [1,1,1]
+    fel = exam_gen.bedomningssignaler(exam)
+    assert [f["code"] for f in fel] == ["bedomningssignal"]
+    assert "trappan delar ut 3/0/0" in fel[0]["message"]
+
+
+def test_bedomningssignal_slapper_igenom_np_formen():
+    """Den kanoniska fixturen ÄR skriven i NP:s form — vakten ska tiga."""
+    assert exam_gen.bedomningssignaler(_exam()) == []
+    assert exam_gen.bedomningssignaler(_exam_med_deluppgifter()) == []
+
+
+def test_bedomningssignal_faller_elevlosningar_som_hoppar_over_steg():
+    """Lärarens fynd: «0 av 3», sedan 2 och 3 — ettpoängsteget saknas, och det
+    är just den gränsen som är svår att dra."""
+    exam = _exam()
+    exam["uppgifter"][2]["elevlosningar"] = [
+        {"etikett": "Elevlösning 1",
+         "partier": [{"rader": ["fel"], "poang": [0, 0, 0], "dom": "d"}]},
+        {"etikett": "Elevlösning 2",
+         "partier": [{"rader": ["halvt"], "poang": [1, 1, 0], "dom": "d"}]},
+        {"etikett": "Elevlösning 3",
+         "partier": [{"rader": ["helt"], "poang": [1, 1, 1], "dom": "d"}]},
+    ]
+    fel = exam_gen.bedomningssignaler(exam)
+    assert [f["code"] for f in fel] == ["bedomningssignal"]
+    assert "täcka stegen [0, 1, 2, 3]" in fel[0]["message"]
+    # …och med steget ifyllt (fyra ryms i schemat) tiger vakten.
+    exam["uppgifter"][2]["elevlosningar"].insert(1, {
+        "etikett": "Elevlösning 1b",
+        "partier": [{"rader": ["ansats"], "poang": [1, 0, 0], "dom": "d"}]})
+    doc, schemafel = exam_spec.validate_exam_json(exam)
+    assert doc is not None and schemafel == []
+    assert exam_gen.bedomningssignaler(exam) == []
+
+
+def test_bedomningssignalen_kostar_aldrig_en_runda():
+    """Samma regel som tal- och nivåsignalerna: en varning om formen får
+    aldrig i sig själv kosta läraren en omskrivning."""
+    trasigt = _exam()
+    trasigt["uppgifter"][0]["bedomning"] = "+3 E för båda nollställena."
+    # Tre anrop: generering + de två blinda domarna (som inte fäller något).
+    llm, calls = _stub_llm([json.dumps(trasigt), "{}", "{}"])
+    res = exam_gen.generate_exam("Ma2b", "SA23", [], model="m", llm=llm)
+    assert res["rounds"] == 1 and len(calls) == 3
+    assert [e["code"] for e in res["errors"]] == ["bedomningssignal"]
+
+
+def test_bedomningen_pa_pappret_ar_en_trappa():
+    """PDF:en (bedomning.tex.j2) sätter kriteriet till vänster och nivån i
+    högermarginalen, en rad per poäng — nationella provets egen form."""
+    doc, _fel = exam_spec.validate_exam_json(_exam())
+    tex = exam_latex.render_bedomning(doc)
+    assert tex.count(r"\bedsteg{") == exam_spec.poangsummor(doc)["total"]
+    assert r"\bedsteg{anger det ena nollstället}{+1 E}" in tex
+
+
+def test_facitets_typografi_ar_fragan_storre_och_svaret_mindre():
+    """Lärarens dom 2026-08-23: uppgiftstexten kursiv och något större,
+    lösningen mindre i rak stil. Skärmen (losning.css) och pappret ska säga
+    samma sak — PDF:en är skärmtrogen."""
+    doc, _fel = exam_spec.validate_exam_json(_exam())
+    tex = exam_latex.render_bedomning(doc)
+    assert r"{\itshape Ange nollställena" in tex
+    assert r"{\small\itshape Ange nollställena" not in tex
+    assert r"{\small\textbf{Lösningsförslag:}" in tex
+    css = (Path(__file__).resolve().parent.parent / "app" / "web" / "ui"
+           / "losning.css").read_text(encoding="utf-8")
+    assert '[data-form="lo-b"] .prtext' in css and "font-style:italic" in css
+
+
+def test_elevlosningens_dom_bar_kommentarsetiketten_i_pdfen():
+    exam = _exam()
+    exam["uppgifter"][2]["elevlosningar"] = [
+        {"etikett": "Elevlösning 1",
+         "partier": [{"rader": ["fel"], "poang": [0, 0, 0],
+                      "dom": "ingen ansats"}]},
+        {"etikett": "Elevlösning 2",
+         "partier": [{"rader": ["helt"], "poang": [1, 1, 1],
+                      "dom": "hela vägen"}]},
+    ]
+    doc, _fel = exam_spec.validate_exam_json(exam)
+    tex = exam_latex.render_bedomning(doc)
+    assert r"\textbf{Kommentar:} ingen ansats" in tex

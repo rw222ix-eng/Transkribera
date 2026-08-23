@@ -349,6 +349,17 @@ def _ar_led(enhet) -> bool:
     return str(enhet or "").strip().rstrip("$ ").endswith("=")
 
 
+# ── BEDÖMNINGSTRAPPAN PÅ PAPPRET ───────────────────────────────────────
+# Nationella provets bedömningsanvisning sätter kriteriet till vänster och
+# nivån i högermarginalen, en rad per poäng (se exam_spec.bedomningsrader).
+# Trappan byggs HÄR och inte i mallen: raderna måste delas innan de escapas,
+# annars blir radbrytningen ett «\n» i löptexten.
+def _bedomning_rader(bedomning) -> list[dict]:
+    return [{"niva": (f"+{r['poang']} {r['niva']}" if r["niva"] else None),
+             "krav": escape_mixed(r["krav"])}
+            for r in exam_spec.bedomningsrader(bedomning) if r["krav"]]
+
+
 def _enhet_vy(*, poang, typ, formaga, text, losning, bedomning,
              alternativ, ratt_alternativ, notis, bild_fil,
              enhet=None, tabell=None, svarsrutor=None, stegtabell=None,
@@ -397,6 +408,7 @@ def _enhet_vy(*, poang, typ, formaga, text, losning, bedomning,
         "text": escape_mixed(text),
         "losning": escape_mixed(losning),
         "bedomning": escape_mixed(bedomning),
+        "bedomning_rader": _bedomning_rader(bedomning),
         "formaga_namn": exam_spec.FORMAGA_NAMN.get(formaga, formaga),
         "bild_fil": bild_fil,
     }
@@ -689,6 +701,7 @@ def _build_view(doc: exam_spec.ExamDoc,
                     # nyckeluppsättning.
                     "losning": escape_mixed(it.losning),
                     "bedomning": escape_mixed(it.bedomning),
+                    "bedomning_rader": _bedomning_rader(it.bedomning),
                     "bild_fil": bild_fil,
                     "formaga_namn": exam_spec.FORMAGA_NAMN.get(it.formaga, it.formaga),
                     "deluppgifter": deluppg,

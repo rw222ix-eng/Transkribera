@@ -137,8 +137,13 @@ def test_arbetsbladet_bar_sitt_facit_provet_inte():
     assert losning not in prov, "provet får aldrig innehålla lösningarna"
     assert losning in bedomning, "bedömningsanvisningen bär provets lösningar"
     # Och bedömningsanvisningen — lärarens eget papper — hör inte till eleven.
-    assert doc.uppgifter[0].bedomning not in ark
-    assert doc.uppgifter[0].bedomning in bedomning
+    # Anvisningen står som en TRAPPA på pappret (ett \bedsteg per poäng, se
+    # exam_spec.bedomningsrader), inte som fältets råa sträng: därför jämförs
+    # kriterierna rad för rad.
+    for rad in exam_spec.bedomningsrader(doc.uppgifter[0].bedomning):
+        assert rad["krav"] not in ark
+        assert f"\\bedsteg{{{rad['krav']}}}{{+{rad['poang']} {rad['niva']}}}" \
+            in bedomning
     # «Separat facit»: elevbladet släcker bandet, lösningarna finns då bara på
     # lärarens separata blad (only_facit). Utan flaggan fick eleverna dem
     # dubbelt — en gång i bladet, en gång i facit-PDF:en.

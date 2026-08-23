@@ -1839,6 +1839,13 @@
            bara uppgiftens EGEN sammanfattning när den finns; utan delar är
            lösningen svaret, som förut. Tom `f` → arkfacit hoppar raden. */
         f: u.losning || '',
+        /* BEDÖMNINGSTRAPPAN till facitbladet: en rad per poäng med sin nivå
+           (exam_spec.bedomningsrader). Fältet gick aldrig hit, och läraren
+           såg därför aldrig VAD varje poäng ges för — bara uppgiftens totala
+           värde i marginalen. Det är lärarens papper: facitbladet läser det,
+           elevens ark rör det aldrig (blad-bygg.provuppg läser bara text,
+           poäng och svarsyta). */
+        bed: u.bedomning || '',
         formaga: u.formaga || '',
         /* VILKEN DEL uppgiften hör till (exam_spec: 'B' = lärarens Del A,
            'C' = Del B, null = ett odelat papper). Fältet gick aldrig hit, och
@@ -1923,6 +1930,11 @@
            egen poäng — samma form som prototypens `vag`. */
         ut.vag = delar.map((d, k) => [`${'abcdef'[k]}) ${d.losning || ''}`,
                                       provSumma(d.poang) + ' p']);
+        /* Deluppgifternas EGNA bedömningstrappor. Föräldern har ingen (dess
+           `bedomning` är tom när deluppgifter finns, exam_spec), och utan den
+           här raden stod uppgift 2 och 6 utan trappa på facit trots att varje
+           deluppgift bar sin. Bokstaven följer med i renderingen. */
+        ut.beddel = delar.map(d => d.bedomning || '');
       }
       return ut;
     });

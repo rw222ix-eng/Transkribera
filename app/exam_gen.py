@@ -299,8 +299,27 @@ INSTRUCTION = (
     "DE lösningsgången — förälderns losning lämnas då tom eller är en enda "
     "sammanfattande rad, aldrig samma text en gång till. Samma $-regel som "
     "text.\n"
-    "- bedomning: bedömningsanvisning, t.ex. '+1 E korrekt ansats, "
-    "+1 C fullständig lösning med motivering'.\n"
+    # ── BEDÖMNINGSTRAPPAN ─────────────────────────────────────────────
+    # Lärarens granskning av det skarpa provet 2026-08-23: «på fleruppgifter
+    # framgår inte vad varje poäng ges för». Anvisningen stod som ETT stycke
+    # («+1 C tecknar ekvationen, +1 C löser ut x, +1 C tolkar faktorn»), och
+    # en trepoängare som inte är delad i steg går inte att dela ut poäng ur.
+    #
+    # Formen är nationella provets, läst i två bedömningsanvisningar (Ma 1c
+    # vt22 och Ma 2c vt22): en rad per poäng, nivån sist på raden, kriteriet
+    # skrivet som något man kan se i en elevlösning («Tecknar trigonometriskt
+    # samband», «Lösning med godtagbart svar»). Vakten räknar raderna mot
+    # poängen (bedomningssignaler) — den kan inte tvingas av grammatiken, för
+    # en trappa är en sträng.
+    "- bedomning: bedömningsanvisningen i nationella provets form — EN RAD "
+    "PER POÄNG, i stigande ordning, varje rad '+1 <nivå> <vad som ger just "
+    "den poängen>' och raderna åtskilda med radbrytning (\\n). En uppgift "
+    "värd [1, 2, 0] har alltså exakt tre rader: en +1 E och två +1 C. Skriv "
+    "ALDRIG flera poäng på samma rad ('+2 C fullständig lösning') och aldrig "
+    "en rad vars nivå saknas i poang. Kriteriet är iakttagbart och kort: "
+    "'+1 E tecknar sambandet', '+1 E lösning med godtagbart svar', "
+    "'+1 C fullständig lösning med korrekt svar'. Sist får EN extra rad stå: "
+    "'Vanligt fel: …'.\n"
     "- innehall: KODERNA för de centrala innehållspunkter uppgiften prövar "
     "(t.ex. [\"G25-M1C-ALG-3\"]) — hämtade ur listan över valt centralt "
     "innehåll nedan, en till tre stycken, aldrig egen text. Står ingen sådan "
@@ -394,7 +413,15 @@ INSTRUCTION = (
     + SCEN_REGEL +
     "- enhet: enheten svaret ska anges i ('kr', 'laddpunkter/år', 'cm$^2$') "
     "eller ledet det skrivs efter ('$f'(x) =$'). Står på svarsraden. Sätt den "
-    "när svaret HAR en enhet — en siffra utan enhet är inget svar.\n"
+    "när svaret HAR en enhet — en siffra utan enhet är inget svar. "
+    # Lärarens granskning 2026-08-23: facit visade «$T(8) = 0{,}1\cdot 256 =
+    # 25{,}6$ mm.» och sedan enheten en gång till, «mm», därför att fältet
+    # `enhet` sätts av pappret självt (svarsraden på elevens ark, kursiverad
+    # efter svaret i facit). Enheten hör till EN av de två — och den som bär
+    # den är fältet, för det är fältet svarsraden läser.
+    "SÄTTER DU `enhet` skriver du den ALDRIG en gång till sist i `losning` — "
+    "pappret sätter den självt efter svaret, och två enheter i rad blir "
+    "«25,6 mm mm».\n"
     "- tabell {rubriker, rader}: mätvärden uppgiften bygger på (årtal, "
     "priser, antal). Rader och rubriker måste ha lika många celler. Använd när "
     "uppgiften ber eleven LÄSA ur data, och hänvisa till den i texten "
@@ -415,10 +442,19 @@ INSTRUCTION = (
     "0-baserat och visas bara för läraren. Den här formen prövar att LÄSA en "
     "lösning — använd den för resonemang och kommunikation, aldrig som "
     "räkneuppgift.\n"
-    "- elevlosningar: två eller tre kommenterade elevlösningar på SAMMA "
-    "uppgift, i stigande ordning (noll poäng, halva, full). Varje lösning har "
+    # Lärarens granskning 2026-08-23: «elevlösningarna hoppar över steg — 0 av
+    # 3, sedan 2 och 3». Det steg som fattas är just det svåra: gränsen mellan
+    # en poäng och två. Taket är därför fyra (exam_spec.ExamItem), och stegen
+    # räknas av bedomningssignaler.
+    "- elevlosningar: två till FYRA kommenterade elevlösningar på SAMMA "
+    "uppgift, i stigande ordning, och de ska TÄCKA POÄNGSTEGEN: noll poäng "
+    "först, full pott sist, och stegen däremellan (en trepoängare får alltså "
+    "fyra lösningar: 0, 1, 2 och 3 poäng). Varje lösning har "
     "etikett och partier; varje parti har rader (lösningens egna rader), poang "
-    "och dom (varför partiet gav eller inte gav poäng). Partiets poang är en "
+    "och dom — kommentaren, i nationella provets form: säg vilken rad i "
+    "bedömningstrappan partiet fick och varför inte nästa ('Tecknar sambandet "
+    "och får den första E-poängen, men avslutar aldrig lösningen — den andra "
+    "E-poängen kräver ett godtagbart svar'). Partiets poang är en "
     "TRIPPEL [E, C, A] precis som uppgiftens — [0, 0, 0] för ett parti som "
     "inte gav något, aldrig ett ensamt tal. Summan av partiernas "
     "poäng får inte överstiga uppgiftens. De hör till BEDÖMNINGEN — eleven ser "
@@ -432,7 +468,8 @@ INSTRUCTION = (
     '"losning": "$A(b) = b(12 - b)$.", "bedomning": "+1 E korrekt uttryck."}, '
     '{"poang": [0, 1, 1], "text": "Bestäm den största möjliga arean.", '
     '"losning": "Max vid $b = 6$ ger $A = 36$ cm².", '
-    '"bedomning": "+1 C ansats, +1 A motiverat maximum."}]}\n'
+    '"bedomning": "+1 C tecknar derivatan eller symmetrilinjen\\n'
+    '+1 A motiverat maximum med korrekt svar"}]}\n'
     "Exempel på en flervalsuppgift:\n"
     '{"del": "B", "formaga": "B", "typ": "rutin", "poang": [1, 0, 0], '
     '"text": "Vilket tal är ett nollställe till $f(x) = x^2 - 9$?", '
@@ -495,9 +532,10 @@ FALLGROPAR = (
     "och använder du dem här faller balansen — proceduruppgifternas poäng går "
     "till resonemang i stället. Skriv dem bara när uppgiftsplanen eller "
     "uppdraget ber om det.\n"
-    "- Skriv ut det väntade felet i bedomning där det är relevant, t.ex. "
-    "\"+1 E korrekt ansats, +1 C fullständig lösning; vanligt fel: minustecknet "
-    "tappas när $-3$ kvadreras\". Läraren ska veta vad hon letar efter."
+    "- Skriv ut det väntade felet SIST i bedomning, som en egen rad efter "
+    "poängtrappan: \"+1 E korrekt ansats\\n+1 C fullständig lösning\\n"
+    "Vanligt fel: minustecknet tappas när $-3$ kvadreras\". Läraren ska veta "
+    "vad hon letar efter."
 )
 
 # Gruppuppgiften kan göra mer än att undvika felet: den kan lägga fram det.
@@ -561,8 +599,9 @@ _UTDRAG_GRUPP = [
                           ["b)", "$\\dfrac{48 - 12}{2 + 4}$"]]},
      "svarsfalt": ["Svar a)", "Svar b)"],
      "losning": "a) $57$, ur $9 + 3 \\cdot 16$. b) $6$, ur $\\dfrac{36}{6}$.",
-     "bedomning": "+1 E rätt svar i a), +1 E rätt svar i b); vanligt fel: "
-                  "$3 \\cdot 4$ kvadreras i a) ($153$)."},
+     # Trappan: en rad per poäng, radbruten (INSTRUCTION, bedomning).
+     "bedomning": "+1 E rätt svar i a)\n+1 E rätt svar i b)\n"
+                  "Vanligt fel: $3 \\cdot 4$ kvadreras i a) ($153$)."},
     # Begreppsuppgiften: uttrycket står färdigt i texten, och gruppen ska
     # NAMNGE dess delar innan den räknar. Situationen är verkstaden, alltså
     # klassens egen värld.
@@ -617,9 +656,10 @@ _UTDRAG_GRUPP = [
           "svarsfalt": ["Formel", "Antal dagar"], "enhet": "dagar",
           "losning": "$K = 500 + 200d$. $500 + 200d = 2500$ ger $d = 10$ "
                      "dagar.",
-          "bedomning": "+1 E korrekt formel $K = 500 + 200d$, +1 C rätt svar "
-                       "$10$ dagar; vanligt fel: startavgiften $500$ "
-                       "multipliceras med $d$."}]},
+          "bedomning": "+1 E korrekt formel $K = 500 + 200d$\n"
+                       "+1 C rätt svar $10$ dagar\n"
+                       "Vanligt fel: startavgiften $500$ multipliceras med "
+                       "$d$."}]},
 ]
 
 FORLAGA_GRUPP = (
@@ -1418,6 +1458,11 @@ def domarenheter(exam: dict) -> list[dict]:
                     "formaga": d.get("formaga") or u.get("formaga") or "",
                     "poang": d.get("poang"),
                     "niva": niva,
+                    # Bedömningsanvisningen står UTANFÖR `kort` av samma skäl
+                    # som delen: nivådomaren ska inte se den (då bedömer den
+                    # anvisningen och inte uppgiften). Bedömningsvakten läser
+                    # den härifrån — se bedomningssignaler.
+                    "bedomning": d.get("bedomning") or "",
                     # Stammen följer med — utan den är deluppgiften obegriplig.
                     "kort": {"stam": u.get("text") or "",
                              "text": d.get("text") or "",
@@ -1436,6 +1481,7 @@ def domarenheter(exam: dict) -> list[dict]:
             "formaga": u.get("formaga") or "",
             "poang": u.get("poang"),
             "niva": niva,
+            "bedomning": u.get("bedomning") or "",
             "kort": {"text": u.get("text") or "",
                      "losning": u.get("losning") or "",
                      "typ": u.get("typ") or "",
@@ -1981,6 +2027,87 @@ def talsignaler(exam: dict) -> list[dict]:
     return ut
 
 
+# ── Deterministiska bedömningsvakter ──────────────────────────────────────
+# Samma form och samma plats i kedjan som nivå- och talsignalerna: billiga,
+# körs alltid, fäller aldrig ensamma, och åker med in i reparationsrundan när
+# domarna ändå fällt något.
+#
+# Vad de mäter är FORMEN, inte omdömet — trappan går att räkna, till skillnad
+# från om ett kriterium är rimligt. Förlagan är nationella provets
+# bedömningsanvisningar (Ma 1c vt22 och Ma 2c vt22, lästa 2026-08-23; se
+# exam_spec.bedomningsrader): en rad per poäng, med nivå.
+#
+# Lärarens granskning av det skarpa provet 2026-08-23: «på fleruppgifter
+# framgår inte vad varje poäng ges för». Provet i basen skrev hela trappan på
+# en rad — «+1 C tecknar ekvationen, +1 C löser ut x, +1 C tolkar faktorn» —
+# och en trepoängare vars anvisning står som ETT stycke går inte att dela ut
+# poäng ur.
+def bedomningssignaler(exam: dict) -> list[dict]:
+    """Deterministiska varningar om bedömningsanvisningar som inte är en
+    trappa, och om elevlösningar som hoppar över poängsteg."""
+    ut: list[dict] = []
+    for e in domarenheter(exam):
+        nr = e["nr"]
+        poang = tuple(e.get("poang") or (0, 0, 0))
+        summa = sum(poang)
+        rader = [r for r in exam_spec.bedomningsrader(e.get("bedomning"))
+                 if not r["not"]]
+        if not rader:
+            ut.append(_err(f"uppgift {nr}", "bedomningssignal",
+                           f"uppgift {nr} saknar bedömningstrappa — skriv en "
+                           "rad per poäng, «+1 E …», i stigande ordning."))
+            continue
+        # 1. Antalet poängrader ska vara antalet poäng. «+2 C fullständig
+        #    lösning» är en rad för två poäng, och läraren ser då inte var
+        #    gränsen mellan 1 p och 2 p går.
+        if len(rader) != summa or any(r["poang"] != 1 for r in rader):
+            ut.append(_err(f"uppgift {nr}", "bedomningssignal",
+                           f"uppgift {nr} är värd {summa} poäng men "
+                           f"bedömningen har {len(rader)} poängrad(er) — "
+                           "nationella provet skriver EN rad per poäng "
+                           "(«+1 E tecknar sambandet», «+1 E lösning med "
+                           "godtagbart svar»), aldrig flera poäng på samma "
+                           "rad."))
+            continue
+        # 2. Nivåerna ska vara uppgiftens egna. En C-uppgift vars trappa delar
+        #    ut E-poäng säger emot poängtripplen, och det är tripplen som
+        #    räknas till betyget.
+        nivaer = {"E": poang[0], "C": poang[1], "A": poang[2]}
+        skrivna = {n: sum(1 for r in rader if r["niva"] == n) for n in "ECA"}
+        if skrivna != nivaer:
+            ut.append(_err(f"uppgift {nr}", "bedomningssignal",
+                           f"uppgift {nr} ger {poang[0]}/{poang[1]}/{poang[2]} "
+                           f"(E/C/A) men trappan delar ut {skrivna['E']}/"
+                           f"{skrivna['C']}/{skrivna['A']} — varje rad ska bära "
+                           "den nivå poängen faktiskt ligger på."))
+    # 3. Elevlösningarna ska täcka poängstegen. «0 av 3», sedan 2 och 3 — det
+    #    steg som saknas är just det läraren behöver se, för gränsen mellan 1 p
+    #    och 2 p är den som är svår att dra. Fyra lösningar ryms (exam_spec),
+    #    alltså täcks 0…3 helt; över tre poäng krävs bara ändarna.
+    for i, u in enumerate(exam.get("uppgifter") or [], 1):
+        if not isinstance(u, dict):
+            continue
+        elever = [e for e in (u.get("elevlosningar") or []) if isinstance(e, dict)]
+        if not elever:
+            continue
+        delar = [d for d in (u.get("deluppgifter") or []) if isinstance(d, dict)]
+        tak = (sum(sum(d.get("poang") or (0, 0, 0)) for d in delar) if delar
+               else sum(u.get("poang") or (0, 0, 0)))
+        summor = [sum(sum(p.get("poang") or (0, 0, 0))
+                      for p in (e.get("partier") or [])) for e in elever]
+        steg = sorted(set(summor))
+        saknas = ([p for p in range(tak + 1) if p not in steg] if tak <= 3
+                  else [p for p in (0, tak) if p not in steg])
+        if saknas or summor != sorted(summor):
+            ut.append(_err(f"uppgift {i}", "bedomningssignal",
+                           f"uppgift {i} är värd {tak} poäng och har "
+                           f"elevlösningar på {steg or [0]} poäng — de ska "
+                           "stå i stigande ordning och täcka stegen "
+                           f"{list(range(tak + 1)) if tak <= 3 else [0, tak]} "
+                           "(minst noll poäng och full pott)."))
+    return ut
+
+
 def _format_problems(problems: list) -> str:
     lines = []
     for p in problems:
@@ -2423,9 +2550,9 @@ def _skala(profil: str, boknivaer: str, skeleton: list[dict] | None,
 
 
 def _signaler(exam: dict) -> list[dict]:
-    """De deterministiska varningarna, samlade. Båda uppsättningarna räknas om
-    efter en reparation — ett fynd som lagats ska inte stå kvar som varning."""
-    return nivasignaler(exam) + talsignaler(exam)
+    """De deterministiska varningarna, samlade. Alla räknas om efter en
+    reparation — ett fynd som lagats ska inte stå kvar som varning."""
+    return nivasignaler(exam) + talsignaler(exam) + bedomningssignaler(exam)
 
 
 def _domar_pass(exam: dict, errors: list, *, model: str, llm, profil: str,

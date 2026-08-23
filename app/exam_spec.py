@@ -414,7 +414,18 @@ class ExamItem(_Uppgiftsbas):
     # tre gånger, i stigande ordning, med domen inne i det parti den gäller.
     # Hör till BEDÖMNINGEN, inte till elevens ark — den som skriver provet ska
     # aldrig se dem. Renderas i bedomning.tex.j2 och i appens facitblad.
-    elevlosningar: list[Elevlosning] | None = Field(default=None, max_length=3)
+    #
+    # FYRA och inte tre (lärarens granskning 2026-08-23): «elevlösningarna
+    # hoppar över steg — 0 av 3, sedan 2 och 3». En trepoängare har fyra
+    # poängsteg (0, 1, 2, 3) och med taket tre gick ett av dem alltid förlorat.
+    # Valet stod mellan att höja taket och att låta trappan i `bedomning` bära
+    # stegen ensam; båda gjordes, för de svarar på olika frågor. Trappan säger
+    # vad varje poäng KRÄVER, elevlösningen visar hur ett papper som nätt och
+    # jämnt når (eller missar) steget SER UT — och det är den skillnaden som är
+    # svår att dra. NP visar inte heller alla steg (Ma 2c vt22 har tre
+    # nollpoängsexempel på samma uppgift), men det visar alltid kommentaren,
+    # och den kräver prompten. Fler än fyra ryms inte på ett facitblad.
+    elevlosningar: list[Elevlosning] | None = Field(default=None, max_length=4)
 
     @model_validator(mode="after")
     def _kontrollera_struktur(self):
@@ -957,6 +968,60 @@ def _svarighet(poang: tuple[int, int, int]) -> float:
 
 def _err(path: str, code: str, message: str) -> dict:
     return {"path": path, "code": code, "message": message}
+
+
+# ── BEDÖMNINGSTRAPPAN ──────────────────────────────────────────────────
+# Nationella provets form, läst i två bedömningsanvisningar (Ma 1c vt22 och
+# Ma 2c vt22): godtagbart svar överst, sedan EN RAD PER POÄNG med nivån i
+# marginalen.
+#
+#     23a)  126,9 (m) ; 127 (m)                        (2/0/0)
+#           Tecknar trigonometriskt samband.               +E
+#           Lösning med godtagbart svar.                   +E
+#
+# Två poäng är alltså två rader — aldrig «+2 E lösning med korrekt svar». Det
+# är hela skillnaden mellan en anvisning man kan rätta efter och en text man
+# måste tolka: läraren ska se trappan 1 p → 2 p → 3 p och veta vilket steg
+# elevens papper nådde.
+#
+# EN parser, tre läsare: vakten i exam_gen (bedomningssignaler), pappret i
+# exam_latex och skärmens facit (app/web/ui/blad-bygg.js `trappsteg` — samma
+# regler, spegel). Formen är DOKUMENTETS och inte generatorns, därför bor den
+# här.
+_BEDSTEG_RE = re.compile(r"^\+\s*(\d+)\s*([ECA])\b[\s.:—-]*(.*)$", re.S)
+# Raden som inte är ett poängsteg: det väntade felet. NP skriver den som
+# «Kommentar: …», appen som «vanligt fel: …» — båda tas emot, ingen av dem
+# räknas som en poäng. Etiketten står KVAR (den säger vad raden är); bara
+# versalen rättas, för i den gamla enradsformen stod noten mitt i en mening
+# och började därför med liten bokstav.
+_BEDNOT_RE = re.compile(r"^(vanligt fel|kommentar|obs)\b", re.I)
+# Gamla dokument skrev hela trappan på EN rad med komman («+1 C tecknar
+# ekvationen, +1 C löser ut $x$; vanligt fel: …»). De ligger kvar i basen och
+# ska fortsätta gå att läsa, så kommaformen delas också — men BARA framför ett
+# «+<siffra>», annars hade decimalkommat i «25,6» klippt raden mitt itu.
+_BEDDELA_RE = re.compile(r"\n|,\s*(?=\+\s*\d)|;\s*(?=vanligt fel|kommentar)",
+                         re.I)
+
+
+def bedomningsrader(text: str) -> list[dict]:
+    """Bedömningsanvisningen som rader: {poang, niva, krav} per poängsteg, och
+    {poang: 0, niva: None, not: True} för en avslutande notrad.
+
+    Tom text ger []. Ordningen är textens — den ÄR trappan."""
+    ut: list[dict] = []
+    for bit in _BEDDELA_RE.split(str(text or "")):
+        bit = bit.strip()
+        if not bit:
+            continue
+        m = _BEDSTEG_RE.match(bit)
+        if m:
+            ut.append({"poang": int(m.group(1)), "niva": m.group(2),
+                       "krav": m.group(3).strip(), "not": False})
+        else:
+            if _BEDNOT_RE.match(bit):
+                bit = bit[0].upper() + bit[1:]
+            ut.append({"poang": 0, "niva": None, "not": True, "krav": bit})
+    return ut
 
 
 def poangenheter(it: ExamItem

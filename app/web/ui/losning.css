@@ -106,10 +106,16 @@
    fullt av streck säger ingenting. Poängen för en deluppgift står där den står
    på provet: sist på deluppgiftens egen rad. */
 
-/* Svarsraden: det enda som ska kunna läsas på en armlängds avstånd. Svaret ett
-   helt gradsteg över frågan — inte fetare. KaTeX har ingen fet kursiv matematik,
+/* Svarsraden: satt i EN vikt, aldrig fet. KaTeX har ingen fet kursiv matematik,
    så fetstil hade gjort «2 400 laddpunkter/år» fet och «F(x) = 2x³ − 2x²» mager:
-   samma rad, två vikter. Graden gäller båda lika. */
+   samma rad, två vikter. Graden gäller båda lika.
+
+   Graden var förr ett helt steg ÖVER frågan. Lärarens dom 2026-08-23 vände på
+   det: «i lösningsförslaget ska uppgiftstexten vara kursiv och något större,
+   svaret och lösningen mindre i rak stil.» Hon läser frågan först — den ska bära
+   uppslaget — och svaret är det korta beskedet under den. Vändningen görs på
+   provets två facitark längre ned; basgraden här är kvar för prototypens och
+   bokens papper, som har sin egen rytm. */
 .losvar{margin:8px 0 0;display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 14px}
 /* `0 1 auto`, inte `0 0`: ett facitsvar kan vara flera meningar långt, och ett
    spann som vägrar krympa blir så brett som sin text — utanför A4-arket. Med
@@ -143,6 +149,33 @@
    marginalen av steget — inte i en summering under. */
 .losteg{display:block}
 .lovag>li em{font-style:normal;font-weight:700;font-size:calc(11.5px * var(--fsk, 1));letter-spacing:.02em;color:#1B7A46;white-space:nowrap;margin-left:8px}
+
+/* ══════════ FRÅGAN STÖRRE OCH KURSIV, SVARET MINDRE OCH RAKT ══════════
+   Lärarens granskning av det skarpa provets lösningsförslag (2026-08-23).
+   Gäller PROVETS två facitark och bara dem: `lo-b` (kortsvar) och `lo-c`
+   (lösningsförslag). Bokens `lo-bok`/`lo-bok3` matchar också «lo-» och har en
+   egen, uppmätt rytm (handskriftens steg längre ned) — därför skrivs formerna
+   ut, aldrig med ^=.
+
+   Samma ordning i PDF:en (app/templates/bedomning.tex.j2: uppgiftstexten i
+   \itshape på grundgraden, lösning och bedömning i \small) — pappret ska vara
+   skärmtroget. */
+[data-form="lo-b"] .prtext,[data-form="lo-c"] .prtext{font-style:italic;font-size:calc(16.5px * var(--fsk, 1));line-height:1.45}
+[data-form="lo-b"] .losvar>span,[data-form="lo-c"] .losvar>span{font-size:calc(14px * var(--fsk, 1))}
+
+/* ── Poängtrappan ──
+   Nationella provets bedömningsanvisning: en rad per poäng, kriteriet till
+   vänster och nivån i marginalen. Nivån står FÖRST här och inte sist som i NP:s
+   tabell — spalten är smal på ett A4 med uppgiftstext, och en högerställd
+   etikett hade lämnat en ojämn lucka mitt på raden. Grön som poängen i
+   lösningsgången: det är samma poäng.
+
+   Notraden (det väntade felet) bär ingen nivå och sätts kursiv — den delar inte
+   ut något, den varnar. */
+.lotrappa{margin:8px 0 0;padding:0;list-style:none;display:grid;gap:3px;font-size:calc(13px * var(--fsk, 1));line-height:1.4;color:#000}
+.lotrappa>li{display:grid;grid-template-columns:calc(38px * var(--fsk, 1)) minmax(0,1fr);gap:0 9px;align-items:baseline}
+.lotrappa>li>i{font-style:normal;font-weight:700;font-size:calc(11.5px * var(--fsk, 1));letter-spacing:.02em;color:#1B7A46;white-space:nowrap;font-variant-numeric:tabular-nums}
+.lotrappa>li[data-not]{font-style:italic;color:#333}
 
 /* Lösningsgången till delprov C bär tre fullständiga lösningar per blad. Den
    luft ett kortsvarsfacit har råd med finns inte här — måtten är stramare, och

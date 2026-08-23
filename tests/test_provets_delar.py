@@ -478,3 +478,83 @@ def test_latexvyn_slapper_svarsfaltet_pa_en_redovisningsuppgift():
     assert vy_lang["svarsfalt_rad"] is None
     assert vy_lang["svarsfalt"] == ["Villkor"]
     assert vy_lang["endast_svar"] is False
+
+
+# ── 8. LÖSNINGSFÖRSLAGET (lärarens granskning 2026-08-23) ──────────────
+#
+# Fem fynd på samma papper: svaret saknades på uppgifter med deluppgifter,
+# enheten stod två gånger, poängtrappan syntes inte, elevlösningarna hoppade
+# över steg och saknade kommentarens etikett, och graderna var omvända.
+# Renderingen prövas i node — det är den HTML läraren faktiskt fick.
+
+def _losark(uppgifter: list[dict], delB: int = 99) -> str:
+    return _kor_bladbygg(
+        "bb.losning({typ:'Prov', losningsblad:true}, "
+        + json.dumps(uppgifter, ensure_ascii=False)
+        + f", {delB}).join('')")
+
+
+def test_deluppgifternas_svar_star_pa_kortsvarsfacit():
+    """«Skriv uttrycken som en enda potens» hade en TOM Svar-rad: föräldern bär
+    ingen egen losning när deluppgifter finns (exam_spec), så `f` var tom
+    sträng — och raden ritades ändå. Svaren ligger i `vag`, ett per
+    deluppgift, och facitet ritade dem inte alls på kortsvarsarket."""
+    html = _losark([_uppg(f="", p=2,
+                          vag=[["a) $3^{5}$", "1 p"], ["b) $2^{-1}$", "1 p"]])])
+    assert "losetikett" not in html, "en tom Svar-rad ritades ändå"
+    assert 'data-tex="3^{5}"' in html and 'data-tex="2^{-1}"' in html
+
+
+def test_enheten_star_en_gang_i_facit():
+    """«$T(8) = 25{,}6$ mm.» följt av ett kursivt «mm» — facittexten bar
+    enheten OCH fältet sattes ut efter den."""
+    dubbel = _losark([_uppg(f="$T(8) = 25{,}6$ mm.", enhet="mm")])
+    assert "<em>mm</em>" not in dubbel, "enheten trycktes två gånger"
+    # Fältet står kvar när facittexten INTE bär enheten — då behövs det.
+    enkel = _losark([_uppg(f="$25{,}6$", enhet="mm")])
+    assert "<em>mm</em>" in enkel
+
+
+def test_poangtrappan_syns_pa_facit():
+    """En rad per poäng, med nivån (nationella provets form). Trappan gick
+    aldrig till skärmen — bara uppgiftens totala värde stod i marginalen, och
+    läraren såg därför inte vad varje poäng ges för."""
+    html = _losark([_uppg(p=2, f="$x = 4$",
+                          bed="+1 E tecknar ekvationen\n+1 C löser ut $x$")])
+    assert "lotrappa" in html
+    assert "+1 E</i>" in html and "+1 C</i>" in html
+    assert "tecknar ekvationen" in html
+
+
+def test_trappan_tar_ocksa_de_gamla_dokumentens_enradare():
+    """Proven i basen skrev hela trappan på en rad med komman. De skrivs ut i
+    morgon och ska visa samma trappa (spegel av exam_spec.bedomningsrader).
+    Notraden — det väntade felet — bär ingen poäng och sätts för sig."""
+    html = _losark([_uppg(p=2, f="$x = 4$",
+                          bed="+1 C tecknar ekvationen, +1 C löser ut $x$; "
+                              "vanligt fel: minskningen delas med 5")])
+    assert html.count("+1 C</i>") == 2
+    assert "data-not" in html and "Vanligt fel" in html
+
+
+def test_deluppgifternas_trappor_bar_sin_bokstav():
+    """Uppgiften har ingen egen bedömning när deluppgifter finns — trapporna
+    ligger på a), b), c) och sätts under varandra med bokstaven framför."""
+    html = _losark([_uppg(p=2, f="",
+                          vag=[["a) $3^{5}$", "1 p"], ["b) $2^{-1}$", "1 p"]],
+                          beddel=["+1 E korrekt svar i a)",
+                                  "+1 E korrekt svar i b)"])])
+    assert "a) korrekt svar i a)" in html and "b) korrekt svar i b)" in html
+
+
+def test_elevlosningens_dom_bar_kommentarsetiketten():
+    """NP:s bedömda elevlösningar avslutas med «Kommentar: …» — den som säger
+    vilken rad i trappan lösningen fick och varför inte nästa."""
+    html = _losark([_uppg(p=3, f="$x = 4$", ut="rakna",
+                          vag=[["$2x = 8$", "1 p"]],
+                          elever=[{"etikett": "Elevlösning 1",
+                                   "partier": [{"rader": ["$2x = 8$"],
+                                                "poang": [0, 0, 0],
+                                                "dom": "ingen ansats"}]}])],
+                   delB=0)
+    assert "<b>Kommentar:</b>" in html

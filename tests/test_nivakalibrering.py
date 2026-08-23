@@ -307,10 +307,12 @@ def _giltigt_prov():
     return _exam([
         {"del": None, "formaga": "B", "typ": "rutin", "poang": [2, 0, 0],
          "text": "Ange nollställena till $y = (x - 2)(x + 5)$.",
-         "losning": "$x = 2$ och $x = -5$.", "bedomning": "+2 E."},
+         "losning": "$x = 2$ och $x = -5$.",
+         # Trappan: en rad per poäng (exam_gen.bedomningssignaler).
+         "bedomning": "+1 E ett nollställe\n+1 E båda nollställena"},
         {"del": None, "formaga": "P", "typ": "redovisning", "poang": [1, 1, 0],
          "text": "Lös ekvationen $x^2 - 9 = 0$.", "losning": "$x = \\pm 3$.",
-         "bedomning": "+1 E, +1 C."},
+         "bedomning": "+1 E korrekt ansats\n+1 C fullständig lösning"},
     ])
 
 

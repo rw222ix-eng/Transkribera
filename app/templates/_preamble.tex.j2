@@ -452,6 +452,17 @@
   {\end{list}}
 ((* endif *))
 
+((# Ett steg i bedömningstrappan (bedomning.tex.j2): kriteriet till vänster,
+    nivån i högermarginalen — nationella provets egen form, där två poäng är
+    två rader och inte en rad med en tvåa i.
+
+    \hfill och inte tabular: kriteriet är löptext som ska brytas som löptext,
+    och nivån hamnar då sist på SISTA raden — precis som i anvisningen. En
+    tabellcell hade i stället låst kriteriet till en spalt och lagt nivån mitt
+    i luften bredvid första raden. \mbox skyddar «+1 E» från att brytas. #))
+\newcommand{\bedsteg}[2]{%
+  \par\noindent{\small #1\hfill\mbox{\textbf{#2}}\par}}
+
 ((# Kvadratisk kryssruta för flerval — tom ruta, inget typsnittsberoende
     (bygger på \fbox + \rule, alltid tillgängligt). #))
 \newcommand{\kryssruta}{\fbox{\rule{0pt}{1.5ex}\rule{1.5ex}{0pt}}}

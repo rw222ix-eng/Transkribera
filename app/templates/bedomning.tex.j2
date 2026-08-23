@@ -11,6 +11,27 @@
 ((* include '_preamble.tex.j2' *))
 ((* import '_former.tex.j2' as former *))
 
+((# ══════════ POÄNGTRAPPAN ══════════
+    Nationella provets form (Ma 1c vt22, Ma 2c vt22): kriteriet till vänster,
+    nivån i högermarginalen, EN RAD PER POÄNG — så att 1 p, 2 p, 3 p syns som
+    en trappa och läraren vet vilket steg elevens papper nådde. Raderna delas
+    i Python (exam_latex._bedomning_rader, som läser exam_spec.bedomningsrader
+    och därför också klarar de gamla dokumentens enradiga kommaform).
+
+    Utan rader — ett tomt fält på en förälder med deluppgifter — trycks
+    ingenting alls; rubriken «Bedömning:» utan innehåll var en rad att läsa
+    förbi. #))
+((* macro bedomning(u) *))
+((* if u.bedomning_rader *))
+{\small\textbf{Bedömning:}}\par\vspace{0.5mm}
+((* for r in u.bedomning_rader *))
+((* if r.niva *))\bedsteg{((( r.krav )))}{((( r.niva )))}
+((* else *)){\small\itshape ((( r.krav )))}\par
+((* endif *))
+((* endfor *))
+((* endif *))
+((* endmacro *))
+
 \begin{document}
 
 \begin{center}
@@ -34,7 +55,12 @@ av totalt ((( granser.total ))) poäng.}
     högermarginalen (jfr prov.tex.j2 och app/templates/_preamble.tex.j2). #))
 \begin{uppgift}{((( u.nummer )))}{((( u.poang_eca )))}\par
 ((* if not u.har_deluppgifter *)){\small\textcolor{ink500}{((( u.formaga_namn )))}}\par\vspace{1mm}((* endif *))
-{\small\itshape ((( u.text )))}\par\vspace{2mm}
+((# UPPGIFTSTEXTEN STÖRRE ÄN SVARET, och kursiv. Lärarens dom 2026-08-23:
+    «i lösningsförslaget ska uppgiftstexten vara kursiv och något större,
+    svaret mindre i rak stil» — hon läser frågan först och svaret sedan, och
+    graderna stod tvärtom. Samma ordning på skärmen (app/web/ui/losning.css),
+    för PDF:en ska vara skärmtrogen. #))
+{\itshape ((( u.text )))}\par\vspace{2mm}
 ((* if u.bild_fil *)){\small Uppgiften har en bild: ((( u.bild_fil )))}\par\vspace{1mm}((* endif *))
 ((* if u.figur_tex *))\par\vspace{2mm}\begin{center}((( u.figur_tex )))\end{center}((* endif *))
 ((( former.kropp(u) )))
@@ -42,17 +68,17 @@ av totalt ((( granser.total ))) poäng.}
 ((* for d in u.deluppgifter *))
 \begin{deluppgift}{((( d.bokstav )))}{((( d.poang_eca )))}\par
 {\small\textcolor{ink500}{((( d.formaga_namn )))}}\par\vspace{1mm}
-{\small\itshape ((( d.text )))}\par\vspace{1mm}
+{\itshape ((( d.text )))}\par\vspace{1mm}
 ((( former.kropp(d) )))
-((* if d.flerval *))\textbf{Rätt: ((( d.ratt_bokstav )))}\par\vspace{1mm}((* endif *))
-\textbf{Lösningsförslag:} ((( d.losning )))\par\vspace{1mm}
-\textbf{Bedömning:} ((( d.bedomning )))
+((* if d.flerval *)){\small\textbf{Rätt: ((( d.ratt_bokstav )))}}\par\vspace{1mm}((* endif *))
+{\small\textbf{Lösningsförslag:} ((( d.losning )))}\par\vspace{1mm}
+((( bedomning(d) )))
 \end{deluppgift}
 ((* endfor *))
 ((* else *))
-((* if u.flerval *))\textbf{Rätt: ((( u.ratt_bokstav )))}\par\vspace{1mm}((* endif *))
-\textbf{Lösningsförslag:} ((( u.losning )))\par\vspace{1mm}
-\textbf{Bedömning:} ((( u.bedomning )))
+((* if u.flerval *)){\small\textbf{Rätt: ((( u.ratt_bokstav )))}}\par\vspace{1mm}((* endif *))
+{\small\textbf{Lösningsförslag:} ((( u.losning )))}\par\vspace{1mm}
+((( bedomning(u) )))
 ((* endif *))
 ((# Kommenterade elevlösningar (förlagans lo4): samma uppgift löst två eller
     tre gånger, i stigande ordning, med domen INNE i det parti den gäller. Det
@@ -69,7 +95,10 @@ av totalt ((( granser.total ))) poäng.}
     Att det inte syntes förr är att elevlösningarnas rader oftast börjar med
     matematik ($…$ → \(), och \( avslutar \par på egen hand. #))
 ((* for r in pa.rader *))((( r )))\par ((* endfor *))
-{\small\itshape ((( pa.dom )))}
+((# «Kommentar:» som i NP:s bedömda elevlösningar — domen ska säga vilken rad
+    i trappan partiet fick och varför inte nästa, och etiketten är det som
+    gör den till en kommentar och inte en till lösningsrad. #))
+{\small\itshape\textbf{Kommentar:} ((( pa.dom )))}
 \end{elevparti}
 ((* endfor *))
 ((* endfor *))

@@ -368,8 +368,7 @@ window.BladBygg = (() => {
     const post = (u, k) => `<div class="pruppg">
       <span class="prnr">${siffra ? k + 1 : (BOKSTAV[k] || k + 1)}.<span class="prvarde">${u.p} p</span></span>
       <div><p class="prtext" data-ref="">${ref(u.t)}</p>
-        ${u.f ? `<div class="losvar"><b class="losetikett">Svar</b><span>${mat(u.f)}</span>${u.enhet ? `<em>${enhetHtml(u.enhet)}</em>` : ''}</div>` : ''}
-        ${u.vag ? `<ul class="lovag">${u.vag.map(s => `<li><span class="losteg">${mat(s[0])}<em>${esc(s[1])}</em></span></li>`).join('')}</ul>` : ''}
+        ${losvar(u)}${losvag(u)}
       </div></div>`;
     /* data-brytbar: facit är lika långt som sina lösningar, och ett svar på
        flera meningar sköt D-uppgiften ut under arkets nederkant. paginera
@@ -663,18 +662,88 @@ window.BladBygg = (() => {
   }
 
   /* ── Lösningsförslaget ───────────────────────────── */
+
+  /* ── SVARSRADEN: ALDRIG TOM, ALDRIG DUBBEL ENHET ──
+     Två fynd ur lärarens granskning av det skarpa provet (2026-08-23), båda
+     på samma rad:
+
+     1. «Svar» stod tomt på uppgift 2 och 6. Det är uppgifter med
+        deluppgifter: föräldern bär ingen egen losning (exam_spec kräver att
+        den ligger på deluppgifterna), så `f` är tom sträng — och raden
+        ritades ändå, med etikett och allt. Deluppgifternas svar finns i
+        `vag` och ritas nedanför; den tomma raden är ren lögn och ska bort.
+     2. «$T(8) = 0{,}1\cdot 256 = 25{,}6$ mm.» följt av ett kursivt «mm».
+        Facittexten bar enheten OCH fältet `enhet` sattes ut efter den.
+        Prompten säger numera att losning inte ska bära enheten när fältet
+        finns (exam_gen.INSTRUCTION), men alla prov som redan ligger i basen
+        gör det — och de skrivs ut i morgon. Därför mäts det här också: slutar
+        svaret på enheten sätts den inte ut en gång till.
+
+     Punkten sist i facittexten hör inte till enheten och räknas bort innan
+     jämförelsen; «25,6 mm.» slutar med «mm». */
+  const ENHET_SLUT = (f, enhet) => {
+    const e = String(enhet || '').replace(/\$/g, '').trim();
+    const s = String(f || '').replace(/\$/g, '').replace(/[.\s]+$/, '');
+    return !!e && s.toLowerCase().endsWith(e.toLowerCase());
+  };
+  function losvar(u) {
+    if (!u.f) return '';
+    return `<div class="losvar"><b class="losetikett">Svar</b><span>${mat(u.f)}</span>${
+      u.enhet && !ENHET_SLUT(u.f, u.enhet) ? `<em>${enhetHtml(u.enhet)}</em>` : ''}</div>`;
+  }
+  /* Vägen till svaret — och på en uppgift med deluppgifter ÄR den svaret:
+     `vag` bär «a) …», «b) …» med sin poäng (plan.js franProv). */
+  const losvag = u => (u.vag && u.vag.length
+    ? `<ul class="lovag">${u.vag.map(s => `<li><span class="losteg">${mat(s[0])}<em>${esc(s[1])}</em></span></li>`).join('')}</ul>`
+    : '');
+
+  /* ── POÄNGTRAPPAN ──
+     Nationella provets bedömningsanvisning: en rad per poäng, med nivån och
+     vad som ger den. Lärarens dom 2026-08-23: «på fleruppgifter framgår inte
+     vad varje poäng ges för.»
+
+     Spegel av app/exam_spec.bedomningsrader — samma delning, samma tolerans
+     mot de gamla dokumentens enradiga kommaform, för skärmen och PDF:en ska
+     visa samma trappa. Ändras den ena ska den andra ändras. */
+  const BEDSTEG = /^\+\s*(\d+)\s*([ECA])\b[\s.:—-]*([\s\S]*)$/;
+  const BEDNOT = /^(vanligt fel|kommentar|obs)\b/i;
+  function trappsteg(bed) {
+    return String(bed || '').split(/\n|,\s*(?=\+\s*\d)|;\s*(?=vanligt fel|kommentar)/i)
+      .map(s => s.trim()).filter(Boolean)
+      .map(s => {
+        const m = s.match(BEDSTEG);
+        if (m) return { niva: `+${m[1]} ${m[2]}`, krav: m[3].trim() };
+        return { niva: '', krav: BEDNOT.test(s) ? s[0].toUpperCase() + s.slice(1) : s };
+      });
+  }
+  /* En trappa för hela uppgiften: förälderns egen, eller deluppgifternas i
+     ordning med sin bokstav framför (en uppgift med deluppgifter har ingen
+     egen bedömning — poängen ligger på a), b), c)). */
+  function trappa(u) {
+    const rader = [];
+    (u.beddel || []).forEach((b, k) => trappsteg(b).forEach(
+      r => rader.push({ ...r, krav: `${'abcdef'[k]}) ${r.krav}` })));
+    if (!rader.length) trappsteg(u.bed).forEach(r => rader.push(r));
+    if (!rader.length) return '';
+    return `<ul class="lotrappa">${rader.map(r => `<li${r.niva ? '' : ' data-not'}>${
+      r.niva ? `<i>${esc(r.niva)}</i>` : '<i></i>'}<span>${mat(r.krav)}</span></li>`).join('')}</ul>`;
+  }
+
   function losKort(u) {
     return `<div class="pruppg">
       <span class="prnr">${u.nr}.<span class="prvarde">${u.p} p</span></span>
       <div><p class="prtext" data-ref="">${ref(u.t)}</p>
-        <div class="losvar"><b class="losetikett">Svar</b><span>${mat(u.f)}</span>${u.enhet ? `<em>${enhetHtml(u.enhet)}</em>` : ''}</div>
+        ${losvar(u)}${losvag(u)}${trappa(u)}
       </div></div>`;
   }
   /* ── Kommenterad elevlösning (förlagans lo4) ──────
-     Samma uppgift löst två eller tre gånger, i stigande ordning, med domen
-     INNE i det parti den gäller — inte i en lista under. Det är gränsen mellan
-     poängen som är svår att dra, och den syns bara när lösningarna står
-     bredvid varandra. Lärarens papper: eleven ser dem aldrig. */
+     Samma uppgift löst två till fyra gånger, i stigande ordning och med ett
+     papper per poängsteg (0, 1, 2, 3 — exam_spec.ExamItem.elevlosningar), med
+     domen INNE i det parti den gäller — inte i en lista under. Det är gränsen
+     mellan poängen som är svår att dra, och den syns bara när lösningarna står
+     bredvid varandra. Domen bär etiketten «Kommentar:» som nationella provets
+     bedömda elevlösningar: den ska säga vilken rad i trappan partiet fick och
+     varför inte nästa. Lärarens papper: eleven ser dem aldrig. */
   /* Partiets poäng är en TRIPPEL (E, C, A) — samma språk som resten av
      dokumentet, se exam_spec.Parti. Den lästes här som ett ensamt tal, och i
      JavaScript är `0 + [1,0,0]` inte 1 utan strängen «01,0,0»: bedömningen
@@ -691,7 +760,7 @@ window.BladBygg = (() => {
       const total = (e.partier || []).reduce((a, p) => a + partipoang(p), 0);
       const partier = (e.partier || []).map(p => `<div class="loparti"${partipoang(p) ? '' : ' data-utan'}>${
         (p.rader || []).map(r => `<div class="loskannrad">${mat(r)}</div>`).join('')
-      }<div class="lodom"><i${partipoang(p) ? '' : ' data-utan'}>${partipoang(p) ? '+' : ''}${partipoang(p)} p</i><p>${mat(p.dom)}</p></div></div>`).join('');
+      }<div class="lodom"><i${partipoang(p) ? '' : ' data-utan'}>${partipoang(p) ? '+' : ''}${partipoang(p)} p</i><p><b>Kommentar:</b> ${mat(p.dom)}</p></div></div>`).join('');
       const full = total >= (u.p || 0) && total > 0;
       return `<div class="loelev"><b>${esc(e.etikett)}</b><span${
         total ? (full ? ' data-full' : '') : ' data-utan'}>${total} av ${u.p} poäng${
@@ -703,8 +772,7 @@ window.BladBygg = (() => {
     return `<div class="pruppg">
       <span class="prnr">${u.nr}.<span class="prvarde">${u.p} p</span></span>
       <div><p class="prtext" data-ref="">${ref(u.t)}</p>
-        <ul class="lovag">${(u.vag || []).map(s => `<li><span class="losteg">${mat(s[0])}<em>${esc(s[1])}</em></span></li>`).join('')}</ul>
-        <div class="losvar"><b class="losetikett">Svar</b><span>${mat(u.f)}</span></div>
+        ${losvag(u)}${losvar(u)}${trappa(u)}
         ${elevlosningar(u)}
       </div></div>`;
   }
