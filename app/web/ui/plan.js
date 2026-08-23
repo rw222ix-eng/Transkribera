@@ -303,11 +303,16 @@
          Skillnaden är hjälpmedlen — båda delarna bär korta svar och uppgifter
          som redovisas på lösblad. */
       { id: 'delprov', namn: 'Upplägg', typ: 'seg', val: ['En del', 'Del A + Del B'] },
-      /* Lösningsförslaget och formelbladet är samma beslut — vad som skrivs ut
-         UTÖVER provet — och stod som två switchar på var sin rad. En rad med två
-         kryss säger det på halva höjden. Fälten under är oförändrade: tryck.js
-         läser `formelblad` och bladet `losningar`. */
-      { id: 'bilagor', namn: 'Bilagor', typ: 'kryss', delar: [{ id: 'losningar', namn: 'Lösningsförslag' }, { id: 'formelblad', namn: 'Formelblad' }] }
+      /* Bedömningsanvisningen och formelbladet är samma beslut — vad som skrivs
+         ut UTÖVER provet — och stod som två switchar på var sin rad. En rad med
+         två kryss säger det på halva höjden. Fälten under är oförändrade:
+         tryck.js läser `formelblad` och bladet `losningar`.
+
+         FÄLTETS ID HETER KVAR `losningar` fast etiketten bytte namn
+         2026-08-23. Id:t är persisterat i varje sparat dokument (`inst`), och
+         ett namnbyte där hade tyst släckt kryssrutan på allt som redan ligger
+         i basen — det är etiketten läraren läser, inte nyckeln. */
+      { id: 'bilagor', namn: 'Bilagor', typ: 'kryss', delar: [{ id: 'losningar', namn: 'Bedömningsanvisning' }, { id: 'formelblad', namn: 'Formelblad' }] }
     ],
     Gruppuppgift: [
       { id: 'grupp', namn: 'Elever per grupp', typ: 'antal', min: 2, max: 5 },
@@ -2216,7 +2221,7 @@
     $$('button', vaxel).forEach((b, j) => {
       b.textContent = j === 0
         ? (v.typ === 'Prov' ? 'Provet' : 'Arbetsbladet')
-        : (v.typ === 'Prov' ? 'Lösningsförslag' : 'Facit');
+        : (v.typ === 'Prov' ? 'Bedömningsanvisning' : 'Facit');
       b.setAttribute('aria-pressed', String(j === (visarLosning ? 1 : 0)));
     });
     const d = visarLosning ? Object.assign(JSON.parse(JSON.stringify(v)), { losningsblad: true }) : v;
@@ -3962,7 +3967,7 @@
     }
   });
 
-  const arkNamn = v => v.typ === 'Prov' ? ['Provet', 'Lösningsförslag'] : v.typ === 'Gruppuppgift' ? ['Gruppuppgiften', 'Facit'] : v.typ === 'Diagnos' ? ['Diagnosen', 'Rättning'] : ['Arbetsbladet', 'Facit'];
+  const arkNamn = v => v.typ === 'Prov' ? ['Provet', 'Bedömningsanvisning'] : v.typ === 'Gruppuppgift' ? ['Gruppuppgiften', 'Facit'] : v.typ === 'Diagnos' ? ['Diagnosen', 'Rättning'] : ['Arbetsbladet', 'Facit'];
   const arkLage = v => ({ tva: harLosning(v), namn: arkNamn(v), vald: visarLosning ? 1 : 0, byt: j => byt(j) });
   function byt(j) {
     visarLosning = j === 1;
@@ -4267,7 +4272,7 @@
   /* Ett riktat arbetsblad bär elevens namn i sitt eget namn — annars ligger två
      blad på samma lektion som två identiska rader i högen (Etapp 4). */
   const dokNamn = v => !v || !v.typ ? 'Dokumentet' : v.losningsblad
-    ? `${v.typ === 'Prov' ? 'Lösningsförslag' : 'Facit'} — ${versal(v.moment)}`
+    ? `${v.typ === 'Prov' ? 'Bedömningsanvisning' : 'Facit'} — ${versal(v.moment)}`
     : `${v.variant === 'Omprov' ? 'Omprov' : v.typ}${v.elev ? ' · ' + v.elev : ''} — ${versal(v.moment)}`;
 
   /* Figurerna kompileras efter att pappret ligger i DOM:en. Varm kompilering tar
@@ -4853,7 +4858,7 @@
     if (!q) return $('#arkivfalt').focus();
     /* Sökningen ser bara det som ligger i Sparat — prov, arbetsblad, tavlor
        och deras lösningsblad. Inget utkast uppe i planeringen. */
-    const namnetPa = v => (v.losningsblad ? (v.typ === 'Prov' ? 'Lösningsförslag' : 'Facit') : v.typ) + ' — ' + versal(v.moment);
+    const namnetPa = v => (v.losningsblad ? (v.typ === 'Prov' ? 'Bedömningsanvisning' : 'Facit') : v.typ) + ' — ' + versal(v.moment);
     if (valt('arkivläge') === 'Sök ord') {
       const l = q.toLowerCase();
       const traff = sparat.filter(v => (namnetPa(v) + ' ' + v.kurs + ' ' + v.klass + ' ' + (v.gy || []).join(' ')).toLowerCase().includes(l));
@@ -4967,7 +4972,7 @@
     if (!v) return;
     const i = v.inst || {};
     const rad = v.typ === 'Prov'
-      ? `${v.uppgifter.length} uppgifter · ${i.provtid || '90 min'} · ${i.delprov || 'Del A + Del B'}${i.formelblad && !v.losningsblad ? ' · formelblad som bilaga' : ''}${v.losningsblad ? ' · lösningsförslag' : ''}`
+      ? `${v.uppgifter.length} uppgifter · ${i.provtid || '90 min'} · ${i.delprov || 'Del A + Del B'}${i.formelblad && !v.losningsblad ? ' · formelblad som bilaga' : ''}${v.losningsblad ? ' · bedömningsanvisning' : ''}`
       : v.typ === 'Arbetsblad'
         ? `${v.uppgifter.length} uppgifter · ${i.niva || 'Blandat'}${v.losningsblad ? ' · facit' : ''}`
         : `${i.langd || 45} minuter · ${i.exempel || 2} exempel på tavlan`;

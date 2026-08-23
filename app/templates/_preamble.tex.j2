@@ -516,8 +516,37 @@
     rubrik läser lika tydligt på papper och kostar ingenting. #))
 \newcommand{\tabrubrik}[1]{{\small\bfseries #1}}
 
-((# Elevlösningens parti i bedömningsanvisningen: lösningens egna rader, och
-    domen inne i partiet den gäller — inte i en lista under. #))
+((# ══════════ BEDÖMNINGSTABELLENS RAD ══════════
+    Lärarens beställning 2026-08-23: vänster lösningen (facit överst, elevernas
+    papper därunder), höger poängen och skälet — på SAMMA rad. Läraren läser
+    radvis: «så här ser 1 p ut, så här ser 2 p ut», och den jämförelsen är hela
+    anvisningens syfte.
+
+    TVÅ MINIPAGES OCH INTE TABULAR. Innehållet är löptext med \par, matte och
+    ibland flera rader; en tabellcell hade krävt att varje & och \\ i
+    innehållet var oskadliggjort, och det som når hit kommer ur modellen.
+    minipage tar vad som helst. Priset är att en rad inte kan brytas över en
+    sidbrytning — och det är rätt pris: en halv elevlösning på nästa sida är
+    värre än en tom halvsida.
+
+    \newcommand är \long som standard, så argumenten får innehålla \par. #))
+\newcommand{\bedrad}[3]{%
+  \par\vspace{1.5mm}%
+  \noindent{\small\bfseries\textcolor{ink700}{#1}}\par\vspace{0.8mm}%
+  \noindent\begin{minipage}[t]{0.55\linewidth}#2\end{minipage}%
+  \hfill\begin{minipage}[t]{0.41\linewidth}#3\end{minipage}%
+  \par\vspace{1mm}}
+
+((# Skiljelinjen mellan två rader. Står FÖRE varje elevrad och aldrig efter
+    den sista — en linje under tabellen hade sett ut som en avstämning. #))
+\newcommand{\bedskilj}{%
+  \par\vspace{1.5mm}\noindent\textcolor{ink200}{\rule{\linewidth}{0.15mm}}%
+  \par\vspace{1.5mm}}
+
+((# Elevlösningens parti — den gamla inramade formen. Används inte längre av
+    bedomning.tex.j2 (tabellen ovan ersatte den 2026-08-23) men står kvar:
+    preamblen delas av alla fyra mallarna, och att riva ett kommando ur en
+    delad preamble för att EN mall slutade använda det är att spara fel sak. #))
 \newsavebox{\elevpartibox}
 \newenvironment{elevparti}[1]{%
   \par\vspace{2mm}%

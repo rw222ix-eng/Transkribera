@@ -104,8 +104,9 @@ def test_en_deluppgift_kan_ocksa_bara_formerna():
      "en kryssruterad med ett enda val"),
     ({"svarsrutor": {"etikett": "Sats", "val": ["a", "b"], "ratt": 5}},
      "ett rätt svar utanför listan"),
-    ({"elevlosningar": ELEVER[:1]},
-     "en enda elevlösning — poängen är att visa skillnaden"),
+    # EN elevlösning är giltig sedan 2026-08-23: en enpoängsuppgift har exakt
+    # ett lägre poängsteg. Noll är det som inte är det — då utelämnas fältet.
+    ({"elevlosningar": []}, "ett tomt elevlösningsfält"),
 ])
 def test_trasiga_former_stoppas_med_besked(fel, vad):
     doc, fellista = exam_spec.validate_exam_json(
@@ -250,12 +251,15 @@ def test_facit_stannar_pa_lararens_papper():
     for namn in ("prov", "arbetsblad"):
         assert "Första felet står i steg" not in tex[namn], \
             f"{namn} avslöjar vilket steg som är fel"
-        assert "Elevlösning A" not in tex[namn], \
+        assert "Derivatan är fel" not in tex[namn], \
             f"{namn} bär elevlösningarna — de är lärarens"
         assert "\\textbf{\\svarsruteval" not in tex[namn], \
             f"{namn} markerar det rätta krysset"
     assert "Första felet står i steg 2" in tex["bedomning"]
-    assert "Elevlösning A" in tex["bedomning"]
+    # Elevlösningarna står som rader i bedömningstabellen: etiketten är
+    # poängsteget («0 p»), och kommentaren är skälet.
+    assert r"\bedrad{0 p}" in tex["bedomning"]
+    assert "Derivatan är fel" in tex["bedomning"]
     assert "\\textbf{\\svarsruteval" in tex["bedomning"]
 
 
@@ -282,9 +286,11 @@ def test_en_elevlosning_som_borjar_med_ord_klistras_inte_fast_i_par():
                         elevlosningar=ELEVER_ORD))
     tex = exam_latex.render_bedomning(doc)
     assert "\\parTanken" not in tex
-    # Bara elevpartierna: preamblen har \parindent och \parskip, som är egna
-    # kommandon och inte ett \par med ett ord fastklistrat.
-    partier = re.findall(r"\\begin\{elevparti\}.*?\\end\{elevparti\}", tex, re.S)
+    # Bara elevraderna: preamblen har \parindent och \parskip, som är egna
+    # kommandon och inte ett \par med ett ord fastklistrat. Raderna ligger
+    # mellan \bedskilj och nästa \bedskilj (bedomning.tex.j2, elevrad).
+    partier = re.findall(r"\\bedskilj(.*?)(?=\\bedskilj|\\end\{uppgift\})",
+                         tex, re.S)
     assert partier
     for p in partier:
         assert re.search(r"\\par[A-Za-zÅÄÖåäö]", p) is None, \
@@ -341,7 +347,7 @@ def test_formerna_kompilerar_och_star_i_pdfen(tmp_path):
         assert "12 600" in text, f"{namn}: datatabellens siffror saknas"
         assert "Randvinkelsatsen" in text, f"{namn}: kryssrutornas val saknas"
         if namn == "bedomning":
-            assert "Elevlösning A" in text
+            assert "Derivatan" in text
             assert "steg 2" in text
         else:
             # Enheten står på svarsraden — och svarsraden finns bara här.

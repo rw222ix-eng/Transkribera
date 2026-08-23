@@ -24,18 +24,50 @@
     i Python (exam_latex._bedomning_rader, som läser exam_spec.bedomningsrader
     och därför också klarar de gamla dokumentens enradiga kommaform).
 
-    Utan rader — ett tomt fält på en förälder med deluppgifter — trycks
-    ingenting alls; rubriken «Bedömning:» utan innehåll var en rad att läsa
-    förbi. #))
-((* macro bedomning(u) *))
-((* if u.bedomning_rader *))
-{\small\textbf{Bedömning:}}\par\vspace{0.5mm}
-((* for r in u.bedomning_rader *))
+    Trappan står i bedömningstabellens HÖGERSPALT (\bedrad) — hel på
+    facitraden, och bara de steg lösningen fick på en elevrad. #))
+((* macro trappa(rader) *))
+((* for r in rader *))
 ((* if r.niva *))\bedsteg{((( r.krav )))}{((( r.niva )))}
 ((* else *)){\small\itshape ((( r.krav )))}\par
 ((* endif *))
 ((* endfor *))
+((* endmacro *))
+
+((# ══════════ FACITRADEN ══════════
+    Tabellens översta rad, en per poängbärande enhet: lösningen till vänster,
+    hela trappan till höger. Etiketten säger vad raden ÄR — «Facit · full
+    pott» — så att elevraderna under den läses som det de är, papper som inte
+    nådde ända fram.
+
+    Utan lösning OCH utan trappa trycks ingenting: en förälder med
+    deluppgifter bär varken det ena eller det andra, och en tom rad läses som
+    ett fel i pappret i stället för som en lucka i underlaget. #))
+((* macro facitrad(u, etikett) *))
+((* if u.losning or u.bedomning_rader *))
+\bedrad{((( etikett )))}{((* if u.losning *)){\small ((( u.losning )))}((* endif *))}{((( trappa(u.bedomning_rader) )))}
 ((* endif *))
+((* endmacro *))
+
+((# ══════════ ELEVRADERNA ══════════
+    En rad per LÄGRE poängsteg — 0 p, 1 p, 2 p … — med elevens papper till
+    vänster och de trappsteg lösningen fick till höger, följt av det korta
+    skälet till att den inte fick nästa. Full pott står som facitraden ovan och
+    skrivs aldrig som elevlösning.
+
+    Raderna kommer ur bedömningspasset (exam_gen.bedomningspass), som är
+    fail-open per uppgift: föll anropet står bara facitraden här, och det är
+    med flit — ett papper utan elevexempel är fortfarande en anvisning man kan
+    rätta efter. #))
+((* macro elevrad(e) *))
+\bedskilj
+((# \par MÅSTE avslutas med ett mellanslag, precis som i gruppuppgift.tex.j2:
+    utan det klistras NÄSTA rads första ord fast i kommandonamnet. Lärarens
+    skarpa 1a-prov gav «\parTanken», ett odefinierat kommando, och HELA
+    bedömningsanvisningen föll — provet fick sin PDF, anvisningen ingen. Att
+    det inte syntes förr är att elevlösningarnas rader oftast börjar med
+    matematik ($…$ → \(), och \( avslutar \par på egen hand. #))
+\bedrad{((( e.etikett )))}{((* for r in e.rader *))((( r )))\par ((* endfor *))}{((* if e.utan *)){\small\bfseries Inga poäng}\par ((* else *))((( trappa(e.trappa) )))((* endif *))((* if e.kommentar *))\par\vspace{1mm}{\small ((( e.kommentar )))}((* endif *))}
 ((* endmacro *))
 
 \begin{document}
@@ -77,43 +109,22 @@ av totalt ((( granser.total ))) poäng.}
 {\itshape ((( d.text )))}\par\vspace{1mm}
 ((( former.kropp(d) )))
 ((* if d.flerval *)){\small\textbf{Rätt: ((( d.ratt_bokstav )))}}\par\vspace{1mm}((* endif *))
-{\small\textbf{Lösningsförslag:} ((( d.losning )))}\par\vspace{1mm}
-((( bedomning(d) )))
+((# TANKSTRECK OCH INTE MITTPUNKT I ETIKETTEN. \textperiodcentered ligger
+    i TS1 (textcomp), och TS1 finns bara i MAGER stil i Tectonic-seeden: den
+    feta etiketten föll på «Font TS1/lmr/bx/n/10.95 not loadable» och tog
+    hela bedömningsanvisningen med sig. Exakt samma fälla som fet kursiv
+    (ec-lmbxi10) samma dag. \textemdash bor i T1 och finns i alla vikter. #))
+((( facitrad(d, 'Facit ' ~ d.bokstav ~ ') \\textemdash{} full pott') )))
 \end{deluppgift}
 ((* endfor *))
 ((* else *))
 ((* if u.flerval *)){\small\textbf{Rätt: ((( u.ratt_bokstav )))}}\par\vspace{1mm}((* endif *))
-{\small\textbf{Lösningsförslag:} ((( u.losning )))}\par\vspace{1mm}
-((( bedomning(u) )))
+((( facitrad(u, 'Facit \\textemdash{} full pott') )))
 ((* endif *))
-((# Kommenterade elevlösningar (förlagans lo4): samma uppgift löst två eller
-    tre gånger, i stigande ordning, med domen INNE i det parti den gäller. Det
-    är gränsen mellan poängen som är svår att dra, och den syns bara när man
-    ser lösningarna bredvid varandra. Står bara här — eleven ser dem aldrig. #))
-((* for e in u.elevlosningar *))
-\par\vspace{3mm}\noindent\textbf{((( e.etikett )))} \textemdash{} ((( e.poang ))) p
-((* for pa in e.partier *))
-\begin{elevparti}{((* if pa.poang *))+((( pa.poang ))) p((* else *))0 p((* endif *))}
-((# \par MÅSTE avslutas, precis som i gruppuppgift.tex.j2: utan mellanslaget
-    klistras NÄSTA rads första ord fast i kommandonamnet. Lärarens skarpa
-    1a-prov gav «\parTanken», ett odefinierat kommando, och HELA
-    bedömningsanvisningen föll — provet fick sin PDF, anvisningen ingen.
-    Att det inte syntes förr är att elevlösningarnas rader oftast börjar med
-    matematik ($…$ → \(), och \( avslutar \par på egen hand. #))
-((* for r in pa.rader *))((( r )))\par ((* endfor *))
-((# «Kommentar:» som i NP:s bedömda elevlösningar — domen ska säga vilken rad
-    i trappan partiet fick och varför inte nästa, och etiketten är det som
-    gör den till en kommentar och inte en till lösningsrad.
-
-    Etiketten står FÖRE kursiven och aldrig inuti den: \itshape\textbf ger
-    fet kursiv (ec-lmbxi10), en form Tectonic-cachen inte bär — hela
-    bedömningsanvisningen föll på «Font … not loadable» innan en enda sida
-    skrevs. Seeden speglar mallarna, alltså får mallarna inte hitta på nya
-    snittvarianter. #))
-{\small\textbf{Kommentar:}\enspace\itshape ((( pa.dom )))}
-\end{elevparti}
-((* endfor *))
-((* endfor *))
+((# Elevraderna sist i uppgiftens tabell, under facitraden (eller under alla
+    deluppgifternas facitrader). Eleven ser dem aldrig — det här är lärarens
+    papper. #))
+((* for e in u.elevrader *))((( elevrad(e) )))((* endfor *))
 \end{uppgift}
 ((* endfor *))
 ((* endfor *))

@@ -415,26 +415,31 @@ class ExamItem(_Uppgiftsbas):
     # Hör till BEDÖMNINGEN, inte till elevens ark — den som skriver provet ska
     # aldrig se dem. Renderas i bedomning.tex.j2 och i appens facitblad.
     #
-    # FYRA och inte tre (lärarens granskning 2026-08-23): «elevlösningarna
-    # hoppar över steg — 0 av 3, sedan 2 och 3». En trepoängare har fyra
-    # poängsteg (0, 1, 2, 3) och med taket tre gick ett av dem alltid förlorat.
-    # Valet stod mellan att höja taket och att låta trappan i `bedomning` bära
-    # stegen ensam; båda gjordes, för de svarar på olika frågor. Trappan säger
-    # vad varje poäng KRÄVER, elevlösningen visar hur ett papper som nätt och
-    # jämnt når (eller missar) steget SER UT — och det är den skillnaden som är
-    # svår att dra. NP visar inte heller alla steg (Ma 2c vt22 har tre
-    # nollpoängsexempel på samma uppgift), men det visar alltid kommentaren,
-    # och den kräver prompten. Fler än fyra ryms inte på ett facitblad.
-    elevlosningar: list[Elevlosning] | None = Field(default=None, max_length=4)
+    # ETT PAPPER PER POÄNGSTEG (lärarens beställning 2026-08-23). Trappan
+    # säger vad varje poäng KRÄVER; elevlösningen visar hur ett papper som nätt
+    # och jämnt når (eller missar) steget SER UT — och det är den skillnaden
+    # som är svår att dra. Stegen som ska visas är 0 … max−1: full pott står
+    # som FACITRADEN överst i tabellen och skrivs inte en gång till.
+    #
+    # Taket är åtta och inte fyra. Fyra räckte när lösningarna var illustrationer
+    # («noll poäng, halva, full»); nu är de en rad var i en tabell, och en
+    # uppgift värd sex poäng har sex lägre steg. Åtta är med marginal över den
+    # högsta poäng en enskild uppgift får i ett balanserat skelett — och en rad
+    # i en tvåspaltstabell kostar en bråkdel av vad den gamla inramade
+    # elevrutan gjorde.
+    #
+    # Golvet är ETT och inte två: en enpoängsuppgift har exakt ett lägre steg
+    # (noll poäng), och kravet på två hade gjort varje flervalsfråga ogiltig.
+    elevlosningar: list[Elevlosning] | None = Field(default=None, max_length=8)
 
     @model_validator(mode="after")
     def _kontrollera_struktur(self):
         if self.figur is not None and self.bild is not None:
             raise ValueError("figur och bild utesluter varandra — välj en")
         if self.elevlosningar is not None:
-            if len(self.elevlosningar) < 2:
+            if not self.elevlosningar:
                 raise ValueError("kommenterade elevlösningar ska vara minst "
-                                 "två — poängen är att visa skillnaden")
+                                 "en — annars utelämnas fältet")
             tak = sum(uppg_poang(self)) if self.deluppgifter else sum(self.poang)
             for e in self.elevlosningar:
                 if e.poang > tak:

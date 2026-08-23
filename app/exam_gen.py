@@ -15,6 +15,7 @@ from __future__ import annotations
 import copy
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
 
 from app import exam_spec, llm_client, niva_rubrik
@@ -442,25 +443,18 @@ INSTRUCTION = (
     "0-baserat och visas bara för läraren. Den här formen prövar att LÄSA en "
     "lösning — använd den för resonemang och kommunikation, aldrig som "
     "räkneuppgift.\n"
-    # Lärarens granskning 2026-08-23: «elevlösningarna hoppar över steg — 0 av
-    # 3, sedan 2 och 3». Det steg som fattas är just det svåra: gränsen mellan
-    # en poäng och två. Taket är därför fyra (exam_spec.ExamItem), och stegen
-    # räknas av bedomningssignaler.
-    "- elevlosningar: två till FYRA kommenterade elevlösningar på SAMMA "
-    "uppgift, i stigande ordning, och de ska TÄCKA POÄNGSTEGEN: noll poäng "
-    "först, full pott sist, och stegen däremellan (en trepoängare får alltså "
-    "fyra lösningar: 0, 1, 2 och 3 poäng). Varje lösning har "
-    "etikett och partier; varje parti har rader (lösningens egna rader), poang "
-    "och dom — kommentaren, i nationella provets form: säg vilken rad i "
-    "bedömningstrappan partiet fick och varför inte nästa ('Tecknar sambandet "
-    "och får den första E-poängen, men avslutar aldrig lösningen — den andra "
-    "E-poängen kräver ett godtagbart svar'). Partiets poang är en "
-    "TRIPPEL [E, C, A] precis som uppgiftens — [0, 0, 0] för ett parti som "
-    "inte gav något, aldrig ett ensamt tal. Summan av partiernas "
-    "poäng får inte överstiga uppgiftens. De hör till BEDÖMNINGEN — eleven ser "
-    "dem aldrig — och är värda att skriva på den uppgift där gränsen mellan "
-    "poängen är svårast att dra. Har uppgiften deluppgifter sätts fältet på "
-    "FÖRÄLDERN och lösningarna visar hela uppgiften.\n"
+    # ── ELEVLÖSNINGARNA BEGÄRS INTE HÄR LÄNGRE ────────────────────────
+    # De skrivs i ett eget pass efter domarna (bedomningspass), ett anrop per
+    # uppgift och parallellt. Skälet är budgeten: en elevlösning per poängsteg
+    # på varje uppgift är trettio små papper till, i ett anrop som redan tar
+    # 7–10 minuter och vars grammatik ligger på 29 015 av 30 000 tecken. Här
+    # kostade de dessutom kvalitet — modellen skrev dem sist av allt, med det
+    # den hade kvar.
+    #
+    # Fältet finns KVAR i schemat och i grammatiken (exam_spec.ExamItem), och
+    # det är med flit: gamla papper i basen bär det, reparations- och
+    # omskrivningsrundorna skickar tillbaka hela dokumentet, och ett fält
+    # grammatiken inte känner igen hade fällt varje sådan runda.
     "Exempel på en uppgift MED deluppgifter (förälderns poang är [0, 0, 0]):\n"
     '{"del": "C", "formaga": "PL", "typ": "problem", "poang": [0, 0, 0], '
     '"text": "En rektangel har omkretsen 24 cm.", "deluppgifter": ['
@@ -1778,6 +1772,364 @@ def doma_rakning(exam: dict, *, model: str, llm=llm_client.generate,
     return raknefel(enheter, _parse_rakning(raw))
 
 
+# ═══════════════════════════════ bedömningspasset ═══════════════════════════
+#
+# LÄRARENS BESTÄLLNING (2026-08-23, efter granskningen av det skarpa provet):
+# bedömningsanvisningen ska visa hela trappan som PAPPER, inte som text. Överst
+# facit med full pott och hela trappan bredvid; därunder en elevlösning per
+# LÄGRE poängsteg — 0 p, 1 p, 2 p … — med vilka poäng den fick och, kort och
+# konkret, varför den inte fick nästa. På varje uppgift.
+#
+# VARFÖR ETT EGET PASS OCH INTE HUVUDANROPET. Elevexempel per poängsteg är
+# mycket text: ett tiouppgiftsprov med tre poäng per uppgift är trettio små
+# lösningar utöver provet självt. Huvudanropet tar redan 7–10 minuter och dess
+# grammatik ligger på 29 015 av 30 000 tecken (claude_code.SCHEMA_TAK_EXE,
+# mätt i tests/test_platar.py) — det finns varken tid eller schema kvar. Det
+# här passet kostar i stället ETT litet anrop per uppgift, och anropen är
+# oberoende av varandra, alltså går de parallellt: väggtiden blir en handfull
+# anrop lång i stället för tolv.
+#
+# KONTRAKTET ÄR DOMARNAS. Eget anrop, temperature 0, json_schema, och
+# FAIL-OPEN PER UPPGIFT: faller ett anrop lämnas den uppgiften utan exempel och
+# provet levereras ändå. Skillnaden mot domarna är att det här passet SKRIVER
+# i dokumentet i stället för att rapportera fynd — och därför prövas det som
+# skrivs mot samma deterministiska mått som vakten (_trappa_duger,
+# _elevstegen): en omskrivning som tappar ett poängsteg är ingen förbättring
+# och kastas.
+#
+# Elevlösningarna landar på exam_spec.Elevlosning, samma fält som förut, så
+# renderarna, PDF:en, valideringen och rättningen fortsätter fungera på gamla
+# papper som på nya.
+BEDOMNING_MAX_TOKENS = 6_000
+# Sex trådar och inte tolv: varje anrop är en egen claude-process (claude_code
+# startar CLI:t per anrop), och tolv samtidiga processer är tolv samtidiga
+# modellkörningar på lärarens kvot. Sex halverar väggtiden på ett tolvuppgifts
+# prov utan att göra kön till en svärm.
+BEDOMNING_TRADAR = 6
+
+BEDOMNING_SYSTEM = (
+    "Du är en svensk matematiklärare som skriver bedömningsanvisningar till "
+    "ett prov. Du skriver ENKELT och KONKRET, som till en kollega som ska "
+    "rätta trettio prov på en kväll — aldrig i akademisk kursplanesvenska. "
+    "Du svarar ALLTID med giltig JSON enligt schemat, ingenting annat."
+)
+
+BEDOMNING_SCHEMA = {
+    "type": "object",
+    "properties": {
+        # Trappan, omskriven i det enkla språket — en post per poängbärande
+        # enhet. `enhet` är deluppgiftens bokstav, eller "" när uppgiften inte
+        # har deluppgifter.
+        "bedomning": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "enhet": {"type": "string"},
+                    "rader": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["enhet", "rader"],
+            },
+        },
+        "elevlosningar": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    # Trippeln (E, C, A) som överallt annars i dokumentet —
+                    # exam_spec.Parti bär den, och ett ensamt tal hade behövt
+                    # gissas isär i nivåer vid inskrivningen.
+                    "poang": {"type": "array", "items": {"type": "integer"}},
+                    "rader": {"type": "array", "items": {"type": "string"}},
+                    "kommentar": {"type": "string"},
+                },
+                "required": ["poang", "rader", "kommentar"],
+            },
+        },
+    },
+    "required": ["bedomning", "elevlosningar"],
+}
+
+# TALREGLERNAS relevanta del. Hela blocket (TALREGLER) är fyrtio rader om hur
+# uppgifternas tal ska VÄLJAS — passet väljer inga tal, det skriver av en elevs
+# papper. Kvar står det som faktiskt gäller en elevlösning: hur den skrivs.
+TALREGLER_ELEV = (
+    "SÅ SKRIVS TALEN i lösningarna: decimalkomma i matteläge ($3{,}5$), "
+    "mellanslag mellan tal och enhet, exakta svar utan räknare (heltal, "
+    "förkortat bråk, exakt rot) och 2–3 värdesiffror med räknare. En "
+    "elevlösning som är fel ska vara fel på ett SANNOLIKT sätt — tappat "
+    "minustecken, glömd andra rot, fel enhet — aldrig nonsens."
+)
+
+
+def _bedenhet(d: dict) -> dict:
+    return {"text": d.get("text") or "", "losning": d.get("losning") or "",
+            "poang": list(d.get("poang") or (0, 0, 0)),
+            "bedomning": d.get("bedomning") or ""}
+
+
+def bedomningsunderlag(exam: dict) -> list[dict]:
+    """Ett underlag per UPPGIFT — bedömningspassets indata.
+
+    Elevlösningarna sitter på uppgiften (exam_spec.ExamItem) medan trappan
+    sitter på varje poängbärande enhet. Anropet måste därför se hela uppgiften
+    på en gång: en elevlösning som visar «a) rätt, b) fel» går inte att skriva
+    ur en deluppgift i taget."""
+    ut: list[dict] = []
+    for i, u in enumerate(exam.get("uppgifter") or [], 1):
+        if not isinstance(u, dict):
+            continue
+        delar = [d for d in (u.get("deluppgifter") or []) if isinstance(d, dict)]
+        enheter = ([dict(_bedenhet(d), nyckel="abcdefghijkl"[k])
+                    for k, d in enumerate(delar[:12])] if delar
+                   else [dict(_bedenhet(u), nyckel="")])
+        ut.append({"nr": i, "text": u.get("text") or "",
+                   "typ": u.get("typ") or "", "enhet": u.get("enhet") or "",
+                   "summa": sum(sum(e["poang"]) for e in enheter),
+                   "enheter": enheter})
+    return ut
+
+
+def build_bedomning_prompt(underlag: dict, *, skala: str = "") -> str:
+    """Bedömningsskrivarens prompt — EN uppgift.
+
+    Ordet «bedömningsskrivare» står här och ingen annanstans i appen:
+    uppspelningen väljer band på det (tests/fejk.py `_auto`), av samma skäl som
+    räknedomaren. Prompten bär en färdig uppgift med facit och skulle annars
+    matcha den generator som skrev den."""
+    tak = int(underlag["summa"])
+    steg = ", ".join(f"{p} p" for p in range(tak)) or "0 p"
+    kort = {"nr": underlag["nr"], "uppgift": underlag["text"],
+            "enheter": [{k: e[k] for k in
+                         ("nyckel", "text", "losning", "poang", "bedomning")}
+                        for e in underlag["enheter"]]}
+    return (
+        "Du är bedömningsskrivare för EN uppgift på ett matematikprov. Nedan "
+        "står uppgiften med sitt facit (losning), sina poäng som (E, C, A) och "
+        "sin nuvarande bedömningsanvisning (bedomning). «nyckel» är "
+        "deluppgiftens bokstav, eller tom sträng när uppgiften inte har "
+        "deluppgifter.\n"
+        f"{json.dumps(kort, ensure_ascii=False)}\n\n"
+        + ((skala + "\n\n") if skala else "")
+        + TALREGLER_ELEV + "\n\n"
+        "Gör två saker.\n\n"
+        "1. SKRIV OM TRAPPAN i `bedomning` — en post per enhet ovan, med "
+        "samma «nyckel». `rader` är EN RAD PER POÄNG i stigande ordning, "
+        "formen «+1 <nivå> <vad som ger just den poängen>»: en enhet med "
+        "poäng [1, 2, 0] har exakt tre rader, en +1 E och två +1 C. Behåll "
+        "alltså antalet rader och nivåerna EXAKT som poängen säger — ändra "
+        "bara SPRÅKET. Skriv det en lärare ser på ett papper, kort och "
+        "konkret: «+1 C korrekt potens av produkten i täljaren», «+1 C i "
+        "övrigt korrekt förenkling med rätt svar», «+1 E rätt alternativ». "
+        "Aldrig kursplanesvenska som «allmän härledning ur divisionsregeln "
+        "med godtyckliga a och n» — skriv «visar regeln för alla a och n, "
+        "inte bara ett tal». Sist får EN extra rad stå: «Vanligt fel: …».\n\n"
+        f"2. SKRIV ELEVLÖSNINGARNA i `elevlosningar`. Uppgiften är värd {tak} "
+        f"poäng, och du skriver en lösning per LÄGRE poängsteg: {steg}. "
+        "Full pott skriver du INTE — facit står redan överst på pappret. "
+        "Ordningen är stigande, den lägsta först.\n"
+        "- `rader` är elevens papper, rad för rad, precis som en elev skulle "
+        "skriva det (matte inom $…$, högst sex rader). Har uppgiften "
+        "deluppgifter börjar raderna med «a)», «b)» …\n"
+        "- `poang` är trippeln [E, C, A] lösningen får, och summan ska vara "
+        "just det poängsteget.\n"
+        "- `kommentar` säger TVÅ saker på enkel svenska, i en eller två korta "
+        "meningar: vilken rad i trappan lösningen fick, och varför den inte "
+        "fick nästa. Till exempel «Får +1 C för korrekt potens i täljaren, "
+        "men förenklar aldrig efter potensregeln.» Lösningen på noll poäng "
+        "säger «Inga poäng» och sedan varför.\n"
+        "Svara med enbart JSON."
+    )
+
+
+def _parse_bedomning(raw: str) -> dict | None:
+    """Passets svar → {"bedomning": {nyckel: text}, "elevlosningar": [...]}.
+
+    Ett svar som inte går att tolka ger None, och då lämnas uppgiften som den
+    var: passet SKRIVER i dokumentet, så ett halvt tolkat svar är farligare än
+    inget svar alls."""
+    data = _json_objekt(raw)
+    if not isinstance(data, dict):
+        return None
+    trappor: dict[str, str] = {}
+    for b in data.get("bedomning") or []:
+        if not isinstance(b, dict):
+            continue
+        rader = [str(r).strip() for r in (b.get("rader") or []) if str(r).strip()]
+        if rader:
+            nyckel = str(b.get("enhet") or "").strip().strip(")").lower()
+            trappor[nyckel] = "\n".join(rader)
+    elever: list[dict] = []
+    for e in data.get("elevlosningar") or []:
+        if not isinstance(e, dict):
+            continue
+        rader = [str(r) for r in (e.get("rader") or []) if str(r).strip()]
+        poang = [int(p) for p in (e.get("poang") or [])
+                 if isinstance(p, (int, float)) and not isinstance(p, bool)]
+        if not rader or len(poang) != 3:
+            continue
+        elever.append({"rader": rader[:6], "poang": tuple(poang),
+                       "kommentar": str(e.get("kommentar") or "").strip()})
+    if not trappor and not elever:
+        return None
+    return {"bedomning": trappor, "elevlosningar": elever}
+
+
+def _trappa_duger(text: str, poang) -> bool:
+    """Trappan mätt med VAKTENS mått (bedomningssignaler): en rad per poäng,
+    varje rad ETT poäng, och nivåerna uppgiftens egna. Passets omskrivning
+    prövas mot samma mått som allt annat — en trappa som tappar ett poängsteg
+    på vägen till enklare språk är ingen förbättring."""
+    p = tuple(poang or (0, 0, 0))
+    rader = [r for r in exam_spec.bedomningsrader(text) if not r["not"]]
+    if len(rader) != sum(p) or any(r["poang"] != 1 for r in rader):
+        return False
+    return ({n: sum(1 for r in rader if r["niva"] == n) for n in "ECA"}
+            == {"E": p[0], "C": p[1], "A": p[2]})
+
+
+def _elevstegen(elever: list[dict], tak: int) -> list[dict]:
+    """Elevlösningarna som faktiskt duger: ett papper per LÄGRE poängsteg,
+    0 … tak−1, i stigande ordning och utan dubbletter.
+
+    Full pott hör inte hit — den raden ÄR facit och står överst på pappret.
+    Kommer den ändå med (modellen läste inte instruktionen) tas den bort: två
+    facitrader säger emot varandra så fort den ena är sämre skriven."""
+    per_steg: dict[int, dict] = {}
+    for e in elever:
+        s = sum(e["poang"])
+        if 0 <= s < tak and s not in per_steg and min(e["poang"]) >= 0:
+            per_steg[s] = e
+    return [per_steg[s] for s in sorted(per_steg)]
+
+
+def skriv_in_bedomning(uppgift: dict, svar: dict) -> bool:
+    """Passets svar in i uppgiften. Returnerar om något faktiskt skrevs.
+
+    Trappan och elevlösningarna skrivs OBEROENDE av varandra: dög den ena men
+    inte den andra ska den som dög ändå komma med."""
+    if not isinstance(uppgift, dict) or not svar:
+        return False
+    skrivet = False
+    delar = [d for d in (uppgift.get("deluppgifter") or []) if isinstance(d, dict)]
+    enheter = ([("abcdefghijkl"[k], d) for k, d in enumerate(delar[:12])]
+               if delar else [("", uppgift)])
+    for nyckel, mal in enheter:
+        ny = (svar.get("bedomning") or {}).get(nyckel)
+        if ny and _trappa_duger(ny, mal.get("poang")):
+            mal["bedomning"] = ny
+            skrivet = True
+    tak = sum(sum(m.get("poang") or (0, 0, 0)) for _n, m in enheter)
+    steg = _elevstegen(svar.get("elevlosningar") or [], tak)
+    if steg:
+        # ETT parti per elevlösning. Partierna finns för att kunna dela en
+        # lösning i stycken med var sin dom (förlagans lo4), men pappret
+        # läraren bad om är en RAD per poängsteg — och en rad är ett parti.
+        uppgift["elevlosningar"] = [
+            {"etikett": f"{sum(e['poang'])} p",
+             "partier": [{"rader": e["rader"], "poang": list(e["poang"]),
+                          "dom": e["kommentar"]}]}
+            for e in steg]
+        skrivet = True
+    return skrivet
+
+
+def _ett_bedomningssvar(underlag: dict, *, model: str, llm, skala: str):
+    """Ett anrop. Sväljer sitt eget fel — fail-open per uppgift betyder att
+    grannuppgifterna inte får veta om att den här föll."""
+    try:
+        raw = llm(
+            model, build_bedomning_prompt(underlag, skala=skala),
+            system=BEDOMNING_SYSTEM,
+            options={"temperature": 0.0},
+            response_format={"type": "json_schema",
+                             "json_schema": {"name": "bedomning",
+                                             "schema": BEDOMNING_SCHEMA}},
+            max_tokens=BEDOMNING_MAX_TOKENS,
+            token_cb=None,
+        )
+        return _parse_bedomning(raw)
+    except Exception:                               # noqa: BLE001
+        return None
+
+
+def bedomningspass(exam: dict, *, model: str, llm=llm_client.generate,
+                   skala: str = "", nummer: list[int] | None = None,
+                   log_cb: Callable[[str], None] | None = None) -> int:
+    """Skriv elevexempel och enkelt språk i trappan — ETT anrop per uppgift,
+    körda parallellt. Returnerar antalet uppgifter som fick något skrivet.
+
+    `nummer` begränsar passet till vissa uppgifter (omskrivningen skriver bara
+    om det som ändrades). Utan det skrivs alla.
+
+    AVBRYT STOPPAR PASSET. Loggraden är livstecknet strömmen avbryter vid
+    (app/web/sse.py: `emit` kastar KlientBorta), och den ligger i HUVUDTRÅDEN
+    efter varje färdigt anrop — trådarna loggar aldrig själva, för då hade
+    avbrottet fastnat i fail-open-fällan och svalts som «ett anrop som föll»."""
+    log = log_cb or (lambda _m: None)
+    valda = set(nummer or [])
+    underlag = [u for u in bedomningsunderlag(exam)
+                if u["summa"] > 0 and (not valda or u["nr"] in valda)]
+    if not underlag:
+        return 0
+    n = len(underlag)
+    uppgifter = exam.get("uppgifter") or []
+    # Siffrorna i raden ÄR mätaren (app/web/ui/fraga.js, NUMMER-regexen läser
+    # «uppgift n av N»). Den räknar FÄRDIGA anrop och inte uppgiftsnummer:
+    # anropen går parallellt och blir klara i den ordning modellen råkar svara,
+    # så uppgiftsnumret hade hoppat fram och tillbaka på lärarens skärm.
+    log(f"Skriver elevexempel (uppgift 1 av {n}) …")
+    pool = ThreadPoolExecutor(max_workers=min(BEDOMNING_TRADAR, n))
+    skrivna = 0
+    try:
+        futures = {pool.submit(_ett_bedomningssvar, u, model=model, llm=llm,
+                               skala=skala): u for u in underlag}
+        klara = 0
+        for fut in as_completed(futures):
+            u = futures[fut]
+            klara += 1
+            try:
+                svar = fut.result()
+            except Exception:                       # noqa: BLE001
+                svar = None
+            if svar and 1 <= u["nr"] <= len(uppgifter):
+                if skriv_in_bedomning(uppgifter[u["nr"] - 1], svar):
+                    skrivna += 1
+            # Raden kommer EFTER skrivningen: kastar den (läraren tryckte
+            # Avbryt) ligger det som hann bli klart redan i dokumentet.
+            log(f"Skriver elevexempel (uppgift {min(klara + 1, n)} av {n}) …")
+    finally:
+        # wait=False + cancel_futures: ett avbrott ska släppa läraren direkt,
+        # inte vänta in fem anrop till som ingen längre väntar på.
+        pool.shutdown(wait=False, cancel_futures=True)
+    return skrivna
+
+
+def andrade_uppgifter(fore: dict, efter: dict) -> list[int]:
+    """Uppgiftsnumren som skiljer sig mellan två versioner av samma papper.
+
+    Bedömningspasset kostar ett anrop per uppgift, och en omskrivning rör
+    oftast en enda: den som INTE ändrades bär redan sina elevexempel, och att
+    skriva om dem hade kostat elva anrop för att läraren bad om något på
+    uppgift tolv. Jämförelsen är på det passet faktiskt läser — text, facit,
+    poäng och trappa — inte på hela uppgiften: en bild som bytts ändrar ingen
+    bedömning."""
+    def kanon(u):
+        if not isinstance(u, dict):
+            return None
+        delar = [d for d in (u.get("deluppgifter") or []) if isinstance(d, dict)]
+        return json.dumps(
+            [u.get("text"), u.get("losning"), u.get("bedomning"),
+             list(u.get("poang") or ()),
+             [[d.get("text"), d.get("losning"), d.get("bedomning"),
+               list(d.get("poang") or ())] for d in delar]],
+            ensure_ascii=False, sort_keys=True)
+    a = [kanon(u) for u in (fore.get("uppgifter") or [])]
+    b = [kanon(u) for u in (efter.get("uppgifter") or [])]
+    return [i for i, u in enumerate(b, 1) if i > len(a) or a[i - 1] != u]
+
+
+
 # ── Deterministiska nivåsignaler ──────────────────────────────────────────
 # Billiga, körs alltid, och de AVGÖR ALDRIG ensamma — de blir varningar läraren
 # ser, inte problem som skickas till reparationsloopen.
@@ -2082,8 +2434,14 @@ def bedomningssignaler(exam: dict) -> list[dict]:
                            "den nivå poängen faktiskt ligger på."))
     # 3. Elevlösningarna ska täcka poängstegen. «0 av 3», sedan 2 och 3 — det
     #    steg som saknas är just det läraren behöver se, för gränsen mellan 1 p
-    #    och 2 p är den som är svår att dra. Fyra lösningar ryms (exam_spec),
-    #    alltså täcks 0…3 helt; över tre poäng krävs bara ändarna.
+    #    och 2 p är den som är svår att dra.
+    #
+    #    STEGEN ÄR 0 … tak−1 och inte 0 … tak (lärarens beställning
+    #    2026-08-23): full pott står som FACITRADEN överst i tabellen, och en
+    #    elevlösning på full pott hade varit samma rad en gång till, sämre
+    #    skriven. Gamla papper bär den ändå — deras översta lösning ÄR full
+    #    pott — och de ska inte börja varna för det, så en extra lösning på
+    #    taket passerar.
     for i, u in enumerate(exam.get("uppgifter") or [], 1):
         if not isinstance(u, dict):
             continue
@@ -2096,15 +2454,15 @@ def bedomningssignaler(exam: dict) -> list[dict]:
         summor = [sum(sum(p.get("poang") or (0, 0, 0))
                       for p in (e.get("partier") or [])) for e in elever]
         steg = sorted(set(summor))
-        saknas = ([p for p in range(tak + 1) if p not in steg] if tak <= 3
-                  else [p for p in (0, tak) if p not in steg])
+        vantade = list(range(max(tak, 1)))
+        saknas = [p for p in vantade if p not in steg]
         if saknas or summor != sorted(summor):
             ut.append(_err(f"uppgift {i}", "bedomningssignal",
                            f"uppgift {i} är värd {tak} poäng och har "
                            f"elevlösningar på {steg or [0]} poäng — de ska "
                            "stå i stigande ordning och täcka stegen "
-                           f"{list(range(tak + 1)) if tak <= 3 else [0, tak]} "
-                           "(minst noll poäng och full pott)."))
+                           f"{vantade} (full pott står som facitraden och "
+                           "skrivs inte som elevlösning)."))
     return ut
 
 
@@ -2641,8 +2999,11 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     skelettet garanterade.
 
     `doma=False` stänger av HELA domarpasset (C4) — både nivådomaren och
-    räknedomaren. De kostar ett modellanrop var och körs annars alltid: nivån
-    och ett facit som stämmer är inget som bara ska begäras i prompten.
+    räknedomaren — OCH bedömningspasset, av samma skäl: flaggan betyder «inga
+    extra modellanrop efter att pappret är skrivet». De kostar ett anrop var
+    (bedömningspasset ett per uppgift) och körs annars alltid: nivån, ett facit
+    som stämmer och en bedömningsanvisning man kan rätta efter är inget som
+    bara ska begäras i prompten.
 
     `koder` är de centrala innehållspunkter läraren kryssade, som koder. De
     låser `innehall` per uppgift (grammatik + validering) så att varje uppgift
@@ -2702,13 +3063,30 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                               koder=koder, niva_mal=niva_mal, log_cb=log_cb)
     if not doma or res["exam"] is None:
         return res
-    return _domar_pass(res["exam"], res["errors"], model=model, llm=llm,
-                       profil=profil,
-                       skala=_skala(profil, boknivaer, skeleton, kurs),
-                       antal=antal, skeleton=grammatik, koder=koder,
-                       niva_mal=niva_mal,
-                       rounds_used=res["rounds"], max_rounds=max_rounds,
+    skala = _skala(profil, boknivaer, skeleton, kurs)
+    res = _domar_pass(res["exam"], res["errors"], model=model, llm=llm,
+                      profil=profil, skala=skala,
+                      antal=antal, skeleton=grammatik, koder=koder,
+                      niva_mal=niva_mal,
+                      rounds_used=res["rounds"], max_rounds=max_rounds,
+                      log_cb=log_cb)
+    # ── BEDÖMNINGSPASSET (2026-08-23) ────────────────────────────────
+    # Sist av allt, och bara på PROVET: det är provets bedömningsanvisning
+    # läraren rättar efter, och arbetsbladets och gruppuppgiftens facit heter
+    # fortfarande «Lösningsförslag» och har ingen poängtrappa att illustrera.
+    # Att lägga det efter domarna är samma val som domarna själva gjorde:
+    # exemplen ska skrivas till det papper läraren FÅR, inte till ett
+    # mellanläge som reparationsrundan sedan skriver om.
+    if profil == "prov" and res["exam"] is not None:
+        bedomningspass(res["exam"], model=model, llm=llm, skala=skala,
                        log_cb=log_cb)
+        # Trappan kan ha skrivits om — vakten räknar om på det som blev.
+        # Utan den här raden hade en gammal varning stått kvar om en trappa
+        # som inte finns längre.
+        res["errors"] = ([e for e in res["errors"]
+                          if e.get("code") != "bedomningssignal"]
+                         + bedomningssignaler(res["exam"]))
+    return res
 
 
 def refine_exam(exam: dict, instruction: str, *, model: str,
@@ -2756,6 +3134,16 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
     # tom), det förra upptäcks framför klassen.
     if riktning is not None and res["errors"]:
         res["exam"] = exam
+    # ── BEDÖMNINGSPASSET, men bara på det som FAKTISKT ändrades ──────
+    # En omskrivning rör oftast en enda uppgift, och de övriga bär redan sina
+    # elevexempel. Att skriva om alla hade kostat elva anrop för att läraren
+    # bad om något på uppgift tolv — och elva nya elevlösningar hon redan
+    # granskat och godkänt.
+    if profil == "prov" and res["exam"] is not None and res["exam"] is not exam:
+        nummer = andrade_uppgifter(exam, res["exam"])
+        if nummer:
+            bedomningspass(res["exam"], model=model, llm=llm, nummer=nummer,
+                           log_cb=log_cb)
     return res
 
 

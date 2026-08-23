@@ -77,9 +77,9 @@
 #lo4 .loelev span[data-full],[data-form="lo4"] .loelev span[data-full],[data-form^="fe-"] .loelev span[data-full],[data-form="lo-c"] .loelev span[data-full]{color:#1B7A46}
 
 /* Faksimilen: elevens egen hand, på papper som inte är bladets papper. */
-#lo4 .loskann,[data-form="lo4"] .loskann,[data-form^="fe-"] .loskann,[data-form="lo-c"] .loskann{position:relative;margin-top:9px;padding:12px 20px 12px 24px;background:#FBFAF7;border:1px solid #E2DFD8;font-family:Caveat,'Shadows Into Light Two',cursive;font-size:calc(22px * var(--fsk, 1));line-height:1.38;color:#22303F}
-#lo4 .loskann .katex,[data-form="lo4"] .loskann .katex,[data-form^="fe-"] .loskann .katex,[data-form="lo-c"] .loskann .katex{font-size:1.02em}
-#lo4 .loskannrad,[data-form="lo4"] .loskannrad,[data-form^="fe-"] .loskannrad,[data-form="lo-c"] .loskannrad{display:flex;align-items:baseline;gap:14px}
+#lo4 .loskann,[data-form="lo4"] .loskann,[data-form^="fe-"] .loskann,[data-form="lo-c"] .loskann,[data-form="lo-b"] .loskann{position:relative;margin-top:9px;padding:12px 20px 12px 24px;background:#FBFAF7;border:1px solid #E2DFD8;font-family:Caveat,'Shadows Into Light Two',cursive;font-size:calc(22px * var(--fsk, 1));line-height:1.38;color:#22303F}
+#lo4 .loskann .katex,[data-form="lo4"] .loskann .katex,[data-form^="fe-"] .loskann .katex,[data-form="lo-c"] .loskann .katex,[data-form="lo-b"] .loskann .katex{font-size:1.02em}
+#lo4 .loskannrad,[data-form="lo4"] .loskannrad,[data-form^="fe-"] .loskannrad,[data-form="lo-c"] .loskannrad,[data-form="lo-b"] .loskannrad{display:flex;align-items:baseline;gap:14px}
 
 /* Partiet: den klämmare läraren sätter i marginalen när en poäng gäller flera
    rader. Bricka och klämmare bär samma nummer som kommentarraden nedanför — det
@@ -179,10 +179,47 @@
 
    Notraden (det väntade felet) bär ingen nivå och sätts kursiv — den delar inte
    ut något, den varnar. */
-.lotrappa{margin:8px 0 0;padding:0;list-style:none;display:grid;gap:3px;font-size:calc(13px * var(--fsk, 1));line-height:1.4;color:#000}
+.lotrappa{margin:0;padding:0;list-style:none;display:grid;gap:3px;font-size:calc(13px * var(--fsk, 1));line-height:1.4;color:#000}
 .lotrappa>li{display:grid;grid-template-columns:calc(38px * var(--fsk, 1)) minmax(0,1fr);gap:0 9px;align-items:baseline}
 .lotrappa>li>i{font-style:normal;font-weight:700;font-size:calc(11.5px * var(--fsk, 1));letter-spacing:.02em;color:#1B7A46;white-space:nowrap;font-variant-numeric:tabular-nums}
 .lotrappa>li[data-not]{font-style:italic;color:#333}
+
+/* ══════════ BEDÖMNINGSTABELLEN ══════════
+   Lärarens beställning 2026-08-23: en tvåspaltstabell per enhet — vänster
+   lösningen (facit överst, elevernas papper därunder), höger poängen och
+   skälet. Radvis läsning är hela poängen: «så här ser 1 p ut, så här ser 2 p
+   ut», och det syns bara när papper och poäng står bredvid varandra.
+
+   `table` och inte grid, med flit: raderna ska kunna brytas mellan sidor när
+   paginate delar arket (blad.js), och en tabellrad är den enda form som gör
+   det utan att lämna en halv cell kvar på förra sidan.
+
+   Vänsterspalten är bredare än högerspalten (0,56/0,44). Elevens papper är det
+   som ska gå att läsa; poängen är korta rader.
+
+   `table-layout:fixed` och `word-break` på cellerna: en lång KaTeX-formel är en
+   enda oböjlig låda, och utan dem sprängde den spalten och drog hela arket ut
+   över A4:ans kant. */
+.lobed{width:100%;margin:10px 0 0;border-collapse:collapse;table-layout:fixed}
+.lobed td{vertical-align:top;padding:9px 0 11px;border-top:1px solid #E2DFD8;overflow-wrap:anywhere}
+.lobed td:first-child{width:56%;padding-right:18px}
+.lobed td:last-child{width:44%;padding-left:18px;border-left:1px solid #E2DFD8}
+/* Facitraden bär ingen överlinje — den ÄR tabellens början — och en grön
+   vänsterkant som säger «det här är det rätta pappret». */
+.lobed tr[data-facit] td{border-top:0}
+.lobedsteg{display:block;margin:0 0 5px;font-size:calc(11.5px * var(--fsk, 1));font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#1B7A46}
+.lobed tr[data-utan] .lobedsteg{color:#C0392B}
+/* En elevlösning på mer än noll men mindre än full pott är varken grön eller
+   röd: den är på väg. Grå etikett, och poängen den fick står i grönt bredvid. */
+.lobed tr:not([data-facit]):not([data-utan]) .lobedsteg{color:#4A4A4A}
+.lobedfacit{font-size:calc(14px * var(--fsk, 1));line-height:1.45;color:#000}
+.lobedfacit>em{font-style:normal;font-weight:700;font-size:calc(11.5px * var(--fsk, 1));letter-spacing:.02em;color:#1B7A46;white-space:nowrap;margin-left:8px}
+.lobedfacit .losvar,.lobedfacit .lovag{margin-top:0}
+.lobedinga{margin:0;font-size:calc(11.5px * var(--fsk, 1));font-weight:700;letter-spacing:.02em;color:#C0392B}
+/* Varför inte nästa poäng — det korta skälet, i samma grad som trappan och
+   satt i rak stil under den. */
+.lobedvarfor{margin:6px 0 0;font-size:calc(13px * var(--fsk, 1));line-height:1.42;color:#000}
+.lobed .loskann{margin-top:0}
 
 /* Lösningsgången till delprov C bär tre fullständiga lösningar per blad. Den
    luft ett kortsvarsfacit har råd med finns inte här — måtten är stramare, och

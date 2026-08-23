@@ -261,6 +261,13 @@
       /* Sättningen och trycket ligger sist: de raderna kommer ur godkännandet
          (routes_exam approve), som kroker sig på samma rad när den används. */
       if (/latex|\bpdf\b|\bA4\b|kompilerar|renderar|^sparar/i.test(m)) return [0.90, 1];
+      /* Bedömningspasset (exam_gen.bedomningspass) ligger EFTER domarna och
+         före sättningen — mellan 0,88 och 0,95. Regeln står före den allmänna
+         «^skriver», som annars hade dragit raden tillbaka till 0,25–0,75.
+         Mätaren går visserligen aldrig bakåt, men den hade frusit i stället
+         för att röra sig, och en stillastående mätare är inte att skilja från
+         en hängd app. */
+      if (/^skriver elevexempel/i.test(m)) return skiva(0.88, 0.95);
       if (/^(justerar|kontrollerar|räknar igenom|modellen svarade)/i.test(m)) return skiva(0.75, 0.90);
       if (/^(skriver|uppdaterar)/i.test(m)) return skiva(0.25, 0.75);
       return null;        // bokens sidor, faktapasset: text, men ingen procent

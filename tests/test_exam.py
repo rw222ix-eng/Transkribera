@@ -1129,7 +1129,10 @@ def test_render_bedomning_contains_solutions():
     doc, _ = exam_spec.validate_exam_json(_exam())
     tex = exam_latex.render_bedomning(doc)
     assert "Bedömningsanvisning" in tex
-    assert "Lösningsförslag" in tex
+    # Facit står i bedömningstabellens översta rad (\bedrad), inte längre
+    # under rubriken «Lösningsförslag:» — pappret heter numera hela vägen
+    # Bedömningsanvisning.
+    assert r"\bedrad{Facit \textemdash{} full pott}" in tex
     assert "Problemlösning" in tex          # förmågenamn
     assert r"\(x = 1\)" in tex or "x = 1" in tex
     # lärardokumentet behåller E/C/A-poängen (elevens prov visar bara
@@ -1146,7 +1149,7 @@ def test_bedomning_behaller_eca_och_far_makron():
     doc, _ = exam_spec.validate_exam_json(_exam())
     tex = exam_latex.render_bedomning(doc)
     assert r"\begin{uppgift}{1}{3/0/0}" in tex
-    assert "Lösningsförslag" in tex and "Bedömning" in tex
+    assert r"\bedrad{Facit" in tex and r"\bedsteg{" in tex
     # kontrollera motsatsen på elevens prov
     prov = exam_latex.render_prov(doc)
     assert "3/0/0" not in prov
@@ -1221,7 +1224,10 @@ def test_bedomning_visar_deluppgifternas_facit():
     tex = exam_latex.render_bedomning(doc)
     assert r"\begin{deluppgift}{a}{0/2/0}" in tex   # per-deluppgift E/C/A
     assert "symmetrilinjens ekvation" in tex        # deluppgiftstext
-    assert "Lösningsförslag" in tex
+    # Varje deluppgift som bär poäng får sin EGEN facitrad med sin egen trappa
+    # bredvid (lärarens beställning 2026-08-23).
+    assert r"\bedrad{Facit a) \textemdash{} full pott}" in tex
+    assert r"\bedrad{Facit b) \textemdash{} full pott}" in tex
 
 
 def test_bedomning_visar_flervalsfacit():
@@ -1822,7 +1828,10 @@ def test_reparationsrundan_far_ocksa_bara_rora_malet():
     fore = _exam()
     res = exam_gen.refine_exam(fore, "gör den svårare", nummer=4,
                                model="m", llm=llm)
-    assert len(calls) == 2, "reparationsrundan kördes inte"
+    # Två rundor + bedömningspassets ENA anrop: bara uppgift 4 ändrades, och
+    # de övriga bär redan sina elevexempel (exam_gen.andrade_uppgifter).
+    assert len(calls) == 3, "reparationsrundan kördes inte"
+    assert sum("bedömningsskrivare" in c["prompt"] for c in calls) == 1
     assert res["errors"] == []
     for i, u in enumerate(fore["uppgifter"]):
         if i != 3:
@@ -2805,25 +2814,44 @@ def test_bedomningssignal_slapper_igenom_np_formen():
 
 def test_bedomningssignal_faller_elevlosningar_som_hoppar_over_steg():
     """Lärarens fynd: «0 av 3», sedan 2 och 3 — ettpoängsteget saknas, och det
-    är just den gränsen som är svår att dra."""
+    är just den gränsen som är svår att dra.
+
+    Stegen som ska täckas är 0 … tak−1: full pott står som FACITRADEN överst i
+    tabellen (lärarens beställning 2026-08-23) och skrivs inte en gång till."""
+    exam = _exam()
+    exam["uppgifter"][2]["elevlosningar"] = [
+        {"etikett": "0 p",
+         "partier": [{"rader": ["fel"], "poang": [0, 0, 0], "dom": "d"}]},
+        {"etikett": "2 p",
+         "partier": [{"rader": ["halvt"], "poang": [1, 1, 0], "dom": "d"}]},
+    ]
+    fel = exam_gen.bedomningssignaler(exam)
+    assert [f["code"] for f in fel] == ["bedomningssignal"]
+    assert "täcka stegen [0, 1, 2]" in fel[0]["message"]
+    # …och med ettpoängssteget ifyllt tiger vakten.
+    exam["uppgifter"][2]["elevlosningar"].insert(1, {
+        "etikett": "1 p",
+        "partier": [{"rader": ["ansats"], "poang": [1, 0, 0], "dom": "d"}]})
+    doc, schemafel = exam_spec.validate_exam_json(exam)
+    assert doc is not None and schemafel == []
+    assert exam_gen.bedomningssignaler(exam) == []
+
+
+def test_bedomningssignal_tal_ett_gammalt_pappers_fullpottslosning():
+    """Papper som redan ligger i basen har full pott som ÖVERSTA lösning —
+    formen före 2026-08-23. De ska inte börja varna för det: en extra lösning
+    på taket passerar, ett hoppat steg gör det inte."""
     exam = _exam()
     exam["uppgifter"][2]["elevlosningar"] = [
         {"etikett": "Elevlösning 1",
          "partier": [{"rader": ["fel"], "poang": [0, 0, 0], "dom": "d"}]},
         {"etikett": "Elevlösning 2",
-         "partier": [{"rader": ["halvt"], "poang": [1, 1, 0], "dom": "d"}]},
+         "partier": [{"rader": ["ansats"], "poang": [1, 0, 0], "dom": "d"}]},
         {"etikett": "Elevlösning 3",
+         "partier": [{"rader": ["halvt"], "poang": [1, 1, 0], "dom": "d"}]},
+        {"etikett": "Elevlösning 4",
          "partier": [{"rader": ["helt"], "poang": [1, 1, 1], "dom": "d"}]},
     ]
-    fel = exam_gen.bedomningssignaler(exam)
-    assert [f["code"] for f in fel] == ["bedomningssignal"]
-    assert "täcka stegen [0, 1, 2, 3]" in fel[0]["message"]
-    # …och med steget ifyllt (fyra ryms i schemat) tiger vakten.
-    exam["uppgifter"][2]["elevlosningar"].insert(1, {
-        "etikett": "Elevlösning 1b",
-        "partier": [{"rader": ["ansats"], "poang": [1, 0, 0], "dom": "d"}]})
-    doc, schemafel = exam_spec.validate_exam_json(exam)
-    assert doc is not None and schemafel == []
     assert exam_gen.bedomningssignaler(exam) == []
 
 
@@ -2833,9 +2861,15 @@ def test_bedomningssignalen_kostar_aldrig_en_runda():
     trasigt = _exam()
     trasigt["uppgifter"][0]["bedomning"] = "+3 E för båda nollställena."
     # Tre anrop: generering + de två blinda domarna (som inte fäller något).
+    # Därtill bedömningspassets ETT anrop per uppgift — det skriver, det
+    # reparerar inte, och kostar därför ingen RUNDA. Stubbens «{}» går inte att
+    # tolka som ett bedömningssvar, så passet lämnar uppgifterna orörda
+    # (fail-open) och varningen står kvar.
     llm, calls = _stub_llm([json.dumps(trasigt), "{}", "{}"])
     res = exam_gen.generate_exam("Ma2b", "SA23", [], model="m", llm=llm)
-    assert res["rounds"] == 1 and len(calls) == 3
+    assert res["rounds"] == 1
+    assert len(calls) == 3 + len(trasigt["uppgifter"])
+    assert sum("bedömningsskrivare" in c["prompt"] for c in calls) == 7
     assert [e["code"] for e in res["errors"]] == ["bedomningssignal"]
 
 
@@ -2856,7 +2890,8 @@ def test_facitets_typografi_ar_fragan_storre_och_svaret_mindre():
     tex = exam_latex.render_bedomning(doc)
     assert r"{\itshape Ange nollställena" in tex
     assert r"{\small\itshape Ange nollställena" not in tex
-    assert r"{\small\textbf{Lösningsförslag:}" in tex
+    # Lösningen ligger i bedömningstabellens vänsterspalt och sätts i \small.
+    assert r"{\small \(x = 1\) och \(x = -3\).}" in tex
     css = (Path(__file__).resolve().parent.parent / "app" / "web" / "ui"
            / "losning.css").read_text(encoding="utf-8")
     assert '[data-form="lo-b"] .prtext' in css and "font-style:italic" in css
@@ -2873,18 +2908,234 @@ def test_bedomningens_sidhuvud_bar_riktiga_tecken():
     assert r"\textperiodcentered{} Bedömningsanvisning" in tex
 
 
-def test_elevlosningens_dom_bar_kommentarsetiketten_i_pdfen():
+def test_elevraderna_bar_steg_poang_och_skal_i_pdfen():
+    """Lärarens beställning 2026-08-23: en rad per lägre poängsteg, med de
+    trappsteg lösningen FICK i högerspalten och det korta skälet under dem.
+    Nollpoängsraden säger «Inga poäng» och sedan varför."""
     exam = _exam()
     exam["uppgifter"][2]["elevlosningar"] = [
-        {"etikett": "Elevlösning 1",
+        {"etikett": "0 p",
          "partier": [{"rader": ["fel"], "poang": [0, 0, 0],
                       "dom": "ingen ansats"}]},
-        {"etikett": "Elevlösning 2",
-         "partier": [{"rader": ["helt"], "poang": [1, 1, 1],
-                      "dom": "hela vägen"}]},
+        {"etikett": "1 p",
+         "partier": [{"rader": ["ansats"], "poang": [1, 0, 0],
+                      "dom": "tecknar men löser inte"}]},
     ]
     doc, _fel = exam_spec.validate_exam_json(exam)
     tex = exam_latex.render_bedomning(doc)
-    # Etiketten står FÖRE kursiven: fet kursiv (ec-lmbxi10) finns inte i
-    # Tectonic-seeden, och hela anvisningen föll på «Font … not loadable».
-    assert r"\textbf{Kommentar:}\enspace\itshape ingen ansats" in tex
+    assert r"\bedrad{0 p}" in tex and r"\bedrad{1 p}" in tex
+    assert r"{\small\bfseries Inga poäng}" in tex
+    assert "ingen ansats" in tex and "tecknar men löser inte" in tex
+    # Ettpoängsraden fick uppgiftens FÖRSTA E-rad — det räknas ur trappan
+    # (exam_latex._fickrader), aldrig av modellen en gång till. E-raden står
+    # alltså två gånger på uppgiften: hel i facitraden, och en gång till i
+    # 1 p-radens högerspalt. C- och A-raderna bara en gång, i facit.
+    assert tex.count(r"\bedsteg{ansats}{+1 E}") == 2
+    assert tex.count(r"\bedsteg{korrekt kvadratkomplettering}{+1 C}") == 1
+    assert tex.count(r"\bedsteg{generell metod}{+1 A}") == 1
+
+
+# ══════════════════════════════════════════════════════════════════════
+# BEDÖMNINGSPASSET (lärarens beställning 2026-08-23)
+#
+# Ett anrop per uppgift, körda parallellt, fail-open per uppgift, och det som
+# skrivs prövas mot samma deterministiska mått som vakten. Det är fyra löften,
+# och vart och ett har sitt test här nedanför.
+# ══════════════════════════════════════════════════════════════════════
+
+def _bedsvar(rader_per_enhet, steg):
+    """Ett svar som passets schema tillåter: trappan per enhet, och en
+    elevlösning per poängsteg."""
+    return json.dumps({
+        "bedomning": [{"enhet": n, "rader": r}
+                      for n, r in rader_per_enhet.items()],
+        "elevlosningar": [
+            {"poang": list(p), "rader": [f"rad för {sum(p)} p"],
+             "kommentar": f"kommentar för {sum(p)} p"} for p in steg],
+    }, ensure_ascii=False)
+
+
+def test_bedomningspasset_skriver_ett_papper_per_poangsteg():
+    """Uppgiften är värd 3 poäng — då står facit överst och tre elevrader
+    under: 0 p, 1 p och 2 p. Full pott skrivs aldrig som elevlösning."""
+    exam = {"uppgifter": [{"poang": [1, 1, 1], "text": "t", "losning": "l",
+                           "bedomning": "+1 E a\n+1 C b\n+1 A c"}]}
+    svar = _bedsvar({"": ["+1 E tecknar sambandet",
+                          "+1 C räknar ut värdet",
+                          "+1 A motiverar svaret"]},
+                    [(0, 0, 0), (1, 0, 0), (1, 1, 0)])
+    llm, calls = _stub_llm([svar])
+    assert exam_gen.bedomningspass(exam, model="m", llm=llm) == 1
+    assert len(calls) == 1
+    u = exam["uppgifter"][0]
+    assert u["bedomning"] == ("+1 E tecknar sambandet\n+1 C räknar ut värdet\n"
+                              "+1 A motiverar svaret")
+    assert [e["etikett"] for e in u["elevlosningar"]] == ["0 p", "1 p", "2 p"]
+    assert u["elevlosningar"][1]["partier"][0]["poang"] == [1, 0, 0]
+    assert u["elevlosningar"][1]["partier"][0]["dom"] == "kommentar för 1 p"
+    # …och dokumentet ska gå igenom schemat och vakten som det står.
+    assert exam_gen.bedomningssignaler(exam) == []
+
+
+def test_bedomningspasset_slanger_en_trappa_som_tappar_ett_poangsteg():
+    """Passet SKRIVER i dokumentet, så det som skrivs mäts med vaktens eget
+    mått: en rad per poäng, och nivåerna uppgiftens egna. En «enklare» trappa
+    som blivit en rad kortare är ingen förbättring."""
+    exam = {"uppgifter": [{"poang": [0, 2, 0], "text": "t", "losning": "l",
+                           "bedomning": "+1 C först\n+1 C sedan"}]}
+    llm, _c = _stub_llm([_bedsvar({"": ["+2 C hela lösningen"]},
+                                  [(0, 0, 0), (0, 1, 0)])])
+    exam_gen.bedomningspass(exam, model="m", llm=llm)
+    # Trappan står kvar…
+    assert exam["uppgifter"][0]["bedomning"] == "+1 C först\n+1 C sedan"
+    # …men elevlösningarna dög och skrevs ändå. De två prövas var för sig.
+    assert [e["etikett"] for e in exam["uppgifter"][0]["elevlosningar"]] == \
+        ["0 p", "1 p"]
+
+
+def test_bedomningspasset_ar_fail_open_per_uppgift():
+    """Faller ett anrop lämnas DEN uppgiften utan exempel och provet levereras.
+    Grannuppgifterna får aldrig veta om det."""
+    exam = {"uppgifter": [
+        {"poang": [1, 0, 0], "text": "a", "losning": "l", "bedomning": "+1 E a"},
+        {"poang": [1, 0, 0], "text": "b", "losning": "l", "bedomning": "+1 E b"},
+    ]}
+    ok = _bedsvar({"": ["+1 E rätt svar"]}, [(0, 0, 0)])
+
+    def llm(model, prompt, **kw):
+        if '"uppgift": "a"' in prompt:
+            raise RuntimeError("kvoten slut")
+        return ok
+
+    assert exam_gen.bedomningspass(exam, model="m", llm=llm) == 1
+    assert "elevlosningar" not in exam["uppgifter"][0]
+    assert exam["uppgifter"][0]["bedomning"] == "+1 E a"
+    assert exam["uppgifter"][1]["elevlosningar"][0]["etikett"] == "0 p"
+
+
+def test_bedomningspasset_kor_anropen_parallellt():
+    """Sex uppgifter, sex trådar: väggtiden ska vara ETT anrop lång, inte sex.
+    Utan parallellitet lade passet minuter till ett prov som redan tar 7–10."""
+    import threading
+    exam = {"uppgifter": [{"poang": [1, 0, 0], "text": f"u{i}", "losning": "l",
+                           "bedomning": "+1 E a"} for i in range(6)]}
+    samtidiga, mest, las = 0, 0, threading.Lock()
+    grind = threading.Barrier(6, timeout=10)
+
+    def llm(model, prompt, **kw):
+        nonlocal samtidiga, mest
+        with las:
+            samtidiga += 1
+            mest = max(mest, samtidiga)
+        # Barriären är beviset: släpper den igenom stod alla sex anropen inne
+        # samtidigt. Körs de i rad slår timeouten till och testet faller.
+        grind.wait()
+        with las:
+            samtidiga -= 1
+        return _bedsvar({"": ["+1 E rätt svar"]}, [(0, 0, 0)])
+
+    assert exam_gen.bedomningspass(exam, model="m", llm=llm) == 6
+    assert mest == 6
+
+
+def test_avbryt_stoppar_bedomningspasset():
+    """Loggraden är livstecknet strömmen avbryter vid (app/web/sse.py). Kastar
+    den ska passet sluta — inte köra klart tolv anrop åt en lärare som gått."""
+    class Borta(Exception):
+        pass
+
+    exam = {"uppgifter": [{"poang": [1, 0, 0], "text": f"u{i}", "losning": "l",
+                           "bedomning": "+1 E a"} for i in range(8)]}
+    llm, calls = _stub_llm([_bedsvar({"": ["+1 E rätt svar"]}, [(0, 0, 0)])])
+    rader = []
+
+    def logg(m):
+        rader.append(m)
+        if len(rader) >= 2:
+            raise Borta
+
+    with pytest.raises(Borta):
+        exam_gen.bedomningspass(exam, model="m", llm=llm, log_cb=logg)
+    # Trådtaket är sex, så högst sex anrop kan ha startat innan den andra
+    # loggraden — aldrig alla åtta.
+    assert len(calls) <= exam_gen.BEDOMNING_TRADAR
+    # Det som HANN bli skrivet ligger kvar: raden kommer efter skrivningen.
+    assert any("elevlosningar" in u for u in exam["uppgifter"])
+
+
+def test_bedomningspassets_loggrad_bar_siffrorna_matarens_regex_laser():
+    """fraga.js flyttar mätaren på «uppgift n av N» i loggraden (f353cbd).
+    Raden räknar FÄRDIGA anrop: de går parallellt och blir klara i den ordning
+    modellen råkar svara, så uppgiftsnumret hade hoppat fram och tillbaka."""
+    exam = {"uppgifter": [{"poang": [1, 0, 0], "text": f"u{i}", "losning": "l",
+                           "bedomning": "+1 E a"} for i in range(3)]}
+    llm, _c = _stub_llm([_bedsvar({"": ["+1 E rätt svar"]}, [(0, 0, 0)])])
+    rader = []
+    exam_gen.bedomningspass(exam, model="m", llm=llm, log_cb=rader.append)
+    assert all(r.startswith("Skriver elevexempel (uppgift ") for r in rader)
+    siffror = [re.search(r"uppgift (\d+) av (\d+)", r).groups() for r in rader]
+    assert siffror[0] == ("1", "3") and siffror[-1] == ("3", "3")
+
+
+def test_bedomningspasset_skriver_trappan_per_deluppgift():
+    """Elevlösningarna sitter på UPPGIFTEN medan trappan sitter på varje
+    poängbärande enhet — ett anrop ser därför hela uppgiften och skriver
+    tillbaka en trappa per deluppgift."""
+    exam = {"uppgifter": [{"poang": [0, 0, 0], "text": "stam", "losning": "",
+                           "bedomning": "", "deluppgifter": [
+                               {"poang": [1, 0, 0], "text": "a", "losning": "l",
+                                "bedomning": "+1 E gammalt a"},
+                               {"poang": [0, 1, 0], "text": "b", "losning": "l",
+                                "bedomning": "+1 C gammalt b"}]}]}
+    llm, _c = _stub_llm([_bedsvar({"a": ["+1 E nytt a"], "b": ["+1 C nytt b"]},
+                                  [(0, 0, 0), (1, 0, 0)])])
+    exam_gen.bedomningspass(exam, model="m", llm=llm)
+    delar = exam["uppgifter"][0]["deluppgifter"]
+    assert delar[0]["bedomning"] == "+1 E nytt a"
+    assert delar[1]["bedomning"] == "+1 C nytt b"
+    assert [e["etikett"] for e in exam["uppgifter"][0]["elevlosningar"]] == \
+        ["0 p", "1 p"]
+
+
+def test_andrade_uppgifter_ser_bara_det_bedomningen_bryr_sig_om():
+    """Omskrivningen ska bara betala för det som ändrades. En bild som bytts
+    ändrar ingen bedömning; en poäng, en text, ett facit eller en trappa gör
+    det."""
+    fore = _exam()
+    assert exam_gen.andrade_uppgifter(fore, _exam()) == []
+    efter = _exam()
+    efter["uppgifter"][3]["losning"] = "något annat"
+    assert exam_gen.andrade_uppgifter(fore, efter) == [4]
+    orort = _exam()
+    orort["uppgifter"][1]["bild"] = 2
+    assert exam_gen.andrade_uppgifter(fore, orort) == []
+
+
+def test_elevlosningar_far_vara_en_men_aldrig_noll():
+    """En enpoängsuppgift har exakt ETT lägre poängsteg. Kravet på två gjorde
+    varje flervalsfråga ogiltig; noll är däremot inget fält alls."""
+    exam = _exam()
+    exam["uppgifter"][1]["elevlosningar"] = [
+        {"etikett": "0 p", "partier": [{"rader": ["fel"], "poang": [0, 0, 0],
+                                        "dom": "d"}]}]
+    doc, fel = exam_spec.validate_exam_json(exam)
+    # Uppgift 2 är värd två poäng, så vakten VILL ha 0 p och 1 p — men schemat
+    # släpper igenom en enda lösning, och vakten är bara en varning.
+    assert doc is not None and fel == []
+    exam["uppgifter"][1]["elevlosningar"] = []
+    doc, fel = exam_spec.validate_exam_json(exam)
+    assert doc is None and "minst" in fel[0]["message"]
+
+
+def test_elevlosningar_ryms_till_atta_steg():
+    """Taket var fyra när lösningarna var illustrationer. Nu är de en rad var i
+    en tabell, och en uppgift värd sex poäng har sex lägre steg."""
+    exam = _exam()
+    exam["uppgifter"][2]["elevlosningar"] = [
+        {"etikett": f"{i} p",
+         "partier": [{"rader": ["x"], "poang": [min(i, 1), max(i - 1, 0), 0],
+                      "dom": "d"}]}
+        for i in range(3)]
+    doc, fel = exam_spec.validate_exam_json(exam)
+    assert doc is not None and fel == []
+    assert exam_spec.ExamItem.model_fields["elevlosningar"].metadata[0].max_length == 8

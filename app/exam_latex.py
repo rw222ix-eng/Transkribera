@@ -360,6 +360,62 @@ def _bedomning_rader(bedomning) -> list[dict]:
             for r in exam_spec.bedomningsrader(bedomning) if r["krav"]]
 
 
+def _trapprader_uppgift(it) -> list[dict]:
+    """Hela uppgiftens trappa, som elevraderna mäts mot: lövets egen, eller
+    deluppgifternas i ordning med sin bokstav framför. Spegel av
+    app/web/ui/blad-bygg.js `trapprader` — skärm och papper ska visa samma
+    trappa, och elevlösningen ska få samma rader tilldelade på båda."""
+    delar = it.deluppgifter or []
+    if not delar:
+        return _bedomning_rader(it.bedomning)
+    ut: list[dict] = []
+    for k, d in enumerate(delar):
+        bokstav = _BOKSTAV[k] if k < len(_BOKSTAV) else str(k + 1)
+        for r in _bedomning_rader(d.bedomning):
+            ut.append({**r, "krav": f"{bokstav}) {r['krav']}"})
+    return ut
+
+
+def _fickrader(rader: list[dict], poang) -> list[dict]:
+    """Trappstegen en elevlösning fick. Trappan är stigande och har en rad per
+    poäng (exam_spec.bedomningsrader), så «två C-poäng» ÄR dess två första
+    C-rader — det går att RÄKNA ut och ska inte skrivas av modellen en gång
+    till. Spegel av blad-bygg.js `fickrader`."""
+    kvar = {"E": poang[0], "C": poang[1], "A": poang[2]}
+    ut = []
+    for r in rader:
+        n = (r["niva"] or "")[-1:] if r["niva"] else ""
+        if n in kvar and kvar[n]:
+            kvar[n] -= 1
+            ut.append(r)
+    return ut
+
+
+def _elevrader(it, trappa: list[dict]) -> list[dict]:
+    """Elevlösningarna som rader i bedömningstabellen: etikett («0 p», «1 p»),
+    elevens egna rader, de trappsteg lösningen fick, och kommentaren.
+
+    Partierna summeras. Pappret läraren bad om är EN rad per poängsteg, men
+    gamla dokument (och förlagans lo4) delar lösningen i flera partier med var
+    sin dom — de läggs ihop till en rad, i ordning."""
+    ut = []
+    for e in (it.elevlosningar or []):
+        poang = [0, 0, 0]
+        for pa in e.partier:
+            for i, x in enumerate(pa.poang[:3]):
+                poang[i] += int(x)
+        total = sum(poang)
+        ut.append({
+            "etikett": f"{total} p",
+            "utan": total == 0,
+            "rader": [escape_mixed(r) for pa in e.partier for r in pa.rader],
+            "trappa": _fickrader(trappa, poang) if total else [],
+            "kommentar": escape_mixed(
+                " ".join(pa.dom for pa in e.partier if pa.dom)),
+        })
+    return ut
+
+
 def _enhet_vy(*, poang, typ, formaga, text, losning, bedomning,
              alternativ, ratt_alternativ, notis, bild_fil,
              enhet=None, tabell=None, svarsrutor=None, stegtabell=None,
@@ -723,6 +779,12 @@ def _build_view(doc: exam_spec.ExamDoc,
                               "poang": sum(pa.poang),
                               "dom": escape_mixed(pa.dom)} for pa in e.partier]}
                 for e in (it.elevlosningar or [])] if facit else []
+            # BEDÖMNINGSTABELLENS elevrader (lärarens beställning 2026-08-23):
+            # en rad per LÄGRE poängsteg, med de trappsteg lösningen faktiskt
+            # fick i högerspalten. Räknas här och inte i mallen — Jinja kan
+            # inte dela ut poäng, och skärmen räknar likadant (blad-bygg.js).
+            item_vy["elevrader"] = (_elevrader(it, _trapprader_uppgift(it))
+                                    if facit else [])
             item_vy["nummer"] = nummer
             # BÄR UPPGIFTEN NÅGON BILD — sin egen eller en deluppgifts? Provets
             # mall begär plats på sidan innan en sådan uppgift börjar

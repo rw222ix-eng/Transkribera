@@ -128,7 +128,8 @@
   }
   /* «Lösningsförslag» blir «lösningsförslaget» i en mening — arkets etikett är
      en flik, frågan i fältet är svenska. */
-  const BEST = { 'hela dokumentet': 'dokumentet', 'lösningsförslag': 'lösningsförslaget', 'provet': 'provet' };
+  const BEST = { 'hela dokumentet': 'dokumentet', 'lösningsförslag': 'lösningsförslaget',
+    'bedömningsanvisning': 'bedömningsanvisningen', 'provet': 'provet' };
   const bestamd = namn => { const n = String(namn || '').toLowerCase(); return BEST[n] || n; };
   /* Namnet räcker för läraren men inte för modellen: «Formel 3» och «Uppgift B»
      står ingenstans i dokumentet den skriver om. Innehållet gör det — det är
@@ -563,7 +564,7 @@
     arkval.hidden = !(ark && ark.tva);
     if (!ark || !ark.tva) return;
     $$('button', arkval).forEach((b, j) => {
-      b.textContent = (ark.namn || ['Provet', 'Lösningsförslag'])[j];
+      b.textContent = (ark.namn || ['Provet', 'Bedömningsanvisning'])[j];
       b.setAttribute('aria-pressed', String(j === (ark.vald || 0)));
     });
     if (!mal) satMal(null);

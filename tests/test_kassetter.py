@@ -19,7 +19,8 @@ import json
 
 import pytest
 
-from app import claude_code, exam_gen, lesson_board, postprocess, whiteboard_spec
+from app import (claude_code, exam_gen, lesson_board, llm_client,
+                 postprocess, whiteboard_spec)
 from tests import fejk
 
 
@@ -329,3 +330,51 @@ def test_en_kassett_som_inte_finns_ar_ett_tydligt_fel(fejk_claude):
     fejk_claude(kassett="finns-inte")
     with pytest.raises(RuntimeError):
         claude_code.generate("x")
+
+
+def test_bedomningsbandet_gar_hela_vagen(fejk_claude):
+    """Bedömningspasset (2026-08-23) genom hela kedjan: CLI → ström → JSON →
+    trappa och elevrader inskrivna i dokumentet.
+
+    Bandet är SKARPT, inspelat på provbandets uppgift 1 — en figuruppgift med
+    två deluppgifter värda en E-poäng var. Svaret bär därför två trappor (a och
+    b, en rad var) och två elevlösningar: 0 p och 1 p. Full pott skrivs inte,
+    den står som facitraden.
+
+    ETT anrop per uppgift: sex uppgifter i provbandet ger sex anrop, och de
+    kostar ingen RUNDA — passet skriver, det reparerar inte."""
+    fejk_claude(kassett="bedomning")
+    exam = exam_gen._parse_exam(json.loads(
+        fejk.las_kassett("prov")["rader"][-1])["result"])
+    svar = exam_gen._parse_bedomning(json.loads(
+        fejk.las_kassett("bedomning")["rader"][-1])["result"])
+    assert set(svar["bedomning"]) == {"a", "b"}
+    assert [sum(e["poang"]) for e in svar["elevlosningar"]] == [0, 1]
+    assert all(e["kommentar"] for e in svar["elevlosningar"])
+
+    skrivna = exam_gen.bedomningspass(exam, model="")
+    # Bandet skrevs till uppgift 1 och passar bara den: trappan mäts mot
+    # uppgiftens poäng och elevlösningarna mot dess poängsteg
+    # (exam_gen.skriv_in_bedomning), så uppspelningen på grannuppgifterna
+    # skriver bara det som råkar stämma. Fail-open hela vägen — ingen uppgift
+    # får en trappa som säger emot sina egna poäng.
+    assert skrivna >= 1
+    for u in exam["uppgifter"]:
+        delar = u.get("deluppgifter") or [u]
+        for d in delar:
+            assert exam_gen._trappa_duger(d["bedomning"], d["poang"])
+    u1 = exam["uppgifter"][0]
+    assert [e["etikett"] for e in u1["elevlosningar"]] == ["0 p", "1 p"]
+
+
+def test_auto_laget_lagger_i_bedomningsbandet(fejk_claude):
+    """Passets prompt bär en färdig uppgift med facit och matchar därför både
+    «matteprov» och nivådomarens nyckelfras. Ordet «bedömningsskrivare» står
+    bara i den prompten, och bandvalet prövas FÖRE båda de andra."""
+    fejk_claude("auto")
+    exam = exam_gen._parse_exam(json.loads(
+        fejk.las_kassett("prov")["rader"][-1])["result"])
+    underlag = exam_gen.bedomningsunderlag(exam)[0]
+    svar = exam_gen._ett_bedomningssvar(underlag, model="", llm=llm_client.generate,
+                                        skala="")
+    assert svar and set(svar["bedomning"]) == {"a", "b"}

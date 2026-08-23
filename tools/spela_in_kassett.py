@@ -178,6 +178,24 @@ SCENARIER = {
         "system": lambda: exam_gen.RAKNE_SYSTEM,
         "schema": lambda: exam_gen.RAKNE_SCHEMA,
     },
+    # Bedömningspasset (2026-08-23). Ett anrop är EN uppgift, så bandet spelas
+    # in på provbandets uppgift 1 — samma dokument som resten av sviten
+    # arbetar med, så en trappa eller en elevlösning i bandet går att slå upp
+    # i uppgiften den skrevs till.
+    #
+    # Uppspelningen ger SAMMA band till alla uppgifter (fejk._auto har en fil
+    # per scenario). Det gör ingen skada: trappan mäts mot uppgiftens poäng och
+    # elevlösningarna mot dess poängsteg (exam_gen.skriv_in_bedomning), så ett
+    # band som inte passar skriver ingenting alls.
+    "bedomning": {
+        "vad": ("exam_gen.bedomningspass — trappan i enkelt språk och en "
+                "elevlösning per poängsteg, för provbandets uppgift 1"),
+        "prompt": lambda: exam_gen.build_bedomning_prompt(
+            exam_gen.bedomningsunderlag(_bandets_dokument("prov"))[0],
+            skala=exam_gen._skala("prov", "", _PROVSKELETT)),
+        "system": lambda: exam_gen.BEDOMNING_SYSTEM,
+        "schema": lambda: exam_gen.BEDOMNING_SCHEMA,
+    },
 }
 
 # Vilket band varje domare läser, och hur många uppgifter dokumentet har. Det

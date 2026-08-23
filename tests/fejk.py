@@ -217,12 +217,26 @@ _TACKNING = "täckningsdomare"
 # (exam_gen.build_rakne_prompt) och ingen annanstans i appen.
 _RAKNING = "räknedomare"
 
+# Bedömningspasset (exam_gen.bedomningspass) prövas av EXAKT samma skäl och
+# FÖRE nivådomaren: dess prompt bär en färdig uppgift med facit och matchar
+# därför både «matteprov» och nivådomarens nyckelfras. Ordet står bara i den
+# prompten (exam_gen.build_bedomning_prompt) och ingen annanstans i appen.
+#
+# ETT band räcker, som för räknedomaren: passet skriver om EN uppgift i taget,
+# och svaret innehåller inga uppgiftsnummer som kan hamna fel. Spelas bandet
+# upp på ett annat papper är trappan fel form för poängen och elevlösningarna
+# fel poängsteg — då skrivs ingenting (skriv_in_bedomning mäter båda), och
+# uppgiften lämnas som den var. Fail-open hela vägen.
+_BEDOMNING = "bedömningsskrivare"
+
 
 def _auto(prompt):
     if _TACKNING in prompt:
         return os.path.join(BAND, "tackningsdomare.json")
     if _RAKNING in prompt:
         return os.path.join(BAND, "raknedomare.json")
+    if _BEDOMNING in prompt:
+        return os.path.join(BAND, "bedomning.json")
     if _DOMARE in prompt:
         for nyckel, namn in _DOMAR_VAL:
             if nyckel in prompt:

@@ -537,24 +537,105 @@ def test_trappan_tar_ocksa_de_gamla_dokumentens_enradare():
     assert "data-not" in html and "Vanligt fel" in html
 
 
-def test_deluppgifternas_trappor_bar_sin_bokstav():
-    """Uppgiften har ingen egen bedömning när deluppgifter finns — trapporna
-    ligger på a), b), c) och sätts under varandra med bokstaven framför."""
+def test_deluppgifternas_trappor_far_var_sin_facitrad():
+    """Uppgiften har ingen egen bedömning när deluppgifter finns — poängen
+    ligger på a), b), c). Varje deluppgift som bär poäng får därför sin EGEN
+    facitrad i bedömningstabellen, med sin lösning till vänster och sin trappa
+    till höger (lärarens beställning 2026-08-23)."""
     html = _losark([_uppg(p=2, f="",
                           vag=[["a) $3^{5}$", "1 p"], ["b) $2^{-1}$", "1 p"]],
                           beddel=["+1 E korrekt svar i a)",
                                   "+1 E korrekt svar i b)"])])
-    assert "a) korrekt svar i a)" in html and "b) korrekt svar i b)" in html
+    assert "Facit a) · full pott" in html and "Facit b) · full pott" in html
+    assert html.count("+1 E</i>") == 2
+    assert "korrekt svar i a)" in html and "korrekt svar i b)" in html
+    # Bokstaven står i etiketten och i lösningen — inte en tredje gång framför
+    # kravet. Trappan med a)-prefix hör till ELEVRADERNA, som gäller hela
+    # uppgiften och därför måste säga vilken deluppgift raden kom från.
+    assert "a) korrekt svar i a)" not in html
 
 
-def test_elevlosningens_dom_bar_kommentarsetiketten():
-    """NP:s bedömda elevlösningar avslutas med «Kommentar: …» — den som säger
-    vilken rad i trappan lösningen fick och varför inte nästa."""
+def test_nollpoangsraden_sager_inga_poang_och_varfor():
+    """Lärarens beställning 2026-08-23: «0-poängsraden: inga poäng + varför.»
+    Skälet står i högerspalten, bredvid elevens papper — aldrig under det."""
     html = _losark([_uppg(p=3, f="$x = 4$", ut="rakna",
-                          vag=[["$2x = 8$", "1 p"]],
-                          elever=[{"etikett": "Elevlösning 1",
+                          bed="+1 E tecknar\n+1 C löser ut $x$\n+1 C svarar",
+                          elever=[{"etikett": "0 p",
                                    "partier": [{"rader": ["$2x = 8$"],
                                                 "poang": [0, 0, 0],
                                                 "dom": "ingen ansats"}]}])],
                    delB=0)
-    assert "<b>Kommentar:</b>" in html
+    assert '<b class="lobedsteg">0 p</b>' in html
+    assert '<p class="lobedinga">Inga poäng</p>' in html
+    assert '<p class="lobedvarfor">ingen ansats</p>' in html
+    # Nollraden får inga trappsteg — den fick inga poäng.
+    assert html.count("lotrappa") == 1        # bara facitradens
+
+
+def test_elevraden_far_de_trappsteg_den_faktiskt_fick():
+    """Höger om elevens papper står de poäng den fick, inte hela trappan.
+    Stegen RÄKNAS ur poängtrippeln (blad-bygg.js fickrader) — trappan är
+    stigande och har en rad per poäng, så «en E-poäng» är dess första E-rad."""
+    html = _losark([_uppg(p=3, f="$x = 4$", ut="rakna",
+                          bed="+1 E tecknar\n+1 C löser ut $x$\n+1 C svarar",
+                          elever=[{"etikett": "1 p",
+                                   "partier": [{"rader": ["$2x = 8$"],
+                                                "poang": [1, 0, 0],
+                                                "dom": "tecknar men stannar"}]}])],
+                   delB=0)
+    facit, elev = html.split('<b class="lobedsteg">1 p</b>')
+    assert facit.count("+1 E</i>") == 1 and facit.count("+1 C</i>") == 2
+    assert elev.count("+1 E</i>") == 1 and elev.count("+1 C</i>") == 0
+    assert '<p class="lobedvarfor">tecknar men stannar</p>' in elev
+
+
+def test_facitraden_star_ensam_nar_elevexempel_saknas():
+    """Fail-open: föll bedömningspassets anrop (eller är pappret gammalt) ska
+    bara facitraden stå. Ingen tom rad — en rad utan innehåll läses som ett
+    fel i pappret, inte som en lucka i underlaget."""
+    html = _losark([_uppg(p=2, f="$x = 4$", bed="+1 E tecknar\n+1 C svarar")])
+    assert html.count("<tr") == 1
+    assert "Facit · full pott" in html
+    assert "lobedinga" not in html and "lobedvarfor" not in html
+
+
+def test_provets_facitark_heter_bedomningsanvisning():
+    """Lärarens beslut 2026-08-23: arket bar förut bara facit och hette
+    «Lösningsförslag». Nu bär det poängtrappan och ett elevpapper per
+    poängsteg, och det är en anvisning att rätta efter.
+
+    Namnet ska vara detsamma överallt — arkets sidhuvud, fliken i
+    förhandsvisningen och i canvas, PDF:ens filnamn, tryckpaketets rad och
+    kvittot. Arbetsbladets facit heter fortfarande «Lösningsförslag» och
+    gruppuppgiftens «Facit»: de bär varken trappa eller elevexempel."""
+    html = _losark([_uppg(nr=1, p=2, f="$x = 4$", bed="+1 E a\n+1 C b"),
+                    _uppg(nr=2, p=2, f="$x = 5$", bed="+1 E a\n+1 C b")],
+                   delB=1)
+    assert "Bedömningsanvisning · kortsvar" in html
+    assert "Bedömningsanvisning · del b" in html
+    assert "Lösningsförslag" not in html
+
+    plan = (UI / "plan.js").read_text(encoding="utf-8")
+    # arkNamn (fliken + granskningens rubrik) och dokNamn (PDF-filnamnet,
+    # tryckpaketets rad, kvittot och arkivsökningen) läser alla samma namn.
+    assert "['Provet', 'Bedömningsanvisning']" in plan
+    assert plan.count("v.typ === 'Prov' ? 'Bedömningsanvisning' : 'Facit'") == 3
+    assert "'Lösningsförslag'" not in plan
+
+    html_app = (UI / "app.html").read_text(encoding="utf-8")
+    assert html_app.count(">Bedömningsanvisning</button>") == 2
+    assert ">Lösningsförslag</button>" not in html_app
+
+    granska = (UI / "granska.js").read_text(encoding="utf-8")
+    assert "'bedömningsanvisning': 'bedömningsanvisningen'" in granska
+
+
+def test_arbetsbladets_facit_heter_fortfarande_losningsforslag():
+    """Namnbytet gäller PROVET. Arbetsbladet och gruppuppgiften har ingen
+    poängtrappa att illustrera och inga elevexempel — deras facit ska heta det
+    de heter, annars lovar namnet något pappret inte bär."""
+    plan = (UI / "plan.js").read_text(encoding="utf-8")
+    assert "['Arbetsbladet', 'Facit']" in plan
+    assert "['Gruppuppgiften', 'Facit']" in plan
+    bygg = (UI / "blad-boklos.js").read_text(encoding="utf-8")
+    assert "Lösningsförslag · boken" in bygg
