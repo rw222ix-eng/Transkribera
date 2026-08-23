@@ -1132,7 +1132,7 @@ def test_render_bedomning_contains_solutions():
     # Facit står i bedömningstabellens översta rad (\bedrad), inte längre
     # under rubriken «Lösningsförslag:» — pappret heter numera hela vägen
     # Bedömningsanvisning.
-    assert r"\bedrad{Facit \textemdash{} full pott}" in tex
+    assert r"\bedrad{Facit {\normalfont\textperiodcentered} full pott}" in tex
     assert "Problemlösning" in tex          # förmågenamn
     assert r"\(x = 1\)" in tex or "x = 1" in tex
     # lärardokumentet behåller E/C/A-poängen (elevens prov visar bara
@@ -1226,8 +1226,8 @@ def test_bedomning_visar_deluppgifternas_facit():
     assert "symmetrilinjens ekvation" in tex        # deluppgiftstext
     # Varje deluppgift som bär poäng får sin EGEN facitrad med sin egen trappa
     # bredvid (lärarens beställning 2026-08-23).
-    assert r"\bedrad{Facit a) \textemdash{} full pott}" in tex
-    assert r"\bedrad{Facit b) \textemdash{} full pott}" in tex
+    assert r"\bedrad{Facit a) {\normalfont\textperiodcentered} full pott}" in tex
+    assert r"\bedrad{Facit b) {\normalfont\textperiodcentered} full pott}" in tex
 
 
 def test_bedomning_visar_flervalsfacit():
@@ -3139,3 +3139,36 @@ def test_elevlosningar_ryms_till_atta_steg():
     doc, fel = exam_spec.validate_exam_json(exam)
     assert doc is not None and fel == []
     assert exam_spec.ExamItem.model_fields["elevlosningar"].metadata[0].max_length == 8
+
+
+def test_ts1_tecknen_satts_alltid_magert_och_uppratt():
+    """TS1 har en fontfil per grad OCH snitt, och den buntade Tectonic-cachen
+    bär bara den magra upprätta. Ett gradtecken i en kursiv uppgiftstext fällde
+    hela bedömningsanvisningen på «Font TS1/lmr/m/it/12 not loadable» —
+    lärarens prov fick sin PDF, hennes anvisning ingen.
+
+    Vakten sitter i escapningen och inte i preamblen: ett försök att linda om
+    \\textdegree med \\let + \\renewcommand gick i loop (LaTeX-symboler i en
+    annan kodning anropar sig själva en gång till efter \\UseTextSymbol) och
+    sprängde TeX:s save stack mitt i seedningen."""
+    exam = _exam()
+    exam["uppgifter"][0]["text"] = "Kaffet håller 50 °C ± 2 °C. Bestäm tiden."
+    doc, fel = exam_spec.validate_exam_json(exam)
+    assert doc is not None and fel == []
+    tex = exam_latex.render_bedomning(doc)
+    # Uppgiftstexten sätts KURSIVT i anvisningen — gradtecknet ska ändå be om
+    # ts1-lmr och inte ts1-lmri.
+    assert r"\itshape Kaffet håller 50 {\normalfont\textdegree}C" in tex
+    # Modellens och lärarens egna tecken går ALLTID genom escapningen, och
+    # där sitter vakten — oavsett var på pappret texten sedan hamnar.
+    for tecken, kommando in (("°", r"\textdegree"), ("±", r"\textpm"),
+                             ("×", r"\texttimes"), ("µ", r"\textmu"),
+                             ("·", r"\textperiodcentered"), ("€", r"\texteuro")):
+        assert exam_latex.escape_mixed(f"x {tecken} y") == \
+            "x {\\normalfont" + kommando + "} y"
+    # MALLENS EGNA tecken står i känd kontext och behöver ingen vakt: två
+    # \textperiodcentered står i sidhuvudet och i rubriken, båda i mager
+    # upprätt stil. Bedömningstabellens etikett är däremot FET och bär vakten
+    # själv — den fällde ts1-lmbx10 första gången.
+    assert tex.count(r"\textperiodcentered") == 2 + tex.count(
+        r"{\normalfont\textperiodcentered} full pott")

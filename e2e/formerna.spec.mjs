@@ -276,46 +276,61 @@ test("form 6 · figur och stegtabell på samma blad bär kombinationens nyckel",
     await expect(page.locator("#formprov .gulos")).toHaveCount(2);
   });
 
-test("lösningsförslaget · kortsvarsfacit och kommenterad elevlösning",
+test("bedömningsanvisningen · facitraden överst och ett papper per poängsteg",
   async ({ page }) => {
-    /* Två former på ett anrop: lo6 (svar och poäng på en rad) och lo4
-       (bedömningen INNE i partiet den gäller).
+    /* Lärarens beställning 2026-08-23. En tvåspaltstabell per enhet: vänster
+       lösningen, höger poängen. Översta raden är facit med full pott och hela
+       trappan bredvid; därunder en rad per LÄGRE poängsteg med de poäng den
+       fick och skälet till att den inte fick nästa.
 
-       Partiets poäng är en trippel i schemat. Läst som ett tal blev «+1 p» till
-       strängen «+1,0,0 p» — JavaScript adderar tal och array genom att foga
-       ihop dem — och huvudet sa «01,0,0 av 4 poäng». Det syns bara på ett prov
-       som kommer från servern; prototypens egna facit bär ett tal. */
+       Partiets poäng är en trippel i schemat. Läst som ett tal blev «1 p» till
+       strängen «1,0,0 p» — JavaScript adderar tal och array genom att foga
+       ihop dem. Det syns bara på ett prov som kommer från servern; prototypens
+       egna facit bär ett tal. */
     await L.fejkatMoln(page);
     await L.oppna(page);
     const html = await page.evaluate(() => window.BladBygg.losning(
       { kurs: "Matematik, nivå 3c", klass: "NA25" },
       [{ nr: 1, p: 2, t: "Förenkla uttrycket.", f: "$2x^2 - 1$",
-         enhet: "cm" },
+         enhet: "cm", bed: "+1 E utvecklar parentesen\n+1 E förenklar rätt" },
        { nr: 2, p: 4, t: "Har hon rätt? Motivera.", f: "Nej.",
          vag: [["a) Derivera", "1 p"], ["b) Motivera", "3 p"]],
+         beddel: ["+1 E korrekt derivata",
+                  "+1 C tecknar villkoret\n+1 C löser ekvationen\n"
+                  + "+1 A motiverar slutsatsen"],
          elever: [
-           { etikett: "Elevlösning A", partier: [
+           { etikett: "0 p", partier: [
              { rader: ["$f'(x) = 3x^2$"], poang: [0, 0, 0],
-               dom: "Derivatan är fel." }] },
-           { etikett: "Elevlösning B", partier: [
+               dom: "Inga poäng. Derivatan är fel." }] },
+           { etikett: "1 p", partier: [
              { rader: ["$f'(x) = 3x^2 + 3 = 0$"], poang: [1, 0, 0],
-               dom: "Godtagbar ansats." },
-             { rader: ["$x^2 = -1$ saknar reell lösning."], poang: [0, 2, 1],
-               dom: "Godtagbart resonemang." }] }] }], 1).join(""));
+               dom: "Får +1 E för derivatan, men löser aldrig ekvationen." }] }] }],
+      1).join(""));
     await satt(page, html);
 
-    // lo6: svaret i sin ruta, med etikett och enhetens förtydligande.
+    // Kortsvarsarket: svaret i sin ruta, med etikett och enhetens förtydligande.
     const kort = page.locator("#formprov [data-form='lo-b'] .losvar").first();
     await expect(kort.locator(".losetikett")).toHaveText("Svar");
     await expect(kort.locator("em")).toHaveText("cm");
+    // …och arket heter Bedömningsanvisning, inte Lösningsförslag.
+    await expect(page.locator("#formprov [data-form='lo-b'] .lohuvud b"))
+      .toHaveText("Bedömningsanvisning · kortsvar");
 
-    // lo4: poängen är hela tal, och full pott märks ut.
-    const domar = await page.locator("#formprov .lodom i").allTextContents();
-    expect(domar).toEqual(["0 p", "+1 p", "+3 p"]);
-    const elever = await page.locator("#formprov .loelev span").allTextContents();
-    expect(elever).toEqual(["0 av 4 poäng", "4 av 4 poäng · full pott"]);
-    // Det parti som inte gav poäng är utmärkt — grönt gav, rött gav inte.
-    await expect(page.locator("#formprov .loparti[data-utan]")).toHaveCount(1);
+    // Uppgift 2: en facitrad per deluppgift, sedan raderna 0 p och 1 p.
+    const tabell = page.locator("#formprov [data-form='lo-c'] .lobed").first();
+    const steg = await tabell.locator(".lobedsteg").allTextContents();
+    expect(steg).toEqual(["Facit a) · full pott", "Facit b) · full pott",
+                          "0 p", "1 p"]);
+    // Facitraderna bär HELA trappan; elevraden bara de steg den fick.
+    const rader = tabell.locator("tr");
+    await expect(rader.nth(1).locator(".lotrappa li")).toHaveCount(3);
+    await expect(rader.nth(2).locator(".lobedinga")).toHaveText("Inga poäng");
+    await expect(rader.nth(3).locator(".lotrappa li")).toHaveCount(1);
+    await expect(rader.nth(3).locator(".lotrappa li i")).toHaveText("+1 E");
+    await expect(rader.nth(3).locator(".lobedvarfor"))
+      .toContainText("löser aldrig ekvationen");
+    // Nollraden är utmärkt — grönt gav, rött gav inte.
+    await expect(tabell.locator("tr[data-utan]")).toHaveCount(1);
   });
 
 test("provets försättsblad bär avtalet — och ingen OBS-ruta upprepar det",

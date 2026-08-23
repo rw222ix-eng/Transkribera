@@ -201,13 +201,26 @@
    enda oböjlig låda, och utan dem sprängde den spalten och drog hela arket ut
    över A4:ans kant. */
 .lobed{width:100%;margin:10px 0 0;border-collapse:collapse;table-layout:fixed}
-.lobed td{vertical-align:top;padding:9px 0 11px;border-top:1px solid #E2DFD8;overflow-wrap:anywhere}
-.lobed td:first-child{width:56%;padding-right:18px}
-.lobed td:last-child{width:44%;padding-left:18px;border-left:1px solid #E2DFD8}
+/* `overflow-x:auto` OCH INTE `visible`. En härledning i ett enda $…$ är EN
+   oböjlig låda — `.mat` är `white-space:nowrap` (matte.css), och KaTeX bryter
+   inte inuti ett uttryck. Den första skarpa körningen gav en differenskvot som
+   sträckte sig tvärs över spaltlinjen och lade sig ovanpå «+1 C»: två rader
+   text på varandra, ingen av dem läsbar. Med scroll på CELLEN klipps den vid
+   spalten i stället, och läraren kan dra fram resten på skärmen. Att i stället
+   krympa graden hade gjort formeln oläslig på papper, och att låta den
+   överlappa är inget val alls.
+
+   `overflow` på cellen och inte på `.mat`: ett inline-block med overflow byter
+   baslinje till sin nederkant, och all kort inline-matte hade hoppat nedåt. */
+.lobed td{vertical-align:top;padding:9px 0 11px;border-top:1px solid #E2DFD8;overflow-wrap:anywhere;overflow-x:auto}
+.lobed td:first-child{width:60%;padding-right:18px}
+.lobed td:last-child{width:40%;padding-left:18px;border-left:1px solid #E2DFD8}
 /* Facitraden bär ingen överlinje — den ÄR tabellens början — och en grön
    vänsterkant som säger «det här är det rätta pappret». */
 .lobed tr[data-facit] td{border-top:0}
-.lobedsteg{display:block;margin:0 0 5px;font-size:calc(11.5px * var(--fsk, 1));font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#1B7A46}
+/* Ingen versalisering: etiketten SÄGER poängsteget («0 p», «1 p»), och
+   «0 P» är inte samma sak som «0 p» på ett papper där p betyder poäng. */
+.lobedsteg{display:block;margin:0 0 5px;font-size:calc(12px * var(--fsk, 1));font-weight:700;letter-spacing:.04em;color:#1B7A46}
 .lobed tr[data-utan] .lobedsteg{color:#C0392B}
 /* En elevlösning på mer än noll men mindre än full pott är varken grön eller
    röd: den är på väg. Grå etikett, och poängen den fick står i grönt bredvid. */

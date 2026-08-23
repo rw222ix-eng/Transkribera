@@ -338,15 +338,27 @@ def _representative_doc() -> exam_spec.ExamDoc:
                           exam_spec.Steg(celler=[r"$27 = 7$",
                                                  r"$x \approx 0{,}77$"])],
                     forsta_fel=1),
-                losning=r"$\frac{12\,600 - 5\,400}{3} = 2\,400$ per år.",
-                bedomning=r"+1 E korrekt kvot, +1 C tolkning i sammanhanget.",
+                # TS1-TECKNEN I BEDÖMNINGSTABELLENS BÅDA SPALTER. Sedan
+                # 2026-08-23 sätts lösningen i \small i vänsterspalten och
+                # trappan i \small i högerspalten (bedomning.tex.j2,
+                # \bedrad), och elevens rader i normalgrad. Var och en av dem
+                # kan bära ett gradtecken — «temperaturen sjunker med 1,86
+                # °C/minut» är ett helt vanligt facit — och TS1 har en
+                # fontfil per grad. Preamblen sätter numera alla TS1-tecken
+                # magert och upprätt (\normalfont-vakten), så det som måste
+                # ligga i cachen är ts1-lmr i de grader mallarna använder.
+                # Raderna här är det som får dem dit.
+                losning=r"$\frac{12\,600 - 5\,400}{3} = 2\,400$ per år "
+                        r"(≈ 3,5 °C ± 0,2 per ‰).",
+                bedomning="+1 E korrekt kvot i laddpunkter/år\n"
+                          "+1 C tolkning i sammanhanget (± 2 °C godtas)",
                 elevlosningar=[
                     exam_spec.Elevlosning(
-                        etikett="Elevlösning A", partier=[exam_spec.Parti(
-                            rader=[r"$f'(x) = 3x^2$"], poang=(0, 0, 0),
+                        etikett="0 p", partier=[exam_spec.Parti(
+                            rader=[r"$f'(x) = 3x^2$ vid 20 °C"], poang=(0, 0, 0),
                             dom=r"Derivatan är fel — termen $3x$ deriveras inte.")]),
                     exam_spec.Elevlosning(
-                        etikett="Elevlösning B", partier=[
+                        etikett="1 p", partier=[
                             exam_spec.Parti(rader=[r"$f'(x) = 3x^2 + 3 = 0$"],
                                             poang=(1, 0, 0),
                                             dom=r"Godtagbar ansats: ekvationen tecknas."),

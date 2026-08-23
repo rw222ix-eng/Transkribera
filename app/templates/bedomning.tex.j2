@@ -109,17 +109,17 @@ av totalt ((( granser.total ))) poäng.}
 {\itshape ((( d.text )))}\par\vspace{1mm}
 ((( former.kropp(d) )))
 ((* if d.flerval *)){\small\textbf{Rätt: ((( d.ratt_bokstav )))}}\par\vspace{1mm}((* endif *))
-((# TANKSTRECK OCH INTE MITTPUNKT I ETIKETTEN. \textperiodcentered ligger
-    i TS1 (textcomp), och TS1 finns bara i MAGER stil i Tectonic-seeden: den
-    feta etiketten föll på «Font TS1/lmr/bx/n/10.95 not loadable» och tog
-    hela bedömningsanvisningen med sig. Exakt samma fälla som fet kursiv
-    (ec-lmbxi10) samma dag. \textemdash bor i T1 och finns i alla vikter. #))
-((( facitrad(d, 'Facit ' ~ d.bokstav ~ ') \\textemdash{} full pott') )))
+((# MITTPUNKTEN SOM PÅ SKÄRMEN — men i \normalfont. Den ligger i TS1, och
+    etiketten är FET: «Font TS1/lmr/bx/n/10.95 not loadable» tog hela
+    bedömningsanvisningen med sig första gången. Samma vakt som escapningen
+    lägger runt modellens egna TS1-tecken (app/exam_latex._LATEX_SPECIALS);
+    mallens egna måste bära den själva. #))
+((( facitrad(d, 'Facit ' ~ d.bokstav ~ ') {\\normalfont\\textperiodcentered} full pott') )))
 \end{deluppgift}
 ((* endfor *))
 ((* else *))
 ((* if u.flerval *)){\small\textbf{Rätt: ((( u.ratt_bokstav )))}}\par\vspace{1mm}((* endif *))
-((( facitrad(u, 'Facit \\textemdash{} full pott') )))
+((( facitrad(u, 'Facit {\\normalfont\\textperiodcentered} full pott') )))
 ((* endif *))
 ((# Elevraderna sist i uppgiftens tabell, under facitraden (eller under alla
     deluppgifternas facitrader). Eleven ser dem aldrig — det här är lärarens

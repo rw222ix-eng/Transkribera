@@ -55,7 +55,7 @@ _LATEX_SPECIALS = {
     "”": r"\textquotedblright{}",   # ”
     "‘": r"\textquoteleft{}",       # ‘
     "’": r"\textquoteright{}",      # ’
-    "·": r"\textperiodcentered{}",  # ·
+    "·": r"{\normalfont\textperiodcentered}",  # · (TS1, se nedan)
     "…": r"\ldots{}",               # …
     "«": r"\guillemotleft{}",       # «
     "»": r"\guillemotright{}",      # »
@@ -67,20 +67,38 @@ _LATEX_SPECIALS = {
     # vinklar och enheter är vardag i matteuppgifter, så det kommer att skrivas
     # igen.
     #
-    # Kommandona finns i TS1, och TS1 har egna fontfiler per grad och snitt —
-    # de måste därför också kompileras i Tectonic-seeden
-    # (tools/seed_tectonic_cache, \tsprov), annars byter tyst krasch plats med
-    # fel glyf.
-    "°": r"\textdegree{}",          # °
-    "±": r"\textpm{}",              # ±
-    "×": r"\texttimes{}",           # ×
-    "÷": r"\textdiv{}",             # ÷
-    "µ": r"\textmu{}",              # µ
-    "‰": r"\textperthousand{}",     # ‰
-    "€": r"\texteuro{}",            # €
-    "½": r"\textonehalf{}",         # ½
-    "¼": r"\textonequarter{}",      # ¼
-    "¾": r"\textthreequarters{}",   # ¾
+    # Kommandona finns i TS1, och TS1 har EN FONTFIL PER GRAD OCH SNITT
+    # (ts1-lmr12, ts1-lmri12, ts1-lmbx10 …). Saknas filen i den buntade
+    # Tectonic-cachen avbryter kompileringen med «Font TS1/… not loadable», och
+    # då får läraren inget papper alls.
+    #
+    # DÄRFÖR \normalfont RUNT VARJE TS1-TECKEN. Snittet kommer ur texten
+    # omkring, och den texten är modellens: ett gradtecken kan hamna i en fet
+    # rubrik, i en kursiv uppgiftstext eller i en \small bedömningsrad. Tre
+    # skarpa fall på två dygn föll på just det — ts1-lmbx12 i «Prov · former»,
+    # ts1-lmbx10 i bedömningstabellens etikett och ts1-lmri12 i «50 °C» i den
+    # kursiva uppgiftstexten. Med \normalfont behövs bara ts1-lmr i mallarnas
+    # grader, och den matrisen är liten nog att seeda uttömmande.
+    #
+    # Vakten sitter HÄR och inte i preamblen. Ett försök att linda om
+    # \textdegree med \let + \renewcommand gick i loop: LaTeX-symboler i en
+    # annan kodning än den aktiva anropar sig själva en gång till efter
+    # \UseTextSymbol{TS1}, och den andra omgången träffade omdefinitionen —
+    # «TeX capacity exceeded, save size» mitt i seedningen. Escapningen äger
+    # utdata och behöver ingen omdefinition alls.
+    #
+    # Kostar ingenting läsvärt: ett gradtecken har ingen kursiv form värd
+    # namnet, och en centrerad punkt ingen fet. Graden följer med som förut.
+    "°": r"{\normalfont\textdegree}",          # °
+    "±": r"{\normalfont\textpm}",              # ±
+    "×": r"{\normalfont\texttimes}",           # ×
+    "÷": r"{\normalfont\textdiv}",             # ÷
+    "µ": r"{\normalfont\textmu}",              # µ
+    "‰": r"{\normalfont\textperthousand}",     # ‰
+    "€": r"{\normalfont\texteuro}",            # €
+    "½": r"{\normalfont\textonehalf}",         # ½
+    "¼": r"{\normalfont\textonequarter}",      # ¼
+    "¾": r"{\normalfont\textthreequarters}",   # ¾
     "²": r"\textsuperscript{2}",    # ²
     "³": r"\textsuperscript{3}",    # ³
     " ": "~",                       # hårt mellanslag
