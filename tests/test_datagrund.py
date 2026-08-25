@@ -437,7 +437,9 @@ def test_aterkommande_handelse_med_klass_blir_veckoschema():
              location="A214", recurringEventId="r1"),
         _tid("2026-08-24", "08:15", "09:00", summary="Matematik 3c 9A",
              location="A214", recurringEventId="r1"),
-    ])
+        # idag= måste med: utan den räknas serien som passerad så fort dagens
+        # datum gått förbi sista instansen, och schemat blir tomt.
+    ], idag="2026-08-17")
     assert ut["schema"] == [{"dag": 1, "tid": "08:15–09:00", "kurs": "Matematik 3c",
                              "klass": "9A", "sal": "A214",
                              # Giltigheten är seriens egna instanser: veckan får
