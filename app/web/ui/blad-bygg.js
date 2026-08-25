@@ -409,8 +409,14 @@ window.BladBygg = (() => {
        gruppuppgift, bokstäver på diagnosen — annars pekar «1.» och «A.» på
        samma uppgift på två papper. */
     const siffra = v.typ !== 'Diagnos';
+    /* Arbetsbladets facit bär inga poäng (lärarens dom 2026-08-26): bladet är
+       övning utan betygsgränser, så «3 p» vid svaret är en siffra som inte
+       delas ut någonstans. PDF:ns facitband skriver redan tomt där
+       (arbetsblad.tex.j2, facitdelen) — skärmen ska lova samma sak.
+       Gruppuppgiften behåller poängen: dess facit läses MED bedömningen. */
+    const poang = u => v.typ === 'Arbetsblad' ? '' : `<span class="prvarde">${u.p} p</span>`;
     const post = (u, k) => `<div class="pruppg">
-      <span class="prnr">${siffra ? k + 1 : (BOKSTAV[k] || k + 1)}.<span class="prvarde">${u.p} p</span></span>
+      <span class="prnr">${siffra ? k + 1 : (BOKSTAV[k] || k + 1)}.${poang(u)}</span>
       <div><p class="prtext" data-ref="">${ref(u.t)}</p>
         ${losvar(u)}${losvag(u)}
       </div></div>`;
