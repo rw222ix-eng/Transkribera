@@ -1032,7 +1032,8 @@ def render_bedomning(doc: exam_spec.ExamDoc,
 def render_arbetsblad(doc: exam_spec.ExamDoc, visa_poang: bool = False,
                       bilder: dict[int, str] | None = None,
                       dokumentkod: str = "", only_facit: bool = False,
-                      utan_facit: bool = False) -> str:
+                      utan_facit: bool = False,
+                      egna_bilder: dict[int, str] | None = None) -> str:
     """Arbetsblad (Fas 5): inga kravgränser, valfri poängvisning, facit på
     egen sida (lösningsförslagen).
 
@@ -1044,10 +1045,17 @@ def render_arbetsblad(doc: exam_spec.ExamDoc, visa_poang: bool = False,
     `utan_facit` är andra halvan av samma löfte: ELEVBLADET utan facitbandet.
     Utan den bar bladet lösningarna på sista sidan även när läraren valt
     separat facit, och eleverna fick dem dubbelt. Flaggorna kombineras aldrig
-    — only_facit ÄR facitbandet, och ett facit utan sitt band är tomt."""
+    — only_facit ÄR facitbandet, och ett facit utan sitt band är tomt.
+
+    `egna_bilder` är plåten appen matchade och den bild läraren själv släppt
+    på en uppgift, nycklade på uppgiftens nummer (app/platar.plat_bilder,
+    app/tryck.egna_bilder). Bladet fick dem aldrig: bara provet skickade dem
+    vidare, och LaTeX-vägen tappade därför bilden så fort avritningen av
+    skärmen inte kunde byggas. Sedan bildbeställningen nådde arbetsbladet
+    (2026-08-25) är det en riktig lucka och inte en teoretisk."""
     return _environment().get_template("arbetsblad.tex.j2").render(
         visa_poang=visa_poang, dokumentkod=dokumentkod, only_facit=only_facit,
-        utan_facit=utan_facit, **_build_view(doc, bilder))
+        utan_facit=utan_facit, **_build_view(doc, bilder, egna=egna_bilder))
 
 
 def _ci_grupper(vy: dict) -> list[dict]:
@@ -1121,9 +1129,12 @@ def render_anteckningar(doc) -> str:
 
 
 def render_gruppuppgift(doc: exam_spec.ExamDoc,
-                        bilder: dict[int, str] | None = None) -> str:
+                        bilder: dict[int, str] | None = None,
+                        egna_bilder: dict[int, str] | None = None) -> str:
     """Gruppuppgift (Fas 0.6): namnrader per elev, tiden och redovisningsformen
     i klartext, inga poäng på gruppens ark — och facit med bedömning på egen
-    sida, för det är lärarens papper."""
+    sida, för det är lärarens papper.
+
+    `egna_bilder`: samma väg som arbetsbladets, se render_arbetsblad."""
     return _environment().get_template("gruppuppgift.tex.j2").render(
-        **_build_view(doc, bilder))
+        **_build_view(doc, bilder, egna=egna_bilder))

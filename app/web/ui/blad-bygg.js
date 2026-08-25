@@ -224,10 +224,26 @@ window.BladBygg = (() => {
 
        `data-bild` är rutans HANDTAG: blad.js hämtar sidan ur underlaget och
        lägger den här (Blad.underlag). Texten nedanför är vad som står kvar när
-       dokumentet inte bär något underlag att hämta ur. */
+       dokumentet inte bär något underlag att hämta ur.
+
+       `u.scen` är uppgiftens BILDBESTÄLLNING (exam_spec.Scen) och den kommer
+       före den tomma rutan. LÄRARENS BESLUT 2026-08-25: står «Plats för
+       illustration» på ska platshållaren innehålla själva bildprompten, så
+       att hon kan kopiera den till sitt ChatGPT-projekt, få en bild och
+       släppa in den. Provet hade rutan sedan länge; bladet ritade en tom yta
+       bredvid en färdig beställning. Samma `scenruta` som provet, inte en
+       kopia: plåtväljaren, «Kopiera scen» och släppytan sitter delegerade på
+       `.prscen` och `[data-plat]` i plan.js, och en egen markup här hade varit
+       två system att hålla i synk för samma sak.
+
+       Den tomma rutan är kvar som RESERV: papper skrivna innan beställningen
+       fanns, och uppgifter modellen inte gav någon scen (en ren räkneuppgift
+       utspelar sig ingenstans). Krysset styr bara reserven — bär uppgiften en
+       scen är den lärarens egen order, och den ritas. */
     const fig = u.fig ? ''
       : u.bild ? `<div class="gufigur guplats" data-bild="${Number(u.bild)}" style="height:110px"><span class="gufigtext">bild ${Number(u.bild)} ur underlaget — läggs in i canvas</span></div>`
-        : illustration ? '<div class="gufigur guplats" style="height:110px"><span class="gufigtext">plats för illustration</span></div>' : '';
+        : u.scen ? scenruta(u)
+          : illustration ? '<div class="gufigur guplats" style="height:110px"><span class="gufigtext">plats för illustration</span></div>' : '';
     /* Notisen står EFTER uppgiftens former och före svarsytan — samma plats som
        \notisruta har i mallarna (arbetsblad.tex.j2, gruppuppgift.tex.j2). */
     const notis = u.notis ? `<p class="gunotis">${brodtext(u.notis)}</p>` : '';

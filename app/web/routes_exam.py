@@ -378,6 +378,17 @@ def create_router(base: Path, arbiter) -> APIRouter:
         antal = int(body.get("antal") or 10)
         tid_min = int(body.get("tid_min") or 120)
         delar = bool(body.get("delar", True))
+        # «Plats för illustration» ur planeringen (plan.js TYPVAL). Krysset
+        # bodde bara i webbläsaren: bladet ritade en tom ruta när det stod på,
+        # och modellen fick samma bildorder oavsett. Nu styr det om
+        # arbetsbladets och gruppuppgiftens uppgifter alls ska bära en
+        # bildbeställning (`scen`, exam_gen.BILD_PA/BILD_AV) — och bär de en
+        # blir platshållaren SJÄLVA bildprompten i canvas, med «Kopiera scen»
+        # och en släppyta (lärarens beställning 2026-08-25).
+        #
+        # Default är PÅ: äldre klienter skickar inget fält, och provet har
+        # alltid sitt bildstöd (dess form är lärarens förlaga, inte ett val).
+        illustration = bool(body.get("illustration", True))
         datum = (body.get("datum") or "").strip() or None
         # Klockslagen ur panelens narfalt («12:45–14:15»). Tomt betyder att
         # läraren inte valt någon starttid — då skriver pappret minuterna
@@ -572,6 +583,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     svart=svart_block, fokus=fokus_block, profil=typ,
                     koder=koder, skeleton=skelett, niva_mal=niva_mal,
                     riktat=riktat_block, grupp=grupp,
+                    illustration=illustration,
                     # ── TEXTEN ÄR KONTRAKTET, INTE ETT PROCENTTAL ──────
                     # Generatorn skickar numera «Skriver uppgift 4 av 12 …» ur
                     # strömmen (exam_gen._Uppgiftsraknare), och klienten läser
@@ -986,14 +998,16 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         # Gruppuppgiften bär sitt facit MED bedömning på sista
                         # sidan — lärarens ark, inte gruppens — och behöver
                         # därför inget separat bedömningsdokument.
-                        tex = exam_latex.render_gruppuppgift(doc, bilder=bilder_map)
+                        tex = exam_latex.render_gruppuppgift(
+                            doc, bilder=bilder_map, egna_bilder=egna_map)
                         bed = None
                     elif typ == "arbetsblad":
                         # utan_facit följer lärarens val: med separat facit
                         # släcks bandet på elevbladets sista sida — lösningarna
                         # finns då bara i facit-filen bredvid.
                         tex = exam_latex.render_arbetsblad(
-                            doc, bilder=bilder_map, utan_facit=separat_facit)
+                            doc, bilder=bilder_map, utan_facit=separat_facit,
+                            egna_bilder=egna_map)
                         bed = None
                     elif typ == "diagnos":
                         # Diagnosen bär sin rättning i samma dokument, sorterad

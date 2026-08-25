@@ -1037,6 +1037,34 @@ ORIGINALITET_UR_BOKEN = (
     "som igenkända. Gör dem gärna bättre än bokens.\n")
 
 
+# ── ILLUSTRATIONSKRYSSET, SAGT TILL MODELLEN ──────────────────────────────
+# LÄRARENS BESLUT 2026-08-25: står «Plats för illustration» på i planeringen
+# ska platshållaren på bladet innehålla SJÄLVA BILDPROMPTEN — samma SCENE-ruta
+# som provet redan har, med «Kopiera scen» och en släppyta. Hon klistrar in
+# stycket i sitt eget ChatGPT-projekt, får en bild och släpper den på rutan.
+#
+# Maskineriet fanns hela vägen: SCEN_REGEL står i INSTRUCTION och delas av
+# alla profiler, grammatiken tillåter `scen` på varje uppgift
+# (exam_spec.to_response_format), plåtmatchningen körs för alla papper
+# (routes_exam) och canvas kan rita rutan (blad-bygg scenruta). Det som
+# saknades var att KRYSSET aldrig lämnade webbläsaren: modellen fick samma
+# order oavsett vad läraren valt, och bladet ritade en tom ruta även när
+# uppgiften bar en färdig beställning.
+#
+# Kryssets AV-läge är därför det som behöver sägas: utan den här raden hade
+# bladet plötsligt börjat visa scenrutor på ett papper där läraren valt bort
+# bilderna. PÅ-läget pekar bara tillbaka på regeln ovan, så att ordern står
+# nära uppdraget och inte bara långt uppe i instruktionen.
+BILD_PA = (
+    "BILDSTÖDET GÄLLER: sätt `scen` på varje uppgift som utspelar sig "
+    "någonstans, enligt scen-regeln ovan. Rena räkneuppgifter utan situation "
+    "får ingen scen.")
+BILD_AV = (
+    "INGA BILDER PÅ DET HÄR PAPPRET: läraren har valt bort "
+    "illustrationsplatsen. Lämna `scen` tomt (null) på ALLA uppgifter, hur "
+    "gärna de än hade kunnat målas.")
+
+
 def build_prompt(kurs: str, klass: str, punkter: list[str], *,
                  antal: int = 10, tid_min: int = 120, delar: bool = True,
                  memory: str = "", teman: str = "",
@@ -1045,7 +1073,8 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
                  svart: str = "", fokus: str = "",
                  profil: str = "prov", koder: list[str] | None = None,
                  grupp: dict | None = None, riktat: str = "",
-                 skeleton: list[dict] | None = None) -> str:
+                 skeleton: list[dict] | None = None,
+                 illustration: bool = True) -> str:
     """Genereringsprompt: instruktion + valda innehållspunkter +
     minneskontext + tidigare provs teman (undvik upprepning som default).
     `profil` växlar mellan prov och arbetsblad (Fas 5). `utfall` är ett rättat
@@ -1057,7 +1086,11 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
     (app/bok.build_niva_block, Del C:s C2). Den gäller arbetsblad och
     gruppuppgift: läromedlet nivåmärker sina uppgifter, och för just den klassen
     ÄR boken skalan. Provet förankras i stället i NP-rubriken — det är lärarens
-    uttryckliga krav att provet ska hålla nationell nivå, inte bokens."""
+    uttryckliga krav att provet ska hålla nationell nivå, inte bokens.
+
+    `illustration` är lärarens kryss «Plats för illustration» i planeringen och
+    gäller BARA arbetsblad och gruppuppgift (plan.js TYPVAL). Provet har alltid
+    sitt bildstöd — dess form är lärarens förlaga, inte ett val i panelen."""
     # Skelettet räknas för ALLA tre profilerna (Del D1b): jämn förmågetäckning
     # ska vara garanterad by construction och inte bero på att modellen råkar
     # sprida poängen rätt. Bara delarna skiljer — arbetsbladet och
@@ -1214,6 +1247,8 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             f"Provtiden hör hemma i tid_min={min_} och ingen annanstans — "
             "hitta inte på egna fält (tid_minuter, tidsatgang …), de avvisas. "
             "Svara med enbart JSON.")
+        # Lärarens illustrationskryss (se BILD_PA/BILD_AV).
+        block.append(BILD_PA if illustration else BILD_AV)
         # Gruppuppgiften får sin uppgiftsplan som TEXT, inte som grammatik.
         # Grammatiklåsningen (to_response_format med skeleton) tvingar varje
         # uppgift att bära poäng själv, och en uppgift med poäng får per schemat
@@ -1269,6 +1304,8 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             "uppgiftens bokstav skrivs överst på lösbladet, och räkningen ska "
             "visas — inte bara svaret. "
             "Lösningsförslagen blir facit, och facit ska vara kort: svaret och på sin höjd ett par led. Svara med enbart JSON.")
+        # Lärarens illustrationskryss (se BILD_PA/BILD_AV).
+        block.append(BILD_PA if illustration else BILD_AV)
         # «Stigande svårighet» stod här förut, och det är en instruktion utan
         # skala: svårare ÄN VAD? Nu följer skalan med — bokens egen när läraren
         # slagit upp ett uppslag, annars NP-rubriken.
@@ -3140,6 +3177,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                   skeleton: list[dict] | None = None,
                   niva_mal: dict | None = None,
                   grupp: dict | None = None, doma: bool = True,
+                  illustration: bool = True,
                   llm=llm_client.generate, max_rounds: int = MAX_ROUNDS,
                   log_cb: Callable[[str], None] | None = None) -> dict:
     """Generera ett prov/arbetsblad/gruppuppgift och reparera schema- och
@@ -3165,7 +3203,11 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     `koder` är de centrala innehållspunkter läraren kryssade, som koder. De
     låser `innehall` per uppgift (grammatik + validering) så att varje uppgift
     säger vad den prövar med kursplanens egen identitet. Utan dem faller
-    fältet tillbaka på fritext, som förut."""
+    fältet tillbaka på fritext, som förut.
+
+    `illustration` är lärarens kryss «Plats för illustration» och styr om
+    arbetsbladets och gruppuppgiftens uppgifter ska bära en bildbeställning
+    (`scen`) alls. Se BILD_PA/BILD_AV."""
     log = log_cb or (lambda _m: None)
     log({"arbetsblad": "Skriver arbetsbladet …",
          "gruppuppgift": "Skriver gruppuppgiften …"}.get(profil, "Skriver provet …"))
@@ -3198,7 +3240,8 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                           bok=bok, boknivaer=boknivaer, forlaga=forlaga,
                           svart=svart, fokus=fokus,
                           profil=profil, koder=koder, grupp=grupp,
-                          riktat=riktat, skeleton=skeleton)
+                          riktat=riktat, skeleton=skeleton,
+                          illustration=illustration)
     exam = _llm_round(prompt, model, llm, antal, grammatik, koder,
                       log_cb=log_cb)
     rounds = 1

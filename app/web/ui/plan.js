@@ -317,7 +317,14 @@
     Gruppuppgift: [
       { id: 'grupp', namn: 'Elever per grupp', typ: 'antal', min: 2, max: 5 },
       { id: 'langd', namn: 'Tid på lektionen', typ: 'minuter', snabb: [10, 20, 30, 45], min: 10, max: 180 },
-      { id: 'redovisning', namn: 'Redovisning', typ: 'seg', val: ['Muntligt', 'Skriftligt', 'Poster'] }
+      { id: 'redovisning', namn: 'Redovisning', typ: 'seg', val: ['Muntligt', 'Skriftligt', 'Poster'] },
+      /* Samma kryss som arbetsbladet. Gruppuppgiften saknade det utan skäl:
+         renderaren skickade redan `!!i.illustration` för båda typerna, men
+         gruppuppgiftens upplägg hade inget fält att skicka, så bilden var
+         permanent avstängd. Och det är just gruppens papper som vinner mest
+         på en bild — fyra elever som ska prata om en situation har lättare
+         att se den framför sig. */
+      { id: 'illustration', namn: 'Plats för illustration', typ: 'switch' }
     ],
     /* Diagnosen har INGEN antalsväljare — och det är hela formen. Antalet
        uppgifter räknas ur två saker läraren redan bestämt: hur mycket av
@@ -368,7 +375,7 @@
     Prov: { nar: 'På lektionen', narDatum: '', narTid: '08:15', provminuter: 90, provtid: '90 min', antal: 6, nivamix: 'Balanserat', delprov: 'Del A + Del B', losningar: true, formelblad: true, takt: 3.5 },
     Arbetsblad: { antal: 3, niva: 'Blandat', facit: 'Facit i bladet', illustration: true,
                   klassblad: true, elever: [], syfte: 'Stötta' },
-    Gruppuppgift: { grupp: 3, langd: 60, redovisning: 'Muntligt' },
+    Gruppuppgift: { grupp: 3, langd: 60, redovisning: 'Muntligt', illustration: true },
     /* 60 minuter är lärarens genomsnittslektion och därmed diagnosens mått;
        75 är taket, och det är servern som håller det (exam_spec). Fälten är
        provets — diagnosen skrivs på en lektion precis som provet, och `nartid`
@@ -2525,6 +2532,12 @@
       delar: false,
       datum: utkast.datum || '',
       typ: 'arbetsblad',
+      /* «Plats för illustration» följer med till prompten. Står krysset på
+         ber servern modellen skriva en bildbeställning per situationsuppgift
+         (exam_gen.BILD_PA), och platshållaren i canvas blir då SJÄLVA
+         bildprompten med «Kopiera scen» och en släppyta. Står det av lämnas
+         `scen` tomt och bladet ser ut precis som förut. */
+      illustration: !!i0.illustration,
       /* «Nivå» — samma regel som provets Poängnivåer: bara icke-default. */
       ...(i0.niva && i0.niva !== 'Blandat' ? { niva: i0.niva } : {}),
       ...(bladNu && bladNu.id ? {
@@ -2577,6 +2590,8 @@
       antal: 4,
       datum: utkast.datum || '',
       typ: 'gruppuppgift',
+      /* Samma kryss som arbetsbladets, se JOBB.Arbetsblad. */
+      illustration: !!i0.illustration,
       ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(), ...u,
       grupp: {
         elever: Number(i0.grupp) || 3,
