@@ -1066,9 +1066,12 @@ window.Blad = (() => {
     return rad;
   }
   function delaArk(trav) {
-    /* Sex varv: varje varv föder som mest ett blad, och ett dokument som
-       verkligen behöver fler än fyra ska inte tappa sina sista kort. */
-    for (let varv = 0; varv < 6; varv++) {
+    /* Ett varv föder som mest ett blad. Taket stod på sex när ett arbetsblad
+       hade tio uppgifter; det rymmer tjugo nu (plan.js, «Antal uppgifter»), och
+       ett blad med en plåt och en stegtabell kan bära två kort. Taket är en
+       nödbroms mot en oändlig slinga, inte en budget: slingan bryts ändå så
+       fort inget blad spiller. */
+    for (let varv = 0; varv < 16; varv++) {
       /* matbar() FÖRST: ett gömt blad rapporterar clientHeight 0, och då säger
          ledigt() «−54» om ett blad som kanske är halvtomt. En gömd mätning får
          aldrig bli en delning — se MÄTBARHETEN. */
@@ -1085,7 +1088,17 @@ window.Blad = (() => {
       /* Flytta bakifrån tills bladet ryms — och packa alltså så många uppgifter
          som får plats, aldrig en per blad. Minst ett kort stannar kvar: ett blad
          utan uppgifter är ett tomt papper i traven. */
-      for (let n = 0; n < 12; n++) {
+      /* ── ENSAM-SIDAN KOM UR EN FAST GRÄNS ──
+         Här stod `n < 12`, och på det skarpa potensbladet (femton uppgifter)
+         räckte det inte: varv ett flyttade tolv kort och lämnade tre kvar på
+         ett blad som rymmer två. Bladet spillde alltså fortfarande, varv två
+         såg det, och födde ETT NYTT blad för det enda kortet över — som lade
+         sig FÖRE fortsättningen med de tolv. Uppgift 3 fick en egen sida med
+         819 px luft under sig medan resten packade tätt.
+         Taket är antalet kort på bladet: slingan bryts ändå på `ledigt() >= 0`,
+         och ett blad kan aldrig behöva fler flyttar än det har kort. */
+      const tak = $$('.gukort', gu).length;
+      for (let n = 0; n < tak; n++) {
         const kort = $$('.gukort', gu);
         if (kort.length <= 1 || ledigt(gu) >= 0) break;
         const sist = kort[kort.length - 1];
