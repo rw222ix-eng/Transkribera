@@ -353,5 +353,8 @@
 /* Bilden är smalare än rutan (70 %), och .gufigur-snedstrecken lyste igenom
    på sidorna — det såg ut som att platshållaren var kvar fast bilden satt i
    (lärarens dom 2026-08-26). Strecken betyder «hit kommer en bild»; med en
-   bild i rutan är det löftet infriat och bakgrunden ska vara pappersvit. */
-.gufigur:has(img){background:#fff}
+   bild i rutan är det löftet infriat och bakgrunden ska vara pappersvit.
+   Ramen är samma löfte i kantform och slocknar av samma dom — den grå linjen
+   runt rutan läste fortfarande som platshållare. Bilden får stå oramad, som
+   \includegraphics gör på pappret. */
+.gufigur:has(img){background:#fff;border:none}
