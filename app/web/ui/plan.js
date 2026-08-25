@@ -335,7 +335,16 @@
       { id: 'mottagare', namn: 'Vem får bladet?', typ: 'mottagare' },
       { id: 'syfte', namn: 'Riktningen', typ: 'seg', val: ['Stötta', 'Utmana'],
         bara: s => (s.elever || []).length > 0 },
-      { id: 'antal', namn: 'Antal uppgifter', typ: 'antal', min: 1, max: 6 },
+      /* Taket var SEX, och det var ett tak utan skäl: arbetsbladet är inte
+         bundet till ett A4 (bladet delas i flera ark av sig självt, blad.js
+         paginera) och servern har aldrig haft någon gräns — den enda
+         förkontrollen är att pappret måste rymma sina uppgiftstyper
+         (exam_spec.genomforbarhet, minst en). Lärarens beställning
+         2026-08-25: upp till tjugo, samma tak som provets. Skelettet,
+         balansen och grammatiktvånget klarar tjugo redan (provet kör dem),
+         och skulle schemat spränga kommandoraden går det i prompten i
+         stället (claude_code.SCHEMA_TAK_EXE). */
+      { id: 'antal', namn: 'Antal uppgifter', typ: 'antal', min: 1, max: 20 },
       { id: 'niva', namn: 'Nivå', typ: 'seg', val: ['E-nivå', 'C-nivå', 'A-nivå', 'Blandat'] },
       { id: 'facit', namn: 'Facit', typ: 'seg', val: ['Inget facit', 'Facit i bladet', 'Separat facit'] },
       { id: 'illustration', namn: 'Plats för illustration', typ: 'switch' }
