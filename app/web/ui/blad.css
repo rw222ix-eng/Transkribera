@@ -350,3 +350,8 @@
   line-height:1.5;color:#444;max-height:190px;overflow:auto}
 .prscenhint{margin:0;padding:6px 10px;font-size:11.5px;color:#777;
   border-top:1px dashed #CFCFCF}
+/* Bilden är smalare än rutan (70 %), och .gufigur-snedstrecken lyste igenom
+   på sidorna — det såg ut som att platshållaren var kvar fast bilden satt i
+   (lärarens dom 2026-08-26). Strecken betyder «hit kommer en bild»; med en
+   bild i rutan är det löftet infriat och bakgrunden ska vara pappersvit. */
+.gufigur:has(img){background:#fff}
