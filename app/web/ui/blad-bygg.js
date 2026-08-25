@@ -231,41 +231,46 @@ window.BladBygg = (() => {
      bladet numrerade redan i siffror.
      Diagnosen står utanför och behåller sina bokstäver: dess rättningsblad
      paras mot brickan, och den formen är dess egen. */
-  function kort(u, i, illustration, siffra) {
+  function kort(u, i, siffra) {
     const bricka = siffra ? String(i + 1) : (BOKSTAV[i] || String(i + 1));
     const alt = u.alt
       ? `<ul class="gudel guval">${u.alt.map((a, k) => `<li><i>${BOKSTAV[k]}.</i> ${mat(a)}</li>`).join('')}</ul>` : '';
     const del = u.del && u.del.length
       ? `<ul class="gudel">${u.del.map((d, k) => `<li>${'abcdef'[k]}) ${brodtext(d)}</li>`).join('')}</ul>` : '';
-    /* Bildplatsen. `illustration` är lärarens kryss «plats för illustration»;
-       `u.bild` är uppgiftens egen hänvisning till bildunderlaget (exam_spec:
-       ett 1-baserat index bland de uppladdade bilderna). Den senare mappades
-       till arket men ritades aldrig — PDF:en satte bilden och skärmen visade
-       ingenting, så uppgiften hänvisade till en bild som inte fanns. Rutan är
-       dessutom den yta lärarens egen bild landar i (blad.js rita, v.bilder).
+    /* Bildplatsen. `u.bild` är uppgiftens egen hänvisning till bildunderlaget
+       (exam_spec: ett 1-baserat index bland de uppladdade bilderna). Den
+       mappades till arket men ritades aldrig — PDF:en satte bilden och skärmen
+       visade ingenting, så uppgiften hänvisade till en bild som inte fanns.
+       Rutan är dessutom den yta lärarens egen bild landar i (blad.js rita,
+       v.bilder).
 
        `data-bild` är rutans HANDTAG: blad.js hämtar sidan ur underlaget och
        lägger den här (Blad.underlag). Texten nedanför är vad som står kvar när
        dokumentet inte bär något underlag att hämta ur.
 
-       `u.scen` är uppgiftens BILDBESTÄLLNING (exam_spec.Scen) och den kommer
-       före den tomma rutan. LÄRARENS BESLUT 2026-08-25: står «Plats för
-       illustration» på ska platshållaren innehålla själva bildprompten, så
-       att hon kan kopiera den till sitt ChatGPT-projekt, få en bild och
-       släppa in den. Provet hade rutan sedan länge; bladet ritade en tom yta
-       bredvid en färdig beställning. Samma `scenruta` som provet, inte en
-       kopia: plåtväljaren, «Kopiera scen» och släppytan sitter delegerade på
-       `.prscen` och `[data-plat]` i plan.js, och en egen markup här hade varit
-       två system att hålla i synk för samma sak.
+       `u.scen` är uppgiftens BILDBESTÄLLNING (exam_spec.Scen). LÄRARENS BESLUT
+       2026-08-25: står «Plats för illustration» på ska platshållaren innehålla
+       själva bildprompten, så att hon kan kopiera den till sitt
+       ChatGPT-projekt, få en bild och släppa in den. Samma `scenruta` som
+       provet, inte en kopia: plåtväljaren, «Kopiera scen» och släppytan sitter
+       delegerade på `.prscen` och `[data-plat]` i plan.js, och en egen markup
+       här hade varit två system att hålla i synk för samma sak.
 
-       Den tomma rutan är kvar som RESERV: papper skrivna innan beställningen
-       fanns, och uppgifter modellen inte gav någon scen (en ren räkneuppgift
-       utspelar sig ingenstans). Krysset styr bara reserven — bär uppgiften en
-       scen är den lärarens egen order, och den ritas. */
+       ── EN PLATSHÅLLARE UTAN PROMPT FINNS INTE ──
+       LÄRARENS DOM samma kväll, om det skarpa potensbladet: tolv av femton
+       uppgifter var rena räkneuppgifter, SCEN_REGEL förbjuder scen på dem, och
+       varje sådan uppgift fick ändå en tom ruta med «plats för illustration».
+       Tolv rutor som lovar en bild ingen har beställt, 110 px var — nästan två
+       hela sidor papper. Rutan ritas därför bara när uppgiften bär en scen att
+       måla efter; krysset styr vad MODELLEN får beställa (exam_gen BILD_PA /
+       BILD_AV), inte om bladet ska reservera tomrum.
+
+       Ingen migrering behövs: ett gammalt papper utan `scen` tappar bara en
+       ruta som ändå aldrig gick att fylla. LaTeX-vägen har aldrig reserverat
+       ytan — arbetsblad.tex.j2 sätter bilden bara när `u.bild_fil` finns. */
     const fig = u.fig ? ''
       : u.bild ? `<div class="gufigur guplats" data-bild="${Number(u.bild)}" style="height:110px"><span class="gufigtext">bild ${Number(u.bild)} ur underlaget — läggs in i canvas</span></div>`
-        : u.scen ? scenruta(u)
-          : illustration ? '<div class="gufigur guplats" style="height:110px"><span class="gufigtext">plats för illustration</span></div>' : '';
+        : u.scen ? scenruta(u) : '';
     /* Notisen står EFTER uppgiftens former och före svarsytan — samma plats som
        \notisruta har i mallarna (arbetsblad.tex.j2, gruppuppgift.tex.j2). */
     const notis = u.notis ? `<p class="gunotis">${brodtext(u.notis)}</p>` : '';
@@ -363,7 +368,7 @@ window.BladBygg = (() => {
              mycket väl sakna ordet. */''}
       <div class="guband"${bandtext ? ' data-egen' : ''}>${esc(bandtext || BAND[v.typ] || BAND.Arbetsblad)}${
         v.nyckelfraga ? ` <b>${mat(v.nyckelfraga)}</b>` : ''}</div>
-      ${uppgifter.map((u, k) => kort(u, k, !!i.illustration, v.typ !== 'Diagnos')).join('')}
+      ${uppgifter.map((u, k) => kort(u, k, v.typ !== 'Diagnos')).join('')}
     </div>`;
   }
 
