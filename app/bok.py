@@ -408,6 +408,29 @@ def uppslag_text(conn, bok_id: int, fran: int, till: int,
     return "\n\n".join(delar)
 
 
+# ── ORIGINALITETSKRAVET ───────────────────────────────────────────────────
+# LÄRARENS BESLUT 2026-08-25: «uppgifterna ska ta inspiration från boken men
+# vara originella och egna, gärna bättre. Aldrig samma eller nära-liknande
+# uppgifter som bokens.»
+#
+# Raden bor i en egen konstant därför att BÅDA bokblocken bär den: det hela
+# uppslaget (tavlan, arbetsbladet, gruppuppgiften) och urvalet (provet,
+# diagnosen). Skärpningen gick annars in i det ena och glömdes i det andra,
+# och då hade samma bok gett två olika order beroende på vilket papper som
+# skrevs. Den säger vad som ska ÄRVAS (typ, begrepp, notation, nivå) och vad
+# som ska vara nytt (sammanhang, scenario, tal) — ett förbud mot avskrift
+# ensamt räckte inte, för en modell som bytte tal och behöll ängen med
+# inhägnaden hade följt bokstaven och brutit meningen.
+_ORIGINALITET = (
+    "Boken är MÅTTSTOCK, inte förlaga: den visar vilken TYP av uppgifter "
+    "klassen arbetar med, vilka begrepp och vilken notation som gäller och "
+    "vilken NIVÅ som är rimlig. Innehållet skriver du själv — egna "
+    "sammanhang, egna scenarier, egna tal. Känner en elev igen en uppgift "
+    "från boken är den fel skriven, och det gäller också nära varianter: "
+    "samma situation med andra siffror är samma uppgift. Sikta högre än "
+    "boken där du kan.")
+
+
 def build_bok_block(bok: dict, fran: int, till: int, text: str,
                     uppgifter: list[dict] | None = None,
                     urval: dict | None = None) -> str:
@@ -428,9 +451,18 @@ def build_bok_block(bok: dict, fran: int, till: int, text: str,
              "de här sidorna: använd samma begrepp och samma notation som "
              "eleverna har framför sig. Skriv HELT EGNA uppgifter — kopiera "
              "aldrig bokens uppgifter eller exempel, inte ens med utbytta "
-             "tal. Bokens uppgifter visar nivå och typ, inget mer. Sidorna "
-             "är avlästa ur boken; [oläsligt] betyder att avläsningen inte "
-             "kunde tyda något där, och sådant ska du inte fylla i själv.",
+             "tal. Bokens uppgifter visar nivå och typ, inget mer. "
+             # LÄRARENS BESLUT 2026-08-25: boken är MÅTTSTOCK, inte förlaga.
+             # «Ta inspiration från boken men gör egna, gärna bättre
+             # uppgifter.» Förbudet stod redan här, men bara som ett förbud
+             # mot avskrift — och en modell som byter tal och behåller
+             # sammanhanget har lytt bokstaven och brutit meningen. Raden
+             # nedan säger vad som ska VARIERA i stället: sammanhanget,
+             # scenariot och talen.
+             + _ORIGINALITET
+             + " Sidorna är avlästa ur boken; [oläsligt] betyder att "
+             "avläsningen inte kunde tyda något där, och sådant ska du inte "
+             "fylla i själv.",
              text]
     nummer = [str(u["nr"]) for u in (uppgifter or []) if u.get("nr")]
     if nummer:
@@ -799,7 +831,11 @@ _URVAL_HUVUD = (
     "jämnt spridda över avsnittet. Det är ett URVAL, inte hela sidor: "
     "uppgifterna som visas är måttstocken för nivå och typ, och de som inte "
     "visas är av samma slag. Skriv HELT EGNA uppgifter — kopiera aldrig bokens "
-    "uppgifter eller exempel, inte ens med utbytta tal. [oläsligt] betyder att "
+    "uppgifter eller exempel, inte ens med utbytta tal. "
+    # Samma skärpning som i det hela blocket (se _ORIGINALITET): boken är
+    # måttstock för typ och nivå, aldrig förlaga för innehåll.
+    + _ORIGINALITET +
+    " [oläsligt] betyder att "
     "avläsningen inte kunde tyda något där, och sådant ska du inte fylla i "
     "själv. Ett avsnitt som inte står här är inte läst — gissa inte vad som "
     "stod i det.")

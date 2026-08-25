@@ -1012,6 +1012,31 @@ def _skelett_plan(skeleton: list[dict], last: bool = True) -> str:
             + "\n".join(rader))
 
 
+# ── ORIGINALITETEN, SAGD I UPPDRAGET ──────────────────────────────────────
+# LÄRARENS BESLUT 2026-08-25: uppgifterna ska ta INSPIRATION ur boken — vilken
+# typ av uppgifter klassen arbetar med, vilka begrepp, vilken notation, vilken
+# nivå — men vara ORIGINELLA och egna, gärna bättre. Aldrig samma uppgifter som
+# bokens, och aldrig nära varianter: samma situation med utbytta tal ÄR bokens
+# uppgift.
+#
+# Kravet står redan i bokblocket (app/bok._ORIGINALITET), och det är där det
+# hör hemma — det är boken som är frestelsen. Men bokblocket är en KÄLLA bland
+# flera och står långt före uppdraget i prompten, och de två papper som läser
+# hela uppslaget i detalj (arbetsblad och gruppuppgift, se routes_exam) är
+# precis de som ligger närmast avskrift. Raden upprepas därför i deras
+# uppdragstext, sist bland orderna, där den inte går att läsa förbi.
+#
+# INTE i provets eller diagnosens uppdrag: de läser bokens URVAL som översikt,
+# och deras uppdragstexter är lärarens egen förlaga beskriven som krav. En rad
+# till där hade varit brus, och bokblockets krav gäller dem ändå.
+ORIGINALITET_UR_BOKEN = (
+    "Utgår pappret från en bok är boken INSPIRATION, aldrig förlaga: härma "
+    "uppgiftstypen, begreppen, notationen och nivån, men skriv originella "
+    "uppgifter med egna sammanhang, egna scenarier och egna tal. En uppgift "
+    "en elev känner igen från boken är fel skriven, och nära varianter räknas "
+    "som igenkända. Gör dem gärna bättre än bokens.\n")
+
+
 def build_prompt(kurs: str, klass: str, punkter: list[str], *,
                  antal: int = 10, tid_min: int = 120, delar: bool = True,
                  memory: str = "", teman: str = "",
@@ -1117,6 +1142,7 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             f"Uppdrag: skriv en GRUPPUPPGIFT för {kurs}, klass {klass}, med "
             f"EXAKT {antal} uppgifter (varken fler eller färre). {n} elever per "
             f"grupp arbetar tillsammans i {min_} minuter. {REDOV.get(red, REDOV['muntligt'])}\n"
+            f"{ORIGINALITET_UR_BOKEN}"
             # STEGRINGEN (Del F, lärarens första dom). Här stod förut att
             # uppgifterna är «fyra ingångar till samma sak, inte en trappa, så
             # de behöver inte bli svårare nedåt». Lärarens skarpa lektion sa
@@ -1231,7 +1257,7 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
         block.append(
             f"Uppdrag: skriv ett ARBETSBLAD (övningsblad, inte prov) för "
             f"{kurs}, klass {klass}, med EXAKT {antal} uppgifter (varken fler "
-            f"eller färre). Tyngden ligger på övning och rutin — men det är "
+            f"eller färre). {ORIGINALITET_UR_BOKEN}Tyngden ligger på övning och rutin — men det är "
             "uppgifternas FORM som ska vara övande, inte förmågefördelningen: "
             "alla sex förmågor ska vägas lika, och en kommunikationsuppgift på "
             "ett arbetsblad är «förklara med ord varför …» i drillformat, inte "
