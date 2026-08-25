@@ -68,8 +68,16 @@
     if (valjLage && e.target.closest('[data-el]')) return;
     /* `.aprick` med i listan: pekarfångsten nedan äter annars klicket på
        prickarna i pappret — panoreringen tog gesten och knappen fick aldrig
-       veta att någon tryckte på den. Samma skäl som nålarna står här. */
-    if (e.target.closest('.gpin,.gfab,.gpanel,.aprick')) return;
+       veta att någon tryckte på den. Samma skäl som nålarna står här.
+
+       `.prplatfot` och `.prscen` av EXAKT samma skäl (lärarens arbetsblad
+       2026-08-25): setPointerCapture flyttar klickets mål till duken, så
+       «Byt plåt», «Ta bort» och «Kopiera scen» fick aldrig veta att någon
+       tryckte — och scenrutans släppyta, som öppnar filväljaren när man
+       klickar den, inte heller. Bara foten och scenrutan står här, inte hela
+       plåtbilden: en plåt är ett par hundra pixlar av arket, och att dra i
+       den ska fortfarande panorera. */
+    if (e.target.closest('.gpin,.gfab,.gpanel,.aprick,.prplatfot,.prscen')) return;
     e.preventDefault();
     const val = window.getSelection && window.getSelection();
     if (val && !val.isCollapsed) val.removeAllRanges();

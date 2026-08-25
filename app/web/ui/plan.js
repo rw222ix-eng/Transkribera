@@ -3959,17 +3959,24 @@
      släppyta; bara ägaren skiljer. Porträttet har ingen plåt att välja bland:
      katalogen är målade SITUATIONER (app/platar MATCHBARA_SPAR), inte
      ansikten, så sattPlat och plåtväljaren nedan rör bara uppgifter. */
+  /* ── FÄLTET HETER `uppgifter` ──────────────────────
+     Här stod `v.uppg`, och den nyckeln finns inte på en dokumentversion: hela
+     huset skriver `v.uppgifter` (franProv, blad.js, arket). scenFor svarade
+     alltså ALLTID null — «Ta bort» föll tyst på vakten i sattPlat, och «Byt
+     plåt» fällde ut väljaren men skrev ingenting när man valde. Lärarens
+     arbetsblad 2026-08-25 var första gången någon tryckte på knapparna: felet
+     har suttit där sedan plåtväljaren skrevs, och gäller provet lika mycket. */
   function scenFor(nyckel) {
     const v = versioner[nu];
     if (!v) return null;
     if (nyckel === 'forsatt') return v.forsattsbild || null;
-    const u = (v.uppg || [])[nyckel - 1];
+    const u = (v.uppgifter || [])[nyckel - 1];
     return u && u.scen ? u.scen : null;
   }
   function sattPlat(nr, namn) {
     if (nu < 0 || !scenFor(nr)) return;
     const v = nyVersion(versioner[nu], x => {
-      const u = (x.uppg || [])[nr - 1];
+      const u = (x.uppgifter || [])[nr - 1];
       if (u && u.scen) u.scen.plat = namn;
       x.anteckning = namn ? `Plåt vald — ${namn}` : 'Plåten borttagen';
       x.andrat = ['uppg' + nr];
@@ -4819,8 +4826,12 @@
              här raden trycktes alltså den automatiska plåten även på den
              uppgift läraren just tagit bort den från. Tom sträng = ingen
              plåt; det är skillnaden mot att inte skicka nyckeln alls. */
+          /* `uppgifter`, inte `uppg` — samma felstavning som scenFor bar, och
+             här kostade den tryck: kartan blev alltid tom, så servern satte
+             den plåt den själv matchade även på en uppgift läraren tagit
+             plåten från. */
           platar: Object.fromEntries(
-            (godkant.uppg || []).filter(u => u.scen)
+            (godkant.uppgifter || []).filter(u => u.scen)
               .map(u => ['uppg' + u.nr, u.scen.plat || ''])),
         }))
         .then(kravGodkant)
