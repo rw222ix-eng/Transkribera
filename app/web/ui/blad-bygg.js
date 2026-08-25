@@ -206,9 +206,16 @@ window.BladBygg = (() => {
   }
 
   /* ── Arbetsbladet och gruppuppgiften ─────────────── */
-  /* `siffra`: gruppuppgiftens brickor är 1, 2, 3 … (lärarens val 2026-08-20) —
-     då kan deluppgifterna heta a) b) utan att två bokstavsserier blandas på
-     samma papper. Arbetsbladet behåller bokstäverna. */
+  /* `siffra`: brickorna är 1, 2, 3 … Gruppuppgiften fick dem 2026-08-20 och
+     ARBETSBLADET 2026-08-25 (lärarens val, efter det skarpa potensbladet) —
+     skälet är detsamma på båda: deluppgifterna heter a) b) c), och bokstäver i
+     marginalen bredvid dem är två bokstavsserier på samma papper. Just det som
+     motiverade bokstäverna motiverar alltså att de går.
+     Serien tog dessutom slut: BOKSTAV har åtta poster, och det skarpa bladet
+     hade femton uppgifter — brickorna löd A…H och sedan 9, 10, 11. Halva
+     bladet numrerade redan i siffror.
+     Diagnosen står utanför och behåller sina bokstäver: dess rättningsblad
+     paras mot brickan, och den formen är dess egen. */
   function kort(u, i, illustration, siffra) {
     const bricka = siffra ? String(i + 1) : (BOKSTAV[i] || String(i + 1));
     const alt = u.alt
@@ -279,7 +286,7 @@ window.BladBygg = (() => {
      tomt: gamla papper, prototypens egna och allt som skrevs innan fältet
      fanns ska se likadana ut som förut. */
   const BAND = {
-    Arbetsblad: 'Skriv svaret på svarsraden där det står «Svar». De uppgifter som ska redovisas är märkta — skriv uppgiftens bokstav överst på lösbladet. Visa hur du räknar, inte bara svaret.',
+    Arbetsblad: 'Skriv svaret på svarsraden där det står «Svar». De uppgifter som ska redovisas är märkta — skriv uppgiftens nummer överst på lösbladet. Visa hur du räknar, inte bara svaret.',
     Gruppuppgift: 'Läs uppgiften tillsammans innan ni börjar räkna. Bestäm vem som skriver. Alla i gruppen ska kunna förklara lösningen efteråt.',
     /* Diagnosens band är det enda som säger åt eleven att HOPPA ÖVER. Det är
        hela mätningen: ett tomrum som eleven kämpat sig förbi med en gissning
@@ -341,7 +348,7 @@ window.BladBygg = (() => {
              mycket väl sakna ordet. */''}
       <div class="guband"${bandtext ? ' data-egen' : ''}>${esc(bandtext || BAND[v.typ] || BAND.Arbetsblad)}${
         v.nyckelfraga ? ` <b>${mat(v.nyckelfraga)}</b>` : ''}</div>
-      ${uppgifter.map((u, k) => kort(u, k, !!i.illustration, v.typ === 'Gruppuppgift')).join('')}
+      ${uppgifter.map((u, k) => kort(u, k, !!i.illustration, v.typ !== 'Diagnos')).join('')}
     </div>`;
   }
 
@@ -378,9 +385,10 @@ window.BladBygg = (() => {
 
   /* ── Facit till arbetsbladet ─────────────────────── */
   function arkfacit(v, uppgifter) {
-    /* Facit numrerar som uppgiftsarket: gruppuppgiftens siffror, arbetsbladets
-       bokstäver — annars pekar «1.» och «A.» på samma uppgift på två papper. */
-    const siffra = v.typ === 'Gruppuppgift';
+    /* Facit numrerar som uppgiftsarket: siffror på arbetsblad och
+       gruppuppgift, bokstäver på diagnosen — annars pekar «1.» och «A.» på
+       samma uppgift på två papper. */
+    const siffra = v.typ !== 'Diagnos';
     const post = (u, k) => `<div class="pruppg">
       <span class="prnr">${siffra ? k + 1 : (BOKSTAV[k] || k + 1)}.<span class="prvarde">${u.p} p</span></span>
       <div><p class="prtext" data-ref="">${ref(u.t)}</p>

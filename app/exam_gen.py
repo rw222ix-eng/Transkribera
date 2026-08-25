@@ -1301,7 +1301,12 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             # för att kunna ändras (exam_spec.instruktion).
             "Skriv instruktionsbandet i fältet \"instruktion\": svaret skrivs "
             "på svarsraden, de uppgifter som ska redovisas är märkta och "
-            "uppgiftens bokstav skrivs överst på lösbladet, och räkningen ska "
+            # NUMMER, inte bokstav: arbetsbladets brickor är 1, 2, 3 sedan
+            # 2026-08-25 (blad-bygg.js kort, arbetsblad.tex.j2 u.nummer).
+            # Bandet sa «skriv uppgiftens bokstav överst på lösbladet» på ett
+            # papper där brickorna var siffror — pappret sa alltså emot sig
+            # självt om hur eleven märker sitt lösblad.
+            "uppgiftens nummer skrivs överst på lösbladet, och räkningen ska "
             "visas — inte bara svaret. "
             "Lösningsförslagen blir facit, och facit ska vara kort: svaret och på sin höjd ett par led. Svara med enbart JSON.")
         # Lärarens illustrationskryss (se BILD_PA/BILD_AV).
