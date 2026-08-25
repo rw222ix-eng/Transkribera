@@ -141,11 +141,26 @@ window.BladBygg = (() => {
       t.rubriker.map(r => `<th>${esc(r)}</th>`).join('')}</tr></thead><tbody>${
       (t.rader || []).map(rad).join('')}</tbody></table>`;
   }
+  /* ── ETIKETTEN ÄR MATEMATIK, PRECIS SOM FRÅGAN ──
+     Ledet framför en linje eller en kryssruterad bär TeX inom dollartecken
+     («$\left(\frac{1}{8}\right)^{2} =$») — det är samma sträng LaTeX-vägen
+     sätter i matteläge (exam_latex escape_mixed). esc() tryckte den ordagrant,
+     så läraren fick rå LaTeX på skärmen medan PDF:en satte bråket. Samma fynd
+     som enheten på svarsraden gjorde en gång, i en annan ruta.
+
+     Kolonet hör till SÄTTNINGEN och inte till texten: slutar etiketten redan
+     på «:», «=», «?» eller «$» sätts inget till. Spegel av exam_latex._FALT_SLUT
+     — utan den läste raden «$…=$:», alltså ett kolon efter likhetstecknet. */
+  const FALT_SLUT = /[:=?$]$/;
+  const faltnamn = e => {
+    const raw = String(e == null ? '' : e).trim();
+    return mat(raw) + (FALT_SLUT.test(raw) ? '' : ':');
+  };
   /* Kryssruteraden: en rad att fylla i, inte en flervalsfråga. Etiketten står
      där svarsradens namn står, rutorna där linjen skulle gå. */
   function rutor(r) {
     if (!r || !r.val) return '';
-    return `<div class="gurad"><span class="gunamn">${esc(r.etikett)}:</span>`
+    return `<div class="gurad"><span class="gunamn">${faltnamn(r.etikett)}</span>`
       + `<span class="gurutor">${r.val.map(v => `<span class="guruta">${mat(v)}</span>`).join('')}</span></div>`;
   }
   /* Stegtabellen: en färdig lösning rad för rad, med en kryssrutekolumn där
@@ -165,7 +180,7 @@ window.BladBygg = (() => {
      utseende. Besluten skrivs på pappret, räkningen på lösblad. */
   function falt(f) {
     if (!f || !f.length) return '';
-    return f.map(e => `<div class="gurad"><span class="gunamn">${esc(e)}:</span>`
+    return f.map(e => `<div class="gurad"><span class="gunamn">${faltnamn(e)}</span>`
       + '<span class="gulinje"></span></div>').join('');
   }
   /* Enheten på svarsraden: ledet före linjen, enheten efter den.
@@ -490,7 +505,7 @@ window.BladBygg = (() => {
        \svarsrad{Svar:}); en naken linje på skärmen och en märkt på pappret är
        två olika löften om samma ruta. */
     const svarsrad = u.rutor
-      ? `<div class="prsvar"><b>${esc(u.rutor.etikett)}:</b><span class="gurutor">${
+      ? `<div class="prsvar"><b>${faltnamn(u.rutor.etikett)}</b><span class="gurutor">${
           (u.rutor.val || []).map(v => `<span class="guruta">${mat(v)}</span>`).join('')}</span></div>`
       : behoverRad
         ? `<div class="prsvar"><b class="prsvarnamn">Svar:</b><span class="prlinje"></span>${
