@@ -933,43 +933,60 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
                      for r in rutor.get((dag, tid, klass), []) if tacker(r, datum)),
                     "")
 
-    # ANKARSERIERNA: rubriker som SJÄLVA bär kursen — «Ma 1c · TE26A · B203»,
+    # ANKARNA: rubriker som SJÄLVA bär kursen — «Ma 1c · TE26A · B203»,
     # skolschemats egen serie — lägger fast vilken kurs som läses i en ruta
     # under vilka veckor. Det är dem de omdöpta instanserna («TE26A: Räkna
     # ifatt» — samma serie, ny rubrik varje vecka och därmed en egen serienyckel)
     # ärver sin kurs av: Claudes bedömning av en sådan rubrik är en gissning,
     # och den gissade «nivå 2c» på klasser som läser 1c (2026-08-17). Kursen i
     # titeln räknas, aldrig beslutet — annars vore ankaret sin egen cirkel.
+    #
+    # ETT ANKARE ÄR INGEN LEKTION, och därför krävs inte längre att händelsen
+    # återkommer. Kravet fanns för att «återkommandet gör en händelse till en
+    # lektion» — men ankaret säger bara VILKEN KURS klassen läser just då, och
+    # det säger «📚 Hämta läromedel – Ma 1c NA26F» (en enstaka torsdag i
+    # augusti) och «🎓 Deadline ämnesbetyg: Ma 1c – NA26F» (en heldag i januari)
+    # lika sant som en serie. Skillnaden är avgörande för en klass som fått
+    # VARENDA skolserie omdöpt: NA26F hade då noll 1c-ankare, arvet föll rakt
+    # ned till schemarutan, och rutan höll en gissning ur augusti 2026 — som
+    # skrevs tillbaka till rutan vid nästa synk. Torsdagarna 11:50 stod som
+    # «Matematik, nivå 2c» hela höstterminen och rättade sig aldrig, för
+    # gissningen bekräftade sig själv (2026-08-26).
+    #
+    # En heldag har ingen ruta att peka på och räknas därför bara för KLASSEN.
     ankare: dict[tuple, dict[str, list[str]]] = {}
     ankare_klass: dict[str, dict[str, list[str]]] = {}
     kurstupel = tuple(kurser)
     for h in handelser or []:
-        s0 = ((h.get("start") or {}).get("dateTime") or "")
-        if not h.get("recurringEventId") or not s0:
-            continue
+        start0 = h.get("start") or {}
+        s0 = start0.get("dateTime") or ""
+        datum0 = (s0[:10] or start0.get("date") or "")
         titel0 = (h.get("summary") or "").strip()
         kurs0 = _kurs_i_titeln(titel0, kurstupel)
         klass0 = _klass_och_kurs(titel0, klasser, kurser)[0] if kurs0 else ""
-        if not kurs0 or not klass0:
+        if not kurs0 or not klass0 or not datum0:
             continue
         try:
-            dag0 = date.fromisoformat(s0[:10]).isoweekday()
+            dag0 = date.fromisoformat(datum0).isoweekday()
         except ValueError:
             continue
+        ankare_klass.setdefault(klass0, {}).setdefault(kurs0, []).append(datum0)
+        if not s0:
+            continue                        # heldag: ingen tid, ingen ruta
         tid0 = _tid(s0, (h.get("end") or {}).get("dateTime") or "")
-        ankare.setdefault((dag0, tid0, klass0), {}).setdefault(kurs0, []).append(s0[:10])
-        ankare_klass.setdefault(klass0, {}).setdefault(kurs0, []).append(s0[:10])
+        ankare.setdefault((dag0, tid0, klass0), {}).setdefault(kurs0, []).append(datum0)
 
     def _tackande(kandidater: dict[str, list[str]], datum: str) -> str:
         """Kursen vars ankarinstanser omsluter datumet. Omsluter två
-        (läsårsskarven, där nästa kurs börjar innan repetitionen tagit slut)
-        avgör den närmaste instansen."""
+        (läsårsskarven, där nästa kurs börjar innan den förra är avslutad)
+        vinner den som BÖRJADE SIST — en klass läser en kurs i taget, och den
+        som startat senast är den som pågår. Närmaste instans dög inte: 1c:ans
+        sista ankare är betygsdeadlinen «🎓 Deadline ämnesbetyg: Ma 1c» en
+        vecka EFTER att 2c redan börjat, och den låg närmare än kursstarten."""
         traff = {k: d for k, d in kandidater.items() if min(d) <= datum <= max(d)}
         if len(traff) <= 1:
             return next(iter(traff), "")
-        dat = date.fromisoformat(datum)
-        return min(traff, key=lambda k: min(
-            abs((dat - date.fromisoformat(x)).days) for x in traff[k]))
+        return max(traff, key=lambda k: min(traff[k]))
 
     def ankarkurs(dag: int, tid: str, klass: str, datum: str) -> str:
         """Rutans egna ankare först; annars klassens som helhet — rutan kan stå

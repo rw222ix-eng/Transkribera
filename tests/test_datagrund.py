@@ -884,6 +884,67 @@ def test_omdopta_instanser_arver_kursen_av_ankarserien():
     assert ut["innehall"][0]["kurs"] == "Matematik, nivå 1c"
 
 
+def test_ankaret_behover_inte_aterkomma_nar_varenda_serie_ar_omdopt():
+    """NA26F torsdag 11:50 stod som «Matematik, nivå 2c» hela höstterminen på en
+    klass som läser 1c, och rättade sig inte av kursarvet (repro 2026-08-26).
+
+    Varenda skolserie i NA26F:s kalender är omdöpt till veckans ämne, så klassen
+    hade INGA ankare alls i höst — kravet på recurringEventId sorterade bort de
+    enda rubriker som bär kursen: uthämtningen av läromedlen (en enstaka torsdag
+    i augusti) och betygsdeadlinen (en heldag i januari). Arvet föll då ned till
+    schemarutan, och rutan höll 2c-gissningen ur augusti 2026 — som skrevs
+    tillbaka till rutan vid nästa synk. Gissningen bekräftade sig själv.
+
+    Ett ankare är ingen lektion: det säger bara vilken kurs klassen läser just
+    då, och en enstaka händelse eller en heldag säger det lika sant."""
+    handelser = [
+        # De enda rubrikerna som bär kursen — ingen av dem återkommer.
+        _tid("2026-08-20", "11:50", "13:30", location="C202",
+             summary="📚 Hämta läromedel – Ma 1c NA26F"),
+        {"summary": "🎓 Deadline ämnesbetyg: Ma 1c – NA26F",
+         "start": {"date": "2027-01-29"}, "end": {"date": "2027-01-30"}},
+        # Kursstarten i vårterminen ÄR en serie, och flyttar gränsen.
+        _tid("2027-01-18", "10:00", "11:30", location="E107",
+             recurringEventId="r0",
+             summary="NA26F: Kursstart Ma 2c. Repetition – uttryck och ekvationer"),
+        _tid("2027-06-01", "12:20", "13:40", location="C202",
+             recurringEventId="r0", summary="NA26F: UPPSAMLINGSPROV Ma 2c"),
+    ] + [
+        _tid(d, "11:50", "13:30", summary=f"NA26F: {amne}", location="C202",
+             recurringEventId="r1", description="s. 12–15")
+        for d, amne in (("2026-08-27", "Grundpotensform och prefix"),
+                        ("2026-12-17", "Genomgång av NP"),
+                        ("2027-01-21", "Repetition – räta linjen"),
+                        ("2027-01-28", "Additionsmetoden"),
+                        ("2027-03-04", "Gamla provuppgifter"))
+    ]
+    # Claude gissade 2c på varenda omdöpt rubrik, och rutan bär gissningen.
+    beslut = {f"na26f: {a.lower()}|tid|serie":
+              {"slag": "lektion", "klass": "NA26F", "kurs": "Matematik, nivå 2c"}
+              for a in ("Grundpotensform och prefix", "Genomgång av NP",
+                        "Repetition – räta linjen", "Additionsmetoden",
+                        "Gamla provuppgifter")}
+    ut = calendar_google.tolka_handelser(
+        handelser, klasser=["NA26F"],
+        kurser=["Matematik, nivå 1c", "Matematik, nivå 2c"], beslut=beslut,
+        idag="2026-08-26",
+        schema_nu=[{"dag": 4, "tid": "11:50–13:30", "klass": "NA26F",
+                    "kurs": "Matematik, nivå 2c", "sal": "C202",
+                    "fran": "2026-08-27", "till": "2027-06-03"}])
+    kurs_per_datum = {i["datum"]: i["kurs"] for i in ut["innehall"]}
+    assert kurs_per_datum["2026-08-27"] == "Matematik, nivå 1c"
+    assert kurs_per_datum["2026-12-17"] == "Matematik, nivå 1c"
+    # Efter kursstarten 2027-01-18 gäller 2c — också veckan då 1c:ans sista
+    # ankare (betygsdeadlinen 2027-01-29) ligger närmare än kursstarten.
+    assert kurs_per_datum["2027-01-21"] == "Matematik, nivå 2c"
+    assert kurs_per_datum["2027-01-28"] == "Matematik, nivå 2c"
+    assert kurs_per_datum["2027-03-04"] == "Matematik, nivå 2c"
+    # Rutan delas i två rader i stället för att bära 2c hela läsåret.
+    torsdagen = sorted((r["fran"], r["kurs"]) for r in ut["schema"]
+                       if r["tid"] == "11:50–13:30")
+    assert [k for _, k in torsdagen] == ["Matematik, nivå 1c", "Matematik, nivå 2c"]
+
+
 def test_rubriken_blir_aldrig_en_kurs_och_slar_aldrig_tillbaka():
     """Felet som satt i basen i tre dygn (repro 2026-08-18): Claudes bedömning
     av en omdöpt instans svarade med HÄNDELSENS EGEN RUBRIK som kurs. Den skrevs
