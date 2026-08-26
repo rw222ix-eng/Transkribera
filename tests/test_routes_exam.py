@@ -85,6 +85,50 @@ def test_generate_creates_exam_with_balance_info(client, monkeypatch):
     assert r.json()["status"] == "utkast"
 
 
+def test_get_exam_ger_deluppgifternas_egna_former(client, monkeypatch):
+    """KÄLLAN SOM PAPPRET LÄKER SIG UR.
+
+    Dokumentets `uppgifter` byggs av plan.js franProv och BAKAS IN i det sparade
+    dokumentet — ett papper som gjordes innan ett fält började följa med bär
+    alltså listan utan fältet för alltid. Lärarens gruppuppgift 2026-08-26 hade
+    Melvins stegtabell i exam-JSON:en men inte i dokumentet, och
+    förhandsvisningen visade en uppgift som inte gick att räkna på.
+
+    Klienten bygger därför om listan ur examen vid öppning (plan.js
+    speglaExamen), och det som gör den läkningen möjlig är att DEN HÄR rutten
+    lämnar tillbaka deluppgifternas egna former oavkortat."""
+    doc = copy.deepcopy(_exam_doc())
+    doc["uppgifter"][2] = {
+        "del": "C", "formaga": "R", "typ": "resonemang", "poang": [0, 0, 0],
+        "text": "Tabellen visar morgontemperaturen.", "losning": "",
+        "bedomning": "", "innehall": ["negativa tal"],
+        "tabell": {"rubriker": ["Morgon", "Temp"], "rader": [["1", "$-6$"]]},
+        "deluppgifter": [
+            {"poang": [1, 1, 1],
+             "text": "Markera den första rad som är fel.",
+             "losning": "Rad 2.",
+             "bedomning": "+1 E pekar ut raden\n+1 C rättar värdet\n"
+                          "+1 A motiverar regeln",
+             "svarsfalt": ["Första felaktiga raden", "Rätt värde"],
+             "stegtabell": {"kolumner": ["Melvins lösning"],
+                            "steg": [{"celler": ["$\\dfrac{-6+(-2)}{2}$"]},
+                                     {"celler": ["$= \\dfrac{-6+2}{2}$"]},
+                                     {"celler": ["$= -2$"]}],
+                            "forsta_fel": 1}}]}
+    _stub_generate(monkeypatch, {"exam": doc, "errors": [], "rounds": 1})
+    r = client.post("/api/exams/generate",
+                    json={"course_id": _course_id(client), "antal": 6})
+    exam_id = _done(r)["id"]
+
+    hamtad = client.get(f"/api/exams/{exam_id}").json()["exam"]
+    d = hamtad["uppgifter"][2]["deluppgifter"][0]
+    assert d["stegtabell"]["kolumner"] == ["Melvins lösning"]
+    assert len(d["stegtabell"]["steg"]) == 3
+    assert d["svarsfalt"] == ["Första felaktiga raden", "Rätt värde"]
+    # Och stammens tabell, som deluppgiften räknar på.
+    assert hamtad["uppgifter"][2]["tabell"]["rader"] == [["1", "$-6$"]]
+
+
 def test_generate_passes_selected_content_and_tags_exam(client, monkeypatch):
     cid = _course_id(client)
     conn = appdb.connect(client.base_dir / "transkribera.db")

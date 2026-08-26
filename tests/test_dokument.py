@@ -516,3 +516,86 @@ def test_plan_js_skickar_stada_bara_fran_godkannandet():
     kvar = js.replace("if (!id) return dokSpara(v, true);", "").replace(
         "(e && e.status === 404) ? dokSpara(v, true) : null", "")
     assert "dokSpara(v, true)" not in kvar
+
+
+# ── Pappret läker sig ur examen ──────────────────────────────────────────
+# Regel 1 ovan («pappret kommer tillbaka byte för byte») har en baksida som
+# kostade läraren en gruppuppgift 2026-08-26: dokumentets `uppgifter` är en
+# AVLEDNING som plan.js franProv gör ur exam-JSON:en, och den bakas in i det
+# sparade dokumentet. Börjar ett fält följa med — deluppgifternas stegtabell,
+# till exempel — bär varje äldre papper listan UTAN fältet för alltid, hur
+# många gånger renderaren än rättas. Hennes uppgift 2 b) bad gruppen markera
+# den första felaktiga raden i Melvins lösning; raderna låg i exam-JSON:en och
+# nådde aldrig pappret, och uppgiften gick inte att räkna på.
+#
+# Läkningen (plan.js speglaExamen) bygger om listan ur examen vid öppning.
+
+def test_pappret_laker_sin_uppgiftslista_ur_examen():
+    js = PLAN_JS.read_text(encoding="utf-8")
+    assert "function speglaExamen(v)" in js, "läkningen är borta ur plan.js"
+    # Den läser examen och bygger om listan med SAMMA franProv som
+    # genereringen och omskrivningen — inte en andra tolkning bredvid.
+    assert "window.API.json(`/api/exams/${v.provId}`)" in js
+    assert "const nya = franProv(res && res.exam)" in js
+    assert "v.uppgifter = nya" in js
+
+
+def test_lakningen_star_still_utan_server_och_utan_prov():
+    """Prototypen och offline-läget har ingenting att hämta ur, och ett papper
+    vars provrad är raderad får inte använda id:t alls: SQLite återanvänder
+    radnummer, och nästa prov kan ha fått just det."""
+    js = PLAN_JS.read_text(encoding="utf-8")
+    assert ("if (!serverPa() || !v || v.provBorta || !v.provId) "
+            "return Promise.resolve(false);") in js
+    # Ett trasigt anrop är samma sak som ingen server: den gamla listan står kvar.
+    assert "}).catch(() => false);" in js
+
+
+def test_lakningen_ror_varken_markeringar_eller_basen():
+    """Ett ombygge är ingen ändring läraren gjort. Skrev det `andradVid` skulle
+    prickarna (prickar.js) blossa upp för att pappret öppnades, och en PATCH
+    per öppning vore en skrivning för att ingenting hände."""
+    js = PLAN_JS.read_text(encoding="utf-8")
+    kropp = js[js.index("function speglaExamen(v)"):]
+    kropp = kropp[:kropp.index("\n  function nyVersion")]
+    for forbjudet in ("andradVid", "andrat", "utkastVersion", "dokSpara",
+                      "'PATCH'"):
+        assert forbjudet not in kropp, f"lakningen ror {forbjudet}"
+
+
+def test_lakningen_ritar_om_bara_nar_listan_faktiskt_byttes():
+    """En förhandsvisning som ritas två gånger flimrar, och ett papper som
+    redan speglar examen har inget nytt att visa."""
+    js = PLAN_JS.read_text(encoding="utf-8")
+    assert "if (JSON.stringify(nya) === JSON.stringify(v.uppgifter || [])) return false;" in js
+    # Öppnas rutan tio gånger läses basen en gång.
+    assert "const speglat = new WeakSet();" in js
+    assert "if (speglat.has(v)) return Promise.resolve(false);" in js
+
+
+def test_lakningen_hanger_pa_bada_ingangarna():
+    """De två vägarna in till ett SPARAT papper: förhandsvisningen och
+    «Fortsätt ändra»/det upplockade utkastet (som båda går genom
+    aterstallUtkast). Arket ritas med en gång ur det som finns och ritas om
+    först när svaret landar — en förhandsvisning som står tom medan basen läses
+    är en trasig förhandsvisning."""
+    js = PLAN_JS.read_text(encoding="utf-8")
+    assert ("speglaExamen(v).then(bytt => {\n"
+            "      if (bytt && fhIndex === i && !fhskal.hidden) "
+            "ritaIn($('#fh-ark'), v);\n    });") in js
+    assert "speglaExamen(v).then(bytt => { if (bytt && versioner[nu] === v) visa(nu); });" in js
+    # Två anropsställen, inte fler: läkningen får inte smyga in i visa(), för
+    # den körs också av ångra/gör om — se nästa test.
+    assert js.count("speglaExamen(v)") == 3   # definitionen + de två ingångarna
+
+
+def test_lakningen_gor_aldrig_om_en_angring():
+    """Har läraren ångrat sig tittar hon MED FLIT på ett äldre varv, och examen
+    i basen står på det nyaste. Att bygga om det varv hon backat ifrån vore att
+    göra om ångringen åt henne — och ångra/gör om går genom visa(), som därför
+    aldrig får läka."""
+    js = PLAN_JS.read_text(encoding="utf-8")
+    assert "if (u.markor === versioner.length - 1) {" in js
+    visa = js[js.index("  function visa(i, ark) {"):]
+    visa = visa[:visa.index("\n  }\n")]
+    assert "speglaExamen" not in visa, "visa() läker — då upphävs varje ångring"

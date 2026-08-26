@@ -2001,6 +2001,60 @@
     });
   }
 
+  /* ── PAPPRET SPEGLAR EXAMEN ─────────────────────────
+     `franProv` körs på exakt två ställen: när pappret skrivs (genereringen) och
+     när det skrivs om (iterera). Resultatet BAKAS IN i dokumentets `uppgifter`,
+     och det är den listan renderaren ritar — aldrig exam-JSON:en. Ett papper som
+     gjordes innan ett fält började följa med bär alltså en uppgiftslista utan
+     fältet FÖR ALLTID, hur många gånger renderaren än rättas.
+
+     Det gick illa när deluppgifternas former kom med (2026-08-26): lärarens
+     gruppuppgift hade Melvins stegtabell i exam_json men inte i dokumentets
+     `uppgifter`, och förhandsvisningen fortsatte visa en uppgift som inte gick
+     att räkna på trots att både schemat, mallen och renderaren nu bar formen.
+     Ett papper vars text bara kan läkas genom att skrivas om är inte läkt.
+
+     Så pappret läker sig självt: står examen kvar i basen byggs `uppgifter` om
+     ur den när pappret öppnas. Samma sorts självläkning som bokens
+     lösningsposter gör (skrivBokLosningar).
+
+     Reglerna, och varför:
+       * INGEN SERVER, INGEN LÄKNING. Prototypen och offline-läget har ingenting
+         att hämta ur, och den gamla listan är då det enda som finns. Ett
+         misslyckat anrop är samma sak: `false`, och pappret ritas som förut.
+       * `provBorta` — provraden är raderad med Ångra, och id:t får inte
+         användas: SQLite återanvänder radnummer, och nästa prov kan ha fått
+         just det.
+       * Bara `provId`. Anteckningarna (`antId`) har inga uppgifter alls — deras
+         form är avsnitt — och franProv har ingenting att säga om dem.
+       * MARKERINGARNA RÖRS INTE. Ett ombygge är ingen ändring läraren gjort:
+         `andrat` och `andradVid` står kvar orörda, så prickarna (prickar.js)
+         blossar inte upp för att pappret öppnades.
+       * INGEN SKRIVNING TILLBAKA. Läkningen är en avledning ur basen och kostar
+         ingenting att göra om; sparas pappret senare följer den nya listan med
+         av sig själv. En PATCH per öppning hade varit en skrivning för att inget
+         hände.
+
+     Löftet är `true` bara när listan FAKTISKT byttes — då, och bara då, finns
+     det något att rita om. */
+  const speglat = new WeakSet();
+  function speglaExamen(v) {
+    if (!serverPa() || !v || v.provBorta || !v.provId) return Promise.resolve(false);
+    /* En gång per papper och sidladdning. Öppnas förhandsvisningen tio gånger
+       ska basen inte läsas tio — efter första varvet ÄR listan den examen bär. */
+    if (speglat.has(v)) return Promise.resolve(false);
+    speglat.add(v);
+    return window.API.json(`/api/exams/${v.provId}`).then(res => {
+      const nya = franProv(res && res.exam);
+      /* Ett tomt svar skriver ingenting: hellre den gamla listan än ett blankt
+         papper om examen råkar sakna uppgifter. */
+      if (!nya.length) return false;
+      if (JSON.stringify(nya) === JSON.stringify(v.uppgifter || [])) return false;
+      v.uppgifter = nya;
+      return true;
+    }).catch(() => false);
+  }
+
   function nyVersion(bas, andring) {
     const vtyp = valt('skrivtyp');
     /* Diagnosen skrivs på en lektion precis som provet och har därför också
@@ -4733,6 +4787,18 @@
     fhskal.hidden = false;
     requestAnimationFrame(() => fhskal.setAttribute('data-pa', ''));
     document.addEventListener('keydown', fhTangent);
+    /* Pappret ritas MED EN GÅNG ur det som redan finns — en förhandsvisning som
+       står tom medan basen läses är en trasig förhandsvisning. Har examen något
+       den sparade listan inte bär (se speglaExamen) ritas arket om när svaret
+       landar. Ett sparat papper har ingen ångra-historik: här finns inget äldre
+       varv som ett ombygge skulle kunna gå förbi.
+       Lösningsbladet är en KLON med eget id i högen men samma provId, och går
+       exakt samma väg — dess facit läses ur samma uppgiftslista.
+       `fhIndex`-vakten: hann läraren stänga rutan eller bläddra till ett annat
+       papper ska svaret inte rita in sig i det hon tittar på nu. */
+    speglaExamen(v).then(bytt => {
+      if (bytt && fhIndex === i && !fhskal.hidden) ritaIn($('#fh-ark'), v);
+    });
   }
   function fhStang() {
     if (!fhskal || fhskal.hidden) return;
@@ -5388,6 +5454,14 @@
        lösningsposter innehåll skrivs de nu och PATCH:as på raden — en gång,
        sedan bär pappret dem. */
     skrivBokLosningar(v);
+    /* Och uppgiftslistan läker på samma sätt, ur examen i basen (speglaExamen).
+       BARA PÅ DET SENASTE VARVET: har läraren ångrat sig tittar hon med flit på
+       ett äldre varv, och examen i basen står på det nyaste — att bygga om det
+       hon backat ifrån vore att göra om ångringen åt henne. Varven bakåt är vad
+       de var, och det är hela poängen med dem. */
+    if (u.markor === versioner.length - 1) {
+      speglaExamen(v).then(bytt => { if (bytt && versioner[nu] === v) visa(nu); });
+    }
     if (window.PlanSteg) { window.PlanSteg.las(4, false); window.PlanSteg.gaTill(4); }
   }
   /* Anropet i väg så snart servern svarat på «var körs det?» — se hogen(). */
