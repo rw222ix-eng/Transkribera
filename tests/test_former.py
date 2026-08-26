@@ -16,10 +16,13 @@ det i handen.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import pytest
 
 from app import exam_gen, exam_latex, exam_pdf, exam_spec
+
+UI = Path(__file__).resolve().parent.parent / "app" / "web" / "ui"
 
 
 def _uppgift(**extra) -> dict:
@@ -325,6 +328,86 @@ def test_tva_kolumner_ger_tva_elevers_losningar_sida_vid_sida():
     tex = exam_latex.render_prov(doc)
     assert "Alvas lösning" in tex and "Bilals lösning" in tex
     assert "{lXXc}" in tex        # steg + två lösningar + kryssrutekolumn
+
+
+# ══════════════════════════ skärmen och papperet ═════════════════════════
+
+def _melvin():
+    """Lärarens gruppuppgift 2026-08-26, uppgift 2: en stam med en mättabell,
+    och en deluppgift som ber gruppen granska en FÄRDIG uträkning. Uträkningen
+    ligger där den frågas om — på deluppgiften."""
+    return {"del": None, "formaga": "B", "typ": "redovisning",
+            "poang": [0, 0, 0], "losning": "", "bedomning": "",
+            "text": "Tabellen visar morgontemperaturen fyra dagar i rad.",
+            "tabell": {"rubriker": ["Morgon", "Temperatur"],
+                       "rader": [["1", "$-6$"], ["2", "$-2$"]]},
+            "deluppgifter": [
+                {"poang": [1, 0, 0], "text": "Beräkna skillnaden.",
+                 "losning": "$4$", "bedomning": "+1 E", "enhet": "°C"},
+                {"poang": [0, 1, 0],
+                 "text": "Melvin har beräknat medeltemperaturen. Markera den "
+                         "första rad som är fel.",
+                 "losning": "Rad 2.", "bedomning": "+1 C",
+                 "svarsfalt": ["Första felaktiga raden", "Rätt värde"],
+                 "stegtabell": {"kolumner": ["Melvins lösning"],
+                                "steg": [{"celler": ["$\\dfrac{-6+(-2)}{2}$"]},
+                                         {"celler": ["$= \\dfrac{-6+2}{2}$"]},
+                                         {"celler": ["$= -2$"]}],
+                                "forsta_fel": 1}}]}
+
+
+def test_deluppgiftens_stegtabell_star_pa_alla_papper():
+    """Uppgiften ska gå att räkna på. Frågar b) om «den första rad som är fel»
+    måste raderna stå på samma papper som frågan."""
+    doc = _doc(_melvin(), profil="gruppuppgift",
+               grupp={"elever": 3, "langd_min": 45,
+                      "redovisning": "skriftligt"})
+    for namn, tex in (("gruppuppgift", exam_latex.render_gruppuppgift(doc)),
+                      ("arbetsblad", exam_latex.render_arbetsblad(doc)),
+                      ("prov", exam_latex.render_prov(doc))):
+        assert "Melvins lösning" in tex, f"{namn} tappade stegtabellens rubrik"
+        assert "-6+2" in tex.replace(" ", ""), f"{namn} tappade Melvins rader"
+        # Facit stannar hos läraren: vilket steg som är fel står inte här.
+        assert "Första felet står i steg" not in tex, f"{namn} röjde facit"
+
+
+def test_skarmen_ritar_deluppgiftens_egna_former():
+    """SKÄRMEN OCH PAPPRET SÄGER SAMMA SAK. _former.tex.j2 kallar sig «samma
+    former som på skärmarket», och mallarna sätter dem på VARJE deluppgift
+    (former.kropp(d)) — men skärmen ritade bara `d.text`.
+
+    Det fällde lärarens gruppuppgift 2026-08-26: uppgift 2 b) bad gruppen
+    markera den första felaktiga raden i Melvins lösning, och stegtabellen med
+    Melvins rader låg på deluppgiften. Förhandsvisningen visade en fråga om en
+    uträkning som inte fanns på pappret, uppgiften gick inte att räkna på — och
+    ingen omskrivning kunde laga det, för i dokumentets JSON var den komplett."""
+    plan = (UI / "plan.js").read_text(encoding="utf-8")
+    js = (UI / "blad-bygg.js").read_text(encoding="utf-8")
+    css = (UI / "prov.css").read_text(encoding="utf-8")
+    # Formerna måste FÖLJA MED från dokumentets JSON, annars finns inget att rita.
+    for falt in ("ut.deltabell", "ut.delsteg", "ut.delrutor", "ut.delalt",
+                 "ut.delnotis", "ut.delfalt"):
+        assert falt in plan, f"{falt} når aldrig arket"
+    # …men facit får aldrig följa med. Deluppgiftens stegtabell plockas isär
+    # kolumn för kolumn och steg för steg, precis som förälderns — `forsta_fel`
+    # och `ratt` kopieras aldrig, och därmed når de aldrig elevens ark.
+    assert "steg: (d.stegtabell.steg || []).map(s => ({ celler: s.celler }))" in plan
+    assert "ut.delalt = delar.map(d => d.alternativ || null)" in plan
+    # Renderarna ritar dem — både gruppuppgiftens kort och provets deluppgift.
+    assert "delform" in js and "u.delsteg" in js and "u.deltabell" in js
+    assert "u.delfalt" in js, "deluppgiftens namngivna rader ritas inte"
+    # Provets deluppgiftsrad är ett rutnät med tre spalter, och varje nytt barn
+    # tar nästa ruta — formerna måste spänna textspalten som figuren gör.
+    assert ".prdel[data-avdelad]>li>.prdelform" in css
+    # Formnyckeln räknar deluppgifternas former också: ett blad vars enda
+    # stegtabell sitter på en deluppgift bär ändå tre former och behöver gu6.
+    assert "'stegtabell', 'delsteg'" in js
+    # STAMMENS former står FÖRE deluppgifterna, på båda papperen. Tabellen är
+    # datat a) och b) räknar på, och skärmen lade den under de frågor som
+    # använde den — mallarna sätter den före (\begin{deluppgift}, \begin{parts}).
+    assert "${alt}${former}${del}" in js
+    assert js.count("${alt}${former}${del}") == 3, \
+        "något papper sätter fortfarande stammens former efter deluppgifterna"
 
 
 # ═════════════════════════════════ tryckt ════════════════════════════════

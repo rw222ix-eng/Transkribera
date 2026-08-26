@@ -197,6 +197,35 @@ window.BladBygg = (() => {
       + `<span class="gulinje"></span>${enhet ? `<span class="prenhet">${enhetHtml(enhet)}</span>` : ''}</div>`;
   }
 
+  /* ── DELUPPGIFTENS EGNA FORMER ────────────────────
+     Samma tre former som föräldern får, en nivå in: tabellen att räkna på,
+     stegtabellen att granska och kryssruteraden att fylla i. PDF:en sätter dem
+     på VARJE deluppgift (`former.kropp(d)` i arbetsblad.tex.j2,
+     gruppuppgift.tex.j2 och prov.tex.j2) och _former.tex.j2 säger i sin egen
+     rubrik att det är «samma former som på skärmarket» — men skärmen ritade
+     bara deluppgiftens text.
+
+     Det gick illa på lärarens gruppuppgift 2026-08-26: uppgift 2 b) bad
+     eleverna markera den första felaktiga raden i «Melvins lösning», och
+     stegtabellen med Melvins rader låg på deluppgiften. Pappret på skärmen bar
+     alltså en fråga om en uträkning som inte stod någonstans — uppgiften gick
+     inte att räkna på, och ingen omskrivning kunde laga det, för i dokumentets
+     JSON var den redan komplett.
+
+     Fälten kommer från plan.js franProv och är TOMMA på ett papper som inte
+     bär dem, så ett gammalt dokument ritas exakt som förut. */
+  const delform = (u, k, tabellklass) =>
+    tabell((u.deltabell || [])[k], tabellklass)
+    + stegtabell((u.delsteg || [])[k]);
+  /* Flervalet på en deluppgift. Det rätta alternativet står ALDRIG här —
+     `ratt_alternativ` stannar i provets JSON, som på föräldern. */
+  function delflerval(u, k, klass) {
+    const a = (u.delalt || [])[k];
+    if (!a || !a.length) return '';
+    return `<ul class="${klass} guval">${
+      a.map((x, j) => `<li><i>${BOKSTAV[j]}.</i> ${mat(x)}</li>`).join('')}</ul>`;
+  }
+
   /* ── Svarsutrymmet: en rad eller ett lösblad. Inget annat. ──
      Eleven gör en av två saker: skriver bara svaret, eller löser hela uppgiften
      på rutat lösblad. Ett linjerat fält mitt i bladet ger varken det ena eller
@@ -235,8 +264,21 @@ window.BladBygg = (() => {
     const bricka = siffra ? String(i + 1) : (BOKSTAV[i] || String(i + 1));
     const alt = u.alt
       ? `<ul class="gudel guval">${u.alt.map((a, k) => `<li><i>${BOKSTAV[k]}.</i> ${mat(a)}</li>`).join('')}</ul>` : '';
+    /* Deluppgiften bär numera sin egen kropp — formerna, ledtråden och de
+       namngivna raderna — i den ordning pappret sätter dem (gruppuppgift.tex.j2
+       rad 45–53): text, kropp, notis, och sist svarsplatsen. */
+    const delnotis = k => {
+      const n = (u.delnotis || [])[k];
+      return n ? `<p class="gunotis">${brodtext(n)}</p>` : '';
+    };
     const del = u.del && u.del.length
-      ? `<ul class="gudel">${u.del.map((d, k) => `<li>${'abcdef'[k]}) ${brodtext(d)}</li>`).join('')}</ul>` : '';
+      ? `<ul class="gudel">${u.del.map((d, k) => `<li>${'abcdef'[k]}) ${brodtext(d)}`
+        + delform(u, k, 'gutab')
+        + rutor((u.delrutor || [])[k])
+        + delflerval(u, k, 'gudel')
+        + delnotis(k)
+        + falt((u.delfalt || [])[k])
+        + '</li>').join('')}</ul>` : '';
     /* Bildplatsen. `u.bild` är uppgiftens egen hänvisning till bildunderlaget
        (exam_spec: ett 1-baserat index bland de uppladdade bilderna). Den
        mappades till arket men ritades aldrig — PDF:en satte bilden och skärmen
@@ -284,11 +326,17 @@ window.BladBygg = (() => {
       : '';
     // Formerna står mellan frågan och svaret: tabellen att räkna på, lösningen
     // att granska, och sedan svarsytan.
+    /* FORMERNA STÅR FÖRE DELUPPGIFTERNA, inte efter dem. Stammens tabell är
+       DATAT a) och b) räknar på, och den stod under frågorna som använde den —
+       lärarens gruppuppgift 2026-08-26 hade alltså «Beräkna skillnaden» och
+       «Markera den första rad som är fel» ovanför morgontemperaturerna. Pappret
+       har aldrig haft den ordningen: gruppuppgift.tex.j2 och arbetsblad.tex.j2
+       sätter former.kropp(u) FÖRE \begin{deluppgift}. */
     const former = tabell(u.tabell, 'gutab') + stegtabell(u.stegtabell);
     const kropp = egen
-      ? `<div class="gutva"><div><p class="gufraga">${brodtext(u.t)}</p>${alt}${del}${former}${notis}${svarsyta(u)}</div>`
+      ? `<div class="gutva"><div><p class="gufraga">${brodtext(u.t)}</p>${alt}${former}${del}${notis}${svarsyta(u)}</div>`
         + `<div>${egen}</div></div>`
-      : `<p class="gufraga">${brodtext(u.t)}</p>${alt}${del}${former}${fig}${notis}${svarsyta(u)}`;
+      : `<p class="gufraga">${brodtext(u.t)}</p>${alt}${former}${del}${fig}${notis}${svarsyta(u)}`;
     return `<div class="gukort" data-ut="${u.ut || 'rakna'}">
       <span class="gubricka">${bricka}</span>
       ${kropp}
@@ -348,8 +396,12 @@ window.BladBygg = (() => {
        stämpelrad läser första bladets rubrik (blad.js delaArk) och följer
        därför med av sig själv. */
     const rubrik = (v.titel || '').trim() || versal(v.moment || o.titel || '');
-    const harFigur = uppgifter.some(u => u && u.fig);
-    const harSteg = uppgifter.some(u => u && u.stegtabell);
+    /* Formnyckeln räknar också DELUPPGIFTERNAS former. Ligger bladets enda
+       stegtabell på en deluppgift bär bladet ändå tre former och behöver gu6:s
+       tätare sättning — nyckeln såg den inte, och bladet spillde. */
+    const nagot = (u, falt, del) => !!(u && (u[falt] || (u[del] || []).some(Boolean)));
+    const harFigur = uppgifter.some(u => nagot(u, 'fig', 'delfig'));
+    const harSteg = uppgifter.some(u => nagot(u, 'stegtabell', 'delsteg'));
     const form = grupp ? 'gu' : (harFigur && harSteg ? 'gu6' : harFigur ? 'gu2' : 'gu1');
     return `<div class="gu" data-form="${form}">
       <div class="guhuv"><h1 class="gutitel">${esc(rubrik)}</h1>${
@@ -468,8 +520,26 @@ window.BladBygg = (() => {
        redovisas på lösblad ska inte ha en linje som inbjuder till motsatsen. */
     const delsvar = () => (u.ut === 'kort'
       ? '<div class="prsvar"><b class="prsvarnamn">Svar:</b><span class="prlinje"></span></div>' : '');
+    /* Deluppgiftens EGNA former (tabell, stegtabell, kryssruterad, flerval,
+       ledtråd). Provets mall sätter dem — prov.tex.j2 rad 220 anropar
+       `former.*` på `d` — och skärmen hoppade över dem helt.
+       Allt går i EN ruta: raden är ett rutnät med tre spalter, och varje nytt
+       barn tar nästa ruta (samma fälla som deluppgiftens figur gick i). Rutan
+       spänner textspalten via .prdelform i prov.css, och står EFTER figuren —
+       samma ordning som mallen (prov.tex.j2: figur, sedan former.*). */
+    const delform_pr = k => {
+      const kropp = tabell((u.deltabell || [])[k], 'prtab')
+        + stegtabell((u.delsteg || [])[k])
+        + (((u.delrutor || [])[k])
+          ? `<div class="prsvar"><b>${faltnamn((u.delrutor[k]).etikett)}</b><span class="gurutor">${
+              ((u.delrutor[k]).val || []).map(v => `<span class="guruta">${mat(v)}</span>`).join('')}</span></div>`
+          : '')
+        + delflerval(u, k, 'prdel prval')
+        + (((u.delnotis || [])[k]) ? `<p class="prtips">${brodtext(u.delnotis[k])}</p>` : '');
+      return kropp ? `<div class="prdelform">${kropp}</div>` : '';
+    };
     const del = u.del && u.del.length
-      ? `<ul class="prdel" data-avdelad="">${u.del.map((d, k) => `<li><i>${'abcdef'[k]})</i><span>${brodtext(d)}</span><span class="prpo">${delpoang(k)} p</span>${delfigur(k)}${delsvar()}</li>`).join('')}</ul>` : '';
+      ? `<ul class="prdel" data-avdelad="">${u.del.map((d, k) => `<li><i>${'abcdef'[k]})</i><span>${brodtext(d)}</span><span class="prpo">${delpoang(k)} p</span>${delfigur(k)}${delform_pr(k)}${delsvar()}</li>`).join('')}</ul>` : '';
     /* FIGUREN. Provets uppgift kan bära en ritad figur (exam_spec figur) — en
        graf, en triangel, en enhetscirkel — och den ritas i PDF:en av
        exam_figures. På skärmarket saknades den helt: uppgiften hänvisade till
@@ -532,10 +602,14 @@ window.BladBygg = (() => {
     /* Marginalen bär ETT format. «(totalt 3 p)» bredvid «1 p» läste sig som två
        olika fält; att poängen är en summa framgår av deluppgifternas egna. */
     const varde = `${u.p} p`;
+    /* Stammens former står FÖRE deluppgifterna, som i mallen (prov.tex.j2
+       sätter former.tabellbok/steg/rutor före \begin{parts}). Tabellen är
+       datat a) och b) räknar på, och den stod under de frågor som använde
+       den. */
     const former = tabell(u.tabell, 'prtab') + stegtabell(u.stegtabell);
     return `<div class="pruppg">
       <span class="prnr">${u.nr}.<span class="prvarde">${varde}</span></span>
-      <div>${krav}<p class="prtext">${brodtext(u.t)}</p>${alt}${del}${former}${scenruta(u)}${figur}${notis}${svarsrad}</div>
+      <div>${krav}<p class="prtext">${brodtext(u.t)}</p>${alt}${former}${del}${scenruta(u)}${figur}${notis}${svarsrad}</div>
     </div>`;
   }
   /* ══════════ BILDSTÖDET PÅ SKÄRMEN ══════════

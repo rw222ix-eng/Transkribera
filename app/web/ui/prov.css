@@ -122,9 +122,16 @@
    textspalten — inte in i poängspalten. Utan den här raden hamnade grafen i
    1(a) i marginalen bredvid «1 p», eftersom raden är ett rutnät med tre
    spalter och varje nytt barn tar nästa ruta. */
+/* Deluppgiftens egna former (tabellen, stegtabellen, kryssruteraden, flervalet,
+   ledtråden) står i EN ruta av samma skäl, och den rutan står FÖRE figuren och
+   svarslinjen — det är ordningen pappret sätter dem i (prov.tex.j2). */
 .prdel[data-avdelad]>li>.prsvar,
+.prdel[data-avdelad]>li>.prdelform,
 .prdel[data-avdelad]>li>.prfig,
 .prdel[data-avdelad]>li>.prbild{grid-column:2/-1}
+/* Första formen under frågan behöver ingen egen topmarginal — tabellerna bär
+   sin egen, och rutan ska inte lägga en till ovanpå. */
+.prdelform>:first-child{margin-top:8px}
 
 /* ── Datatabellen ──
    Provets egen tabell: hårlinjer, ingen grå platta. Arbetsbladens tabell hör

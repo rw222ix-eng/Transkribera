@@ -1949,6 +1949,44 @@
           ut.delfig = delar.map(d => d.figur || null);
           ut.delbild = delar.map(d => d.bild || null);
         }
+        /* ── DELUPPGIFTERNAS EGNA FORMER ─────────────────
+           Tabellen, stegtabellen, kryssruteraden, flervalet, notisen och de
+           namngivna raderna får stå på en DELUPPGIFT — schemat delar
+           _Uppgiftsbas mellan uppgift och SubItem (app/exam_spec.py) — och
+           PAPPRET sätter dem där: arbetsblad.tex.j2, gruppuppgift.tex.j2 och
+           prov.tex.j2 anropar alla `former.kropp(d)` på varje deluppgift.
+           Hit gick bara `d.text`.
+
+           LÄRARENS GRUPPUPPGIFT 2026-08-26 är hela fyndet. Uppgift 2 b) löd
+           «Melvin har beräknat medeltemperaturen … Markera den första rad som
+           är fel» — och Melvins fyra rader låg i deluppgiftens `stegtabell`,
+           alltså i dokumentet men aldrig på skärmen. Uppgiften gick inte att
+           räkna på, hon bad om en omskrivning, och den kunde inte laga något:
+           för modellen VAR uppgiften fullständig. Felet satt i renderingen.
+
+           Facit stannar i JSON:en, precis som på föräldern ovan: `forsta_fel`,
+           `ratt` och `ratt_alternativ` följer aldrig med till elevens ark.
+           Fälten skickas bara när NÅGON deluppgift bär dem — en lista med bara
+           null i vore brus i varje sparat dokument (samma regel som delfig). */
+        const nagonDel = f => delar.some(f);
+        if (nagonDel(d => d.tabell)) {
+          ut.deltabell = delar.map(d => (d.tabell
+            ? { rubriker: d.tabell.rubriker, rader: d.tabell.rader } : null));
+        }
+        if (nagonDel(d => d.stegtabell)) {
+          ut.delsteg = delar.map(d => (d.stegtabell
+            ? { kolumner: d.stegtabell.kolumner,
+                steg: (d.stegtabell.steg || []).map(s => ({ celler: s.celler })) }
+            : null));
+        }
+        if (nagonDel(d => d.svarsrutor)) {
+          ut.delrutor = delar.map(d => (d.svarsrutor
+            ? { etikett: d.svarsrutor.etikett, val: d.svarsrutor.val } : null));
+        }
+        if (nagonDel(d => d.alternativ)) ut.delalt = delar.map(d => d.alternativ || null);
+        if (nagonDel(d => d.notis)) ut.delnotis = delar.map(d => d.notis || null);
+        if (nagonDel(d => d.svarsfalt)) ut.delfalt = delar.map(d => d.svarsfalt || null);
+        if (nagonDel(d => d.enhet)) ut.delenhet = delar.map(d => d.enhet || null);
         /* Facitbladets poängsatta väg: varje deluppgift är ett steg med sin
            egen poäng — samma form som prototypens `vag`. */
         ut.vag = delar.map((d, k) => [`${'abcdef'[k]}) ${d.losning || ''}`,

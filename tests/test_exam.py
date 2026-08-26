@@ -1282,6 +1282,55 @@ def test_omskrivningen_haller_ihop_uppgift_och_facit_at_bada_hall():
     assert "text och TAL ändras" in p
 
 
+def test_omskrivningen_kraver_en_uppgift_som_gar_att_rakna_pa():
+    """Lärarens gruppuppgift 2026-08-26: hon markerade uppgift 2 och skrev att
+    uppgiften var otydlig och att det inte gick att räkna på den. Varvet skrev
+    om uppgiftens a) och lämnade b) — «Markera den första rad som är fel» —
+    ordagrant kvar. Den sortens dom är ett krav på FULLSTÄNDIGHET, inte en
+    beställning på putsat språk, och prompten måste säga det."""
+    p = exam_gen.build_refine_prompt(
+        {"titel": "Gruppuppgift", "uppgifter": []},
+        "uppgiften är otydlig, det går inte att räkna på den", nummer=2)
+    assert "gå att LÖSA av det som står i den" in p
+    assert "stegtabell, tabell, figur, alternativ" in p
+    assert "komplett och beräkningsbar" in p
+
+
+def test_lararens_mening_star_sist_i_omskrivningen():
+    """Önskemålet stod bara mitt i prompten, före ett halvt sidlångt block med
+    allmänna regler — och det är blockets ord modellen har i handen när den
+    börjar skriva. Meningen står nu också SIST, närmast svaret."""
+    p = exam_gen.build_refine_prompt(
+        {"titel": "Prov", "uppgifter": []}, "ta bort deluppgift b)", nummer=4)
+    svans = p.rstrip()[-300:]
+    assert "ta bort deluppgift b)" in svans
+    assert "väger tyngst" in svans
+    assert svans.endswith("Svara med enbart JSON.")
+    # Den står KVAR på sin gamla plats också: målraden och uppgiftsnumret hör
+    # ihop med den, och en mening som bara står sist tappar sitt «gäller
+    # uppgift 4».
+    assert "Lärarens önskemål gäller uppgift 4: ta bort deluppgift b)" in p
+
+
+def test_malslaset_galler_gruppuppgiften_ocksa():
+    """Gruppuppgiften går genom /api/exams/{id}/refine som provet, och `uppg2`
+    ska låsa omskrivningen till uppgift 2 där lika väl. Utan låset skriver
+    modellen om hela pappret och «förbättrar» de uppgifter läraren var nöjd
+    med."""
+    assert exam_gen.riktat_mal(2, {"el": "uppg2", "namn": "Uppgift 2"}) \
+        == ("uppgift", 2)
+    original = {"titel": "Gruppuppgift",
+                "uppgifter": [{"text": "ett"}, {"text": "två"}, {"text": "tre"}]}
+    kandidat = {"titel": "Ett annat namn",
+                "uppgifter": [{"text": "PETAD"}, {"text": "två, fullständig"},
+                              {"text": "PETAD"}]}
+    ihop, skal = exam_gen.sammanfoga_riktat(original, kandidat, ("uppgift", 2))
+    assert skal == ""
+    assert ihop["uppgifter"] == [{"text": "ett"}, {"text": "två, fullständig"},
+                                 {"text": "tre"}]
+    assert ihop["titel"] == "Gruppuppgift"
+
+
 def test_bedomning_platt_oforandrad():
     doc, _ = exam_spec.validate_exam_json(_exam())
     tex = exam_latex.render_bedomning(doc)

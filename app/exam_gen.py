@@ -2663,7 +2663,30 @@ def build_refine_prompt(exam: dict, instruction: str,
         "(enklare tal, ett heltal som svar, en annan metod) ska uppgiftens "
         "text och TAL ändras så att de ger just det — uppgift och facit är "
         "samma sak sedd från två håll, och ett facit som räknar på andra tal "
-        "än uppgiften är värre än inget facit alls. Svara med enbart JSON."
+        "än uppgiften är värre än inget facit alls. "
+        # ── UPPGIFTEN SKA GÅ ATT RÄKNA PÅ ──────────────────────────
+        # Lärarens gruppuppgift 2026-08-26: hon markerade uppgift 2 och skrev
+        # «uppgiften är otydlig och behöver ändras — det går inte ens att räkna
+        # på den som den är nu». Varvet skrev om uppgiftens a) och lämnade b)
+        # ordagrant kvar: «Markera den första rad som är fel». Modellen gjorde
+        # inget fel efter sina egna regler — raderna fanns i deluppgiftens
+        # stegtabell — men önskemålet handlade om att uppgiften inte GÅR att
+        # arbeta med, och den sortens dom ska läsas som ett krav på
+        # fullständighet, inte som en språkputs.
+        "En uppgift ska gå att LÖSA av det som står i den. Hänvisar texten "
+        "till en uträkning, en tabell, en figur eller en lista måste den ligga "
+        "i uppgiftens egna fält (stegtabell, tabell, figur, alternativ) — "
+        "annars ber du eleven granska något som inte står på pappret. Säger "
+        "läraren att en uppgift är otydlig, ofullständig eller omöjlig att "
+        "räkna på är det just DET som ska lagas: gör uppgiften komplett och "
+        "beräkningsbar, och nöj dig aldrig med att skriva om språket eller "
+        "byta ut en deluppgift som redan fungerade.\n\n"
+        # Lärarens mening står SIST, närmast svaret. Den stod bara mitt i
+        # prompten, före ett halvt sidlångt block med allmänna regler, och det
+        # är blockets ord modellen har i handen när den börjar skriva.
+        f"Lärarens önskemål en gång till, ordagrant — det väger tyngst av allt "
+        f"som står här: {instruction}\n\n"
+        "Svara med enbart JSON."
     )
 
 
