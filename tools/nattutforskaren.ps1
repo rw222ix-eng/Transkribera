@@ -44,6 +44,11 @@ param(
     [int]$TidsbudgetMinuter = 45,
     # Inte 8751 (e2e) och inte 8752 (soaken): nattkorningen ska kunna ligga
     # parallellt med en glomd svit utan att de tar varandras port eller bas.
+    # ValidateRange for att en provkorning pa port 1 gick igenom halsokollen
+    # (uvicorn band porten, HTTP-klienten fick 200) men var oanvandbar for
+    # agenten: Chrome vagrar lag-portar med net::ERR_UNSAFE_PORT, sa natten
+    # brann utan att loggen sa varfor.
+    [ValidateRange(1024, 65535)]
     [int]$Port = 8753,
     [string]$Kalla = 'E:\Transkribera',
     [string]$Klon = (Join-Path $env:LOCALAPPDATA 'transkribera-natt'),
@@ -84,24 +89,59 @@ function Logga($text) {
     Add-Content -Path $logg -Value $rad -Encoding utf8
 }
 
+function Nativ {
+    # Kor ett vanligt program och logga allt det sager. Ma finnas: med
+    # $ErrorActionPreference = 'Stop' gor Windows PowerShell 5.1 varje rad ett
+    # program skriver till stderr till ett TERMINERANDE fel, aven nar
+    # programmet lyckades. "Cloning into ..." skriver git till stderr, sa
+    # `git clone` avslutade hela skriptet trots slutkod 0. Har sanks
+    # preferensen runt anropet i stallet, och slutkoden far avgora.
+    param([string]$Fil, [string[]]$Argument)
+    $tidigare = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $Fil @Argument 2>&1 | ForEach-Object { Logga ("    " + $_) }
+    } finally {
+        $ErrorActionPreference = $tidigare
+    }
+    return $LASTEXITCODE
+}
+
 Logga "Nattutforskaren startar. Rapport: $rapport"
 
 # -- Klonen -----------------------------------------------------------------
 # Farsk kod utan att rora arbetstradet. reset --hard i stallet for pull:
 # klonen ar ett engangstrad och en halvfardig merge kl. 03:00 stoppar natten.
-if (-not (Test-Path (Join-Path $Klon '.git'))) {
+$farsk = -not (Test-Path (Join-Path $Klon '.git'))
+if (-not $farsk) {
+    # Pekar klonen nagon annanstans an $Kalla ar den fran en tidigare uppsattning
+    # (en worktree som stadats bort, ett repo som flyttats). Da ar den vardelos,
+    # och utan den har kontrollen faller varje natt pa "fetch: repository not
+    # found" tills nagon raderar katalogen for hand.
+    $origin = (& git -C $Klon remote get-url origin 2>$null | Out-String).Trim()
+    if ($origin -ne $Kalla) {
+        Logga "Klonens origin ar '$origin', inte '$Kalla'. Gor om den."
+        Remove-Item -Recurse -Force $Klon -ErrorAction SilentlyContinue
+        $farsk = $true
+    }
+}
+if ($farsk) {
     Logga "Klonar $Kalla till $Klon"
-    git clone --no-hardlinks $Kalla $Klon 2>&1 | Out-String | Write-Host
+    $kod = Nativ 'git' @('clone', '--no-hardlinks', $Kalla, $Klon)
 } else {
     Logga "Uppdaterar klonen"
-    git -C $Klon fetch origin 2>&1 | Out-String | Write-Host
-    git -C $Klon reset --hard origin/HEAD 2>&1 | Out-String | Write-Host
+    $kod = Nativ 'git' @('-C', $Klon, 'fetch', 'origin')
+    if ($kod -eq 0) { $kod = Nativ 'git' @('-C', $Klon, 'reset', '--hard', 'origin/HEAD') }
+}
+if ($kod -ne 0) {
+    Logga "AVBRYTER: git gav slutkod $kod"
+    exit 1
 }
 if (-not (Test-Path (Join-Path $Klon 'e2e\testserver.py'))) {
     Logga "AVBRYTER: klonen saknar e2e\testserver.py"
     exit 1
 }
-Logga ("Klonen star pa " + (git -C $Klon log --oneline -1 | Out-String).Trim())
+Nativ 'git' @('-C', $Klon, 'log', '--oneline', '-1') | Out-Null
 
 # -- Playwright-MCP:n -------------------------------------------------------
 # Claude CLI:t har ingen Playwright-MCP konfigurerad fran borjan, och lararens
@@ -128,12 +168,8 @@ Logga "Skrev MCP-konfig: $mcpfil"
 # Paketet hamtas av npx vid forsta korningen. Gors det inne i agentens uppstart
 # ser felet ut som "MCP-servern svarade inte"; har ser det ut som vad det ar.
 Logga "Kontrollerar @playwright/mcp"
-$mcpver = & npx -y '@playwright/mcp@latest' --version 2>&1 | Out-String
-if ($LASTEXITCODE -ne 0) {
+if ((Nativ 'npx' @('-y', '@playwright/mcp@latest', '--version')) -ne 0) {
     Logga "VARNING: @playwright/mcp gick inte att hamta. Agenten blir blind."
-    Logga $mcpver.Trim()
-} else {
-    Logga ("@playwright/mcp " + $mcpver.Trim())
 }
 
 # -- Sandladeservern --------------------------------------------------------
@@ -216,6 +252,10 @@ try {
             -WorkingDirectory $rapport -PassThru -WindowStyle Hidden `
             -RedirectStandardInput $promptfil `
             -RedirectStandardOutput $agentut -RedirectStandardError $agenterr
+        # Handtaget MASTE lasas direkt, annars ar $agent.ExitCode $null efter att
+        # processen dott och loggraden nedan blir tom. Att rora .Handle far
+        # .NET att cacha handtaget sa slutkoden gar att lasa i efterhand.
+        $null = $agent.Handle
         Set-Content -Path (Join-Path $rapport 'agent.pid') -Value $agent.Id -Encoding ascii
 
         # Hard grans = budgeten plus fem minuters marginal for uppstart och for
@@ -228,8 +268,12 @@ try {
             Stop-Process -Id $agent.Id -Force -ErrorAction SilentlyContinue
             $slutkod = 2
         } else {
-            Logga "Utforskaren klar, slutkod $($agent.ExitCode)"
-            if ($agent.ExitCode -ne 0) { $slutkod = $agent.ExitCode }
+            # WaitForExit() innan ExitCode lases: utan den ar koden $null pa ett
+            # objekt fran Start-Process -PassThru, och loggraden blev tom.
+            $agent.WaitForExit()
+            $kod = $agent.ExitCode
+            Logga "Utforskaren klar, slutkod $kod"
+            if ($kod -ne 0) { $slutkod = $kod }
         }
     }
 } finally {
