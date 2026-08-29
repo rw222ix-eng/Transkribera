@@ -190,11 +190,16 @@
       const off = b ? Number(b.sidoffset || 0) : 0;
       return off < 0 ? 1 - off : 1;
     },
+    /* SWR: hyllan ändras nästan aldrig (en bok läses in någon gång per termin)
+       men avsnittsregistret är stort och fyra vyer väntar på det. Cachen ritar
+       hyllan direkt; servern får rätta den om en bok tillkommit. taEmot är
+       idempotent och avslutas med `bok-redo`, så en omritning är ofarlig. */
     hamta: () => {
       if (!(window.API && window.API.pa)) return Promise.resolve(null);
-      return window.API.json('/api/bocker')
-        .then(d => { taEmot(d.bocker || []); return d.bocker; })
-        .catch(() => null);
+      return window.API.jsonSWR('/api/bocker', {
+        vidCache: d => taEmot(d.bocker || []),
+        vidFarskt: d => taEmot(d.bocker || []),
+      }).then(d => d.bocker).catch(() => null);
     },
   };
   if (window.API && window.API.redo) window.API.redo.then(() => window.Bok.hamta());

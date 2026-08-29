@@ -246,30 +246,42 @@
     serverdata = null;
     if (!id || !s || !(window.API && window.API.pa)) return;
     const nyck = nyckelNu();
-    window.API.json(`/api/bocker/${id}/uppslag?fran=${s.fran}&till=${s.till}`)
-      .then(d => {
-        if (nyckelNu() !== nyck) return;         // spannet hann bytas
-        serverdata = { nyckel: nyck, uppgifter: d.uppgifter || [],
-                       olasta: (d.olasta || []).length,
-                       /* Numren servern SÅG saknas mitt i följden på lästa
-                          sidor. Odefinierat från en äldre server — då härleds
-                          frågan här i stället (iLucka). */
-                       luckor: d.luckor };
-        forslag = forslaget();
-        bort = standardbort();
-        rita();
-        window.planKoll && window.planKoll();
-        /* Faktapasset fyller panelen — och för provet och diagnosen är panelen
-           fälld (rita ovan). Ett provspann över trettio sidor hade blivit
-           minuters LLM-anrop för en lista ingen ser, så passet hoppas här och
-           tas av servern när det skrivs (routes_planning.bok_las_text), där
-           väntan redan syns i molnraden. `hoppat` minns hoppet så att ett byte
-           tillbaka till lektionsmaterial tar passet direkt (spegla). */
-        const helhet = !!(window.Helhetstyp && window.Helhetstyp());
-        hoppat = helhet && (d.utan_fakta || []).length > 0;
-        if ((d.utan_fakta || []).length && !helhet) lasSidorna(id, s, nyck);
-      })
-      .catch(() => {});
+    const ta = d => {
+      if (nyckelNu() !== nyck) return;         // spannet hann bytas
+      serverdata = { nyckel: nyck, uppgifter: d.uppgifter || [],
+                     olasta: (d.olasta || []).length,
+                     /* Numren servern SÅG saknas mitt i följden på lästa
+                        sidor. Odefinierat från en äldre server — då härleds
+                        frågan här i stället (iLucka). */
+                     luckor: d.luckor };
+      forslag = forslaget();
+      bort = standardbort();
+      rita();
+      window.planKoll && window.planKoll();
+    };
+    /* SWR: läraren bläddrar fram och tillbaka mellan samma sidspann hela
+       planeringen igenom, och uppslaget är samma svar varje gång tills sidorna
+       lästs om. Cachen ritar listan direkt; servern ritar om den bara om något
+       ändrats.
+
+       Faktapasset hänger däremot på DET FÄRSKA svaret och inget annat — och på
+       varje färskt svar, även när det är identiskt med cachen. Vore beslutet
+       lagt i `vidFarskt` (som tiger när svaret är oförändrat) hade ett spann med
+       olästa sidor aldrig lästs mer än en gång per webbläsare. */
+    window.API.jsonSWR(`/api/bocker/${id}/uppslag?fran=${s.fran}&till=${s.till}`, {
+      vidCache: ta, vidFarskt: ta,
+    }).then(d => {
+      if (nyckelNu() !== nyck) return;
+      /* Faktapasset fyller panelen — och för provet och diagnosen är panelen
+         fälld (rita ovan). Ett provspann över trettio sidor hade blivit
+         minuters LLM-anrop för en lista ingen ser, så passet hoppas här och
+         tas av servern när det skrivs (routes_planning.bok_las_text), där
+         väntan redan syns i molnraden. `hoppat` minns hoppet så att ett byte
+         tillbaka till lektionsmaterial tar passet direkt (spegla). */
+      const helhet = !!(window.Helhetstyp && window.Helhetstyp());
+      hoppat = helhet && (d.utan_fakta || []).length > 0;
+      if ((d.utan_fakta || []).length && !helhet) lasSidorna(id, s, nyck);
+    }).catch(() => {});
   }
   let hoppat = false;
 
@@ -284,7 +296,14 @@
     if (!host || laser || bett === nyck) return;
     laser = true;
     bett = nyck;
-    const klart = () => { laser = false; if (nyckelNu() === nyck) hamta(); };
+    /* Passet skrivs genom API.strom, som går utanför json() och därför inte
+       glömmer något av sig själv. Uppslaget läraren just väntade på är precis
+       det cachade svaret som nu är osant. */
+    const klart = () => {
+      laser = false;
+      window.API.swrGlom && window.API.swrGlom('/api/bocker/' + id + '/uppslag');
+      if (nyckelNu() === nyck) hamta();
+    };
     const jobb = ({ signal, log }) => window.API.strom(
       `/api/bocker/${id}/las`,
       { fran: s.fran, till: s.till, bara: 'fakta' }, { signal, log });

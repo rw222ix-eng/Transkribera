@@ -915,9 +915,13 @@ window.Klass = (() => {
   /* Efter API.redo: sonderingen av servern är async, och frågan är meningslös
      innan den svarat (api.js). */
   if (window.API && window.API.redo) {
+    /* SWR: kontot byts en gång om året och står i en knapptitel. Cachen gör att
+       titeln är rätt från första bildrutan i stället för efter ett nätanrop. */
+    const taKonto = s => { if (s && s.konto) { konto = s.konto; ritaSynk(); } };
     window.API.redo
-      .then(() => window.API.pa && window.API.json('/api/calendar/status'))
-      .then(s => { if (s && s.konto) { konto = s.konto; ritaSynk(); } })
+      .then(() => window.API.pa
+        ? window.API.jsonSWR('/api/calendar/status', { vidCache: taKonto, vidFarskt: taKonto })
+        : null)
       .catch(() => { /* kontot är en upplysning, inte ett krav */ });
   }
   function ritaSynk() {
