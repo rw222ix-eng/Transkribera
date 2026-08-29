@@ -135,6 +135,10 @@
        kasta bort arkivet varje gång läraren sätter en poäng. */
     '/api/lessons': ['/api/history'],
     '/api/history': ['/api/lessons'],
+    /* Transkriberingen går som en ström (se glömskan i strom) och det den
+       skapar är just en lektion med historikrad — utan ringen hade arkivet
+       ritats ur ett cachat svar från före inspelningen. */
+    '/api/transcribe': ['/api/lessons', '/api/history'],
   };
 
   function swrGlomFor(vag) {
@@ -272,6 +276,13 @@
       e.kod = fel.kod;
       throw e;
     }
+    /* Strömjobben är alltid skrivningar (generate, refine, approve, bokens
+       lösningar…) men går förbi json() och därmed förbi glömskan ovan. Utan
+       raden här hade en refine lämnat det cachade /api/exams/{id}-svaret kvar,
+       och nästa öppning ritat provet som det såg ut FÖRE omskrivningen. Glöms
+       görs så snart servern tagit emot: jobbet börjar mutera då, oavsett hur
+       strömmen sedan slutar. */
+    swrGlomFor(vag);
     const laget = { id: null, seq: 0, slut: false, svar: null, fel: null,
                     avbrutet: false, vag };
     await las(r.body, krokar, laget);
