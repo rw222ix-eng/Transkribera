@@ -216,11 +216,14 @@ def jobb_response(job, request, *, typ: str, db_file, dokument_id=None):
 
     `dokument_id` är valfritt och bara till för att hitta rätt jobb igen: det
     är utkastets id när jobbet hör till ett papper som redan finns."""
+    # EN anslutning för hela jobbet. Att öppna en per event var frestande
+    # (kortare kod, ingen livstid att hålla reda på) och fel: ett prov skickar
+    # hundratals händelser, och varje `connect` är en filöppning plus fyra
+    # PRAGMA. Anslutningen används av begäranstråden fram till att tråden
+    # startar och av jobbtråden därefter — aldrig av båda samtidigt — och
+    # sqlite-anslutningarna här öppnas med check_same_thread=False.
     conn = db.connect(db_file)
-    try:
-        jobb_id = db.skapa_jobb(conn, typ=typ, dokument_id=dokument_id)
-    finally:
-        conn.close()
+    jobb_id = db.skapa_jobb(conn, typ=typ, dokument_id=dokument_id)
 
     q: queue.Queue = queue.Queue()
     end = object()
@@ -231,17 +234,23 @@ def jobb_response(job, request, *, typ: str, db_file, dokument_id=None):
     raknare = {"seq": 0}
     las = threading.Lock()
 
+    # Händelser som bara har ett liv i nuet. `token` och `delta` är texten som
+    # rinner in medan modellen skriver — de finns för att rutan ska röra sig,
+    # och den som kommer tillbaka en kvart senare har ingen nytta av att se
+    # tavlan skrivas om i repris. Att lagra dem hade dessutom betytt tusentals
+    # rader per körning för noll läsare. De går ut live och räknas inte i
+    # `seq`: numren ska vara historikens, så att `fran=SEQ` betyder något.
+    FLYKTIGA = ("token", "delta")
+
     def _skriv(ev: dict) -> dict:
         """Ge eventet sitt nummer och lägg det i historiken. Numret sätts under
         lås: jobbtråden och (vid fel) huvudtråden kan båda emitta."""
+        if ev.get("type") in FLYKTIGA:
+            return ev
         with las:
             raknare["seq"] += 1
             ev = dict(ev, seq=raknare["seq"])
-        c = db.connect(db_file)
-        try:
-            db.lagg_jobb_event(c, jobb_id, ev["seq"], ev)
-        finally:
-            c.close()
+        db.lagg_jobb_event(conn, jobb_id, ev["seq"], ev)
         return ev
 
     def emit(ev):
@@ -258,18 +267,10 @@ def jobb_response(job, request, *, typ: str, db_file, dokument_id=None):
         ref = None
         if isinstance(resultat, dict):
             ref = resultat.get("id")
-        c = db.connect(db_file)
-        try:
-            db.satt_jobb_status(c, jobb_id, status, fel=fel, resultat_ref=ref)
-        finally:
-            c.close()
+        db.satt_jobb_status(conn, jobb_id, status, fel=fel, resultat_ref=ref)
 
     def run():
-        c = db.connect(db_file)
-        try:
-            db.satt_jobb_status(c, jobb_id, "running")
-        finally:
-            c.close()
+        db.satt_jobb_status(conn, jobb_id, "running")
         try:
             result = job(emit)
             ev = _skriv({"type": "done", "result": result})
@@ -294,6 +295,7 @@ def jobb_response(job, request, *, typ: str, db_file, dokument_id=None):
             with _avbrott_las:
                 _avbrott.pop(jobb_id, None)
             q.put(end)
+            conn.close()
 
     threading.Thread(target=run, daemon=True).start()
 
@@ -331,26 +333,28 @@ def uppspelning(jobb_id: int, request, *, db_file, fran: int = 0):
 
     async def gen():
         nasta = max(0, int(fran))
-        while True:
-            conn = db.connect(db_file)
-            try:
+        # En anslutning för hela uppspelningen, inte en per varv: varvet går var
+        # fjärdedels sekund och en tavla kan gå i tio minuter.
+        conn = db.connect(db_file)
+        try:
+            while True:
                 nya = db.jobb_events(conn, jobb_id, nasta)
                 jobb = db.hamta_jobb(conn, jobb_id)
-            finally:
-                conn.close()
-            for ev in nya:
-                yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
-                nasta = int(ev.get("seq") or nasta) + 1
-            if jobb is None:
-                break
-            # Slut OCH ikapp: statusen sätts efter att sista eventet skrivits,
-            # men ordningen mellan de två skrivningarna är inte garanterad för
-            # en läsare. Ett varv till kostar en fjärdedels sekund och tar bort
-            # hela klassen av «done kom aldrig fram».
-            if jobb["status"] in db.JOBB_SLUT and not nya:
-                break
-            if await request.is_disconnected():
-                break
-            await anyio.sleep(VANTA)
+                for ev in nya:
+                    yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+                    nasta = int(ev.get("seq") or nasta) + 1
+                if jobb is None:
+                    break
+                # Slut OCH ikapp: statusen sätts efter att sista eventet
+                # skrivits, men ordningen mellan de två skrivningarna är inte
+                # garanterad för en läsare. Ett varv till kostar en fjärdedels
+                # sekund och tar bort hela klassen av «done kom aldrig fram».
+                if jobb["status"] in db.JOBB_SLUT and not nya:
+                    break
+                if await request.is_disconnected():
+                    break
+                await anyio.sleep(VANTA)
+        finally:
+            conn.close()
 
     return StreamingResponse(gen(), media_type="text/event-stream")

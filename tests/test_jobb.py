@@ -190,8 +190,14 @@ def test_stangd_flik_dodar_inte_jobbet(db_file):
     conn = appdb.connect(db_file)
     try:
         assert _vanta(lambda: appdb.hamta_jobb(conn, jobb_id)["status"] == "done")
-        # …och historiken är komplett trots att ingen läste den live.
-        assert len(appdb.jobb_events(conn, jobb_id)) == 42   # log + 40 + done
+        # …och historiken finns trots att ingen läste den live. Tokenströmmen
+        # gör den INTE: `token` och `delta` är texten som rinner in medan
+        # modellen skriver, och den som kommer tillbaka en kvart senare har
+        # ingen nytta av att se tavlan skrivas om i repris. Numren är
+        # historikens, så att `fran=SEQ` betyder något.
+        historik = appdb.jobb_events(conn, jobb_id)
+        assert [e["type"] for e in historik] == ["log", "done"]
+        assert [e["seq"] for e in historik] == [1, 2]
     finally:
         conn.close()
 

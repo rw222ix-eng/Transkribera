@@ -72,7 +72,9 @@ def create_router(base: Path) -> APIRouter:
             rad = db.hamta_jobb(conn, jobb_id)
             if rad is None:
                 return JSONResponse({"error": "okänt jobb"}, status_code=404)
-            rad["seq"] = len(db.jobb_events(conn, jobb_id))
+            rad["seq"] = conn.execute(
+                "SELECT COALESCE(MAX(seq), 0) AS n FROM jobb_events "
+                "WHERE jobb_id = ?", (jobb_id,)).fetchone()["n"]
         finally:
             conn.close()
         return _jobb(rad)

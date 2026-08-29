@@ -2137,10 +2137,12 @@ def bedomningspass(exam: dict, *, model: str, llm=llm_client.generate,
     `nummer` begränsar passet till vissa uppgifter (omskrivningen skriver bara
     om det som ändrades). Utan det skrivs alla.
 
-    AVBRYT STOPPAR PASSET. Loggraden är livstecknet strömmen avbryter vid
-    (app/web/sse.py: `emit` kastar KlientBorta), och den ligger i HUVUDTRÅDEN
-    efter varje färdigt anrop — trådarna loggar aldrig själva, för då hade
-    avbrottet fastnat i fail-open-fällan och svalts som «ett anrop som föll»."""
+    AVBRYT STOPPAR PASSET. Loggraden är livstecknet avbrottet sker vid
+    (app/web/sse.py: `emit` kastar `JobbAvbrutet` när läraren tryckt Avbryt),
+    och den ligger i HUVUDTRÅDEN efter varje färdigt anrop — trådarna loggar
+    aldrig själva, för då hade avbrottet fastnat i fail-open-fällan och svalts
+    som «ett anrop som föll». (Att fliken STÄNGS är inget avbrott längre: det
+    här passet är sista tredjedelen av ett prov som redan är betalt.)"""
     log = log_cb or (lambda _m: None)
     valda = set(nummer or [])
     underlag = [u for u in bedomningsunderlag(exam)
