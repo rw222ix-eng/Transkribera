@@ -33,11 +33,17 @@ from tests import fejk                       # noqa: E402  (efter sys.path)
 from tests.fejk import skriv_claude          # noqa: E402
 
 
-def bas() -> Path:
+def bas(port: int = 8751) -> Path:
     """Färsk bas per körning. Samma sökväg varje gång så en trasig körning går
     att titta i efteråt — men tömd, så ingen körning ärver förra körningens
-    dokument."""
-    b = Path(tempfile.gettempdir()) / "transkribera-e2e"
+    dokument.
+
+    Porten går in i namnet för allt UTOM sviten själv (8751). Nattutforskaren
+    (tools/nattutforskaren.ps1, port 8753) startar samma server, och med en
+    delad sökväg hade dess första rad tömt basen under en e2e-körning som
+    råkade pågå."""
+    namn = "transkribera-e2e" if port == 8751 else f"transkribera-e2e-{port}"
+    b = Path(tempfile.gettempdir()) / namn
     if b.exists():
         shutil.rmtree(b, ignore_errors=True)
     b.mkdir(parents=True, exist_ok=True)
@@ -50,7 +56,7 @@ def main() -> None:
     import uvicorn
 
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8751
-    b = bas()
+    b = bas(port)
     os.environ["CLAUDE_CODE_BIN"] = str(skriv_claude(b / "fejkbin"))
     # Auto: fejk-CLI:t väljer kassett ur prompten. En lärardag (Etapp 4) skriver
     # tavla, prov, arbetsblad, gruppuppgift och granskning i samma körning —
