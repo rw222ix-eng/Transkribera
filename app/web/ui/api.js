@@ -128,7 +128,11 @@
     '/api/schema': ['/api/schema', '/api/lessons'],
     '/api/groups': ['/api/elever', '/api/dokument'],
     '/api/elever': ['/api/groups', '/api/dokument'],
-    '/api/dokument': ['/api/lessons', '/api/history'],
+    /* Arkivkorten ritas ur BÅDA listorna (app.js hydreraArkivet) — den ena
+       glömd och den andra kvar hade ritat halva sanningen. Pappren hänger
+       däremot inte ihop med dem: en rättad uppgift ändrar inte en inspelning,
+       och den vanligaste skrivningen i appen (autosparet i elevläget) ska inte
+       kasta bort arkivet varje gång läraren sätter en poäng. */
     '/api/lessons': ['/api/history'],
     '/api/history': ['/api/lessons'],
   };
@@ -152,11 +156,12 @@
     const cachadText = rad ? swrDela(rad) : null;
     let harCache = false;
     if (cachadText != null) {
-      try {
-        const d = JSON.parse(cachadText);
-        harCache = true;
-        if (k.vidCache) k.vidCache(d);
-      } catch (e) { harCache = false; /* trasig post: hämtningen rättar den */ }
+      let d;
+      try { d = JSON.parse(cachadText); harCache = true; }
+      catch (e) { harCache = false; /* trasig post: hämtningen rättar den */ }
+      /* Ritningen ur cachen får aldrig ta hämtningen med sig. Går den sönder är
+         den färska ritningen kvar, och den är den som räknas. */
+      if (harCache && k.vidCache) { try { k.vidCache(d); } catch (e) {} }
     }
     return json(vag).then(farskt => {
       const ny = JSON.stringify(farskt);

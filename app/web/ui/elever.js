@@ -448,9 +448,9 @@
       /* cihamta fyller kartan SYNKRONT ur swr-cachen. Frågas den om igen direkt
          efteråt står profilen ofta redan där, och «Läser …» hinner aldrig
          blinka förbi. Löftet ritar om när servern svarat något annat. */
-      const pa_vag = cihamta();
+      const paVag = cihamta();
       vald = cicache.get(nyckel);
-      pa_vag.then(() => { if (cinyckel() === nyckel && cicache.get(nyckel) !== vald) ritaCi(); });
+      paVag.then(() => { if (cinyckel() === nyckel && cicache.get(nyckel) !== vald) ritaCi(); });
       if (!vald) {
         lista.innerHTML = '';
         not.textContent = 'Läser …';

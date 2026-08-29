@@ -860,8 +860,9 @@ function nyttKort(f) {
 /* ══════════ HYDRERING · arkivet ur servern ══════════
    Korten i #inspelningar står i app.html för att designprojektet ska visa en
    fylld app utan server. Svarar servern är det DEN som äger listan: de statiska
-   korten byts ut mot lärarens riktiga lektioner, EN gång vid start, innan
-   filtren, lovbanden och veckan räknas.
+   korten byts ut mot lärarens riktiga lektioner vid start, innan filtren,
+   lovbanden och veckan räknas. (Ritningen kan ske två gånger: först ur cachen,
+   sedan om servern säger något annat — se hydreraArkivet nedan.)
 
    Två källor slås ihop på history_id, för ingen av dem har allt:
    /api/lessons bär organisationen (datum, klass, kurs — det arkivet sorterar
@@ -898,6 +899,9 @@ function ritaArkivet(lektioner, historik) {
   /* En omritning bygger nya kort, och listan hoppar då till toppen om den var
      rullad. Läget läggs tillbaka i samma bildruta. */
   if (rullat && window.scrollY !== rullat) window.scrollTo(0, rullat);
+  /* Listan ÄR uppdaterad nu — erbjudandet om att uppdatera den vore en lögn. */
+  const lapp = $('#arkivlapp');
+  if (lapp) { arkivlappenGor = null; lapp.remove(); }
 }
 
 /* Är det säkert att bygga om listan under läraren just nu? Omritningen kastar
