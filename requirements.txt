@@ -28,6 +28,17 @@ pillow              # tavlans PNG läses här (app/tryck.py); pypdfium2 lämnar
 yt-dlp
 requests
 
+# Räkneverket (app/rakneverk.py): den deterministiska domaren över facit och
+# svarsalternativ. math-verify drar in latex2sympy2_extended (LaTeX-läsaren) och
+# antlr4-python3-runtime; ingen av dem importeras med namn av oss, och de står
+# därför INTE här. De är math-verifys beroenden och ska hämtas som sådana.
+#
+# Appen startar utan båda: rakneverk.verktyg() svarar None och varje led blir
+# «otolkbart», vilket aldrig fäller något. En installation utan dem tappar alltså
+# en kontroll, inte en funktion.
+sympy               # räkningen; math-verify kräver den ändå
+math-verify         # svarsjämförelsen (huggingface/Math-Verify)
+
 # Maskinen
 psutil
 

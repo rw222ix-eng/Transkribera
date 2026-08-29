@@ -18,7 +18,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
 
-from app import exam_spec, llm_client, niva_rubrik
+from app import exam_spec, llm_client, niva_rubrik, rakneverk
 
 MAX_ROUNDS = 3          # generering + balansreparation (delad budget)
 MAX_LATEX_ROUNDS = 2    # kompileringsfel → korrigering
@@ -898,6 +898,92 @@ def build_referens(items: list[str]) -> str:
             f"{numrerade}")
 
 
+# ── VARIATIONSVAKTEN (Etapp 4) ────────────────────────────────────────────
+# «Undvik att upprepa dessa» har funnits sedan Fas 4 (`teman`), och den listan
+# är uppgifternas INLEDNINGAR, sextio tecken text. Den fångar en upprepad
+# berättelse («I en damm växer alger …») och missar den upprepning läraren
+# faktiskt klagar på: samma uppgift med nya siffror. «Lös ekvationen $3x + 6 =
+# 21$» och «Lös ekvationen $5x + 2 = 17$» är två olika strängar och en enda
+# uppgift.
+#
+# Fingeravtrycket säger vad uppgiften ÄR när talen är borta: gemener,
+# hopdragna blanksteg och varje tal utbytt mot #. De två raderna ovan blir
+# båda «lös ekvationen $#x + # = #$», och då syns det.
+#
+# VILLKORET ÄR HELIGT: blocket läggs till prompten BARA när listan är icke-tom.
+# Testernas databas är tom, alltså blir listan tom, alltså är prompten byte för
+# byte densamma som före den här etappen, och kassetterna (tests/kassetter)
+# är orörda. Samma mönster som «Vad var svårt?»-rutan i planeringen: ett tomt
+# fält lämnar inget spår i prompten.
+_SIFFRA_RE = re.compile(r"\d+(?:[.,]\d+)?")
+
+# Under den längden säger avtrycket ingenting. «Beräkna $#$» är inte en uppgift
+# som går igen, det är en formulering alla uppgifter delar, och en flagga
+# den hade varit brus i varje generering.
+MIN_AVTRYCK = 25
+# Hur många avtryck som får plats i prompten. Fler är inte en bättre lista utan
+# en längre; modellen läser de första och tröttnar.
+MAX_AVTRYCK = 24
+_AVTRYCK_TAK = 140            # tecken per rad i listan
+
+
+def fingeravtryck(text: str) -> str:
+    """Uppgiftens FORM utan dess tal: gemener, ett blanksteg mellan orden och
+    varje tal utbytt mot #."""
+    return _SIFFRA_RE.sub("#", " ".join(str(text or "").split()).lower())
+
+
+def _avtrycken(texter) -> list[str]:
+    """Fingeravtrycken, avkortade, utan dubbletter och utan de för korta."""
+    ut: list[str] = []
+    for t in texter or []:
+        a = fingeravtryck(t)[:_AVTRYCK_TAK]
+        if len(a) >= MIN_AVTRYCK and a not in ut:
+            ut.append(a)
+    return ut
+
+
+def build_variation(texter) -> str:
+    """Undvik-listan som FORM. Tom lista → tom sträng → orörd prompt."""
+    avtryck = _avtrycken(texter)[:MAX_AVTRYCK]
+    if not avtryck:
+        return ""
+    return ("Uppgifter som redan skrivits till den här kursen, med varje tal "
+            "utbytt mot #. Listan säger alltså inte vilka SIFFROR som är "
+            "förbrukade utan vilka UPPGIFTER som är det: skriv inte en uppgift "
+            "som blir en av raderna nedan när dess tal byts ut. Nya siffror i "
+            "samma uppgift är en upprepning, inte en variation. Byt "
+            "sammanhang, byt fråga eller byt vad som är givet och vad som "
+            "söks.\n- " + "\n- ".join(avtryck))
+
+
+def variationsflaggor(exam: dict, texter) -> list[dict]:
+    """De uppgifter som ändå blev en gammal uppgift med nya tal.
+
+    En FLAGGA och inte ett fel: den kostar ingen reparationsrunda och stoppar
+    inget papper. Två skäl. Upprepningen är ibland avsiktlig (ett omprov ska
+    pröva samma sak igen), och avtrycket är trubbigt nog att ha fel ibland,
+    ett fel som kostar en modellrunda ska vara säkrare än så. Läraren ser
+    flaggan och avgör själv."""
+    gamla = set(_avtrycken(texter))
+    if not gamla:
+        return []
+    ut: list[dict] = []
+    for i, u in enumerate((exam or {}).get("uppgifter") or [], 1):
+        if not isinstance(u, dict):
+            continue
+        rader = [(str(i), u.get("text") or "")]
+        for j, d in enumerate(u.get("deluppgifter") or []):
+            if isinstance(d, dict):
+                rader.append((f"{i}{chr(ord('a') + j)}", d.get("text") or ""))
+        for nr, text in rader:
+            avtryck = fingeravtryck(text)[:_AVTRYCK_TAK]
+            if len(avtryck) >= MIN_AVTRYCK and avtryck in gamla:
+                ut.append({"nr": nr, "avtryck": avtryck,
+                           "text": _kort(text, 120)})
+    return ut
+
+
 def build_riktat(elev: str, syfte: str, punkter: list[dict]) -> str:
     """Promptblocket för ett arbetsblad som hör till EN elev (Etapp 4).
 
@@ -1067,7 +1153,7 @@ BILD_AV = (
 
 def build_prompt(kurs: str, klass: str, punkter: list[str], *,
                  antal: int = 10, tid_min: int = 120, delar: bool = True,
-                 memory: str = "", teman: str = "",
+                 memory: str = "", teman: str = "", variation: str = "",
                  referens: str = "", bilder: str = "", utfall: str = "",
                  bok: str = "", boknivaer: str = "", forlaga: str = "",
                  svart: str = "", fokus: str = "",
@@ -1145,6 +1231,12 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
     if teman:
         block.append("Tidigare provs uppgiftsteman — UNDVIK att upprepa dessa:\n"
                      + teman)
+    # Variationsvakten står omedelbart efter temalistan: de svarar på samma
+    # fråga från två håll (temat är uppgiftens ÄMNE, avtrycket dess FORM), och
+    # ska läsas i samma andetag. Tom sträng när underlaget är tomt, se
+    # build_variation, och kassetteregeln som villkoret finns för.
+    if variation:
+        block.append(variation)
     if referens:
         block.append(referens)
     if bilder:
@@ -3132,6 +3224,69 @@ def _signaler(exam: dict) -> list[dict]:
     return nivasignaler(exam) + talsignaler(exam) + bedomningssignaler(exam)
 
 
+def _rakneverk_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
+                    antal: int | None, skeleton: list[dict] | None,
+                    rounds_used: int, max_rounds: int,
+                    koder: list[str] | None = None,
+                    niva_mal: dict | None = None,
+                    log_cb: Callable[[str], None] | None = None) -> dict:
+    """Den DETERMINISTISKA räkningen, och den går FÖRE modelldomarna (Etapp 4).
+
+    Ordningen är hela poängen. Räknedomaren är en språkmodell som räknar efter
+    en språkmodell, och när båda gör samma fel märks det aldrig. Räkneverket
+    (app/rakneverk) räknar med sympy: samma svar varje gång, ingen kostnad, och
+    en fällning som går att lita på. Det den hittar ska alltså vara lagat INNAN
+    modelldomarna får se pappret. Annars betalar vi en domarrunda för att låta
+    en modell gissa om något vi redan kunde räkna ut.
+
+    Två saker görs, och de är olika till sin natur:
+
+    * DISTRAKTORERNA lagas rakt av, utan runda och utan modell. Ett
+      svarsalternativ som är lika med det rätta är inte en smaksak, och ett
+      räknefel ur biblioteket är ett bättre alternativ än det som stod där.
+      PROMPTEN RÖRS ALDRIG: hela lagningen sker efter modellen, och
+      kassetterna är därför orörda (tests/kassetter).
+    * FACIT som inte går ihop går in i den befintliga reparationsloopen, med
+      koden ``raknefel`` och samma budget som alla andra fel.
+
+    Fail-open hela vägen: saknas sympy, går ett led inte att tolka, eller är
+    rundorna slut, då levereras pappret som det är och fynden visas för
+    läraren i stället.
+
+    REFINE GÅR INTE HÄR IGENOM, med flit. En riktad omskrivning får bara röra
+    det läraren pekade på (`sammanfoga_riktat`), och att laga ett
+    svarsalternativ på en uppgift hon inte markerat vore precis det grinden
+    finns för att stoppa. Vill vi räkna efter en omskrivning måste räkneverket
+    först lära sig att bara röra målet."""
+    log = log_cb or (lambda _m: None)
+    for rad in rakneverk.laga_flerval(exam):
+        log(rad)
+    dom = rakneverk.granska(exam)
+    log(rakneverk.sammanfattning(dom["statistik"]))
+    fel = dom["fel"]
+    if not fel:
+        return {"exam": exam, "errors": errors, "rounds": rounds_used}
+    if rounds_used >= max_rounds:
+        # Budgeten slut, samma val som domarpasset gör: visa fynden för
+        # läraren i stället för att tiga om dem.
+        return {"exam": exam, "errors": errors + fel, "rounds": rounds_used}
+    log(f"Räkneverket fällde {len(fel)} facit, justerar …")
+    kandidat = _llm_round(build_repair_prompt(exam, fel + errors, profil),
+                          model, llm, antal, skeleton, koder, log_cb=log_cb,
+                          etikett=f"Justerar provet (runda {rounds_used + 1} "
+                                  f"av {max_rounds}) —")
+    rounds_used += 1
+    if kandidat is None:
+        return {"exam": exam, "errors": errors + fel, "rounds": rounds_used}
+    _doc, nya = _validate(kandidat, profil, koder, niva_mal)
+    # Samma grind som domarpassets: var pappret rent före räkneverket och
+    # trasigt efter är omskrivningen en försämring. Behåll det gamla och visa
+    # fyndet som en varning i stället.
+    if nya and not errors:
+        return {"exam": exam, "errors": fel, "rounds": rounds_used}
+    return {"exam": kandidat, "errors": nya, "rounds": rounds_used}
+
+
 def _domar_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                 skala: str, antal: int | None, skeleton: list[dict] | None,
                 rounds_used: int, max_rounds: int, koder: list[str] | None = None,
@@ -3198,6 +3353,7 @@ def _domar_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
 def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                   antal: int = 10, tid_min: int = 120, delar: bool = True,
                   memory: str = "", teman: str = "", referens: str = "",
+                  tidigare: list[str] | None = None,
                   bilder: str = "", utfall: str = "", bok: str = "",
                   boknivaer: str = "", forlaga: str = "",
                   svart: str = "", fokus: str = "", profil: str = "prov",
@@ -3235,7 +3391,13 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
 
     `illustration` är lärarens kryss «Plats för illustration» och styr om
     arbetsbladets och gruppuppgiftens uppgifter ska bära en bildbeställning
-    (`scen`) alls. Se BILD_PA/BILD_AV."""
+    (`scen`) alls. Se BILD_PA/BILD_AV.
+
+    `tidigare` är uppgiftstexterna kursen redan sett
+    (db.tidigare_uppgiftstexter) och driver variationsvakten: en undvik-lista
+    med talen utbytta mot # går in i prompten, och det som ändå blev en gammal
+    uppgift med nya tal kommer tillbaka i svarets `likheter`. En TOM lista
+    lämnar prompten ordagrant som den var. Se build_variation."""
     log = log_cb or (lambda _m: None)
     log({"arbetsblad": "Skriver arbetsbladet …",
          "gruppuppgift": "Skriver gruppuppgiften …"}.get(profil, "Skriver provet …"))
@@ -3262,8 +3424,14 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # fäller om modellen frångår den. Provet levde redan med den kostnaden, och
     # arbetsbladet betalar den gärna: en drilluppgift behöver sällan a/b/c.
     grammatik = None if profil == "gruppuppgift" else skeleton
+    # Variationsvakten (Etapp 4). `tidigare` är uppgiftstexterna kursen redan
+    # sett (db.tidigare_uppgiftstexter); är listan tom blir blocket en TOM
+    # STRÄNG och prompten byte för byte densamma som förut. Det villkoret är
+    # inte en optimering utan kassetteregeln: testernas databas är tom.
+    variation = build_variation(tidigare)
     prompt = build_prompt(kurs, klass, punkter, antal=antal, tid_min=tid_min,
                           delar=delar, memory=memory, teman=teman,
+                          variation=variation,
                           referens=referens, bilder=bilder, utfall=utfall,
                           bok=bok, boknivaer=boknivaer, forlaga=forlaga,
                           svart=svart, fokus=fokus,
@@ -3289,8 +3457,34 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                               rounds_used=rounds, max_rounds=max_rounds,
                               profil=profil, antal=antal, skeleton=grammatik,
                               koder=koder, niva_mal=niva_mal, log_cb=log_cb)
+    # ── RÄKNEVERKET (Etapp 4) ────────────────────────────────────────
+    # Deterministiskt och FÖRE modelldomarna: det som går att räkna ut ska
+    # räknas ut, inte gissas av ett andra modellanrop. Se _rakneverk_pass.
+    #
+    # Passet lyder INTE under `doma`. Flaggan betyder «inga extra modellanrop
+    # efter att pappret är skrivet», och räkneverket gör inga: det räknar med
+    # sympy. Hittar det ett fel kostar lagningen en reparationsrunda ur samma
+    # budget som balansfelen, precis som varje annat fel valideringen hittar.
+    if res["exam"] is not None:
+        res = _rakneverk_pass(res["exam"], res["errors"], model=model, llm=llm,
+                              profil=profil, antal=antal, skeleton=grammatik,
+                              koder=koder, niva_mal=niva_mal,
+                              rounds_used=res["rounds"], max_rounds=max_rounds,
+                              log_cb=log_cb)
+
+    def flagga(r: dict) -> dict:
+        """Blev en uppgift ändå en gammal uppgift med nya tal? Fältet
+        `likheter` följer med svaret; det stoppar ingenting och kostar ingen
+        runda (se variationsflaggor)."""
+        likheter = variationsflaggor(r.get("exam") or {}, tidigare)
+        r["likheter"] = likheter
+        for f in likheter:
+            log(f"Uppgift {f['nr']} liknar en tidigare uppgift i kursen: "
+                f"«{f['text']}»")
+        return r
+
     if not doma or res["exam"] is None:
-        return res
+        return flagga(res)
     skala = _skala(profil, boknivaer, skeleton, kurs)
     res = _domar_pass(res["exam"], res["errors"], model=model, llm=llm,
                       profil=profil, skala=skala,
@@ -3314,7 +3508,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
         res["errors"] = ([e for e in res["errors"]
                           if e.get("code") != "bedomningssignal"]
                          + bedomningssignaler(res["exam"]))
-    return res
+    return flagga(res)
 
 
 def refine_exam(exam: dict, instruction: str, *, model: str,

@@ -3513,6 +3513,95 @@ def exam_themes_for_prompt(conn: sqlite3.Connection, course_id: int,
     return "\n".join(lines)
 
 
+# Variationsunderlaget (Etapp 4): VARJE uppgift kursen sett, inte bara de
+# godkända provens.
+#
+# `exam_themes_for_prompt` ovan läser de tre senaste GODKÄNDA proven, och det
+# är rätt underlag för sin fråga («vilka teman är förbrukade?»). Det är fel
+# underlag för variationsvakten, som ska svara på en annan: «har jag skrivit
+# precis den här uppgiften förut?» Den frågan gäller arbetsblad, diagnoser och
+# gruppuppgifter lika mycket som prov, och den gäller utkast lika mycket som
+# godkända papper. En uppgift som skrevs i går och ligger kvar i högen är
+# lika förbrukad som en som trycktes.
+#
+# Två källor, för pappren bor på två ställen och har gjort det sedan
+# frontendbytet: `exams`/`exam_items` (generatorns egen bokföring) och
+# `dokument`/`dokument_versioner` (högen läraren ser). Samma papper kan stå i
+# båda; dubbletterna faller bort på fingeravtrycket i exam_gen och inte här.
+_VARIATION_DOKUMENT = 12
+_VARIATION_TEXTER = 60
+
+
+def tidigare_uppgiftstexter(conn: sqlite3.Connection, course_id: int, *,
+                            moment: str | None = None,
+                            koder: list[str] | None = None,
+                            max_dokument: int = _VARIATION_DOKUMENT,
+                            max_texter: int = _VARIATION_TEXTER) -> list[str]:
+    """Uppgiftstexterna kursen redan sett, nyast först.
+
+    `koder` smalnar av till de papper som taggats med minst en av lärarens
+    valda innehållspunkter, alltså «samma område», med kursplanens egen identitet i
+    stället för en gissning ur texten. Finns ingen sådan koppling (ett papper
+    som skrevs innan taggningen fanns) faller urvalet tillbaka på hela kursen:
+    ett tomt underlag är samma sak som ingen variationsvakt alls, och då är
+    bredden bättre än tystnaden."""
+    cid = int(course_id)
+    ut: list[str] = []
+
+    def lagg(text) -> None:
+        t = " ".join(str(text or "").split())
+        if t and len(ut) < max_texter:
+            ut.append(t)
+
+    # ── Generatorns bokföring ───────────────────────────────────────
+    villkor, params = "e.course_id = ?", [cid]
+    rena = [str(k).strip() for k in (koder or []) if str(k).strip()]
+    if rena:
+        villkor += (" AND e.id IN (SELECT t.exam_id FROM content_tags t "
+                    "JOIN course_content c ON c.id = t.content_id "
+                    f"WHERE t.exam_id IS NOT NULL AND c.kod IN "
+                    f"({','.join('?' * len(rena))}))")
+        params += rena
+    rader = conn.execute(
+        "SELECT i.text FROM exam_items i JOIN exams e ON e.id = i.exam_id "
+        f"WHERE {villkor} "
+        "ORDER BY COALESCE(e.datum, e.created_at) DESC, i.id LIMIT ?",
+        (*params, max_texter)).fetchall()
+    if not rader and rena:                    # inga taggade papper, ta kursen
+        rader = conn.execute(
+            "SELECT i.text FROM exam_items i JOIN exams e ON e.id = i.exam_id "
+            "WHERE e.course_id = ? "
+            "ORDER BY COALESCE(e.datum, e.created_at) DESC, i.id LIMIT ?",
+            (cid, max_texter)).fetchall()
+    for r in rader:
+        lagg(r["text"])
+
+    # ── Högen läraren ser ───────────────────────────────────────────
+    # Bara den version markören står på: ångrade versioner är papper läraren
+    # ÅNGRADE, och att låta dem styra nästa generering vore att låta ett
+    # bortvalt papper leva vidare som ett förbud.
+    dok_villkor, dok_params = "d.course_id = ?", [cid]
+    if (moment or "").strip():
+        dok_villkor += " AND d.moment = ?"
+        dok_params.append(moment.strip())
+    for r in conn.execute(
+            _DOKUMENT_LATT.format(where=f" WHERE {dok_villkor}"),
+            dok_params).fetchall()[::-1][:max_dokument]:
+        # Baklänges: `_DOKUMENT_LATT` sorterar på plats i högen, och ett nytt
+        # papper läggs sist. Sista raden är alltså den nyaste.
+        try:
+            blob = json.loads(r["data"]) if r["data"] else None
+        except (TypeError, ValueError):
+            continue
+        for u in ((blob or {}).get("uppgifter") or []):
+            if not isinstance(u, dict):
+                continue
+            lagg(u.get("t") or u.get("text"))
+            for d in (u.get("del") or []):
+                lagg(d if isinstance(d, str) else (d or {}).get("text"))
+    return ut[:max_texter]
+
+
 _SIMILARITY_TOKEN_RE = None
 
 
