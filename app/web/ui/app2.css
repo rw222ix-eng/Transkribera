@@ -486,6 +486,26 @@
 .granskaskal:not([data-valj]) .gdok [data-el]:hover{outline:1px dashed rgba(96,168,221,.45);outline-offset:4px}
 .gdok [data-el][data-mal]{outline:2px solid var(--sky-deep);outline-offset:4px;background:color-mix(in srgb,var(--atmosphere) 14%,transparent)}
 .gdok [data-el][data-pekad]{outline:2px solid var(--atmosphere);outline-offset:4px;background:color-mix(in srgb,var(--atmosphere) 18%,transparent)}
+/* ── VÄNTAN SOM SYNS ───────────────────────────────
+   Ett svep över de rutor varvet skriver om, så länge det går. Det ligger i ett
+   eget barn (`.gshimmer`, satt av granska.js) och inte i ett `::after`:
+   pseudoelementet är redan taget av väljlägets etikett längre ner, och bladen
+   sätter egna på sina rutor. Barnet är absolut placerat och bär ingen text —
+   det kan alltså varken flytta något eller ändra rutans textinnehåll (som
+   diffen mäter på). */
+.gshimmer{position:absolute;inset:-4px;border-radius:7px;pointer-events:none;z-index:4;background-image:linear-gradient(100deg,transparent 32%,color-mix(in srgb,var(--atmosphere) 42%,transparent) 50%,transparent 68%);background-size:200% 100%;background-repeat:no-repeat;box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--sky-deep) 40%,transparent);animation:gsvep 1.5s linear infinite}
+@keyframes gsvep{from{background-position:100% 0}to{background-position:0 0}}
+/* Blinken när patchen landat: en ring som slår ut och tonar bort på de rutor
+   servern faktiskt skrev om. Ring och inte yta — `.andrad` (prickar.js) äger
+   ytan, och två markeringar i samma färglager hade suddat varandra. */
+.gdok [data-el][data-blink]{animation:gblink 800ms var(--ease) 2}
+@keyframes gblink{
+  from{box-shadow:0 0 0 0 color-mix(in srgb,var(--sky-deep) 60%,transparent)}
+  to{box-shadow:0 0 0 9px transparent}}
+@media (prefers-reduced-motion:reduce){
+  .gshimmer{animation:none;background-image:none;background-color:color-mix(in srgb,var(--atmosphere) 18%,transparent)}
+  .gdok [data-el][data-blink]{animation:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--sky-deep) 45%,transparent)}
+}
 .gpin{position:absolute;left:-14px;top:6px;width:22px;height:22px;border-radius:50% 50% 50% 3px;background:var(--sky-deep);color:#fff;display:grid;place-items:center;font-family:var(--sans);font-size:.72rem;font-weight:600;box-shadow:0 4px 10px rgba(0,0,0,.35);cursor:pointer;z-index:5}
 .gpin[data-pa]{background:var(--berry)}
 .gfabs{position:absolute;left:20px;bottom:20px;z-index:6;display:flex;align-items:center;gap:10px}
@@ -493,6 +513,22 @@
 .gfab:hover{transform:translateY(-1px)}
 .gfab[aria-pressed='true']{background:var(--sky-deep);color:#fff}
 .gfabikon{font-size:1rem;line-height:1}
+/* ── MINI-CHATTEN VID RUTAN ────────────────────────
+   Fast position, satt i pixlar av granska.js: duken har ingen scroll, pappret
+   flyttas med en transform. `[hidden]` måste sägas här — `display:flex` vinner
+   annars över attributet. */
+.gmini{position:fixed;z-index:8;display:flex;align-items:flex-end}
+.gmini[hidden]{display:none}
+.gminiknapp{display:inline-flex;align-items:center;gap:7px;border:none;border-radius:var(--r-pill);background:var(--sky-deep);color:#fff;font-family:inherit;font-size:.78rem;font-weight:500;padding:7px 15px;cursor:pointer;white-space:nowrap;box-shadow:0 12px 26px -12px rgba(0,0,0,.6);transition:background-color var(--dur-2) var(--ease)}
+.gminiknapp[hidden]{display:none}
+.gminiknapp:hover{background:var(--navy)}
+.gminiknapp:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.gminiform{display:flex;align-items:flex-end;gap:6px;padding:6px;border-radius:13px;background:#fff;box-shadow:0 16px 34px -14px rgba(0,0,0,.6)}
+.gminiform[hidden]{display:none}
+.gminiform textarea{width:min(230px,34vw);height:32px;max-height:88px;border:none;background:transparent;font-family:inherit;font-size:.84rem;line-height:1.45;color:var(--ink);resize:none;padding:6px 8px;overflow-y:auto}
+.gminiform textarea:focus{outline:none}
+.gminikor{flex:0 0 auto;border:none;border-radius:9px;background:var(--sky-deep);color:#fff;font-family:inherit;font-size:.9rem;line-height:1;padding:9px 12px;cursor:pointer}
+.gminikor:hover{background:var(--navy)}
 
 /* samtalskolumnen — en läsvy, inte en bubbelström */
 .gpanel{display:flex;flex-direction:column;min-height:0;background:var(--surface)}

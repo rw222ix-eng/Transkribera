@@ -76,8 +76,11 @@
        tryckte — och scenrutans släppyta, som öppnar filväljaren när man
        klickar den, inte heller. Bara foten och scenrutan står här, inte hela
        plåtbilden: en plåt är ett par hundra pixlar av arket, och att dra i
-       den ska fortfarande panorera. */
-    if (e.target.closest('.gpin,.gfab,.gpanel,.aprick,.prplatfot,.prscen')) return;
+       den ska fortfarande panorera.
+
+       Och `.gmini` av samma skäl: mini-chatten ligger över duken, och utan den
+       här raden åt panoreringen klicket på dess knapp och dess textfält. */
+    if (e.target.closest('.gpin,.gfab,.gpanel,.gmini,.aprick,.prplatfot,.prscen')) return;
     e.preventDefault();
     const val = window.getSelection && window.getSelection();
     if (val && !val.isCollapsed) val.removeAllRanges();
@@ -122,6 +125,9 @@
     skal.toggleAttribute('data-valj', pa);
     $('#g-valj').setAttribute('aria-pressed', String(pa));
     $('#g-valjtext').textContent = pa ? 'Klicka på det du vill ändra' : 'Välj element';
+    /* Mini-chatten hör till väljläget: slås det av är rutan inte längre vald
+       på ett sätt som går att skriva om. */
+    satMini();
   }
   $('#g-valj').addEventListener('click', () => satValj(!valjLage));
 
@@ -197,6 +203,12 @@
     ruta.toggleAttribute('data-flera', malen.length > 1);
     $('#g-malx').hidden = !malen.length;
     markeraMalen();
+    /* Arkbytet går också här (nollaMal) — svepet hör till sitt ark och ska
+       släckas när det andra ligger framme. */
+    markeraArbete();
+    /* Ny ruta, ny mening: en halvskriven mini-chatt hörde till den förra. */
+    stangMini(false);
+    satMini();
     /* Placeholdern går genom skrivläget och inte förbi det: går ett varv, eller
        väntar en kö, är det «Skriv nästa — läggs i kö» som gäller — inte frågan
        om urvalet. */
@@ -207,6 +219,78 @@
      kunde vara en. */
   const markeraMalen = () => $$('.gdok [data-el]', plan).forEach(x =>
     x.toggleAttribute('data-mal', malen.some(m => m.el === x.dataset.el)));
+
+  /* ── VÄNTAN SOM SYNS ───────────────────────────────
+     Urvalet nollställs så fort meningen gått i väg (se skicka), och därmed
+     slocknade också markeringen: i de minuter en omskrivning tar såg pappret
+     orört ut, och den enda upplysningen om att något pågick stod i panelen
+     längst bort till höger. `arbetar` håller kvar VILKA rutor varvet gäller
+     tills patchen landat, och de får ett svep över sig så länge. */
+  let arbetar = null;
+  const satArbete = (elen, ark) => { arbetar = { elen: elen.slice(), ark: ark || 0 }; markeraArbete(); };
+  const slappArbete = () => { arbetar = null; markeraArbete(); };
+  /* Svepet är ett eget BARN till rutan och inte ett `::after`: väljläget har
+     redan tagit pseudoelementet till sin etikett (app2.css), och bladen sätter
+     egna på sina rutor. Ritas om efter varje omritning — omritningen slänger
+     hela klonen med allt som hängde i den. */
+  function markeraArbete() {
+    $$('.gshimmer', plan).forEach(s => s.remove());
+    if (!arbetar || arbetar.ark !== arkIndex()) return;
+    arbetar.elen.forEach(id => $$(`.gdok [data-el="${id}"]`, plan).forEach(el => {
+      const s = document.createElement('span');
+      s.className = 'gshimmer';
+      el.appendChild(s);
+    }));
+  }
+  /* ── OMRITNINGAR VI INTE BAD OM ────────────────────
+     Tavlan ritar om sig själv när den blivit mätbar (blad.js nar()), en stund
+     efter att canvasen öppnats — och den omritningen slänger rutorna med
+     markeringarna i. Klickade läraren på ett element strax innan slocknade
+     urvalet i pappret utan att någon rört det, och svepet hade gjort samma sak
+     mitt under ett varv. Vakten sätter tillbaka det granskningen äger.
+     Våra EGNA barn (nålar och svep) räknas inte som en omritning — annars hade
+     markeraArbete väckt vakten som väckte markeraArbete, bildruta efter
+     bildruta. */
+  let atersatt = 0;
+  const varEgen = m => [...m.addedNodes, ...m.removedNodes].every(n =>
+    n.nodeType === 1 && (n.classList.contains('gpin') || n.classList.contains('gshimmer')));
+  if (typeof MutationObserver === 'function') {
+    new MutationObserver(muts => {
+      if (atersatt || skal.hidden) return;
+      if (muts.every(m => m.type !== 'childList' || varEgen(m))) return;
+      atersatt = requestAnimationFrame(() => {
+        atersatt = 0;
+        if (skal.hidden) return;
+        markeraMalen();
+        markeraArbete();
+      });
+    }).observe(plan, { childList: true, subtree: true });
+  }
+  /* ── BLINKEN PÅ DET SOM FAKTISKT ÄNDRADES ──────────
+     Serverns `andrade` är den ärliga listan (app/dokumentdiff.py), samma som
+     nålarna och kortet går på. Blinken hängs på OMRITNINGEN och inte på svaret:
+     arket ritas om HELT (plan.js iterera → visa → Blad.rita tömmer värden), och
+     en markering satt före det hade slängts med klonen. Kommer ingen omritning
+     — servern ändrade inget, eller pappret är prototypens — blinkar vi ändå,
+     på det som ligger framme, när väntan gått ut. */
+  let vantarBlink = null, blinkade = [];
+  function armeraBlink(idn, ark) {
+    if (!idn || !idn.length) return;
+    const mitt = vantarBlink = { idn: idn.slice(), ark: ark || 0 };
+    setTimeout(() => { if (vantarBlink === mitt) blinkaNu(); }, 700);
+  }
+  function blinkaNu() {
+    const b = vantarBlink;
+    vantarBlink = null;
+    /* Fel ark framme? Provet och lösningsförslaget bär samma id:n, och en blink
+       där hade lyst upp en ruta ingen skrev om. */
+    if (!b || b.ark !== arkIndex()) return;
+    blinkade = b.idn.slice();
+    b.idn.forEach(id => $$(`.gdok [data-el="${id}"]`, plan).forEach(el => {
+      el.setAttribute('data-blink', '');
+      setTimeout(() => el.removeAttribute('data-blink'), 1600);
+    }));
+  }
   const taBortMal = id => { malen = malen.filter(m => m.el !== id); ritaMal(); };
   const nollaMal = () => { malen = []; ritaMal(); };
   function vaxlaMal(el) {
@@ -244,7 +328,7 @@
   /* Varvet är över — hur det än slutade. Historikens knappar släpps HELT ett
      ögonblick, så att plan.js (ritaHistorik) hinner räkna om deras eget läge
      innan nästa post ur kön låser dem igen med rätt värde sparat. */
-  function varvetOver() { skickarNu = false; slappHistorik(); ritaFalt(); }
+  function varvetOver() { skickarNu = false; slappHistorik(); slappArbete(); ritaFalt(); }
   function ritaSkrivlage() { ritaFalt(); satHistoriklas(); }
   function ritaFalt() {
     const koar = skickarNu || ko.length > 0;
@@ -400,6 +484,9 @@
     andrade.slice(0, 2).forEach(id => {
       const p = document.createElement('p');
       p.style.margin = '0';
+      /* Vilken ruta paret gäller — «Ändrade delar»-kortet ovanför pekar hit,
+         och utan id:t hade det bara kunnat peka på diffen som helhet. */
+      p.dataset.el = id;
       p.innerHTML = '<span class="gfore"></span><span class="gefter"></span>';
       $('.gfore', p).textContent = kapa(fore[id]);
       $('.gefter', p).textContent = kapa(efter[id]);
@@ -541,6 +628,96 @@
       : `${post.namn} står kvar oförändrad. Något annat på pappret skrevs om i stället, och det är markerat.`;
   }
 
+  /* Etiketten SÅ SOM DEN STÅR, till skillnad från namnFor ovan som svarar i
+     gemener åt meningarna i tråden. Kortet nedan sätter namn på knappar, och
+     där ska det stå «Uppgift 3» precis som i målchipsen. */
+  const namnRakt = id => {
+    const el = $(`.gdok [data-el="${id}"]`, plan);
+    return (el && el.dataset.namn) || '';
+  };
+  /* ── ÄNDRADE DELAR ─────────────────────────────────
+     Ett varv säger i dag i löpande text vad som hände, och blir det tre rutor
+     drunknar de i meningen. Kortet räknar upp dem — ur SAMMA `andrade` som
+     nålarna och blinken går på, alltså serverns ärliga diff och inte en
+     avläsning av önskemålet. Varje del är en knapp: finns dess före/efter i
+     varvets diff lyser paret upp där, annars panoreras pappret till rutan. */
+  function ritaAndradeKort(varv, post, sagt) {
+    if (!sagt || !sagt.length) return;
+    const kort = document.createElement('div');
+    kort.className = 'gandrade';
+    kort.innerHTML = '<span class="gandradehuv"></span><div class="gandradelista"></div>';
+    $('.gandradehuv', kort).textContent = sagt.length === 1
+      ? '1 del ändrades' : `${sagt.length} delar ändrades`;
+    const ut = $('.gandradelista', kort);
+    sagt.forEach(id => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'gandradedel';
+      b.dataset.el = id;
+      /* Hittas ingen etikett står id:t kvar hellre än ingenting: en tom knapp
+         är sämre än en knapp som heter «forsatt». */
+      b.textContent = namnRakt(id) || id;
+      b.addEventListener('click', ev => { ev.stopPropagation(); visaDel(varv, id, post.ark); });
+      ut.appendChild(b);
+    });
+    varv.appendChild(kort);
+  }
+  function visaDel(varv, id, ark) {
+    const rad = $(`.gdiff p[data-el="${id}"]`, varv);
+    if (rad) {
+      $$('.gdiff p[data-lyst]', lista).forEach(p => p.removeAttribute('data-lyst'));
+      rad.setAttribute('data-lyst', '');
+      (window.rullaLada || ((b, y) => { b.scrollTop = y; }))(lista, varv.offsetTop - 40);
+      setTimeout(() => rad.removeAttribute('data-lyst'), 1800);
+      return;
+    }
+    visaElement(id, ark);
+  }
+  /* Panorera fram en ruta. Duken har ingen scroll — pappret flyttas med
+     `vy`-transformen — så vägen dit är en förskjutning och inte scrollIntoView. */
+  function visaElement(id, ark) {
+    if ((ark || 0) !== arkIndex()) {
+      window.toast && window.toast('Den rutan ligger på det andra arket.');
+      return;
+    }
+    const el = $(`.gdok [data-el="${id}"]`, plan);
+    if (!el) return;
+    const r = duk.getBoundingClientRect(), b = el.getBoundingClientRect();
+    vy.x += (r.left + r.width / 2) - (b.left + b.width / 2);
+    vy.y += (r.top + r.height / 2) - (b.top + b.height / 2);
+    satLage(null);
+    satVy();
+    markera(id, true);
+    setTimeout(() => markera(id, false), 1400);
+  }
+  /* ── «FUNKADE INTE» ────────────────────────────────
+     Blev varvet inte som läraren tänkt är omtaget en mening hon inte ska behöva
+     skriva en gång till: samma rutor, samma önskan, plus det servern själv sa
+     om varför det inte gick. Går genom KÖN som allt annat — ett varv i luften
+     åt gången, och står något redan där hamnar omtaget bakom det. */
+  function omtagText(post, res) {
+    /* Serverns egna meningar slutar med punkt, fallbacken gör det inte —
+       och en mening som glider ihop med nästa läser modellen som en enda. */
+    const fel = skalet(res) || 'resultatet blev inte som önskat';
+    return `${post.text}\n\nDet förra försöket gick fel: ${fel}${/[.!?]$/.test(fel) ? '' : '.'}`
+      + ' Gör om ändringen, den här gången så att önskemålet uppfylls.';
+  }
+  function ritaOmtag(varv, post, res) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'gomtag';
+    b.textContent = 'Funkade inte';
+    b.addEventListener('click', ev => {
+      ev.stopPropagation();
+      /* Ett omtag per varv: klickas knappen två gånger står samma mening två
+         gånger i kön. Misslyckas omtaget får DET varvet sin egen knapp. */
+      b.disabled = true;
+      kosatt({ text: omtagText(post, res), ark: post.ark,
+               mal: post.malen.map(m => Object.assign({}, m)) });
+    });
+    varv.appendChild(b);
+  }
+
   /* Vad varvet HETER — i tråden, i jobbtexten och i svaren: rutornas egna
      etiketter, uppräknade på svenska. Utan valda rutor är det arket som gäller,
      och det slås upp på postens eget ark (se arkNamnFor). */
@@ -559,8 +736,13 @@
     /* Urvalet nollställs så fort meningen är avskickad — nästa klick och nästa
        mening börjar rent, precis som förut. */
     nollaMal();
-    /* Går ett varv, eller står redan något i kön? Då bakom det. FIFO: läraren
-       skrev meningarna i en ordning, och den ordningen är hennes. */
+    kosatt(onskan);
+  }
+  /* Går ett varv, eller står redan något i kön? Då bakom det. FIFO: läraren
+     skrev meningarna i en ordning, och den ordningen är hennes. Egen funktion
+     för att «Funkade inte» går samma väg — ett omtag är en post som alla
+     andra. */
+  function kosatt(onskan) {
     if (skickarNu || ko.length) return koa(onskan);
     korOnskan(onskan);
   }
@@ -721,6 +903,9 @@
     varv.addEventListener('pointerleave', () => post.elen.forEach(id => markera(id, false)));
     varv.addEventListener('click', () => fokusera(post.id));
     post.elen.forEach(id => satNal(id, post.id, post.ark));
+    /* Svepet över rutorna varvet gäller — se VÄNTAN SOM SYNS ovan. Urvalet är
+       redan nollställt här, så markeringen kan inte bäras av `data-mal`. */
+    satArbete(post.elen, post.ark);
     (window.rullaLada || ((b, y) => { b.scrollTop = y; }))(lista, lista.scrollHeight);
 
     window.Fraga.kor($('.gsvar', varv), {
@@ -766,6 +951,14 @@
            om vad som går att ångra — och SIST går nästa post ur kön, som låser
            igen med det nyss uträknade läget sparat. */
         varvetOver();
+        /* Kortet byggs FÖRE omritningen: etiketterna läses ur klonen som ligger
+           framme, och den bär samma id:n som den nya (blad.js markera sätter
+           dem varje varv). Blinken armeras samtidigt men avfyras först när
+           omritningen landat — se armeraBlink. */
+        const sagt = res && Array.isArray(res.andrade) ? res.andrade : null;
+        ritaAndradeKort(varv, post, sagt);
+        ritaOmtag(varv, post, res);
+        armeraBlink(sagt, post.ark);
         if (host && host.onAndra) host.onAndra(post.text, post.namn, post.elen, res);
         vantaDiff(varv, fore, 0, foreArk);
         (window.rullaLada || ((b, y) => { b.scrollTop = y; }))(lista, lista.scrollHeight);
@@ -798,6 +991,86 @@
   $('#g-falt').addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#g-form').requestSubmit(); }
   });
+  /* ── MINI-CHATTEN VID RUTAN ────────────────────────
+     Med EXAKT en ruta vald ligger knappen vid rutan i stället för i panelen
+     520 px bort: ögat står redan där, och meningen ska kunna skrivas där ögat
+     är. Den skickar genom `skicka()` — samma kö, samma prompt, samma tråd. En
+     egen väg hade blivit en andra sanning att hålla i takt med panelchatten.
+     Flera valda rutor får ingen knapp: den hör till EN ruta, och «den här» om
+     tre rutor betyder ingenting. */
+  const mini = $('#g-mini'), miniform = $('#g-miniform'), minifalt = $('#g-minifalt'),
+        miniknapp = $('#g-miniknapp');
+  let miniBild = 0;
+  const miniMal = () => (valjLage && malen.length === 1)
+    ? $(`.gdok [data-el="${malen[0].el}"]`, plan) : null;
+  function satMini() {
+    const el = miniMal();
+    if (!el) return stangMini(true);
+    mini.hidden = false;
+    flyttaMini(el);
+    if (!miniBild) miniBild = requestAnimationFrame(foljMini);
+  }
+  /* Pappret panoreras och zoomas med en transform — det finns ingen
+     scrollposition att lyssna på, så rutans plats mäts om varje bildruta.
+     Slingan går bara så länge knappen syns. */
+  function foljMini() {
+    miniBild = 0;
+    if (mini.hidden) return;
+    const el = miniMal();
+    if (!el) return stangMini(true);
+    flyttaMini(el);
+    miniBild = requestAnimationFrame(foljMini);
+  }
+  /* Klämd innanför duken: pappret kan ligga halvt utanför kanten, och en knapp
+     som följt med dit hade hamnat under panelen eller under headern. */
+  function flyttaMini(el) {
+    const r = duk.getBoundingClientRect(), b = el.getBoundingClientRect();
+    const br = mini.offsetWidth || 150, h = mini.offsetHeight || 34;
+    mini.style.left = Math.round(Math.min(Math.max(b.left, r.left + 10), Math.max(r.left + 10, r.right - br - 10))) + 'px';
+    mini.style.top = Math.round(Math.min(Math.max(b.top - h - 8, r.top + 10), Math.max(r.top + 10, r.bottom - h - 10))) + 'px';
+  }
+  /* `helt` gömmer hela knappen; utan den fälls bara fältet ihop och knappen
+     står kvar — rutan är fortfarande vald. */
+  function stangMini(helt) {
+    if (!mini) return;
+    miniform.hidden = true;
+    minifalt.value = '';
+    minifalt.style.height = 'auto';
+    miniknapp.hidden = false;
+    if (!helt) return;
+    mini.hidden = true;
+    if (miniBild) cancelAnimationFrame(miniBild);
+    miniBild = 0;
+  }
+  if (mini) {
+    miniknapp.addEventListener('click', ev => {
+      ev.stopPropagation();
+      miniknapp.hidden = true;
+      miniform.hidden = false;
+      flyttaMini(miniMal() || duk);
+      minifalt.focus({ preventScroll: true });
+    });
+    miniform.addEventListener('submit', e => {
+      e.preventDefault();
+      const t = minifalt.value;
+      if (!t.trim()) return;
+      stangMini(false);
+      /* `skicka` nollställer urvalet, och då gömmer ritaMal → satMini knappen
+         av sig själv. Ingen egen städning här. */
+      skicka(t);
+    });
+    minifalt.addEventListener('input', () => {
+      minifalt.style.height = 'auto';
+      minifalt.style.height = Math.min(88, minifalt.scrollHeight) + 'px';
+    });
+    minifalt.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); miniform.requestSubmit(); return; }
+      /* Esc fäller ihop fältet och stänger INTE canvasen: `tangent` på
+         document hade annars fått gesten och tagit hela överlägget med sig. */
+      if (e.key === 'Escape') { e.stopPropagation(); stangMini(false); }
+    });
+  }
+
   /* Bilden hör till EN ruta — den läggs på ett ställe i pappret. Med flera valda
      är det den första, alltså den läraren pekade på först. */
   $('#g-bild').addEventListener('click', () => { if (host && host.onBild) host.onBild(malen.length ? malen[0].el : 'rubrik'); });
@@ -840,6 +1113,8 @@
     $('#g-titel').textContent = o.titel || 'Utkast';
     $('#g-meta').textContent = o.meta || '';
     kommentarer = []; nr = 0; malen = []; senaste = { varv: 0, ark: 0, par: {} };
+    /* Nytt papper: svepet och den armerade blinken hörde till det förra. */
+    arbetar = null; vantarBlink = null;
     satSnabb(false);          // nytt papper, inget element valt än
     /* Nytt papper, tom kö. Ett varv som fortfarande går hör till det förra
        pappret — plan.js slänger dess svar (se sammaPapper där) — och de köade
@@ -872,6 +1147,7 @@
     document.addEventListener('keydown', tangent);
   }
   function stang() {
+    stangMini(true);
     skal.removeAttribute('data-pa');
     document.body.style.overflow = forraOverflow;
     setTimeout(() => { skal.hidden = true; }, 220);
@@ -928,6 +1204,12 @@
        hela trådens markeringar — och de pekade på uppgifter ingen kommenterat. */
     kommentarer.forEach(k => k.elen.forEach(id => satNal(id, k.id, k.ark)));
     markeraMalen();
+    /* Svepet och blinken hängde i den gamla klonen och följde inte med hit.
+       Blinken hör HIT och ingen annanstans: det är först nu det nya pappret
+       står på skärmen, och en blink satt före omritningen hade slängts med
+       klonen utan att någon sett den. */
+    markeraArbete();
+    blinkaNu();
     satVy();
   }
   /* Vad prickarna i pappret behöver av granskningen: paret att visa, och vägen
@@ -951,6 +1233,11 @@
                      /* Kön utåt, som text: e2e ska kunna fråga vad som väntar
                         utan att gräva i panelens DOM. */
                      get koad() { return ko.map(x => x.text); },
+                     /* Blinken varar 1,6 s och går inte att fånga med en
+                        väntande expect — den senaste listan står kvar här av
+                        samma skäl som `koad` finns: e2e ska slippa jaga en
+                        markering i DOM:en. */
+                     get blinkade() { return blinkade.slice(); },
                      get senasteVarv() { return senaste.varv; },
                      get kommentarer() { return kommentarer; } };
 })();
