@@ -1,6 +1,6 @@
-"""Strömmen som bär alla långa jobb (app/web/sse.py) — och buggkandidat 8.
+"""Strömmen som bär de FLIKBUNDNA jobben (app/web/sse.py) — och buggkandidat 8.
 
-Tavlan, provet, transkriberingen, boken, tryckpaketet och chatten går alla
+Transkriberingen, boken, tryckpaketet, arkivfrågan och underlagsläsningen går
 genom `sse_response`: ett jobb på en tråd, dess händelser ut som SSE. Två
 egenskaper prövas här, och den andra är den som kostade pengar:
 
@@ -9,6 +9,11 @@ egenskaper prövas här, och den andra är den som kostade pengar:
    till sista tecknet, höll GPU-låset hela tiden och skrev sitt resultat till en
    kö ingen läste — ett avbrutet chattanrop kostade alltså hela Claude-körningen
    ändå, och nästa dokument möttes av «GPU:n är upptagen».
+
+DOKUMENTJOBBEN (provet, tavlan, arbetsbladet, anteckningarna) gör tvärtom sedan
+Etapp 2: de går genom `jobb_response`, ligger i databasen och lever vidare när
+fliken stängs. Det är rätt svar för dem av samma skäl som regel 2 är rätt här —
+frågan är vem som betalar för väntan. Se tests/test_jobb.py.
 
 Testerna kör strömmen direkt i stället för över HTTP. Nedkopplingen syns bara
 på ASGI:s receive-kanal, och den kan ingen testklient härma trovärdigt — men

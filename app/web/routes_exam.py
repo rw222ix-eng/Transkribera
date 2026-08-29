@@ -32,7 +32,34 @@ from app import (ci_profil, course_data, db, dokumentdiff, exam_gen,
 # create_router, och anropet blir ett rekursivt HTTP-lager djupt.
 from app import kalibrering as kalibrering_modul
 from app.web import routes_planning
-from app.web.sse import sse_response
+from app.web.sse import Stege, jobb_response
+
+# ── DOMÄNSTEGEN ──────────────────────────────────────────────────────────────
+# Ladderna för de tre långa jobben. De ligger HÄR, i en tabell, och inte
+# utspridda i koden: hoppar ett steg över (bedömningspasset körs bara för prov,
+# reparationsrundan bara när något gick fel) räknar `Stege` fram numret ändå,
+# och läraren ser mätaren gå framåt utan att någon behövt räkna procent.
+# Namnen — nycklarna — är det generatorn säger; texterna är det läraren läser.
+_STEG_SKRIV = [
+    ("underlag", "Läser underlaget"),
+    ("bok", "Läser boken"),
+    ("skriver", "Skriver uppgifterna"),
+    ("reparerar", "Rättar det som inte höll"),
+    ("domare", "Domarna granskar"),
+    ("bedomning", "Skriver elevexempel"),
+    ("sparar", "Sparar pappret"),
+]
+_STEG_OM = [
+    ("skriver", "Skriver om pappret"),
+    ("reparerar", "Rättar det som inte höll"),
+    ("domare", "Domarna granskar"),
+    ("sparar", "Sparar varvet"),
+]
+_STEG_GODKANN = [
+    ("latex", "Sätter LaTeX"),
+    ("pdf", "Bygger PDF"),
+    ("sparar", "Sparar pappret"),
+]
 
 # Molnjobben köar inte bakom kortet längre (se gpu_arbiter): de delar en
 # semafor med tak, och beskedet över taket säger vad som faktiskt pågår.
@@ -596,9 +623,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
             return JSONResponse(_LLM_BUSY, status_code=409)
 
         def job(emit):
+            steg = Stege(emit, _STEG_SKRIV)
             try:
                 if arbiter.ensure_llm() is None:
                     raise RuntimeError("Språkmodellen är inte installerad.")
+                steg.na("underlag")
                 # Bokdörren (Etapp 0.8): uppgifterna ska ansluta till de sidor
                 # klassen arbetar med. Hur mycket av boken som går in beror på
                 # PAPPRET — lärarens dom (2026-08-22): «tavlan måste ha en
@@ -612,6 +641,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 #     tavlan (bok_las_text) — spannet är en lektion och
                 #     uppgifterna ska spegla bokens i detalj.
                 oversikt = typ in ("prov", "diagnos")
+                steg.na("bok")
                 bok_block = (routes_planning.bok_prov_text(base, db_file, body,
                                                            emit=emit)
                              if oversikt else
@@ -637,18 +667,34 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     koder=koder, skeleton=skelett, niva_mal=niva_mal,
                     riktat=riktat_block, grupp=grupp,
                     illustration=illustration,
-                    # ── TEXTEN ÄR KONTRAKTET, INTE ETT PROCENTTAL ──────
-                    # Generatorn skickar numera «Skriver uppgift 4 av 12 …» ur
-                    # strömmen (exam_gen._Uppgiftsraknare), och klienten läser
-                    # SIFFRORNA UR RADEN för att flytta sin mätare
-                    # (app/web/ui/fraga.js, stegAv). Alternativet — ett eget
-                    # {"type":"progress","pct":N} härifrån — hade krävt en
-                    # steg→procent-tabell på BÅDA sidor: samma sprödhet, dubbelt
-                    # så mycket kod, och två ställen att glömma när en loggrad
-                    # byter ordalydelse. Raden läraren läser och siffran mätaren
-                    # visar kommer nu ur samma mening, och kan inte säga emot
-                    # varandra.
-                    log_cb=lambda m: emit({"type": "log", "msg": m}))
+                    # ── TVÅ SPÅR, INGEN PROCENT PÅ NÅGOT AV DEM ───────
+                    # Det stod länge bara EN kanal här: loggraden. Generatorn
+                    # skickar «Skriver uppgift 4 av 12 …» ur strömmen
+                    # (exam_gen._Uppgiftsraknare) och klienten läste SIFFRORNA
+                    # UR RADEN för att flytta sin mätare. Det var rätt val mot
+                    # alternativet som fanns då — ett {"type":"progress",
+                    # "pct":N} härifrån hade krävt en steg→procent-tabell på
+                    # BÅDA sidor, dubbelt så mycket kod och två ställen att
+                    # glömma när en loggrad byter ordalydelse.
+                    #
+                    # Vad som ändrades: raden kunde bara säga var INNE I
+                    # SKRIVNINGEN det stod. Domarna, reparationsrundan och
+                    # bedömningspasset — som tillsammans är halva väntetiden —
+                    # gled förbi som texter utan plats i förloppet, och mätaren
+                    # stod still i minuter.
+                    #
+                    # Nu finns två spår, och båda är hämtade ur vad som
+                    # FAKTISKT händer, inte ur en tabell över hur långt det
+                    # brukar vara:
+                    #   · `steg_cb` namnger var i arbetet vi är («domare»).
+                    #     Numret och texten sätts av `Stege` ur ladderna högst
+                    #     upp i den här filen — EN tabell, på en sida.
+                    #   · `log_cb` är raden som förut, med sitt «n av N», och
+                    #     klienten delar in det aktuella stegets band efter den.
+                    # Ingen procent i något av dem: klienten räknar, servern
+                    # säger vad den gör.
+                    log_cb=lambda m: emit({"type": "log", "msg": m}),
+                    steg_cb=steg.na)
                 # Upplägget är lärarens val, inte modellens: skriv in det som
                 # valdes även om modellen råkade fylla i något annat. Samma sak
                 # med mottagaren — namnet på pappret är lärarens beslut.
@@ -687,6 +733,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # Ingen bild genereras här och inget bild-API anropas — det
                 # är hennes uttryckliga beslut (se app/platar.py).
                 platar.matcha_exam(res["exam"], base=base)
+                steg.na("sparar")
                 conn = db.connect(db_file)
                 try:
                     view = db.create_exam(
@@ -705,7 +752,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
             finally:
                 arbiter.release_llm(llm)
 
-        return sse_response(job, req)
+        # Jobbet, inte strömmen, äger körningen (se app/web/sse.py). Läraren som
+        # stänger fliken mitt i ett prov får pappret skrivet ändå — det är ändå
+        # betalt — och hittar det när hon kommer tillbaka. Molnplatsen hålls
+        # hela vägen: `finally` ovan körs oavsett vem som gick.
+        return jobb_response(job, req, typ=typ, db_file=db_file)
 
     # -------------------------------------------------------------- refine --
 
@@ -809,6 +860,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                      else routes_planning.bok_text(db_file, body))
 
         def job(emit):
+            steg = Stege(emit, _STEG_OM)
             try:
                 if arbiter.ensure_llm() is None:
                     raise RuntimeError("Språkmodellen är inte installerad.")
@@ -819,7 +871,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     bok=bok_block, historik=historik,
                     profil=view.get("typ") or "prov",
                     niva_mal=nivaval["mal"] if nivaval else None,
-                    log_cb=lambda m: emit({"type": "log", "msg": m}))
+                    log_cb=lambda m: emit({"type": "log", "msg": m}),
+                    steg_cb=steg.na)
                 # Klockslagen överlever omskrivningen: modellen skriver om
                 # hela dokumentet och känner inte fältet, så tiden hämtas ur
                 # den version som låg framme.
@@ -832,14 +885,17 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # ordmatchning och kostar ingenting.
                 platar.matcha_exam(res["exam"], base=base)
                 if res["exam"] is not None and res["exam"] != view["exam"]:
-                    # ── LYSSNAR NÅGON ÄN? ────────────────────────
-                    # Läraren som tryckte Avbryt eller stängde fliken fick
-                    # versionen sparad ändå: strömmen är avbruten men tråden
-                    # kör vidare, och mellan sista loggraden och skrivningen
-                    # fanns inget livstecken att avbryta VID. Ett emit precis
-                    # före skrivningen är det livstecknet — `emit` kastar
-                    # KlientBorta när ingen lyssnar, och då committas inget.
-                    emit({"type": "log", "msg": "Sparar varvet …"})
+                    # ── SA HON ÅT OSS ATT SLUTA? ─────────────────
+                    # Raden fanns förr för att fråga om NÅGON LYSSNADE: mellan
+                    # sista loggraden och skrivningen saknades ett livstecken,
+                    # och en stängd flik fick varvet sparat ändå.
+                    #
+                    # Frågan är en annan nu. En stängd flik är inget avbrott —
+                    # varvet är betalt och ska sparas (app/web/sse.py). Det som
+                    # stoppar är lärarens Avbryt, och `emit` kastar
+                    # `JobbAvbrutet` här om hon tryckt den. Samma rad, samma
+                    # plats, samma korta väg till stopp — men på hennes ord.
+                    steg.na("sparar")
                     # Och: har någon annan hunnit skriva om samma papper medan
                     # vi väntade på modellen är vår text byggd på en version som
                     # inte längre gäller. Att spara den vore last-write-wins —
@@ -865,7 +921,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 arbiter.release_llm(llm)
                 _slapp_varvet(exam_id)
 
-        return sse_response(job, req)
+        return jobb_response(job, req, typ=view.get("typ") or "prov",
+                             db_file=db_file, dokument_id=exam_id)
 
     # ------------------------------------------------------------- approve --
 
@@ -978,6 +1035,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # (fix_latex), och släpps direkt efteråt.
 
         def job(emit):
+            steg = Stege(emit, _STEG_GODKANN)
             llm = None                  # molnplatsens nyckel — bara om vi tar den
             try:
                 exam = view["exam"]
@@ -1045,6 +1103,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         exam["granser"] = exam_spec.kravgranser_ur_summor(
                             exam_spec.poangsummor(doc))
                     doc.granser = exam["granser"]
+                    steg.na("latex")
                     emit({"type": "log", "msg": "Renderar LaTeX …"})
                     # Typflaggan styr mallen (Fas 5): arbetsblad får facit-
                     # sida i samma dokument och ingen bedömningsanvisning.
@@ -1111,6 +1170,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     # en annan. Skärmens ark tas därför bara emot för de
                     # papper vars form BOR på skärmen.
                     if bild_uppgift and skarmen_galler:
+                        steg.na("pdf")
                         emit({"type": "log", "msg": "Lägger bladen på A4 …"})
                     skarm = (tryck.png_till_pdf(bild_uppgift, out_dir, slug)
                              if (bild_uppgift and skarmen_galler) else None)
@@ -1177,6 +1237,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         emit({"type": "log",
                               "msg": "PDF-motorn saknas — sparar .tex utan PDF."})
                         break
+                    steg.na("pdf")
                     emit({"type": "log", "msg": "Kompilerar PDF …"})
                     prov_pdf, log = exam_pdf.compile_pdf(tex, out_dir, slug)
                     # Ett prov som EN GÅNG kompilerat får inte försvinna för att
@@ -1279,6 +1340,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         llm = None
                     exam = fix["exam"]
 
+                steg.na("sparar")
                 conn = db.connect(db_file)
                 try:
                     # Sökvägarna hör till den version som FAKTISKT renderades.
@@ -1323,7 +1385,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 arbiter.release_llm(llm)
                 raise
 
-        return sse_response(job, req)
+        return jobb_response(job, req, typ=view.get("typ") or "prov",
+                             db_file=db_file, dokument_id=exam_id)
 
     # ------------------------------------------------------ tillbaka igen --
 

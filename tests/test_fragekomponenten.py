@@ -67,3 +67,33 @@ def test_bada_lagen_ropar_efterfel_och_efterklar():
         kropp = _kroppar(js, f"function {namn}(host, o)")[0]
         for anrop in ("o.efterFel(", "o.efterKlar("):
             assert anrop in kropp, f"{namn}() ropar aldrig {anrop}"
+
+
+def test_bada_lagen_sager_avbrottet_till_servern():
+    """Etapp 2: att riva fetchen stoppar inte längre jobbet.
+
+    Jobbet lever i servern (app/web/sse.py) och skriver klart sitt papper även
+    när ingen lyssnar — det är hela poängen. Alltså MÅSTE Avbryt gå vägen om
+    POST /api/jobb/{id}/avbryt, och den vägen måste tas FÖRE `styrning.abort()`:
+    efter rivningen finns ingen ström kvar som kunde ha burit id:t hit, och en
+    knapp som ser ut att stoppa något men inte gör det är värre än ingen knapp."""
+    js = FRAGA_JS.read_text(encoding="utf-8")
+    for i, kropp in enumerate(_kroppar(js, "const stoppa = ")):
+        assert "avbrytJobbet(" in kropp, (
+            f"stoppa() nr {i + 1} avbryter bara i webbläsaren — jobbet kör "
+            "vidare i servern och skriver klart pappret")
+        assert kropp.index("avbrytJobbet(") < kropp.index(".abort()")
+
+
+def test_strukturerade_steg_gar_fore_regexharledningen():
+    """Loggradens siffror är RESERVEN, inte den andra rösten.
+
+    Servern skickar {steg, av, text} på sina domänsteg. Så länge inget sådant
+    kommit läses procenten ur meningen som förut (stegAv). När ett kommit är
+    det stegen som äger bandet, och raden förfinar bara inom det — annars drar
+    två härledningar i samma mätare och den fastnar eller hoppar."""
+    js = FRAGA_JS.read_text(encoding="utf-8")
+    kropp = _kroppar(js, "function serverrad(m)")[0]
+    assert "if (band)" in kropp, "serverrad() vet inte om ett steg är känt"
+    assert kropp.index("if (band)") < kropp.index("stegAv(t)"), (
+        "regex-härledningen körs före stegen — den ska vara reserven")

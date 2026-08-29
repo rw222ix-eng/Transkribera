@@ -27,6 +27,37 @@
       : t.slice(0, tak - 1).replace(/[\s…]+$/, '') + '…';
   };
 
+  /* ── JOBBET BAKOM RUTAN ────────────────────────────────────────────
+     Sedan de långa jobben ligger i databasen (app/web/sse.py) har varje
+     körning ett id, och Avbryt måste säga det till servern: att bara riva
+     fetchen räcker inte längre — tråden lever vidare och skriver klart.
+
+     Id:t kommer hit som ett dokumentevent (api.js `sand`) och inte som ett
+     argument, för vägen hit går genom `o.jobb`, som anroparen skriver och som
+     bara skickar vidare `signal` och `log`. Att tvinga varje anropsställe att
+     bära id:t hade betytt en ändring i plan.js, granska.js, elever.js och
+     uppgifter.js för en sak ingen av dem har med att göra. */
+  function jobblyssnare(kroken) {
+    let id = null;
+    const start = e => { if (id === null) { id = e.detail.id; } };
+    const steg = e => { if (id === null || e.detail.id === id) kroken(e.detail); };
+    document.addEventListener('jobb-start', start);
+    document.addEventListener('jobb-steg', steg);
+    return {
+      get id() { return id; },
+      slut() {
+        document.removeEventListener('jobb-start', start);
+        document.removeEventListener('jobb-steg', steg);
+      },
+    };
+  }
+
+  /* Avbryt hos servern också — inte bara i webbläsaren. Tyst om det inte gick:
+     jobbet kan just ha blivit klart, och det är inget läraren behöver läsa om. */
+  function avbrytJobbet(id) {
+    if (id && window.API && window.API.avbrytJobb) window.API.avbrytJobb(id);
+  }
+
   /* Svarstexten målas likadant i båda lägena: [[tid|text]] blir källmarkör,
      *ord* blir markerat. */
   function malaText(str, node) {
@@ -80,9 +111,16 @@
     /* Samma `o.jobb` som i det stora läget: finns det väntar raden på ett
        riktigt anrop i stället för på en klocka, och Avbryt avbryter det. */
     const styrning = o.jobb ? new AbortController() : null;
+    /* Raden i det enkla läget har ingen mätare — stegen används därför bara
+       till texten. Ett namngivet steg är ändå ett bättre besked än den
+       oföränderliga jobbtexten: «Domarna granskar» säger var det står. */
+    const lyssnare = jobblyssnare(d => {
+      if (!stoppad && d.text) $('.fjobbtext', el).textContent = kortRad(d.text, 72);
+    });
     let svaret = null;
     const klarna = () => {
       if (stoppad) return;
+      lyssnare.slut();
       clearInterval(klocka);
       jobb.setAttribute('data-ut', '');
       setTimeout(() => jobb.remove(), 220);
@@ -105,6 +143,7 @@
        ändring som ser gjord ut men aldrig skedde. */
     const felade = e => {
       if (stoppad || (e && e.name === 'AbortError')) return;
+      lyssnare.slut();
       clearInterval(klocka);
       jobb.remove();
       el.dataset.lage = 'stoppad';
@@ -135,6 +174,11 @@
     }
     const stoppa = etikett => {
       stoppad = true;
+      /* Ordningen spelar roll: säg det till servern INNAN anropet rivs, medan
+         id:t fortfarande går att läsa. Rivningen ensam stoppar ingenting —
+         jobbet lever i servern och skriver klart sitt papper. */
+      avbrytJobbet(lyssnare.id);
+      lyssnare.slut();
       if (styrning) { try { styrning.abort(); } catch (e) { /* redan klar */ } }
       clearTimeout(t);
       clearInterval(klocka);
@@ -248,6 +292,29 @@
        varandra. Varför texten och inte ett eget pct-fält: se kommentaren vid
        log_cb i app/web/routes_exam.py. */
     const NUMMER = /uppgift (\d+)(?: av (\d+))?/i;
+
+    /* ── SERVERNS EGNA STEG ──────────────────────────────────────────
+       Regeln ovan läser procent ur MENINGEN. Den var rätt så länge servern bara
+       hade meningar — men den kunde bara säga var inne i SKRIVNINGEN det stod.
+       Domarna, reparationsrundan och bedömningspasset är tillsammans halva
+       väntetiden, och de gled förbi som texter utan plats i förloppet: mätaren
+       stod stilla i minuter medan raden bytte innehåll.
+       Servern skickar nu {steg, av, text} på sina domänsteg (app/web/sse.py
+       Stege, med ladderna i rutterna). Har ETT sådant kommit är det de som
+       styr — regexen nedan blir reserv för de gamla loggraderna, inte en andra
+       röst som drar i samma mätare.
+       Bandet: appens egen läsning äger 0,04–0,14 (den sker här på datorn och
+       är över på ett par sekunder); serverns steg delar resten. */
+    let band = null;
+    const BAND0 = 0.14;
+    function serversteg(d) {
+      if (!d || !d.av) return;
+      const bredd = (1 - BAND0) / d.av;
+      band = [BAND0 + bredd * (d.steg - 1), BAND0 + bredd * d.steg];
+      serverSagt = true;
+      smal(kortRad(d.text), band[0], band[1]);
+    }
+
     function stegAv(m) {
       const d = NUMMER.exec(m);
       /* Med «n av N» får uppgiften sin egen skiva av bandet. Utan siffror
@@ -276,6 +343,21 @@
       const t = String(m || '').trim();
       if (!t || !smalt || !smalruta.isConnected) return;
       serverSagt = true;
+      /* Med ett känt steg är loggraden en FÖRFINING inom det, inte ett eget
+         bud på hur långt det gått: «Skriver uppgift 4 av 12» delar upp
+         skrivsteget, och en rad utan siffror byter bara text. Det är samma
+         mening som förut, men den flyttar mätaren inom sin egen skiva av
+         bandet i stället för mot en tabell som gissar var skivan börjar. */
+      if (band) {
+        const d = NUMMER.exec(t);
+        $('.fsmaltext', el).textContent = kortRad(t);
+        if (d && d[2]) {
+          const N = Math.max(1, +d[2]), n = Math.max(1, Math.min(N, +d[1]));
+          const [a, b] = band;
+          matare(a + (b - a) * (n - 1) / N, a + (b - a) * n / N);
+        }
+        return;
+      }
       const s = stegAv(t);
       if (s) smal(t, s[0], s[1]);
       else $('.fsmaltext', el).textContent = kortRad(t);
@@ -302,10 +384,16 @@
        kommit, klockan går i verklig tid, och Avbryt avbryter anropet på
        riktigt. Samma rader, samma ordning, samma texter. */
     const styrning = o.jobb ? new AbortController() : null;
+    /* Serverns domänsteg och jobbets id — se jobblyssnare högst upp. */
+    const lyssnare = jobblyssnare(d => { if (!stoppad) serversteg(d); });
     let svaret = null, jobbfel = null;
 
     const stoppa = (etikett) => {
       stoppad = true;
+      /* Servern först, medan id:t går att läsa: rivningen av fetchen stoppar
+         inte längre jobbet — det lever i servern och skriver klart. */
+      avbrytJobbet(lyssnare.id);
+      lyssnare.slut();
       if (styrning) { try { styrning.abort(); } catch (e) { /* redan klar */ } }
       timers.forEach(clearTimeout);
       /* Samma kontrakt som i korEnkel ovan: den som håller ett lås medan varvet
@@ -428,6 +516,7 @@
     function felade(e) {
       const avbrutet = e && (e.name === 'AbortError' || /abort/i.test(e.message || ''));
       if (avbrutet) return;
+      lyssnare.slut();
       timers.forEach(clearTimeout);
       el.dataset.lage = 'stoppad';
       smalUt();
@@ -478,6 +567,7 @@
     }
 
     function klar() {
+      lyssnare.slut();
       el.dataset.lage = 'klar';
       smalUt();
       vantelage(false);
@@ -584,7 +674,144 @@
     (window.rullaLada || ((x, y) => { x.scrollTop = y; }))(box, mal, 560);
   }
 
-  window.Fraga = { kor, get varm() { return varm; }, MODELL };
+  /* ══════════ JOBBET SOM STOD KVAR ══════════
+     Läraren stängde fliken mitt i ett prov, eller datorn somnade. Jobbet dog
+     inte med henne längre (app/web/sse.py) — men utan den här raden hade hon
+     inte VETAT det: sidan öppnades tom, och pappret dök upp i högen senare
+     utan förklaring.
+
+     Remsan är avsiktligt liten. Den gör en enda sak — säger att något pågår,
+     hur långt det kommit, och ger Avbryt — och den bygger INTE upp skrivvyn
+     igen. Att bära tillbaka läraren till steg 4 med rätt klass, kurs, källor
+     och kö vore att gissa vad hon höll på med; att säga sanningen och lämna
+     valet till henne är billigare och ärligare. Blir jobbet klart medan hon
+     tittar erbjuder remsan en omladdning, och då hämtar sidan pappret som
+     vanligt.
+
+     Egen `<style>` och inte en rad i app5.css, med flit: remsan hör ihop med
+     den här filen och ingen annan, och en delad CSS-fil är det ställe där två
+     parallella grenar krockar. */
+  const STIL = `
+.jater{position:fixed;left:50%;bottom:18px;transform:translateX(-50%) translateY(12px);
+  z-index:60;display:flex;align-items:center;gap:10px;max-width:min(560px,calc(100vw - 32px));
+  padding:10px 12px;border:1px solid var(--line,#DADADA);border-radius:var(--r-pill,9999px);
+  background:var(--surface,#fff);box-shadow:var(--shadow-sm,0 4px 4px rgba(0,0,0,.1));
+  font:500 13px/1.3 var(--sans,system-ui);color:var(--ink,#000);
+  opacity:0;transition:opacity .26s var(--ease,ease),transform .26s var(--ease,ease)}
+.jater[data-in]{opacity:1;transform:translateX(-50%) translateY(0)}
+.jater .jtext{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.jater .jspar{flex:0 0 74px;height:4px;border-radius:9999px;background:var(--track,#E8F1F8);overflow:hidden}
+.jater .jspar i{display:block;height:100%;width:4%;border-radius:9999px;
+  background:var(--accent,#117BC8);transition:width .4s linear}
+.jater button{flex:0 0 auto;border:0;background:none;padding:2px 6px;cursor:pointer;
+  font:inherit;color:var(--accent,#117BC8);text-decoration:underline}
+@media (prefers-reduced-motion:reduce){.jater,.jater .jspar i{transition:none}}`;
+
+  /* Typnamnen som de heter för läraren. Servern lagrar dokumenttypen
+     (routes_exam `typ`), som är samma ord — men i gemener och i den form
+     rutterna använder, inte i den form en mening börjar med. */
+  const TYPNAMN = { prov: 'Provet', arbetsblad: 'Arbetsbladet',
+                    gruppuppgift: 'Gruppuppgiften', diagnos: 'Diagnosen',
+                    tavla: 'Tavlan', anteckningar: 'Anteckningarna' };
+
+  function remsa(jobb) {
+    if (!document.getElementById('jaterstil')) {
+      const s = document.createElement('style');
+      s.id = 'jaterstil';
+      s.textContent = STIL;
+      document.head.appendChild(s);
+    }
+    const el = document.createElement('div');
+    el.className = 'jater';
+    el.setAttribute('role', 'status');
+    el.innerHTML = '<span class="jtext"></span><span class="jspar"><i></i></span>'
+      + '<button class="jstopp" type="button">Avbryt</button>';
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.setAttribute('data-in', ''));
+    const namn = TYPNAMN[jobb.typ] || 'Dokumentet';
+    const txt = $('.jtext', el), fyll = $('.jspar i', el);
+    txt.textContent = jobb.senaste ? `${namn}: ${kortRad(jobb.senaste, 48)}`
+                                   : `${namn} skrivs fortfarande …`;
+    const ut = () => {
+      el.removeAttribute('data-in');
+      setTimeout(() => el.remove(), 300);
+    };
+    const knapp = (etikett, gor) => {
+      const b = $('.jstopp', el);
+      b.textContent = etikett;
+      b.replaceWith(b.cloneNode(true));       // släpp gamla lyssnare
+      $('.jstopp', el).addEventListener('click', gor);
+    };
+    $('.jstopp', el).addEventListener('click', () => {
+      if (window.API.avbrytJobb) window.API.avbrytJobb(jobb.id);
+      ut();
+    });
+    return {
+      steg: d => {
+        if (!d.av) return;
+        fyll.style.width = Math.min(100, (d.steg / d.av) * 100).toFixed(1) + '%';
+        if (d.text) txt.textContent = `${namn}: ${kortRad(d.text, 48)}`;
+      },
+      log: m => { if (m) txt.textContent = `${namn}: ${kortRad(m, 48)}`; },
+      klar: () => {
+        fyll.style.width = '100%';
+        txt.textContent = `${namn} blev klart medan du var borta.`;
+        knapp('Ladda om', () => window.location.reload());
+      },
+      fel: m => {
+        txt.textContent = `${namn}: ${kortRad(m || 'det gick inte', 48)}`;
+        knapp('Stäng', ut);
+      },
+      tappad: () => {
+        /* Anslutningen tog slut, inte jobbet. Att skriva «klart» här vore en
+           lögn med konsekvens: läraren laddar om och pappret finns inte. */
+        txt.textContent = `${namn} skrivs vidare i bakgrunden — kontakten bröts.`;
+        knapp('Försök igen', () => { ut(); aterupptagning(); });
+      },
+      ut,
+    };
+  }
+
+  /* Frågar EN gång vid sidladdning. Det senaste körande jobbet plockas upp —
+     appen skriver ett dokument i taget (varvlåset i routes_exam, bladkön i
+     plan.js), så «det senaste» är i praktiken «det». */
+  async function aterupptagning() {
+    if (!window.API || !window.API.pa || !window.API.aktivaJobb) return null;
+    let svar;
+    try { svar = await window.API.aktivaJobb(); } catch (e) { return null; }
+    const jobb = (svar && svar.kor && svar.kor[0]) || null;
+    if (!jobb) return null;
+    const r = remsa(jobb);
+    /* Från noll första gången och inte från `seq`: raderna som redan passerat
+       spelas upp på en gång och kostar ingenting, och den sista av dem är den
+       enda som syns. Att be om ett spann vi ändå inte kan räkna fram exakt
+       vore att riskera att missa just den.
+
+       Sedan: en ström som tar slut UTAN att jobbet sagt sitt sista ord betyder
+       att anslutningen dog, inte jobbet. Då hakar vi på igen där vi slutade.
+       Att i stället skriva «klart» vore en lögn med följd — läraren laddar om
+       och pappret finns inte. */
+    let fran = 0;
+    for (let i = 0; i < 3; i++) {
+      let l;
+      try {
+        l = await window.API.jobbStrom(jobb.id, { steg: r.steg, log: r.log }, fran);
+      } catch (e) {
+        r.fel(e && e.message);
+        return jobb;
+      }
+      if (l.avbrutet) { r.ut(); return jobb; }   // hon avbröt det i en annan flik
+      if (l.fel) { r.fel(l.fel); return jobb; }
+      if (l.slut) { r.klar(); return jobb; }
+      fran = l.seq + 1;
+    }
+    r.tappad();
+    return jobb;
+  }
+
+  document.addEventListener('api-redo', () => { aterupptagning(); });
+
+  window.Fraga = { kor, aterupptagning, get varm() { return varm; }, MODELL };
 
   /* En kort uppspelning i svaret: knappen blir ett spår som fylls, och raden ur
      transkriptet står under källorna medan den spelas. */
