@@ -21,7 +21,7 @@ import re
 import threading
 from pathlib import Path
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from app import (ci_profil, course_data, db, dokumentdiff, exam_gen,
@@ -219,7 +219,15 @@ def create_router(base: Path, arbiter) -> APIRouter:
     # ----------------------------------------------------- föreslaget antal --
 
     @router.get("/api/exams/foreslag-antal")
-    def foreslag_antal(tid: int, typ: str = "prov", nivamix: str | None = None,
+    # FUZZFYND 2026-08-29: `tid` och `antal` (nedan) var obundna heltal, och
+    # båda vägarna bygger ett SKELETT med en post per uppgift. `?tid=99999999`
+    # respektive `?antal=99999999` låser alltså tråden i minuter och äter minne
+    # tills den dör. Schemathesis hittade det genom att helt enkelt skicka ett
+    # stort tal. Gränserna är FastAPI:s egna (422 i stället för hängning) och
+    # står i schemat, så fuzzern slutar leta där också. 1440 = ett dygns
+    # provtid, 200 uppgifter = tio gånger det längsta prov läraren skrivit.
+    def foreslag_antal(tid: int = Query(ge=1, le=1440), typ: str = "prov",
+                       nivamix: str | None = None,
                        takt: float | None = None):
         """Hur många uppgifter provtiden rymmer — lärarens motsvarighet till
         diagnosens dimensionering, fast åt andra hållet.
@@ -243,7 +251,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
     # -------------------------------------------------- skelettets summor --
 
     @router.get("/api/exams/skelett")
-    def skelett(antal: int, typ: str = "prov", nivamix: str | None = None,
+    def skelett(antal: int = Query(ge=1, le=200), typ: str = "prov",
+                nivamix: str | None = None,
                 takt: float | None = None, delar: bool | None = None):
         """Vad upplägget skulle ge INNAN pappret är skrivet: {antal, poang,
         summor {e, c, a}, tid, takt}.

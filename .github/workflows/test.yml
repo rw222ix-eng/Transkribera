@@ -114,6 +114,26 @@ jobs:
           name: playwright-spar
           path: e2e/test-results
 
+  # Fuzzningen får ett EGET jobb, inte en rad i pytest-jobbet. Två skäl: den
+  # behöver varken ffmpeg eller Tectonic (den rör bara HTTP-ytan), och den tar
+  # en dryg minut som annars läggs på de 45 minuter pytest-jobbet redan har.
+  # Faller den har en rutt börjat svara 5xx på skräpindata, vilket inte ska
+  # förväxlas med de kända fynden: de ligger som xfail i test_api_fuzz.py.
+  fuzz:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: schemathesis
+        env:
+          KOR_FUZZ: "1"
+        run: pytest -m fuzz -q -p no:cacheprovider
+
   beroenden:
     runs-on: windows-latest
     timeout-minutes: 20

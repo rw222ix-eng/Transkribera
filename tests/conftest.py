@@ -41,6 +41,11 @@ def pytest_configure(config):
         "markers", "tectonic: kräver den buntade Tectonic-motorn (bin/tectonic)")
     config.addinivalue_line(
         "markers", "ffmpeg: kräver riktig ffmpeg/ffprobe på maskinen")
+    # Fuzzningen (tests/test_api_fuzz.py) är opt-in via KOR_FUZZ och hoppar över
+    # sig själv på modulnivå. Markern finns för att kunna VÄLJA den: `-m fuzz`
+    # kör bara den, `-m "not fuzz"` kör resten.
+    config.addinivalue_line(
+        "markers", "fuzz: schemathesis mot API-ytan (kräver KOR_FUZZ=1)")
 
 
 def pytest_runtest_setup(item):

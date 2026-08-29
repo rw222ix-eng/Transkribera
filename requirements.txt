@@ -39,3 +39,5 @@ google-auth-oauthlib
 pytest
 pytest-cov
 hypothesis          # egenskapstester: segmenteringen, tiderna, datummatten
+schemathesis        # fuzzar API-ytan ur /openapi.json (tests/test_api_fuzz.py);
+                    # kör bara med KOR_FUZZ=1, alltså i CI:s egna jobb
