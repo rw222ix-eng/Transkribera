@@ -16,12 +16,14 @@ Fas 2 wires the LLM that fills ``insights``.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import sqlite3
 import threading
+from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 26
+SCHEMA_VERSION = 27
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -785,6 +787,46 @@ _NIVAVAL_MIGRATION = """
 ALTER TABLE exams ADD COLUMN nivaval TEXT;
 """
 
+# Jobben som överlever fliken (v27) — ENDAST additiv; rollback: DROP TABLE
+# jobb_events; DROP TABLE jobb; + PRAGMA user_version=26.
+#
+# Ett långt jobb (prov, tavla, blad, anteckningar) levde förr bara så länge
+# SSE-strömmen gjorde det: stängde läraren fliken kastades hela Claude-körningen
+# — den var ändå betald. Nu ligger jobbet i databasen, och strömmen är bara ett
+# fönster mot det. Två tabeller, för de svarar på två frågor:
+#
+# * `jobb` — vad pågår, och hur gick det? Statusen är den som får läsas rakt av
+#   ur en ny flik: queued innan tråden hunnit igång, running medan den kör, och
+#   done/error/avbrutet när den är slut. `resultat_ref` pekar ut vad jobbet
+#   lämnade efter sig (provets id, planeringens pid) så att en återupptagen
+#   klient kan hitta pappret utan att läsa hela eventhistoriken.
+# * `jobb_events` — exakt de händelser klienten hade fått om den stått kvar,
+#   i ordning. `seq` är jobbets egen räknare (inte ett globalt rowid): en
+#   klient som tappar anslutningen säger «jag såg till 42» och får resten.
+#   Payloaden är eventets JSON ordagrant — samma rad som gick ut över SSE.
+#
+# ON DELETE CASCADE: eventen är meningslösa utan sitt jobb, och städningen av
+# gamla jobb ska inte behöva känna till dem.
+_JOBB_MIGRATION = """
+CREATE TABLE IF NOT EXISTS jobb (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    typ          TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'queued',
+    skapad       TEXT NOT NULL,
+    klar         TEXT,
+    fel          TEXT,
+    resultat_ref TEXT,
+    dokument_id  TEXT
+);
+CREATE TABLE IF NOT EXISTS jobb_events (
+    jobb_id INTEGER NOT NULL REFERENCES jobb(id) ON DELETE CASCADE,
+    seq     INTEGER NOT NULL,
+    payload TEXT NOT NULL,
+    PRIMARY KEY (jobb_id, seq)
+);
+CREATE INDEX IF NOT EXISTS idx_jobb_status ON jobb(status, id);
+"""
+
 _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                4: _PLANNING_MIGRATION, 5: _EXAMS_MIGRATION,
                                6: _GY25_MIGRATION, 7: _DATAGRUND_MIGRATION,
@@ -806,7 +848,8 @@ _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                23: _LEKTIONSDELAR_MIGRATION,
                                24: _BOKEXEMPEL_MIGRATION,
                                25: _FEEDBACKRORD_MIGRATION,
-                               26: _NIVAVAL_MIGRATION}
+                               26: _NIVAVAL_MIGRATION,
+                               27: _JOBB_MIGRATION}
 
 # Migreringar som bara innehåller ALTER TABLE … ADD COLUMN. De körs sats för
 # sats så att en redan tillagd kolumn hoppas över i stället för att fälla hela
@@ -894,6 +937,25 @@ def connect(db_path: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(str(db_path), check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")                 # per-connection, always
+    # ── DE TRE SOM GÖR TRÅDADE JOBB UTHÄRDLIGA ───────────────────────
+    # Alla tre är per anslutning och måste sättas om varje gång; ingen av dem
+    # rör filens innehåll.
+    #
+    # busy_timeout: utan den kastar sqlite «database is locked» PÅ FÖRSTA
+    # försöket. Med WAL är det bara skrivare mot skrivare som krockar, och de
+    # krockarna varar millisekunder — men jobbtrådarna (SSE) skriver samtidigt
+    # som webbförfrågningarna gör det, och en femsekunders väntan är skillnaden
+    # mellan «det tog ett ögonblick» och ett rött besked hos läraren.
+    conn.execute("PRAGMA busy_timeout=5000")
+    # synchronous=NORMAL är WAL-lägets rekommenderade inställning: fsync sker
+    # vid checkpoint i stället för vid varje commit. Det som kan gå förlorat i
+    # ett strömavbrott är de sista transaktionerna, inte databasen — och det är
+    # rätt avvägning här: appen skriver hundratals små rader per jobb
+    # (jobb_events), och FULL betalade en disksynk för var och en.
+    conn.execute("PRAGMA synchronous=NORMAL")
+    # Temporära tabeller och sorteringar i minnet i stället för i en fil bredvid
+    # databasen. Frågorna här är små; diskrundan är ren kostnad.
+    conn.execute("PRAGMA temp_store=MEMORY")
     if key not in _initialized:
         with _init_lock:
             if key not in _initialized:                    # double-check under lock
@@ -902,6 +964,47 @@ def connect(db_path: Path) -> sqlite3.Connection:
                 _ensure_fts(conn)
                 _initialized.add(key)
     return conn
+
+
+# ── SKRIVSESSIONEN ──────────────────────────────────────────────────────────
+# Ett processglobalt lås runt varje skrivning. Det låter tungt och är det inte:
+# appen har EN användare, skrivningarna är millisekundskorta, och läsningarna
+# går utanför låset (WAL låter dem gå parallellt med skrivaren ändå). Vad det
+# köper är att SSE-jobbens trådar — som numera lever vidare efter att fliken
+# stängts, och alltså kan skriva samtidigt som läraren klickar i en ny flik —
+# inte står och slåss om skrivlåset i sqlite och får «database is locked».
+_skrivlas = threading.RLock()
+
+
+@contextlib.contextmanager
+def skriv(conn: sqlite3.Connection):
+    """En skrivtransaktion. Ersätter `with conn:` överallt där något ändras.
+
+    `with conn:` committar på vägen ut men BÖRJAR ingen transaktion — sqlite3
+    öppnar den själv, som DEFERRED, vid första INSERT/UPDATE/DELETE. En deferred
+    transaktion tar skrivlåset först när den skriver, och två som hunnit läsa
+    däremellan kan inte båda uppgradera: den ena får SQLITE_BUSY och kan inte
+    ens vänta ut det, för att vänta hade varit en deadlock. BEGIN IMMEDIATE tar
+    skrivlåset direkt, och då är busy_timeout ovan det som gäller i stället —
+    den andra väntar och lyckas.
+
+    BEGIN hoppas över när anslutningen REDAN står i en transaktion — annars
+    faller anropet med «cannot start a transaction within a transaction». Det
+    händer på riktigt och inte bara vid nästling: `_get_or_create` committar
+    bara när den faktiskt skapade en rad, så en uppslagning som inte skapade
+    något lämnar sqlite3:s implicita transaktion öppen bakom sig. Committen
+    körs ändå, precis som `with conn:` gjorde — det är den som gör att
+    schemat, loven och kalendern hamnar på disk."""
+    with _skrivlas:
+        egen = not conn.in_transaction
+        if egen:
+            conn.execute("BEGIN IMMEDIATE")
+        try:
+            yield conn
+        except BaseException:
+            conn.rollback()
+            raise
+        conn.commit()
 
 
 def _ensure_fts(conn: sqlite3.Connection) -> None:
@@ -2145,7 +2248,7 @@ def replace_schema(conn: sqlite3.Connection, rader: list[dict]) -> list[dict]:
                       (r.get("fran") or "").strip() or None,
                       (r.get("till") or "").strip() or None,
                       ",".join(r.get("undantag") or []) or None))
-    with conn:
+    with skriv(conn):
         conn.execute("DELETE FROM schema_lektioner")
         conn.executemany(
             "INSERT INTO schema_lektioner"
@@ -2166,7 +2269,7 @@ def seed_lov(conn: sqlite3.Connection, poster: list[dict]) -> int:
     redan lagt in samma lov skrivs aldrig över, och omstart lägger inte
     dubbletter. Returnerar antal nya rader."""
     n = 0
-    with conn:
+    with skriv(conn):
         for p in poster or []:
             if not (p.get("fran") and p.get("till") and p.get("namn")):
                 continue
@@ -2183,7 +2286,7 @@ def replace_lov(conn: sqlite3.Connection, poster: list[dict], *,
     Med ett fönster (`fran`/`till`) rörs bara lov som ÖVERLAPPAR det. Utan den
     begränsningen raderade en synk i augusti påsklovet nästa vår, bara för att
     läsningen inte sträckte sig dit."""
-    with conn:
+    with skriv(conn):
         if fran and till:
             conn.execute("DELETE FROM lov WHERE till >= ? AND fran <= ?", (fran, till))
         else:
@@ -2237,7 +2340,7 @@ def add_kalenderpost(conn: sqlite3.Connection, *, datum: str, titel: str,
     if not datum or not titel:
         return None
     group_id = get_or_create_group(conn, klass or "")
-    with conn:
+    with skriv(conn):
         conn.execute(
             "INSERT OR IGNORE INTO kalenderposter(datum, tid, titel, group_id, slag, kalla) "
             "VALUES (?, ?, ?, ?, ?, ?)",
@@ -2274,7 +2377,7 @@ def replace_kalenderposter(conn: sqlite3.Connection, poster: list[dict],
                       None if ci is None else ",".join(ci) if isinstance(ci, (list, tuple))
                       else str(ci).strip(),
                       int(p.get("ci_okant") or 0) or None))
-    with conn:
+    with skriv(conn):
         if fran and till:
             conn.execute("DELETE FROM kalenderposter WHERE kalla = ? "
                          "AND datum BETWEEN ? AND ?", (kalla, fran, till))
@@ -2389,7 +2492,7 @@ def replace_lektionsinnehall(conn: sqlite3.Connection, poster: list[dict], *,
                       (p.get("uppg") or "").strip() or None,
                       None if hjm is None else str(hjm).strip(),
                       _delar_json(p.get("delar"))))
-    with conn:
+    with skriv(conn):
         if fran and till:
             conn.execute("DELETE FROM lektionsinnehall WHERE datum BETWEEN ? AND ?",
                          (fran, till))
@@ -2428,7 +2531,7 @@ def stada_rubrikkurser(conn: sqlite3.Connection) -> list[str]:
                 "SELECT course_id FROM lessons UNION "
                 "SELECT course_id FROM planned_lessons")
     borttagna = []
-    with conn:
+    with skriv(conn):
         for r in conn.execute("SELECT id, namn FROM courses").fetchall():
             namn = (r["namn"] or "").strip()
             if not any(namn.lower().startswith(f"{g.strip().lower()}:")
@@ -2463,7 +2566,7 @@ def save_kalenderbeslut(conn: sqlite3.Connection, beslut: dict[str, dict]) -> in
     rader = [(n, b.get("slag"), b.get("klass"), b.get("kurs"), b.get("namn"), nu)
              for n, b in (beslut or {}).items()
              if isinstance(b, dict) and b.get("slag")]
-    with conn:
+    with skriv(conn):
         conn.executemany(
             "INSERT INTO kalenderbeslut(nyckel, slag, klass, kurs, namn, updated_at) "
             "VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(nyckel) DO UPDATE SET "
@@ -2587,7 +2690,7 @@ def create_dokument(conn: sqlite3.Connection, *, dokument: dict,
     if sort is None:
         rad = conn.execute("SELECT COALESCE(MAX(sort), -1) + 1 AS n FROM dokument").fetchone()
         sort = rad["n"]
-    with conn:
+    with skriv(conn):
         cur = conn.execute(
             "INSERT INTO dokument(typ, moment, group_id, course_id, datum, tid, "
             "status, markor, sort, foljd, elev_id, created_at, updated_at) "
@@ -2616,7 +2719,7 @@ def add_dokument_version(conn: sqlite3.Connection, dokument_id: int, *,
     kol = _dokument_kolumner(dokument or {})
     gid = get_or_create_group(conn, (dokument or {}).get("klass") or "")
     cid = get_or_create_course(conn, (dokument or {}).get("kurs") or "")
-    with conn:
+    with skriv(conn):
         conn.execute("DELETE FROM dokument_versioner WHERE dokument_id = ? AND version > ?",
                      (dokument_id, markor))
         conn.execute(
@@ -2656,7 +2759,7 @@ def update_dokument(conn: sqlite3.Connection, dokument_id: int, *,
         satt.update(_dokument_kolumner(dokument))
         satt["group_id"] = get_or_create_group(conn, dokument.get("klass") or "")
         satt["course_id"] = get_or_create_course(conn, dokument.get("kurs") or "")
-    with conn:
+    with skriv(conn):
         if dokument is not None:
             conn.execute(
                 "UPDATE dokument_versioner SET data = ?, anteckning = ? "
@@ -2669,7 +2772,7 @@ def update_dokument(conn: sqlite3.Connection, dokument_id: int, *,
 
 
 def delete_dokument(conn: sqlite3.Connection, dokument_id: int) -> bool:
-    with conn:
+    with skriv(conn):
         # Feedbacken hänger i dokument_id utan främmande nyckel (den finns bara
         # så länge poängen gör det) och följer därför inte med kaskaden.
         conn.execute("DELETE FROM elevfeedback WHERE dokument_id = ?", (dokument_id,))
@@ -2710,7 +2813,7 @@ def set_dokument_ordning(conn: sqlite3.Connection, ids: list[int]) -> list[dict]
     """Högens ordning som klienten håller den. Ett syskon ligger direkt efter
     sitt original, och en ångrad radering hamnar tillbaka på sin plats — det är
     positioner, inte tidsstämplar, och de måste därför skrivas explicit."""
-    with conn:
+    with skriv(conn):
         conn.executemany("UPDATE dokument SET sort = ? WHERE id = ?",
                          [(i, int(d)) for i, d in enumerate(ids or [])])
     return list_dokument(conn)
@@ -2735,7 +2838,7 @@ def save_klassprofil(conn: sqlite3.Connection, minne: dict) -> dict:
     nu = _now()
     rader = [(k, json.dumps(v, ensure_ascii=False), nu)
              for k, v in (minne or {}).items() if isinstance(v, dict)]
-    with conn:
+    with skriv(conn):
         conn.execute("DELETE FROM klassprofil")
         conn.executemany(
             "INSERT INTO klassprofil(klass, data, updated_at) VALUES (?, ?, ?)", rader)
@@ -2790,7 +2893,7 @@ def save_rattning(conn: sqlite3.Connection, dokument_id: int, *,
     — därför ersätts raderna i stället för att läggas till, och en rad som
     tömts försvinner i stället för att stå kvar med sitt gamla värde."""
     nu = _now()
-    with conn:
+    with skriv(conn):
         conn.execute(
             "INSERT INTO rattning(dokument_id, exam_id, klass, kurs, datum, "
             "elever, andel, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
@@ -2870,7 +2973,7 @@ def delete_rattning(conn: sqlite3.Connection, dokument_id: int) -> bool:
     Elevernas rader följer med av samma skäl, och feedbacken därför att den
     inte HAR någon främmande nyckel att följa: texten är skriven ur poängen och
     överlever dem inte."""
-    with conn:
+    with skriv(conn):
         conn.execute("DELETE FROM elevfeedback WHERE dokument_id = ?", (dokument_id,))
         conn.execute("DELETE FROM elevresultat WHERE dokument_id = ?", (dokument_id,))
         conn.execute("DELETE FROM rattning_rader WHERE dokument_id = ?", (dokument_id,))
@@ -2921,7 +3024,7 @@ def save_elever(conn: sqlite3.Connection, group_id: int,
         if namn and namn.lower() not in sedda:
             sedda.add(namn.lower())
             rena.append(namn)
-    with conn:
+    with skriv(conn):
         conn.executemany(
             "INSERT INTO elever(group_id, namn, sort, aktiv) VALUES (?, ?, ?, 1) "
             "ON CONFLICT(group_id, namn) DO UPDATE SET sort = excluded.sort, "
@@ -2960,7 +3063,7 @@ def save_elevresultat(conn: sqlite3.Connection, dokument_id: int,
             if all(x is None for x in t):
                 continue
             rader.append((did, int(elev_id), str(nyckel), t[0], t[1], t[2]))
-    with conn:
+    with skriv(conn):
         conn.execute("DELETE FROM elevresultat WHERE dokument_id = ?", (did,))
         conn.executemany(
             "INSERT INTO elevresultat(dokument_id, elev_id, nyckel, varde_e, "
@@ -2972,7 +3075,7 @@ def delete_elevresultat(conn: sqlite3.Connection, dokument_id: int) -> None:
     """Ångra elevrättningen: siffrorna OCH feedbacken. Texten är skriven ur
     poängen — står den kvar utan dem beskriver den ett prov som inte finns."""
     did = int(dokument_id)
-    with conn:
+    with skriv(conn):
         conn.execute("DELETE FROM elevresultat WHERE dokument_id = ?", (did,))
         conn.execute("DELETE FROM elevfeedback WHERE dokument_id = ?", (did,))
 
@@ -3001,7 +3104,7 @@ def save_elevfeedback(conn: sqlite3.Connection, dokument_id: int,
     får skrivas om av nästa körning."""
     did = int(dokument_id)
     nu = _now()
-    with conn:
+    with skriv(conn):
         for elev_id, text in (feedback or {}).items():
             t = str(text or "").strip()
             if not t:
@@ -3054,7 +3157,7 @@ def create_bok(conn: sqlite3.Connection, *, namn: str, kurs: str | None = None,
                fil: str | None = None, mapp: str | None = None,
                sidor: int = 0, status: str = "ny") -> dict:
     nu = _now()
-    with conn:
+    with skriv(conn):
         cur = conn.execute(
             "INSERT INTO bocker(namn, kurs, fil, mapp, sidor, status, "
             "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -3067,7 +3170,7 @@ def update_bok(conn: sqlite3.Connection, bok_id: int, **falt) -> dict | None:
     satt = {k: v for k, v in falt.items() if k in tillatna}
     if satt:
         satt["updated_at"] = _now()
-        with conn:
+        with skriv(conn):
             conn.execute(f"UPDATE bocker SET {', '.join(k + ' = ?' for k in satt)} "
                          "WHERE id = ?", (*satt.values(), bok_id))
     return get_bok(conn, bok_id)
@@ -3078,7 +3181,7 @@ def set_bok_register(conn: sqlite3.Connection, bok_id: int,
     """Registret ersätts i ett svep. Läses boken om ska den nya förteckningen
     gälla — inte en blandning av två läsningar, där ett avsnitt kan finnas två
     gånger med olika sidspann."""
-    with conn:
+    with skriv(conn):
         conn.execute("DELETE FROM bok_avsnitt WHERE bok_id = ?", (bok_id,))
         conn.executemany(
             "INSERT INTO bok_avsnitt(bok_id, ordning, nr, titel, kap, vag, "
@@ -3097,7 +3200,7 @@ def save_bok_sida(conn: sqlite3.Connection, bok_id: int, sida: int, *,
     därför skrivs bara de fält som faktiskt har ett värde: ett faktapass som
     körs om ska inte radera en text som redan kostat 96 sekunder."""
     nu = _now()
-    with conn:
+    with skriv(conn):
         conn.execute(
             "INSERT INTO bok_sidor(bok_id, sida, pdf_sida, avsnitt, rubrik, text, "
             "nivasystem, last_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
@@ -3113,7 +3216,7 @@ def save_bok_sida(conn: sqlite3.Connection, bok_id: int, sida: int, *,
 
 def save_bok_uppgifter(conn: sqlite3.Connection, bok_id: int,
                        uppgifter: list[dict]) -> None:
-    with conn:
+    with skriv(conn):
         conn.executemany(
             "INSERT INTO bok_uppgifter(bok_id, nr, sida, niva, nivamarke, exempel) "
             "VALUES (?, ?, ?, ?, ?, ?) "
@@ -3157,7 +3260,7 @@ def rakna_om_uppg(conn: sqlite3.Connection, bok_id: int) -> None:
     där en enda sida är läst har tio uppgifter i databasen och femtio i boken —
     och «10 uppgifter» i bokdörren är då ett fel som ser ut som ett faktum.
     NULL betyder «inte läst än», och det är sant tills det är osant."""
-    with conn:
+    with skriv(conn):
         conn.execute(
             "UPDATE bok_avsnitt SET uppg = ("
             "  SELECT COUNT(*) FROM bok_uppgifter u "
@@ -3176,7 +3279,7 @@ def delete_bok(conn: sqlite3.Connection, bok_id: int) -> str | None:
     row = conn.execute("SELECT mapp FROM bocker WHERE id = ?", (bok_id,)).fetchone()
     if row is None:
         return None
-    with conn:
+    with skriv(conn):
         conn.execute("DELETE FROM bok_uppgifter WHERE bok_id = ?", (bok_id,))
         conn.execute("DELETE FROM bok_sidor WHERE bok_id = ?", (bok_id,))
         conn.execute("DELETE FROM bok_avsnitt WHERE bok_id = ?", (bok_id,))
@@ -3568,3 +3671,171 @@ def find_similar_exam_items(conn: sqlite3.Connection, course_id: int,
                 "likhet": round(best_sim, 2),
             })
     return flags
+
+
+# ------------------------------------------------------------------- jobb --
+#
+# Långa jobb (prov, tavla, blad, anteckningar) körs på en tråd och strömmas som
+# SSE. Förr VAR strömmen jobbet: föll anslutningen — läraren stängde fliken,
+# datorn somnade, wifit blinkade — dog körningen med den, och den var betald.
+# Nu är jobbet en rad här och strömmen ett fönster mot den. Den som kommer
+# tillbaka frågar `aktiva_jobb` vad som pågår och spelar upp `jobb_events` från
+# den händelse hon senast såg.
+#
+# Motorn står i app/web/sse.py (jobb_response) och rutterna i
+# app/web/routes_jobb.py. Här finns bara lagringen.
+
+# Statusarna. Skrivna en gång, så att ingen läsare gissar stavningen.
+JOBB_KOR = ("queued", "running")
+JOBB_SLUT = ("done", "error", "avbrutet")
+
+
+def _nu() -> str:
+    """Tidsstämpel i ISO-format, sekundupplöst, UTC. Jobbtiderna jämförs bara
+    med varandra — då är en tidszon per maskin ett sätt att göra ordningen
+    beroende av var appen råkar köra."""
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def skapa_jobb(conn: sqlite3.Connection, *, typ: str,
+               dokument_id: str | int | None = None) -> int:
+    """Ett nytt jobb i kö. Id:t är det klienten får som första SSE-event."""
+    with skriv(conn):
+        cur = conn.execute(
+            "INSERT INTO jobb(typ, status, skapad, dokument_id) "
+            "VALUES (?, 'queued', ?, ?)",
+            (str(typ), _nu(),
+             None if dokument_id is None else str(dokument_id)))
+    return int(cur.lastrowid)
+
+
+def satt_jobb_status(conn: sqlite3.Connection, jobb_id: int, status: str, *,
+                     fel: str | None = None,
+                     resultat_ref: str | int | None = None) -> None:
+    """Flytta jobbet till ett nytt läge.
+
+    Ett jobb som redan är slut flyttas ALDRIG igen (WHERE-satsen). Annars hade
+    en tråd som hann skriva sitt `done` efter att läraren tryckt Avbryt skrivit
+    över avbrottet — och listan hade sagt att pappret blev skrivet, medan hon
+    just sagt åt appen att sluta."""
+    satt = ["status = ?"]
+    varden: list = [str(status)]
+    if status in JOBB_SLUT:
+        satt.append("klar = ?")
+        varden.append(_nu())
+    if fel is not None:
+        satt.append("fel = ?")
+        varden.append(str(fel))
+    if resultat_ref is not None:
+        satt.append("resultat_ref = ?")
+        varden.append(str(resultat_ref))
+    varden.append(int(jobb_id))
+    with skriv(conn):
+        conn.execute(
+            f"UPDATE jobb SET {', '.join(satt)} "
+            "WHERE id = ? AND status IN ('queued', 'running')", varden)
+
+
+def lagg_jobb_event(conn: sqlite3.Connection, jobb_id: int, seq: int,
+                    payload: dict) -> None:
+    """En händelse, ordagrant som den gick ut över strömmen.
+
+    INSERT OR REPLACE och inte OR IGNORE: seq är jobbets egen räknare och en
+    krock ska inte kunna tystas ner till en tappad rad."""
+    with skriv(conn):
+        conn.execute(
+            "INSERT OR REPLACE INTO jobb_events(jobb_id, seq, payload) "
+            "VALUES (?, ?, ?)",
+            (int(jobb_id), int(seq), json.dumps(payload, ensure_ascii=False)))
+
+
+def jobb_events(conn: sqlite3.Connection, jobb_id: int,
+                fran: int = 0) -> list[dict]:
+    """Händelserna från och med `fran`, i ordning. Varje event bär sitt `seq`,
+    så att den som läser dem vet var den ska fortsätta nästa gång."""
+    rader = conn.execute(
+        "SELECT seq, payload FROM jobb_events "
+        "WHERE jobb_id = ? AND seq >= ? ORDER BY seq",
+        (int(jobb_id), int(fran))).fetchall()
+    ut = []
+    for r in rader:
+        try:
+            ev = json.loads(r["payload"])
+        except (ValueError, TypeError):
+            continue                      # en trasig rad tystar inte resten
+        if isinstance(ev, dict):
+            ev.setdefault("seq", r["seq"])
+            ut.append(ev)
+    return ut
+
+
+def hamta_jobb(conn: sqlite3.Connection, jobb_id: int) -> dict | None:
+    r = conn.execute("SELECT * FROM jobb WHERE id = ?",
+                     (int(jobb_id),)).fetchone()
+    return dict(r) if r is not None else None
+
+
+def aktiva_jobb(conn: sqlite3.Connection, *,
+                dokument_id: str | int | None = None,
+                antal: int = 20) -> list[dict]:
+    """Det som pågår, plus de senast avslutade.
+
+    Båda behövs av samma skäl: den som laddar om sidan mitt i ett prov ska se
+    förloppet, och den som laddar om två sekunder EFTER att provet blev klart
+    ska se att det blev klart — inte en tom skärm som ser ut som om körningen
+    aldrig funnits. Nyast först.
+
+    `senaste` är den sista textbärande händelsen (log eller progress), så att en
+    lista går att rita utan att först spela upp varje jobbs hela historik, och
+    `seq` är hur långt historiken räcker."""
+    sql = "SELECT * FROM jobb"
+    params: list = []
+    if dokument_id is not None:
+        sql += " WHERE dokument_id = ?"
+        params.append(str(dokument_id))
+    rader = conn.execute(sql + " ORDER BY id DESC LIMIT ?",
+                         (*params, int(antal))).fetchall()
+    ut = []
+    for r in rader:
+        jobb = dict(r)
+        jobb["seq"] = conn.execute(
+            "SELECT COALESCE(MAX(seq), 0) AS n FROM jobb_events WHERE jobb_id = ?",
+            (jobb["id"],)).fetchone()["n"]
+        jobb["senaste"] = ""
+        for p in conn.execute(
+                "SELECT payload FROM jobb_events WHERE jobb_id = ? "
+                "ORDER BY seq DESC LIMIT 40", (jobb["id"],)).fetchall():
+            try:
+                ev = json.loads(p["payload"])
+            except (ValueError, TypeError):
+                continue
+            text = (ev.get("msg") or ev.get("text") or "") if isinstance(ev, dict) else ""
+            if isinstance(ev, dict) and ev.get("type") in ("log", "progress") and text:
+                jobb["senaste"] = text
+                break
+        ut.append(jobb)
+    return ut
+
+
+def stada_jobb(conn: sqlite3.Connection) -> int:
+    """Jobb som stod som körande när processen dog är inte körande.
+
+    Trådarna bor i serverprocessen; startar den om finns ingen kvar som kan
+    skriva deras slut. Utan den här raden hade en omstart lämnat spöken som en
+    ny flik visat som «pågår» för alltid. Körs en gång vid uppstart."""
+    with skriv(conn):
+        cur = conn.execute(
+            "UPDATE jobb SET status = 'avbrutet', klar = ?, "
+            "fel = COALESCE(fel, 'Servern startade om medan jobbet kördes.') "
+            "WHERE status IN ('queued', 'running')", (_nu(),))
+    return int(cur.rowcount or 0)
+
+
+def rensa_jobb(conn: sqlite3.Connection, behall: int = 200) -> int:
+    """Håll historiken kort. Eventraderna är många och små, och ingen frågar
+    efter förra veckans förlopp — pappret självt ligger i exams/dokument."""
+    with skriv(conn):
+        cur = conn.execute(
+            "DELETE FROM jobb WHERE id NOT IN ("
+            "  SELECT id FROM jobb ORDER BY id DESC LIMIT ?)", (int(behall),))
+    return int(cur.rowcount or 0)

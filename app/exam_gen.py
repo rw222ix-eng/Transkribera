@@ -3207,7 +3207,8 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                   grupp: dict | None = None, doma: bool = True,
                   illustration: bool = True,
                   llm=llm_client.generate, max_rounds: int = MAX_ROUNDS,
-                  log_cb: Callable[[str], None] | None = None) -> dict:
+                  log_cb: Callable[[str], None] | None = None,
+                  steg_cb: Callable[[str], None] | None = None) -> dict:
     """Generera ett prov/arbetsblad/gruppuppgift och reparera schema- och
     balansfel inom rundbudgeten. `grupp` är gruppuppgiftens upplägg (elever,
     langd_min, redovisning) och ignoreras för de andra profilerna.
@@ -3237,6 +3238,12 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     arbetsbladets och gruppuppgiftens uppgifter ska bära en bildbeställning
     (`scen`) alls. Se BILD_PA/BILD_AV."""
     log = log_cb or (lambda _m: None)
+    # `steg` NAMNGER var i arbetet vi är; `log` säger vad som händer just nu.
+    # Skillnaden syns i gränssnittet: namnet flyttar mätaren ett helt steg,
+    # raden rör sig inom det. Vem som ger stegen sina nummer och texter är inte
+    # den här filens sak — se ladderna i app/web/routes_exam.py.
+    steg = steg_cb or (lambda _n: None)
+    steg("skriver")
     log({"arbetsblad": "Skriver arbetsbladet …",
          "gruppuppgift": "Skriver gruppuppgiften …"}.get(profil, "Skriver provet …"))
     ogenomforbart = exam_spec.genomforbarhet(antal, profil)
@@ -3285,6 +3292,11 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                             "message": "modellen svarade inte med giltig JSON"}],
                 "rounds": rounds}
     _doc, errors = _validate(exam, profil, koder, niva_mal)
+    # Bara när det FINNS något att reparera. Ett steg som tänds för att sedan
+    # vara över på en millisekund är brus i förloppet, och ett prov som gick
+    # igenom på första försöket ska inte se ut som ett som inte gjorde det.
+    if errors:
+        steg("reparerar")
     res = _repair_until_valid(exam, errors, model=model, llm=llm,
                               rounds_used=rounds, max_rounds=max_rounds,
                               profil=profil, antal=antal, skeleton=grammatik,
@@ -3292,6 +3304,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     if not doma or res["exam"] is None:
         return res
     skala = _skala(profil, boknivaer, skeleton, kurs)
+    steg("domare")
     res = _domar_pass(res["exam"], res["errors"], model=model, llm=llm,
                       profil=profil, skala=skala,
                       antal=antal, skeleton=grammatik, koder=koder,
@@ -3306,6 +3319,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # exemplen ska skrivas till det papper läraren FÅR, inte till ett
     # mellanläge som reparationsrundan sedan skriver om.
     if profil == "prov" and res["exam"] is not None:
+        steg("bedomning")
         bedomningspass(res["exam"], model=model, llm=llm, skala=skala,
                        log_cb=log_cb)
         # Trappan kan ha skrivits om — vakten räknar om på det som blev.
@@ -3324,7 +3338,8 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
                 niva_mal: dict | None = None,
                 llm=llm_client.generate,
                 max_rounds: int = MAX_ROUNDS,
-                log_cb: Callable[[str], None] | None = None) -> dict:
+                log_cb: Callable[[str], None] | None = None,
+                steg_cb: Callable[[str], None] | None = None) -> dict:
     """Riktad omgenerering (per-uppgift-chatt); validera + auto-reparera.
 
     `niva_mal` är dokumentets PERSISTERADE nivåval (exams.nivaval →
@@ -3336,6 +3351,8 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
     markerat när de är flera — då gäller önskemålet dem alla, och grinden
     nedan släpper igenom unionen av dem i stället för ett enda mål."""
     log = log_cb or (lambda _m: None)
+    steg = steg_cb or (lambda _n: None)        # se generate_exam ovan
+    steg("skriver")
     log("Uppdaterar provet …")
     candidate = _llm_round(
         build_refine_prompt(exam, instruction, nummer, mal, bok, historik,
@@ -3357,6 +3374,8 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
                     "errors": [{"path": "mal", "code": "mal", "message": skal}],
                     "rounds": 1}
     _doc, errors = _validate(candidate, profil, niva_mal=niva_mal)
+    if errors:
+        steg("reparerar")
     res = _repair_until_valid(candidate, errors, model=model, llm=llm,
                               rounds_used=1, max_rounds=max_rounds,
                               profil=profil, niva_mal=niva_mal,
@@ -3376,6 +3395,7 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
     if profil == "prov" and res["exam"] is not None and res["exam"] is not exam:
         nummer = andrade_uppgifter(exam, res["exam"])
         if nummer:
+            steg("domare")
             bedomningspass(res["exam"], model=model, llm=llm, nummer=nummer,
                            log_cb=log_cb)
     return res

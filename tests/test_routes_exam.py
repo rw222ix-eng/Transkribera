@@ -1550,34 +1550,71 @@ def test_varv_som_bygger_pa_en_overkord_version_sparas_inte(client, monkeypatch)
     assert len(vy["versions"]) == 2
 
 
-def test_avbrutet_varv_committas_inte(client, monkeypatch):
-    """Läraren tryckte Avbryt eller stängde fliken: strömmen är död men tråden
-    kör vidare, och mellan sista loggraden och skrivningen fanns inget livstecken
-    att avbryta VID — versionen sparades ändå, och nästa gång hon öppnade appen
-    låg ett varv hon aldrig sett överst i ångra-historiken."""
+def _kor_utan_strom(monkeypatch, emit):
+    """Kör refine-jobbet med ett eget `emit` och utan HTTP-ström.
+
+    Livstecknet före skrivningen är hela poängen i de två testerna nedan, och
+    det går inte att pröva över en riktig ström: nedkopplingen syns bara på
+    ASGI:s receive-kanal. Här ersätts `jobb_response` av en funktion som kör
+    jobbet rakt av och lämnar tillbaka vad emit gjorde."""
     from fastapi.responses import JSONResponse as _JSON
 
+    from app.web import sse
+
+    def fejkad(job, req, *, typ=None, db_file=None, dokument_id=None):
+        try:
+            job(emit)
+            return _JSON({"slut": "klart"})
+        except sse.JobbAvbrutet:
+            return _JSON({"slut": "avbrutet"})
+    monkeypatch.setattr(routes_exam, "jobb_response", fejkad)
+
+
+def test_stangd_flik_sparar_varvet(client, monkeypatch):
+    """SEMANTIKBYTET (Etapp 2). Förr kastades varvet när fliken stängdes: emit
+    kastade `KlientBorta` och skrivningen blev aldrig av.
+
+    Det var fel avvägning. Varvet är betalt i samma ögonblick modellen svarat,
+    och läraren som bytte flik medan hon väntade fick ingenting för pengarna.
+    Jobbet ligger nu i databasen och lever sitt eget liv (app/web/sse.py) —
+    tråden skriver klart, och versionen finns när hon kommer tillbaka."""
+    result, _ = _make_exam(client, monkeypatch)
+    # Ingen som lyssnar, men heller inget avbrott: emit gör precis ingenting,
+    # vilket är vad `jobb_response` gör när kön saknar läsare.
+    _kor_utan_strom(monkeypatch, lambda ev: None)
+
+    ny = _exam_doc()
+    ny["uppgifter"][0]["text"] = "Varvet hon inte satt och tittade på."
+    monkeypatch.setattr(exam_gen, "refine_exam",
+                        lambda exam, message, *a, **k:
+                        {"exam": ny, "errors": [], "rounds": 1})
+
+    r = client.post(f"/api/exams/{result['id']}/refine",
+                    json={"message": "gör den kortare"})
+    assert r.json()["slut"] == "klart"
+    assert len(_versioner(client, result["id"])) == 2
+
+
+def test_avbrutet_varv_committas_inte(client, monkeypatch):
+    """Läraren tryckte Avbryt: DÅ ska varvet inte sparas.
+
+    Samma livstecken som förr, men frågan är en annan — «sa hon åt oss att
+    sluta?» i stället för «lyssnar någon?». `emit` kastar `JobbAvbrutet` när
+    flaggan satts (POST /api/jobb/{id}/avbryt), och skrivningen blir aldrig av.
+    Utan den låg ett varv hon aldrig sett överst i ångra-historiken."""
     from app.web import sse
 
     result, _ = _make_exam(client, monkeypatch)
     laget = {"modellen_klar": False, "avbrutet": False}
 
-    def fejkad_strom(job, req):
-        """Strömmen som redan tappat sin lyssnare: varje livstecken efter att
-        modellen svarat kastar KlientBorta, precis som sse.emit gör."""
-        def emit(ev):
-            if laget["modellen_klar"]:
-                laget["avbrutet"] = True
-                raise sse.KlientBorta
-        try:
-            job(emit)
-        except sse.KlientBorta:
-            pass
-        return _JSON({"avbrutet": laget["avbrutet"]})
-    monkeypatch.setattr(routes_exam, "sse_response", fejkad_strom)
+    def emit(ev):
+        if laget["modellen_klar"]:
+            laget["avbrutet"] = True
+            raise sse.JobbAvbrutet
+    _kor_utan_strom(monkeypatch, emit)
 
     ny = _exam_doc()
-    ny["uppgifter"][0]["text"] = "Varvet ingen väntar på."
+    ny["uppgifter"][0]["text"] = "Varvet hon avbröt."
 
     def fake_refine(exam, message, *a, **k):
         laget["modellen_klar"] = True
@@ -1586,11 +1623,12 @@ def test_avbrutet_varv_committas_inte(client, monkeypatch):
 
     r = client.post(f"/api/exams/{result['id']}/refine",
                     json={"message": "gör den kortare"})
-    assert r.json()["avbrutet"] is True
+    assert r.json()["slut"] == "avbrutet"
+    assert laget["avbrutet"] is True
     assert len(_versioner(client, result["id"])) == 1
     # Och låset släpptes trots avbrottet — annars vore pappret dött för alltid.
     laget["modellen_klar"] = False
-    monkeypatch.setattr(routes_exam, "sse_response", sse.sse_response)
+    monkeypatch.setattr(routes_exam, "jobb_response", sse.jobb_response)
     assert client.post(f"/api/exams/{result['id']}/refine",
                        json={"message": "en till"}).status_code == 200
 

@@ -28,7 +28,26 @@ from fastapi.responses import JSONResponse
 from app import (db, dokumentdiff, exam_latex, exam_pdf, gpu_arbiter,
                  llm_client, notes_gen, postprocess, tryck)
 from app.web import routes_planning
-from app.web.sse import sse_response
+from app.web.sse import Stege, jobb_response
+
+# ── DOMÄNSTEGEN ──────────────────────────────────────────────────────────────
+# Samma tabellmönster som prov- och planeringsroutern. Mötesläsningen är ett
+# eget steg därför att den KAN vara den långa delen: fem möten över taket är
+# fem modellanrop innan pappret ens börjat skrivas.
+_STEG_SKRIV = [
+    ("transkript", "Läser mötena"),
+    ("skriver", "Skriver anteckningarna"),
+    ("sparar", "Sparar pappret"),
+]
+_STEG_OM = [
+    ("skriver", "Skriver om anteckningarna"),
+    ("sparar", "Sparar varvet"),
+]
+_STEG_GODKANN = [
+    ("latex", "Sätter LaTeX"),
+    ("pdf", "Bygger PDF"),
+    ("sparar", "Sparar pappret"),
+]
 
 # Molnjobben köar inte bakom kortet längre (se gpu_arbiter): de delar en
 # semafor med tak, och beskedet över taket säger vad som faktiskt pågår.
@@ -196,12 +215,15 @@ def create_router(base: Path, arbiter) -> APIRouter:
             return JSONResponse(_LLM_BUSY, status_code=409)
 
         def job(emit):
+            steg = Stege(emit, _STEG_SKRIV)
             try:
                 if arbiter.ensure_llm() is None:
                     raise RuntimeError("Språkmodellen är inte installerad.")
                 # Mötena läses INNE i jobbet: ett referat är ett modellanrop,
                 # och väntan ska synas i stället för att begäran står tyst.
+                steg.na("transkript")
                 transkript = _transkript_block(lektioner, emit=emit)
+                steg.na("skriver")
                 res = notes_gen.generate_notes(
                     kurs, klass, moment, model=_model_name(),
                     onskemal=onskemal, transkript=transkript, memory=memory,
@@ -211,6 +233,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 if res["notes"] is None:
                     return {"id": None, "anteckningar": None,
                             "errors": res["errors"], "rounds": res["rounds"]}
+                steg.na("sparar")
                 conn = db.connect(db_file)
                 try:
                     view = db.create_exam(
@@ -225,7 +248,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
             finally:
                 arbiter.release_llm(llm)
 
-        return sse_response(job, req)
+        # Se app/web/sse.py: pappret överlever att fliken stängs.
+        return jobb_response(job, req, typ="anteckningar", db_file=db_file)
 
     # -------------------------------------------------------------- refine --
 
@@ -259,20 +283,22 @@ def create_router(base: Path, arbiter) -> APIRouter:
             return JSONResponse(_LLM_BUSY, status_code=409)
 
         def job(emit):
+            steg = Stege(emit, _STEG_OM)
             try:
                 if arbiter.ensure_llm() is None:
                     raise RuntimeError("Språkmodellen är inte installerad.")
+                steg.na("skriver")
                 res = notes_gen.refine_notes(
                     view["exam"], message, model=_model_name(), mal=mal,
                     malen=malen, bok=bok_block, historik=historik,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 if res["notes"] is not None and res["notes"] != view["exam"]:
-                    # Se routes_exam: ett livstecken FÖRE skrivningen. Läraren
-                    # som stängde fliken mitt i fick annars varvet sparat ändå —
-                    # tråden lever, strömmen gör det inte. `emit` kastar
-                    # KlientBorta när ingen lyssnar.
-                    emit({"type": "log", "msg": "Sparar varvet …"})
+                    # Se routes_exam: livstecknet FÖRE skrivningen frågar numera
+                    # om läraren tryckt Avbryt, inte om fliken finns kvar. En
+                    # stängd flik sparar varvet — det är hela poängen med att
+                    # jobbet ligger i databasen (app/web/sse.py).
+                    steg.na("sparar")
                     conn = db.connect(db_file)
                     try:
                         ny = db.add_exam_version(conn, note_id, res["notes"])
@@ -289,7 +315,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
             finally:
                 arbiter.release_llm(llm)
 
-        return sse_response(job, req)
+        return jobb_response(job, req, typ="anteckningar", db_file=db_file,
+                             dokument_id=note_id)
 
     # ------------------------------------------------------------- approve --
 
@@ -339,11 +366,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
             return JSONResponse({"error": "otillåten sökväg"}, status_code=400)
 
         def job(emit):
+            steg = Stege(emit, _STEG_GODKANN)
             doc, fel = notes_gen.validate_notes_json(view["exam"])
             if doc is None:
                 # Utan ett giltigt dokument finns ingenting att rendera. Godkänt
                 # med tom hand vore värre än ett ärligt nej.
                 return _resultat(view, fel, 0)
+            steg.na("latex")
             emit({"type": "log", "msg": "Renderar LaTeX …"})
             tex = exam_latex.render_anteckningar(doc)
             slug = _safe_component(doc.titel, "anteckningar")
@@ -353,6 +382,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
             pdf_path = None
             errors: list = list(fel)
             if bild:
+                steg.na("pdf")
                 emit({"type": "log", "msg": "Lägger bladet på A4 …"})
                 pdf_path = tryck.png_till_pdf(bild, ut_dir, slug)
                 if pdf_path is None:
@@ -365,6 +395,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 emit({"type": "log",
                       "msg": "PDF-motorn saknas — sparar .tex utan PDF."})
             elif pdf_path is None:
+                steg.na("pdf")
                 emit({"type": "log", "msg": "Kompilerar PDF …"})
                 pdf_path, logg = exam_pdf.compile_pdf(tex, ut_dir, slug)
                 if pdf_path is None:
@@ -374,6 +405,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                                     "en trasig formel mellan dollartecken — be "
                                     "om en omskrivning i chatten så byggs den "
                                     "om.\n" + logg)}]
+            steg.na("sparar")
             conn = db.connect(db_file)
             try:
                 ny = db.set_exam_artifacts(
@@ -386,6 +418,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
             res["tex"] = str(tex_path)
             return res
 
-        return sse_response(job, req)
+        return jobb_response(job, req, typ="anteckningar", db_file=db_file,
+                             dokument_id=note_id)
 
     return router

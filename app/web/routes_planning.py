@@ -23,7 +23,27 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from app import (bok, db, dokumentdiff, forlaga, gpu_arbiter, lararord,
                  lesson_board, llm_client, rattning)
-from app.web.sse import sse_response
+from app.web.sse import Stege, jobb_response, sse_response
+
+# ── DOMÄNSTEGEN ──────────────────────────────────────────────────────────────
+# Samma mönster som prov-routerns ladder (app/web/routes_exam.py): namnen är
+# vad som händer, texterna är vad läraren läser, och `Stege` räknar numren.
+# Tavlan har färre steg än provet därför att den GÖR färre saker — inga
+# domare, ingen bedömningsanvisning — och en ladder som listar steg som aldrig
+# tänds gör bara mätaren långsam på slutet.
+_STEG_TAVLA = [
+    ("bok", "Läser boken"),
+    ("skriver", "Skriver tavlan"),
+    ("sparar", "Sparar tavlan"),
+]
+_STEG_TAVLA_OM = [
+    ("skriver", "Skriver om tavlan"),
+    ("sparar", "Sparar varvet"),
+]
+_STEG_TAVLA_REP = [
+    ("skriver", "Rättar det motorn klagade på"),
+    ("sparar", "Sparar tavlan"),
+]
 
 # Två tavlor i 2× blir ett par MB; 30 MB är väl tilltaget men stoppar missbruk.
 _MAX_PNG_BYTES = 30 * 1024 * 1024
@@ -727,13 +747,16 @@ def create_router(base: Path, arbiter) -> APIRouter:
             return JSONResponse(_LLM_BUSY, status_code=409)
 
         def job(emit):
+            steg = Stege(emit, _STEG_TAVLA)
             try:
                 if arbiter.ensure_llm() is None:
                     raise RuntimeError("Språkmodellen är inte installerad.")
                 # Bokdörren: sidorna läraren slog upp i remsan. Läses här inne,
                 # inne i jobbet — de kan kosta minuter, och då ska förloppet
                 # synas i stället för att begäran står tyst.
+                steg.na("bok")
                 bok_txt = bok_las_text(base, db_file, body, emit=emit)
+                steg.na("skriver")
                 res = lesson_board.generate_board(
                     course or "matematik", group or "klassen", moment,
                     model=_model_name(), memory=memory, underlag=underlag_txt,
@@ -745,6 +768,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # den sätts deterministiskt EFTER valideringen, ur den
                 # starttid som redan följer med planeringen + schemats sluttid.
                 board = lesson_board.satt_tid(res["board"], starttid, sluttid)
+                steg.na("sparar")
                 pid = uuid.uuid4().hex[:12]
                 spara_planering(pid, {
                     "board": board, "rounds": res["rounds"],
@@ -757,7 +781,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
             finally:
                 arbiter.release_llm(llm)
 
-        return sse_response(job, req)
+        # Se app/web/sse.py: tavlan är ett av de fyra jobben som lever vidare
+        # när fliken stängs. Den tar minuter och är betald i samma ögonblick
+        # den startar — att kasta den för att läraren bytte flik var att kasta
+        # pengar och tid hon inte får tillbaka.
+        return jobb_response(job, req, typ="tavla", db_file=db_file)
 
     # ------------------------------------------------------- render-report --
 
@@ -781,9 +809,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
             return JSONResponse(_LLM_BUSY, status_code=409)
 
         def job(emit):
+            steg = Stege(emit, _STEG_TAVLA_REP)
             try:
                 if arbiter.ensure_llm() is None:
                     raise RuntimeError("Språkmodellen är inte installerad.")
+                steg.na("skriver")
                 res = lesson_board.repair_board(
                     st["board"], warnings, model=_model_name(),
                     rounds_used=st["rounds"],
@@ -796,13 +826,15 @@ def create_router(base: Path, arbiter) -> APIRouter:
                                                     st.get("starttid"),
                                                     st.get("sluttid"))
                 st["rounds"] = res["rounds"]
+                steg.na("sparar")
                 spara_planering(pid, st)
                 return {"id": pid, "board": st["board"], "errors": res["errors"],
                         "rounds": res["rounds"], "repaired": True}
             finally:
                 arbiter.release_llm(llm)
 
-        return sse_response(job, req)
+        return jobb_response(job, req, typ="tavla", db_file=db_file,
+                             dokument_id=pid)
 
     # -------------------------------------------------------------- refine --
 
@@ -842,20 +874,23 @@ def create_router(base: Path, arbiter) -> APIRouter:
         fore = copy.deepcopy(st["board"])       # jämförelsen behöver den orörd
 
         def job(emit):
+            steg = Stege(emit, _STEG_TAVLA_OM)
             try:
                 if arbiter.ensure_llm() is None:
                     raise RuntimeError("Språkmodellen är inte installerad.")
+                steg.na("skriver")
                 res = lesson_board.refine_board(
                     st["board"], message, model=_model_name(), mal=mal,
                     malen=malen, bok=bok_txt, historik=historik,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
-                # Lyssnar någon än? Läraren som tryckte Avbryt eller stängde
-                # fliken fick tavlan omskriven ändå: strömmen var avbruten men
-                # tråden körde vidare, och mellan sista tecknet och skrivningen
-                # fanns inget livstecken att avbryta VID. `emit` kastar
-                # KlientBorta när ingen lyssnar — då sparas ingenting.
-                emit({"type": "log", "msg": "Sparar varvet …"})
+                # Sa hon åt oss att sluta? Raden frågade förr om NÅGON
+                # LYSSNADE — mellan sista tecknet och skrivningen fanns inget
+                # livstecken att avbryta vid, och en stängd flik fick tavlan
+                # omskriven ändå. Nu är en stängd flik inget avbrott
+                # (app/web/sse.py): tavlan är betald och ska sparas. Det som
+                # stoppar här är lärarens Avbryt — `emit` kastar `JobbAvbrutet`.
+                steg.na("sparar")
                 if res["board"] is not None:
                     st["board"] = lesson_board.satt_tid(res["board"],
                                                         st.get("starttid"),
@@ -874,7 +909,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
             finally:
                 arbiter.release_llm(llm)
 
-        return sse_response(job, req)
+        return jobb_response(job, req, typ="tavla", db_file=db_file,
+                             dokument_id=pid)
 
     # ------------------------------------------------------------- approve --
 
