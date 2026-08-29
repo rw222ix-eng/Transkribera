@@ -138,8 +138,9 @@ def sse_response(job, request) -> StreamingResponse:
 #     Den sätter en flagga som jobbtråden ser vid nästa `emit`, precis som
 #     `KlientBorta` gjorde — samma korta väg till stopp, men på hennes begäran
 #     och inte på nätverkets.
-#   * Varje event skrivs till `jobb_events` innan det går ut. En klient som
-#     kommer tillbaka spelar upp historiken och hakar på live
+#   * Händelserna skrivs till `jobb_events` innan de går ut — alla utom
+#     tokenströmmen, som bara har ett liv i nuet (se FLYKTIGA nedan). En klient
+#     som kommer tillbaka spelar upp historiken och hakar på live
 #     (GET /api/jobb/{id}/strom?fran=SEQ).
 #
 # Arbiterns molnplats hålls hela körningen, som förut: den släpps i jobbets
