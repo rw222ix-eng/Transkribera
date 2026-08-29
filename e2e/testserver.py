@@ -33,11 +33,14 @@ from tests import fejk                       # noqa: E402  (efter sys.path)
 from tests.fejk import skriv_claude          # noqa: E402
 
 
-def bas() -> Path:
-    """Färsk bas per körning. Samma sökväg varje gång så en trasig körning går
-    att titta i efteråt — men tömd, så ingen körning ärver förra körningens
-    dokument."""
-    b = Path(tempfile.gettempdir()) / "transkribera-e2e"
+def bas(port: int) -> Path:
+    """Färsk bas per körning. Samma sökväg för samma port så en trasig körning
+    går att titta i efteråt — men tömd, så ingen körning ärver förra körningens
+    dokument. Porten i namnet för att två samtidiga sviter (två worktrees,
+    olika SOAK_PORT) inte ska riva varandras bas: utan den rmtree:ade den som
+    startade sist databasen under den som redan körde, och den första sviten
+    föll test för test på «no such table» utan spår av orsaken."""
+    b = Path(tempfile.gettempdir()) / f"transkribera-e2e-{port}"
     if b.exists():
         shutil.rmtree(b, ignore_errors=True)
     b.mkdir(parents=True, exist_ok=True)
@@ -50,7 +53,7 @@ def main() -> None:
     import uvicorn
 
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8751
-    b = bas()
+    b = bas(port)
     os.environ["CLAUDE_CODE_BIN"] = str(skriv_claude(b / "fejkbin"))
     # Auto: fejk-CLI:t väljer kassett ur prompten. En lärardag (Etapp 4) skriver
     # tavla, prov, arbetsblad, gruppuppgift och granskning i samma körning —
