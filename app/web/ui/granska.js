@@ -1021,13 +1021,18 @@
     flyttaMini(el);
     miniBild = requestAnimationFrame(foljMini);
   }
-  /* Klämd innanför duken: pappret kan ligga halvt utanför kanten, och en knapp
-     som följt med dit hade hamnat under panelen eller under headern. */
+  /* Helst i marginalen TILL HÖGER om rutan: ovanför lägger sig knappen över
+     rutan närmast över, och den är någon annans. Ryms den inte bredvid går den
+     ovanför ändå — och alltid innanför duken, för pappret kan ligga halvt
+     utanför kanten och knappen får inte följa med under panelen. */
   function flyttaMini(el) {
     const r = duk.getBoundingClientRect(), b = el.getBoundingClientRect();
     const br = mini.offsetWidth || 150, h = mini.offsetHeight || 34;
-    mini.style.left = Math.round(Math.min(Math.max(b.left, r.left + 10), Math.max(r.left + 10, r.right - br - 10))) + 'px';
-    mini.style.top = Math.round(Math.min(Math.max(b.top - h - 8, r.top + 10), Math.max(r.top + 10, r.bottom - h - 10))) + 'px';
+    const bredvid = b.right + 12 + br <= r.right - 10;
+    const klam = (v, lag, hog) => Math.round(Math.min(Math.max(v, lag), Math.max(lag, hog)));
+    mini.style.left = klam(bredvid ? b.right + 12 : b.left, r.left + 10, r.right - br - 10) + 'px';
+    mini.style.top = klam(bredvid ? b.top + b.height / 2 - h / 2 : b.top - h - 8,
+                          r.top + 10, r.bottom - h - 10) + 'px';
   }
   /* `helt` gömmer hela knappen; utan den fälls bara fältet ihop och knappen
      står kvar — rutan är fortfarande vald. */
