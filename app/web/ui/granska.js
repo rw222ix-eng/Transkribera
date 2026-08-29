@@ -455,7 +455,16 @@
 
   /* Före och efter. Att godkänna en ändring utan att se exakt vad som blev annorlunda
      tvingar en att läsa om hela uppgiften — diffen står därför i ändringsposten. */
-  const platt = n => n.textContent.replace(/\s+/g, ' ').trim();
+  /* Nålar och svep är VÅRA barn i rutan (satNal/markeraArbete) — nålens
+     nummer är text och hade följt med i avläsningen: ett varv mot uppgift 2
+     gjorde att «… nummer 2.» lästes som «… nummer 2. 1» och uppgiften dök
+     upp i diffen fast servern inte rört den. Klonen offras i stället för
+     rutan själv — överläggen får inte ryckas ur pappret mitt i ett varv. */
+  const platt = n => {
+    const k = n.cloneNode(true);
+    $$('.gpin, .gshimmer', k).forEach(o => o.remove());
+    return k.textContent.replace(/\s+/g, ' ').trim();
+  };
   /* Senaste varvets före/efter, per element-id. Prickarna i pappret läser den
      här (window.Granska.diffFor) i stället för att hålla en egen kopia som kan
      säga emot panelen. Nollställs när canvasen öppnas på ett nytt papper. */
