@@ -547,6 +547,13 @@
     .ordin{display:inline;opacity:0;animation:ordfram var(--dur-3) var(--ease) both}
     @keyframes ordfram{from{opacity:0;filter:blur(3px)}to{opacity:1;filter:none}}
     .tomrad{font-size:.95rem;color:var(--sky-ink-2);max-width:56ch;margin:22px 0 0}
+    /* Lappen som säger att en cachad lista hunnit bli inaktuell medan läraren
+       höll i något i den (app.js arkivlapp). Den ska gå att strunta i: samma
+       grad och färg som tomraden, med erbjudandet som en understruken text —
+       ingen knapp som konkurrerar med sidans riktiga knappar. */
+    .swrlapp{display:flex;align-items:baseline;gap:8px;font-size:.85rem;color:var(--on-sky-2);margin:18px 0 0}
+    .swrlapp button{font:inherit;color:var(--on-sky);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+    .swrlapp button:hover{color:#fff}
     .grupprubrik{display:flex;align-items:baseline;gap:12px;margin:0 0 6px;padding-bottom:12px;border-bottom:1px solid var(--line)}
     .vecka{font-size:1.05rem;font-weight:700;color:var(--ink);margin:0}
     .spann,.antal{white-space:nowrap;font-size:.75rem;color:var(--ink-3)}

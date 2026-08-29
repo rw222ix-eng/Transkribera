@@ -590,6 +590,9 @@
         }))
         .then(bok => {
           if (!bok) throw new Error('Servern slutade svara mitt i inläsningen.');
+          /* Inläsningen går genom API.strom och glömmer därför inget av sig
+             själv: den cachade hyllan saknar just den bok som nyss lades in. */
+          window.API.swrGlom && window.API.swrGlom('/api/bocker');
           return window.Bok && window.Bok.hamta ? window.Bok.hamta().then(() => bok) : bok;
         });
     }

@@ -453,6 +453,11 @@ async function korRiktigt(rader, fottext) {
       if (!svar) throw new Error('Servern slutade svara mitt i körningen. Filen är orörd — försök igen.');
       r.klar = true;
       r.resultat = svar;
+      /* En körning lägger en lektion i arkivet. Strömmen går utanför json() och
+         glömmer inget av sig själv — utan det här visade nästa sidladdning den
+         cachade listan UTAN lektionen som just kördes, tills servern hann svara. */
+      window.API.swrGlom && window.API.swrGlom('/api/lessons');
+      window.API.swrGlom && window.API.swrGlom('/api/history');
       /* Lektionens id på servern följer med filen: granskningen efteråt ber om
          den riktiga extraktionen på den, i stället för att läsa transkriptet
          med regex här. */
@@ -863,17 +868,10 @@ function nyttKort(f) {
    och filtrerar på) och /api/history bär körningen (talat och målspråk, om det
    finns bild). Att spegla in det saknade fältet i den andra tabellen hade gjort
    samma sanning till två som kan glida isär. */
-async function hydreraArkivet() {
-  const A = window.API;
-  if (!A || !A.pa) return;
-  let lektioner, historik;
-  try {
-    [lektioner, historik] = await Promise.all([A.json('/api/lessons'), A.json('/api/history')]);
-  } catch (e) {
-    return;                       // servern svarar inte längre: prototypen står kvar
-  }
+function ritaArkivet(lektioner, historik) {
   const kor = new Map((historik || []).map(h => [h.id, h]));
   const vard = $('#inspelningar');
+  const rullat = window.scrollY;
   $$('.veckogrupp', vard).forEach(g => g.remove());
   /* Servern sorterar nyast först — korten läggs i den ordningen, i sin egen
      ISO-vecka (veckogruppFor skapar veckan om den saknas). */
@@ -897,6 +895,78 @@ async function hydreraArkivet() {
   raknaOm();                      // räknar om rubrikerna och ritar lovbanden (lov.js)
   window.Klass && window.Klass.rita && window.Klass.rita();
   window.Lektionskal && window.Lektionskal.rita && window.Lektionskal.rita();
+  /* En omritning bygger nya kort, och listan hoppar då till toppen om den var
+     rullad. Läget läggs tillbaka i samma bildruta. */
+  if (rullat && window.scrollY !== rullat) window.scrollTo(0, rullat);
+}
+
+/* Är det säkert att bygga om listan under läraren just nu? Omritningen kastar
+   varje kort och gör nya — allt hon HÅLLER I försvinner med dem: den öppna
+   radmenyn, namnet hon skriver om, kryssen hon satt i markeringsläget. Är något
+   av det uppe ritas inte om; i stället erbjuds omritningen på en rad hon kan
+   trycka på när hon är klar. */
+function arkivetLedigt() {
+  const vard = $('#inspelningar');
+  if (!vard) return false;
+  const markrad = $('#markrad');
+  if (markrad && !markrad.hidden) return false;
+  if ($('.radmeny', vard) || $('.namnfalt', vard)) return false;
+  const aktiv = document.activeElement;
+  if (aktiv && aktiv !== document.body && vard.contains(aktiv)) return false;
+  return true;
+}
+
+/* Den diskreta lappen. Ingen toast: en toast tar ögat mitt i något annat och
+   försvinner av sig själv — det här är ett erbjudande som ska stå kvar tills
+   det tas. */
+let arkivlappenGor = null;
+function arkivlapp(gor) {
+  arkivlappenGor = gor;
+  let p = $('#arkivlapp');
+  if (p) return;
+  p = document.createElement('p');
+  p.className = 'swrlapp';
+  p.id = 'arkivlapp';
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.textContent = 'Uppdatera listan';
+  b.addEventListener('click', () => {
+    const g = arkivlappenGor;
+    arkivlappenGor = null;
+    p.remove();
+    if (g) g();
+  });
+  p.append(document.createTextNode('Arkivet har ändrats sedan listan ritades. '), b);
+  const vard = $('#inspelningar');
+  vard.parentNode.insertBefore(p, vard);
+}
+
+/* SWR: arkivet är sidans längsta lista och ritades förr först när BÅDA
+   svaren kommit. Låg de i cachen ritas listan i samma andetag som sidan, och
+   servern ritar om den bara när den faktiskt säger något annat.
+
+   De två hämtningarna hålls isär: cachen läggs synkront i variablerna nedan,
+   och `forsok` ritar så snart båda hälfterna finns — cachade eller färska. */
+function hydreraArkivet() {
+  const A = window.API;
+  if (!A || !A.pa) return Promise.resolve();
+  let lektioner = null, historik = null, ritat = false;
+  const forsok = () => {
+    if (!lektioner || !historik) return;
+    if (!ritat) { ritaArkivet(lektioner, historik); ritat = true; return; }
+    const om = () => ritaArkivet(lektioner, historik);
+    if (arkivetLedigt()) om(); else arkivlapp(om);
+  };
+  const p1 = A.jsonSWR('/api/lessons', {
+    vidCache: d => { lektioner = d; },
+    vidFarskt: d => { lektioner = d; forsok(); },
+  }).catch(() => null);
+  const p2 = A.jsonSWR('/api/history', {
+    vidCache: d => { historik = d; },
+    vidFarskt: d => { historik = d; forsok(); },
+  }).catch(() => null);
+  forsok();                       // båda cachehalvorna lades dit synkront ovan
+  return Promise.all([p1, p2]).then(() => {});
 }
 
 /* Filtren ska erbjuda de klasser och kurser läraren FAKTISKT har: schemat

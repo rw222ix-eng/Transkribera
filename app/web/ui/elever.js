@@ -366,11 +366,17 @@
     if (r.group_id) gruppId = r.group_id;
   }
 
+  /* SWR: samma papper öppnas om och om igen — poängen, gränserna och klasslistan
+     ska stå där när modalen slår upp, inte en hämtning senare. Cacheritningen
+     görs BARA på ett orört läge: har läraren hunnit klicka är cachen äldre än
+     skärmen och skulle skriva över det hon just satte. Serverns svar vinner som
+     förut, cache eller inte — det är det som är sanningen om pappret. */
   function hamta() {
     if (!server()) return;
     const v = doc;
-    window.API.json(vag(v)).then(r => {
+    const ta = (r, franCache) => {
       if (doc !== v) return;
+      if (franCache && smutsigt) return;
       harServer = true;
       las(r);
       smutsigt = false;
@@ -379,6 +385,10 @@
          och läraren måste klicka innan hon kan börja. Textfält lämnas ifred. */
       const aktiv = document.activeElement;
       if (!aktiv || aktiv.tagName !== 'TEXTAREA') fokusera();
+    };
+    window.API.jsonSWR(vag(v), {
+      vidCache: r => ta(r, true),
+      vidFarskt: r => ta(r, false),
     }).catch(() => {});
   }
 
@@ -410,7 +420,13 @@
       ? `/api/groups/${gruppId}/ci-profil?kurs=${kurs}`
       : `/api/elever/${nuvarande().id}/ci-profil?kurs=${kurs}`
         + (gruppId ? `&group_id=${gruppId}` : '');
-    return window.API.json(vagen).then(r => {
+    /* Kartan ovan lever bara sidans livstid. SWR ger den ett minne över
+       omladdningar: profilen är räknad över alla rättade papper och ändras bara
+       när något sparats (då töms kartan, och en PUT tömmer swr-nyckeln). */
+    return window.API.jsonSWR(vagen, {
+      vidCache: r => { cicache.set(nyckel, r); },
+      vidFarskt: r => { cicache.set(nyckel, r); if (cinyckel() === nyckel) ritaCi(); },
+    }).then(r => {
       cicache.set(nyckel, r);
       return r;
     }).catch(() => null);
@@ -427,12 +443,19 @@
     if (!server() || !nyckel) { ruta.hidden = true; return; }
     ruta.hidden = false;
     const lista = $('#elevcilista'), not = $('#elevcinot');
-    const vald = cicache.get(nyckel);
+    let vald = cicache.get(nyckel);
     if (!vald) {
-      lista.innerHTML = '';
-      not.textContent = 'Läser …';
-      cihamta().then(() => { if (cinyckel() === nyckel) ritaCi(); });
-      return;
+      /* cihamta fyller kartan SYNKRONT ur swr-cachen. Frågas den om igen direkt
+         efteråt står profilen ofta redan där, och «Läser …» hinner aldrig
+         blinka förbi. Löftet ritar om när servern svarat något annat. */
+      const pa_vag = cihamta();
+      vald = cicache.get(nyckel);
+      pa_vag.then(() => { if (cinyckel() === nyckel && cicache.get(nyckel) !== vald) ritaCi(); });
+      if (!vald) {
+        lista.innerHTML = '';
+        not.textContent = 'Läser …';
+        return;
+      }
     }
     const punkter = (vald.punkter || []).filter(p => p.andel !== null);
     lista.innerHTML = '';
@@ -653,6 +676,10 @@
       log: m => { $('#elevnot').textContent = m; },
     }).then(r => {
       knapp.disabled = false;
+      /* Strömmade jobb går utanför json() och glöms därför inte av sig själva:
+         feedbacken ligger i samma svar som elevresultatet, och cachen skulle
+         annars visa den gamla texten nästa gång pappret öppnas. */
+      window.API.swrGlom && window.API.swrGlom('/api/dokument/' + v.id);
       if (doc !== v) return;
       feedback = Object.assign({}, (r && r.feedback) || {});
       rita();

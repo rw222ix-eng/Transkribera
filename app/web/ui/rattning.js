@@ -221,15 +221,19 @@
   function hamta() {
     if (!server()) return;
     const v = doc;
-    window.API.json(vag(v)).then(r => {
+    const ta = r => {
       if (doc !== v || !r || !(r.rader || []).length) return;
       serverrader = r.rader;
       if (r.elever) elever = r.elever;
       /* Serverns siffror gäller bara om ingenting står i fälten: har man
-         börjat skriva ska det man skrivit inte bytas ut under handen. */
+         börjat skriva ska det man skrivit inte bytas ut under handen. Samma
+         spärr håller för cachen — den är ännu äldre än servern. */
       if (!Object.keys(varden).length && r.varden) varden = Object.assign({}, r.varden);
       rita();
-    }).catch(() => {});
+    };
+    /* SWR: raderna kommer ur cachen medan modalen slår upp, och byts bara om
+       servern räknat fram något annat sedan sist. */
+    window.API.jsonSWR(vag(v), { vidCache: ta, vidFarskt: ta }).catch(() => {});
   }
 
   /* Kvittot, inte källan: siffrorna ligger redan på skärmen. Svarar servern

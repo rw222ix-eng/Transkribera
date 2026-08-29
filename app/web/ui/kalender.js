@@ -454,9 +454,20 @@ window.Kalender = (() => {
     return post;
   }
 
+  /* SWR: veckan är det första läraren ser och det dyraste svaret på sidan —
+     schemat, loven, posterna och innehållet i ett stycke. Låg det i cachen ritas
+     det i samma andetag som sidan, och serverns svar ritar om BARA om veckan
+     faktiskt ändrats. Omritningen är samma ritaOm() som synken kör, och den är
+     alltid säker: veckan bär inget användartillstånd — ingen panel, ingen
+     markering, inget halvskrivet fält bor i den. */
   const redo = (window.API ? window.API.redo : Promise.resolve())
-    .then(() => (window.API && window.API.pa) ? window.API.json('/api/schema') : null)
-    .then(d => { if (d) { ta(d); ritaOm(); } })
+    .then(() => {
+      if (!(window.API && window.API.pa)) return null;
+      return window.API.jsonSWR('/api/schema', {
+        vidCache: d => { ta(d); ritaOm(); },
+        vidFarskt: d => { ta(d); ritaOm(); },
+      });
+    })
     .catch(() => { /* servern svarar inte: prototypens vecka står kvar */ });
 
   return { poster, schema, lov, innehall, innehallFor, planeringen, uppgifterForSpann, provpunkter, nastaProv, forraProv, omVeckor, forDatum, schemaFor, lovFor, traff, krockrad, veckan, veckoBild, veckonr, mandagen, nastaSkolvecka, terminen, lagg, ord, synka, redo, franServern: () => franServern, idag: () => iso(new Date()) };
