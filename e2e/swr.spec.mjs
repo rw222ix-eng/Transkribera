@@ -78,6 +78,51 @@ test("andra besöket ritar arkivet ur cachen, med listrutterna fastspända", asy
   expect(svarat, "listrutterna svarade — testet bevisar då ingenting").toBe(0);
 });
 
+test("högen ritas ur cachen medan /api/dokument står fast", async ({ page }) => {
+  await laddad(page);
+
+  /* Samma bevisföring som arkivtestet: momentet finns inte i prototypens hög
+     (plan.js har «derivatans definition»), så syns pappret med rutten fastspänd
+     kan det bara ha kommit ur cachen. Läses via window.Dokument.sparade() —
+     högen har ingen egen vy längre, korten ligger på sina lektioner i veckan.
+     Sådden väntar in förstabesökets EGEN cachning av rutten: svaret kunde annars
+     ligga i flykt och skriva över sådden efteråt. */
+  await page.waitForFunction(() => !!localStorage.getItem("swr1:/api/dokument"),
+    null, { timeout: 8_000 });
+  await saCache(page, "/api/dokument", {
+    sparade: [{ id: 9, dokument: {
+      typ: "Prov", moment: NAMN, klass: "NA25", kurs: "Matematik 3c",
+      datum: "2026-08-24", tid: "08:15–09:00", gy: [], inst: {},
+    } }],
+  });
+
+  let svarat = 0;
+  page.on("response", r => { if (/\/api\/dokument(\?|$)/.test(r.url())) svarat++; });
+  await hallFast(page, "**/api/dokument");
+  await page.goto("/");
+
+  await page.waitForFunction(namn => window.Dokument
+    && (window.Dokument.sparade() || []).some(v => v && v.moment === namn),
+  NAMN, { timeout: 8_000 });
+  expect(svarat, "/api/dokument svarade — testet bevisar då ingenting").toBe(0);
+});
+
+test("ett strömjobb glömmer det cachade svaret", async ({ page }) => {
+  await laddad(page);
+  /* Refine och approve går som strömmar, förbi json() — utan glömskan i strom()
+     hade nästa öppning ritat provet som det såg ut före omskrivningen. */
+  await saCache(page, "/api/exams/33", { exam: { uppgifter: [] } });
+  await page.route("**/api/exams/33/refine", route => route.fulfill({
+    status: 200, contentType: "text/event-stream",
+    body: 'data: {"type":"done","result":{}}\n\n',
+  }));
+  const kvar = await page.evaluate(async () => {
+    await window.API.strom("/api/exams/33/refine", {});
+    return Object.keys(localStorage).filter(k => k.indexOf("swr1:/api/exams") === 0);
+  });
+  expect(kvar, `strömmen lämnade kvar cachade svar: ${kvar.join(", ")}`).toEqual([]);
+});
+
 test("veckan står där innan /api/schema svarat", async ({ page }) => {
   await laddad(page);
   const harSchema = await page.evaluate(() => !!localStorage.getItem("swr1:/api/schema"));
