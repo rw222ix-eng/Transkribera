@@ -1651,6 +1651,20 @@
       <div class="gfabs">
         <button class="gfab" id="g-valj" type="button" aria-pressed="false"><span class="gfabikon">◎</span><span id="g-valjtext">Välj element</span></button>
       </div>
+      <!-- MINI-CHATTEN: en ruta i pappret, en mening om just den. Vägen från
+           «det här ska ändras» till meningen ska vara kort — panelen längst
+           bort till höger är en resa när ögat redan står på rutan. Skickas
+           samma väg som panelchatten (samma kö, samma prompt); den här rutan
+           är bara en annan plats att skriva på.
+           Fast position, satt av granska.js: pappret panoreras och zoomas med
+           transform, så det finns ingen scrollposition att hänga i. -->
+      <div class="gmini" id="g-mini" hidden>
+        <button class="gminiknapp" id="g-miniknapp" type="button">✎ Ändra den här</button>
+        <form class="gminiform" id="g-miniform" hidden>
+          <textarea id="g-minifalt" rows="1" placeholder="Vad ska ändras här?"></textarea>
+          <button class="gminikor" id="g-minikor" type="submit" aria-label="Skicka">↵</button>
+        </form>
+      </div>
     </div>
     <aside class="gpanel">
       <div class="gpanelhuvud">

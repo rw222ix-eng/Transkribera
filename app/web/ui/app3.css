@@ -131,6 +131,24 @@ html{font-size:clamp(14.5px,13px + .3vw,18.5px)}
 .gdiff .gfore{display:block;color:var(--ink-3);text-decoration:line-through;text-decoration-color:var(--berry)}
 .gdiff .gefter{display:block;margin-top:4px;color:var(--ink)}
 .gdifford{font-size:.72rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin-right:8px}
+/* Paret som «Ändrade delar»-kortet pekade på, ett ögonblick. */
+.gdiff p[data-lyst]{box-shadow:0 0 0 2px var(--atmosphere);border-radius:7px}
+
+/* ── ÄNDRADE DELAR ─────────────────────────────────
+   Vad som FAKTISKT skrevs om, ur serverns egen diff (app/dokumentdiff.py) —
+   samma lista som nålarna och blinken i pappret går på. Knappar och inte text:
+   varje del leder till sitt före/efter, eller till rutan i pappret. */
+.gandrade{margin:10px 0 0;padding:9px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface)}
+.gandradehuv{display:block;margin-bottom:7px;font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+.gandradelista{display:flex;flex-wrap:wrap;gap:6px}
+.gandradedel{border:1px solid var(--line);border-radius:var(--r-pill);background:var(--sunken);color:var(--ink-2);font-family:inherit;font-size:.78rem;padding:4px 11px;cursor:pointer;transition:background-color var(--dur-2) var(--ease),border-color var(--dur-2) var(--ease),color var(--dur-2) var(--ease)}
+.gandradedel:hover{background:var(--accent-weak);border-color:var(--atmosphere);color:var(--sky-deep)}
+.gandradedel:focus-visible{outline:2px solid var(--sky-deep);outline-offset:1px}
+/* Omtaget: en liten väg tillbaka när varvet inte blev som läraren tänkt. */
+.gomtag{margin:9px 0 0;border:1px solid var(--line);border-radius:var(--r-pill);background:transparent;color:var(--ink-3);font-family:inherit;font-size:.74rem;padding:4px 12px;cursor:pointer;transition:color var(--dur-2) var(--ease),border-color var(--dur-2) var(--ease)}
+.gomtag:hover{color:var(--berry);border-color:var(--berry)}
+.gomtag:disabled{opacity:.45;cursor:default}
+.gomtag:focus-visible{outline:2px solid var(--sky-deep);outline-offset:1px}
 
 /* kön: samma väljare som i filtren — samma storlek, samma hover, samma panel */
 .komark .valj[data-gissad] .valjknapp{border-style:solid;border-color:var(--atmosphere)}
