@@ -31,7 +31,7 @@ from app import (ci_profil, course_data, db, dokumentdiff, exam_gen,
 # den heter också det. Utan omdöpningen skuggar funktionen modulen inne i
 # create_router, och anropet blir ett rekursivt HTTP-lager djupt.
 from app import kalibrering as kalibrering_modul
-from app.web import routes_planning
+from app.web import Id64, _kropp, routes_planning
 from app.web.sse import Stege, jobb_response
 
 # ── DOMÄNSTEGEN ──────────────────────────────────────────────────────────────
@@ -311,7 +311,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
     # ---------------------------------------------------- innehållsstatus --
 
     @router.get("/api/exams/content-status")
-    def content_status(course_id: int, group_id: int | None = None):
+    def content_status(course_id: Id64, group_id: Id64 | None = None):
         """Kursens innehållspunkter med behandlat/obehandlat-markering ur
         minnet (taggade mot någon lektion — ev. filtrerat på klass)."""
         conn = db.connect(db_file)
@@ -407,7 +407,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         return {"exams": exams}
 
     @router.get("/api/exams/{exam_id:int}")
-    def get_exam(exam_id: int):
+    def get_exam(exam_id: Id64):
         conn = db.connect(db_file)
         try:
             view = db.get_exam(conn, exam_id)
@@ -426,7 +426,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
 
     @router.post("/api/exams/generate")
     async def generate(req: Request):
-        body = await req.json()
+        body = await _kropp(req)
         group_id, course_id = _ids(body)
         if not course_id:
             return JSONResponse({"error": "välj en kurs"}, status_code=400)
@@ -761,8 +761,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
     # -------------------------------------------------------------- refine --
 
     @router.post("/api/exams/{exam_id:int}/refine")
-    async def refine(exam_id: int, req: Request):
-        body = await req.json()
+    async def refine(exam_id: Id64, req: Request):
+        body = await _kropp(req)
         message = (body.get("message") or "").strip()
         if not message:
             return JSONResponse({"error": "skriv vad som ska ändras"},
@@ -938,7 +938,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         return out
 
     @router.post("/api/exams/{exam_id:int}/approve")
-    async def approve(exam_id: int, req: Request):
+    async def approve(exam_id: Id64, req: Request):
         """Lås versionen och lägg pappret på disk.
 
         PDF:en byggs i första hand av de blad klienten ritade av (``blad`` i
@@ -1391,7 +1391,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
     # ------------------------------------------------------ tillbaka igen --
 
     @router.post("/api/exams/{exam_id:int}/oppna")
-    def oppna(exam_id: int):
+    def oppna(exam_id: Id64):
         """Lägg tillbaka ett godkänt papper som utkast.
 
         Godkännandet var en enkelriktad dörr: efter det gick pappret inte att
@@ -1485,15 +1485,15 @@ def create_router(base: Path, arbiter) -> APIRouter:
                             filename=sido.name)
 
     @router.get("/api/exams/{exam_id:int}/pdf")
-    def get_pdf(exam_id: int):
+    def get_pdf(exam_id: Id64):
         return _serve_artifact(exam_id, "pdf")
 
     @router.get("/api/exams/{exam_id:int}/tex")
-    def get_tex(exam_id: int):
+    def get_tex(exam_id: Id64):
         return _serve_artifact(exam_id, "tex")
 
     @router.get("/api/exams/{exam_id:int}/bedomning")
-    def get_bedomning(exam_id: int):
+    def get_bedomning(exam_id: Id64):
         """Lärarens rättningsdokument: kravgränser, bedömningsanvisning och
         kommenterade elevlösningar, satt i LaTeX vid godkännandet.
 
@@ -1506,7 +1506,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
             "då kompileras den bredvid.")
 
     @router.get("/api/exams/{exam_id:int}/losningar")
-    def get_losningar(exam_id: int):
+    def get_losningar(exam_id: Id64):
         """Provets lösningsförslag som det SER UT i appen — facitläget avritat
         vid godkännandet. Saknas bilden faller den tillbaka på
         bedömningsanvisningen (tryck.losningar_bredvid): ett godkännande utan
@@ -1517,7 +1517,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
             "då ritas det av.")
 
     @router.get("/api/exams/{exam_id:int}/facit")
-    def get_facit(exam_id: int):
+    def get_facit(exam_id: Id64):
         return _serve_bredvid(
             exam_id, tryck.facit_bredvid,
             "Facit finns inte som egen fil — arbetsbladet bär det på sista "
@@ -1526,7 +1526,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
     # -------------------------------------------------------------- radera --
 
     @router.delete("/api/exams/{exam_id:int}")
-    def delete_exam(exam_id: int):
+    def delete_exam(exam_id: Id64):
         """Radera ett prov/arbetsblad permanent: databasraderna och de
         sparade artefakterna (.tex/.pdf + systerdokumenten bredvid).
         Filer tas endast bort strikt under Transkriberingar/ — sökvägar

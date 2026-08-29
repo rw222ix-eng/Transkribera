@@ -19,7 +19,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from app import db
-from app.web import sse
+from app.web import Id64, sse
 
 
 def create_router(base: Path) -> APIRouter:
@@ -66,7 +66,7 @@ def create_router(base: Path) -> APIRouter:
                 "kor": [_jobb(r) for r in rader if r["status"] in db.JOBB_KOR]}
 
     @router.get("/api/jobb/{jobb_id:int}")
-    def ett(jobb_id: int):
+    def ett(jobb_id: Id64):
         conn = db.connect(db_file)
         try:
             rad = db.hamta_jobb(conn, jobb_id)
@@ -80,7 +80,7 @@ def create_router(base: Path) -> APIRouter:
         return _jobb(rad)
 
     @router.get("/api/jobb/{jobb_id:int}/strom")
-    def strom(jobb_id: int, req: Request, fran: int = 0):
+    def strom(jobb_id: Id64, req: Request, fran: Id64 = 0):
         """Historiken från `fran`, och sedan live.
 
         SSE över GET, till skillnad från de jobbstartande rutterna som är
@@ -96,7 +96,7 @@ def create_router(base: Path) -> APIRouter:
         return sse.uppspelning(jobb_id, req, db_file=db_file, fran=fran)
 
     @router.post("/api/jobb/{jobb_id:int}/avbryt")
-    def avbryt(jobb_id: int):
+    def avbryt(jobb_id: Id64):
         """Lärarens Avbryt.
 
         Två saker händer, och båda behövs: flaggan stoppar tråden vid nästa

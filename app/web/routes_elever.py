@@ -25,6 +25,7 @@ from fastapi.responses import JSONResponse
 
 from app import (ci_profil, course_data, db, elev_feedback, gpu_arbiter,
                  klasslista, rattning)
+from app.web import Id64, _kropp
 from app.web.sse import sse_response
 
 # Molnjobben köar inte bakom kortet längre (se gpu_arbiter): de delar en
@@ -86,7 +87,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
     # ------------------------------------------------------------ klasslistan --
 
     @router.get("/api/groups/{group_id:int}/elever")
-    def hamta_elever(group_id: int):
+    def hamta_elever(group_id: Id64):
         conn = db.connect(db_file)
         try:
             return {"elever": db.list_elever(conn, group_id)}
@@ -94,12 +95,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
             conn.close()
 
     @router.put("/api/groups/{group_id:int}/elever")
-    async def spara_elever(group_id: int, req: Request):
+    async def spara_elever(group_id: Id64, req: Request):
         """Hela klasslistan i ett svep — läraren klistrar in den ur sin lista,
         precis som den ser ut, och klasslista.ordna städar och sorterar den på
         efternamn. Ingen elev raderas: den som stryks inaktiveras och tar sina
         gamla prov med sig (db.save_elever)."""
-        body = await req.json()
+        body = await _kropp(req)
         namn = body.get("namn") if isinstance(body, dict) else body
         if not isinstance(namn, list):
             return JSONResponse({"error": "namn måste vara en lista"},
@@ -114,7 +115,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
     # ---------------------------------------------------------- elevresultat --
 
     @router.get("/api/dokument/{dokument_id:int}/elevresultat")
-    def hamta_elevresultat(dokument_id: int):
+    def hamta_elevresultat(dokument_id: Id64):
         u = _underlag(dokument_id)
         if u is None:
             return JSONResponse({"error": "okänt dokument"}, status_code=404)
@@ -126,14 +127,14 @@ def create_router(base: Path, arbiter) -> APIRouter:
             conn.close()
 
     @router.put("/api/dokument/{dokument_id:int}/elevresultat")
-    async def spara_elevresultat(dokument_id: int, req: Request):
+    async def spara_elevresultat(dokument_id: Id64, req: Request):
         """Elevernas poäng — och klassens, framräknade ur dem.
 
         Ordningen är inte fri: elevraderna refererar rattning(dokument_id), så
         klassrättningen måste finnas när de skrivs. Skrev ingen elev något alls
         finns ingen rättning att skriva, och då tas den bort i stället — ett
         prov utan siffror ska säga «Rätta provet», inte «Rättat · 0 %»."""
-        body = await req.json()
+        body = await _kropp(req)
         resultat = body.get("resultat") if isinstance(body, dict) else None
         if not isinstance(resultat, dict):
             return JSONResponse({"error": "resultat krävs"}, status_code=400)
@@ -169,7 +170,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
             conn.close()
 
     @router.delete("/api/dokument/{dokument_id:int}/elevresultat")
-    def ta_bort_elevresultat(dokument_id: int):
+    def ta_bort_elevresultat(dokument_id: Id64):
         """Ångra: elevernas siffror, feedbacken och klassaggregatet. Toasten
         erbjuder det, och då ska ingenting ligga kvar och komma tillbaka."""
         conn = db.connect(db_file)
@@ -198,7 +199,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         return prof | {"kurs": kurs or ""}
 
     @router.get("/api/elever/{elev_id:int}/ci-profil")
-    def elevens_ci_profil(elev_id: int, kurs: str | None = None,
+    def elevens_ci_profil(elev_id: Id64, kurs: str | None = None,
                           group_id: int | None = None):
         """Elevens centrala innehåll, svagast först.
 
@@ -209,7 +210,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
             "elev_id": elev_id}
 
     @router.get("/api/groups/{group_id:int}/ci-profil")
-    def klassens_ci_profil(group_id: int, kurs: str | None = None):
+    def klassens_ci_profil(group_id: Id64, kurs: str | None = None):
         """Samma räkning för hela klassen — underlaget för vad som ska tas om
         gemensamt i stället för elev för elev."""
         return _profil(kurs=kurs, elev_id=None, group_id=group_id) | {
@@ -218,7 +219,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
     # ------------------------------------------------------------- feedbacken --
 
     @router.post("/api/dokument/{dokument_id:int}/elevfeedback")
-    async def skriv_elevfeedback(dokument_id: int, req: Request):
+    async def skriv_elevfeedback(dokument_id: Id64, req: Request):
         """Feedbacktexten per elev, skriven av Claude Code.
 
         Anonymiseringen görs HÄR och inte i generatorn: `ordning` är
@@ -280,9 +281,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
         return sse_response(job, req)
 
     @router.put("/api/dokument/{dokument_id:int}/elevfeedback")
-    async def spara_elevfeedback(dokument_id: int, req: Request):
+    async def spara_elevfeedback(dokument_id: Id64, req: Request):
         """Lärarens egen redigering. Texten är hennes när hon rört den."""
-        body = await req.json()
+        body = await _kropp(req)
         feedback = body.get("feedback") if isinstance(body, dict) else None
         if not isinstance(feedback, dict):
             return JSONResponse({"error": "feedback krävs"}, status_code=400)
