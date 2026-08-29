@@ -77,17 +77,11 @@
     return { bok: Object.assign({ id, fran: s.fran, till: s.till },
       u ? { remsa: u.remsa || '', bortremsa: u.bortremsa || '' } : {}) };
   }
-  /* Varje lokal skrivning stämplas: ett SWR-svar som var i flykt när den gick
-     i väg är redan omkört och får inte rita om planeringen (hogenForsok). */
-  let skrivetHar = false;
-  const skicka = (vag, metod, kropp) => {
-    skrivetHar = true;
-    return window.API.json(vag, {
-      method: metod,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(kropp || {}),
-    });
-  };
+  const skicka = (vag, metod, kropp) => window.API.json(vag, {
+    method: metod,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(kropp || {}),
+  });
   const dokKlart = v => sparasNu.get(v) || Promise.resolve(null);
 
   /* `stada` skickas BARA av godkännandet (se utkastGodkann). Lösningsbladet,
@@ -121,11 +115,9 @@
   }
   function dokTaBort(v) {
     if (!serverPa() || !v) return Promise.resolve(null);
-    return dokKlart(v).then(() => {
-      if (!v.id) return null;
-      skrivetHar = true;
-      return window.API.json('/api/dokument/' + v.id, { method: 'DELETE' }).catch(() => null);
-    });
+    return dokKlart(v).then(() => v.id
+      ? window.API.json('/api/dokument/' + v.id, { method: 'DELETE' }).catch(() => null)
+      : null);
   }
   /* Platsen i högen bär betydelse: syskonet ligger direkt efter sitt original
      och en ångrad radering hamnar tillbaka där den låg. Ordningen skrivs därför
@@ -233,10 +225,7 @@
     visarLosning = false;
     $('#dokument').hidden = true;
     planKoll();
-    if (id && serverPa()) {
-      skrivetHar = true;
-      window.API.json('/api/dokument/' + id, { method: 'DELETE' }).catch(() => {});
-    }
+    if (id && serverPa()) window.API.json('/api/dokument/' + id, { method: 'DELETE' }).catch(() => {});
     const ater = () => {
       versioner = vs;
       bladNu = nuVar; bladko = koVar;
@@ -2046,16 +2035,16 @@
          av sig själv. En PATCH per öppning hade varit en skrivning för att inget
          hände.
 
-     `vidBytt` kallas bara när listan FAKTISKT byttes — då, och bara då, finns
+     Löftet är `true` bara när listan FAKTISKT byttes — då, och bara då, finns
      det något att rita om. */
   const speglat = new WeakSet();
-  function speglaExamen(v, vidBytt) {
-    if (!serverPa() || !v || v.provBorta || !v.provId) return;
+  function speglaExamen(v) {
+    if (!serverPa() || !v || v.provBorta || !v.provId) return Promise.resolve(false);
     /* En gång per papper och sidladdning. Öppnas förhandsvisningen tio gånger
        ska basen inte läsas tio — efter första varvet ÄR listan den examen bär. */
-    if (speglat.has(v)) return;
+    if (speglat.has(v)) return Promise.resolve(false);
     speglat.add(v);
-    const bygg = res => {
+    return window.API.json(`/api/exams/${v.provId}`).then(res => {
       const nya = franProv(res && res.exam);
       /* Ett tomt svar skriver ingenting: hellre den gamla listan än ett blankt
          papper om examen råkar sakna uppgifter. */
@@ -2063,15 +2052,7 @@
       if (JSON.stringify(nya) === JSON.stringify(v.uppgifter || [])) return false;
       v.uppgifter = nya;
       return true;
-    };
-    /* SWR: låg examen i cachen läks pappret SYNKRONT — omritningen kommer innan
-       läraren hunnit se den gamla listan — och det färska svaret rättar efteråt
-       bara om det säger något annat. Skrivvägarna som går som strömmar (refine,
-       approve) glömmer cachen i api.js strom, så ett cachat exam-svar är aldrig
-       äldre än senaste omskrivningen. */
-    const rita = res => { if (bygg(res) && vidBytt) vidBytt(); };
-    window.API.jsonSWR(`/api/exams/${v.provId}`, { vidCache: rita, vidFarskt: rita })
-      .catch(() => {});
+    }).catch(() => false);
   }
 
   function nyVersion(bas, andring) {
@@ -3882,11 +3863,7 @@
        utan LLM-anrop. Samma behovsräkning som ovan — två olika mått på «är
        den skriven?» hade förr eller senare sagt olika saker. */
     const id0 = v.id || utkastId;
-    /* jsonSWR i stället för json: samma färska svar tillbaka (löftet löser
-       alltid med serverns — beslutet nedan får aldrig fattas på en cache), men
-       på vägen fylls SWR-cachen på, så nästa laddning ritar högen ur ett svar
-       som är så här färskt. */
-    (id0 ? window.API.jsonSWR('/api/dokument').catch(() => null)
+    (id0 ? window.API.json('/api/dokument').catch(() => null)
          : Promise.resolve(null)).then(svar => {
       const rad = svar
         ? [svar.utkast].concat(svar.sparade || []).filter(Boolean)
@@ -4819,8 +4796,8 @@
        exakt samma väg — dess facit läses ur samma uppgiftslista.
        `fhIndex`-vakten: hann läraren stänga rutan eller bläddra till ett annat
        papper ska svaret inte rita in sig i det hon tittar på nu. */
-    speglaExamen(v, () => {
-      if (fhIndex === i && !fhskal.hidden) ritaIn($('#fh-ark'), v);
+    speglaExamen(v).then(bytt => {
+      if (bytt && fhIndex === i && !fhskal.hidden) ritaIn($('#fh-ark'), v);
     });
   }
   function fhStang() {
@@ -5420,57 +5397,14 @@
      tvärtom. */
   const hogen = () => {
     if (!serverPa()) return Promise.resolve(null);
-    /* SWR som arkivets (app.js hydreraArkivet): låg svaret i cachen ritas högen
-       i samma andetag som kalendern är klar, och servern ritar om den bara när
-       den säger något annat. Krokarna stashar bara — ritningen väntar på
-       kalendern (klassvyn läser veckan), aldrig tvärtom. */
-    return window.API.jsonSWR('/api/dokument', {
-      vidCache: d => { hogenSvar = d; },
-      vidFarskt: d => { hogenSvar = d; hogenForsok(); },
-    }).catch(() => null);
+    return window.API.json('/api/dokument').catch(() => null);
   };
   let hogenPaVag = null;
-  let hogenSvar = null;      // senaste obehandlade svaret — cachat eller färskt
-  let hogenRedo = false;     // kalendern klar: klassvyn kan läsa veckan
-  let hogenRitad = false;
 
-  function hogenForsok() {
-    if (!hogenRedo || !hogenSvar) return;
-    const d = hogenSvar;
-    hogenSvar = null;
-    if (!hogenRitad) { hogenRitad = true; tillampaDokument(d); return; }
-    /* Omritning: det färska svaret skiljer sig från det cachade som ritades.
-       Skrevs något lokalt under tiden är snapshoten redan omkörd — rör inget
-       (skrivningen glömde cachen, nästa laddning hämtar sanningen). Och står
-       läraren mitt i planeringen byts inte marken under henne: omritningen
-       erbjuds i stället, arkivlappens tanke (app.js arkivetLedigt). */
-    if (skrivetHar) return;
-    const om = () => { if (!skrivetHar) tillampaDokument(d); };
-    if (planLedigt()) om();
-    else window.toast && window.toast('Planeringen har ändrats sedan sidan ritades.', 'Uppdatera', om);
-  }
-
-  /* Är det fritt att bygga om planeringen under läraren just nu? Förhandsrutan
-     och ett framme liggande papper är arbetsytor, inte listor — de ritas aldrig
-     om i smyg. Ligger fliken inte ens framme finns ingen att störa. */
-  function planLedigt() {
-    if (fhskal && !fhskal.hidden) return false;
-    const rot = $('#vy-planering');
-    if (!rot || rot.hidden) return true;
-    const kanvas = $('#dokument');
-    if (kanvas && !kanvas.hidden) return false;
-    const aktiv = document.activeElement;
-    return !(aktiv && aktiv !== document.body && rot.contains(aktiv));
-  }
-
-  function hydreraDokument() {
+  async function hydreraDokument() {
     if (!serverPa()) return;
-    if (!hogenPaVag) hogenPaVag = hogen();
-    hogenRedo = true;
-    hogenForsok();      // cachehalvan lades dit synkront när anropet gick i väg
-  }
-
-  function tillampaDokument(d) {
+    const d = await (hogenPaVag || hogen());
+    if (!d) return;
     const rader = d.sparade || [];
     sparat = rader.map(x => x.dokument).filter(Boolean);
     /* Det parkerade parförslaget bor på pappret som väntar på sin följeslagare
@@ -5526,7 +5460,7 @@
        hon backat ifrån vore att göra om ångringen åt henne. Varven bakåt är vad
        de var, och det är hela poängen med dem. */
     if (u.markor === versioner.length - 1) {
-      speglaExamen(v, () => { if (versioner[nu] === v) visa(nu); });
+      speglaExamen(v).then(bytt => { if (bytt && versioner[nu] === v) visa(nu); });
     }
     if (window.PlanSteg) { window.PlanSteg.las(4, false); window.PlanSteg.gaTill(4); }
   }

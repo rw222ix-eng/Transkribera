@@ -27,7 +27,9 @@ def _clock(t: float) -> str:
 
 
 def _meta_pairs(lesson: dict) -> list[tuple[str, str]]:
-    pairs = [("Datum", lesson.get("datum") or lesson.get("ts", "")[:10]),
+    # `or ""`, inte default i get(): ts-kolumnen kan finnas med värdet None,
+    # och None[:10] fällde hela rapporten (fuzzfynd 3).
+    pairs = [("Datum", lesson.get("datum") or (lesson.get("ts") or "")[:10]),
              ("Klass", lesson.get("group")), ("Kurs", lesson.get("course")),
              ("Sal", lesson.get("sal")), ("Längd", lesson.get("dur"))]
     return [(k, v) for k, v in pairs if v]

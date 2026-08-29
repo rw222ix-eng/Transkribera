@@ -2233,21 +2233,32 @@ def replace_schema(conn: sqlite3.Connection, rader: list[dict]) -> list[dict]:
     Klass- och kursraderna slås upp FÖRE transaktionen: _get_or_create
     committar när den skapar en rad, och en commit mitt i hade avslutat
     transaktionen och lämnat schemat halvtomt om nästa rad small."""
+    # Textfälten kan komma utifrån med vilken JSON-typ som helst (kroppen är
+    # otypad); ett tal i `tid` eller `klass` fällde hela skrivningen på
+    # `.strip()`. Fel typ betyder samma sak som tomt fält.
+    def _text(v) -> str:
+        return v.strip() if isinstance(v, str) else ""
+
     klara = []
     for r in rader or []:
         try:
             dag = int(r.get("dag") or 0)
         except (TypeError, ValueError):
             continue
-        tid = (r.get("tid") or "").strip()
+        tid = _text(r.get("tid"))
         if not (1 <= dag <= 7) or not tid:
             continue
-        klara.append((dag, tid, get_or_create_group(conn, r.get("klass") or ""),
-                      get_or_create_course(conn, r.get("kurs") or ""),
-                      (r.get("sal") or "").strip() or None,
-                      (r.get("fran") or "").strip() or None,
-                      (r.get("till") or "").strip() or None,
-                      ",".join(r.get("undantag") or []) or None))
+        # undantag måste vara en lista för att kunna kommateras — annan form
+        # (tal, sträng, objekt) behandlas som ingen: raden är ändå placerbar.
+        undantag = r.get("undantag")
+        if not isinstance(undantag, list):
+            undantag = []
+        klara.append((dag, tid, get_or_create_group(conn, _text(r.get("klass"))),
+                      get_or_create_course(conn, _text(r.get("kurs"))),
+                      _text(r.get("sal")) or None,
+                      _text(r.get("fran")) or None,
+                      _text(r.get("till")) or None,
+                      ",".join(str(u) for u in undantag) or None))
     with skriv(conn):
         conn.execute("DELETE FROM schema_lektioner")
         conn.executemany(

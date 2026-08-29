@@ -14,6 +14,7 @@ import uuid
 from datetime import datetime
 from html import escape as _escape
 from pathlib import Path
+from typing import Annotated
 
 from urllib.parse import urlsplit
 
@@ -21,6 +22,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse,
                                PlainTextResponse, StreamingResponse)
 from fastapi.staticfiles import StaticFiles
+from pydantic import Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app import (debug_log, hardware, llm_client,
@@ -33,8 +35,9 @@ from app import (debug_log, hardware, llm_client,
 # SJÄLVA filen (media = Path(...)) och skuggar modulen — aliaset gör att
 # varaktigheten går att fråga efter även där.
 from app import media as media_mod
-from app.web import (routes_anteckningar, routes_bok, routes_elever, routes_exam,
-                     routes_jobb, routes_planning, routes_tryck, sse)
+from app.web import (Id64, _kropp, routes_anteckningar, routes_bok,
+                     routes_elever, routes_exam, routes_jobb, routes_planning,
+                     routes_tryck, sse)
 
 _MONTHS_SV = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
 
@@ -478,7 +481,7 @@ def create_app(base_dir: Path | None = None,
     async def api_elevenlabs_nyckel(req: Request):
         """Spara (eller radera) ElevenLabs-nyckeln. Nyckeln returneras ALDRIG —
         svaret säger bara om det finns en. Filen ligger i .gitignore."""
-        body = await req.json()
+        body = await _kropp(req)
         try:
             elevenlabs_asr.spara_nyckel(base, body.get("nyckel") or "")
         except OSError as e:
@@ -496,7 +499,7 @@ def create_app(base_dir: Path | None = None,
         eller {"reset": true} för standard (base/models). Träder i kraft direkt för
         nya nedladdningar, inläsning och språkmodellen (uppdaterar GPU-arbitern)."""
         nonlocal models_root
-        body = await req.json()
+        body = await _kropp(req)
         if body.get("reset"):
             new_dir = None
         else:
@@ -515,7 +518,7 @@ def create_app(base_dir: Path | None = None,
 
     @app.post("/api/transcribe")
     async def api_transcribe(req: Request):
-        body = await req.json()
+        body = await _kropp(req)
         source = (body.get("source") or "").strip()
         language = body.get("language") or ""
         target_language = body.get("target_language") or language   # subtitle output language
@@ -901,7 +904,7 @@ def create_app(base_dir: Path | None = None,
     async def api_history_update(entry_id: str, req: Request):
         """Persist edits to a saved transcription: an edited `transcript` (rewrites
         the sidecar files + recomputes the word count) and/or a saved `summary`."""
-        body = await req.json()
+        body = await _kropp(req)
         items = history_store.load_history(history_file)
         entry = next((e for e in items if e.get("id") == entry_id), None)
         if entry is None:
@@ -968,7 +971,7 @@ def create_app(base_dir: Path | None = None,
         return les
 
     @app.get("/api/lessons")
-    def api_lessons(group_id: int | None = None, course_id: int | None = None,
+    def api_lessons(group_id: Id64 | None = None, course_id: Id64 | None = None,
                     date_from: str | None = None, date_to: str | None = None):
         conn = _db()
         try:
@@ -979,7 +982,7 @@ def create_app(base_dir: Path | None = None,
         return [_lesson_view(it) for it in items]
 
     @app.get("/api/lessons/{lesson_id}")
-    def api_lesson_get(lesson_id: int):
+    def api_lesson_get(lesson_id: Id64):
         conn = _db()
         try:
             les = db.get_lesson(conn, lesson_id)
@@ -990,8 +993,8 @@ def create_app(base_dir: Path | None = None,
         return _lesson_view(les)
 
     @app.patch("/api/lessons/{lesson_id}")
-    async def api_lesson_patch(lesson_id: int, req: Request):
-        body = await req.json()
+    async def api_lesson_patch(lesson_id: Id64, req: Request):
+        body = await _kropp(req)
         conn = _db()
         try:
             if db.get_lesson(conn, lesson_id) is None:
@@ -1043,7 +1046,7 @@ def create_app(base_dir: Path | None = None,
             pass
 
     @app.delete("/api/lessons/{lesson_id}")
-    def api_lesson_delete(lesson_id: int):
+    def api_lesson_delete(lesson_id: Id64):
         conn = _db()
         try:
             lp = db.lesson_paths(conn, lesson_id)
@@ -1083,7 +1086,7 @@ def create_app(base_dir: Path | None = None,
 
     @app.post("/api/courses")
     async def api_course_create(req: Request):
-        body = await req.json()
+        body = await _kropp(req)
         conn = _db()
         try:
             cid = db.get_or_create_course(conn, body.get("namn", ""))
@@ -1103,7 +1106,7 @@ def create_app(base_dir: Path | None = None,
 
     @app.post("/api/groups")
     async def api_group_create(req: Request):
-        body = await req.json()
+        body = await _kropp(req)
         conn = _db()
         try:
             gid = db.get_or_create_group(conn, body.get("namn", ""))
@@ -1140,10 +1143,17 @@ def create_app(base_dir: Path | None = None,
     async def api_schema_replace(req: Request):
         """Skriv om hela veckoschemat. PUT och inte POST med flit: schemat är
         EN sak som ägs av skolan, inte en samling rader att lägga till i."""
-        body = await req.json()
+        # Inte _kropp: rutten tar också en NAKEN lista som kropp (kontraktet i
+        # test_datagrund), och _kropp släpper bara igenom objekt.
+        try:
+            body = await req.json()
+        except Exception:
+            return JSONResponse({"error": "kroppen är inte giltig JSON"},
+                                status_code=400)
         rader = body.get("schema") if isinstance(body, dict) else body
-        if not isinstance(rader, list):
-            return JSONResponse({"error": "schema måste vara en lista"}, status_code=400)
+        if not isinstance(rader, list) or not all(isinstance(r, dict) for r in rader):
+            return JSONResponse({"error": "schema måste vara en lista av objekt"},
+                                status_code=400)
         conn = _db()
         try:
             return {"schema": db.replace_schema(conn, rader)}
@@ -1154,7 +1164,7 @@ def create_app(base_dir: Path | None = None,
     async def api_kalenderpost_create(req: Request):
         """Posten läraren godtagit (frontendens Kalender.lagg). Utan den dog
         kalendern vid omladdning — det var prototypens största lögn."""
-        body = await req.json()
+        body = await _kropp(req)
         conn = _db()
         try:
             post = db.add_kalenderpost(
@@ -1171,7 +1181,9 @@ def create_app(base_dir: Path | None = None,
     # 330 dagar framåt, inte 210: läsfönstret måste nå LÄSÅRETS slut. Med 210
     # slutade det i mars, och de nationella proven i maj fanns helt enkelt inte
     # för appen — en synk i augusti ska se hela året den planerar (2026-08-10).
-    def api_schema_synk(dagar: int = 330):
+    # Taket 3650 är inte SQLites utan datetimes: dagar=7773350 svämmade över
+    # timedelta och blev ett 502 i stället för ett 422. Tio år räcker för alla.
+    def api_schema_synk(dagar: Annotated[int, Field(ge=1, le=3650)] = 330):
         """Läs om schemat, salarna, loven och posterna ur Google Kalender.
 
         Bara 'schema'-ursprunget byts ut — lärarens godkända poster ('appen')
@@ -1314,7 +1326,7 @@ def create_app(base_dir: Path | None = None,
 
     @app.post("/api/dokument")
     async def api_dokument_skapa(req: Request):
-        body = await req.json()
+        body = await _kropp(req)
         dok = body.get("dokument")
         if not isinstance(dok, dict):
             return JSONResponse({"error": "dokument krävs"}, status_code=400)
@@ -1349,11 +1361,11 @@ def create_app(base_dir: Path | None = None,
             conn.close()
 
     @app.patch("/api/dokument/{dokument_id}")
-    async def api_dokument_uppdatera(dokument_id: int, req: Request):
+    async def api_dokument_uppdatera(dokument_id: Id64, req: Request):
         """Skriver om versionen markören står på, flyttar markören eller byter
         status. Rättningen och återbruksräknaren är inte ändringar att ångra —
         de skrivs rakt på pappret."""
-        body = await req.json()
+        body = await _kropp(req)
         conn = _db()
         try:
             d = db.update_dokument(
@@ -1373,9 +1385,9 @@ def create_app(base_dir: Path | None = None,
         return d
 
     @app.post("/api/dokument/{dokument_id}/versioner")
-    async def api_dokument_version(dokument_id: int, req: Request):
+    async def api_dokument_version(dokument_id: Id64, req: Request):
         """En ändring: ny version efter markören, och det som låg framåt kapas."""
-        body = await req.json()
+        body = await _kropp(req)
         dok = body.get("dokument")
         if not isinstance(dok, dict):
             return JSONResponse({"error": "dokument krävs"}, status_code=400)
@@ -1390,7 +1402,7 @@ def create_app(base_dir: Path | None = None,
         return d
 
     @app.delete("/api/dokument/{dokument_id}")
-    def api_dokument_radera(dokument_id: int):
+    def api_dokument_radera(dokument_id: Id64):
         conn = _db()
         try:
             borta = db.delete_dokument(conn, dokument_id)
@@ -1404,7 +1416,7 @@ def create_app(base_dir: Path | None = None,
     async def api_dokument_ordning(req: Request):
         """Högens ordning, som klienten håller den: syskonet direkt efter sitt
         original, en ångrad radering tillbaka på sin plats."""
-        body = await req.json()
+        body = await _kropp(req)
         ids = body.get("ids") if isinstance(body, dict) else body
         if not isinstance(ids, list):
             return JSONResponse({"error": "ids måste vara en lista"}, status_code=400)
@@ -1458,7 +1470,7 @@ def create_app(base_dir: Path | None = None,
         return res
 
     @app.get("/api/dokument/{dokument_id}/rattning")
-    def api_rattning(dokument_id: int):
+    def api_rattning(dokument_id: Id64):
         """Raderna att fylla i + det som redan är ifyllt. `rattat` är null tills
         provet rättats — kortet säger «Rätta provet», inte «Rättat · 0 %»."""
         papper, sparad = _rattning_underlag(dokument_id)
@@ -1473,11 +1485,11 @@ def create_app(base_dir: Path | None = None,
                 "rattat": res["rattat"] if sparad else None}
 
     @app.put("/api/dokument/{dokument_id}/rattning")
-    async def api_rattning_spara(dokument_id: int, req: Request):
+    async def api_rattning_spara(dokument_id: Id64, req: Request):
         """Klassens poäng per uppgift. Servern räknar andelen och de svaga
         momenten och lämnar tillbaka dem i den form pappret bär (`rattat`) —
         ett tal som räknas på två ställen blir förr eller senare två tal."""
-        body = await req.json()
+        body = await _kropp(req)
         papper, sparad = _rattning_underlag(dokument_id)
         if papper is None:
             return JSONResponse({"error": "okänt dokument"}, status_code=404)
@@ -1498,7 +1510,7 @@ def create_app(base_dir: Path | None = None,
                 "varden": res["rattat"]["varden"], "rattat": res["rattat"]}
 
     @app.delete("/api/dokument/{dokument_id}/rattning")
-    def api_rattning_ta_bort(dokument_id: int):
+    def api_rattning_ta_bort(dokument_id: Id64):
         """Ångra: provet är orättat igen. Toasten i rättningen erbjuder det, och
         då ska siffrorna vara borta — inte ligga kvar och komma tillbaka."""
         conn = _db()
@@ -1532,7 +1544,7 @@ def create_app(base_dir: Path | None = None,
         """Hela minnet i ett svep. Självläkningen (fel bok på fel kurs) körs i
         frontenden innan den skriver hit — servern ska inte ha en andra åsikt om
         vad klassen läser."""
-        body = await req.json()
+        body = await _kropp(req)
         if not isinstance(body, dict):
             return JSONResponse({"error": "minnet måste vara ett objekt"}, status_code=400)
         conn = _db()
@@ -1544,7 +1556,7 @@ def create_app(base_dir: Path | None = None,
     # ---- Insikter: LLM-extraktion + redigerbara kort (Fas 2) ------------------
 
     @app.get("/api/lessons/{lesson_id}/insights")
-    def api_insights(lesson_id: int):
+    def api_insights(lesson_id: Id64):
         conn = _db()
         try:
             return db.list_insights(conn, lesson_id)
@@ -1552,7 +1564,7 @@ def create_app(base_dir: Path | None = None,
             conn.close()
 
     @app.post("/api/lessons/{lesson_id}/extract")
-    async def api_extract(lesson_id: int, req: Request):
+    async def api_extract(lesson_id: Id64, req: Request):
         conn = _db()
         try:
             les = db.get_lesson(conn, lesson_id)
@@ -1606,8 +1618,8 @@ def create_app(base_dir: Path | None = None,
         return _sse_response(job, req)
 
     @app.post("/api/lessons/{lesson_id}/insights")
-    async def api_insight_add(lesson_id: int, req: Request):
-        body = await req.json()
+    async def api_insight_add(lesson_id: Id64, req: Request):
+        body = await _kropp(req)
         text = (body.get("text") or "").strip()
         if not text:
             return JSONResponse({"error": "text krävs"}, status_code=400)
@@ -1623,8 +1635,8 @@ def create_app(base_dir: Path | None = None,
         return ins
 
     @app.patch("/api/insights/{insight_id}")
-    async def api_insight_patch(insight_id: int, req: Request):
-        body = await req.json()
+    async def api_insight_patch(insight_id: Id64, req: Request):
+        body = await _kropp(req)
         conn = _db()
         try:
             if db.get_insight(conn, insight_id) is None:
@@ -1637,7 +1649,7 @@ def create_app(base_dir: Path | None = None,
         return ins
 
     @app.delete("/api/insights/{insight_id}")
-    def api_insight_delete(insight_id: int):
+    def api_insight_delete(insight_id: Id64):
         conn = _db()
         try:
             db.delete_insight(conn, insight_id)
@@ -1648,7 +1660,7 @@ def create_app(base_dir: Path | None = None,
     # ---- Markörer: viktiga ögonblick (under inspelning / uppspelning) ---------
 
     @app.get("/api/lessons/{lesson_id}/markers")
-    def api_markers(lesson_id: int):
+    def api_markers(lesson_id: Id64):
         conn = _db()
         try:
             return db.list_markers(conn, lesson_id)
@@ -1656,8 +1668,8 @@ def create_app(base_dir: Path | None = None,
             conn.close()
 
     @app.post("/api/lessons/{lesson_id}/markers")
-    async def api_marker_add(lesson_id: int, req: Request):
-        body = await req.json()
+    async def api_marker_add(lesson_id: Id64, req: Request):
+        body = await _kropp(req)
         conn = _db()
         try:
             if db.get_lesson(conn, lesson_id) is None:
@@ -1670,7 +1682,7 @@ def create_app(base_dir: Path | None = None,
         return m
 
     @app.delete("/api/markers/{marker_id}")
-    def api_marker_delete(marker_id: int):
+    def api_marker_delete(marker_id: Id64):
         conn = _db()
         try:
             db.delete_marker(conn, marker_id)
@@ -1693,7 +1705,7 @@ def create_app(base_dir: Path | None = None,
     async def api_recording_markers(history_id: str, req: Request):
         """Attach markers captured live during an in-app recording to the lesson
         once it has been transcribed (resolved via history_id)."""
-        body = await req.json()
+        body = await _kropp(req)
         markers = body.get("markers") or []
         conn = _db()
         try:
@@ -1705,7 +1717,7 @@ def create_app(base_dir: Path | None = None,
     # ---- Nästa lektion: carry-forward per klass (Fas 3) ----------------------
 
     @app.get("/api/next-prep")
-    def api_next_prep(group_id: int):
+    def api_next_prep(group_id: Id64):
         conn = _db()
         try:
             return db.next_prep(conn, group_id)
@@ -1780,7 +1792,7 @@ def create_app(base_dir: Path | None = None,
     threading.Thread(target=_kvallskopian, daemon=True).start()
 
     @app.get("/api/lessons/{lesson_id}/report")
-    def api_lesson_report(lesson_id: int, format: str = "html"):
+    def api_lesson_report(lesson_id: Id64, format: str = "html"):
         """Export a lesson (summary + insights + markers) as a shareable report.
         Written under base/exports/ and openable via /api/open."""
         fmt = "md" if format == "md" else "html"
@@ -1804,7 +1816,7 @@ def create_app(base_dir: Path | None = None,
         return {"path": str(dest), "format": fmt}
 
     @app.get("/api/trends")
-    def api_trends(group_id: int):
+    def api_trends(group_id: Id64):
         """Longitudinal class dashboard: lesson/insight counts, action completion
         and recurring difficulties over the term."""
         conn = _db()
@@ -1869,7 +1881,7 @@ def create_app(base_dir: Path | None = None,
 
     @app.post("/api/calendar/calendar")
     async def api_calendar_valj(req: Request):
-        body = await req.json()
+        body = await _kropp(req)
         return calendar_google.satt_kalender(base, body.get("id") or "")
 
     @app.post("/api/calendar/disconnect")
@@ -1886,7 +1898,7 @@ def create_app(base_dir: Path | None = None,
 
     @app.post("/api/calendar/event")
     async def api_calendar_event(req: Request):
-        body = await req.json()
+        body = await _kropp(req)
         res = calendar_google.create_event(
             base,
             title=body.get("title") or "",
@@ -1951,7 +1963,7 @@ def create_app(base_dir: Path | None = None,
         """Answer a free-text question across all recorded lessons (RAG): retrieve
         the most relevant lessons via FTS, feed bounded excerpts to the LLM, and
         stream a Swedish answer that cites which lesson/class/date it came from."""
-        body = await req.json()
+        body = await _kropp(req)
         query = (body.get("q") or body.get("query") or "").strip()
         if not query:
             return JSONResponse({"error": "fråga krävs"}, status_code=400)
@@ -2143,7 +2155,7 @@ def create_app(base_dir: Path | None = None,
 
     @app.post("/api/postprocess")
     async def api_postprocess(req: Request):
-        body = await req.json()
+        body = await _kropp(req)
         operation = body.get("operation", "summary")
         transcript = body.get("transcript", "")
         # `model` tas emot och ignoreras sedan Claude Code tog över (samma sak
@@ -2173,7 +2185,7 @@ def create_app(base_dir: Path | None = None,
 
     @app.post("/api/chat")
     async def api_chat(req: Request):
-        body = await req.json()
+        body = await _kropp(req)
         messages = body.get("messages") or []
         transcript = body.get("transcript", "")
         model = body.get("model", "")     # tas emot, ignoreras — se /api/postprocess
@@ -2309,12 +2321,12 @@ def create_app(base_dir: Path | None = None,
     @app.post("/api/open")
     async def api_open(req: Request):
         """Open a result file/folder in the OS file manager (local desktop app)."""
-        return _open_path((await req.json()).get("path") or "")
+        return _open_path((await _kropp(req)).get("path") or "")
 
     @app.post("/api/reveal")
     async def api_reveal(req: Request):
         """Reveal a result folder/file in the OS file manager."""
-        return _open_path((await req.json()).get("path") or "")
+        return _open_path((await _kropp(req)).get("path") or "")
 
     # Frontenden monteras SIST. app.html refererar sina 45 skript, 15 stilmallar,
     # typsnitt och bilder med relativa sökvägar, och eftersom dokumentet ligger på

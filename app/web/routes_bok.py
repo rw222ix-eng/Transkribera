@@ -25,6 +25,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from app import bok as bok_mod
 from app import bok_losning, db, gpu_arbiter
+from app.web import Id64, _kropp
 from app.web.sse import sse_response
 
 # Molnjobben köar inte bakom kortet längre (se gpu_arbiter): de delar en
@@ -74,7 +75,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
             conn.close()
 
     @router.get("/api/bocker/{bok_id:int}")
-    def en(bok_id: int):
+    def en(bok_id: Id64):
         conn = _db()
         try:
             b = db.get_bok(conn, bok_id)
@@ -90,7 +91,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
     async def importera(req: Request):
         """Läs in en bok: registret ur innehållsförteckningen + sidoffset.
         PDF:en laddas upp först (POST /api/upload) och pekas ut med `path`."""
-        body = await req.json()
+        body = await _kropp(req)
         rå = (body.get("path") or "").strip()
         if not rå:
             return JSONResponse({"error": "peka ut PDF:en (path)"}, status_code=400)
@@ -132,13 +133,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
     # ------------------------------------------------------------- läs sidor --
 
     @router.post("/api/bocker/{bok_id:int}/las")
-    async def las(bok_id: int, req: Request):
+    async def las(bok_id: Id64, req: Request):
         """Läs sidorna i ett uppslag. Redan lästa sidor kostar ingenting.
 
         `bara: "fakta"` läser bara uppgiftsnummer och sidfötter — det är vad
         bokdörren behöver när ett uppslag väljs, och det tar en minut i stället
         för en kvart."""
-        body = await req.json()
+        body = await _kropp(req)
         bara = body.get("bara") if body.get("bara") in ("fakta", "text") else None
         try:
             fran = int(body.get("fran"))
@@ -181,7 +182,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
     # ------------------------------------------------------ lösningsförslagen --
 
     @router.post("/api/bocker/{bok_id:int}/losningar")
-    async def losningar(bok_id: int, req: Request):
+    async def losningar(bok_id: Id64, req: Request):
         """Lösningsförslag till valda uppgifter — ur de LÄSTA sidorna.
 
         Arken bar prototypmallar («Faktorisera x² − 9» i ett avsnitt om
@@ -196,7 +197,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         gjorde platshållare av dem och arket ritade inte platshållare. Taket
         är borta (bok_losning delar i stället urvalet i omgångar och kör dem
         parallellt), så ALLA valda uppgifter på lästa sidor prövas nu."""
-        body = await req.json()
+        body = await _kropp(req)
         try:
             begarda = [int(n) for n in (body.get("uppg") or [])]
         except (TypeError, ValueError):
@@ -258,7 +259,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
     # -------------------------------------------------------------- uppslaget --
 
     @router.get("/api/bocker/{bok_id:int}/uppslag")
-    def uppslag(bok_id: int, fran: int, till: int | None = None):
+    def uppslag(bok_id: Id64, fran: Id64, till: Id64 | None = None):
         """Vad som står på sidorna — uppgiftsnumren med nivå, och hur många av
         sidorna som är lästa. Texten följer inte med: den är för promptens
         skull och kan vara tiotusentals tecken."""
@@ -328,7 +329,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
             return full
 
     @router.get("/api/bocker/{bok_id:int}/sida/{sida:int}.png")
-    def sidbild(bok_id: int, sida: int, full: int = 0):
+    def sidbild(bok_id: Id64, sida: Id64, full: int = 0):
         """Sidan som BILD, för förhandsvisningen i remsan (uppslag.js).
 
         Bladen i väljaren var ritade attrapper — fem grå streck på hårdkodade
@@ -387,7 +388,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
     # ------------------------------------------------------------ rätta till --
 
     @router.put("/api/bocker/{bok_id:int}")
-    async def andra(bok_id: int, req: Request):
+    async def andra(bok_id: Id64, req: Request):
         """Bokens namn och KURS i efterhand. Body: {"namn"?, "kurs"?}.
 
         Kursen är bokens nyckel till registret (`bok.js taEmot`: registret läggs
@@ -396,7 +397,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         att radera boken och betala importen om. Tom sträng betyder «ingen
         kurs»; ett utelämnat fält lämnas orört.
         """
-        body = await req.json()
+        body = await _kropp(req)
         falt = {}
         if "namn" in body:
             namn = (body.get("namn") or "").strip()
@@ -418,7 +419,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
     # ---------------------------------------------------------------- radera --
 
     @router.delete("/api/bocker/{bok_id:int}")
-    def radera(bok_id: int):
+    def radera(bok_id: Id64):
         """Boken ur hyllan: raderna och de renderade sidbilderna. PDF:en läraren
         laddade upp lämnas kvar — den är hennes fil, inte appens."""
         conn = _db()

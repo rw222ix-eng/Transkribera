@@ -484,13 +484,7 @@ test("provets färdiga fil pekas ut åt servern i stället för att hämtas hem"
   await fejka(page, { sparade: [rad(1, papper({
     typ: "Arbetsblad", provId: 42, bokuppg: bokuppg() }))] });
   await page.route("**/api/exams/**", route => {
-    const vag = new URL(route.request().url()).pathname;
-    /* Spegeln (plan.js speglaExamen) läser examen som JSON när pappret öppnas.
-       Det är ingen fil på väg hem och räknas inte — testet mäter hämtningar
-       av byggda filer, inte självläkningens läsning. */
-    if (/^\/api\/exams\/\d+$/.test(vag)) return route.fulfill({
-      status: 200, contentType: "application/json", body: "{}" });
-    hamtat.push(vag);
+    hamtat.push(new URL(route.request().url()).pathname);
     return route.fulfill({ status: 200, contentType: "application/pdf",
                            body: Buffer.from("%PDF-1.5 bladet") });
   });
@@ -531,11 +525,7 @@ test("lösningsbladet laddar ner sin EGEN fil, inte originalets", async ({ page 
     rad(2, papper({ typ: "Arbetsblad", provId: 43, losningsblad: true })),
   ] });
   await page.route("**/api/exams/**", route => {
-    const vag = new URL(route.request().url()).pathname;
-    // Spegelns JSON-läsning vid öppningen räknas inte — se testet ovan.
-    if (/^\/api\/exams\/\d+$/.test(vag)) return route.fulfill({
-      status: 200, contentType: "application/json", body: "{}" });
-    hamtat.push(vag);
+    hamtat.push(new URL(route.request().url()).pathname);
     return route.fulfill({ status: 200, contentType: "application/pdf",
                            body: Buffer.from("%PDF-1.5 losningarna") });
   });
@@ -570,11 +560,7 @@ test("varje pappersort hämtar sin egen byggda fil", async ({ page }) => {
     rad(5, papper({ typ: "Anteckningar", antId: 15 })),
   ] });
   await page.route("**/api/exams/**", route => {
-    const vag = new URL(route.request().url()).pathname;
-    // Spegelns JSON-läsning vid öppningen räknas inte — se testet ovan.
-    if (/^\/api\/exams\/\d+$/.test(vag)) return route.fulfill({
-      status: 200, contentType: "application/json", body: "{}" });
-    hamtat.push(vag);
+    hamtat.push(new URL(route.request().url()).pathname);
     return route.fulfill({ status: 200, contentType: "application/pdf",
                            body: Buffer.from("%PDF-1.5 pappret") });
   });

@@ -105,91 +105,22 @@ UTANFOR_SANDLADAN = {
 }
 
 # ── Kända fynd ──────────────────────────────────────────────────────────────
-# Fuzzningens första körning hittade riktiga 500:or. De rättas INTE här (den
-# här grenen bygger verktyget, inte servern). De lyfts ut ur den gröna testen
-# och körs för sig med xfail nedan, så de syns i varje körning i stället för att
-# glömmas bort i en rapport.
+# Fuzzningens första körning hittade fyra klasser av riktiga 500:or. Alla är
+# rättade, och listan är tom — den står kvar som mekanism: ett nytt fynd läggs
+# in här med metod+rutt så det syns i varje körning i stället för att glömmas
+# bort i en rapport, och rättas sedan i en egen gren.
 #
-# FYND 1, TOM ELLER OTOLKBAR KROPP GER 500 (36 rutter). Rutterna skriver
-# `body = await req.json()` utan try, och starlettes `json()` kastar
-# JSONDecodeError på en tom kropp. `curl -X POST /api/courses` utan kropp är
-# alltså ett 500, inte ett 400. Ingen av dem kan nås från appens egen frontend
-# (den skickar alltid JSON), men de står öppna på localhost och de fyller
-# felloggen med spökstackar. Rättningen är en delad hjälpare, `async def
-# _kropp(req) -> dict` som svarar {} eller 400, och den hör hemma i en gren
-# som får röra server.py, routes_*.py och deras tester.
+# FYND 1, TOM ELLER OTOLKBAR KROPP GAV 500 (36 rutter) och FYND 2, RÄTT JSON
+# MEN FEL FORM (t.ex. `[]` mot POST /api/dokument): rättade med den delade
+# hjälparen `_kropp` i app/web/__init__.py — kroppen blir dict eller 400.
 #
-# FYND 2, RÄTT JSON MEN FEL FORM ger också 500. `POST /api/dokument` med
-# kroppen `[]` ger `AttributeError: 'list' object has no attribute 'get'`
-# (server.py:1313, `dok = body.get("dokument")`). Samma hjälpare löser den:
-# det som inte är ett objekt ska bli 400. Fuzzern råkar oftast hitta den tomma
-# kroppen först, så rutterna nedan bär bägge felen.
+# FYND 3, TILLSTÅNDSBEROENDE: rapporten föll på `lesson.get("ts", "")[:10]`
+# när ts fanns med värdet None (app/report.py), uppslaget på obundna
+# `fran`/`till` mot SQLite.
 #
-# FYND 3, TILLSTÅNDSBEROENDE. Tre rutter faller bara ibland: de går igenom mot
-# en tom bas och 500:ar när fuzzningens tidigare anrop har hunnit lägga in en
-# rad (en bok utan fil, en lektion utan innehåll). De ligger med i listan just
-# därför. Xfail utan strict tål båda utfallen, och en icke-strikt xfail är
-# ärligare än en flaxande grön svit.
-#
-# FYND 4, ETT ID STÖRRE ÄN 2**63 GER 500.
-# `/api/bocker/444779963788339897181175067705344/sida/1.png` ger
-# `OverflowError: Python int too large to convert to SQLite INTEGER`
-# (app/db.py, varje `WHERE id = ?`). Bokens sida är den enda som syns i den
-# gröna testen, för de andra bär redan fynd 1, men felet finns på minst åtta
-# rutter: /api/exams/{id}, /api/lessons/{id}, /api/markers/{id},
-# /api/planning/{id}, /api/groups/{id}/elever, /api/dokument/{id}/rattning,
-# bokens uppslag och bokens sida. Fixen är av samma slag som fynd 1: en typ som
-# avvisar id utanför int64 (`Path(le=2**63 - 1)`) i stället för att låta
-# sqlite3 kasta.
-KANDA_FYND = {
-    # Fynd 1 + 2: kropplösa POST/PUT/PATCH.
-    ("POST", "/api/anteckningar/generate"),
-    ("POST", "/api/anteckningar/{note_id}/refine"),
-    ("POST", "/api/bocker"),
-    ("PUT", "/api/bocker/{bok_id}"),
-    ("POST", "/api/bocker/{bok_id}/las"),
-    ("POST", "/api/bocker/{bok_id}/losningar"),
-    ("POST", "/api/calendar/calendar"),
-    ("POST", "/api/calendar/event"),
-    ("POST", "/api/chat"),
-    ("POST", "/api/courses"),
-    ("POST", "/api/dokument"),
-    ("PATCH", "/api/dokument/{dokument_id}"),
-    ("POST", "/api/dokument/{dokument_id}/versioner"),
-    ("PUT", "/api/dokument/ordning"),
-    ("PUT", "/api/dokument/{dokument_id}/elevfeedback"),
-    ("PUT", "/api/dokument/{dokument_id}/elevresultat"),
-    ("PUT", "/api/dokument/{dokument_id}/rattning"),
-    ("POST", "/api/elevenlabs-nyckel"),
-    ("POST", "/api/exams/generate"),
-    ("POST", "/api/exams/{exam_id}/refine"),
-    ("POST", "/api/groups"),
-    ("PUT", "/api/groups/{group_id}/elever"),
-    ("PATCH", "/api/history/{entry_id}"),
-    ("PATCH", "/api/insights/{insight_id}"),
-    ("POST", "/api/kalenderposter"),
-    ("PUT", "/api/klassprofil"),
-    ("PATCH", "/api/lessons/{lesson_id}"),
-    ("POST", "/api/lessons/{lesson_id}/insights"),
-    ("POST", "/api/lessons/{lesson_id}/markers"),
-    ("POST", "/api/planning/ask"),
-    ("POST", "/api/planning/generate"),
-    ("POST", "/api/planning/underlag"),
-    ("PATCH", "/api/planning/{planned_id}"),
-    ("POST", "/api/postprocess"),
-    ("POST", "/api/recordings/{history_id}/markers"),
-    ("PUT", "/api/schema"),
-    ("POST", "/api/search/ask"),
-    ("POST", "/api/tavla/pdf"),
-    ("POST", "/api/transcribe"),
-    ("POST", "/api/tryck"),
-    # Fynd 3: faller bara med rader i basen.
-    ("POST", "/api/schema/synk"),
-    ("GET", "/api/bocker/{bok_id}/uppslag"),
-    ("GET", "/api/lessons/{lesson_id}/report"),
-    # Fynd 4: id större än SQLite:s 64 bitar.
-    ("GET", "/api/bocker/{bok_id}/sida/{sida}.png"),
-}
+# FYND 4, ID UTANFÖR INT64 GAV OverflowError mot SQLite: rättat med `Id64` i
+# app/web/__init__.py på varje id-parameter som når en SQL-fråga.
+KANDA_FYND: set[tuple[str, str]] = set()
 
 _UNDANTAG = UTANFOR_SANDLADAN | KANDA_FYND
 

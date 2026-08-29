@@ -20,6 +20,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from starlette.background import BackgroundTask
 
 from app import db, tryck
+from app.web import _kropp
 from app.web.sse import sse_response
 
 MAX_DOKUMENT = 20
@@ -95,7 +96,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
     @router.post("/api/tryck")
     async def tryck_paket(req: Request):
         """Bygg paketet. `dokument` är raderna i utskriftsrutan, i ordning."""
-        body = await req.json()
+        body = await _kropp(req)
         rader = body.get("dokument")
         if not isinstance(rader, list) or not rader:
             return JSONResponse({"error": "inget att skriva ut"}, status_code=400)
@@ -214,7 +215,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
 
         Ingen SSE: det är ett bildbyte och några sidor, inte ett bygge som tar
         tiotals sekunder, och svaret ÄR filen."""
-        body = await req.json()
+        body = await _kropp(req)
         namn = tryck._safe(str(body.get("namn") or "Tavla"), "Tavla")
         # En sträng är hela tavlan i ett stycke, en lista är dess bräden — ett
         # per sida, i EN fil. Listan får inte gå igenom `str()`: då hade

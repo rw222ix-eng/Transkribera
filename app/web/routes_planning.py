@@ -23,6 +23,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from app import (bok, db, dokumentdiff, forlaga, gpu_arbiter, lararord,
                  lesson_board, llm_client, rattning)
+from app.web import Id64, _kropp
 from app.web.sse import Stege, jobb_response, sse_response
 
 # ── DOMÄNSTEGEN ──────────────────────────────────────────────────────────────
@@ -571,7 +572,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         """Ladda upp bokssidor/uppgifter (PNG/JPG/WebP/PDF som data-URL:er).
         Sidorna sparas under base_dir och bildtolkas lokalt med visionsmodellen
         (SSE-jobb under GPU-arbitern); beskrivningarna styr sedan tavlan."""
-        body = await req.json()
+        body = await _kropp(req)
         filer = body.get("filer") or []
         if not isinstance(filer, list) or not filer:
             return JSONResponse({"error": "inga filer att ladda upp"},
@@ -717,7 +718,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
     @router.post("/api/planning/generate")
     async def generate(req: Request):
         """Generera en lektionstavla (SSE-jobb under GPU-arbitern)."""
-        body = await req.json()
+        body = await _kropp(req)
         moment = (body.get("moment") or "").strip()
         if not moment:
             return JSONResponse({"error": "ange ett moment/ämne för lektionen"},
@@ -796,7 +797,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         st = hamta_planering(pid)
         if st is None or st.get("board") is None:
             return JSONResponse({"error": "okänd planering"}, status_code=404)
-        body = await req.json()
+        body = await _kropp(req)
         warnings = [str(w) for w in (body.get("warnings") or [])][:_MAX_WARNINGS]
         if not warnings:
             return {"ok": True, "repaired": False}
@@ -844,7 +845,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         st = hamta_planering(pid)
         if st is None or st.get("board") is None:
             return JSONResponse({"error": "okänd planering"}, status_code=404)
-        body = await req.json()
+        body = await _kropp(req)
         message = (body.get("message") or "").strip()
         if not message:
             return JSONResponse({"error": "skriv vad som ska ändras"},
@@ -1131,7 +1132,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         """Fråga arkivet (RAG): hämta mest relevanta tavlor/prov, mata
         LLM:en med begränsade utdrag och strömma ett svenskt svar som
         anger vilken tavla/vilket prov det bygger på."""
-        body = await req.json()
+        body = await _kropp(req)
         query = (body.get("q") or "").strip()
         if not query:
             return JSONResponse({"error": "fråga krävs"}, status_code=400)
@@ -1230,7 +1231,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
             conn.close()
 
     @router.get("/api/planning/{planned_id:int}")
-    def get_planned(planned_id: int):
+    def get_planned(planned_id: Id64):
         """Sparad planering ur DB:n (kalenderklick → visa tavlan)."""
         conn = db.connect(db_file)
         try:
@@ -1250,10 +1251,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
     _STATUSES = {"planerad", "hållen", "inställd"}
 
     @router.patch("/api/planning/{planned_id:int}")
-    async def patch_planned(planned_id: int, req: Request):
+    async def patch_planned(planned_id: Id64, req: Request):
         """Manuell överstyrning (Fas 3): länka/av-länka lektion
         (lesson_id: int|null), ändra status/datum/tid/titel."""
-        body = await req.json()
+        body = await _kropp(req)
         fields = {k: body[k] for k in _PATCHABLE if k in body}
         if not fields:
             return JSONResponse({"error": "inga fält att uppdatera"},

@@ -27,7 +27,7 @@ from fastapi.responses import JSONResponse
 
 from app import (db, dokumentdiff, exam_latex, exam_pdf, gpu_arbiter,
                  llm_client, notes_gen, postprocess, tryck)
-from app.web import routes_planning
+from app.web import Id64, _kropp, routes_planning
 from app.web.sse import Stege, jobb_response
 
 # ── DOMÄNSTEGEN ──────────────────────────────────────────────────────────────
@@ -180,7 +180,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
     @router.post("/api/anteckningar/generate")
     async def generate(req: Request):
         """Skriv anteckningarna (SSE-jobb under GPU-arbitern)."""
-        body = await req.json()
+        body = await _kropp(req)
         onskemal = (body.get("onskemal") or "").strip()
         lektioner = [int(x) for x in (body.get("lektioner") or [])
                      if str(x).strip().lstrip("-").isdigit()]
@@ -254,9 +254,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
     # -------------------------------------------------------------- refine --
 
     @router.post("/api/anteckningar/{note_id:int}/refine")
-    async def refine(note_id: int, req: Request):
+    async def refine(note_id: Id64, req: Request):
         """Chatt-iteration: «lägg till en rad om miniräknarna»."""
-        body = await req.json()
+        body = await _kropp(req)
         message = (body.get("message") or "").strip()
         if not message:
             return JSONResponse({"error": "skriv vad som ska ändras"},
@@ -333,7 +333,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         return ut
 
     @router.post("/api/anteckningar/{note_id:int}/approve")
-    async def approve(note_id: int, req: Request):
+    async def approve(note_id: Id64, req: Request):
         """Lås versionen och lägg pappret på disk.
 
         Samma två vägar som provets godkännande (routes_exam approve): kom
