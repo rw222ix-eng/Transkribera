@@ -34,7 +34,7 @@ from app import (debug_log, hardware, llm_client,
 # varaktigheten går att fråga efter även där.
 from app import media as media_mod
 from app.web import (routes_anteckningar, routes_bok, routes_elever, routes_exam,
-                     routes_planning, routes_tryck, sse)
+                     routes_jobb, routes_planning, routes_tryck, sse)
 
 _MONTHS_SV = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
 
@@ -381,6 +381,11 @@ def create_app(base_dir: Path | None = None,
     app.include_router(routes_elever.create_router(base, arb))
     app.include_router(routes_bok.create_router(base, arb))
     app.include_router(routes_tryck.create_router(base, arb))
+    # Jobben som överlever fliken (Etapp 2). Ingen arbiter: routern startar
+    # inga jobb, den öppnar bara fönster mot dem som redan går. Registreras
+    # EFTER de andra av samma skäl som allt annat här — den äger /api/jobb/*
+    # och kan inte krocka, men ordningen i filen är också läsordningen.
+    app.include_router(routes_jobb.create_router(base))
 
     # Följer den pågående transkriberingen så /api/transcribe/cancel kan svara
     # sant och avbryta den (annars slutade «Avbryt» bara lyssna i webbläsaren
