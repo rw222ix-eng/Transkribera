@@ -27,6 +27,10 @@ from fastapi.responses import FileResponse, JSONResponse
 from app import (ci_profil, course_data, db, dokumentdiff, exam_gen,
                  exam_latex, exam_pdf, exam_spec, gpu_arbiter, llm_client,
                  platar, tryck)
+# Egen rad och eget namn: modulen heter `kalibrering` och rutten som svarar med
+# den heter också det. Utan omdöpningen skuggar funktionen modulen inne i
+# create_router, och anropet blir ett rekursivt HTTP-lager djupt.
+from app import kalibrering as kalibrering_modul
 from app.web import routes_planning
 from app.web.sse import sse_response
 
@@ -183,10 +187,17 @@ def create_router(base: Path, arbiter) -> APIRouter:
         finally:
             conn.close()
 
-    def _exam_result(view: dict, errors: list, rounds: int) -> dict:
+    def _exam_result(view: dict, errors: list, rounds: int,
+                     likheter: list | None = None) -> dict:
         doc, _ = exam_spec.validate_exam_json(view.get("exam") or {})
         summor = exam_spec.poangsummor(doc) if doc else None
         return {
+            # Variationsvaktens flaggor (Etapp 4): uppgifter som blev en
+            # tidigare uppgift med nya tal. En VARNING och inget fel: den
+            # står bredvid `errors` och inte i den, för den ska inte se ut som
+            # något som måste lagas. Alltid en lista, aldrig None: klienten ska
+            # inte behöva skilja «inga flaggor» från «ingen vakt körde».
+            "likheter": likheter or [],
             "id": view["id"], "exam": view.get("exam"),
             # Vilken exam-version JSON:en ovan kom ur. Klienten fäster den på
             # sitt utkastvarv, så att ett ångrat varv kan säga vilken version
@@ -326,6 +337,25 @@ def create_router(base: Path, arbiter) -> APIRouter:
         if fil is None or not fil.is_file():
             return JSONResponse({"error": "okänd plåt"}, status_code=404)
         return FileResponse(fil, media_type="image/jpeg")
+
+    # ------------------------------------------------------- kalibrering --
+    # Svårighetskalibreringen (Etapp 4). Läser BARA: inga modellanrop, ingen
+    # arbitergrind, ingenting som skrivs. Passet räknar p-värde och
+    # punktbiserial diskriminering ur elevernas egna resultat (app/kalibrering)
+    # och flaggar de uppgifter vars empiri säger emot etiketten.
+    #
+    # Egen rutt och inte ett fält på provet: måttet gäller ett papper som är
+    # RÄTTAT, alltså långt efter att provet lämnade generatorn, och det
+    # intressanta svaret är oftast summan över flera papper i samma kurs.
+    @router.get("/api/exams/kalibrering")
+    def kalibrering(kurs: str | None = None, klass: str | None = None,
+                    dokument_id: int | None = None):
+        conn = db.connect(db_file)
+        try:
+            return kalibrering_modul.kalibrera(conn, kurs=kurs, klass=klass,
+                                               dokument_id=dokument_id)
+        finally:
+            conn.close()
 
     # -------------------------------------------------------------- lista --
 
@@ -521,6 +551,14 @@ def create_router(base: Path, arbiter) -> APIRouter:
             memory = db.memory_for_prompt(conn, int(group_id), int(course_id)) \
                 if group_id else ""
             teman = db.exam_themes_for_prompt(conn, int(course_id))
+            # Variationsvakten (Etapp 4): uppgifterna kursen redan sett, som
+            # FORM. `teman` säger vad tidigare prov handlade om; den här säger
+            # vilka uppgifter som är förbrukade också när siffrorna byts.
+            # Tom lista (ny kurs, tom databas) → prompten är ordagrant som
+            # förut, och kassetterna orörda.
+            tidigare_uppgifter = db.tidigare_uppgiftstexter(
+                conn, int(course_id), moment=(body.get("moment") or "").strip()
+                or None, koder=koder)
             # Referensläget (Fas 5): tidigare provs uppgifter in i prompten
             # med instruktion att variera och höja svårighetsgraden.
             referens = ""
@@ -538,6 +576,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # förlagan gör detsamma, av samma skäl: läraren har PEKAT på ett papper.
         if forlaga_block:
             teman = ""
+        # Variationsvakten faller av samma skäl och i samma två lägen: har
+        # läraren PEKAT på ett papper som ska följas är «skriv inte något som
+        # liknar det du gjort förut» en motsägande order.
+        if referens or forlaga_block:
+            tidigare_uppgifter = []
 
         llm = arbiter.try_acquire_llm()
         if not llm:
@@ -578,6 +621,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     kurs, klass or "klassen", punkter, model=_model_name(),
                     antal=antal, tid_min=tid_min, delar=delar,
                     memory=memory, teman=teman, referens=referens,
+                    tidigare=tidigare_uppgifter,
                     bilder=bilder_block, utfall=utfall_block, bok=bok_block,
                     boknivaer=nivaer_block, forlaga=forlaga_block,
                     svart=svart_block, fokus=fokus_block, profil=typ,
@@ -647,7 +691,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         db.tag_content(conn, c["id"], exam_id=view["id"])
                 finally:
                     conn.close()
-                return _exam_result(view, res["errors"], res["rounds"])
+                return _exam_result(view, res["errors"], res["rounds"],
+                                    res.get("likheter"))
             finally:
                 arbiter.release_llm(llm)
 
