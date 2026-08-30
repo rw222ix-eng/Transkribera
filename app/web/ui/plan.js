@@ -325,13 +325,15 @@
 
          Golvet är serverns och mätt: gruppuppgiften kräver redovisning, och då
          måste pappret rymma både en rutinuppgift och en som redovisas — minst
-         två (app/exam_spec.py genomforbarhet). Taket är lärarens: fler än tio
-         uppgifter är inte längre en lektion att prata sig igenom. */
-      { id: 'antal', namn: 'Antal uppgifter', typ: 'antal', min: 2, max: 10,
+         två (app/exam_spec.py genomforbarhet). Taket är arbetsbladets tjugo och
+         står här av samma skäl som där: läraren bad om tolv. Ett tak på tio
+         hade varit husets smak, och hennes egna papper säger emot den —
+         arbetsbladet på tolv uppgifter till IndA skrevs samma dag. */
+      { id: 'antal', namn: 'Antal uppgifter', typ: 'antal', min: 2, max: 20,
         vidMin: 'Två är serverns golv — pappret måste rymma både en '
                 + 'rutinuppgift och en som gruppen redovisar.',
-        vidMax: 'Fyra rutor är vad ett A4 rymmer med plats att skriva på. '
-                + 'Fler flyttas till ett andra ark.' },
+        vidMax: 'Tjugo är appens tak, samma som arbetsbladets. Fyra rutor är '
+                + 'vad ett A4 rymmer — resten flyttas till fler ark.' },
       { id: 'grupp', namn: 'Elever per grupp', typ: 'antal', min: 2, max: 5 },
       { id: 'langd', namn: 'Tid på lektionen', typ: 'minuter', snabb: [10, 20, 30, 45], min: 10, max: 180 },
       { id: 'redovisning', namn: 'Redovisning', typ: 'seg', val: ['Muntligt', 'Skriftligt', 'Poster'] },
