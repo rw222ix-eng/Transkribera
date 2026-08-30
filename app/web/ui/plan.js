@@ -315,6 +315,23 @@
       { id: 'bilagor', namn: 'Bilagor', typ: 'kryss', delar: [{ id: 'losningar', namn: 'Bedömningsanvisning' }, { id: 'formelblad', namn: 'Formelblad' }] }
     ],
     Gruppuppgift: [
+      /* ── Hur många uppgifter gruppuppgiften får ha ────────────
+         Antalet var LÅST till fyra, och skälet var pappret: fyra rutor är vad
+         ett A4 rymmer med plats att skriva på (gruppark.css). Det skälet höll
+         inte längre — gruppuppgiftens ark packar och delar sig själv sedan
+         bladen fick sin paginering (blad.js delaArk, «forts. 2 av 2»), precis
+         som arbetsbladets. Kvar av låsningen fanns bara att läraren inte fick
+         välja.
+
+         Golvet är serverns och mätt: gruppuppgiften kräver redovisning, och då
+         måste pappret rymma både en rutinuppgift och en som redovisas — minst
+         två (app/exam_spec.py genomforbarhet). Taket är lärarens: fler än tio
+         uppgifter är inte längre en lektion att prata sig igenom. */
+      { id: 'antal', namn: 'Antal uppgifter', typ: 'antal', min: 2, max: 10,
+        vidMin: 'Två är serverns golv — pappret måste rymma både en '
+                + 'rutinuppgift och en som gruppen redovisar.',
+        vidMax: 'Fyra rutor är vad ett A4 rymmer med plats att skriva på. '
+                + 'Fler flyttas till ett andra ark.' },
       { id: 'grupp', namn: 'Elever per grupp', typ: 'antal', min: 2, max: 5 },
       { id: 'langd', namn: 'Tid på lektionen', typ: 'minuter', snabb: [10, 20, 30, 45], min: 10, max: 180 },
       { id: 'redovisning', namn: 'Redovisning', typ: 'seg', val: ['Muntligt', 'Skriftligt', 'Poster'] },
@@ -375,7 +392,7 @@
     Prov: { nar: 'På lektionen', narDatum: '', narTid: '08:15', provminuter: 90, provtid: '90 min', antal: 6, nivamix: 'Balanserat', delprov: 'Del A + Del B', losningar: true, formelblad: true, takt: 3.5 },
     Arbetsblad: { antal: 3, niva: 'Blandat', facit: 'Facit i bladet', illustration: true,
                   klassblad: true, elever: [], syfte: 'Stötta' },
-    Gruppuppgift: { grupp: 3, langd: 60, redovisning: 'Muntligt', illustration: true },
+    Gruppuppgift: { antal: 4, grupp: 3, langd: 60, redovisning: 'Muntligt', illustration: true },
     /* 60 minuter är lärarens genomsnittslektion och därmed diagnosens mått;
        75 är taket, och det är servern som håller det (exam_spec). Fälten är
        provets — diagnosen skrivs på en lektion precis som provet, och `nartid`
@@ -2677,9 +2694,10 @@
     JOBB.Gruppuppgift = ({ signal, log }) => sidor(log).then(u => window.API.strom('/api/exams/generate', {
       kurs: utkast.kurs, klass: utkast.klass,
       punkter: gyKoder(), punkter_text: [...vald],
-      /* Fyra uppgifter — inte en väljare, utan formen: fyra rutor är vad ett
-         A4 rymmer med plats att skriva på (gruppark.css). */
-      antal: 4,
+      /* Fyra är förvalet och kommer ur pappret: fyra rutor är vad ett A4 rymmer
+         med plats att skriva på (gruppark.css). Det är inte längre ett lås —
+         se «Antal uppgifter» i TYPVAL. */
+      antal: Number(i0.antal) || 4,
       datum: utkast.datum || '',
       typ: 'gruppuppgift',
       /* Samma kryss som arbetsbladets, se JOBB.Arbetsblad. */

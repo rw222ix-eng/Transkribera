@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { forbiNivavarningen } from "./larardag.mjs";
 
 /* GRUPPUPPGIFTENS ARK — ETT HUVUD, PACKADE BLAD
  *
@@ -588,3 +589,56 @@ test("tre radbrytningar i data blir EN tomrad på arket — inte noll",
     expect(text).toContain("A:");
     expect(text).toContain("B:");
   });
+
+/* ══════════ ANTALET UPPGIFTER ÄR LÄRARENS VAL ══════════
+   Fyra var låst i plan.js med pappret som skäl: fyra rutor är vad ett A4
+   rymmer med plats att skriva på. Skälet höll inte längre — testerna ovan är
+   beviset: arket packar och delar sig självt. Läraren stod alltså vid en panel
+   som lät henne välja elever per grupp, tid och redovisning, men inte hur många
+   uppgifter pappret skulle ha. */
+test("antalet uppgifter går att välja och når servern", async ({ page }) => {
+  await fejka(page, []);
+  const anrop = [];
+  await page.route("**/api/exams/generate", route => {
+    anrop.push(route.request().postDataJSON());
+    const klar = { type: "done", result: {
+      id: 5, typ: "gruppuppgift", status: "utkast", errors: [], rounds: 1,
+      exam: { titel: "Gruppuppgift", kurs: "Matematik, nivå 1a", klass: "BA26B",
+              datum: "2026-09-14", uppgifter: UPPGIFTER.map(u => ({
+                poang: [u.p, 0, 0], text: u.t, typ: "kort", losning: "" })) } } };
+    return route.fulfill({ status: 200, contentType: "text/event-stream",
+                           body: `data: ${JSON.stringify(klar)}\n\n` });
+  });
+  await page.goto("/");
+  await hydrerad(page);
+  await page.getByRole("tab", { name: "Planering" }).click();
+  await page.evaluate(() => {
+    window.SattLage("Gruppuppgift");
+    const f = document.querySelector("#moment");
+    f.value = "1.1 Tal i olika former";
+    f.dispatchEvent(new Event("input", { bubbles: true }));
+    window.PlanSteg.las(4, false);
+    window.PlanSteg.gaTill(4);
+  });
+
+  const antalrad = page.locator('.typrad[data-id="antal"]');
+  await expect(antalrad.locator(".steppervarde")).toHaveText("4");
+
+  // Golvet är serverns (exam_spec.genomforbarhet: redovisning kräver två), och
+  // raden säger vilket golv det är i stället för att bara vägra.
+  for (let n = 0; n < 3; n++) await antalrad.locator('[data-steg="-1"]').click();
+  await expect(antalrad.locator(".steppervarde")).toHaveText("2");
+  await expect(antalrad).toContainText("serverns golv");
+
+  for (let n = 0; n < 4; n++) await antalrad.locator('[data-steg="1"]').click();
+  await expect(antalrad.locator(".steppervarde")).toHaveText("6");
+
+  await page.locator("#skriv").click();
+  await forbiNivavarningen(page);
+  await expect.poll(() => anrop.length, { timeout: 30_000 }).toBe(1);
+  expect(anrop[0].typ).toBe("gruppuppgift");
+  expect(anrop[0].antal).toBe(6);
+  // Grupprutan är oförändrad — antalet är ett eget val, inte en omskrivning
+  // av de andra.
+  expect(anrop[0].grupp).toMatchObject({ elever: 3, langd_min: 60 });
+});
