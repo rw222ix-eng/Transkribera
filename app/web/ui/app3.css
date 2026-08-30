@@ -63,6 +63,13 @@ html{font-size:clamp(14.5px,13px + .3vw,18.5px)}
 .hknapp:hover:not(:disabled){background-color:var(--sky-deep);background-position:-30% 0;border-color:var(--sky-deep);color:#fff;box-shadow:0 10px 20px -10px rgba(9,66,108,.62);transform:translateY(-1px)}
 .hknapp:active:not(:disabled){transform:translateY(0) scale(.94)}
 .hknapp:disabled{opacity:.32;cursor:default}
+/* Veckopilen under ett drag: håller läraren ett dokumentchip över den bläddrar
+   veckan, så att pappret kan släppas på en lektion i en ANNAN vecka. Pilen
+   pulserar så länge draget pågår — annars ser den ut som en vanlig knapp man
+   inte kan sikta på med ett chip i handen. */
+@keyframes dragpil{0%,100%{box-shadow:0 0 0 0 var(--accent-weak)}50%{box-shadow:0 0 0 6px var(--accent-weak)}}
+.hknapp[data-dragmal]{border-color:var(--sky-deep);color:var(--sky-deep);animation:dragpil 1100ms var(--ease) infinite}
+@media (prefers-reduced-motion:reduce){.hknapp[data-dragmal]{animation:none;box-shadow:0 0 0 4px var(--accent-weak)}}
 .histnot{font-size:.76rem;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:min(34ch,30vw)}
 .dokhuvud .historik{margin-left:auto}
 /* Slängen står längst ut till höger, efter ångra/gör om: den hör till pappret

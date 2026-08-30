@@ -239,6 +239,18 @@ window.Klass = (() => {
      flytt: NA-klassen och TE-klassen läser samma kapitel i otakt, och samma
      tavla ska kunna läggas på båda utan att skrivas om (Dokument.aterAnvand). */
   let dragDok = null;
+  /* Städningen efter draget ligger på DOKUMENTET, inte bara på chipet: bläddrar
+     man veckan under draget river rita() käll-chipet, och då eldar dess dragend
+     i tomma luften utan att nå hit. Utan den centrala städningen läckte dragDok
+     vidare, och nästa klick i veckan lästes av släppytorna som ett pågående
+     drag. */
+  function stadaDrag() {
+    dragDok = null;
+    $$('.lekt[data-drop]').forEach(x => x.removeAttribute('data-drop'));
+    [$('#schemafram'), $('#schemabak')].forEach(p => p && p.removeAttribute('data-dragmal'));
+  }
+  document.addEventListener('dragend', stadaDrag);
+  document.addEventListener('drop', stadaDrag);
   function valjOmprov(v) {
     omprovDok = v;
     if (v.klass) vald = v.klass;
@@ -372,21 +384,26 @@ window.Klass = (() => {
       b.textContent = v.losningsblad ? (v.typ === 'Prov' ? 'Lösningar' : 'Facit')
         : (v.variant || (v.elev ? `${v.typ} · ${v.elev.split(' ')[0]}` : v.typ));
       b.addEventListener('click', e => { e.stopPropagation(); window.Dokument && window.Dokument.visa && window.Dokument.visa(dok().indexOf(v)); });
-      /* Chipet går att DRA till en annan lektion i veckan — släpp, och kopian
-         lägger sig där (aterAnvand). Prov sprids inte mellan klasser, facit
-         hör till sitt blad och elevpapper till sin elev — de dras inte. */
+      /* Chipet går att DRA till en annan lektion — släpp, och kopian lägger sig
+         där (aterAnvand). Målet behöver inte ligga i den ritade veckan: håller
+         man chipet över veckopilen bläddrar den under draget (pilDrag). Prov
+         sprids inte mellan klasser, facit hör till sitt blad och elevpapper
+         till sin elev — de dras inte. */
       if (!v.losningsblad && !v.elev && v.typ !== 'Prov') {
         b.draggable = true;
-        b.dataset.tip += ' — eller dra till en annan lektion för att återanvända';
+        b.dataset.tip += ' — eller dra till en annan lektion; pilarna bläddrar veckan under draget';
         b.addEventListener('dragstart', e => {
           dragDok = v;
           e.dataTransfer.setData('text/plain', namnPa(v));
           e.dataTransfer.effectAllowed = 'copy';
+          /* Pilarna lyser upp: de är en del av gesten så länge draget pågår. */
+          [$('#schemafram'), $('#schemabak')].forEach(p => p && p.setAttribute('data-dragmal', ''));
         });
-        b.addEventListener('dragend', () => {
-          dragDok = null;
-          $$('.lekt[data-drop]', grid).forEach(x => x.removeAttribute('data-drop'));
-        });
+        /* Chipets EGNA dragend står kvar bredvid dokumentets: bläddrar man
+           veckan mitt i draget rivs chipet av rita(), och ett rivet element
+           bubblar inte längre upp till document. Den som fortfarande hänger
+           kvar i DOM:en städas alltså här, resten av stadaDrag. */
+        b.addEventListener('dragend', stadaDrag);
       }
       remsa.appendChild(b);
     });
@@ -872,6 +889,30 @@ window.Klass = (() => {
   }
   $('#schemafram').addEventListener('click', () => byt(1));
   $('#schemabak').addEventListener('click', () => byt(-1));
+  /* Draget slutade förr vid veckans kant: pappret kunde bara läggas på en
+     lektion som råkade vara uppritad. Nu bläddrar pilen medan chipet hålls över
+     den — samma glid som ett klick, en vecka i taget.
+     Kön (koat) används INTE här. Den samlar övertramp, och ett chip som vilar på
+     pilen i två sekunder skulle hoppa fyra veckor extra när man släpper. Låset
+     `byter` är hela throttlingen: nästa steg tas först när glidet är klart. */
+  function pilDrag(knapp, steg) {
+    if (!knapp) return;
+    knapp.addEventListener('dragover', e => {
+      if (!dragDok) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      if (byter) return;
+      byt(steg);
+    });
+    /* Släpper man PÅ pilen har inget hänt — pappret får inte försvinna tyst. */
+    knapp.addEventListener('drop', e => {
+      if (!dragDok) return;
+      e.preventDefault();
+      window.toast && window.toast('Pilen bläddrar bara veckan — släpp pappret på en lektion');
+    });
+  }
+  pilDrag($('#schemafram'), 1);
+  pilDrag($('#schemabak'), -1);
   /* «Idag» pekar ut dagen, inte bara veckan: ringen pulserar två gånger och är
      sedan borta igen — ett svar på frågan «var är jag?», inte ett nytt tillstånd. */
   function pulseraIdag() {
