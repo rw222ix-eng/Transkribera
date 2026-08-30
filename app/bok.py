@@ -21,6 +21,7 @@ finns i stället för ett anrop rakt in i `bok_ocr`.
 from __future__ import annotations
 
 import re
+import time
 from pathlib import Path
 
 from app import bok_ocr, db
@@ -41,9 +42,39 @@ def bok_mapp(base: Path, bok_id: int) -> Path:
     return base / "Transkriberingar" / "bocker" / str(int(bok_id))
 
 
-def sidantal(pdf: Path) -> int:
+def _oppna(pdf: Path):
+    """PDF:en, eller ett fel som säger VILKEN fil som inte gick att öppna.
+
+    pypdfium2 kastar «Failed to load document (PDFium: Data format error)» och
+    inget mer. Morgonen 2026-08-30 föll tre inläsningar i rad på den raden, och
+    loggen bar tre likadana tracebacks utan sökväg: ingen kunde säga vilken av
+    hyllans tre böcker som vägrade, om filen låg kvar på disken eller om den
+    bytts ut under appen. Felet bär nu boken, storleken och tidsstämpeln —
+    filen kan vara halvkopierad, ersatt av något som inte är en PDF eller
+    borttagen mellan två läsningar, och de tre skiljer sig åt i just de
+    siffrorna. (En bok vars fil är borta hela vägen fångas tidigare, i
+    las_spann — den här raden ser den som försvann under handen.)
+
+    Meddelandet går hela vägen ut till läraren: jobbet som läser ett uppslag
+    skickar sitt fel till skärmen (app/web/sse.py), och «PDF:en gick inte att
+    öppna» med filnamnet är begripligt där. Traceback:en var det inte.
+    """
     import pypdfium2 as pdfium
-    doc = pdfium.PdfDocument(str(pdf))
+    try:
+        return pdfium.PdfDocument(str(pdf))
+    except Exception as fel:
+        try:
+            st = pdf.stat()
+            om = (f"{st.st_size} byte, ändrad "
+                  f"{time.strftime('%Y-%m-%d %H:%M', time.localtime(st.st_mtime))}")
+        except OSError:
+            om = "filen finns inte på den sökvägen"
+        raise RuntimeError(
+            f"PDF:en gick inte att öppna: {pdf} ({om}) — {fel}") from fel
+
+
+def sidantal(pdf: Path) -> int:
+    doc = _oppna(pdf)
     try:
         return len(doc)
     finally:
@@ -56,9 +87,8 @@ def rendera(pdf: Path, index: list[int], ut: Path) -> list[Path]:
     Redan renderade sidor hoppas över: bilderna ligger kvar mellan körningar,
     och en omläsning av samma uppslag ska inte kosta om.
     """
-    import pypdfium2 as pdfium
     ut.mkdir(parents=True, exist_ok=True)
-    doc = pdfium.PdfDocument(str(pdf))
+    doc = _oppna(pdf)
     try:
         filer = []
         for i in index:

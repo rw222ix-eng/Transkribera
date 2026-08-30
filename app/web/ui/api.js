@@ -172,7 +172,17 @@
   }
 
   async function json(vag, opt) {
-    const r = await fetch(vag, opt);
+    let r;
+    try {
+      r = await fetch(vag, opt);
+    } catch (e) {
+      /* `fetch` avvisar BARA när anropet aldrig nådde fram — ett 500 är ett
+         svar och kommer nedan. Alltså: servern är borta, eller precis här och
+         nu onåbar. `kanna` avgör vilket; ett enstaka avbrutet anrop ska inte
+         hänga upp en banderoll. */
+      kanna();
+      throw e;
+    }
     const kropp = await r.json().catch(() => ({}));
     if (!r.ok) {
       const fel = new Error(kropp.error || `${r.status} ${r.statusText}`);
@@ -363,12 +373,96 @@
     return `${String(Math.floor(h / 60)).padStart(2, '0')}:${String(h % 60).padStart(2, '0')}`;
   };
 
+  /* ══════════ NÄR SERVERN FÖRSVINNER MITT I PASSET ══════════
+     Sonderingen ovan ställer frågan EN gång, vid start. Morgonen 2026-08-30 dog
+     appens serverprocess medan sidan låg kvar öppen, och sidan visste ingenting
+     om det: listorna stod kvar, API.pa var fortfarande sant, och bokväljarens
+     sidblad tömdes ett och ett medan `onerror` tog bort varje bild som inte gick
+     att hämta (uppslag.js). Läraren satt i en app som såg levande ut och var
+     död, och det syntes först som att förhandsvisningen «försvunnit».
+
+     Banderollen ritas HÄR och inte av servern, tvärtemot regeln att servern
+     märker sin egen sida (server.py, _banderoll): servern som skulle ha skrivit
+     den är just det som fattas.
+
+     API.pa rörs INTE. Den säger att appen har en backend, och faller den börjar
+     anropsställena rita prototypens påhittade data i stället — mitt i lärarens
+     pass, ovanpå hennes riktiga listor. Bortavaron är ett eget tillstånd. */
+  const HJARTA_PA = 20000;      // servern svarar: fråga sällan, loggen ska vara läsbar
+  const HJARTA_BORTA = 3000;    // servern tiger: fråga tätt, hon väntar på att den ska komma
+  let borta = false, hjartslag = 0, husPid = null;
+
+  function banderoll(text, ladda) {
+    let el = document.getElementById('serverborta');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'serverborta';
+      /* Samma svarta list som spökservern får, i rött. Stilen ligger i
+         attributet och inte i en stilmall av samma skäl som _banderoll: inget
+         av det här ska finnas i designfilerna. */
+      el.setAttribute('style', 'position:fixed;left:0;right:0;top:0;z-index:2147483647;'
+        + 'background:#8a1c1c;color:#fff;text-align:center;padding:4px 10px;'
+        + 'pointer-events:none;letter-spacing:.03em;'
+        + 'font:600 12px/1.5 ui-sans-serif,system-ui,sans-serif');
+      (document.body || document.documentElement).appendChild(el);
+    }
+    el.textContent = text;
+    if (!ladda) return;
+    const knapp = document.createElement('button');
+    knapp.type = 'button';
+    knapp.textContent = 'Ladda om';
+    /* Listen släpper igenom klick (pointer-events: none) — knappen i den måste
+       ta tillbaka dem, annars går den inte att trycka på. */
+    knapp.setAttribute('style', 'margin-left:10px;pointer-events:auto;cursor:pointer;'
+      + 'background:#fff;color:#8a1c1c;border:0;border-radius:3px;padding:1px 8px;font:inherit');
+    knapp.onclick = () => location.reload();
+    el.appendChild(knapp);
+  }
+
+  const takt = ms => { clearInterval(hjartslag); hjartslag = setInterval(kanna, ms); };
+
+  function tappad() {
+    if (borta) return;
+    borta = true;
+    API.borta = true;
+    document.documentElement.setAttribute('data-serverborta', '');
+    banderoll('SERVERN SVARAR INTE · appen är öppen, men programmet bakom den kör inte längre');
+    takt(HJARTA_BORTA);
+  }
+
+  function tillbaka(hus) {
+    borta = false;
+    API.borta = false;
+    document.documentElement.removeAttribute('data-serverborta');
+    if (husPid && hus.pid && hus.pid !== husPid) {
+      /* En ANNAN process svarar nu. Jobb-id:n, strömmar och allt sidan håller i
+         minnet pekar på en server som inte finns längre, så sidan måste läsas
+         om — men omladdningen är lärarens klick, inte vårt: den tar ett
+         halvskrivet papper med sig om den kommer oombedd. */
+      banderoll('SERVERN STARTADE OM · sidan hör till den gamla körningen', true);
+    } else {
+      const el = document.getElementById('serverborta');
+      if (el) el.remove();
+    }
+    takt(HJARTA_PA);
+  }
+
+  /* Frågar huset om det står kvar. Går utanför `json` med flit: den vägen
+     hade kallat hit igen vid varje misslyckande. */
+  function kanna() {
+    if (!API.pa) return Promise.resolve();   // prototypen har aldrig haft en server
+    return fetch('/api/var-kors', { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then(v => { if (borta) tillbaka((v || {}).hus || {}); })
+      .catch(() => { tappad(); });
+  }
+
   Object.assign(API, { json, jsonSWR, swrGlom, swrTom, strom,
                        jobbStrom, aktivaJobb, avbrytJobb,
                        laddaUpp, langd, klocka });
 
   API.redo = json('/api/var-kors')
-    .then(v => { API.pa = true; API.varKors = v; })
+    .then(v => { API.pa = true; API.varKors = v; husPid = ((v || {}).hus || {}).pid || null; })
     .catch(() => {
       API.pa = false;
       /* Inget hus svarar: antingen designprojektet (som aldrig haft en server)
@@ -381,6 +475,9 @@
     })
     .then(() => {
       document.documentElement.toggleAttribute('data-server', API.pa);
+      /* Hjärtslaget bara där det finns ett hjärta: i prototypen är tystnaden
+         normaltillståndet och en röd list vore en lögn. */
+      if (API.pa) takt(HJARTA_PA);
       document.dispatchEvent(new CustomEvent('api-redo', { detail: API }));
     });
 

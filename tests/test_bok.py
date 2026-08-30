@@ -12,6 +12,7 @@ allt runt omkring den, och det är där pengarna och sanningen sitter:
 Den skarpa avläsningen mäts i `ocr-eval/`, inte här.
 """
 import json
+from pathlib import Path
 
 import pytest
 
@@ -402,6 +403,21 @@ def test_bilderna_renderas_bara_en_gang(tmp_path, conn, ocr):
     stampel = fil.stat().st_mtime_ns
     bok.las_spann(tmp_path, conn, b["id"], 10, 10)
     assert fil.stat().st_mtime_ns == stampel
+
+
+def test_trasig_pdf_sager_vilken_fil(tmp_path, conn, ocr):
+    """pdfium säger «Data format error» och inget om vilken bok det gäller.
+
+    Morgonen 2026-08-30 låg tre sådana tracebacks i loggen och ingen gick att
+    spåra: hyllan har tre böcker på flera hundra megabyte var, och alla tre
+    öppnades felfritt när de provades i efterhand."""
+    b = bok.importera(tmp_path, conn, pdf=pdf_fil(tmp_path / "d"))
+    fil = Path(db.get_bok(conn, b["id"])["fil"])
+    fil.write_bytes(b"%PDF-1.7 men resten ar sonder")
+    with pytest.raises(RuntimeError) as fel:
+        bok.las_spann(tmp_path, conn, b["id"], 10, 10, bara="fakta")
+    assert str(fil) in str(fel.value)
+    assert "byte, ändrad" in str(fel.value)
 
 
 # ------------------------------------------------------------- promptblocket --
