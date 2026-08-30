@@ -88,6 +88,18 @@ def _static_dir() -> Path:
 STATIC_DIR = _static_dir()
 
 
+def _ikon_fil() -> Path:
+    """.ico:n som exe-filen redan bär (Transkribera_web.spec, icon=) — samma
+    bild i webbläsarens flik. Fryst packar PyInstaller upp den under _MEIPASS,
+    inte bredvid exe-filen, så _base_dir duger inte här."""
+    if getattr(sys, "frozen", False):
+        return Path(getattr(sys, "_MEIPASS", ".")) / "assets" / "transkribera.ico"
+    return Path(__file__).resolve().parents[2] / "assets" / "transkribera.ico"
+
+
+IKON_FIL = _ikon_fil()
+
+
 def _base_dir() -> Path:
     # Frozen: next to the exe. Source: repo root (app/web/server.py -> repo).
     if getattr(sys, "frozen", False):
@@ -424,6 +436,19 @@ def create_app(base_dir: Path | None = None,
         return PlainTextResponse(
             "Frontenden saknas: app/web/ui/app.html finns inte i den här "
             "utcheckningen.", status_code=503)
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon():
+        """Flikikonen. Webbläsaren frågar efter /favicon.ico av sig själv, och
+        utan svar loggade varje start ett 404 i konsolen.
+
+        En rutt i stället för en fil i app/web/ui: den mappen är en rak kopia av
+        Claude Design, och allt som läggs dit eller länkas in i app.html är en
+        avvikelse till att komma ihåg vid nästa synk. Ikonen hör dessutom till
+        appen, inte till designen — det är samma .ico som exe-filen bär."""
+        if IKON_FIL.exists():
+            return FileResponse(str(IKON_FIL), media_type="image/x-icon")
+        return PlainTextResponse("", status_code=404)
 
     @app.get("/api/hardware")
     def api_hardware():

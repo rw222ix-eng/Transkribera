@@ -44,6 +44,11 @@ if not _os.path.isdir("app/web/ui"):
     raise SystemExit("app/web/ui saknas — frontenden finns inte i utcheckningen.")
 datas += [("app/web/ui", "app/web/ui")]
 
+# Flikikonen som /favicon.ico serverar (server._ikon_fil). Samma fil som
+# EXE(icon=) nedan pekar ut, men den raden ritar bara exe-filen i Utforskaren —
+# den lägger ingenting i paketet.
+datas += [("assets/transkribera.ico", "assets")]
+
 # Bundlad appdata (centralt innehåll m.m.) där course_data.data_dir() letar
 # när appen är fryst (Fas 3).
 datas += [("app/data", "app/data")]

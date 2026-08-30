@@ -13,6 +13,16 @@ def test_index_served(client):
     assert "Transkribera" in r.text
 
 
+def test_favicon_serveras(client):
+    """Utan rutt frågade webbläsaren efter /favicon.ico vid varje start och fick
+    ett 404 i konsolen. Ikonen ligger i assets/, inte i app/web/ui — se
+    server.favicon om filen någon gång flyttas."""
+    r = client.get("/favicon.ico")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "image/x-icon"
+    assert len(r.content) > 0
+
+
 # ── Vem lyssnar? ────────────────────────────────────────────────────────────
 # Kvällen 2026-08-20 satt läraren i tre timmar i ett fönster som pratade med en
 # annan server än appen (Claude Codes förhandsvisning på 8750, gammal kod, samma
