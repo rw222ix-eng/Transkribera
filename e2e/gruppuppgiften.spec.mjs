@@ -642,3 +642,81 @@ test("antalet uppgifter går att välja och når servern", async ({ page }) => {
   // av de andra.
   expect(anrop[0].grupp).toMatchObject({ elever: 3, langd_min: 60 });
 });
+
+/* ══════════ FACIT ÄR LÄRARENS PAPPER ══════════
+   Lösningarna skrevs hela tiden — modellen sätter lösning och bedömning på
+   varje uppgift — men de låg alltid sist i GRUPPENS ark, och läraren hade
+   ingen väg att flytta dem därifrån. Arket ligger på ett bord under
+   lektionen; det är elevernas skrivyta. Förvalet är därför «Separat facit»,
+   inte arbetsbladets «Facit i bladet». */
+test("facitvalet står i upplägget, med Separat facit som förval",
+  async ({ page }) => {
+    await fejka(page, []);
+    await page.goto("/");
+    await hydrerad(page);
+    await page.getByRole("tab", { name: "Planering" }).click();
+    await page.evaluate(() => {
+      window.SattLage("Gruppuppgift");
+      const f = document.querySelector("#moment");
+      f.value = "1.1 Tal i olika former";
+      f.dispatchEvent(new Event("input", { bubbles: true }));
+      window.PlanSteg.las(4, false);
+      window.PlanSteg.gaTill(4);
+    });
+    const facitrad = page.locator('.typrad[data-id="facit"]');
+    await expect(facitrad).toBeVisible();
+    await expect(facitrad.locator('button[aria-pressed="true"]'))
+      .toHaveText("Separat facit");
+  });
+
+test("godkännandet lämnar facit som eget papper — och säger det till servern",
+  async ({ page }) => {
+    const utkast = papper({ inst: { grupp: 3, langd: 45,
+                                    redovisning: "Muntligt",
+                                    facit: "Separat facit" } });
+    await fejka(page, [], { id: 10, markor: 0, versioner: [utkast] });
+    const sparade = [];
+    await page.route("**/api/dokument", route => {
+      if (route.request().method() !== "POST") return route.fallback();
+      sparade.push(route.request().postDataJSON());
+      return route.fulfill({ status: 200, contentType: "application/json",
+                             body: JSON.stringify({ ok: true, id: 90 }) });
+    });
+    const godkant = [];
+    await page.route("**/api/exams/**", route => {
+      godkant.push(route.request().postDataJSON());
+      const klar = { type: "done", result: { id: 12, pdf: "", tex: "", errors: [] } };
+      return route.fulfill({ status: 200, contentType: "text/event-stream",
+                             body: `data: ${JSON.stringify(klar)}\n\n` });
+    });
+    await page.goto("/");
+    await hydrerad(page);
+    await page.getByRole("tab", { name: "Planering" }).click();
+    await expect(page.locator("#dokument")).toBeVisible({ timeout: 20_000 });
+
+    /* Växeln bär dokumentets eget namn. Den sa «Arbetsbladet» också i en
+       gruppuppgift — etiketten ärvdes den dagen växeln fick fler papper. */
+    await expect(page.locator("#arkval button").first())
+      .toHaveText("Gruppuppgiften");
+    await expect(page.locator("#arkval button").nth(1)).toHaveText("Facit");
+
+    await page.locator("#godkann").click();
+    /* Det godkända pappret PATCHas på plats — utkastraden finns redan
+       (utkastGodkann). Det som POSTas är det NYA dokumentet: facit. */
+    await expect.poll(() => sparade.length, { timeout: 20_000 })
+      .toBeGreaterThanOrEqual(1);
+    // Facit blir ett EGET dokument i högen — det tryckhögen och
+    // facit-knappen läser (plan.js harEgetFacit).
+    const facit = sparade.map(d => d && d.dokument)
+      .filter(d => d && d.losningsblad);
+    expect(facit.length).toBe(1);
+    expect(facit[0].typ).toBe("Gruppuppgift");
+    expect(facit[0].uppgifter.length).toBe(4);
+    /* Och servern får veta att gruppens ark INTE ska bära lösningarna.
+       Anropet väntar på avritningen av bladen (plan.js `avritade`), så det
+       kommer en stund efter klicket. */
+    const flaggan = () => godkant.filter(Boolean)
+      .find(k => "separat_facit" in k);
+    await expect.poll(() => !!flaggan(), { timeout: 40_000 }).toBe(true);
+    expect(flaggan().separat_facit).toBe(true);
+  });

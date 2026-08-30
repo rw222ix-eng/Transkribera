@@ -17,9 +17,17 @@
   ((# Ingen metarad: läraren säger gruppstorlek, tid och redovisningsform själv
      i klassrummet (beslut 2026-08-20). Fälten styr fortfarande namnraderna och
      instruktionsbandet — samma regel som skärmen (blad.js grupphuvud). #))
-  {\large Gruppuppgift — ((( kurs )))((* if klass *)) \; · \; ((( klass )))((* endif *))((* if datum *)) \; · \; ((( datum )))((* endif *))}
+  {\large ((* if only_facit *))Facit((* else *))Gruppuppgift((* endif *)) — ((( kurs )))((* if klass *)) \; · \; ((( klass )))((* endif *))((* if datum *)) \; · \; ((( datum )))((* endif *))}
 \end{center}
 
+((# only_facit ger facit ENSAMT som ett eget papper — det «Separat facit»
+    lovar i planeringen, och det är samma mall och därmed samma sättning
+    som facitsidan i arket. utan_facit är spegelbilden: GRUPPENS ark utan
+    lärarens sida. Flaggorna kombineras aldrig — only_facit ÄR facit, och
+    ett facit utan sitt facit är tomt. Samma par som arbetsblad.tex.j2
+    bär, och av samma skäl: valet «Separat facit» ska synas på båda
+    papperen, inte bara i filnamnet. #))
+((* if not only_facit *))
 \vspace{4mm}
 ((# Namnraderna: en per elev i gruppen, precis som gutopp i webbversionen. #))
 ((* for _ in range(grupp.elever) *))
@@ -63,8 +71,10 @@
 \end{uppgift}
 ((* endfor *))
 ((* endfor *))
+((* endif *))
 
-\newpage
+((* if not utan_facit *))
+((* if not only_facit *))\newpage((* endif *))
 \delprovband{Facit och bedömning}
 {\small Lärarens ark — delas inte ut. Poängen står vid det steg den delas ut på.}
 \vspace{3mm}
@@ -84,5 +94,6 @@
 \end{uppgift}
 ((* endfor *))
 ((* endfor *))
+((* endif *))
 
 \end{document}

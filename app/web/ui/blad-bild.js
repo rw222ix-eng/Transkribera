@@ -353,11 +353,13 @@ window.BladBild = (() => {
 
      · ARBETSBLADET får en EGEN fil, «{stam} - facit.pdf», som rutten
        /api/exams/{id}/facit serverar. Där hör bilderna hemma i `facit`.
-     · GRUPPUPPGIFTEN bär sitt facit på SISTA SIDAN i samma dokument —
-       gruppuppgift.tex.j2 skriver alltid ut «Facit och bedömning», och det är
-       lärarens ark, inte gruppens. Facitläget läggs därför sist i `uppgift`.
-       Har läraren redan valt «Facit i bladet» står arket där; då läggs det
-       inte dit en andra gång (`harFacitArk`).
+     · GRUPPUPPGIFTEN får samma egen fil. Facit låg förut ALLTID sist i
+       gruppens ark — mallen skrev ut «Facit och bedömning» oavsett — och
+       läraren hade ingen väg att flytta det därifrån. Sedan hon fått samma
+       facitväljare som arbetsbladet (plan.js TYPVAL, förval «Separat facit»)
+       styr valet var det landar: eget papper, sist i arket («Facit i bladet»,
+       och då står arket redan i `uppgift` — blad.js `bladen` lägger dit det),
+       eller ingenstans.
      · PROVET får också en egen fil, men under ett annat namn: «{stam} -
        losningar.pdf». Knappen gav förut bedömningsanvisningen — lärarens
        LaTeX-satta rättningsdokument med kravgränser och kommenterade
@@ -367,10 +369,9 @@ window.BladBild = (() => {
        godkännandet kommer utan bilder.
      Diagnosen bär alltid sin rättning i huvuddokumentet (blad.js `bladen`)
      och har inget eget läge att hämta. */
-  const EGEN_FACITFIL = v => v && v.typ === 'Arbetsblad';
+  const EGEN_FACITFIL = v => v && (v.typ === 'Arbetsblad'
+                                   || v.typ === 'Gruppuppgift');
   const EGEN_LOSNINGSFIL = v => v && v.typ === 'Prov';
-  const FACIT_SIST = v => v && v.typ === 'Gruppuppgift';
-  const harFacitArk = former => former.indexOf('fa') >= 0;
 
   const vila = ms => new Promise(ja => setTimeout(ja, ms));
   /* Sättningens sista svep ligger på 260 ms (blad.js `rita`). Vänta ut det och
@@ -388,19 +389,13 @@ window.BladBild = (() => {
     return $$('.blad', trav).filter(b => !b.querySelector(BOKARK));
   }
 
-  /* Ett arkläge ritat och rastrerat. `former` är arkens `data-form` i ordning
-     — den enda uppgiften den fyller är att säga om facit redan står i
-     dokumentet, se FACIT_SIST ovan. */
+  /* Ett arkläge ritat och rastrerat. */
   function lage(bo, v, skala) {
     const mal = document.createElement('div');
     bo.appendChild(mal);
     const trav = window.Blad.rita(mal, v);
     return satt(trav).then(() => {
       const blad = bladenI(trav);
-      const former = blad.map(b => {
-        const ark = b.querySelector('.ark, .gu');
-        return (ark && ark.dataset.form) || '';
-      });
       let kedja = Promise.resolve([]);
       blad.forEach(b => {
         kedja = kedja.then(ut => {
@@ -409,7 +404,7 @@ window.BladBild = (() => {
             .then(bild => ut.concat([bild]));
         });
       });
-      return kedja.then(png => ({ png, former }));
+      return kedja.then(png => ({ png }));
     });
   }
 
@@ -450,11 +445,6 @@ window.BladBild = (() => {
         if (EGEN_LOSNINGSFIL(v)) {
           return lage(bo, facitlaget(), skala)
             .then(f => ({ uppgift: u.png, facit: [], losningar: f.png }));
-        }
-        if (FACIT_SIST(v) && !harFacitArk(u.former)) {
-          return lage(bo, facitlaget(), skala)
-            .then(f => ({ uppgift: u.png.concat(f.png), facit: [],
-                          losningar: [] }));
         }
         return { uppgift: u.png, facit: [], losningar: [] };
       })

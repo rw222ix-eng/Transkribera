@@ -1108,11 +1108,18 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     # Typflaggan styr mallen (Fas 5): arbetsblad får facit-
                     # sida i samma dokument och ingen bedömningsanvisning.
                     if typ == "gruppuppgift":
-                        # Gruppuppgiften bär sitt facit MED bedömning på sista
-                        # sidan — lärarens ark, inte gruppens — och behöver
-                        # därför inget separat bedömningsdokument.
+                        # Gruppuppgiften bär sitt facit MED bedömning —
+                        # lärarens ark, inte gruppens — och behöver därför
+                        # inget separat bedömningsdokument.
+                        #
+                        # VAR det låg är numera lärarens val, samma tre som
+                        # arbetsbladet har (plan.js TYPVAL): sist i gruppens
+                        # ark, som eget papper, eller inte alls. Facit stod
+                        # förut alltid sist, och den som ville ha det som
+                        # eget papper hade ingen väg dit.
                         tex = exam_latex.render_gruppuppgift(
-                            doc, bilder=bilder_map, egna_bilder=egna_map)
+                            doc, bilder=bilder_map, egna_bilder=egna_map,
+                            utan_facit=separat_facit)
                         bed = None
                     elif typ == "arbetsblad":
                         # utan_facit följer lärarens val: med separat facit
@@ -1133,18 +1140,26 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         tex = exam_latex.render_prov(doc, bilder=bilder_map,
                                                      egna_bilder=egna_map)
                         bed = exam_latex.render_bedomning(doc, bilder=bilder_map)
-                    # Arbetsbladets separata facit: samma facitband som ligger
-                    # sist i bladet, som ETT eget papper bredvid. Det är filen
+                    # Det separata facit: samma facitband som ligger sist i
+                    # bladet, som ETT eget papper bredvid. Det är filen
                     # «Separat facit» lovar i planeringen — lösningsbladet i
                     # dokumenthögen hade ingen egen PDF, och knappen gav bladet
-                    # självt i stället. Byggs för VARJE arbetsblad, inte bara
-                    # när rutan är kryssad: valet bor i webbläsarens dokument
-                    # och inte i provets JSON, och en fil som redan ligger där
-                    # kostar ingenting jämfört med ett godkännande som måste
-                    # göras om för att läraren ändrade sig efteråt.
-                    facit = (exam_latex.render_arbetsblad(
-                        doc, bilder=bilder_map, only_facit=True)
-                        if typ == "arbetsblad" else None)
+                    # självt i stället.
+                    #
+                    # Byggs för VARJE arbetsblad och varje gruppuppgift, inte
+                    # bara när valet är gjort: valet bor i webbläsarens
+                    # dokument och inte i provets JSON, och en fil som redan
+                    # ligger där kostar ingenting jämfört med ett godkännande
+                    # som måste göras om för att läraren ändrade sig efteråt.
+                    if typ == "arbetsblad":
+                        facit = exam_latex.render_arbetsblad(
+                            doc, bilder=bilder_map, only_facit=True)
+                    elif typ == "gruppuppgift":
+                        facit = exam_latex.render_gruppuppgift(
+                            doc, bilder=bilder_map, egna_bilder=egna_map,
+                            only_facit=True)
+                    else:
+                        facit = None
                     slug = _safe_component(doc.titel, typ)
                     out_dir.mkdir(parents=True, exist_ok=True)
                     tex_path = out_dir / f"{slug}.tex"
@@ -1520,8 +1535,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
     def get_facit(exam_id: Id64):
         return _serve_bredvid(
             exam_id, tryck.facit_bredvid,
-            "Facit finns inte som egen fil — arbetsbladet bär det på sista "
-            "sidan. Godkänn bladet på nytt, då byggs det separat också.")
+            "Facit finns inte som egen fil — pappret bär det på sista sidan. "
+            "Godkänn det på nytt, då byggs facit separat också.")
 
     # -------------------------------------------------------------- radera --
 

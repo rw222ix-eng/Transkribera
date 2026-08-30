@@ -1130,11 +1130,20 @@ def render_anteckningar(doc) -> str:
 
 def render_gruppuppgift(doc: exam_spec.ExamDoc,
                         bilder: dict[int, str] | None = None,
-                        egna_bilder: dict[int, str] | None = None) -> str:
+                        egna_bilder: dict[int, str] | None = None,
+                        only_facit: bool = False,
+                        utan_facit: bool = False) -> str:
     """Gruppuppgift (Fas 0.6): namnrader per elev, tiden och redovisningsformen
     i klartext, inga poäng på gruppens ark — och facit med bedömning på egen
     sida, för det är lärarens papper.
 
-    `egna_bilder`: samma väg som arbetsbladets, se render_arbetsblad."""
+    `egna_bilder`: samma väg som arbetsbladets, se render_arbetsblad.
+
+    `only_facit` och `utan_facit` är samma par som arbetsbladet bär, och de
+    kom hit när gruppuppgiften fick sin egen facitväljare: facit låg alltid
+    sist i gruppens ark, och läraren som ville ha det som eget papper hade
+    ingen väg dit. only_facit ger lärarens sida ensam; utan_facit ger
+    gruppens ark utan den."""
     return _environment().get_template("gruppuppgift.tex.j2").render(
+        only_facit=only_facit, utan_facit=utan_facit,
         **_build_view(doc, bilder, egna=egna_bilder))

@@ -173,6 +173,44 @@ def test_gruppens_ark_bar_inga_poang_men_lararens_gor_det():
     assert doc.uppgifter[0].losning.replace("$", "\\(", 1) or True
 
 
+def test_separat_facit_delar_pappret_i_tva():
+    """Facit låg ALLTID sist i gruppens ark, och läraren som ville ha det som
+    eget papper hade ingen väg dit — väljaren fanns bara på arbetsbladet.
+
+    Flaggorna är samma par som arbetsbladet bär: only_facit ger lärarens sida
+    ensam, utan_facit ger gruppens ark utan den. Tillsammans täcker de pappret
+    exakt en gång."""
+    doc, _ = exam_spec.validate_exam_json(_doc(), "gruppuppgift")
+    BAND = r"\delprovband{Facit och bedömning}"
+    NAMNRAD = r"\noindent Namn:"
+
+    gruppens = exam_latex.render_gruppuppgift(doc, utan_facit=True)
+    assert gruppens.count(NAMNRAD) == 4
+    assert BAND not in gruppens
+    assert doc.uppgifter[0].bedomning not in gruppens
+
+    lararens = exam_latex.render_gruppuppgift(doc, only_facit=True)
+    assert BAND in lararens
+    assert doc.uppgifter[0].bedomning in lararens
+    # Inga namnrader och ingen svarsplats: lärarens ark är inget att skriva på.
+    assert NAMNRAD not in lararens
+    # Efter \begin{document}: preambeln DEFINIERAR \svarsrad och gör det i
+    # varje papper mallen sätter.
+    assert r"\svarsrad" not in lararens.split(r"\begin{document}")[1]
+    # Rubriken säger vilket papper det är — «Gruppuppgift» på ett facit hade
+    # lagt fel ark på fel hög.
+    assert "Facit — " in lararens and "Gruppuppgift — " not in lararens
+
+
+def test_utan_val_bar_arket_sitt_facit_som_forut():
+    """Godkännanden utan flaggor — API-anrop, en äldre klient, pytest — ska ge
+    exakt det papper de alltid gett."""
+    doc, _ = exam_spec.validate_exam_json(_doc(), "gruppuppgift")
+    tex = exam_latex.render_gruppuppgift(doc)
+    assert r"\noindent Namn:" in tex
+    assert r"\delprovband{Facit och bedömning}" in tex
+
+
 def test_ifyllnadsraderna_ersatter_svarsraden():
     """Förlagans grepp: BESLUTEN skrivs på pappret («Ekvation: ____»,
     «Svar i ord: ____»), räkningen på lösblad. Den som fyllt i de raderna har
@@ -394,8 +432,15 @@ def test_okand_typ_faller_tillbaka_pa_prov(client, monkeypatch):
     assert calls[0]["profil"] == "prov"
 
 
-def test_godkannandet_skriver_ett_dokument_utan_separat_bedomning(client, monkeypatch):
-    """Gruppuppgiften bär sitt facit på sista sidan — inget andra dokument."""
+def test_godkannandet_skriver_arket_och_facit_men_ingen_bedomning(client, monkeypatch):
+    """Gruppuppgiften rättas ur sitt eget facit — bedömningsanvisningen är
+    provets dokument och skrivs inte här.
+
+    Facit-filen byggs för VARJE gruppuppgift, precis som arbetsbladets:
+    valet «Separat facit» bor i webbläsarens dokument och inte i provets
+    JSON, och en fil som redan ligger där kostar ingenting jämfört med ett
+    godkännande som måste göras om för att läraren ändrade sig efteråt.
+    Utan flaggan i kroppen bär arket sitt facit ändå, som förut."""
     monkeypatch.setattr(exam_pdf, "engine_available", lambda: False)
     _stub(monkeypatch)
     ex = _done(client.post("/api/exams/generate", json={
@@ -403,13 +448,37 @@ def test_godkannandet_skriver_ett_dokument_utan_separat_bedomning(client, monkey
         "typ": "gruppuppgift",
         "grupp": {"elever": 4, "langd_min": 45, "redovisning": "poster"}}))
     _done(client.post(f"/api/exams/{ex['id']}/approve", json={}))
-    tex = sorted(p.name for p in client.base_dir.rglob("*.tex"))
-    assert tex and not any(n.endswith(" - bedomning.tex") for n in tex), tex
-    innehall = next(p for p in client.base_dir.rglob("*.tex")).read_text(encoding="utf-8")
+    filer = sorted(client.base_dir.rglob("*.tex"), key=lambda p: p.name)
+    namn = [f.name for f in filer]
+    assert namn and not any(n.endswith(" - bedomning.tex") for n in namn), namn
+    assert any(n.endswith(" - facit.tex") for n in namn), namn
+    arket = next(f for f in filer if not f.name.endswith(" - facit.tex"))
+    innehall = arket.read_text(encoding="utf-8")
     # Metaraden trycks inte längre (se test_arket_bar_namnrader_men_ingen_metarad)
     # — men namnraderna, som räknas ur samma gruppfält, ska stå där.
     assert "elever per grupp" not in innehall
     assert innehall.count(r"\noindent Namn:") == 4
+
+
+def test_separat_facit_tar_lararens_sida_ur_gruppens_ark(client, monkeypatch):
+    """Flaggan reser med godkännandet därför att valet bor i webbläsarens
+    dokument (plan.js inst.facit) och inte i provets JSON. Utan den bar
+    gruppens ark lösningarna ändå, och de låg dessutom i facit-filen
+    bredvid: eleverna fick dem dubbelt."""
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: False)
+    _stub(monkeypatch)
+    ex = _done(client.post("/api/exams/generate", json={
+        "kurs": "Matematik, nivå 2c", "punkter_text": ["Derivator"],
+        "typ": "gruppuppgift",
+        "grupp": {"elever": 4, "langd_min": 45, "redovisning": "poster"}}))
+    _done(client.post(f"/api/exams/{ex['id']}/approve",
+                      json={"separat_facit": True}))
+    filer = sorted(client.base_dir.rglob("*.tex"), key=lambda f: f.name)
+    arket = next(f for f in filer if not f.name.endswith(" - facit.tex"))
+    facit = next(f for f in filer if f.name.endswith(" - facit.tex"))
+    BAND = r"\delprovband{Facit och bedömning}"
+    assert BAND not in arket.read_text(encoding="utf-8")
+    assert BAND in facit.read_text(encoding="utf-8")
 
 
 def test_prompten_talar_om_gruppen(monkeypatch):

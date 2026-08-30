@@ -343,7 +343,19 @@
          permanent avstängd. Och det är just gruppens papper som vinner mest
          på en bild — fyra elever som ska prata om en situation har lättare
          att se den framför sig. */
-      { id: 'illustration', namn: 'Plats för illustration', typ: 'switch' }
+      { id: 'illustration', namn: 'Plats för illustration', typ: 'switch' },
+      /* Samma tre val som arbetsbladet, men med ett annat förval.
+         Facit skrevs hela tiden — modellen sätter lösning och bedömning på
+         varje uppgift, och gruppuppgift.tex.j2 tryckte dem sist i gruppens
+         ark — men läraren hade ingen väg att flytta dem därifrån. Ett ark
+         som ligger på ett bord under lektionen är elevernas skrivyta, och
+         lösningarna hör inte hemma på det: förvalet är därför «Separat
+         facit», inte arbetsbladets «Facit i bladet».
+
+         Gamla gruppuppgifter bär inget val alls (fältet fanns inte), och
+         läses därför som «Separat facit» överallt där valet frågas — se
+         guFacit nedan. */
+      { id: 'facit', namn: 'Facit', typ: 'seg', val: ['Inget facit', 'Facit i bladet', 'Separat facit'] }
     ],
     /* Diagnosen har INGEN antalsväljare — och det är hela formen. Antalet
        uppgifter räknas ur två saker läraren redan bestämt: hur mycket av
@@ -394,7 +406,8 @@
     Prov: { nar: 'På lektionen', narDatum: '', narTid: '08:15', provminuter: 90, provtid: '90 min', antal: 6, nivamix: 'Balanserat', delprov: 'Del A + Del B', losningar: true, formelblad: true, takt: 3.5 },
     Arbetsblad: { antal: 3, niva: 'Blandat', facit: 'Facit i bladet', illustration: true,
                   klassblad: true, elever: [], syfte: 'Stötta' },
-    Gruppuppgift: { antal: 4, grupp: 3, langd: 60, redovisning: 'Muntligt', illustration: true },
+    Gruppuppgift: { antal: 4, grupp: 3, langd: 60, redovisning: 'Muntligt', illustration: true,
+                    facit: 'Separat facit' },
     /* 60 minuter är lärarens genomsnittslektion och därmed diagnosens mått;
        75 är taket, och det är servern som håller det (exam_spec). Fälten är
        provets — diagnosen skrivs på en lektion precis som provet, och `nartid`
@@ -2326,10 +2339,21 @@
      ett val: det är just gruppuppgifterna läraren går igenom på tavlan efteråt.
      Anteckningarna har inga uppgifter och därför inget facit — pappret ÄR
      lärarens ark, det finns ingen andra hälft att vända på. */
+  /* Gruppuppgifter skrivna före facitväljaren (2026-08-30) har inget val i
+     sitt upplägg. De läses som förvalet — det är vad de FICK: facit på
+     lärarens egen sida, aldrig på gruppens ark. */
+  const guFacit = v => (v.inst || {}).facit || 'Separat facit';
+  /* Papper som får sitt facit som ETT EGET dokument i högen: arbetsbladet
+     sedan tidigare, gruppuppgiften sedan väljaren finns. Provets
+     lösningsförslag är samma sak men bor bakom sitt eget kryss. */
+  const harEgetFacit = v =>
+    (v.typ === 'Arbetsblad' && (v.inst || {}).facit === 'Separat facit')
+    || (v.typ === 'Gruppuppgift' && guFacit(v) === 'Separat facit');
   const harLosning = v => v.typ === 'Prov'
     ? !!(v.inst || {}).losningar
     : v.typ === 'Arbetsblad' ? (v.inst || {}).facit === 'Separat facit'
-      : v.typ === 'Gruppuppgift';
+      : v.typ === 'Gruppuppgift' ? guFacit(v) === 'Separat facit'
+        : false;
   function visa(i, ark) {
     nu = i;
     const v = versioner[i];
@@ -2348,8 +2372,11 @@
     vaxel.hidden = !tva;
     if (!tva) visarLosning = false;
     $$('button', vaxel).forEach((b, j) => {
+      /* Vänsterknappen sa «Arbetsbladet» också när läraren stod i en
+         gruppuppgift — växeln ärvde arbetsbladets etikett den dagen den
+         fick fler papper att växla mellan. */
       b.textContent = j === 0
-        ? (v.typ === 'Prov' ? 'Provet' : 'Arbetsbladet')
+        ? Best(v.typ)
         : (v.typ === 'Prov' ? 'Bedömningsanvisning' : 'Facit');
       b.setAttribute('aria-pressed', String(j === (visarLosning ? 1 : 0)));
     });
@@ -4932,7 +4959,8 @@
              «inte på elevens papper». Utan den fick ett blad läraren bad ha
              INGET facit ändå lösningarna tryckta — men bara när avritningen
              föll och LaTeX-vägen tog över. */
-          separat_facit: godkant.typ === 'Arbetsblad'
+          separat_facit: (godkant.typ === 'Arbetsblad'
+                          || godkant.typ === 'Gruppuppgift')
             && (godkant.inst || {}).facit !== 'Facit i bladet',
           version: godkant.provVersion || null,
           blad,
@@ -5009,7 +5037,7 @@
       window.Klass && window.Klass.rita && window.Klass.rita();
     }
     const i = v.inst || {};
-    if ((v.typ === 'Prov' && i.losningar) || (v.typ === 'Arbetsblad' && i.facit === 'Separat facit')) {
+    if ((v.typ === 'Prov' && i.losningar) || harEgetFacit(v)) {
       const l = JSON.parse(JSON.stringify(v));
       delete l.id;
       l.losningsblad = true;
@@ -5041,7 +5069,7 @@
     /* Stapelns rader läser momentet — töms det måste de skrivas om, annars står
        «Utgår från 5.1 …» kvar bredvid «Beskriv momentet ovan». */
     window.PlanSteg && window.PlanSteg.rita && window.PlanSteg.rita();
-    const extra = (v.typ === 'Prov' && i.losningar) || (v.typ === 'Arbetsblad' && i.facit === 'Separat facit');
+    const extra = (v.typ === 'Prov' && i.losningar) || harEgetFacit(v);
     /* Godkännandet är grinden: först här föreslås nästa i paret, och då med det
        sparade dokumentet som förlaga. */
     /* Förlagan är det GODKÄNDA pappret självt, inte en kopia av versionen: det
