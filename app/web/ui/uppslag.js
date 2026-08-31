@@ -61,6 +61,9 @@
   const avsnittFor = sida => reg().find(a => { const [f, t] = grans(a); return sida >= f && sida <= t; }) || null;
   const rullaLada = (box, mal) => (window.rullaLada || ((b, y) => { b.scrollTop = y; }))(box, mal, 520);
 
+  /* Byts en gång per sidladdning — se bild-raden i ritaUppslag. */
+  const LADDNING = Date.now();
+
   /* ── Uppslaget: första och sista sidan som två blad ──
      Bladen var ritade attrapper: fem grå streck på hårdkodade bredder, lika
      för varje sida i varje bok. De såg ut som en förhandsvisning och var det
@@ -79,8 +82,17 @@
       const rader = [92, 78, 96, 64, 88].map(w => `<i style="width:${w}%"></i>`).join('');
       /* onerror tar bort bilden i stället för att lämna en trasig ikon —
          underlägget under den är redan ett fullgott blad. */
+      /* LADDNING i adressen: en omladdning ska alltid kunna rädda bladet.
+         Rutten skickade länge max-age=86400, och kvällen 2026-08-31 satt
+         läraren med vita blad ett dygn efter att bilderna på disken lagats —
+         webbläsaren hade rätt att visa sin gamla kopia och gjorde det, hur
+         många gånger hon än laddade om. Rutten säger no-cache nu, men de
+         förgiftade posterna ligger kvar i varje webbläsare som hann hämta
+         under tiden, och en adress som byts vid omladdning är enda vägen
+         förbi dem. Inom samma laddning är nyckeln konstant, så att bläddra
+         tillbaka till ett uppslag kostar fortfarande ingenting. */
       const bild = id
-        ? `<img class="bkbild" alt="Sida ${nr}" src="/api/bocker/${id}/sida/${nr}.png" onerror="this.remove()">`
+        ? `<img class="bkbild" alt="Sida ${nr}" src="/api/bocker/${id}/sida/${nr}.png?laddning=${LADDNING}" onerror="this.remove()">`
         : '';
       return `<div class="bkblad"><span class="bkark"><span class="bkbrub"></span>${rader}${bild}</span><span class="bkbnr">${nr} · ${roll}</span><span class="bkbavs">${a ? a.nr + ' ' + a.titel : 'utanför registret'}</span></div>`;
     };
