@@ -420,6 +420,79 @@ def test_trasig_pdf_sager_vilken_fil(tmp_path, conn, ocr):
     assert "byte, ändrad" in str(fel.value)
 
 
+def _skanningslik(mapp, sidor=30, namn="Skannad bok.pdf"):
+    """En PDF vars sidor BÄR något — som bokhyllans skanningar gör.
+
+    pdf_fil() ovan gör tomma blad, och ett tomt blad renderas lagligt vitt.
+    Vakten i bok.rendera skiljer på de två fallen genom sidans objektlista,
+    så vitthetstesterna behöver en PDF med objekt i sig."""
+    import pypdfium2 as pdfium
+    from PIL import Image
+    mapp.mkdir(parents=True, exist_ok=True)
+    doc = pdfium.PdfDocument.new()
+    for _ in range(sidor):
+        sida = doc.new_page(200, 300)
+        # En bild, precis som en skannad sida — det ÄR objektet vakten känner.
+        bild = pdfium.PdfImage.new(doc)
+        bild.set_bitmap(pdfium.PdfBitmap.from_pil(
+            Image.new("RGB", (20, 20), "black")))
+        bild.set_matrix(pdfium.PdfMatrix().scale(20, 20))
+        sida.insert_obj(bild)
+        sida.gen_content()
+    f = mapp / namn
+    doc.save(str(f))
+    doc.close()
+    return f
+
+
+def test_helvit_rendering_av_en_sida_med_innehall_sparas_aldrig(tmp_path,
+                                                                monkeypatch):
+    """Kvällen 2026-08-31 låg tretton vita 9 kB-PNG:er i bokmapparna, skrivna
+    i en miljö där pdfium inte kunde läsa böckernas PDF:er. Sidbild-rutten såg
+    att filen fanns och skickade den, så läraren fick tomma blad i väljaren
+    och trodde att boken var oläst."""
+    from PIL import Image
+    pdf = _skanningslik(tmp_path / "d")
+    ut = tmp_path / "ut"
+
+    class _Vit:
+        def to_pil(self):
+            return Image.new("RGB", (40, 60), "white")
+
+    monkeypatch.setattr(type(bok._oppna(pdf)[0]), "render",
+                        lambda self, **k: _Vit())
+    with pytest.raises(RuntimeError) as fel:
+        bok.rendera(pdf, [0], ut)
+    assert "helt vit" in str(fel.value)
+    assert not list(ut.glob("*.png"))
+
+
+def test_ett_verkligt_tomt_blad_far_renderas(tmp_path):
+    """Vitt ensamt är ingen dom: en PDF kan ha ett tomt blad, och då är den
+    vita bilden rätt svar."""
+    pdf = pdf_fil(tmp_path / "d", sidor=2)
+    filer = bok.rendera(pdf, [0], tmp_path / "ut")
+    assert filer and filer[0].exists()
+
+
+def test_vit_attrapp_pa_disken_skrivs_over(tmp_path):
+    """Attrappen ska inte överleva nästa läsning bara för att filen finns."""
+    from PIL import Image
+    pdf = _skanningslik(tmp_path / "d")
+    ut = tmp_path / "ut"
+    ut.mkdir()
+    (ut / "sida-001.png").write_bytes(b"")
+    Image.new("RGB", (420, 544), "white").save(ut / "sida-001.png")
+    Image.new("RGB", (420, 544), "white").save(ut / "sida-001-f420.png")
+
+    bok.rendera(pdf, [0], ut)
+
+    with Image.open(ut / "sida-001.png") as im:
+        assert im.convert("L").getextrema() != (255, 255)
+    # Miniatyren är den läraren faktiskt ser — den vita kopian måste bort.
+    assert not (ut / "sida-001-f420.png").exists()
+
+
 # ------------------------------------------------------------- promptblocket --
 
 def test_bara_lasta_sidor_kommer_med_i_prompten(tmp_path, conn, ocr):

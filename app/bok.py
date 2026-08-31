@@ -81,11 +81,60 @@ def sidantal(pdf: Path) -> int:
         doc.close()
 
 
+def _helvit(bild) -> bool:
+    """Bär renderingen ingenting alls? En enda pixel som inte är 255 räcker
+    för att svaret ska bli falskt."""
+    return bild.convert("L").getextrema() == (255, 255)
+
+
+def _misslyckad(sida, bild) -> bool:
+    """Helvit rendering av en sida som HAR något att rita = misslyckad.
+
+    Vitt ensamt räcker inte som dom: en PDF kan ha ett verkligt tomt blad,
+    och testsviten bygger sina böcker av just sådana. Skillnaden står i
+    sidans objektlista — en skannad boksida bär alltid minst ett objekt
+    (bilden), ett tomt blad bär noll. Vitt OCH objekt betyder alltså att
+    pdfium fick något att rita men lämnade ifrån sig ingenting.
+    """
+    if not _helvit(bild):
+        return False
+    try:
+        return any(True for _ in sida.get_objects())
+    except Exception:
+        return False          # kan vi inte fråga sidan får bilden passera
+
+
+def _attrapp(f: Path) -> bool:
+    """Är filen på disken en vit attrapp från en trasig körning?
+
+    Grinden är storleken: en riktig sida i PDF_SKALA väger över en megabyte,
+    en helvit under tio kilobyte. Bara de små öppnas — annars hade varje
+    uppslag kostat en PIL-läsning av ett par megabyte för ingenting.
+    """
+    try:
+        if f.stat().st_size > 60_000:
+            return False
+        from PIL import Image
+        with Image.open(f) as im:
+            return _helvit(im)
+    except Exception:
+        return False
+
+
 def rendera(pdf: Path, index: list[int], ut: Path) -> list[Path]:
     """Renderar PDF-sidor (0-baserat index) till PNG under `ut`.
 
     Redan renderade sidor hoppas över: bilderna ligger kvar mellan körningar,
     och en omläsning av samma uppslag ska inte kosta om.
+
+    En misslyckad rendering skrivs ALDRIG till disken. Kvällen 2026-08-31 satt
+    läraren i appen och fick tomma blad i uppslagsväljaren: tretton vita
+    9 kB-PNG:er låg i bokmapparna, skrivna av en körning i en miljö där
+    pdfium inte kunde läsa böckernas PDF:er (samma «Data format error» som
+    _oppna beskriver). För sidbild-rutten i routes_bok.py såg de giltiga ut —
+    filen fanns, alltså skickades den — och boken framstod som oläst fastän
+    hela registret låg i basen. Attrapper som redan ligger på disken skrivs
+    över här i stället för att hoppas över, miniatyren bredvid med.
     """
     ut.mkdir(parents=True, exist_ok=True)
     doc = _oppna(pdf)
@@ -95,8 +144,26 @@ def rendera(pdf: Path, index: list[int], ut: Path) -> list[Path]:
             if not (0 <= i < len(doc)):
                 continue
             f = ut / f"sida-{i + 1:03d}.png"
-            if not f.exists():
-                doc[i].render(scale=PDF_SKALA).to_pil().save(f)
+            if not f.exists() or _attrapp(f):
+                sida = doc[i]
+                bild = sida.render(scale=PDF_SKALA).to_pil()
+                if _misslyckad(sida, bild):
+                    raise RuntimeError(
+                        f"Sida {i + 1} i {pdf.name} renderades helt vit trots "
+                        "att sidan har innehåll — pdfium läste inte PDF:en. "
+                        "Ingen bild sparades.")
+                if not (f.exists() and _helvit(bild)):
+                    # Ett verkligt tomt blad ser likadant ut varje gång: filen
+                    # som redan ligger där ÄR renderingen, och att skriva om
+                    # den skulle bara flytta tidsstämpeln på en sida som ingen
+                    # rört (test_bilderna_renderas_bara_en_gang).
+                    bild.save(f)
+                    # Miniatyren (routes_bok._miniatyr) skapas en gång och
+                    # lever sitt eget liv bredvid originalet. Byts originalet
+                    # ut måste den gå, annars visar väljaren den vita kopian
+                    # vidare.
+                    for liten in ut.glob(f"sida-{i + 1:03d}-f*.png"):
+                        liten.unlink(missing_ok=True)
             filer.append(f)
         return filer
     finally:
