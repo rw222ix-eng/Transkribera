@@ -17,11 +17,12 @@ finns kvar för takets skull, och för att `ensure_llm()` sitter på samma stäl
 """
 from __future__ import annotations
 
+import hashlib
 import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 
 from app import bok as bok_mod
 from app import bok_losning, db, gpu_arbiter
@@ -328,8 +329,15 @@ def create_router(base: Path, arbiter) -> APIRouter:
         except Exception:
             return full
 
+    def _etag(fil: Path) -> str:
+        """Samma formel som Starlettes FileResponse (mtime + storlek), så
+        taggen vi jämför mot är den vi själva skickade."""
+        st = fil.stat()
+        grund = f"{st.st_mtime}-{st.st_size}".encode()
+        return f'"{hashlib.md5(grund, usedforsecurity=False).hexdigest()}"'
+
     @router.get("/api/bocker/{bok_id:int}/sida/{sida:int}.png")
-    def sidbild(bok_id: Id64, sida: Id64, full: int = 0):
+    def sidbild(request: Request, bok_id: Id64, sida: Id64, full: int = 0):
         """Sidan som BILD, för förhandsvisningen i remsan (uppslag.js).
 
         Bladen i väljaren var ritade attrapper — fem grå streck på hårdkodade
@@ -379,11 +387,29 @@ def create_router(base: Path, arbiter) -> APIRouter:
                                     status_code=500)
         if not full:
             fil = _miniatyr(fil)
-        # Bilden ändras aldrig för ett givet (bok, sida) — den är renderad ur en
-        # PDF som ligger still. Utan cache-huvudet hämtar remsan om båda bladen
-        # vid varje klick.
+        # `no-cache` betyder «fråga alltid», inte «spara aldrig»: webbläsaren
+        # behåller bilden och skickar sitt etag, och servern svarar 304 utan
+        # kropp så länge filen står still. Remsan hämtar alltså fortfarande
+        # inte om bladen vid varje klick — det var vad `max-age=86400` skulle
+        # lösa — men den kan inte längre fastna i en gammal bild.
+        #
+        # Och bilden ÄNDRAS: sidnumret översätts om när faktapasset rättar
+        # siktet (bok_sidor.pdf_sida vinner över sidoffset, se ovan), och en
+        # vit attrapp från en trasig körning skrivs över nästa gång sidan
+        # renderas (bok.rendera). Kvällen 2026-08-31 satt läraren med tomma
+        # blad i väljaren ett dygn efter att bilderna på disken lagats: filen
+        # var rätt, webbläsaren visade sin egen kopia.
+        # FileResponse sätter etag men svarar aldrig 304 av sig själv — den
+        # jämförelsen bor i StaticFiles. Utan den hade «fråga alltid» betytt
+        # «skicka hela bilden varje gång», och det var precis kostnaden
+        # max-age skulle slippa.
+        tagg = _etag(fil)
+        if request.headers.get("if-none-match") == tagg:
+            return Response(status_code=304,
+                            headers={"Cache-Control": "no-cache",
+                                     "ETag": tagg})
         return FileResponse(str(fil), media_type="image/png",
-                            headers={"Cache-Control": "max-age=86400"})
+                            headers={"Cache-Control": "no-cache"})
 
     # ------------------------------------------------------------ rätta till --
 

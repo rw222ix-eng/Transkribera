@@ -805,6 +805,24 @@ def test_en_sida_mindre_an_taket_skalas_inte_upp(client, ocr):
     assert liten.width == 400
 
 
+def test_sidbilden_far_alltid_fragas_om(client, ocr):
+    """Bilden är INTE oföränderlig för ett givet (bok, sida): sidnumret
+    översätts om när faktapasset rättar siktet, och en vit attrapp skrivs över
+    nästa gång sidan renderas. Med `max-age=86400` satt utan revalidering satt
+    läraren kvällen 2026-08-31 med tomma blad ett dygn efter att bilderna på
+    disken lagats — filen var rätt, webbläsaren visade sin egen kopia.
+
+    `no-cache` är inte «spara aldrig» utan «fråga alltid»: etaggen finns kvar,
+    så en oförändrad sida kostar ett 304 utan kropp."""
+    b = _importera(client)
+    r = client.get(f"/api/bocker/{b['id']}/sida/10.png")
+    assert r.headers["cache-control"] == "no-cache"
+    assert r.headers.get("etag")
+    om = client.get(f"/api/bocker/{b['id']}/sida/10.png",
+                    headers={"if-none-match": r.headers["etag"]})
+    assert om.status_code == 304 and not om.content
+
+
 def test_sidbilden_sager_nej_i_stallet_for_att_gissa(client, ocr):
     """Ett blad utan bild är ett fullgott blad (uppslag.js tar bort <img> på
     fel). Ett blad med FEL sida är en lärare som slår upp fel uppslag i
