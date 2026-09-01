@@ -26,7 +26,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from app import (db, dokumentdiff, exam_latex, exam_pdf, gpu_arbiter,
-                 llm_client, notes_gen, postprocess, tryck)
+                 llm_client, notes_gen, postprocess, spar, tryck)
 from app.web import Id64, _kropp, routes_planning
 from app.web.sse import Stege, jobb_response
 
@@ -282,6 +282,14 @@ def create_router(base: Path, arbiter) -> APIRouter:
         if not llm:
             return JSONResponse(_LLM_BUSY, status_code=409)
 
+        # Se routes_exam: lärarens mening + målet till spåret (app/spar.py).
+        # Anteckningarna var den enda chatten som inte spårade — söndags-
+        # analysens första fynd.
+        spar.logga(db_file, "onske", doktyp="anteckningar", dok_id=note_id,
+                   detalj={"message": message,
+                           "mal": (mal or {}).get("namn"),
+                           "malen": [m.get("namn") for m in (malen or [])]})
+
         def job(emit):
             steg = Stege(emit, _STEG_OM)
             try:
@@ -311,6 +319,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # lärarens formulering.
                 svar["andrade"] = dokumentdiff.andrade_element(
                     "anteckningar", view["exam"], ny.get("exam"))
+                spar.logga(db_file, "utfall", doktyp="anteckningar",
+                           dok_id=note_id,
+                           detalj={"andrade": svar["andrade"],
+                                   "fel": len(res["errors"] or [])})
                 return svar
             finally:
                 arbiter.release_llm(llm)
