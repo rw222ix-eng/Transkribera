@@ -166,14 +166,24 @@
      står ingenstans i dokumentet den skriver om. Innehållet gör det — det är
      det enda som pekar ut elementet i JSON:en. Kapat, för ett block kan vara
      långt och prompten har annat att bära. */
-  const innehall = el => (el.dataset.text || el.textContent || '')
+  /* Skärmtexten läses ur en KLON med våra egna överlägg borttagna: nålarna
+     (.gpin) och svepet (.gshimmer) hänger som barn i rutan, och nålens nummer
+     är text. Utan rensningen fick modellen «… nummer 2. 1» som «så här står
+     det på skärmen» — en siffra läraren aldrig ser som del av texten — och
+     skrev om fel sak utifrån den. Samma grepp som diffens platt() nedan. */
+  const skarmtext = el => {
+    const k = el.cloneNode(true);
+    $$('.gpin, .gshimmer', k).forEach(o => o.remove());
+    return (k.textContent || '').replace(/\s+/g, ' ').trim();
+  };
+  const innehall = el => (el.dataset.text || skarmtext(el))
     .replace(/\s+/g, ' ').trim().slice(0, 300);
   /* Rutans text SÅ SOM DEN STÅR PÅ SKÄRMEN, oförkortat av `data-text`. Den
      skiljer sig från JSON:en på ett sätt som betyder något: KaTeX lämnar kvar
      sin LaTeX-källa i en MathML-annotation, så en satt formel står här två
      gånger — och det är DEN bilden läraren beskriver när hon skriver «det står
      ett dollartecken mitt i raden». Går med som `mal.renderat`. */
-  const renderat = el => (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 600);
+  const renderat = el => skarmtext(el).slice(0, 600);
   /* Ett mål så som det ser ut i urvalet och i kroppen till servern. */
   const malAv = el => ({ el: el.dataset.el, namn: etikett(el), text: innehall(el),
                          renderat: renderat(el) });
