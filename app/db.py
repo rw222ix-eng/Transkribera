@@ -23,7 +23,7 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 27
+SCHEMA_VERSION = 28
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -827,6 +827,27 @@ CREATE TABLE IF NOT EXISTS jobb_events (
 CREATE INDEX IF NOT EXISTS idx_jobb_status ON jobb(status, id);
 """
 
+# Användarspåret (v28) — ENDAST additiv; rollback: DROP TABLE spar;
+# + PRAGMA user_version=27.
+#
+# Raderna skrivs av app/spar.py (se modulhuvudet där för varför de finns och
+# vad de tre arterna betyder) och läses av `python -m tools.spar`. Ingen
+# främmande nyckel mot exams/planeringar: spåret ska överleva att pappret
+# raderas — «Rickard skrev om sidhuvudet fyra gånger och kastade sedan provet»
+# är precis den sortens rad rapporten finns för.
+_SPAR_MIGRATION = """
+CREATE TABLE IF NOT EXISTS spar (
+    id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    tid    TEXT NOT NULL,
+    art    TEXT NOT NULL,
+    vag    TEXT,
+    doktyp TEXT,
+    dok_id TEXT,
+    detalj TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_spar_tid ON spar(tid, art);
+"""
+
 _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                4: _PLANNING_MIGRATION, 5: _EXAMS_MIGRATION,
                                6: _GY25_MIGRATION, 7: _DATAGRUND_MIGRATION,
@@ -849,7 +870,8 @@ _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                24: _BOKEXEMPEL_MIGRATION,
                                25: _FEEDBACKRORD_MIGRATION,
                                26: _NIVAVAL_MIGRATION,
-                               27: _JOBB_MIGRATION}
+                               27: _JOBB_MIGRATION,
+                               28: _SPAR_MIGRATION}
 
 # Migreringar som bara innehåller ALTER TABLE … ADD COLUMN. De körs sats för
 # sats så att en redan tillagd kolumn hoppas över i stället för att fälla hela

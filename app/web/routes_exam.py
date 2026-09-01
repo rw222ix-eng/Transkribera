@@ -26,7 +26,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from app import (ci_profil, course_data, db, dokumentdiff, exam_gen,
                  exam_latex, exam_pdf, exam_spec, gpu_arbiter, llm_client,
-                 platar, tryck)
+                 platar, spar, tryck)
 # Egen rad och eget namn: modulen heter `kalibrering` och rutten som svarar med
 # den heter också det. Utan omdöpningen skuggar funktionen modulen inne i
 # create_router, och anropet blir ett rekursivt HTTP-lager djupt.
@@ -831,6 +831,15 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # svaret ska sparas har ett annat varv hunnit före (se vakten i jobbet).
         basversion = view.get("current_version")
 
+        # Lärarens egen mening + målet hon pekade på — den enda platsen där
+        # hennes ord passerar appen utan att annars sparas (app/spar.py).
+        # Utfallet (vad varvet ändrade) loggas när jobbet är klart, nedan.
+        spar.logga(db_file, "onske", doktyp=view.get("typ") or "prov",
+                   dok_id=exam_id,
+                   detalj={"message": message, "nummer": nummer,
+                           "mal": (mal or {}).get("namn"),
+                           "malen": [m.get("namn") for m in (malen or [])]})
+
         # Två varv på samma papper köar inte — det andra får ett ärligt nej med
         # en gång. En kö hade betytt att läraren står och väntar på en runda hon
         # redan glömt att hon startade, och att hennes andra mening skrivs mot
@@ -916,6 +925,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # lärarens mening (app/dokumentdiff.py). Klienten märker dem.
                 svar["andrade"] = dokumentdiff.andrade_element(
                     newview.get("typ") or "prov", view["exam"], newview.get("exam"))
+                # Utfallet till spåret: ihop med `onske`-raden ovan säger de
+                # «bad om X, fick Y ändrat» — det är det paret rapporten
+                # (tools/spar.py) grupperar på när canvaschatten ska bli bättre.
+                spar.logga(db_file, "utfall", doktyp=newview.get("typ") or "prov",
+                           dok_id=exam_id,
+                           detalj={"andrade": svar["andrade"],
+                                   "fel": len(res["errors"] or [])})
                 return svar
             finally:
                 arbiter.release_llm(llm)

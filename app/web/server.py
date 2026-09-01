@@ -30,7 +30,7 @@ from app import (debug_log, hardware, llm_client,
                  history_store, gpu_arbiter, output_store, media, db,
                  paths, settings_store, ics_export, backup, report,
                  calendar_google, kalender_ai, course_data, lasar_data,
-                 elevenlabs_asr, claude_code, rattning, filhanterare)
+                 elevenlabs_asr, claude_code, rattning, filhanterare, spar)
 # Samma modul som `media` ovan. Inne i transkriberingsjobbet är `media` namnet på
 # SJÄLVA filen (media = Path(...)) och skuggar modulen — aliaset gör att
 # varaktigheten går att fråga efter även där.
@@ -358,6 +358,26 @@ def create_app(base_dir: Path | None = None,
         if not tung and (path == "/" or path.startswith("/static")
                          or path.endswith((".js", ".css", ".html"))):
             response.headers["Cache-Control"] = "no-cache"
+        return response
+
+    # 4) Användarspåret (app/spar.py): varje anrop som ÄNDRAR något blir en rad
+    #    i spar-tabellen, med vägen normaliserad så raderna räknas per funktion.
+    #    GET:ar loggas inte — de är sidladdningar och polling, inte handlingar —
+    #    utom nedladdningarna (…/pdf), för «vilka papper skrivs faktiskt ut?»
+    #    är en av frågorna spåret finns för. Skrivningen sväljer sina egna fel
+    #    och sker EFTER svaret: ett spår får aldrig kosta läraren en väntan.
+    @app.middleware("http")
+    async def _anvandarspar(request: Request, call_next):
+        borjan = time.monotonic()
+        response = await call_next(request)
+        vag = request.url.path
+        if vag.startswith("/api/") and (
+                request.method in ("POST", "PUT", "PATCH", "DELETE")
+                or (request.method == "GET" and vag.endswith("/pdf"))):
+            spar.logga(db_file, "api",
+                       vag=f"{request.method} {spar.normalisera(vag)}",
+                       detalj={"status": response.status_code,
+                               "ms": int((time.monotonic() - borjan) * 1000)})
         return response
 
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")

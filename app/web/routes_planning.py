@@ -22,7 +22,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from app import (bok, db, dokumentdiff, forlaga, gpu_arbiter, lararord,
-                 lesson_board, llm_client, rattning)
+                 lesson_board, llm_client, rattning, spar)
 from app.web import Id64, _kropp
 from app.web.sse import Stege, jobb_response, sse_response
 
@@ -872,6 +872,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
         if not llm:
             return JSONResponse(_LLM_BUSY, status_code=409)
 
+        # Lärarens mening + målet — samma par som provets refine (app/spar.py):
+        # `onske` här, `utfall` när varvet är klart, ihopläsbara via dok_id.
+        spar.logga(db_file, "onske", doktyp="tavla", dok_id=pid,
+                   detalj={"message": message,
+                           "mal": (mal or {}).get("namn"),
+                           "malen": [m.get("namn") for m in (malen or [])]})
+
         fore = copy.deepcopy(st["board"])       # jämförelsen behöver den orörd
 
         def job(emit):
@@ -899,14 +906,18 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # Varje användariteration får en färsk reparationsbudget.
                 st["rounds"] = res["rounds"]
                 spara_planering(pid, st)
+                andrade = dokumentdiff.andrade_element("tavla", fore,
+                                                       st["board"])
+                spar.logga(db_file, "utfall", doktyp="tavla", dok_id=pid,
+                           detalj={"andrade": andrade,
+                                   "fel": len(res["errors"] or [])})
                 return {"id": pid, "board": st["board"], "errors": res["errors"],
                         "rounds": res["rounds"],
                         # Rutorna som faktiskt skrevs om, i tavlans egen
                         # id-serie (app/dokumentdiff.py). Tidssektionen sätts
                         # om deterministiskt varje varv och märks bara när dess
                         # innehåll verkligen skiljer sig.
-                        "andrade": dokumentdiff.andrade_element(
-                            "tavla", fore, st["board"])}
+                        "andrade": andrade}
             finally:
                 arbiter.release_llm(llm)
 
