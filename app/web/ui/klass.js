@@ -60,6 +60,15 @@ window.Klass = (() => {
   }
   const lektionerna = d => (d.lov ? [] : d.schema.filter(s => vald === 'alla' || s.klass === vald))
     .slice().sort((a, b) => start(a.tid).localeCompare(start(b.tid)));
+  /* Vilken kurs läser klassen ett visst datum? En extralektion i kalendern bär
+     bara klassen, och kortet ska ändå kunna säga vad timmen är. Schemaraden som
+     GÄLLER den dagen svarar först (en klass kan byta kurs mitt i läsåret),
+     annars klassens första rad, annars ingenting alls. */
+  const kursFor = (klass, datum) => {
+    const rader = K.schema.filter(s => s.klass === klass);
+    const gallande = rader.find(s => (!s.fran || datum >= s.fran) && (!s.till || datum <= s.till));
+    return (gallande || rader[0] || {}).kurs || '';
+  };
 
   /* Ett dokument hör till lektionen: samma dag, samma klass, samma kurs — och
      samma klockslag när dokumentet vet sitt klockslag. */
@@ -519,6 +528,10 @@ window.Klass = (() => {
     if (rutan) post.rutan = rutan.titel;
     const el = document.createElement('article');
     el.className = 'lekt';
+    /* Raden kommer inte ur veckoschemat utan ur kalendern (se ritaVeckan). Den
+       ska bete sig som en lektion i allt, men märkningen finns så att CSS och
+       tester kan skilja den extra timmen från den återkommande. */
+    if (s.extra) el.setAttribute('data-extra', '');
     if (d.datum < K.idag()) el.setAttribute('data-forbi', '');
     if (docs.length) el.setAttribute('data-klar', '');
     /* Streckad kant betyder «här saknas material». Säger kalendern vad rutan
@@ -672,19 +685,38 @@ window.Klass = (() => {
         return;
       }
       const lekt = lektionerna(d);
-      const poster = posterFor(d).filter(p => !lekt.some(s => iRutan(p, s)));
+      /* Extralektionen. En kalenderpost med BÅDE klass och klockslag som inte
+         ligger i någon schemaruta är en lektion utanför det ordinarie schemat
+         («BA26B: Överslagsräkning», en torsdag när schemat inte har BA26B).
+         Den ritades förut som ett postkort, alltså «Ur kalendern» utan klick,
+         och läraren kunde varken välja timmen eller göra material till den.
+         Prov och NP har sina egna kort med sina egna knappar och rörs inte,
+         och en post utan klass är inget klassen har (Kaggdag, ämneslagsmöte). */
+      const extra = [];
+      posterFor(d).forEach(p => {
+        if (!p.klass || !p.tid || arProv(p) || egetProv(p)) return;
+        if (lekt.some(s => iRutan(p, s))) return;
+        /* Två poster i samma timme är fortfarande en enda lektion. */
+        if (extra.some(s => s.klass === p.klass && start(s.tid) === start(p.tid))) return;
+        extra.push({ tid: p.tid, kurs: kursFor(p.klass, d.datum), klass: p.klass, sal: '', extra: true });
+      });
+      /* Härifrån är den extra timmen en lektion som alla andra: den ska inte
+         ritas en gång till som postkort, dokumenten som skrivits för den ska
+         hamna PÅ kortet i stället för i en egen «lös» hög, och den räknas med. */
+      const alla = lekt.concat(extra);
+      const poster = posterFor(d).filter(p => !alla.some(s => iRutan(p, s)));
       /* Dokument som inte hänger på någon lektion den dagen — provet som lades
          på en annan dag. De får ett eget kort, ett per klass och klockslag. */
       const losa = {};
       dok().filter(v => v.datum === d.datum
         && (vald === 'alla' || (v.klass || '') === vald)
-        && !lekt.some(s => (v.klass || '') === (s.klass || '') && (!v.tid || !s.tid || start(v.tid) === start(s.tid))))
+        && !alla.some(s => (v.klass || '') === (s.klass || '') && (!v.tid || !s.tid || start(v.tid) === start(s.tid))))
         .forEach(v => { const n = (v.klass || '') + '|' + start(v.tid); (losa[n] = losa[n] || []).push(v); });
-      const rader = lekt.map(s => ({ tid: start(s.tid), el: () => lektkort(d, s), s }))
+      const rader = alla.map(s => ({ tid: start(s.tid), el: () => lektkort(d, s), s }))
         .concat(poster.map(p => ({ tid: start(p.tid) || '23:59', el: () => postkort(d, p) })))
         .concat(Object.values(losa).map(g => ({ tid: start(g[0].tid) || '23:59', el: () => dokkort(d, g) })))
         .sort((a, b) => a.tid.localeCompare(b.tid));
-      lekt.forEach(s => { lektioner++; if (dokFor(d.datum, s).length) klara++; });
+      alla.forEach(s => { lektioner++; if (dokFor(d.datum, s).length) klara++; });
       if (!rader.length) kol.insertAdjacentHTML('beforeend', '<p class="sktom">Ingen lektion</p>');
       rader.forEach(r => kol.appendChild(r.el()));
       grid.appendChild(kol);

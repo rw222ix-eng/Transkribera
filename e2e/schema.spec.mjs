@@ -79,6 +79,45 @@ test("veckoschemat kommer från servern, inte ur kalender.js", async ({ page }) 
   await expect(rutnat.locator(".lekt", { hasText: "Ämneslagsmöte" })).toContainText("Ur kalendern");
 });
 
+/* Extralektionen. Läraren lägger in en timme som schemat inte har — TE25 en
+   torsdag, fast serien ligger på onsdagar. Posten bär klass OCH klockslag, och
+   då är den en lektion: den ska gå att välja och planera som alla andra. Förut
+   blev den ett dött «Ur kalendern»-kort, och det gick inte att göra vare sig
+   tavla eller arbetsblad till den. */
+test("en kalenderpost med klass och tid är en lektion, inte bara en notis", async ({ page }) => {
+  await fejkaDatagrunden(page, {
+    schema: Object.assign({}, SCHEMA, {
+      poster: SCHEMA.poster.concat([{
+        datum: "2026-08-20", tid: "10:00–11:00", titel: "TE25: Extra räknestuga",
+        klass: "TE25" }]),
+    }),
+  });
+  // Samma frysning som ovan: posten ligger torsdagen den 20 augusti.
+  await page.clock.install({ time: new Date("2026-08-20T09:00:00") });
+  await page.goto("/");
+  await hydrerad(page);
+  await page.getByRole("tab", { name: "Planering" }).click();
+
+  const rutnat = page.locator("#schemagrid");
+  const extra = rutnat.locator(".lekt", { hasText: "Extra räknestuga" });
+  // Ett riktigt lektionskort: klassen, kalenderns egen rubrik, och valbart.
+  await expect(extra).toHaveAttribute("data-valjbar", "");
+  await expect(extra.locator(".lektklass")).toHaveText("TE25");
+  await expect(extra.locator(".lektbokat")).toContainText("Extra räknestuga");
+  await expect(extra).not.toContainText("Ur kalendern");
+  await extra.click();
+  await expect(extra).toHaveAttribute("data-vald", "");
+
+  /* Tre valbara kort: schemats två lektioner plus den extra timmen. Posten UTAN
+     klass är ingen lektion och ska fortsatt vara ett postkort man inte kan
+     välja, så totalen är fyra. */
+  await expect(rutnat.locator(".lekt[data-valjbar]")).toHaveCount(3);
+  await expect(rutnat.locator(".lekt")).toHaveCount(4);
+  const motet = rutnat.locator(".lekt", { hasText: "Ämneslagsmöte" });
+  await expect(motet).toContainText("Ur kalendern");
+  await expect(motet).not.toHaveAttribute("data-valjbar", "");
+});
+
 test("arkivets kort är lärarens lektioner, inte app.html:s", async ({ page }) => {
   await fejkaDatagrunden(page);
   await page.goto("/");
