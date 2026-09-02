@@ -1023,6 +1023,10 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
     # läser, och det vet vi först när schemat är genomgånget. Posten själv (en
     # muterbar dict som redan ligger i `poster`) fylls i efterhand, se nedan.
     provrader: list[tuple[dict, str, str, str]] = []
+    # Engångslektionerna, av samma skäl och i samma väntan som provraderna:
+    # (händelse, datum, tid, klass, kurs i rubriken). Kursen står sällan i
+    # rubriken, och klassens kurser är kända först när hela loopen gått.
+    extralektioner: list[tuple[dict, str, str, str, str]] = []
     # Klassens kurser, som de kommer ur veckoschemat. Motsvarar group_id →
     # course_id i basen. Rutorna räknas in först vid uppslag, per DATUM —
     # 2c-serien som börjar nästa läsår ska inte ge höstens 1c-prov 2c-punkter.
@@ -1215,6 +1219,27 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
                 schema.append(rad)
             continue
         notera_post(h, datum, _tid(s, e), titel, klass)
+        # Engångslektionen — den flyttade timmen, extrapasset, tillfället som
+        # aldrig blev en serie — är lika mycket en lektion som seriens
+        # instanser, och läraren skrev sidorna på den med precis samma avsikt.
+        # Utan den här raden nådde «BA26B: Överslagsräkning · s. 24–26» aldrig
+        # `innehall`, och planeringens förval (profil.js, Kalender.innehallFor)
+        # hittade ingenting och lämnade förra lektionens sidor stående. Kortet i
+        # veckan blir redan en lektion via klass.js (data-extra), och förvalen
+        # läser samma tabell som serierna gör.
+        #
+        # Provet har sin egen väg (provrader → ci) och ska inte bli en lektion:
+        # dess beskrivning säger vad provet PRÖVAR, inte vad klassen ska läsa.
+        # Den ÅTERKOMMANDE som inte blev lektion rörs inte heller: den ligger
+        # kvar som en fråga till Claude (osaker, raden nedan), och blir en
+        # riktig lektion med schemarad i andra passet om svaret säger det.
+        # Kursen tas ur `_kurs_i_titeln`, inte ur `kurs` — den sistnämnda är
+        # rubrikens rester när ingen känd kurs stod där («NA26F:
+        # Överslagsräkning»), och det är inget kursnamn.
+        if (klass and not h.get("recurringEventId") and not provslag(titel)
+                and sidor_ur_beskrivning(h.get("description"))):
+            extralektioner.append((h, datum, _tid(s, e), klass,
+                                   _kurs_i_titeln(titel, kurstupel)))
         # En återkommande tidsatt händelse som INTE blev en lektion är den
         # osäkraste sortens gissning: «Ma2c NA25 halvklass A» är en lektion med
         # en kursstavning vi inte känner, «Mentorstid NA25» är det inte.
@@ -1257,6 +1282,18 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
         post["ci"] = koder
         if okanda:
             post["ci_okant"] = okanda
+    # Engångslektionernas sidor, sist av samma skäl som provens punkter: kursen
+    # står sällan i rubriken («NA26F: Överslagsräkning»), och vad klassen läser
+    # vet vi först när schemat är genomgånget. Läser hon exakt EN kurs den dagen
+    # är det den lektionen gäller. Läser hon flera och rubriken tiger hoppas
+    # raden över — hellre inget förval än rätt sidor på fel kurs.
+    for h, datum, tid, klass, kurs in extralektioner:
+        if not kurs:
+            klassens = klassens_kurser(klass, datum)
+            if len(klassens) != 1:
+                continue
+            kurs = next(iter(klassens))
+        notera_innehall(h, datum, tid, klass, kurs)
     poster.sort(key=lambda p: (p["datum"], p["tid"]))
     return {"schema": schema, "lov": lov, "poster": poster, "notiser": notiser,
             "innehall": sorted(innehall.values(),

@@ -822,6 +822,72 @@ def test_rutan_avgor_bara_nar_bagge_villkoren_haller(summary, tid, beskrivning, 
     assert len(ut["osakra"]) == 1           # ligger kvar som en fråga till Claude
 
 
+# --------------------------------- engångslektionen som bär sidor --
+
+# Två kurser i samma klass, i lärarens eget schema. Ingen av rutorna säger
+# vilken av dem en händelse utanför dem tillhör.
+SCHEMAT_TVA_KURSER = [
+    {"dag": 1, "tid": "10:00–11:30", "klass": "NA26F",
+     "kurs": "Matematik, nivå 1c", "sal": "E107"},
+    {"dag": 4, "tid": "09:00–10:00", "klass": "NA26F",
+     "kurs": "Matematik, nivå 2c", "sal": "E107"},
+]
+
+ENGANGEN = "s. 24–26\n1216–1217, 1219–1220"
+
+
+def test_engangslektionens_sidor_nar_innehallet():
+    """Den flyttade timmen och extrapasset återkommer inte, och föll därför ut
+    som en ren post — sidorna läraren skrev på den nådde aldrig `innehall`, och
+    planeringen förvalde förra lektionens sidor. Engångstillfället är lika
+    mycket en lektion som seriens instanser."""
+    ut = calendar_google.tolka_handelser([
+        _tid("2026-08-24", "10:00", "11:30", summary="Matematik, nivå 1c NA26F",
+             location="E107", recurringEventId="r1"),
+        _tid("2026-08-27", "10:00", "11:00", summary="NA26F: Överslagsräkning",
+             description=ENGANGEN),
+        # Provets beskrivning säger vad provet PRÖVAR, inte vad klassen ska
+        # läsa — den vägen går via `ci`, aldrig via innehållet.
+        _tid("2026-08-28", "10:00", "11:00", summary="NA26F: PROV 1",
+             description="s. 30–32"),
+    ], klasser=["NA26F"], kurser=["Matematik, nivå 1c"], idag="2026-08-24")
+    assert [(p["datum"], p["klass"], p.get("slag")) for p in ut["poster"]] == [
+        ("2026-08-27", "NA26F", None), ("2026-08-28", "NA26F", "prov")]
+    assert ut["innehall"] == [
+        {"datum": "2026-08-27", "tid": "10:00–11:00", "klass": "NA26F",
+         "kurs": "Matematik, nivå 1c", "fran": 24, "till": 26,
+         # Uppgiftsraden saknar ordet «uppg», så listan läses inte — och
+         # hjälpmedlen nämns inte alls, vilket är ett svar det också.
+         "hjalpmedel": "", "delar": [{"fran": 24, "till": 26}]}]
+
+
+def test_engangspost_utan_sidor_ger_inget_innehall():
+    """Ingen gissning: står det inga sidor säger synken ingenting, och appens
+    vanliga förval (klassprofilens takt) gäller."""
+    ut = calendar_google.tolka_handelser([
+        _tid("2026-08-24", "10:00", "11:30", summary="Matematik, nivå 1c NA26F",
+             location="E107", recurringEventId="r1"),
+        _tid("2026-08-27", "10:00", "11:00", summary="NA26F: Studiebesök",
+             description="Vi ses vid entrén"),
+    ], klasser=["NA26F"], kurser=["Matematik, nivå 1c"], idag="2026-08-24")
+    assert [p["datum"] for p in ut["poster"]] == ["2026-08-27"]
+    assert ut["innehall"] == []
+
+
+def test_engangslektion_nar_klassen_laser_tva_kurser_gissar_inte():
+    """Rubriken tiger om kursen och klassen läser två. Hellre inget förval än
+    rätt sidor på fel kurs — sidorna 24–26 i 1c-boken är inte sidorna 24–26 i
+    2c-boken."""
+    ut = calendar_google.tolka_handelser([
+        _tid("2026-08-27", "13:00", "14:00", summary="NA26F: Överslagsräkning",
+             description=ENGANGEN),
+    ], klasser=["NA26F"],
+        kurser=["Matematik, nivå 1c", "Matematik, nivå 2c"],
+        idag="2026-08-24", schema_nu=SCHEMAT_TVA_KURSER)
+    assert [p["datum"] for p in ut["poster"]] == ["2026-08-27"]
+    assert ut["innehall"] == []
+
+
 """Samma ruta, TVÅ serier: skolans kalender lägger nästa läsårs kurs på samma
 tid (grupp 324/325 bär både 1c-serien och 2c-serien från 2027). Raden som
 täcker lektionens datum är den som gäller — en platt ruta → kurs lät sista
