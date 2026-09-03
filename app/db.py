@@ -23,7 +23,7 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 28
+SCHEMA_VERSION = 29
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -740,6 +740,24 @@ _LEKTIONSDELAR_MIGRATION = """
 ALTER TABLE lektionsinnehall ADD COLUMN delar TEXT;
 """
 
+# Lektionens rubrik ur kalenderhandelsens TITEL (v29) - ENDAST additiv;
+# rollback: lamna kolumnen (NULL = ingen synk har last raden med titelogon) +
+# PRAGMA user_version=28.
+#
+# Lararen doper varje lektion efter amnet: "NA26F: Faktorisering och
+# forkortning". Beskrivningen bar bara sidorna, sa delarna (v23) fick ingen
+# rubrik och kortet i veckan foll tillbaka pa bokens register, som svarade
+# "1.3 Uttryck" om en lektion hon aldrig kallat sa. Titeln ar hennes ord om
+# HELA lektionen, delarnas rubriker hennes ord om var DEL; kortet visar delarna
+# forst, sedan titeln, sist boken (klass.js innehallsrad).
+#
+# Integritetsgransen i calendar_google (vid _AVDELARE) galler BESKRIVNINGEN och
+# ar orord: titeln laser appen redan i sin helhet (kalenderposter.titel). Kapas
+# vid samma tak som delarnas rubriker, har OCKSA och inte bara i synken.
+_LEKTIONSRUBRIK_MIGRATION = """
+ALTER TABLE lektionsinnehall ADD COLUMN rubrik TEXT;
+"""
+
 # Bokens genomräknade exempel (v24) — ENDAST additiv; rollback: kolumnen kan
 # lämnas kvar (NULL är giltigt) + PRAGMA user_version=23.
 #
@@ -871,12 +889,13 @@ _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                25: _FEEDBACKRORD_MIGRATION,
                                26: _NIVAVAL_MIGRATION,
                                27: _JOBB_MIGRATION,
-                               28: _SPAR_MIGRATION}
+                               28: _SPAR_MIGRATION,
+                               29: _LEKTIONSRUBRIK_MIGRATION}
 
 # Migreringar som bara innehåller ALTER TABLE … ADD COLUMN. De körs sats för
 # sats så att en redan tillagd kolumn hoppas över i stället för att fälla hela
 # migreringen — se _apply_migrations.
-_ALTER_MIGRATIONER = {6, 12, 13, 14, 16, 17, 18, 21, 22, 23, 24, 25, 26}
+_ALTER_MIGRATIONER = {6, 12, 13, 14, 16, 17, 18, 21, 22, 23, 24, 25, 26, 29}
 
 _LESSON_SELECT = """
 SELECT l.*, g.namn AS group_namn, c.namn AS course_namn
@@ -2429,7 +2448,7 @@ def list_lektionsinnehall(conn: sqlite3.Connection) -> list[dict]:
     kurs, precis som lektionskortet är byggt)."""
     rows = conn.execute(
         "SELECT i.datum, i.tid, i.fran, i.till, i.uppg, i.hjalpmedel, i.delar, "
-        "g.namn AS klass, c.namn AS kurs "
+        "i.rubrik, g.namn AS klass, c.namn AS kurs "
         "FROM lektionsinnehall i "
         "LEFT JOIN groups  g ON g.id = i.group_id "
         "LEFT JOIN courses c ON c.id = i.course_id "
@@ -2455,6 +2474,9 @@ def list_lektionsinnehall(conn: sqlite3.Connection) -> list[dict]:
                 delar = None
             if isinstance(delar, list) and delar:
                 p["delar"] = delar
+        # Titelns rubrik (v29). Tom och NULL ar samma svar utat: ingen rubrik.
+        if r["rubrik"]:
+            p["rubrik"] = r["rubrik"]
         ut.append(p)
     return ut
 
@@ -2524,7 +2546,10 @@ def replace_lektionsinnehall(conn: sqlite3.Connection, poster: list[dict], *,
                       sid_fran, max(sid_fran, sid_till),
                       (p.get("uppg") or "").strip() or None,
                       None if hjm is None else str(hjm).strip(),
-                      _delar_json(p.get("delar"))))
+                      _delar_json(p.get("delar")),
+                      # Titelns rubrik (v29), kapad har ocksa: vagen in i basen
+                      # ska halla for en annan anropare an synken.
+                      str(p.get("rubrik") or "").strip()[:_RUBRIKTAK].strip() or None))
     with skriv(conn):
         if fran and till:
             conn.execute("DELETE FROM lektionsinnehall WHERE datum BETWEEN ? AND ?",
@@ -2533,8 +2558,8 @@ def replace_lektionsinnehall(conn: sqlite3.Connection, poster: list[dict], *,
             conn.execute("DELETE FROM lektionsinnehall")
         conn.executemany(
             "INSERT OR REPLACE INTO lektionsinnehall"
-            "(datum, tid, group_id, course_id, fran, till, uppg, hjalpmedel, delar) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", klara)
+            "(datum, tid, group_id, course_id, fran, till, uppg, hjalpmedel, delar, "
+            "rubrik) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", klara)
     return list_lektionsinnehall(conn)
 
 

@@ -536,13 +536,25 @@ _UPPGIFTER = re.compile(r"\buppg(?:ift(?:er(?:na)?)?)?\.?[ \t]*(\d[\d ,;.\t–�
                         re.IGNORECASE)
 
 
-# Rubriken är en etikett, inte en anteckning. Taket finns för att en rad som
-# svämmar över inte ska bli en väg att smuggla ut hela beskrivningen: det som
-# står före sidspannet på en rad är i praktiken ett par ord.
+# Rubriken är en etikett, inte en anteckning. Taket är en GRÄNS för vad som
+# räknas som rubrik, inte en kapning: en rad som svämmar över är en mening,
+# och en kapad mening sparade en gång ett elevnamn («📣 <elev>: gå med i
+# Classroom, kod …») som om det vore en rubrik. Det som står före sidspannet
+# på en rad är i praktiken ett par ord, och är det mer än så är det en
+# anteckning som stannar i kalendern. Titelns rubrik (rubrik_ur_titeln) kapas
+# vid samma tak, den är lärarens medvetna etikett och inte en anteckning.
 _RUBRIKTAK = 60
 # Ledtecknen läraren skiljer rubrik från sidor med. Tas bort från slutet, så att
 # «Kubikrötter:» och «Kubikrötter –» båda blir «Kubikrötter».
 _RUBRIKSKRAP = " 	:–—-·•,;."
+# Slutar orden framför sidspannet på ett av de här står spannet mitt i en
+# mening: «Gruppuppgift i stället för bokens aktivitet på s. 17» hänvisar till
+# sidan, det är ingen rubrik för den.
+_HANVISNINGSORD = frozenset(
+    "på i till från om se enligt ur av med för samt och".split())
+# Meningsslut på raden. Avsnittsnumret «1.1 Kvadratrötter» har ingen blank
+# efter punkten och bryter inte.
+_MENINGSSLUT = re.compile(r"[.!?](?:\s+|$)")
 
 
 def _rubrik(text: str) -> str:
@@ -550,15 +562,61 @@ def _rubrik(text: str) -> str:
 
     Bara sista raden räknas: står rubriken tre rader upp hör den till något
     annat. Ett inledande listtecken eller avsnittsnummer får stå kvar; det är
-    lärarens sätt att skriva och säger något."""
+    lärarens sätt att skriva och säger något.
+
+    Bara det som står EFTER radens sista meningsslut räknas, en kandidat
+    längre än taket är en anteckning, och en som slutar på ett hänvisningsord
+    («… aktivitet på s. 17») är resten av en mening. Alla tre ger tom sträng,
+    och då står lektionen utan rubrik i den delen, vilket är sant."""
     rad = str(text or "").splitlines()[-1] if str(text or "").strip() else ""
     # Uppgiftslistan och ett tidigare sidspann på samma rad är inte rubriker —
     # «s. 2–4 · uppg. 1101–1103 · s. 7–9» har en rubrik för det första spannet
     # (ingen) och ingen för det andra, inte «uppg. 1101–1103».
     rad = _SIDOR.sub(" ", _UPPGIFTER.sub(" ", rad))
+    rad = _MENINGSSLUT.split(rad)[-1]
     rubrik = rad.strip().strip(_RUBRIKSKRAP).strip()
     # En rubrik som bara är siffror eller skiljetecken är ingen rubrik — det är
     # resten av föregående spann («… 1116–1119 ·»).
+    if not re.search(r"[^\W\d_]", rubrik, re.UNICODE):
+        return ""
+    if len(rubrik) > _RUBRIKTAK:
+        return ""
+    sista = re.split(r"\s+", rubrik)[-1].lower()
+    if sista in _HANVISNINGSORD:
+        return ""
+    return rubrik
+
+
+def rubrik_ur_titeln(titel: str | None, klasser, kurser) -> str:
+    """Lektionens ämne ur händelsens TITEL, eller tom sträng.
+
+    Läraren döper varje lektion efter ämnet: «NA26F: Faktorisering och
+    förkortning». Beskrivningen bär bara sidorna («s. 31–34 · uppg. …»), så
+    _rubrik fann ingenting och kortet i veckan föll tillbaka på bokens
+    register, som svarade «1.3 Uttryck» om en lektion hon aldrig kallat så.
+    Titeln är hennes egna ord om lektionen, och appen läser den redan i sin
+    helhet (kalenderposter, provslag, _klass_och_kurs). Integritetsgränsen vid
+    _AVDELARE gäller beskrivningen och är orörd.
+
+    Tom när titeln inte säger något om ämnet: skolschemats egna serier («Ma 1c
+    – TE26A – B205») och kursnamn är kurser, inte ämnen, och provet har sitt
+    eget besked. Klassen tas bort var den än står, ledande med kolon eller
+    streck, eller sist («Faktorisering NA26F»)."""
+    t = " ".join(str(titel or "").split())
+    if not t or provslag(t) or _kurs_i_titeln(t, tuple(kurser or ())):
+        return ""
+    rest = t
+    # Längsta klassnamnet först, av samma skäl som i _klass_och_kurs: «TE26A:
+    # Kvadratrötter» är TE26A:s lektion, inte TE26:s med ett A kvar i rubriken.
+    for k in sorted((k for k in (klasser or []) if (k or "").strip()),
+                    key=len, reverse=True):
+        namn = re.escape(k.strip())
+        ny = re.sub(r"^\s*" + namn + r"\s*[:–—\-·]?\s*", "", rest, flags=re.IGNORECASE)
+        ny = re.sub(r"[\s,·/–—\-]*" + namn + r"\s*$", "", ny, flags=re.IGNORECASE)
+        if ny != rest:
+            rest = ny
+            break
+    rubrik = rest.strip().strip(_RUBRIKSKRAP).strip()
     if not re.search(r"[^\W\d_]", rubrik, re.UNICODE):
         return ""
     return rubrik[:_RUBRIKTAK].strip(_RUBRIKSKRAP).strip()
@@ -1054,11 +1112,23 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
         # sträng är svaret «läst, inget nämndes», och det är ett annat svar än
         # NULL (raden har aldrig lästs med hjälpmedelsögon). Provets förval
         # skiljer på dem, se kalender.js planeringen.
-        innehall[(datum, tid, klass, kurs)] = dict(
+        post = dict(
             {"datum": datum, "tid": tid, "klass": klass, "kurs": kurs,
              "hjalpmedel": hjalpmedel_ur_text(h.get("description"),
                                               h.get("summary"))},
             **sidor)
+        # Lektionens ämne ur titeln, lärarens ord om HELA lektionen. Delarnas
+        # rubriker (framför sidspannen) är hennes ord om var DEL och står kvar
+        # i `delar`; kortet visar dem först (klass.js innehallsrad). Nyckeln
+        # utelämnas när titeln tiger, då vet basen att inget stod där.
+        # Lektionens egen kurs räknas med bland kurserna: utan kurslista (en tom
+        # installation) är «Matematik 3c 9A» annars ett ämne som heter som
+        # kursen.
+        rubrik = rubrik_ur_titeln(h.get("summary"), klasser,
+                                  list(dict.fromkeys(list(kurser) + [kurs])))
+        if rubrik:
+            post["rubrik"] = rubrik
+        innehall[(datum, tid, klass, kurs)] = post
 
     def osaker(h: dict, titel: str, varfor: str, **extra) -> None:
         nyckel = serienyckel(h)

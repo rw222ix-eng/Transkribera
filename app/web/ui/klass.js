@@ -482,13 +482,18 @@ window.Klass = (() => {
      kursen står sidorna för sig själva — sant, och mer än ingenting. */
   const sidorna = (f, t) => f === t ? `s. ${f}` : `s. ${f}–${t}`;
   function innehallsrad(inn, kurs) {
-    /* LÄRARENS EGNA RUBRIKER FÖRST. Hon skriver dem framför sidspannet i
-       kalenderhändelsen — «Kvadratrötter: s. 2–4» — och de vet något boken inte
-       kan veta: avsnitt 1.1 heter «Kvadratrötter och kubikrötter» och går över
-       s. 2–6, så registret lovade dubbelt så mycket som hon skrivit. Delar utan
-       rubrik faller tillbaka på boken, som förut. */
+    /* TRE STEG, I FALLANDE NÄRHET TILL LÄRARENS EGNA ORD.
+       1. Delarnas rubriker: hon skriver dem framför sidspannet i beskrivningen,
+          «Kvadratrötter: s. 2–4», och de är hennes ord om var DEL. De vet något
+          boken inte kan veta: avsnitt 1.1 heter «Kvadratrötter och kubikrötter»
+          och går över s. 2–6, så registret lovade dubbelt så mycket.
+       2. Titelns rubrik: «NA26F: Faktorisering och förkortning» är hennes ord
+          om HELA lektionen. Utan den stod «del av 1.3 Uttryck» på en lektion
+          hon aldrig kallat så, för beskrivningen bar bara sidorna.
+       3. Boken, som bara vet avsnittsnamnet. */
     const egna = (inn.delar || []).filter(d => d && d.rubrik);
     if (egna.length) return egna.map(d => `${d.rubrik}, ${sidorna(d.fran, d.till)}`).join(' · ');
+    if (inn.rubrik) return `${inn.rubrik}, ${sidorna(inn.fran, inn.till)}`;
     const A = (kurs && window.Bok && window.Bok.registerFor) ? (window.Bok.registerFor(kurs) || []) : [];
     const del = (window.Bok && window.Bok.avsnitten) ? window.Bok.avsnitten(A, inn.fran, inn.till) : [];
     if (!del.length) return sidorna(inn.fran, inn.till);

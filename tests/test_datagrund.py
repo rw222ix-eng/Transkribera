@@ -212,6 +212,18 @@ def test_delarna_med_lararens_rubriker_gar_genom_databasen(conn):
     assert db.list_lektionsinnehall(conn)[0]["delar"] == rad["delar"]
 
 
+def test_titelns_rubrik_gar_genom_databasen_och_kapas(conn):
+    """Lektionens ämne ur kalendertiteln (v29) följer med hela vägen, saknas
+    den saknas nyckeln, och taket håller också i basen."""
+    rad = dict(INNEHALL[0], rubrik="Faktorisering och förkortning")
+    assert db.replace_lektionsinnehall(conn, [rad])[0]["rubrik"] == rad["rubrik"]
+    assert db.list_lektionsinnehall(conn)[0]["rubrik"] == rad["rubrik"]
+    assert "rubrik" not in db.replace_lektionsinnehall(conn, INNEHALL)[0]
+    assert "rubrik" not in db.replace_lektionsinnehall(conn, [dict(INNEHALL[0], rubrik="  ")])[0]
+    lang = db.replace_lektionsinnehall(conn, [dict(INNEHALL[0], rubrik="A" * 200)])
+    assert lang[0]["rubrik"] == "A" * 60
+
+
 def test_bara_falten_som_far_lagras_foljer_med_ur_delarna(conn):
     """Integritetsgränsen håller också för en anropare som inte är synken:
     rubriken kapas, och allt annat i en del kastas."""
@@ -506,13 +518,74 @@ def test_rubriken_over_avdelaren_far_folja_med_men_aldrig_texten_under():
 
 
 def test_rubriken_kapas_och_siffror_ar_ingen_rubrik():
-    """Rubriken är en etikett, inte en anteckning: taket finns för att en rad
-    som svämmar över inte ska bli en väg ut för hela beskrivningen."""
+    """Rubriken är en etikett, inte en anteckning: taket är en GRÄNS för vad
+    som räknas som rubrik. En rad som svämmar över är en mening och sparas
+    inte alls, en kapad mening sparade en gång ett elevnamn."""
     ut = calendar_google.sidor_ur_beskrivning("A" * 200 + ": s. 2–4")
-    assert len(ut["delar"][0]["rubrik"]) <= 60
+    assert "rubrik" not in ut["delar"][0]
+    # Precis på taket går fortfarande igenom.
+    ut60 = calendar_google.sidor_ur_beskrivning("B" * 60 + ": s. 2–4")
+    assert ut60["delar"][0]["rubrik"] == "B" * 60
     # Resten av föregående spann är ingen rubrik för nästa.
     ut2 = calendar_google.sidor_ur_beskrivning("s. 2–4 · uppg. 1101–1103 · s. 7–9")
     assert "rubrik" not in ut2["delar"][1]
+
+
+def test_meningar_framfor_sidspannet_ar_inga_rubriker():
+    """Tre rader ur lärarens riktiga bas som alla blivit rubriker: en
+    påminnelse med ett ELEVNAMN som kapades vid taket, ett spann mitt i en
+    mening («… aktivitet på s. 17») och en andra mening efter en första.
+    Ingen av dem är en etikett, och namnet får aldrig lämna kalendern."""
+    ut = calendar_google.sidor_ur_beskrivning(
+        "📣 Sami Krim: gå med i Classroom, kod rj2qthdn. Står bara som en "
+        "påminnelse tills alla är med: s. 28–30 · uppg. 1318–1327")
+    assert "Sami" not in str(ut) and "Krim" not in str(ut)
+    assert "rubrik" not in ut["delar"][0]
+    ut2 = calendar_google.sidor_ur_beskrivning(
+        "s. 17–20 · uppg. 1140–1146\n"
+        "Gruppuppgift i stället för bokens aktivitet på s. 17")
+    assert all("rubrik" not in d for d in ut2["delar"])
+    ut3 = calendar_google.sidor_ur_beskrivning(
+        "Räkna ifatt. Datorn behövs till kalkylbladsuppgifterna 1–4 på s. 21")
+    assert "rubrik" not in ut3["delar"][0]
+    # Efter meningsslutet får en riktig etikett stå kvar.
+    ut4 = calendar_google.sidor_ur_beskrivning("Räkna ifatt. Potenser: s. 7–9")
+    assert ut4["delar"][0]["rubrik"] == "Potenser"
+
+
+@pytest.mark.parametrize("text, vantat", [
+    ("Kubikrötter: s. 5–6", "Kubikrötter"),
+    ("– Potenser s. 7–9", "Potenser"),
+    ("1.1 Kvadratrötter s. 2–4", "1.1 Kvadratrötter"),
+    ("Exponenter som inte är heltal: s. 16–18", "Exponenter som inte är heltal"),
+    ("Potensekvationer och numerisk ekvationslösning: s. 50–52",
+     "Potensekvationer och numerisk ekvationslösning"),
+])
+def test_riktiga_etiketter_star_kvar_som_rubriker(text, vantat):
+    assert calendar_google.sidor_ur_beskrivning(text)["delar"][0]["rubrik"] == vantat
+
+
+KLASSERNA = ["TE26A", "NA26F", "TE26"]
+KURSERNA = ["Matematik, nivå 1c", "Matematik, nivå 2c"]
+
+
+@pytest.mark.parametrize("titel, vantat", [
+    ("NA26F: Faktorisering och förkortning", "Faktorisering och förkortning"),
+    ("TE26A – Uttryck", "Uttryck"),
+    ("Faktorisering NA26F", "Faktorisering"),
+    ("TE26A: Kvadratrötter", "Kvadratrötter"),      # inte TE26 med ett A kvar
+    ("Ma 1c – TE26A – B205", ""),                   # skolschemats egen serie
+    ("Matematik, nivå 1c NA26F", ""),               # kursen är inget ämne
+    ("NA26F: PROV 1 (kap 1 och 2)", ""),            # provet har sitt eget besked
+    ("NA26F", ""),
+    ("", ""),
+    ("NA26F: " + "X" * 100, "X" * 60),
+])
+def test_amnet_ur_titeln(titel, vantat):
+    """«NA26F: Faktorisering och förkortning» är lärarens ord om lektionen.
+    Klassen tas bort var den än står, och det som är en kurs, ett prov eller
+    ingenting alls ger ingen rubrik."""
+    assert calendar_google.rubrik_ur_titeln(titel, KLASSERNA, KURSERNA) == vantat
 
 
 @pytest.mark.parametrize("text, vantat", [
@@ -800,7 +873,9 @@ def test_rubriken_som_sager_amnet_kanns_igen_pa_rutan_i_schemat():
         {"datum": "2026-08-24", "tid": "10:00–11:30", "klass": "NA26F",
          "kurs": "Matematik, nivå 1c", "fran": 2, "till": 6,
          "hjalpmedel": "raknare", "uppg": "1101–1103, 1105–1119",
-         "delar": [{"fran": 2, "till": 6, "uppg": "1101–1103, 1105–1119"}]}]
+         "delar": [{"fran": 2, "till": 6, "uppg": "1101–1103, 1105–1119"}],
+         # Titelns ämne, lärarens ord om hela lektionen (v29).
+         "rubrik": "Kvadratrötter och kubikrötter"}]
 
 
 @pytest.mark.parametrize("summary, tid, beskrivning, schema", [
@@ -858,7 +933,8 @@ def test_engangslektionens_sidor_nar_innehallet():
          "kurs": "Matematik, nivå 1c", "fran": 24, "till": 26,
          # Uppgiftsraden saknar ordet «uppg», så listan läses inte — och
          # hjälpmedlen nämns inte alls, vilket är ett svar det också.
-         "hjalpmedel": "", "delar": [{"fran": 24, "till": 26}]}]
+         "hjalpmedel": "", "delar": [{"fran": 24, "till": 26}],
+         "rubrik": "Överslagsräkning"}]
 
 
 def test_engangspost_utan_sidor_ger_inget_innehall():

@@ -440,3 +440,24 @@ test("lärarens egna rubriker vinner över bokens avsnittsnamn", async ({ page }
   await nu.click();
   await expect(page.locator("#moment")).toHaveValue("Kubikrötter · Potenser");
 });
+
+test("titelns rubrik vinner över boken när delarna tiger", async ({ page }) => {
+  /* «NA26F: Faktorisering och förkortning» stod i kalendern, beskrivningen bar
+     bara sidorna, och kortet sa «del av 1.3 Uttryck». Titeln är hennes ord om
+     hela lektionen (v29) och går före bokens avsnittsnamn, men efter delarnas
+     egna rubriker. */
+  await fejka(page, { ...INNEHALLET,
+    innehall: [{ datum: "2026-11-02", tid: "09:05–10:20", klass: "NA25",
+                 kurs: "Matematik, nivå 2c", fran: 207, till: 210, uppg: "", hjalpmedel: "",
+                 rubrik: "Faktorisering och förkortning" }] });
+  await page.route("**/api/bocker", route => json(route, { bocker: HYLLAN }));
+  await vid(page, "2026-11-02");
+  await page.goto("/");
+  await hydrerad(page);
+  await page.getByRole("tab", { name: "Planering" }).click();
+  await stillaVecka(page);
+
+  const nu = page.locator("#schemagrid article.lekt").filter({ hasText: "NA25" });
+  await expect(nu.locator(".lektinnehall"))
+    .toHaveText("Faktorisering och förkortning, s. 207–210");
+});
