@@ -30,7 +30,7 @@ function tavla(rubrik) {
 
 const strom = h => h.map(x => `data: ${JSON.stringify(x)}\n\n`).join("");
 
-async function fejka(page, { refine, andrade } = {}) {
+async function fejka(page, { refine, andrade, brade } = {}) {
   const anrop = [];
   const json = (route, kropp) => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify(kropp) });
@@ -47,7 +47,8 @@ async function fejka(page, { refine, andrade } = {}) {
       /* `andrade` är serverns egen diff av dokumentets JSON (Etapp: ärliga
          markeringar). Skickas den inte alls förblir svaret det gamla — och
          klienten ska då falla tillbaka på sin regexp, precis som förr. */
-      const klar = { id: "abc123def456", board: tavla("Omskriven tavla"),
+      const klar = { id: "abc123def456",
+                     board: brade ? brade("Omskriven tavla") : tavla("Omskriven tavla"),
                      errors: [], rounds: 1 };
       if (andrade) klar.andrade = andrade;
       return route.fulfill({ status: 200, contentType: "text/event-stream",
@@ -56,7 +57,8 @@ async function fejka(page, { refine, andrade } = {}) {
     if (vag.endsWith("/render-report")) return json(route, { ok: true, repaired: false });
     return route.fulfill({ status: 200, contentType: "text/event-stream",
       body: strom([{ type: "done", result: {
-        id: "abc123def456", board: tavla("Derivatans definition"),
+        id: "abc123def456",
+        board: brade ? brade("Derivatans definition") : tavla("Derivatans definition"),
         errors: [], rounds: 1 } }]) });
   });
   return anrop;
@@ -481,3 +483,62 @@ test("en snabbknapp skickar sin mening samma väg som fritext", async ({ page })
   // …och varvet står i tråden som vilken ändring som helst.
   await expect(page.locator(".gvarv .gfraga").first()).toHaveText(kropp.message);
 });
+
+
+/* ── BARNEN I TAVELRADEN ────────────────────────────────────────────────────
+ * Läraren 2026-09-05: «jag kan inte markera allt heller, allting är inte
+ * markerbart». Sedan dramaturgin ligger figur, begreppsrader, formler och
+ * Vanligt fel i EN `row`, och motorn strök wb-element på barnen — raden var en
+ * enda klump. Nu bär barnen `wb-del` och ett eget id ur förälderns (`tav1.1`),
+ * och den serien måste vara SAMMA som serverns (app/dokumentdiff.py).
+ */
+
+function tavlaMedRad(rubrik) {
+  const brade = (namn, bredd) => ({
+    name: namn, width: bredd, height: 780, chrome: "aluminium",
+    padding: { top: 24, right: 26, bottom: 24, left: 30 },
+    sections: [
+      { kind: "heading", text: rubrik, size: 30 },
+      { kind: "row", gap: 24, children: [
+        { kind: "math", latex: "a^2 + b^2 = c^2", size: 22 },
+        { kind: "math", latex: "f(x) = 2x", size: 22 },
+        { kind: "text", text: "Vanligt fel:", size: 18 },
+      ] },
+    ],
+  });
+  return { title: rubrik, boards: [brade("teori", 900), brade("exempel", 1800)] };
+}
+
+test("ett barn i tavelraden går att markera, och nålen sitter på barnet",
+  async ({ page }) => {
+    const anrop = await fejka(page, { brade: tavlaMedRad, andrade: ["tav1.1"] });
+    await page.goto("/");
+    await hydrerad(page);
+    await skrivTavla(page);
+    await oppnaCanvas(page);
+    await page.locator("#g-valj").click();
+
+    const rad = page.locator('#granskaskal .gdok [data-el="tav1"]');
+    const barn = page.locator('#granskaskal .gdok [data-el="tav1.1"]');
+    await expect(rad).toHaveCount(1);
+    await expect(barn).toHaveCount(1);          // formeln är en egen ruta
+    await barn.click();
+    await expect(barn).toHaveAttribute("data-mal", "");
+    await expect(rad).not.toHaveAttribute("data-mal", "");
+
+    await page.locator("#g-falt").fill("Skriv den med a i stället");
+    await page.locator("#g-form").evaluate(f => f.requestSubmit());
+    await expect.poll(() => anrop.some(a => a.vag.endsWith("/refine")),
+                      { timeout: 20_000 }).toBe(true);
+    // Id:t når servern — det är det som gör mål-låset möjligt.
+    const kropp = anrop.find(a => a.vag.endsWith("/refine")).kropp;
+    expect(kropp.mal.el).toBe("tav1.1");
+
+    // Nålen sitter på BARNET och inte på raden, också efter omritningen.
+    await expect(page.locator('[data-el="tav1.1"] > .gpin').first())
+      .toBeVisible({ timeout: 20_000 });
+    await expect(page.locator('[data-el="tav1"] > .gpin')).toHaveCount(0);
+    // …och serverns egen diff märker barnet.
+    await expect.poll(() => page.locator('[data-el="tav1.1"].andrad').count(),
+                      { timeout: 20_000 }).toBeGreaterThan(0);
+  });

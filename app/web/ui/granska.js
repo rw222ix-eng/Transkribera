@@ -170,7 +170,7 @@
      (.gpin) och svepet (.gshimmer) hänger som barn i rutan, och nålens nummer
      är text. Utan rensningen fick modellen «… nummer 2. 1» som «så här står
      det på skärmen» — en siffra läraren aldrig ser som del av texten — och
-     skrev om fel sak utifrån den. Samma grepp som diffens platt() nedan. */
+     skrev om fel sak utifrån den. Samma grepp som diffens ogonblick() nedan. */
   const skarmtext = el => {
     const k = el.cloneNode(true);
     $$('.gpin, .gshimmer', k).forEach(o => o.remove());
@@ -479,11 +479,15 @@
      gjorde att «… nummer 2.» lästes som «… nummer 2. 1» och uppgiften dök
      upp i diffen fast servern inte rört den. Klonen offras i stället för
      rutan själv — överläggen får inte ryckas ur pappret mitt i ett varv. */
-  const platt = n => {
-    const k = n.cloneNode(true);
-    $$('.gpin, .gshimmer', k).forEach(o => o.remove());
-    return k.textContent.replace(/\s+/g, ' ').trim();
-  };
+  /* EN KLON PER PAPPER, inte en per ruta (2026-09-05).
+     Här stod `platt(n)`, som klonade varje [data-el] för sig. Med tavlans
+     rader markerbara inifrån klonas då samma innehåll flera gånger — raden,
+     och sedan var och en av dess formler igen — och ögonblicksbilden tas inte
+     en gång per varv utan upp till åttio: `vantaDiff` läser om varje bildruta
+     tills något ändrats (tak 40) och `naste` var 30:e ms med samma tak.
+     MÄTT i Chrome mot FEW_SHOTS[0] (32 rutor, e2e-servern på 8751):
+     klon per ruta 0,3–0,5 ms · en klon per papper 0,1–0,3 ms.
+     Samma text ut: nålarna och svepet stryks ur klonen, precis som förut. */
   /* Senaste varvets före/efter, per element-id. Prickarna i pappret läser den
      här (window.Granska.diffFor) i stället för att hålla en egen kopia som kan
      säga emot panelen. Nollställs när canvasen öppnas på ett nytt papper. */
@@ -491,7 +495,13 @@
   const kapa = s => s.length > 160 ? s.slice(0, 159) + '…' : s;
   function ogonblick() {
     const m = {};
-    $$('.gdok [data-el]', plan).forEach(n => { m[n.dataset.el] = platt(n); });
+    $$('.gdok', plan).forEach(dok => {
+      const k = dok.cloneNode(true);
+      $$('.gpin, .gshimmer', k).forEach(o => o.remove());
+      $$('[data-el]', k).forEach(n => {
+        m[n.dataset.el] = n.textContent.replace(/\s+/g, ' ').trim();
+      });
+    });
     return m;
   }
   /* En diff som visar samma text två gånger är ingen diff — den får läraren att
