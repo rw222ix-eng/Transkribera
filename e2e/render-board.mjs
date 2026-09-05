@@ -98,6 +98,14 @@ try {
         document.querySelectorAll('.whiteboard').forEach((b, bi) => {
           const br = b.getBoundingClientRect();
           b.querySelectorAll('*').forEach(el => {
+            /* MÄT ALDRIG GÖMD DOM. KaTeX lägger en MathML-kopia av varje
+               formel i .katex-mathml, som är klippt till 1×1 px — men
+               barnen (math, semantics, mrow, mo, mi) rapporterar ändå sina
+               egna rutor, oklippta, och en formel som RADBRYTS i det synliga
+               ledet fick MathML-kopian att sticka ut 60 px utanför tavlan.
+               Kontrollkörningen 2026-09-05 föll på just det, och tavlan var
+               hel: felet satt här. Samma vakt som canvasens bladpackning. */
+            if (el.closest('.katex-mathml')) return;
             if (!el.getClientRects().length) return;
             const r = el.getBoundingClientRect();
             if (r.width === 0 || r.height === 0) return;
