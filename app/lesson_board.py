@@ -2298,11 +2298,14 @@ TACKNING_INSTRUKTION = (
     # kväll): «i andra hand luta sig på det centrala innehållet.» Utan bok
     # prövades täckningen mot ingenting; nu prövas den mot kursens egna
     # Gy25-punkter, som skrivningen också fick (course_data.CI_MARKOR).
-    "Står i stället «CENTRALT INNEHÅLL (Gy25)» nedan är PUNKTERNA kontraktet: "
-    "gå punkt för punkt och fråga «kan eleven påbörja det den här punkten "
-    "beskriver med det som står på tavlan?». Saknas något är det ett fynd med "
-    "tom nummerlista. Urvalsfrågorna om uppgiftstyper gäller ändå inte, för "
-    "det finns inga uppgifter att jämföra med.\n"
+    "Står i stället «CENTRALT INNEHÅLL (Gy25)» nedan är PUNKTERNA kontraktet, "
+    "men bara den DEL av dem som lektionens moment rör: gå punkt för punkt "
+    "och fråga «kan eleven påbörja det den här punkten beskriver OM DEN "
+    "HANDLAR OM MOMENTET, med det som står på tavlan?». En punkt som ligger "
+    "utanför momentet hoppar du över — kräv aldrig innehåll ur den, och "
+    "föreslå aldrig att tavlan byter moment eller rubrik. Fynd får tom "
+    "nummerlista. Urvalsfrågorna om uppgiftstyper gäller inte här, för det "
+    "finns inga uppgifter att jämföra med.\n"
     # FÄRDIGA URÄKNINGAR. Lärarens dom (2026-08-20, upprepad 2026-09-05 när
     # en tavla om linjära funktioner skrev ut hela avläsningen): «Jag kommer
     # ju göra själva uträkningarna. Det räcker med en stark utgångspunkt.

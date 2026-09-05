@@ -43,8 +43,13 @@ def test_blocket_sager_sjalvt_vad_det_ar():
     b = cd.centralt_innehall_block(
         "Matematik, nivå 2a", "Andragradsuttryck: multiplicera binom")
     assert b.startswith(cd.CI_MARKOR)
-    assert "kursens punkter för momentet" in b
-    assert "skriv HELT EGNA" in b.replace("Skriv HELT EGNA", "skriv HELT EGNA")
+    assert "kursens punkter som MOMENTET rör" in b
+    assert "HELT EGNA" in b
+    # Punkterna är ramen, aldrig en ny dagordning: första kontrollkörningen
+    # 2026-09-05 (kväll) bad om «multiplicera binom» och fick tillbaka en
+    # tavla som hette «Andragradsfunktioner och ekvationer».
+    assert "det är MOMENTET som styr tavlan" in b
+    assert "aldrig till innehåll ur en punkt som ligger utanför momentet" in b
     # En rad per punkt, med etiketten och Skolverkets text.
     rader = [r for r in b.splitlines() if r.startswith("- ")]
     assert rader and all(": " in r for r in rader)

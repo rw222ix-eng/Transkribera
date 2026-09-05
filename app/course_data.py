@@ -208,10 +208,18 @@ def centralt_innehall_block(kurs: str, moment: str) -> str:
     punkter = centralt_innehall_punkter(kurs, moment)
     if not punkter:
         return ""
-    rader = [f"{CI_MARKOR}, kursens punkter för momentet. Boken är inte "
-             "uppslagen den här gången, så det här är kontraktet: tavlan ska "
-             "bära det de här punkterna kräver, med kursens egna begrepp. "
-             "Punkterna är Skolverkets ordagranna text. Skriv HELT EGNA "
-             "uppgifter och exempel utifrån dem."]
+    # MOMENTET STYR, PUNKTERNA RAMAR IN. Första kontrollkörningen 2026-09-05
+    # (kväll) bad om «Andragradsuttryck: multiplicera binom» och fick en tavla
+    # som hette «Andragradsfunktioner och ekvationer»: täckningsdomaren såg
+    # fem luckor mot punkterna och kompletteringen skrev om tavlan till dem.
+    # Punkterna är kursens ram, aldrig en ny dagordning.
+    rader = [f"{CI_MARKOR}, kursens punkter som MOMENTET rör. Boken är inte "
+             "uppslagen den här gången, så punkterna är det enda kontraktet: "
+             "de säger vilka begrepp och metoder kursen kräver, med kursens "
+             "egna ord. Men det är MOMENTET som styr tavlan. Skriv om den del "
+             "av punkterna som momentet faktiskt rör, och lägg aldrig till "
+             "innehåll ur en punkt som ligger utanför momentet. Punkterna är "
+             "Skolverkets ordagranna text. Uppgifter och exempel är HELT "
+             "EGNA."]
     rader += [f"- {p.get('kort') or ''}: {p.get('text') or ''}" for p in punkter]
     return "\n".join(rader)

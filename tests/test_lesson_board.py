@@ -1242,8 +1242,11 @@ def test_ci_blocket_gar_in_i_prompten_pa_bokens_plats():
         "Matematik, nivå 2a", "Andragradsuttryck: multiplicera binom")
     p = lb.build_prompt("Matematik, nivå 2a", "IndA",
                         "Andragradsuttryck: multiplicera binom", bok=ci)
-    assert "CENTRALT INNEHÅLL (Gy25), kursens punkter för momentet" in p
+    assert "CENTRALT INNEHÅLL (Gy25), kursens punkter som MOMENTET rör" in p
     assert "Andragradsfunktioner" in p
+    # Och momentet styr: första kontrollkörningen fick en tavla som bytt namn
+    # till punkternas rubriker (2026-09-05, kväll).
+    assert "det är MOMENTET som styr tavlan" in p
     # Och utan block är prompten precis som förut.
     assert "CENTRALT INNEHÅLL" not in lb.build_prompt("Ma2a", "IndA", "x")
 
