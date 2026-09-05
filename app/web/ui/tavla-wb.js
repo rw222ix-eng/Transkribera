@@ -246,10 +246,35 @@ function svg(tag, attrs = {}, ...children) {
   }
   for (const c of children) {
     if (c == null) continue;
-    if (typeof c === 'string') e.appendChild(document.createTextNode(c));
-    else e.appendChild(c);
+    if (typeof c === 'string') {
+      if (tag === 'text' && /[_^]/.test(c)) indexText(e, c);
+      else e.appendChild(document.createTextNode(c));
+    } else e.appendChild(c);
   }
   return e;
+}
+
+/* Index och exponent i handskrivna etiketter. Prompten (lesson_board
+   INSTRUCTION, regel 7) ber modellen döpa punkter «x_1, y_1», och det gör
+   den. Men motorn skrev strängen rakt av, så en skarp tavla 2026-09-05 bar
+   «x_1» och «x_2» med understreck under nollställena. Här delas strängen:
+   `x_1` och `x_{12}` blir nedsänkta tspan, `a^2` och `a^{-1}` upphöjda.
+   Gäller varje SVG-text som ritas ur en sträng (punkter, skalstreck,
+   vinklar, sidor, axlar); texts-sektionens egen `sup` går en annan väg och
+   rörs inte. Ett ensamt _ eller ^ utan något efter sig skrivs som det är. */
+function indexText(e, str) {
+  const re = /([_^])(\{([^}]*)\}|\S)/g;
+  let sist = 0, m;
+  while ((m = re.exec(str))) {
+    if (m.index > sist) e.appendChild(document.createTextNode(str.slice(sist, m.index)));
+    const t = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+    t.setAttribute('font-size', '70%');
+    t.setAttribute('baseline-shift', m[1] === '_' ? 'sub' : 'super');
+    t.appendChild(document.createTextNode(m[3] != null ? m[3] : m[2]));
+    e.appendChild(t);
+    sist = m.index + m[0].length;
+  }
+  if (sist < str.length) e.appendChild(document.createTextNode(str.slice(sist)));
 }
 
 function colorVar(c) {
