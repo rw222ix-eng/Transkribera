@@ -136,10 +136,9 @@ INSTRUCTION = (
     # Lärarens dom (2026-09-05): «vad är ett uttryck? Vad INNEHÅLLER ett
     # uttryck?» Den andra frågan är lika viktig som den första, men den
     # besvaras inte med fler meningar i sidflödet: delarna döps i figuren
-    # (7) och begreppen får sina rader i spalten (8c).
-    "5b. Vad begreppet INNEHÅLLER hör också hemma på vänstern, men inte som "
-    "fler meningar: delarna döps i figurraden (7) och begreppen får sina "
-    "rader i spalten (8c).\n"
+    # (7) och begreppen får sina rader i spalten (8c). Regeln hade en egen
+    # rad 5b i prompten till 2026-09-05 (kväll), men den sa bara vad 7 och 8c
+    # säger: struken för att betala kolumnregeln i exempelavsnittet.
     "6. Figuren och formlerna SIDA VID SIDA i en row: figuren till vänster, "
     "och till höger om den en col med formelkedjan och \"Vanligt fel:\". "
     "Vänstertavlan är 900 px bred — staplas allt under varandra blir den en "
@@ -250,8 +249,10 @@ INSTRUCTION = (
     "underline-sektion.\n"
     "Skriv INTE någon lektionstid på tavlan — den lägger systemet dit.\n"
     "Högertavlan är antingen EXEMPEL (huvudregeln) eller ett FALLGALLERI:\n"
-    "- Exempel: 1–2 stycken (\"Exempel 1\", \"Exempel 2\"), uppgiftsraden högst "
-    "två rader och därunder metodstegen — inte uträkningen och inte svaret. "
+    # Antalet och facitförbudet stod här också; strukna 2026-09-05 (kväll) för
+    # att betala kolumnregeln nedan. Båda står kvar i exempelavsnittet.
+    "- Exempel: namngivna (\"Exempel 1\", \"Exempel 2\"), uppgiftsraden högst "
+    "två rader och därunder metodstegen. "
     "Exempel hör hemma här — aldrig på vänstertavlan.\n"
     "- Fallgalleri (när momentet är en sats med klassiska fall, t.ex. "
     "randvinkelsatsen): 3–4 färdiga figurer, var och en med fallets namn och "
@@ -319,6 +320,15 @@ INSTRUCTION = (
     "aldrig två parallella uträkningar i samma rad («A = 2·18   A = 50/2») "
     "— ögat ska aldrig behöva läsa korsvis. Är det andra scenariot värt att "
     "visa blir det ett eget exempel som räknas mot taket; annars stryks det.\n"
+    # KOLUMNERNA. Kontrollkörningen 2026-09-05 (kväll): två exempel med varsin
+    # tabell och graf hamnade i SAMMA kolumn, och motorn krympte hela spalten
+    # till 70 % för att få plats («[WB] col@x=30: skalade ner till 70%»).
+    # Tavlan validerade — nedskalning passerade tyst — och var ändå oläslig
+    # från tredje bänkraden. Nu står regeln i prompten och nedskalningen går
+    # till reparation (REPAIR_HINTS, tavla-wb.js).
+    "- Ett exempel som bär en figur, en graf eller en tabell får en EGEN "
+    "kolumn. Högst två exempel per kolumn, och två figurbärande exempel "
+    "delar aldrig kolumn: spalten krymper då och all text med den.\n"
     # Kravet stod förut två gånger — här och som en egen punkt längre ned om
     # bokens flera vägar. Slogs ihop 2026-09-05 för att korta prompten.
     "- Finns flera vägar till svaret (som i boken) visas TVÅ: \"Väg 1\" och "
@@ -400,10 +410,11 @@ INSTRUCTION = (
     "- Välj ändå talen så att uträkningen GÅR JÄMNT UT när läraren räknar den "
     "på plats — heltal eller enkla decimaltal. Eleven ska se metoden, inte "
     "fastna i aritmetiken.\n"
-    "- Exemplen speglar den TYP och NIVÅ urvalet har, men skriv ALLTID egna "
-    "uppgifter: bokens får aldrig skrivas av, inte ens med utbytta tal. Ett "
-    "eget exempel kan göras enklare, renare och mer pedagogiskt än bokens, "
-    "så att eleven klarar bokens efteråt.\n"
+    # Första halvan («exemplen speglar urvalets typ och nivå») ströks
+    # 2026-09-05 (kväll): urvalsregeln högre upp säger den redan.
+    "- Skriv ALLTID egna uppgifter: bokens får aldrig skrivas av, inte ens "
+    "med utbytta tal. Ett eget exempel kan göras enklare, renare och mer "
+    "pedagogiskt än bokens, så att eleven klarar bokens efteråt.\n"
     # TILLÄMPNINGARNA HÖR TILL HÖGERN. Domen 2026-09-05 (del 2), efter att en
     # areamodell hade definierat andragradsuttrycket på vänstern: arean är
     # inte vad uttrycket ÄR, men den är en av de uppgifter urvalet innehåller.
@@ -448,12 +459,13 @@ INSTRUCTION = (
     "urvalet (uppgiftsraden, inte bara sidorna): «står det den här uppgiften "
     "kräver på tavlan — en formel, ett metodsteg eller ett exempel?». Saknas "
     "något är genomgången för tunn; står det som inte behövs för de "
-    "uppgifterna är den för tjock.\n"
     # TÄCKNINGEN PRÖVAS BAKLÄNGES. Samma dom, andra halvan: «målet är att
     # eleverna efter genomgången ska kunna klara av alla uppgifter på de
     # sidor jag valt att utgå ifrån.» Ett svep över sidorna räcker inte —
-    # det är URVALET som är kontraktet, uppgift för uppgift.
-    "- Först när svaret är ja för varje VALD uppgift är genomgången klar.\n"
+    # det är URVALET som är kontraktet, uppgift för uppgift. Kravet hade en
+    # egen punkt till 2026-09-05 (kväll); den sitter nu i samma mening.
+    "uppgifterna är den för tjock. Först när svaret är ja för varje VALD "
+    "uppgift är genomgången klar.\n"
     # RANDFALLET. Samma dom (2026-08-21): «en sak jag saknar, speciellt för
     # kuben: vad gör man om det står ett negativt tal under rotstecknet, fast
     # det är i kubik? Vad händer då?»
@@ -545,6 +557,20 @@ REPAIR_HINTS = (
     "skriv om räknesteg som math-sektioner, och slå ihop flera exempel eller "
     "fall till EN table-sektion med korta celler. Ta bort hela stycken hellre "
     "än att korta varje mening — det är mängden som är felet, inte längden.\n"
+    # FACITVAKTEN (2026-09-05, kväll) — se whiteboard_spec._check_facit.
+    "- 'är en färdig uträkning': skriv steget i ORD i stället, det som säger "
+    "vad man GÖR («Avläs k: skillnaden mellan två rader»), eller stryk raden "
+    "helt. Räkna aldrig ut svaret — läraren gör det med klassen.\n"
+    "- 'uträknat sifferexempel på vänstertavlan': stryk raden, eller flytta "
+    "den till det exempel på högertavlan den hör till. På vänstern står "
+    "bokstäver.\n"
+    # NEDSKALNINGEN (2026-09-05, kväll) — motorns fit-pass, se tavla-wb.js.
+    # Varningen finns bara när tavlan RITAS, alltså i appens render-report,
+    # inte vid genereringen på servern: precis som överlappen.
+    "- 'skalade ner till N %': kolumnen är överfull och texten krymper till "
+    "oläslighet. Flytta ett exempel till den andra kolumnen eller korta "
+    "stegen — och rita aldrig två figurer, grafer eller tabeller i samma "
+    "kolumn.\n"
 )
 
 def _cirkel(cx: float, cy: float, r: float, n: int = 48) -> list[list[float]]:
@@ -2091,8 +2117,13 @@ def _repair_until_valid(board: dict | None, errors: list, *, model: str, llm,
 
 # Raden bok.build_bok_block lägger in FÖRST när uppgiftspanelen skickat sin
 # remsa (routes_planning.bok_urval). Den — inte bokblocket — är domarens
-# kontrakt: sidorna finns i blocket så snart de är lästa, men urvalet är
-# lärarens beslut, och bara det säger vad tavlan lovar att bära.
+# kontrakt för TÄCKNINGEN: sidorna finns i blocket så snart de är lästa, men
+# urvalet är lärarens beslut, och bara det säger vad tavlan lovar att bära.
+#
+# Sedan 2026-09-05 (kväll) grindar raden inte längre om passet KÖRS, bara vad
+# det dömer: domaren läser efter markören i sin egen prompt och hoppar över
+# täckningen och urvalsfrågorna när den saknas. Formfelen — färdiga
+# uträkningar, siffror på vänstern, för tjock vänster — gäller utan bok.
 URVALSMARKOR = "LÄRARENS URVAL"
 
 # Domarens EGNA rundor: kompletteringen + en rättning om den bröt schemat.
@@ -2114,6 +2145,35 @@ TACKNING_INSTRUKTION = (
     "en diagonal») — en halvering som inte är hälften, ett led skrivet åt "
     "fel håll, ett svar som inte stämmer. Ett räknefel på en genomgångstavla "
     "är alltid ett fynd, aldrig en detalj.\n"
+    # UTAN URVAL DÖMS BARA FORMEN. Domen 2026-09-05 (kväll): färdiga
+    # uträkningar och siffror på vänstern är FORMFEL, och de gäller lika
+    # mycket på en tavla som skrivits ur minnet, en förlaga eller ett fritt
+    # uppdrag. Därför körs passet numera för varje tavla (se _tackning_pass),
+    # och det är prompten som stänger av det som kräver ett urval.
+    "Står ingen rad «LÄRARENS URVAL» nedan finns inget kontrakt att döma "
+    "täckningen mot: hoppa då över täckningen och alla urvalsfrågor helt, "
+    "och döm bara formen — räknefel, färdiga uträkningar, siffror på "
+    "vänstern och begreppskopplingen.\n"
+    # FÄRDIGA URÄKNINGAR. Lärarens dom (2026-08-20, upprepad 2026-09-05 när
+    # en tavla om linjära funktioner skrev ut hela avläsningen): «Jag kommer
+    # ju göra själva uträkningarna. Det räcker med en stark utgångspunkt.
+    # Massa färdiga uträkningar behövs inte.» Tabellmomentet lockar — när
+    # uppgiften ÄR att läsa av k skriver modellen avläsningen.
+    "Fäll FÄRDIGA URÄKNINGAR i exemplen: en math-rad på högertavlan som "
+    "räknar ut något — tal på båda sidor om = eller ⇒ där högerledet är "
+    "svaret («260 − 200 = 60 ⇒ k = 60, m = 200»), eller en kedja av led. "
+    "Uppgiftens EGEN rad — ekvationen som ges, tabellen, figuren — är ingen "
+    "uträkning och står kvar. Säg vilket exempel och vilken rad det gäller, "
+    "och forslag är att byta raden mot ett steg i ORD som säger vad man GÖR "
+    "(«Avläs k: skillnaden mellan två rader») eller att stryka den.\n"
+    # SIFFROR PÅ VÄNSTERN. Samma tavla bar «y = 4 − 5x ⇒ k = −5, m = 4» på
+    # vänstern, efter Vanligt fel: ett exempel på fel tavla. Regel 8b förbjöd
+    # det redan, men ingen grind fällde det.
+    "Fäll SIFFROR PÅ VÄNSTERN: en math-rad på vänstertavlan med konkreta tal "
+    "är ett exempel på fel tavla — på vänstern står bokstäver. Undantagen är "
+    "lektionstiden överst och det felaktiga ledet under «Vanligt fel:», som "
+    "är beställt. forslag är att stryka raden eller flytta den till det "
+    "exempel den hör till.\n"
     # EXEMPLEN MOT URVALET. Domen 2026-09-05 (del 2): domaren letade bara
     # LUCKOR, och därför fick «samma uttryck, nu med tal» — en nivå 1-typ som
     # ingen vald uppgift ber om — stå kvar medan tre valda typer saknades.
@@ -2291,12 +2351,18 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     råa tokens medan den skriver — UI:t bygger upp tavlan live ur dem.
 
     `doma=False` stänger av täckningsdomaren. Den kostar ett modellanrop och
-    körs annars när LÄRARENS URVAL står i bokblocket — utan urval finns inget
-    kontrakt att döma mot. Grinden satt förr på blocket i stort, men blocket
-    skrivs så snart sidorna är lästa: byter läraren sidspann och trycker Skriv
-    innan uppgiftspanelens faktapass svarat följer ingen remsa med, och
-    domaren dömde då mot uppslagets ALLA nummer och drev en reparationsrunda
-    för uppgifter läraren aldrig valt.
+    körs annars för VARJE tavla (2026-09-05, kväll). Grinden satt förut på
+    LÄRARENS URVAL i bokblocket, därför att täckningen inte går att döma utan
+    ett urval att döma mot — men färdiga uträkningar, siffror på vänstern och
+    en för tjock vänster är FORMFEL som gäller lika mycket på en tavla ur
+    minnet, en förlaga eller ett fritt uppdrag. Grinden flyttade därför in i
+    domarens prompt: står ingen urvalsrad i blocket hoppar domaren över
+    täckningen och urvalsfrågorna och dömer bara formen. Kravet på just
+    urvalsRADEN (inte bokblocket i stort) står kvar av samma skäl som förut:
+    blocket skrivs så snart sidorna är lästa, och byter läraren sidspann och
+    trycker Skriv innan uppgiftspanelens faktapass svarat följer ingen remsa
+    med — då dömde domaren mot uppslagets ALLA nummer och drev en
+    reparationsrunda för uppgifter läraren aldrig valt.
 
     Domarens rundor räknas inte in i `rounds` — se _tackning_pass — men
     redovisas som `domarrundor`."""
@@ -2333,7 +2399,7 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     res = _repair_until_valid(board, errors, model=model, llm=llm,
                               rounds_used=rounds, max_rounds=max_rounds,
                               log_cb=log, token_cb=token_cb)
-    if doma and URVALSMARKOR in (bok or "") and res.get("board") is not None:
+    if doma and res.get("board") is not None:
         dom = _tackning_pass(res["board"], res["errors"], model=model, llm=llm,
                              bok=bok, log_cb=log, token_cb=token_cb)
         # `rounds` är den budget generering och renderingsreparation delar:

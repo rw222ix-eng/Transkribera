@@ -675,6 +675,109 @@ def _check_rutor(sections: list, path: str, errors: list[dict]) -> None:
             _check_rutor(sec.children, f"{path}[{si}].children", errors)
 
 
+# FACITVAKTEN (lärarens dom 2026-09-05, kväll). «Jag kommer ju göra själva
+# uträkningarna. Det räcker med en stark utgångspunkt. Massa färdiga
+# uträkningar behövs inte.» Kravet står i prompten sedan augusti, men en tavla
+# om linjära funktioner skrev ändå «260 − 200 = 60 ⇒ k = 60, m = 200» i
+# exempel 1 och «(0, 600) → (1, 500) ⇒ k = −100, m = 600» i exempel 2:
+# tabellmomentet lockar, för uppgiften ÄR att läsa av k, och då skriver
+# modellen avläsningen. Samma tavla bar dessutom «y = 4 − 5x ⇒ k = −5, m = 4»
+# på VÄNSTERN, efter Vanligt fel — ett sifferexempel på fel tavla, som regel
+# 8b förbjuder utan att någon vakt fällde det.
+#
+# Reglerna här fäller det deterministiskt, som rutorna: en fällning kostar på
+# sin höjd en reparationsrunda, och domaren behöver då inte se det.
+# KONSERVATIVA med flit — en GIVEN ekvation är inte en uträkning:
+# «x^2 + 6x - 7 = 0», «f(x) = -x^2 - 2x + 3» och «y = -100x + 600» är
+# uppgiftens egen rad och ska stå kvar. Det som fälls är ledet som RÄKNAR:
+# en pil till ett svar i tal, eller en kedja som slutar i ett rent tal.
+_PIL_RE = re.compile(r"\\(?:Rightarrow|Longrightarrow|implies|to|rightarrow|"
+                     r"Leftrightarrow|leftrightarrow)\b")
+# Exponenter, index och rotindex är inte «tal» eleven räknar med: a^2 + b^2 =
+# c^2 är bokstäver, \sqrt[3]{x} likaså. De städas bort före sifferletandet,
+# annars fälldes Pythagoras sats som ett sifferexempel.
+_HAK_RE = re.compile(r"\[[^\]]*\]")
+_INDEX_HOJD_RE = re.compile(r"[\^_](\{[^}]*\}|.)")
+_RENT_TAL_RE = re.compile(r"^[\s{(\,;]*-?\d+(?:\{,\}\d+|,\d+)?[\s})\,;.]*$")
+_BOKSTAV_LIKA_TAL_RE = re.compile(r"[A-Za-z]\s*=\s*-?\d")
+
+
+def _talrensad(latex: str) -> str:
+    """LaTeX utan det som ser ut som siffror men inte är tal att räkna med."""
+    s = _HAK_RE.sub(" ", latex or "")
+    s = _INDEX_HOJD_RE.sub(" ", s)
+    return _LATEX_COMMAND_RE.sub(" ", s)
+
+
+def _har_tal(text: str) -> bool:
+    return bool(re.search(r"\d", text))
+
+
+def _ar_utrakning(latex: str) -> bool:
+    """En math-rad som RÄKNAR: «⇒ k = 60» eller en kedja som slutar i ett tal."""
+    ren = _talrensad(latex)
+    pil = _PIL_RE.search(latex or "")
+    if pil:
+        svans = _talrensad((latex or "")[pil.end():])
+        if _BOKSTAV_LIKA_TAL_RE.search(svans):
+            return True
+    led = ren.split("=")
+    if len(led) >= 3 and _RENT_TAL_RE.match(led[-1]) and _har_tal(led[-1]):
+        return True
+    return False
+
+
+def _tal_pa_bada_sidor(latex: str) -> bool:
+    led = _talrensad(latex).split("=")
+    return any(_har_tal(led[i]) and _har_tal(led[i + 1])
+               for i in range(len(led) - 1))
+
+
+def _fritt_vanligt_fel(sections: list) -> object | None:
+    """Det FELAKTIGA ledet under «Vanligt fel:» är beställt (regel 9) och är
+    undantaget från båda vakterna — annars fällde de tavlans egen fallgrop.
+    Undantaget gäller den FÖRSTA math-sektionen efter rubriken, inte resten:
+    det var just raden EFTER förklaringen som var sifferexemplet."""
+    sett = False
+    for sec in sections or []:
+        if isinstance(sec, (TextSection, HeadingSection)):
+            if str(getattr(sec, "text", "")).strip().lower().startswith("vanligt fel"):
+                sett = True
+        elif sett and isinstance(sec, MathSection):
+            return sec
+    return None
+
+
+def _check_facit(sections: list, path: str, errors: list[dict],
+                 vanstertavlan: bool) -> None:
+    undantag = _fritt_vanligt_fel(sections)
+    for si, sec in enumerate(sections or []):
+        spath = f"{path}[{si}]"
+        if isinstance(sec, MathSection):
+            if sec is undantag:
+                continue
+            if vanstertavlan:
+                # Regel 8b: på vänstern står bokstäver. En rad som RÄKNAR med
+                # tal är ett exempel, och exempel bor på högertavlan.
+                if _ar_utrakning(sec.latex) and _tal_pa_bada_sidor(sec.latex):
+                    errors.append(_err(spath, "siffror_vanster",
+                                       f"'{sec.latex[:60]}' är ett uträknat "
+                                       "sifferexempel på vänstertavlan — där "
+                                       "står bokstäver. Stryk raden, eller "
+                                       "flytta den till det exempel den hör "
+                                       "till."))
+            elif _ar_utrakning(sec.latex):
+                errors.append(_err(spath, "facit",
+                                   f"'{sec.latex[:60]}' är en färdig uträkning "
+                                   "— exemplet är en utgångspunkt, inte ett "
+                                   "facit. Skriv steget i ord i stället "
+                                   "(«Avläs k: skillnaden mellan två rader»), "
+                                   "eller stryk raden. Läraren räknar på "
+                                   "plats."))
+        elif isinstance(sec, (CalloutSection, RowSection, ColSection)):
+            _check_facit(sec.children, f"{spath}.children", errors, vanstertavlan)
+
+
 def _text_volym(sections: list) -> int:
     """Summan av läsbar text i ett sektionsflöde — text och listpunkter, ned
     genom callout/row/col. Rubriker och matte räknas inte: se _MAX_BOARD_TEXT."""
@@ -773,6 +876,10 @@ def validate_rules(doc: BoardDoc) -> list[dict]:
             _check_text_lengths(sections, path, errors)
             _check_rutor(sections, path, errors)
             volym += _text_volym(sections)
+            # Facitvakten (2026-09-05, kväll). Vänstertavlan är boards[0] —
+            # där fälls sifferexemplet; exempeltavlorna är resten, och där
+            # fälls den färdiga uträkningen. Se _check_facit.
+            _check_facit(sections, path, errors, bi == 0)
             for g, col_w, gpath in _iter_graphs(sections, width, path):
                 _validate_graph(g, col_w, gpath, errors)
         # Kolumntavlan bär flera exempelspalter — taket skalar per spalt

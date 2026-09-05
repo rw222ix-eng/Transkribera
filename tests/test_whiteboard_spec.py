@@ -401,6 +401,118 @@ def test_rutor_falls_deterministiskt():
     assert ws.validate_board_json(_doc(_board(sections=[djup])))[1] == []
 
 
+# ------------------------------------------------------------ facitvakten --
+# Lärarens dom (2026-08-20, upprepad 2026-09-05 när en tavla om linjära
+# funktioner skrev ut hela avläsningen): «Jag kommer ju göra själva
+# uträkningarna. Det räcker med en stark utgångspunkt. Massa färdiga
+# uträkningar behövs inte.» Vakten är KONSERVATIV: en given ekvation är inte
+# en uträkning, och tavlans egen fallgrop under «Vanligt fel:» är beställd.
+#
+# LaTeX skrivs med BS + kommandonamn i stället för dubbla backslashar: de
+# blir oläsliga i en testfil full av dem, och det är exakt de raderna som
+# avgör om vakten fäller rätt.
+BS = chr(92)
+
+
+def _hoger(sektioner):
+    """En högertavla med EN exempelkolumn — boards[1], där exempel bor."""
+    b = _board(width=1800, name="hoger")
+    del b["sections"]
+    b["columns"] = [{"weight": 1, "sections": sektioner}]
+    return _doc(_board(), b)
+
+
+def _tex(kort):
+    for tecken, kommando in (("QQQ", "sqrt"), ("RR", "Rightarrow"),
+                             ("QQ", "quad"), ("SS", ";"), ("TT", "to"),
+                             ("CC", "cdot"), ("FF", "frac"), ("KK", ",")):
+        kort = kort.replace(tecken, BS + kommando)
+    return kort
+
+
+UTRAKNINGAR = [
+    "260 - 200 = 60 RR k = 60,QQ m = 200",
+    "y = 60x RR k = 60,SS m = 0",
+    "(0,KK 600) TT (1,KK 500) RR k = -100,SS m = 600",
+    "A = 3 CC 4 = 12",
+]
+GIVNA = [
+    "x^2 + 6x - 7 = 0",
+    "f(x) = -x^2 - 2x + 3",
+    "FF{x+2}{3} + FF{x+2}{6}",
+    "y = -100x + 600",
+    "a^2 + b^2 = c^2",
+    "y = kx + m",
+    "A = a^2 RR a = QQQ{A}",
+    "(a + b)(c + d) = ac + ad + bc + bd",
+    "2x^2 + 3x = 5x^2",
+]
+
+
+@pytest.mark.parametrize("latex", UTRAKNINGAR)
+def test_fardig_utrakning_i_ett_exempel_falls(latex):
+    _d, fel = ws.validate_board_json(_hoger([
+        {"kind": "heading", "text": "Exempel 1"},
+        {"kind": "math", "latex": _tex(latex)}]))
+    assert [e["code"] for e in fel] == ["facit"], (latex, fel)
+
+
+@pytest.mark.parametrize("latex", GIVNA)
+def test_uppgiftens_egen_rad_star_kvar(latex):
+    """Ekvationen som GES är ingen uträkning och ska stå kvar."""
+    _d, fel = ws.validate_board_json(_hoger([
+        {"kind": "heading", "text": "Exempel 1"},
+        {"kind": "math", "latex": _tex(latex)}]))
+    assert fel == [], (latex, fel)
+
+
+def test_det_felaktiga_ledet_under_vanligt_fel_ar_bestallt():
+    """Regel 9 BER om det felaktiga ledet i en math-sektion. Vakten får inte
+    fälla tavlans egen fallgrop — men bara den FÖRSTA math-raden efter
+    rubriken undantas: det var raden EFTER förklaringen som var facit."""
+    rader = [
+        {"kind": "heading", "text": "Exempel 1"},
+        {"kind": "text", "text": "Vanligt fel:"},
+        {"kind": "underline"},
+        {"kind": "math", "latex": _tex("2x = 10 RR x = 5")},
+        {"kind": "text", "text": "Saldot minskar."}]
+    assert ws.validate_board_json(_hoger(rader))[1] == []
+    dalig = rader + [{"kind": "math", "latex": _tex("y = 60x RR k = 60,SS m = 0")}]
+    assert [e["code"] for e in ws.validate_board_json(_hoger(dalig))[1]] == ["facit"]
+
+
+def test_sifferexempel_pa_vanstern_falls():
+    """«y = 4 - 5x => k = -5, m = 4» stod på vänstern, efter Vanligt fel.
+    Regel 8b förbjöd det redan; ingen vakt fällde det."""
+    vanster = _board(sections=[
+        {"kind": "heading", "text": "Linjära funktioner"},
+        {"kind": "math", "latex": _tex("y = kx + m")},
+        {"kind": "text", "text": "Vanligt fel:"},
+        {"kind": "math", "latex": _tex("y = 4 - 5x RR k = 5")},
+        {"kind": "text", "text": "Tecknet framför x hör till k."},
+        {"kind": "math", "latex": _tex("y = 4 - 5x RR k = -5,SS m = 4")}])
+    fel = ws.validate_board_json(_doc(vanster))[1]
+    assert [e["code"] for e in fel] == ["siffror_vanster"], fel
+    assert "sections[5]" in fel[0]["path"]
+
+
+def test_vansterns_bokstavsformler_star_kvar():
+    """Pythagoras sats är bokstäver: exponenterna är inte tal att räkna med."""
+    for latex in ("a^2 + b^2 = c^2", "y = kx + m", "x^2 + 6x - 7 = 0",
+                  "(a + b)(c + d) = ac + ad + bc + bd", "A = a^2 RR a = QQQ{A}"):
+        vanster = _board(sections=[{"kind": "math", "latex": _tex(latex)}])
+        assert ws.validate_board_json(_doc(vanster))[1] == [], latex
+
+
+def test_vakten_gar_ned_i_row_och_col():
+    """Den fällda tavlan bar båda raderna nedgrävda i en row/col."""
+    rad = {"kind": "row", "children": [
+        {"kind": "col", "children": [
+            {"kind": "math", "latex": _tex("y = 4 - 5x RR k = -5,SS m = 4")}]}]}
+    fel = ws.validate_board_json(_doc(_board(sections=[rad])))[1]
+    assert [e["code"] for e in fel] == ["siffror_vanster"]
+
+
 def test_figur_i_row_valideras_som_en_figur():
     """Figurerna får ligga i en row (figur till vänster, formler till höger).
     Då måste grafreglerna gälla DÄR INNE också — annars blir raden en dörr

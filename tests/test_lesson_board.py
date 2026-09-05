@@ -417,8 +417,11 @@ def test_prompten_bar_exempelkraven():
     p = lb.build_prompt("Ma1b", "9A", "pythagoras sats")
     assert "1–3 exempel, aldrig fler" in p
     assert "GÅR JÄMNT UT" in p
-    assert "TYP och NIVÅ" in p
-    assert "skriv ALLTID egna uppgifter" in p
+    # «Exemplen speglar den TYP och NIVÅ urvalet har» ströks 2026-09-05
+    # (kväll): urvalsregeln högre upp säger det redan, och prompten skulle
+    # kortas för kolumnregeln. Kravet prövas i
+    # test_prompten_valjer_exemplen_ur_urvalet i stället.
+    assert "ALLTID egna uppgifter" in p
     assert "det felaktiga ledet i rött bredvid det rätta" in p
     assert "Väg 1" in p and "Väg 2" in p
     # Utgångspunkt, inte facit — läraren räknar på plats.
@@ -447,6 +450,16 @@ def test_prompten_valjer_exemplen_ur_urvalet():
     # Och tillämpningarna hör till högern, som uppgifter.
     assert "Tillämpningar (area, volym, pengar) står på HÖGERN" in p
     assert "Fallgropen väljs ur urvalets SVÅRASTE typ" in p
+
+
+def test_prompten_ger_figurexemplet_en_egen_kolumn():
+    """Kontrollkörningen 2026-09-05 (kväll): två exempel med varsin tabell
+    och graf hamnade i samma kolumn, och motorn krympte spalten till 70 %.
+    Tavlan validerade — nedskalning passerade tyst — och var ändå oläslig."""
+    p = lb.build_prompt("Ma1a", "BA26B", "linjära funktioner")
+    assert "får en EGEN kolumn" in p
+    assert "Högst två exempel per kolumn" in p
+    assert "två figurbärande exempel delar aldrig kolumn" in p
 
 
 def test_prompten_tonar_ner_fargerna():
@@ -613,7 +626,8 @@ def test_generate_passes_token_cb_to_llm():
 
     cb_tokens: list[str] = []
     cb = cb_tokens.append
-    res = lb.generate_board("Ma1b", "9A", "x", model="m", llm=llm, token_cb=cb)
+    res = lb.generate_board("Ma1b", "9A", "x", model="m", llm=llm, token_cb=cb,
+                            doma=False)
     assert res["errors"] == []
     assert seen and all(c is cb for c in seen)
     assert cb_tokens == ['{"title":']
@@ -630,7 +644,10 @@ def test_generate_repairs_rule_error():
 
 def test_generate_gives_up_after_max_rounds():
     llm, calls = _stub_llm([json.dumps(_broken_doc())])
-    res = lb.generate_board("Ma1b", "9A", "x", model="m", llm=llm)
+    # doma=False: täckningsdomaren körs numera för VARJE tavla
+    # (2026-09-05, kväll) och skulle annars lägga ett anrop till på
+    # räkningen. Det som mäts här är skrivrundorna.
+    res = lb.generate_board("Ma1b", "9A", "x", model="m", llm=llm, doma=False)
     assert res["rounds"] == lb.MAX_ROUNDS
     assert len(calls) == lb.MAX_ROUNDS
     assert any(e["code"] == "utanför-range" for e in res["errors"])
@@ -640,7 +657,10 @@ def test_generate_gives_up_after_max_rounds():
 def test_generate_retries_on_invalid_json_then_succeeds():
     # Trunkerat/trasigt svar (bench Fas 2) → omkörning inom rundbudgeten.
     llm, calls = _stub_llm(["det här är inte json", json.dumps(_valid_doc())])
-    res = lb.generate_board("Ma1b", "9A", "x", model="m", llm=llm)
+    # doma=False: täckningsdomaren körs numera för VARJE tavla
+    # (2026-09-05, kväll) och skulle annars lägga ett anrop till på
+    # räkningen. Det som mäts här är skrivrundorna.
+    res = lb.generate_board("Ma1b", "9A", "x", model="m", llm=llm, doma=False)
     assert res["errors"] == []
     assert res["rounds"] == 2
     assert len(calls) == 2
@@ -671,6 +691,31 @@ def test_repair_board_uses_client_warnings():
     assert res["errors"] == []
     assert res["rounds"] == 2            # 1 (generering) + 1 (reparation)
     assert "element-överlapp" in calls[0]["prompt"]
+
+
+def test_nedskalningen_far_sitt_atgardsrad():
+    """En krympt kolumn är samma sorts fynd som ett överlapp: motorn mäter
+    den, klienten rapporterar den, servern skriver om tavlan. Rådet måste
+    säga vad läraren menade — «rita aldrig två figurer i samma kolumn» —
+    annars kortar modellen bara texten och kolumnen krymper igen.
+    Tröskeln (85 %) sitter i tavla-wb.js KRYMPGRANS och prövas i
+    e2e/formerna.spec.mjs."""
+    llm, calls = _stub_llm([json.dumps(_valid_doc())])
+    res = lb.repair_board(
+        _valid_doc(),
+        ["[WB] col@x=30: skalade ner till 70% (h:700/720, w:410/846)."],
+        model="m", llm=llm)
+    assert res["errors"] == []
+    assert "skalade ner till 70%" in calls[0]["prompt"]
+    assert "flytta ett exempel till den andra kolumnen" in calls[0]["prompt"].lower()
+    assert "aldrig två figurer" in calls[0]["prompt"].lower()
+
+
+def test_reparationsraden_bar_facitvaktens_koder():
+    """Vakten fäller deterministiskt (whiteboard_spec._check_facit); rådet
+    säger hur raden ska skrivas om i stället för att bara strykas."""
+    assert "skriv steget i ORD" in lb.REPAIR_HINTS
+    assert "uträknat sifferexempel på vänstertavlan" in lb.REPAIR_HINTS
 
 
 def test_repair_board_respects_shared_round_budget():
@@ -992,6 +1037,31 @@ def test_domaren_provar_exemplen_mot_urvalet():
     assert "Ett HELT exempel byts" in lapp
 
 
+def test_domaren_faller_facit_och_siffror_pa_vanstern():
+    """Kvällens dom (2026-09-05) på en tavla om linjära funktioner: högern bar
+    «260 − 200 = 60 ⇒ k = 60, m = 200» och vänstern «y = 4 − 5x ⇒ k = −5,
+    m = 4». «Jag kommer ju göra själva uträkningarna. Det räcker med en stark
+    utgångspunkt.»"""
+    t = lb.build_tackning_prompt({"boards": []}, "LÄRARENS URVAL: 3204–3208")
+    assert "FÄRDIGA URÄKNINGAR" in t
+    assert "Uppgiftens EGEN rad" in t          # den ges, den är ingen uträkning
+    assert "steg i ORD som säger vad man GÖR" in t
+    assert "SIFFROR PÅ VÄNSTERN" in t
+    assert "på vänstern står bokstäver" in t
+    # Det felaktiga ledet under Vanligt fel är beställt (regel 9) och undantas.
+    assert "Vanligt fel:», som är beställt" in t
+
+
+def test_domaren_hoppar_over_urvalsfragorna_utan_urval():
+    """Formfelen gäller utan bok, täckningen gör det inte. Grinden flyttade
+    2026-09-05 (kväll) från generate_board in i domarens egen prompt."""
+    t = lb.build_tackning_prompt({"boards": []}, "")
+    assert "Står ingen rad «LÄRARENS URVAL» nedan" in t
+    assert "hoppa då över täckningen och alla urvalsfrågor helt" in t
+    # …och formfelen står kvar att döma på.
+    assert "FÄRDIGA URÄKNINGAR" in t and "SIFFROR PÅ VÄNSTERN" in t
+
+
 def test_ren_dom_ror_inte_tavlan():
     doc = _valid_doc()
     llm, calls = _stub_llm([_dom([])])
@@ -1043,17 +1113,24 @@ def test_otydlig_dom_faller_ingen_tavla():
     assert res["board"] == doc and res["errors"] == []
 
 
-def test_generate_board_domer_bara_nar_boken_ar_kalla():
+def test_generate_board_domer_varje_tavla():
+    """Grinden på LÄRARENS URVAL flyttade 2026-09-05 (kväll) in i domarens
+    egen prompt: färdiga uträkningar, siffror på vänstern och en för tjock
+    vänster är FORMFEL som gäller lika mycket på en tavla ur minnet, en
+    förlaga eller ett fritt uppdrag. Passet körs därför alltid."""
     svar = json.dumps(_valid_doc())
-    # Utan bok: en enda LLM-runda — ingen dom.
-    llm, calls = _stub_llm([svar])
-    lb.generate_board("Ma 1c", "NA26F", "rötter", model="m", llm=llm)
-    assert len(calls) == 1
-    # Med bok: genereringen + domen (ren) — två anrop, inga extra rundor.
+    # Utan bok: genereringen + domen — och domarprompten bär inget urval.
+    llm, calls = _stub_llm([svar, _dom([])])
+    res = lb.generate_board("Ma 1c", "NA26F", "rötter", model="m", llm=llm)
+    assert len(calls) == 2 and res["rounds"] == 1 and res["errors"] == []
+    assert "täckningsdomare" in calls[1]["prompt"]
+    assert "LÄRARENS URVAL: klassen" not in calls[1]["prompt"]
+    # Med bok: samma två anrop, och urvalet står i domarens prompt.
     llm2, calls2 = _stub_llm([svar, _dom([])])
-    res = lb.generate_board("Ma 1c", "NA26F", "rötter", model="m", llm=llm2,
-                            bok=BOKBLOCK)
-    assert len(calls2) == 2 and res["rounds"] == 1 and res["errors"] == []
+    res2 = lb.generate_board("Ma 1c", "NA26F", "rötter", model="m", llm=llm2,
+                             bok=BOKBLOCK)
+    assert len(calls2) == 2 and res2["rounds"] == 1 and res2["errors"] == []
+    assert "LÄRARENS URVAL: klassen" in calls2[1]["prompt"]
     # doma=False stänger av den helt.
     llm3, calls3 = _stub_llm([svar])
     lb.generate_board("Ma 1c", "NA26F", "rötter", model="m", llm=llm3,
@@ -1061,23 +1138,20 @@ def test_generate_board_domer_bara_nar_boken_ar_kalla():
     assert len(calls3) == 1
 
 
-def test_domaren_kraver_urvalet_inte_bara_bokblocket():
-    """Grinden satt på bokblocket, men blocket skrivs så snart sidorna är
-    lästa. Byter läraren sidspann och trycker Skriv innan uppgiftspanelens
-    faktapass svarat saknas remsan (uppgifter.urval → null), och det urval
-    domaren ska döma mot finns inte i prompten. Domaren dömde då mot
-    «Uppgiftsnummer på sidorna» — hela uppslaget — och drev en
-    reparationsrunda för uppgifter läraren aldrig valt, plus ett modellanrop."""
+def test_domaren_far_bokblocket_utan_urval_ograverat():
+    """Blocket skrivs så snart sidorna är lästa. Byter läraren sidspann och
+    trycker Skriv innan uppgiftspanelens faktapass svarat saknas remsan
+    (uppgifter.urval → null), och då dömde domaren mot «Uppgiftsnummer på
+    sidorna» — hela uppslaget — och drev en reparationsrunda för uppgifter
+    läraren aldrig valt. Nu körs passet ändå, men prompten säger åt domaren
+    att hoppa över täckningen och urvalsfrågorna när markören saknas."""
     svar = json.dumps(_valid_doc())
-    llm, calls = _stub_llm([svar, _dom([{"uppgifter": [1116], "vad": "x"}])])
+    llm, calls = _stub_llm([svar, _dom([])])
     res = lb.generate_board("Ma 1c", "NA26F", "rötter", model="m", llm=llm,
                             bok=BOKBLOCK_UTAN_URVAL)
-    assert len(calls) == 1 and res["errors"] == []
-    # Med urvalsraden i blocket körs domaren som förut.
-    llm2, calls2 = _stub_llm([svar, _dom([])])
-    lb.generate_board("Ma 1c", "NA26F", "rötter", model="m", llm=llm2,
-                      bok=BOKBLOCK)
-    assert len(calls2) == 2
+    assert len(calls) == 2 and res["errors"] == []
+    assert "LÄRARENS URVAL: klassen" not in calls[1]["prompt"]
+    assert "hoppa då över täckningen" in calls[1]["prompt"]
 
 
 def test_domarens_rundor_ater_inte_renderingsreparationens_budget():
@@ -1290,7 +1364,10 @@ def test_ett_trasigt_lappsvar_faller_tillbaka_pa_helomskrivningen():
         "jag kan tyvärr inte lappa det här",
         json.dumps(_valid_doc()),
     ])
-    res = lb.generate_board("Ma1b", "9A", "x", model="m", llm=llm)
+    # doma=False: täckningsdomaren körs numera för VARJE tavla
+    # (2026-09-05, kväll) och skulle annars lägga ett anrop till på
+    # räkningen. Det som mäts här är skrivrundorna.
+    res = lb.generate_board("Ma1b", "9A", "x", model="m", llm=llm, doma=False)
     assert res["errors"] == [] and res["rounds"] == 3
     assert len(calls) == 3
     assert "Skriv om HELA tavlan som JSON" in calls[2]["prompt"]
