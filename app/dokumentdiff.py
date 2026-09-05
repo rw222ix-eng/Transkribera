@@ -168,23 +168,54 @@ def _anteckningar(fore: dict, efter: dict) -> list[str]:
 # Spaltlinjerna mellan kolumnerna är `.wb-svg` utan `.wb-element` och räknas
 # därför inte — det är avsiktligt i motorn, och måste vara det här också.
 
-def _tavelelement(doc: dict) -> list[tuple[str, Any]]:
-    """(element-id, sektion) för varje nod motorn kommer att rita, i ordning."""
-    ut: list[tuple[str, Any]] = []
+# BARNEN I EN RAD (2026-09-05). Läraren kunde inte peka på en enskild formel:
+# hela figur-och-formler-raden var EN ruta. Nu bär motorn `wb-del` på barnen i
+# en `row`/`col` (tavla-wb.js renderSection), blad.js taggaTavla ger dem
+# förälderns id plus sitt eget index med punkt — `tav5.1`, `tav5.1.2` — och den
+# serien måste räknas EXAKT likadant här. Talet är barnets index i JSON:ens
+# `children`, för motorn ritar varje barn i en row/col i ordning (också en
+# `spacer`, som blir en tom ruta utan klass: den hoppas över som ruta men
+# räknas i indexet).
+#
+# BARA row och col. En `callout` lägger sina barn genom layoutFlow, där en
+# `spacer` försvinner helt och en understruken rubrik lägger beslag på en extra
+# nod — en serie som ska bära två olika räkneregler går isär förr eller senare.
+# Callouten är alltså en ruta, som förut.
+
+
+def _ritas(sek: Any) -> bool:
+    """Blir sektionen en ruta att peka på? `spacer` flyttar bara ner y."""
+    return (isinstance(sek, dict) and bool(sek.get("kind"))
+            and sek.get("kind") != "spacer")
+
+
+def _barnbarande(sek: Any) -> bool:
+    return (isinstance(sek, dict) and sek.get("kind") in ("row", "col")
+            and isinstance(sek.get("children"), list))
+
+
+def _tavelnoder(doc: dict) -> list[tuple[str, Any, str]]:
+    """(element-id, sektion, JSON-väg) för varje nod motorn ritar, i ordning.
+
+    Vägen har elementkartans form (lesson_board.elementkarta/_slot förstår
+    den): `boards[0].sections[5].children[1]`."""
+    ut: list[tuple[str, Any, str]] = []
     n = 0
-    for brade in (doc.get("boards") or []):
+    for bi, brade in enumerate(doc.get("boards") or []):
         if not isinstance(brade, dict):
             continue
         kolumner = brade.get("columns")
         if kolumner:
-            listor = [(k or {}).get("sections") or [] for k in kolumner]
+            listor = [((k or {}).get("sections") or [],
+                       f"boards[{bi}].columns[{ci}].sections")
+                      for ci, k in enumerate(kolumner)]
         else:
-            listor = [brade.get("sections") or []]
-        for sektioner in listor:
-            for sek in sektioner:
-                if not isinstance(sek, dict) or sek.get("kind") == "spacer":
+            listor = [(brade.get("sections") or [], f"boards[{bi}].sections")]
+        for sektioner, vag in listor:
+            for si, sek in enumerate(sektioner):
+                if not _ritas(sek):
                     continue
-                ut.append((f"tav{n}", sek))
+                _nod(f"tav{n}", sek, f"{vag}[{si}]", ut)
                 n += 1
                 # `is not None` och inte sanningsvärde: `"underline": {}` är
                 # ett TOMT objekt, falskt i Python men sant i JS — och det är
@@ -192,16 +223,103 @@ def _tavelelement(doc: dict) -> list[tuple[str, Any]]:
                 if (sek.get("kind") == "heading"
                         and sek.get("underline") is not None):
                     n += 1                      # understrykningens egen nod
-        for ann in (brade.get("annotations") or []):
-            ut.append((f"tav{n}", ann))
+        for ai, ann in enumerate(brade.get("annotations") or []):
+            _nod(f"tav{n}", ann, f"boards[{bi}].annotations[{ai}]", ut)
             n += 1
+    return ut
+
+
+def _nod(eid: str, sek: Any, vag: str, ut: list) -> None:
+    """Noden själv och — för en row/col — dess barn, med punktserien."""
+    ut.append((eid, sek, vag))
+    if not _barnbarande(sek):
+        return
+    for j, barn in enumerate(sek["children"]):
+        if _ritas(barn):
+            _nod(f"{eid}.{j}", barn, f"{vag}.children[{j}]", ut)
+
+
+def _tavelelement(doc: dict) -> list[tuple[str, Any]]:
+    """Toppnivåns noder — barnen hör till sin förälder och diffas där."""
+    return [(i, s) for i, s, _ in _tavelnoder(doc) if "." not in i]
+
+
+def tavelvag(doc: dict, elid: str) -> str | None:
+    """Elementets JSON-väg, eller None när id:t inte finns i dokumentet.
+
+    Den riktade omskrivningen (lesson_board.refine_board) översätter lärarens
+    markering till en väg med den här. Utan väg finns inget mål att låsa, och
+    då går varvet dagens väg — en helomskrivning."""
+    if not isinstance(doc, dict) or not elid:
+        return None
+    for i, _sek, vag in _tavelnoder(doc):
+        if i == elid:
+            return vag
+    return None
+
+
+def _utan_barn(sek: dict) -> str:
+    return _kanon({k: v for k, v in sek.items() if k != "children"})
+
+
+def _barndiff(fore_sek: Any, efter_sek: Any, eid: str) -> list[str]:
+    """Id:n för de BARN som skiljer sig — tom lista när raden ska märkas hel.
+
+    Läraren markerade formeln, inte raden. Är det bara barnen som skiljer sig
+    ska nålen sitta på barnet; ändrades raden själv (gap, justering, bredd)
+    eller bytte den sort är det raden som är ändringen."""
+    if not (_barnbarande(fore_sek) and _barnbarande(efter_sek)):
+        return []
+    if fore_sek.get("kind") != efter_sek.get("kind"):
+        return []
+    if _utan_barn(fore_sek) != _utan_barn(efter_sek):
+        return []
+    return _flode(fore_sek["children"], efter_sek["children"], eid)
+
+
+def _flode(fore: list, efter: list, eid: str) -> list[str]:
+    """Ändrade barn i en syskonlista — som `_lista`, men med djupet kvar."""
+    a = [_kanon(x) for x in fore]
+    b = [_kanon(x) for x in efter]
+    ut: list[str] = []
+    for tag, i1, i2, j1, j2 in SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
+        if tag == "equal":
+            continue
+        if tag == "delete":
+            j = min(j1, len(efter) - 1)
+            if j >= 0 and _ritas(efter[j]):
+                ut.append(f"{eid}.{j}")
+            continue
+        for j in range(j1, j2):
+            if not _ritas(efter[j]):
+                continue
+            i = i1 + (j - j1)
+            gammal = fore[i] if tag == "replace" and i < i2 else None
+            djupare = _barndiff(gammal, efter[j], f"{eid}.{j}")
+            ut.extend(djupare or [f"{eid}.{j}"])
     return ut
 
 
 def _tavla(fore: dict, efter: dict) -> list[str]:
     f = _tavelelement(fore)
     e = _tavelelement(efter)
-    ut = _lista([s for _, s in f], [s for _, s in e], lambda j: e[j][0])
+    a = [_kanon(s) for _, s in f]
+    b = [_kanon(s) for _, s in e]
+    ut: list[str] = []
+    for tag, i1, i2, j1, j2 in SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
+        if tag == "equal":
+            continue
+        if tag == "delete":
+            # Inget nytt att märka: peka på grannen som nu står där.
+            j = min(j1, len(e) - 1)
+            if j >= 0:
+                ut.append(e[j][0])
+            continue
+        for j in range(j1, j2):
+            i = i1 + (j - j1)
+            gammal = f[i][1] if tag == "replace" and i < i2 else None
+            djupare = _barndiff(gammal, e[j][1], e[j][0])
+            ut.extend(djupare or [e[j][0]])
     # Titeln står inte som en egen nod — den bärs av brädets rubriksektion, och
     # den fångas redan ovan. Ändras BARA brädets ram (mått, färg, krita) finns
     # det ingenting på tavlan att peka på, och då märks ingenting. Ärligt.

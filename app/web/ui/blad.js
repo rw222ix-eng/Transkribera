@@ -720,17 +720,47 @@ window.Blad = (() => {
        är innehållet en gång till. */
     return rubrik ? `${rubrik} · blocket` : t.slice(0, 33) + '…';
   }
+  /* ── BARNEN I EN RAD (2026-09-05) ──
+     Läraren: «jag kan inte markera allt heller, allting är inte markerbart».
+     Sedan dramaturgin ligger vänsterns figur, begreppsrader, formler och
+     Vanligt fel i EN `row` — och raden var EN ruta att peka på, för motorn
+     strök `wb-element` på sina barn (tavla-wb.js renderSection). Nu bär barnen
+     `wb-del`, och de får ett eget id ur förälderns med punkt: `tav5.1`,
+     `tav5.1.2`. Talet är barnets index bland ALLA syskon i DOM-ordning, och
+     det är med flit samma tal som JSON:ens `children[1]` — motorn ritar varje
+     barn i en row/col, också en `spacer` (den blir en tom ruta utan klass och
+     hoppas därför över här, men den räknas). Serverns nålserie räknar likadant
+     (app/dokumentdiff.py `_tavelnoder`), och det är HELA poängen: ett id som
+     glider isär mellan blad och server pekar en nål på fel ruta.
+
+     TOPPNIVÅNS SERIE (`tav0`, `tav1` …) är oförändrad. Sparade utkast, spåret
+     och testerna bär den.
+
+     Listpunkter och tabellceller blir INTE egna rutor, varken nu eller sedan:
+     motorn ritar en lista och en tabell som ETT element (WB.list, WB.table),
+     och det finns ingen nod per punkt eller per cell att fästa något på. En
+     halv markering vore sämre än ingen. */
   function taggaTavla(host, v) {
     const andrat = (v && v.andrat) || [];
     let rubrik = '';
     const raknare = {};
-    $$('.wb-element', host).forEach((el, n) => {
-      el.dataset.el = 'tav' + n;
+    const barnen = (far, id) => [...far.children].forEach((barn, i) => {
+      if (!barn.classList || !barn.classList.contains('wb-del')) return;
+      dop(barn, id + '.' + i, false);
+    });
+    /* `toppen` avgör om elementet får sätta RUBRIKEN för de följande. Bara
+       toppnivån gör det: en kort etikett inne i en rad («Vanligt fel:») hör
+       till sin rad, och hade den blivit rubrik så hette resten av tavlans
+       formler «Vanligt fel · formel 4». */
+    function dop(el, id, toppen) {
+      el.dataset.el = id;
       el.dataset.namn = tavnamn(el, rubrik, raknare);
       const t = (el.textContent || '').replace(/\s+/g, ' ').trim();
-      if (el.classList.contains('wb-text') && t && t.length <= 24) rubrik = t.replace(/[:.]+$/, '');
-      if (andrat.includes('tav' + n)) el.classList.add('andrad');
-    });
+      if (toppen && el.classList.contains('wb-text') && t && t.length <= 24) rubrik = t.replace(/[:.]+$/, '');
+      if (andrat.includes(id)) el.classList.add('andrad');
+      barnen(el, id);
+    }
+    $$('.wb-element', host).forEach((el, n) => dop(el, 'tav' + n, true));
     /* EFTER slingan: `tavnamn` läser elementets textContent, och en prick som
        satts först hade kunnat hamna i namnet. Prickarna rör inte layouten —
        motorn har redan mätt, och de ligger absolut inne i en absolut ruta. */

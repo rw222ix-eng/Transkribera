@@ -225,6 +225,96 @@ def test_tva_braden_delar_en_enda_serie():
     assert dd.andrade_element("tavla", doc("d"), doc("NY")) == ["tav3"]
 
 
+# --------------------------------------------------------- barnen i raden --
+# Läraren 2026-09-05: «jag kan inte markera allt heller, allting är inte
+# markerbart». Hela figur-och-formler-raden var EN ruta. Nu bär motorn `wb-del`
+# på barnen (tavla-wb.js renderSection), blad.js taggaTavla ger dem förälderns
+# id plus sitt eget index med punkt, och serien här måste räknas EXAKT likadant
+# — annars pekar nålen på fel ruta.
+
+
+def _mat(t):
+    return {"kind": "math", "latex": t}
+
+
+def _rad(*barn, **falt):
+    return {"kind": "row", "children": list(barn), **falt}
+
+
+def test_barnen_i_en_rad_far_punktserie_ur_foraldern():
+    fore = _brade(_txt("a"), _rad(_mat("x"), _mat("y")))
+    efter = _brade(_txt("a"), _rad(_mat("x"), _mat("NY")))
+    assert dd.andrade_element("tavla", fore, efter) == ["tav1.1"]
+
+
+def test_barnbarn_i_en_kolumn_gar_hela_vagen_ned():
+    """`tav0.1.2` — index bland syskonen, rekursivt, precis som JSON:ens
+    `children[1].children[2]`."""
+    def doc(sista):
+        return _brade(_rad(_mat("v"),
+                           {"kind": "col",
+                            "children": [_txt("a"), _txt("b"), _txt(sista)]}))
+    assert dd.andrade_element("tavla", doc("c"), doc("NY")) == ["tav0.1.2"]
+
+
+def test_raden_sjalv_marks_nar_det_ar_raden_som_andrades():
+    """Byter raden gap eller justering är det RADEN nålen ska sitta på, inte
+    ett av barnen."""
+    fore = _brade(_rad(_mat("x"), _mat("y"), gap=10))
+    efter = _brade(_rad(_mat("x"), _mat("y"), gap=40))
+    assert dd.andrade_element("tavla", fore, efter) == ["tav0"]
+
+
+def test_spacer_i_en_rad_raknas_i_indexet_men_blir_ingen_ruta():
+    """Motorn ritar varje barn i en row, också en `spacer` — den blir en tom
+    ruta utan klass. Den är alltså inte markerbar, men den TAR sitt nummer, och
+    räknas den bort pekar nålen på fel barn."""
+    def doc(sista):
+        return _brade(_rad(_mat("x"), {"kind": "spacer", "size": 8}, _mat(sista)))
+    assert dd.andrade_element("tavla", doc("y"), doc("NY")) == ["tav0.2"]
+    # …och en ändring som BARA gäller spacern har ingen ruta att sitta på: då
+    # är det raden som är ändringen.
+    fore = _brade(_rad(_mat("x"), {"kind": "spacer", "size": 8}))
+    efter = _brade(_rad(_mat("x"), {"kind": "spacer", "size": 30}))
+    assert dd.andrade_element("tavla", fore, efter) == ["tav0"]
+
+
+def test_callouten_ar_en_ruta_och_dess_barn_numreras_inte():
+    """Callouten lägger sina barn genom layoutFlow, där en spacer försvinner
+    helt och en understruken rubrik tar en extra nod. Två räkneregler i en
+    serie går isär förr eller senare — callouten är därför en ruta."""
+    def doc(sista):
+        return _brade({"kind": "callout", "children": [_txt("a"), _txt(sista)]})
+    assert dd.andrade_element("tavla", doc("b"), doc("NY")) == ["tav0"]
+
+
+def test_tavelvag_ger_elementkartans_vag():
+    doc = _brade(_txt("a"), _rad(_mat("x"),
+                                 {"kind": "col", "children": [_txt("q")]}))
+    assert dd.tavelvag(doc, "tav0") == "boards[0].sections[0]"
+    assert dd.tavelvag(doc, "tav1.1") == "boards[0].sections[1].children[1]"
+    assert dd.tavelvag(doc, "tav1.1.0") == \
+        "boards[0].sections[1].children[1].children[0]"
+    # Ett id som inte finns ger None — och då finns inget mål att låsa.
+    assert dd.tavelvag(doc, "tav9") is None
+    assert dd.tavelvag(doc, "") is None
+
+
+def test_tavelvag_raknar_kolumner_och_understrykningens_reserverade_nummer():
+    rub = {"kind": "heading", "text": "Derivator", "underline": {}}
+    doc = {"title": "T", "boards": [{
+        "width": 900, "height": 780,
+        "columns": [{"sections": [rub, _txt("v")]},
+                    {"sections": [_rad(_mat("h"))]}]}]}
+    # tav1 är understrykningens egen nod: motorn ritar den, dokumentet har
+    # ingen sektion där, och vägen finns alltså inte.
+    assert dd.tavelvag(doc, "tav0") == "boards[0].columns[0].sections[0]"
+    assert dd.tavelvag(doc, "tav1") is None
+    assert dd.tavelvag(doc, "tav2") == "boards[0].columns[0].sections[1]"
+    assert dd.tavelvag(doc, "tav3.0") == \
+        "boards[0].columns[1].sections[0].children[0]"
+
+
 # ------------------------------------------------------------------ ramen --
 
 def test_okand_typ_och_trasiga_dokument_ger_tom_lista():

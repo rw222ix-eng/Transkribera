@@ -486,6 +486,18 @@
 .granskaskal:not([data-valj]) .gdok [data-el]:hover{outline:1px dashed rgba(96,168,221,.45);outline-offset:4px}
 .gdok [data-el][data-mal]{outline:2px solid var(--sky-deep);outline-offset:4px;background:color-mix(in srgb,var(--atmosphere) 14%,transparent)}
 .gdok [data-el][data-pekad]{outline:2px solid var(--atmosphere);outline-offset:4px;background:color-mix(in srgb,var(--atmosphere) 18%,transparent)}
+/* ── BARNEN I EN TAVELRAD (2026-09-05) ──
+   De är markerbara nu (blad.js taggaTavla, `wb-del`), men en streckad ram runt
+   varje formel INUTI ramen runt raden gör tavlan till ett rutnät att läsa i
+   stället för en tavla. Barnet vilar därför utan egen ram och visar sig först
+   under pekaren — och då slocknar raden ovanför, så att det syns VILKEN av de
+   två ett klick väljer. Etiketten «Klicka för kommentar eller bild» hör till
+   raden: satt över en formel på 30 px täcker den grannen. */
+.granskaskal[data-valj] .gdok .wb-del[data-el]{outline:none;outline-offset:2px}
+.granskaskal[data-valj] .gdok .wb-del[data-el]:hover{outline:2px solid var(--atmosphere);outline-offset:2px}
+.granskaskal[data-valj] .gdok [data-el]:has(.wb-del[data-el]:hover){outline-color:transparent;background:transparent}
+.granskaskal[data-valj] .gdok .wb-del[data-el]::after{content:none}
+.gdok .wb-del[data-el][data-mal],.gdok .wb-del[data-el][data-pekad]{outline-offset:2px}
 /* ── VÄNTAN SOM SYNS ───────────────────────────────
    Ett svep över de rutor varvet skriver om, så länge det går. Det ligger i ett
    eget barn (`.gshimmer`, satt av granska.js) och inte i ett `::after`:

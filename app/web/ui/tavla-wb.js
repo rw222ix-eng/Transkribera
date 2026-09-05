@@ -2204,7 +2204,16 @@ function renderSection(spec, boardColor) {  // returns a DOM node plus its estim
           // nested-inside-row/col: strip the wb-element class so the
           // host's overlap validator doesn't treat these as peers of
           // top-level elements.
+          // …men de får en EGEN klass i stället för ingen alls (2026-09-05).
+          // Läraren: «jag kan inte markera allt heller, allting är inte
+          // markerbart». Canvasen fäster på [data-el], blad.js taggaTavla
+          // satte det bara på .wb-element, och sedan dramaturgin ligger hela
+          // vänsterns figur, begreppsrader och formler i EN row: en enda
+          // klump att peka på. `wb-del` är alltså bara ett HANDTAG för
+          // taggningen — överlappsvakten räknar fortfarande bara wb-element,
+          // och layouten rör klassen inte alls.
           c.node.classList.remove('wb-element');
+          c.node.classList.add('wb-del');
           node.appendChild(c.node);
         }
       }
@@ -2230,7 +2239,9 @@ function renderSection(spec, boardColor) {  // returns a DOM node plus its estim
           c.node.style.position = 'relative';
           c.node.style.left = '';
           c.node.style.top = '';
+          // samma handtag som i `row` ovan — se kommentaren där.
           c.node.classList.remove('wb-element');
+          c.node.classList.add('wb-del');
           node.appendChild(c.node);
         }
       }
