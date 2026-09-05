@@ -187,6 +187,19 @@ def _begreppsrader(doc: dict) -> list[str]:
     return ut
 
 
+def _formler_i_spalten(doc: dict) -> int:
+    """Math-sektionerna i vänsterspalten FÖRE «Vanligt fel:» — alltså tavlans
+    regler, inte det felaktiga ledet som står under varningsrubriken."""
+    spalt = _vanstersektioner(doc)[-1]["children"][1]["children"]
+    n = 0
+    for sek in spalt:
+        if sek.get("text", "").startswith("Vanligt fel"):
+            break
+        if sek["kind"] == "math":
+            n += 1
+    return n
+
+
 def _algebrashoten() -> dict:
     return next(doc for uppdrag, doc in lb.FEW_SHOTS if "Uttryck" in uppdrag)
 
@@ -202,9 +215,15 @@ def test_vanstern_borjar_i_begreppen():
     """«Vi behöver trycka mer på begreppen. Utgå från grunden, från de begrepp
     vi berör. Snackar vi om uttryck: vad är ett uttryck?» (2026-09-05.) Alla
     fyra shotarna bär formen, för domen gäller all matematik appen skriver —
-    uttrycket är exemplet på formen, inte formens gräns."""
+    uttrycket är exemplet på formen, inte formens gräns.
+
+    Samma dag, eftermiddagen, kom taket: «i stället för all den texten är det
+    bättre att skriva upp typ två regler. En regel kanske räcker.» Alltså inte
+    «minst en rad» längre utan 1–3 rader och högst två formler."""
     for uppdrag, doc in lb.FEW_SHOTS:
-        assert _begreppsrader(doc), uppdrag
+        rader = _begreppsrader(doc)
+        assert 1 <= len(rader) <= 3, (uppdrag, rader)
+        assert _formler_i_spalten(doc) <= 2, (uppdrag, _formler_i_spalten(doc))
     ord_i_verbshoten = " ".join(_begreppsrader(_algebrashoten())).lower()
     for verb in ("utveckla", "faktorisera", "förlänga"):
         assert verb in ord_i_verbshoten, verb
@@ -220,20 +239,51 @@ def _prefix(doc: dict) -> set:
 
 def test_exempelstegen_pekar_pa_vanstern():
     """«Nu ska man utveckla det här uttrycket. Då trycker man på vad utveckla
-    betyder.» Steget börjar i ordet, och ordet står på vänstern — annars finns
-    ingen rad att peka tillbaka på. Prövas på ALLA shotar: formen bär utan
-    algebra («Sätt in», «Lös ut», «Bestäm», «Avläs»)."""
+    betyder.» Steget börjar i ordet — men bara MOMENTETS EGNA ord kräver en
+    rad på vänstern. Kravet stod förut åt andra hållet, och det var det som
+    fyllde vänstern: «multiplicera varje term med varje term, term gånger
+    term, tal för sig, x för sig — det är vedertagna regler som vi kommer
+    prata om» (2026-09-05). Ett förkunskapsverb sägs, det skrivs inte."""
     med_steg = 0
     for uppdrag, doc in lb.FEW_SHOTS:
-        orden = _prefix(doc)
         punkter = _metodsteg(doc)
         if punkter:
             med_steg += 1
         for punkt in punkter:
-            assert punkt.split(":")[0].strip().lower() in orden, (uppdrag, punkt)
+            ord_, _, resten = punkt.partition(":")
+            assert ord_.strip() and resten.strip(), (uppdrag, punkt)
     # Fallgalleriet har inga metodsteg alls (läraren pratar och pekar) — men
     # tre av fyra ska ha dem, annars kan testet gå tomt utan att någon märker.
     assert med_steg >= 3, med_steg
+    # Momentets EGNA verb står som rad OCH används av ett steg: det är den
+    # kopplingen läraren pekar längs.
+    algebra = _algebrashoten()
+    anvanda = {p.split(":")[0].strip().lower() for p in _metodsteg(algebra)}
+    assert {"utveckla", "faktorisera"} <= (_prefix(algebra) & anvanda)
+    # Och förkunskapsverbet får börja ett steg utan att ha en rad: Pythagoras
+    # sätter in och löser ut utan att de orden står på vänstern.
+    pyt = next(d for u, d in lb.FEW_SHOTS if "Pythagoras" in u)
+    assert "sätt in" not in _prefix(pyt)
+    assert any(p.lower().startswith("sätt in:") for p in _metodsteg(pyt))
+
+
+# Förkunskaperna: klassen kan dem sedan tidigare kurser, och läraren säger
+# dem i stället för att skriva dem. En rad som börjar med något av de här
+# orden är den sortens rad domen 2026-09-05 fällde.
+FORKUNSKAPSORD = {"multiplicera", "förenkla", "beräkna", "beräkna värdet",
+                  "tecken", "area", "sätt in", "sätta in", "lös ut", "lösa ut",
+                  "bestäm", "bestämma", "avläs", "avläsa", "förkorta"}
+
+
+def test_en_regel_star_en_gang():
+    """«I stället för all den texten är det bättre att skriva upp typ två
+    regler.» Regeln stod två gånger på tavlan som fälldes: som mening i
+    begreppsraden («Multiplicera: varje term mot varje term») och som formel.
+    Ingen shot får visa den dubbleringen, och ingen får visa en rad för ett
+    verb klassen redan kan."""
+    for uppdrag, doc in lb.FEW_SHOTS:
+        for ord_ in _prefix(doc):
+            assert ord_ not in FORKUNSKAPSORD, (uppdrag, ord_)
 
 
 # ------------------------------------------------------------------ prompt --
@@ -274,11 +324,36 @@ def test_prompten_satter_begreppen_forst():
     # Aldrig en fast ordlista: momentet ger orden, och exemplen i prompten
     # ska komma ur olika områden.
     assert "aldrig " in p and "av en färdig lista" in p
+    # Orden i prompten kommer ur olika områden. De stod förut i en uppräkning
+    # inne i 8c; den ströks 2026-09-05 (uppräkningen lockade till fler rader,
+    # och prompten skulle kortas), så nu bärs de av metodstegens exempel —
+    # «Derivera: …», «Avrunda: …», «Konstruera: …».
     for verb in ("derivera", "avrunda", "konstruera"):
-        assert verb in p, verb
+        assert verb in p.lower(), verb
     # Och i exemplen: steget börjar i ordet från vänstern.
     assert "BÖRJAR med verbet eller begreppet" in p
     assert "BEGREPPSDRIVEN" in p
+
+
+def test_prompten_forbjuder_areamodellen_och_taket():
+    """Domen 2026-09-05, eftermiddagen: «det är bara massa kvadrater och
+    rektanglar, och en massa text till höger … varför just kvadrat? Då tror
+    eleverna att det handlar om kvadrater och rektanglar, area. Men det är
+    uttryck.» Prompten ska bära både taket och kroppsförbudet själv — shotarna
+    visar formen, men prompten är den som gäller alla moment."""
+    p = lb.build_prompt("Ma2a", "IndA", "andragradsuttryck")
+    # Taket: högst tre rader, högst två formler, en regel en gång.
+    assert "HÖGST TRE, helst två" in p
+    assert "HÖGST TVÅ formler på vänstern" in p
+    assert "EN regel står EN gång, som FORMEL" in p
+    # Förkunskaperna skrivs aldrig, hur ofta exemplen än använder dem.
+    assert "Förkunskaper klassen redan har" in p
+    assert "FÖRKUNSKAPSVERB" in p
+    # Kroppen hör till geometrin; algebran får anatomin i figurens plats.
+    assert "area- eller volymmodell" in p
+    assert "GEOMETRIMOMENT" in p
+    assert "har INGEN kropp" in p
+    assert "bokens ingång, inte tavlans tak" in p
 
 
 def test_prompten_forbjuder_rutor_och_kraver_bredden():
@@ -819,6 +894,13 @@ def test_domaren_provar_ocksa_begreppskopplingen():
     t = lb.build_tackning_prompt({"boards": []}, "LÄRARENS URVAL: 1201, 1202")
     assert "BEGREPPSKOPPLINGEN" in t
     assert "formelsamling" in t
+    # Och sedan eftermiddagens dom (2026-09-05) går kopplingen åt BÅDA håll:
+    # kompletteringen lade förut till en rad för varje verb exemplen använde,
+    # och det var så vänstern blev sex rader tjock.
+    assert "ÅT BÅDA HÅLL" in t
+    assert "FÖR TJOCK" in t and "STRYKA" in t
+    assert "förkunskapsverb" in t
+    assert "fler än tre begreppsrader" in t and "fler än två formler" in t
     # Fyndformen är oförändrad, och fejk.py matchar fortfarande på ordet.
     assert '{"saknas"' in t
     assert "täckningsdomare" in t

@@ -131,16 +131,15 @@ INSTRUCTION = (
     # bär två begrepp — båda ska få sin definition, kort och tidigt.
     "5. Vardagsspråket om vad begreppet ÄR — konkret från början: en kort "
     "definitionsmening per begrepp momentet bär («Kvadratroten ur A: talet "
-    "som gånger sig självt ger A» — och handlar lektionen också om kubikroten "
-    "får den sin egen rad). En vardagsmening som bär idén får följa. Sedan "
-    "inga fler meningar.\n"
+    "som gånger sig självt ger A»; bär lektionen också kubikroten får den sin "
+    "rad). Sedan inga fler meningar.\n"
     # Lärarens dom (2026-09-05): «vad är ett uttryck? Vad INNEHÅLLER ett
     # uttryck?» Den andra frågan är lika viktig som den första, men den
     # besvaras inte med fler meningar i sidflödet: delarna döps i figuren
     # (7) och begreppen får sina rader i spalten (8c).
     "5b. Vad begreppet INNEHÅLLER hör också hemma på vänstern, men inte som "
-    "fler meningar: delarna döps i figurraden och begreppen får varsin rad i "
-    "spalten bredvid figuren.\n"
+    "fler meningar: delarna döps i figurraden (7) och begreppen får sina "
+    "rader i spalten (8c).\n"
     "6. Figuren och formlerna SIDA VID SIDA i en row: figuren till vänster, "
     "och till höger om den en col med formelkedjan och \"Vanligt fel:\". "
     "Vänstertavlan är 900 px bred — staplas allt under varandra blir den en "
@@ -152,27 +151,40 @@ INSTRUCTION = (
     "motorn ger en list ingen egen bredd, och utan col lägger sig spalten till "
     "höger rakt ovanpå punkterna. Grafer, figurer och tabeller bär sin bredd "
     "själva och kan ligga direkt i raden.\n"
-    "7. Figuren är generisk: shape eller graph med bokstäver som beteckningar "
-    "(a, b, c, x_1, y_1), aldrig konkreta tal, gärna med arrows och korta "
-    "etiketter att peka på. Saknar momentet naturlig figur står den generiska "
-    "uppställningen där i stället — bokstäver, inte siffror — och då är den "
-    "DÖPT: en col med width (t.ex. 300), uttrycket i en math-sektion "
-    "(ax + b) och under den korta etiketter, en per del («ax och b är "
-    "termer», «a och x är faktorer», «a koefficient, x variabel»). Läraren "
-    "ska kunna peka på termen när hon säger ordet term.\n"
+    # KROPPAR BARA I GEOMETRIN. Lärarens dom (2026-09-05) över en tavla om
+    # andragradsuttryck som bar en kvadrat och en rektangel: «det är bara
+    # massa kvadrater och rektanglar. Det är inte så att vi snackar om
+    # kvadrater hela tiden när vi snackar om uttryck av andra graden. Varför
+    # just kvadrat? Då tror eleverna att det handlar om kvadrater och
+    # rektanglar, area. Men det är uttryck.»
+    "7. Figurens plats bär momentets ANATOMI. Handlar momentet om figurer "
+    "eller grafer (geometri, trigonometri, funktioner) står KROPPEN där: "
+    "shape eller graph med bokstäver som beteckningar (a, b, c, x_1, y_1), "
+    "aldrig konkreta tal, gärna med arrows och korta etiketter att peka på. "
+    "Allt annat — algebra, ekvationer, procent, statistik, sannolikhet — har "
+    "INGEN kropp: där står den generiska uppställningen DÖPT, en col med "
+    "width (t.ex. 300), formen i en math-sektion och under den korta "
+    "etiketter, en per del (x^2 + 5x - 7: «andragradsterm», "
+    "«förstagradsterm», «konstant»). Bär momentet två former ritas båda, den "
+    "andra under den första ((x + 3)(x + 2): «två binom»). Läraren ska kunna "
+    "peka på termen när hon säger ordet term.\n"
     "7b. EN bokstavsuppsättning för hela tavlan: de bokstäver figuren inför "
     "(a, b …) är de som används i varje formel och exempel därefter. En ny "
     "bokstav får aldrig dyka upp från ingenstans — behövs den ska den "
     "introduceras i figuren eller definitionsmeningen först.\n"
-    # TVÅ KROPPAR, DÖPTA TIDIGT. Lärarens dom (2026-08-21), på en tavla där
-    # exempel 2:s kub dök upp från ingenstans: «volymen 216 — var kommer den
-    # ifrån? Bättre att man på vänstra delen av tavlan redan har döpt den här
-    # kvadraten och den här kuben, och återanvänder de figurerna. Benämn dem
-    # som kvadraten och kuben bara, med lite mått, lite kort.»
-    "7c. Bär momentet två begrepp med varsin naturlig kropp (kvadraten och "
-    "kuben) ritas BÅDA i figurraden — små, döpta med sitt vardagsnamn "
-    "(«kvadraten», «kuben») och med bokstavsmått. Det är de kropparna "
-    "exemplen sedan pekar tillbaka på.\n"
+    # AREAMODELLEN. Samma dom (2026-09-05): «figurer med olika sidor som blir
+    # en area är bara ETT sätt att få upphöjt två, inte själva saken.
+    # Kvadraten kan man använda för att visa att det blir ett
+    # andragradsuttryck, men jag tror det försvårar mer än det hjälper.»
+    # Andra halvan av regeln är den äldre domen (2026-08-21) om kuben som dök
+    # upp från ingenstans i exempel 2 — den gäller nu bara geometrimoment.
+    "7c. Rita ALDRIG en area- eller volymmodell för att DEFINIERA ett "
+    "algebrabegrepp: kvadraten är ett sätt att illustrera upphöjt två, inte "
+    "vad ett uttryck ÄR, och den får eleven att tro att lektionen handlar om "
+    "area. Öppnar boken avsnittet med en kvadrat är det bokens ingång, inte "
+    "tavlans tak. Bär ett GEOMETRIMOMENT två begrepp med varsin naturlig "
+    "kropp (kvadraten och kuben) ritas båda — små, döpta med vardagsnamn och "
+    "bokstavsmått; det är dem exemplen pekar tillbaka på.\n"
     "8. Formlerna kommer EFTER figuren (till höger om den), aldrig före. "
     "Formeln ska se ut att komma ur figuren. Står flera formler på tavlan ska "
     "de stå i den ordning de härleds, så att läraren kan peka sig fram genom "
@@ -183,10 +195,12 @@ INSTRUCTION = (
     "8b. Formlerna är REGLER i bokstäver — inga uträknade sifferexempel på "
     "vänstertavlan: en rad med siffror och mellanled är ett exempel, och "
     "exempel bor på högertavlan. Även en minsta sifferillustration av en "
+    # Samma sak gäller jämförelser som exakt-mot-närmevärde: de bärs av ett
+    # exempel på högertavlan, aldrig av en egen sifferruta på vänstern. Raden
+    # om det ströks 2026-09-05 — exempelreglerna säger redan samma sak, och
+    # prompten skulle KORTAS.
     "regel ($\\sqrt[3]{-8} = -2$) hör till exemplen — på vänstern står bara "
-    "bokstäver. Detsamma gäller jämförelser som exakt-mot-närmevärde: de bärs "
-    "naturligt av ett exempel på högertavlan («låt roten stå kvar — det är "
-    "det exakta svaret»), aldrig av en egen sifferruta på vänstern.\n"
+    "bokstäver.\n"
     # BEGREPPEN FÖRST. Lärarens dom (2026-09-05): «Vi behöver trycka mer på
     # begreppen. Utgå från grunden, från de begrepp vi berör. Snackar vi om
     # uttryck: vad är ett uttryck? Vad innehåller ett uttryck? Allt det kör vi
@@ -198,25 +212,36 @@ INSTRUCTION = (
     # poängen: de står i formelsamlingen, och en spalt full av dem trängde ut
     # just det lektionen handlar om. Kvar ur den gamla regeln är dess andra
     # halva, att momentets tillämpningsformel hör till exemplet.
+    # FÅ RADER. Domens andra halva (2026-09-05), över sex textrader på
+    # vänstern: «om jag skriver upp det här på tavlan kommer eleverna bara
+    # sitta där och inte fatta någonting. Multiplicera varje term med varje
+    # term, term gånger term, tal för sig, x för sig: det är vedertagna
+    # regler som vi kommer prata om. I stället för all den texten är det
+    # bättre att skriva upp typ två regler. En regel kanske räcker.»
     "8c. Domen gäller ALL matematik tavlan kan bära: varje moment och varje "
     "källa (boken, ett tidigare arbete, minnet, en förlaga eller ett fritt "
-    "uppdrag). Spalten till höger om figuren öppnar med BEGREPPSRADERNA: en "
-    "text-rad per begrepp och verb MOMENTET bär, formen «Ord: vad det är», "
-    "högst ~60 tecken, i den ordning exemplen använder dem. Verben ÄR "
-    "begrepp: det momentet ber eleven GÖRA får varsin rad, precis som de "
-    "substantiv momentet inför. Vilka orden blir avgörs av momentet, aldrig "
-    "av en färdig lista — derivera, lösa ut, bestämma, avrunda, förkorta, "
-    "konstruera och uppskatta är begrepp lika mycket som utveckla och "
-    "faktorisera. Först EFTER raderna kommer bokstavsformeln som visar vad "
-    "verbet GÖR, EN per verb: a(b + c) = ab + ac läst åt höger är utveckla, "
-    "åt vänster faktorisera. Sist Vanligt fel.\n"
-    "8d. Aldrig en lista räknelagar. Tumregeln för vad som INTE ska skrivas: "
-    "kan eleven slå upp regeln, och är den inte dagens begrepp, skriv den "
-    "inte — «inte en massa räknelagar och skit, det hör till deras "
-    "formelsamling». Momentets tillämpningsformel (A = a^2 \\Rightarrow "
-    "a = \\sqrt{A}) skrivs som FÖRSTA led i det exempel som använder den, "
-    "inte på vänstern: vänstern säger vad begreppet ÄR, exemplet visar vad "
-    "det används till.\n"
+    "uppdrag). Spalten till höger om figuren öppnar med BEGREPPSRADERNA: "
+    "HÖGST TRE, helst två, formen «Ord: vad det är», högst ~60 tecken, i den "
+    "ordning exemplen använder dem. Bara momentets EGNA NYA begrepp «Binom: "
+    "uttryck med två termer», «Sort: x^2 och x är olika sorter». Verben ÄR "
+    "begrepp, men bara det verb som ÄR det som lärs ut får en rad (utveckla, "
+    "faktorisera, derivera, kvadratkomplettera). Förkunskaper klassen redan "
+    "har — multiplicera, förenkla, beräkna värdet, teckenregler, sätta in, "
+    "lösa ut — skrivs ALDRIG, hur ofta exemplen än använder dem: de är för "
+    "uppenbara för tavlan. Vilka orden blir avgörs av momentet, aldrig av en "
+    "färdig lista.\n"
+    "8d. EN regel står EN gång, som FORMEL — aldrig som mening i en "
+    "begreppsrad och som formel också. HÖGST TVÅ formler på vänstern, och de "
+    "ska vara de som ÄR momentet ((a + b)(c + d) = ac + ad + bc + bd på en "
+    "lektion om andragradsuttryck, a(b + c) = ab + ac läst åt höger är "
+    "utveckla och åt vänster faktorisera, produktregeln på en "
+    "deriveringslektion). Aldrig en lista räknelagar: kan eleven slå upp "
+    "regeln, och är den inte dagens begrepp, skriv den inte — «inte en massa "
+    "räknelagar och skit, det hör till deras formelsamling». Momentets "
+    "tillämpningsformel (A = a^2 \\Rightarrow a = \\sqrt{A}) skrivs som "
+    "FÖRSTA led i det exempel som använder den, inte på vänstern: vänstern "
+    "säger vad begreppet ÄR, exemplet visar vad det används till. Sist "
+    "Vanligt fel.\n"
     "9. Sist i den högra spalten: \"Vanligt fel:\" i rött (text med weight 700) "
     "följt av en underline-sektion i rött, sedan det felaktiga ledet i en "
     "math-sektion och en kort rad om varför. Inne i en row/col ritar motorn "
@@ -253,9 +278,11 @@ INSTRUCTION = (
     "multiplicera in 3:an i parentesen», «Derivera: produktregeln, u och v "
     "var för sig», «Avrunda: två värdesiffror», «Konstruera: "
     "mittpunktsnormalen till AB». Uttrycket och dess verb är bara ett exempel "
-    "på formen; momentet ger sina egna ord. Går ett steg inte att namnge med "
-    "ett begrepp från vänstern saknar det antingen sin rad där (komplettera "
-    "vänstern) eller hör inte hemma på tavlan.\n"
+    "på formen; momentet ger sina egna ord. Ett steg får gärna börja med ett "
+    "FÖRKUNSKAPSVERB (multiplicera, förenkla, sätt in) utan att det verbet "
+    "har en rad på vänstern — bara momentets EGNA verb kräver sin rad där "
+    "(se 8c). Går ett steg inte att namnge alls hör det inte hemma på "
+    "tavlan.\n"
     # LÄSRIKTNINGEN. Lärarens dom (2026-08-20), på en tavla med två figurer
     # och «Hel area: A = 2·18   A = 50/2» i samma rad: «man får kolla korsvis
     # med ögonen för att hänga med. Onödigt komplicerat. Och arean finns i en
@@ -266,10 +293,14 @@ INSTRUCTION = (
     "aldrig två parallella uträkningar i samma rad («A = 2·18   A = 50/2») "
     "— ögat ska aldrig behöva läsa korsvis. Är det andra scenariot värt att "
     "visa är det ett EGET exempel med egen rubrik, och det räknas mot taket; "
-    "annars stryks det. En vändning i tråden fortsätter NEDÅT i samma "
-    "exempel eller öppnar nästa — aldrig bredvid.\n"
-    "- Två alternativ visas som \"Väg 1\" och \"Väg 2\" under varandra — "
-    "aldrig ihopklämda på en rad med «resp.».\n"
+    "annars stryks det.\n"
+    # Kravet stod förut två gånger — här och som en egen punkt längre ned om
+    # bokens flera vägar. Slogs ihop 2026-09-05 för att korta prompten.
+    "- Finns flera vägar till svaret (som i boken) visas TVÅ: \"Väg 1\" och "
+    "\"Väg 2\" under varandra, ett par ord var om vad vägen går ut på, som "
+    "två egna rader — aldrig ihopklämda på en rad med «resp.», och aldrig en "
+    "punktlista som väver ihop stegen ur båda. Eleverna löser olika, och "
+    "genomgången ska rymma båda.\n"
     # RÖDA TRÅDEN. Lärarens dom (2026-08-20): «exemplen måste bygga på
     # varandra, så att det blir en röd tråd. Dels för att inte hoppa för
     # mycket, men även vara så pass smarta att vi kan återanvända uträkningar
@@ -291,14 +322,13 @@ INSTRUCTION = (
     "- Kedjan är BEGREPPSDRIVEN, inte bara taldriven: exempel 1 gör något med "
     "ett uttryck, exempel 2 tar SAMMA uttryck baklänges («vi går tillbaka») "
     "och exempel 3 lägger det i en ny form där ett nytt verb behövs "
-    "(uttrycket i ett bråk: förlänga, sedan förenkla genom att faktorisera "
-    "och stryka den gemensamma faktorn). Det är FORMEN som är regeln, inte "
+    "(uttrycket i ett bråk: förlänga och sedan förenkla). Det är FORMEN som "
+    "är regeln, inte "
     "algebran: momentet avgör vilka verb som finns, och saknar det motsatta "
     "verb bygger tråden vidare på situationen som förut.\n"
-    "- Exemplens kroppar HÄMTAS från vänstertavlan: «kvadraten, nu med arean "
-    "108 cm²» — exemplets figur är en liten kopia med bara måttet, inget mer. "
-    "En kropp som inte synts på vänstern (en kub med volymen 216 från "
-    "ingenstans) får inte bära ett exempel.\n"
+    "- Bär vänstern kroppar (geometrimoment) HÄMTAS exemplens kroppar därifrån: "
+    "«kvadraten, nu med arean 108 cm²» — en liten kopia med bara måttet. En "
+    "kropp som inte synts på vänstern får inte bära ett exempel.\n"
     "- Tråden får ALDRIG kosta täckningen: varje metodtyp urvalet kräver ska "
     "fortfarande beröras — välj vändningarna så att nästa metodtyp landar i "
     "samma berättelse. Går berättelsen inte att förlänga naturligt: byt "
@@ -319,17 +349,16 @@ INSTRUCTION = (
     # riktigt detta exempel — vad ska den visa egentligen?» Samma metod
     # baklänges är fortfarande samma metod, och raden hade ingen egen fråga —
     # den bara stod där.
-    "- En «Omvänt:»-rad inklämd i ett färdigt exempel är ett andra scenario "
-    "och faller på regeln ovan: samma metod åt andra hållet (dela i stället "
-    "för att dubbla före roten) är samma metod — stryk raden. Är vändningen "
-    "verkligen ny får den ett eget exempel med egen rubrik och egen fråga.\n"
+    "- En «Omvänt:»-rad inklämd i ett färdigt exempel är samma metod åt andra "
+    "hållet — stryk den. Är vändningen verkligen ny får den ett eget exempel "
+    "med egen rubrik och egen fråga.\n"
     # MINIFALLEN. Samma dom, samma kväll, på en rad småfigurer under exempel
     # 1 («Halva kvadraten: dubbla arean», «Två i rad: dela arean»): «så pass
     # enkla och oväsentliga — de kan eleverna själva upptäcka i boken. De ska
     # tas bort helt och hållet, de tar bara onödigt mycket plats.»
     "- Samma fälla i galleriform: en rad småfigurer med varsin trivial "
-    "variant under ett exempel. Varianter eleverna upptäcker själva i boken "
-    "skrivs inte på tavlan — stryk hela raden.\n"
+    "variant under ett exempel — varianter eleven upptäcker själv i boken "
+    "skrivs inte på tavlan, stryk hela raden.\n"
     # Trådens dyraste fälla, uppmätt på tredje varvet: «samma kvadrat delad
     # av en diagonal — triangelns area är 20 cm²» när kvadraten var 36.
     # Återbruk gör talen BEROENDE av varandra, och ett felräknat återbruk
@@ -384,18 +413,13 @@ INSTRUCTION = (
     "och metodsteg exemplet använder ska finnas bland vänsterns formler och "
     "metoder, så att läraren kan peka från exemplets rad tillbaka till raden "
     "där den står. Kräver exemplet något som inte står där — komplettera "
-    "vänstertavlan först, eller välj ett annat exempel. Förankringen gäller "
-    "BEGREPPEN och verben lika mycket som formlerna: använder ett metodsteg "
-    "ordet förlänga ska raden «Förlänga: …» stå på vänstern.\n"
+    "vänstertavlan först, eller välj ett annat exempel. Men förankringen får "
+    "ALDRIG bli fler rader: kräver ett steg bara ett förkunskapsverb säger "
+    "läraren det, och vänstern lämnas som den är.\n"
     "- Visa det vanliga felet INNE i ett exempel när det går: det felaktiga "
     "ledet i rött bredvid det rätta, i just den uppgift klassen tittar på. Ett "
     "fel som bara står som en regel känns inte igen; ett fel som står i "
     "exemplet gör det.\n"
-    "- Finns det flera vägar till svaret (som i boken) — visa två: \"Väg 1\" "
-    "och \"Väg 2\", ett par ord var om vad vägen går ut på, som TVÅ egna "
-    "rader. En punktlista som väver ihop stegen ur båda vägarna visar ingen "
-    "av dem («slå ihop rötterna» och «bryt ut och stryk» är två vägar, inte "
-    "tre steg). Eleverna löser olika, och genomgången ska rymma båda.\n"
     # EXAKT OCH NÄRMEVÄRDE. Lärarens dom (2026-08-21 kväll), på ett exempel
     # som bara visade ≈: «vi har inte nämnt det här med att svara exakt eller
     # med närmevärde — det har vi glömt, och det kommer på bokuppgifterna.»
@@ -410,18 +434,16 @@ INSTRUCTION = (
     "- Är boken källa (sidor eller uppgifter finns i bokblocket nedan) är "
     "tavlans mål exakt detta: kort, lätt att fatta och följsam, MEN "
     "tillräcklig för att eleven ska klara SAMTLIGA uppgifter på just de "
-    "sidorna. Gå igenom vilka uppgiftstyper som förekommer där och se till att "
-    "varje typ har det den kräver på tavlan — en formel, ett metodsteg eller "
-    "ett exempel. Saknas något är genomgången för tunn; står det som inte "
-    "behövs för de uppgifterna är den för tjock.\n"
+    "sidorna. Pröva det BAKLÄNGES, uppgift för uppgift genom det VALDA "
+    "urvalet (uppgiftsraden, inte bara sidorna): «står det den här uppgiften "
+    "kräver på tavlan — en formel, ett metodsteg eller ett exempel?». Saknas "
+    "något är genomgången för tunn; står det som inte behövs för de "
+    "uppgifterna är den för tjock.\n"
     # TÄCKNINGEN PRÖVAS BAKLÄNGES. Samma dom, andra halvan: «målet är att
     # eleverna efter genomgången ska kunna klara av alla uppgifter på de
     # sidor jag valt att utgå ifrån.» Ett svep över sidorna räcker inte —
     # det är URVALET som är kontraktet, uppgift för uppgift.
-    "- Pröva täckningen BAKLÄNGES: gå uppgift för uppgift genom det VALDA "
-    "urvalet i bokblocket (uppgiftsraden, inte bara sidorna) och fråga «står "
-    "det den här uppgiften kräver på tavlan?». Först när svaret är ja för "
-    "varje vald uppgift är genomgången klar.\n"
+    "- Först när svaret är ja för varje VALD uppgift är genomgången klar.\n"
     # RANDFALLET. Samma dom (2026-08-21): «en sak jag saknar, speciellt för
     # kuben: vad gör man om det står ett negativt tal under rotstecknet, fast
     # det är i kubik? Vad händer då?»
@@ -450,10 +472,10 @@ INSTRUCTION = (
     "- Hellre math, tabell och figur än text. Ett steg som går att skriva som "
     "en formel skrivs som en formel.\n"
     # Begreppsraderna (8c) är text och äter av samma budget som allt annat.
-    # Taket rörs inte: läraren har fällt det själv.
-    "- Begreppsraderna räknas som text. Håll dem vid ~60 tecken och se till "
-    "att definitionsmeningen, raderna och Vanligt fel ryms tillsammans. Är "
-    "det trångt: färre verb, inte längre rader.\n"
+    # Taket rörs inte: läraren har fällt det själv. Raden var längre förut
+    # och sa också vad man gör när det blir trångt — men 8c har numera ett
+    # hårt tak på tre rader, och då säger den sig själv.
+    "- Begreppsraderna räknas som text: ~60 tecken var, högst tre.\n"
     # Kedjans pris, uppmätt när röda tråden kom: uppföljarnas «Samma kurva,
     # men nu …»-rader och en avslutande kontrollrad sprängde budgeten två
     # inspelningar i rad (473 och 445 tecken mot taket ~400).
@@ -475,10 +497,9 @@ INSTRUCTION = (
     "teckenfel vid negativa tal, glömd eller fel enhet, en tappad rot, fel "
     "prioriteringsordning, avrundning för tidigt, förväxlade begrepp. Ett "
     "moment där eleven inte kan göra fel finns inte.\n"
-    "- Vänstertavlan SKA ha en röd rubrik \"Vanligt fel:\" (text + underline i "
-    "rött, sist i spalten till höger om figuren) som visar felet konkret "
-    "— helst det felaktiga ledet i en math-sektion — och säger med en kort "
-    "mening varför det blir fel. En förmaning räcker inte: eleven ska känna "
+    "- Vänstertavlan SKA ha sin röda \"Vanligt fel:\" (formen står i 9) och "
+    "visa felet konkret — helst det felaktiga ledet i en math-sektion — med "
+    "en kort mening om varför. En förmaning räcker inte: eleven ska känna "
     "igen sitt eget misstag.\n"
     "- Välj exemplen så att MINST ETT går rakt genom en av fallgroparna. Är "
     "teckenfel fallgropen ska ett exempel ha en negativ koefficient; är "
@@ -587,18 +608,14 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                                 {"kind": "text",
                                  "text": "Katet: sidan vid räta vinkeln",
                                  "size": 18},
+                                # TVÅ RADER, INTE FYRA (domen 2026-09-05).
+                                # «Sätt in» och «Lös ut» stod här förut och
+                                # ströks: de är förkunskaper från Ma 1, inte
+                                # det satsen lär ut. Exemplens steg börjar
+                                # ändå med dem — ett förkunskapsverb behöver
+                                # ingen egen rad att peka på.
                                 {"kind": "text",
                                  "text": "Hypotenusa: sidan mitt emot vinkeln",
-                                 "size": 18},
-                                # Verben är momentets egna. Pythagoras har inga
-                                # algebraverb, och behöver inga: satsen sätts in
-                                # och sidan löses ut. Det är de orden exemplens
-                                # steg börjar med.
-                                {"kind": "text",
-                                 "text": "Sätt in: byt bokstäverna mot talen",
-                                 "size": 18},
-                                {"kind": "text",
-                                 "text": "Lös ut: få den okända sidan ensam",
                                  "size": 18, "gapAfter": 12},
                                 {"kind": "math", "latex": "a^2 + b^2 = c^2",
                                  "size": 30, "gapAfter": 14},
@@ -720,14 +737,13 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                                 {"kind": "text",
                                  "text": "Symmetrilinje: linjen kurvan speglas i",
                                  "size": 18},
+                                # «Bestäm» och «Avläs» stod här förut och ströks
+                                # med domen 2026-09-05: att bestämma och att
+                                # avläsa är förkunskaper, inte det lektionen
+                                # lär ut. Kvar står de två orden grafen
+                                # faktiskt inför.
                                 {"kind": "text",
                                  "text": "Vändpunkt: där kurvan byter riktning",
-                                 "size": 18},
-                                {"kind": "text",
-                                 "text": "Bestäm: räkna fram båda talen",
-                                 "size": 18},
-                                {"kind": "text",
-                                 "text": "Avläs: läs punkten ur formen",
                                  "size": 18, "gapAfter": 12},
                                 {"kind": "math", "latex": "f(x) = ax^2 + bx + c",
                                  "size": 24, "gapAfter": 12},
@@ -844,20 +860,31 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                         # siffror: siffrorna bor på högertavlan.
                         {"kind": "row", "gap": 26, "children": [
                             {"kind": "col", "width": 300, "gap": 6, "children": [
-                                {"kind": "math", "latex": "ax + b", "size": 34,
-                                 "gapAfter": 12},
+                                {"kind": "math", "latex": "ax + b", "size": 32,
+                                 "gapAfter": 8},
                                 {"kind": "text", "text": "ax och b är termer",
-                                 "size": 18},
-                                {"kind": "text", "text": "a och x är faktorer",
                                  "size": 18},
                                 {"kind": "text",
                                  "text": "a koefficient, x variabel",
+                                 "size": 18, "gapAfter": 14},
+                                # Momentet bär två former, och båda står i
+                                # anatomin — den andra under den första, så att
+                                # läraren kan peka på parentesen när hon säger
+                                # ordet faktor.
+                                {"kind": "math", "latex": "a(b + c)", "size": 32,
+                                 "gapAfter": 8},
+                                {"kind": "text",
+                                 "text": "parentesen är en faktor",
                                  "size": 18}]},
-                            # BEGREPPSRADERNA öppnar spalten, en rad per verb
-                            # lektionen bär, i den ordning exemplen använder
-                            # dem. Efter dem, inte före, kommer bokstavsformeln
-                            # som visar vad verbet GÖR: a(b + c) = ab + ac läst
-                            # åt höger är utveckla, åt vänster faktorisera.
+                            # BEGREPPSRADERNA öppnar spalten: HÖGST TRE, och
+                            # bara de verb som ÄR lektionen. «Förenkla: stryk
+                            # gemensam faktor» stod här som fjärde rad och
+                            # ströks med domen 2026-09-05 — att förenkla kan
+                            # klassen sedan Ma 1, och exempel 3:s steg får
+                            # börja med ordet ändå. Efter raderna, inte före,
+                            # kommer bokstavsformeln som visar vad verbet GÖR:
+                            # a(b + c) = ab + ac läst åt höger är utveckla, åt
+                            # vänster faktorisera.
                             {"kind": "col", "gap": 8, "children": [
                                 {"kind": "text",
                                  "text": "Utveckla: multiplicera in i parentesen",
@@ -867,9 +894,6 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                                  "size": 18},
                                 {"kind": "text",
                                  "text": "Förlänga: multiplicera täljare och nämnare",
-                                 "size": 18},
-                                {"kind": "text",
-                                 "text": "Förenkla: stryk gemensam faktor",
                                  "size": 18, "gapAfter": 12},
                                 {"kind": "math", "latex": "a(b + c) = ab + ac",
                                  "size": 24, "gapAfter": 10},
@@ -2067,15 +2091,21 @@ TACKNING_INSTRUKTION = (
     # BEGREPPSKOPPLINGEN. Lärarens dom (2026-09-05) kom med ett villkor:
     # hon vill inte sitta och iterera varje tavla för hand. Slirar formen är
     # domaren rätt plats att fånga det på, inte fler promptrader.
-    "Pröva sist BEGREPPSKOPPLINGEN: varje verb och begrepp exemplen använder "
-    "ska ha sin egen rad på vänstertavlan i formen «Ord: vad det är». Vilka "
-    "orden är avgör momentet, inte en färdig lista — derivera, lösa ut, "
-    "bestämma, avrunda, förkorta, konstruera, utveckla och faktorisera är "
-    "alla exempel, inget urval att välja ur. Saknas raden "
-    "är det ett fynd, och forslag är raden som ska in. Omvänt: står en "
-    "räknelag på vänstern som inget exempel använder och som eleven kan slå "
-    "upp i sin formelsamling är tavlan för tjock där — ett fynd med förslag "
-    "att stryka raden.\n"
+    #
+    # Andra domen samma dag vände kopplingen: den gamla lydelsen krävde en
+    # vänsterrad för VARJE verb exemplen använde, och kompletteringen lade
+    # därför till rader tills vänstern bar sex av dem. Nu fäller domaren åt
+    # andra hållet också, och hårdare — det är tjockleken som är felet.
+    "Pröva sist BEGREPPSKOPPLINGEN, som går ÅT BÅDA HÅLL. Momentets EGNA nya "
+    "begrepp och det verb momentet LÄR UT ska ha sin rad på vänstertavlan i "
+    "formen «Ord: vad det är»; saknas den är det ett fynd, och forslag är "
+    "raden som ska in. Ett metodsteg som bara använder ett förkunskapsverb "
+    "(multiplicera, förenkla, sätt in, lös ut) kräver INGEN rad — kräv aldrig "
+    "en. Fäll i stället en FÖR TJOCK vänster, och forslag är då att STRYKA "
+    "raden: fler än tre begreppsrader, fler än två formler, en regel som står "
+    "både som mening och som formel, en räknelag eleven kan slå upp i sin "
+    "formelsamling, eller en kvadrat, rektangel eller annan kropp på ett "
+    "moment som inte handlar om geometri eller grafer.\n"
     "Svara med enbart JSON: {\"saknas\": [{\"uppgifter\": [nummer, …], "
     "\"vad\": \"det som saknas eller är felräknat, kort\", \"forslag\": "
     "\"vad som ska läggas till eller rättas på tavlan — en formel, en rad, "
