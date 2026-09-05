@@ -852,3 +852,54 @@ test("svarsraden står bara på de uppgifter som bara kräver ett svar", async (
     .toHaveText("Fullständig lösning krävs.");
   await expect(uppg.nth(1).locator(".prsvar")).toHaveCount(0);
 });
+
+test("nedskalad kolumn går till reparation, uppskalad gör det inte", async ({ page }) => {
+  /* LÄRARENS DOM 2026-09-05 (kväll): två exempel med varsin tabell och graf
+     hamnade i SAMMA kolumn, fit-passet krympte spalten till 70 % och tavlan
+     var oläslig från tredje bänkraden. Nedskalning skrevs som console.info,
+     och blad.js fångar bara console.warn — därför nådde den aldrig
+     reparationsrundan, fast överlapp och «ryms inte» gör det.
+
+     Två halvor prövas: gränsen (tavla-wb.js KRYMPGRANS) och att en riktigt
+     överfull kolumn faktiskt skriver sin rad som en VARNING. Gränsen prövas
+     mot den exporterade predikaten och inte med innehåll: fit-passets
+     binärsökning snäpper till grova skalor (0,6 · 0,65 · 0,7 · 0,8) och går
+     inte att styra till 92 % med rader i en spalt. */
+  await L.fejkatMoln(page);
+  await L.oppna(page);
+  expect(await page.evaluate(() => [
+    window.WBLayout.krympvarning(0.70),   // den fällda tavlans egen skala
+    window.WBLayout.krympvarning(0.92),   // nätt: syns, men lagas inte
+    window.WBLayout.krympvarning(1.6),    // uppskalning är ofarlig
+  ])).toEqual([true, false, false]);
+
+  const varningar = [];
+  const ovrigt = [];
+  page.on("console", m => {
+    const t = m.text();
+    if (!t.startsWith("[WB]")) return;
+    (m.type() === "warning" ? varningar : ovrigt).push(t);
+  });
+
+  /* Tio rader i en 900×400-tavla → fit-passet landar på 61 %. */
+  await tavla(page, { title: "T", boards: [{
+    name: "overfull", width: 900, height: 400, chrome: "aluminium",
+    padding: { top: 24, right: 26, bottom: 24, left: 30 },
+    sections: Array.from({ length: 10 }, (_, i) => (
+      { kind: "text", text: "Rad nummer " + i + " med lagom mycket text i sig" })),
+  }] });
+  await page.waitForTimeout(150);
+  expect(varningar.join(" | ")).toMatch(/skalade ner till \d\d%/);
+
+  /* Två rader i samma tavla → uppskalning, och den ska INTE varna. */
+  varningar.length = 0;
+  ovrigt.length = 0;
+  await tavla(page, { title: "T", boards: [{
+    name: "gles", width: 900, height: 400, chrome: "aluminium",
+    padding: { top: 24, right: 26, bottom: 24, left: 30 },
+    sections: [{ kind: "text", text: "En rad" }, { kind: "text", text: "En till" }],
+  }] });
+  await page.waitForTimeout(150);
+  expect(ovrigt.join(" | ")).toMatch(/skalade upp till/);
+  expect(varningar, "uppskalning får aldrig kosta en reparationsrunda").toEqual([]);
+});

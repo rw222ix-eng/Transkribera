@@ -2028,6 +2028,28 @@ function scaleSections(sections, s) {
 // practice (bigger font → taller content), so this converges in
 // ~7 passes to within 1% of budget.
 // ============================================================
+/* NEDSKALNING ÄR ETT FEL ATT REPARERA (lärarens dom 2026-09-05, kväll).
+   Två exempel med varsin tabell och graf hamnade i SAMMA kolumn, och
+   fit-passet krympte hela spalten till 70 % för att få plats. Tavlan
+   validerade — nedskalningen skrevs som console.info, och blad.js fångar
+   bara console.warn — och var ändå oläslig från tredje bänkraden.
+
+   Under KRYMPGRANS går raden nu samma väg som överlappen: blad.js →
+   Tavla.varnade → render-report → lesson_board.repair_board, med
+   åtgärdsrådet i REPAIR_HINTS («flytta ett exempel till den andra
+   kolumnen; rita aldrig två figurer i samma kolumn»). Uppskalning är
+   fortfarande ofarlig, och en nätt nedskalning (85–98 %) syns men lagas
+   inte: den kostar inte läsbarheten, och en reparationsrunda för den vore
+   dyrare än felet.
+
+   Varningen finns bara när tavlan RITAS, alltså i appen — vid genereringen
+   på servern finns ingen renderare. Så repareras överlappen också. */
+const KRYMPGRANS = 0.85;
+
+function krympvarning(skala) {
+  return skala < KRYMPGRANS;
+}
+
 function layoutFlowFit(sections, board, opts, debugName = '') {
   const budget = opts.maxY - opts.y0;
   // Scale search bounds. Lower is hard floor (legibility); upper
@@ -2128,9 +2150,9 @@ function layoutFlowFit(sections, board, opts, debugName = '') {
     );
   } else if (Math.abs(scale - 1) > 0.02) {
     const dir = scale > 1 ? 'upp' : 'ner';
-    (console.info || console.log || function(){})(
-      `[WB] ${debugName || 'flow'}: skalade ${dir} till ${Math.round(scale * 100)}% (h:${Math.round(res.height)}/${Math.round(budget)}, w:${Math.round(res.maxW)}/${Math.round(widthBudget)}).`
-    );
+    const rad = `[WB] ${debugName || 'flow'}: skalade ${dir} till ${Math.round(scale * 100)}% (h:${Math.round(res.height)}/${Math.round(budget)}, w:${Math.round(res.maxW)}/${Math.round(widthBudget)}).`;
+    if (krympvarning(scale)) console.warn(rad);
+    else (console.info || console.log || function(){})(rad);
   }
   return { ...res, scale };
 }
@@ -2768,4 +2790,9 @@ window.WBLayout = {
   layoutFlow,
   renderSection,
   measure,
+  // Gränsen mellan «syns» och «lagas» — se KRYMPGRANS. Exporterad för att
+  // e2e ska kunna pröva alla tre fallen (70 %, 92 %, uppskalning) utan att
+  // behöva träffa en exakt skala med innehåll: fit-passets binärsökning
+  // snäpper till grova värden och går inte att styra dit.
+  krympvarning,
 };
