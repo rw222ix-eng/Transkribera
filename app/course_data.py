@@ -123,3 +123,95 @@ def kod_till_kort() -> dict[str, str]:
     identiteten till det läraren ser (rättningens CI-kolumn, elevens profil)."""
     return {p["kod"]: p["kort"]
             for n in gy_nivaer() for o in n["omraden"] for p in o["punkter"]}
+
+
+# ── Centralt innehåll som ANDRAHANDSKÄLLA för lektionstavlan ────────────────
+# Lärarens dom (2026-09-05, kväll): «behandlar det verkligen de sidorna i
+# boken man ska göra? ÅTERANVÄND INTE UPPGIFTER, GÖR EGNA! I andra hand luta
+# sig på det centrala innehållet.»
+#
+# Utan bok fanns ingenting att pröva täckningen mot: tavlan dömdes bara på
+# form. Kursens egna Gy25-punkter är det andra kontraktet, det som gäller
+# oavsett vilken bok skolan råkar ha köpt, och de ligger redan bundlade och
+# offline i den här modulen. Blocket går in i prompten på BOKENS plats
+# (routes_planning generate), så att både skrivningen och täckningsdomaren
+# får det utan att någon annan väg behöver ändras.
+CI_MARKOR = "CENTRALT INNEHÅLL (Gy25)"
+
+# Högst fem punkter. Fler är inte ett moment utan en kurs, och en tavla som
+# ska bära en hel kurs bär ingenting.
+_CI_MAX = 5
+# Ord kortare än så bär ingen betydelse att matcha på («och», «för», «med»).
+_CI_MINSTA_ORD = 4
+# Två ord räknas som samma sak när de delar en tillräckligt lång stam:
+# «andragradsuttryck» och «andragradsfunktioner» delar «andragrads», och det
+# är stammen momentet handlar om. Kortare gemensam början är en tillfällighet.
+_CI_STAM = 6
+
+
+def _ci_ord(text: str) -> set[str]:
+    ren = "".join(c.lower() if c.isalnum() else " " for c in str(text or ""))
+    return {o for o in ren.split() if len(o) >= _CI_MINSTA_ORD}
+
+
+def _ci_traff(momentord: set[str], punktord: set[str]) -> bool:
+    for m in momentord:
+        for p in punktord:
+            if m == p:
+                return True
+            if len(m) >= _CI_STAM and len(p) >= _CI_STAM:
+                gemensam = 0
+                for a, b in zip(m, p):
+                    if a != b:
+                        break
+                    gemensam += 1
+                if gemensam >= _CI_STAM:
+                    return True
+    return False
+
+
+def _kursens_punkter(kurs: str) -> list[dict]:
+    """Alla Gy25-punkter för EN kurs, i ämnesplanens ordning. Kursen slås upp
+    på vilket som helst av sina namn: «Matematik, nivå 2a» (appens kursnamn),
+    «Ma2a» (kurskortnamnet) och «Matematik 2a» (den gamla beteckningen)."""
+    sokt = " ".join(str(kurs or "").lower().split())
+    if not sokt:
+        return []
+    for n in gy_nivaer():
+        namn = {str(n.get(f) or "").lower() for f in ("fullnamn", "kurs", "gammal")}
+        if sokt in namn:
+            return [p for o in n["omraden"] for p in o["punkter"]]
+    return []
+
+
+def centralt_innehall_punkter(kurs: str, moment: str) -> list[dict]:
+    """Kursens EGNA punkter som momentet nämner, högst fem, i ämnesplanens
+    ordning. Tom lista när kursen är okänd eller ingen punkt matchar: då finns
+    inget andrahandskontrakt heller, och tavlan döms bara på formen."""
+    momentord = _ci_ord(moment)
+    if not momentord:
+        return []
+    ut = []
+    for p in _kursens_punkter(kurs):
+        if _ci_traff(momentord, _ci_ord(p.get("kort")) | _ci_ord(p.get("text"))):
+            ut.append(p)
+        if len(ut) >= _CI_MAX:
+            break
+    return ut
+
+
+def centralt_innehall_block(kurs: str, moment: str) -> str:
+    """Promptblocket, eller "" när ingen punkt matchar. Formuleras som bokens
+    block (app/bok.build_bok_block): blocket säger själv vad det är och vad
+    som gäller, så att prompten slipper en regel om en källa den oftast inte
+    har."""
+    punkter = centralt_innehall_punkter(kurs, moment)
+    if not punkter:
+        return ""
+    rader = [f"{CI_MARKOR}, kursens punkter för momentet. Boken är inte "
+             "uppslagen den här gången, så det här är kontraktet: tavlan ska "
+             "bära det de här punkterna kräver, med kursens egna begrepp. "
+             "Punkterna är Skolverkets ordagranna text. Skriv HELT EGNA "
+             "uppgifter och exempel utifrån dem."]
+    rader += [f"- {p.get('kort') or ''}: {p.get('text') or ''}" for p in punkter]
+    return "\n".join(rader)

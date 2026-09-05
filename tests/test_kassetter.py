@@ -49,19 +49,48 @@ def test_ett_band_gar_genom_bryggan_ord_for_ord(fejk_claude):
     assert claude_code.SENASTE["kostnad"] > 0
 
 
+# BANDET ÄR ÄLDRE ÄN TAKET. tavla.json spelades in när textbudgeten var 400
+# tecken per tavla och 250 per kolumn. Läraren sänkte taken 2026-09-05 (kväll)
+# till 280 och 170 — «det är svårt att få med allt på tavlan när jag väl ska
+# skriva allt detta» — och bandets högertavla (224 + 274 tecken) ligger sedan
+# dess över. Det är REGELN som biter, inte kedjan som är trasig, och ett band
+# spelas aldrig om för en promptändring. Testerna nedan mäter därför allt UTOM
+# budgeten; att budgeten faktiskt fäller bandet prövas på ett enda ställe, av
+# test_det_sankta_taket_faller_bandets_hogertavla.
+def _utan_budget(errors: list) -> list:
+    return [e for e in errors
+            if not (isinstance(e, dict) and e.get("code") == "textbudget")]
+
+
 def test_tavlan_ur_kassetten_ar_giltig_wb_json(fejk_claude):
     """Hela vägen: CLI → ström → JSON → whiteboard_spec → färdig tavla."""
     fejk_claude(kassett="tavla")
+    # EN runda: bandet svarar likadant varje gång, så en reparationsrunda på
+    # budgetfyndet hade bara spelat upp samma tavla igen.
     res = lesson_board.generate_board(
-        "Matematik 3c", "NA25", "Derivatans definition", model="")
-    assert res["errors"] == []
+        "Matematik 3c", "NA25", "Derivatans definition", model="",
+        max_rounds=1)
+    assert _utan_budget(res["errors"]) == [], res["errors"]
     assert res["rounds"] == 1
     board = res["board"]
     assert board["title"] == "Derivatans definition"
     # Samma validator som servern kör innan tavlan får skickas till klienten
     # (den tar den tolkade dicten, inte JSON-texten).
     doc, fel = whiteboard_spec.validate_board_json(board)
-    assert doc is not None and fel == []
+    assert doc is not None and _utan_budget(fel) == []
+
+
+def test_det_sankta_taket_faller_bandets_hogertavla(fejk_claude):
+    """Och åt andra hållet: det sänkta taket biter på en riktig inspelning.
+    Bandets högertavla bär 498 tecken löpande text mot det nya taket 340 (två
+    kolumner à 170), och det är precis den sortens tavla läraren fällde:
+    «det känns lite mycket på vissa ställen»."""
+    fejk_claude(kassett="tavla")
+    res = lesson_board.generate_board(
+        "Matematik 3c", "NA25", "Derivatans definition", model="",
+        max_rounds=1)
+    budget = [e for e in res["errors"] if e.get("code") == "textbudget"]
+    assert budget and budget[0]["path"] == "boards[1]", res["errors"]
 
 
 def test_en_trasig_tavla_repareras_i_nasta_runda(fejk_claude):
@@ -78,7 +107,7 @@ def test_en_trasig_tavla_repareras_i_nasta_runda(fejk_claude):
     res = lesson_board.generate_board(
         "Matematik 3c", "NA25", "Derivatans definition", model="",
         llm=lambda model, prompt, **kw: vaxla(prompt, system=kw.get("system")))
-    assert res["errors"] == [], res["errors"]
+    assert _utan_budget(res["errors"]) == [], res["errors"]
     assert res["rounds"] >= 2, "reparationsrundan kördes aldrig"
 
 
@@ -263,16 +292,18 @@ def test_mal_last_omskrivning_ror_bara_rutan_lararen_pekade_pa(fejk_claude):
     svar på en fråga om en lapp."""
     fejk_claude("auto")
     board = lesson_board.generate_board(
-        "Matematik 3c", "NA25", "Derivatans definition", model="")["board"]
+        "Matematik 3c", "NA25", "Derivatans definition", model="",
+        max_rounds=1)["board"]
     rad = board["boards"][0]["sections"][6]
     assert rad["kind"] == "row"          # klumpen läraren inte kunde peka i
     fore = copy.deepcopy(rad["children"][1]["children"][1])
 
     ut = lesson_board.refine_board(board, "skriv definitionen med a i stället",
-                                   model="", mal={"el": "tav7.1.1",
-                                                  "namn": "Formel 2",
-                                                  "innehall": fore["latex"]})
-    assert ut["errors"] == []
+                                   model="", max_rounds=1,
+                                   mal={"el": "tav7.1.1",
+                                        "namn": "Formel 2",
+                                        "innehall": fore["latex"]})
+    assert _utan_budget(ut["errors"]) == [], ut["errors"]
     assert ut["rounds"] == 1             # en lapp, inte en hel tavla
     efter = ut["board"]["boards"][0]["sections"][6]["children"][1]["children"][1]
     assert "f'(a)" in efter["latex"] and "f'(a)" not in fore["latex"]
@@ -292,8 +323,8 @@ def test_auto_laget_lagger_i_bandet_prompten_ber_om(fejk_claude):
     faller det här testet i stället för att en lärardag tyst får fel papper."""
     fejk_claude("auto")
     tavla = lesson_board.generate_board("Matematik, nivå 2c", "NA25",
-                                        "Derivator", model="")
-    assert tavla["errors"] == [] and tavla["rounds"] == 1
+                                        "Derivator", model="", max_rounds=1)
+    assert _utan_budget(tavla["errors"]) == [] and tavla["rounds"] == 1
     assert tavla["board"]["title"]
 
     for profil, antal, grupp in [

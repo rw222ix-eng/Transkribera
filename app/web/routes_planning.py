@@ -21,8 +21,8 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse
 
-from app import (bok, db, dokumentdiff, forlaga, gpu_arbiter, lararord,
-                 lesson_board, llm_client, rattning, spar)
+from app import (bok, course_data, db, dokumentdiff, forlaga, gpu_arbiter,
+                 lararord, lesson_board, llm_client, rattning, spar)
 from app.web import Id64, _kropp
 from app.web.sse import Stege, jobb_response, sse_response
 
@@ -762,6 +762,22 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # synas i stället för att begäran står tyst.
                 steg.na("bok")
                 bok_txt = bok_las_text(base, db_file, body, emit=emit)
+                # I ANDRA HAND DET CENTRALA INNEHÅLLET. Lärarens ord
+                # (2026-09-05, kväll): «behandlar det verkligen de sidorna i
+                # boken man ska göra? I andra hand luta sig på det centrala
+                # innehållet.» Utan uppslagen bok fanns inget kontrakt alls:
+                # tavlan skrevs fritt och täckningsdomaren hade ingenting att
+                # döma mot. Kursens egna Gy25-punkter för momentet går in på
+                # BOKENS plats i prompten, och följer därmed automatiskt med
+                # till domaren (generate_board skickar `bok` vidare dit).
+                # Matchar ingen punkt blir blocket tomt och allt är som förut.
+                if not (bok_txt or "").strip():
+                    bok_txt = course_data.centralt_innehall_block(course or "",
+                                                                  moment)
+                    if bok_txt:
+                        emit({"type": "log",
+                              "msg": "Ingen bok uppslagen — lutar mig på "
+                                     "kursens centrala innehåll."})
                 steg.na("skriver")
                 res = lesson_board.generate_board(
                     course or "matematik", group or "klassen", moment,

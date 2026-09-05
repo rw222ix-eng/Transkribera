@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from app import lesson_board
+from app import course_data, lesson_board
 
 
 def _events(resp) -> list[dict]:
@@ -106,7 +106,7 @@ def _stub_generate(monkeypatch, result):
              **_kw):
         calls.append({"course": course, "group": group, "moment": moment,
                       "model": model, "memory": memory, "underlag": underlag,
-                      "utfall": utfall})
+                      "utfall": utfall, "bok": bok})
         if log_cb:
             log_cb("Genererar lektionstavlan …")
         return result
@@ -196,6 +196,33 @@ def test_generate_utan_klass_och_kurs_gar_anda(llm_ready, monkeypatch):
                            {"board": _valid_board(), "errors": [], "rounds": 1})
     _done(llm_ready.post("/api/planning/generate", json={"moment": "Integraler"}))
     assert calls[0]["group"] == "klassen" and calls[0]["course"] == "matematik"
+
+
+def test_utan_bok_gar_det_centrala_innehallet_in_pa_bokens_plats(llm_ready,
+                                                                 monkeypatch):
+    """«I andra hand luta sig på det centrala innehållet.» (Lärarens dom
+    2026-09-05, kväll.) Utan uppslagen bok fanns inget kontrakt: tavlan skrevs
+    fritt och täckningsdomaren hade ingenting att döma mot. Kursens egna
+    Gy25-punkter går in på BOKENS plats, och följer därmed med till domaren
+    utan att någon annan väg behöver ändras."""
+    calls = _stub_generate(monkeypatch,
+                           {"board": _valid_board(), "errors": [], "rounds": 1})
+    _done(llm_ready.post("/api/planning/generate",
+                         json={"moment": "Andragradsuttryck: multiplicera binom",
+                               "klass": "IndA", "kurs": "Matematik, nivå 2a"}))
+    assert calls[0]["bok"].startswith(course_data.CI_MARKOR)
+    assert "Andragradsfunktioner" in calls[0]["bok"]
+
+
+def test_utan_bok_och_utan_ci_traff_ar_allt_som_forut(llm_ready, monkeypatch):
+    """Matchar ingen punkt finns inget andrahandskontrakt heller. Hellre tomt
+    än fem punkter som inte hör till momentet."""
+    calls = _stub_generate(monkeypatch,
+                           {"board": _valid_board(), "errors": [], "rounds": 1})
+    _done(llm_ready.post("/api/planning/generate",
+                         json={"moment": "repetition inför provet",
+                               "kurs": "Historia 1b"}))
+    assert calls[0]["bok"] == ""
 
 
 def test_generate_409_when_over_taket(llm_ready, monkeypatch):

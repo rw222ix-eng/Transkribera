@@ -546,8 +546,17 @@ _COL_GAP = 24.0
 # mäts mot hela tavelbredden men placeras i ett smalare flöde → "ryms inte
 # (bredd)" + överlapp med nästa sektion (bench Fas 2). Deterministisk gräns
 # här ger modellen ett exakt, åtgärdbart fel FÖRE rendering.
-_MAX_TEXT_CHARS = 90
-_MAX_ITEM_CHARS = 80
+#
+# SÄNKTA 2026-09-05 (90 → 60 och 80 → 50). Lärarens dom över fem genererade
+# tavlor: «det känns lite mycket på vissa ställen. Dels är det svårt att få med
+# allt på tavlan när jag väl ska skriva allt detta, dels kan det vara svårt att
+# hinna innan lektionen att rita och skriva allt, samt att det är svårt för
+# eleverna att hänga med. Hellre korta namn bara i stället för hela meningar,
+# och om det ska vara meningar ska de vara korta.» En rad på 90 tecken ÄR en
+# mening; ett namn med sin förklaring ryms i 60. Metodstegen (listpunkter) är
+# stödrepliker läraren ska ha i huvudet, inte skriva av: 50.
+_MAX_TEXT_CHARS = 60
+_MAX_ITEM_CHARS = 50
 # TEXTBUDGETEN (Del F, lärarens fjärde dom). Reglerna ovan mäter en sektion i
 # taget och släpper därför igenom en tavla som är full av korta rader — och det
 # var precis vad läraren fick: hennes egen vänstertavla bar upplägg, nyckelfråga,
@@ -576,8 +585,18 @@ _MAX_ITEM_CHARS = 80
 # med columns bär flera exempelspalter och får 250 per spalt (två kolumner →
 # 500); en sections-tavla behåller 400. Fortfarande mätt, inte satt: lärarens
 # underkända högertavla på 812 fälls med god marginal.
-_MAX_BOARD_TEXT = 400
-_MAX_COLUMN_TEXT = 250
+#
+# SÄNKTA 2026-09-05 (400 → 280 och 250 → 170). Samma dom som sänkte
+# radlängderna ovan: «det är svårt att få med allt på tavlan när jag väl ska
+# skriva allt detta.» Räknat på den vänstertavla hon fällde blev det ~20
+# skrivna enheter: rubrik, fyra agendapunkter, öppningsfråga, definition, två
+# uppställningar med fyra etiketter, tre begreppsrader, två formler och ett
+# vanligt fel med rubrik, formel och mening. Hennes eget tal var 12. Taken är
+# mätta mot few-shotarna efter trimningen (vänstertavlorna 217–268, kolumnerna
+# 83–154) och lämnar luft för en tät tavla, men fäller den som blivit ett
+# föredrag. Läraren sänkte 400 själv i augusti; nu sänkte hon igen.
+_MAX_BOARD_TEXT = 280
+_MAX_COLUMN_TEXT = 170
 _ASPECT_TOLERANCE = 0.15  # motorn varnar vid >15 % avvikelse
 _VERTEX_EPS = 1e-6
 
@@ -974,7 +993,11 @@ def _normalize_sections(sections: list, in_container: bool = False) -> list:
             continue
         if sec.get("kind") == "text" and isinstance(sec.get("text"), str) \
                 and len(sec["text"]) > _MAX_TEXT_CHARS:
-            chunks = _split_text(sec["text"], 78)
+            # Bredden följer taket i stället för att stå som en egen siffra
+            # (78 mot det gamla taket 90). När läraren sänkte taket till 60
+            # 2026-09-05 delade normaliseringen fortfarande i 78-teckensbitar,
+            # och varje bit föll direkt på text-lang-regeln efteråt.
+            chunks = _split_text(sec["text"], max(24, _MAX_TEXT_CHARS - 12))
             for i, chunk in enumerate(chunks):
                 part = dict(sec)
                 part["text"] = chunk

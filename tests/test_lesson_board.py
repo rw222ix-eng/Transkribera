@@ -3,6 +3,7 @@ import copy
 import re
 import json
 
+from app import course_data
 from app import lesson_board as lb
 from app import whiteboard_spec as ws
 
@@ -90,13 +91,22 @@ def test_alla_few_shots_foljer_dramaturgin():
             f"{uppdrag}: {arter}"
         # Rubriken och agendan står mitt på tavlan — så skriver läraren dem.
         assert s[0].get("align") == "center" and s[1].get("align") == "center", uppdrag
-        # Agendan: 3–4 korta punkter i vardaglig svenska, och boksidorna.
-        assert 3 <= len(s[1]["items"]) <= 4, uppdrag
+        # Agendan: TRE korta punkter i vardaglig svenska, och boken i EN av
+        # dem. Taket var 3–4 till 2026-09-05: «agendan säger bok och uppgifter
+        # två gånger», och en fjärde punkt är en skriven enhet till.
+        assert len(s[1]["items"]) == 3, uppdrag
         assert all(len(p.split()) <= 5 for p in s[1]["items"]), uppdrag
-        assert any("boken s." in p for p in s[1]["items"]), uppdrag
+        bokpunkter = [p for p in s[1]["items"] if "boken s." in p.lower()]
+        assert len(bokpunkter) == 1, uppdrag
         # Öppningsfrågan är en fråga till klassen, inte en definition — och en
         # rubrik, inte en ruta. Utan färg: färgen betyder något annat nu.
+        # HÖGST FEM ORD (2026-09-05): frågan ställs muntligt, den skrivs bara
+        # för att stå kvar.
         assert s[3]["text"].endswith("?") and "color" not in s[3], uppdrag
+        assert len(s[3]["text"].split()) <= 5, (uppdrag, s[3]["text"])
+        # Definitionsmeningen: högst ÅTTA ord. «Om det ska vara meningar ska
+        # de vara korta.»
+        assert len(s[4]["text"].split()) <= 8, (uppdrag, s[4]["text"])
         # Högst EN mening vardagsspråk innan matematiken tar över.
         assert arter.count("text") == 1, uppdrag
         # Raden sist: figuren (eller den generiska uppställningen) till vänster,
@@ -111,8 +121,12 @@ def test_alla_few_shots_foljer_dramaturgin():
         i_math = spalt.index("math")
         assert i_math >= 1, uppdrag
         assert set(spalt[:i_math]) == {"text"}, (uppdrag, spalt)
-        assert all(": " in c["text"] and len(c["text"]) <= 60
-                   for c in rad[1]["children"][:i_math]), uppdrag
+        # Och raden är ett NAMN, inte en mening: ord, kolon, högst FEM ord
+        # (2026-09-05). «Hellre korta namn bara i stället för hela meningar.»
+        for c in rad[1]["children"][:i_math]:
+            assert ": " in c["text"], (uppdrag, c["text"])
+            assert len(c["text"].split(":", 1)[1].split()) <= 5, (uppdrag,
+                                                                  c["text"])
         # Vanligt fel sist i spalten: röd rubrik + understrykning, ingen ruta.
         rubrik = next(c for c in rad[1]["children"]
                       if c.get("text", "").startswith("Vanligt fel:"))
@@ -174,6 +188,34 @@ def test_few_shotarna_haller_textbudgeten():
                      + [c.sections for c in board.columns or []])
             volym = sum(ws._text_volym(f) for f in flows)
             assert volym <= ws._MAX_BOARD_TEXT, f"{uppdrag}, tavla {i}: {volym}"
+
+
+def test_budgettaken_ar_sankta_och_shotarna_haller_dem():
+    """Lärarens dom 2026-09-05 (kväll): «det känns lite mycket på vissa
+    ställen … det är svårt att få med allt på tavlan när jag väl ska skriva
+    allt detta.» Taken sänktes 400→280, 250→170, 90→60 och 80→50, och
+    shotarna måste hålla dem: en modell härmar det den ser."""
+    assert (ws._MAX_BOARD_TEXT, ws._MAX_COLUMN_TEXT) == (280, 170)
+    assert (ws._MAX_TEXT_CHARS, ws._MAX_ITEM_CHARS) == (60, 50)
+    for uppdrag, doc in lb.FEW_SHOTS:
+        parsed, _fel = ws.validate_board_json(doc)
+        for i, board in enumerate(parsed.boards):
+            if board.columns:
+                for ci, kol in enumerate(board.columns):
+                    volym = ws._text_volym(kol.sections)
+                    assert volym <= ws._MAX_COLUMN_TEXT, (uppdrag, i, ci, volym)
+            else:
+                volym = ws._text_volym(board.sections)
+                assert volym <= ws._MAX_BOARD_TEXT, (uppdrag, i, volym)
+
+
+def test_en_sjuttiotecknig_rad_falls_nu():
+    """Kontrollen åt andra hållet: taket biter. Samma shot med EN rad på 70
+    tecken (som passerade före domen) ska fällas deterministiskt."""
+    doc = _valid_doc()
+    doc["boards"][0]["sections"][4]["text"] = "x" * 70
+    _parsed, fel = ws.validate_board_json(doc)
+    assert [f for f in fel if f["code"] == "text-lang"], fel
 
 
 def _begreppsrader(doc: dict) -> list[str]:
@@ -320,6 +362,18 @@ def test_exempelstegen_bar_uppgiftens_tal():
     assert provade >= 4, provade      # shotarna får inte tappa sina exempel
 
 
+def test_stegen_ar_stodrepliker_inte_meningar():
+    """«Högern blandar det hon skriver med det hon säger» (2026-09-05, kväll).
+    Steget är en stödreplik läraren har i huvudet: verb, kolon, högst FYRA
+    ord — och högst tre steg per exempel."""
+    for uppdrag, doc in lb.FEW_SHOTS:
+        for _uppgift, steg in _exempelgrupper(doc):
+            assert len(steg) <= 3, (uppdrag, steg)
+            for punkt in steg:
+                _ord, _, resten = punkt.partition(":")
+                assert len(resten.split()) <= 4, (uppdrag, punkt)
+
+
 def test_en_regel_star_en_gang():
     """«I stället för all den texten är det bättre att skriva upp typ två
     regler.» Regeln stod två gånger på tavlan som fälldes: som mening i
@@ -363,7 +417,9 @@ def test_prompten_satter_begreppen_forst():
     räknelagar och skit, det hör till deras formelsamling» (2026-09-05)."""
     p = lb.build_prompt("Ma1c", "EK25", "utveckla och faktorisera uttryck")
     assert "BEGREPPSRADERNA" in p
-    assert "Ord: vad det är" in p
+    # Formen var «Ord: vad det är» till 2026-09-05 (kväll). Nu står taket i
+    # samma mening: ett NAMN, ord, kolon, högst fem ord.
+    assert "ord, kolon, HÖGST FEM ORD" in p
     assert "formelsamling" in p
     assert "Verben ÄR begrepp" in p
     # Aldrig en fast ordlista: momentet ger orden, och exemplen i prompten
@@ -387,9 +443,12 @@ def test_prompten_forbjuder_areamodellen_och_taket():
     uttryck.» Prompten ska bära både taket och kroppsförbudet själv — shotarna
     visar formen, men prompten är den som gäller alla moment."""
     p = lb.build_prompt("Ma2a", "IndA", "andragradsuttryck")
-    # Taket: högst tre rader, högst två formler, en regel en gång.
-    assert "HÖGST TRE, helst två" in p
-    assert "HÖGST TVÅ formler på vänstern" in p
+    # Taket: två rader som norm (tre bara när momentet inför tre nya
+    # begrepp), EN formel som norm, en regel en gång. Lydelsen skärptes
+    # 2026-09-05 (kväll) från «högst tre / högst två» till en NORM med ett
+    # villkorat undantag: «typ två regler. En regel kanske räcker.»
+    assert "NORMEN ÄR TVÅ, tre bara när momentet inför tre nya begrepp" in p
+    assert "NORMEN ÄR EN FORMEL på vänstern, TVÅ bara när båda ÄR momentet" in p
     assert "EN regel står EN gång, som FORMEL" in p
     # Förkunskaperna skrivs aldrig, hur ofta exemplen än använder dem.
     assert "Förkunskaper klassen redan har" in p
@@ -408,7 +467,8 @@ def test_prompten_forbjuder_rutor_och_kraver_bredden():
     assert "Rita ALDRIG rutor" in p
     assert "callout-sektioner är förbjudna" in p
     assert "SIDA VID SIDA i en row" in p
-    assert "Arbetar i boken s." in p          # agendan bär boksidorna
+    # Agendan bär boksidorna, och uppgifterna i SAMMA punkt (2026-09-05).
+    assert "Bok och uppgifter står i EN av dem" in p
 
 
 def test_prompten_bar_exempelkraven():
@@ -421,7 +481,12 @@ def test_prompten_bar_exempelkraven():
     # (kväll): urvalsregeln högre upp säger det redan, och prompten skulle
     # kortas för kolumnregeln. Kravet prövas i
     # test_prompten_valjer_exemplen_ur_urvalet i stället.
-    assert "ALLTID egna uppgifter" in p
+    # «ÅTERANVÄND INTE UPPGIFTER, GÖR EGNA!» Lärarens egna ord, ordagrant i
+    # prompten sedan 2026-09-05 (kväll) — det gamla «Skriv ALLTID egna
+    # uppgifter» gick att lyda genom att byta en siffra.
+    assert "ÅTERANVÄND INTE UPPGIFTER, GÖR EGNA" in p
+    assert "att byta TALEN räcker inte" in p
+    assert "Byt SITUATION" in p
     assert "det felaktiga ledet i rött bredvid det rätta" in p
     assert "Väg 1" in p and "Väg 2" in p
     # Utgångspunkt, inte facit — läraren räknar på plats.
@@ -477,6 +542,38 @@ def test_build_prompt_bar_fallgalleriet():
     assert "Randvinkelsatsen" in p
     assert "Tre fall" in p
     assert "Exempel 4 — uppdrag:" in p
+
+
+def test_prompten_bar_de_korta_namnen():
+    """«Hellre korta namn bara i stället för hela meningar, och om det ska
+    vara meningar ska de vara korta.» (2026-09-05, kväll.) Taken måste stå i
+    prompten själv: shotarna visar formen, prompten gäller alla moment."""
+    p = lb.build_prompt("Ma2a", "IndA", "andragradsuttryck")
+    # Agendan: tre punkter, boken en gång.
+    assert "en list med TRE punkter" in p
+    assert "Bok och uppgifter står i EN av dem, aldrig i två" in p
+    # Öppningsfrågan och definitionsmeningen.
+    assert "EN rad på högst FEM ORD" in p
+    assert "högst ÅTTA ORD per begrepp momentet bär" in p
+    # Begreppsraden och steget.
+    assert "ord, kolon, HÖGST FEM ORD" in p
+    assert "kolon och HÖGST FYRA ORD" in p
+    assert "HÖGST TVÅ steg per exempel" in p
+    # Anatomin: en uppställning, tre etiketter på ett ord var.
+    assert "högst TRE etiketter på ETT ord var" in p
+    assert "En ANDRA uppställning bara när momentet har två former" in p
+    # Felförklaringen.
+    assert "Förklaringen under det är HÖGST FEM ORD" in p
+    # Och lärarens eget tal på hur mycket som får stå.
+    assert "SKRIVNA ENHETERNA" in p and "HÖGST TOLV" in p
+
+
+def test_prompten_skriver_inte_ord_som_matte():
+    """Kontrollkörningen 2026-09-05: prioriteringsordningen «parentes → potens
+    → multiplikation» stod som math och radbröts mitt i orden."""
+    p = lb.build_prompt("Ma1a", "BA26B", "tal i olika former")
+    assert "är ingen matematik" in p
+    assert "text-rad eller " in p and "aldrig som math" in p
 
 
 def test_prompten_ar_inte_orimligt_lang():
@@ -1060,6 +1157,95 @@ def test_domaren_hoppar_over_urvalsfragorna_utan_urval():
     assert "hoppa då över täckningen och alla urvalsfrågor helt" in t
     # …och formfelen står kvar att döma på.
     assert "FÄRDIGA URÄKNINGAR" in t and "SIFFROR PÅ VÄNSTERN" in t
+
+
+def test_domaren_provar_roda_traden_och_egna_uppgifter():
+    """Kvällens dom 2026-09-05: «följer det en tydlig röd tråd … ÅTERANVÄND
+    INTE UPPGIFTER, GÖR EGNA!» Regeln fanns i skrivprompten, men ingen grind
+    fällde brottet: rottavlan bar fyra lösa exempel, och en areauppgift var
+    bokens 1219 med ett annat tal."""
+    t = lb.build_tackning_prompt({"boards": []}, "LÄRARENS URVAL: 1218–1227")
+    assert "Pröva RÖDA TRÅDEN" in t
+    assert "Utgår exempel 2 från exempel 1" in t
+    assert "Lösa exempel utan gemensam" in t
+    assert "Pröva EGNA UPPGIFTER" in t
+    assert "ÅTERANVÄND INTE UPPGIFTER, GÖR EGNA!" in t
+    assert "nära variant" in t
+    assert "byt situation, inte bara" in t
+
+
+def test_bokkopievakten_faller_avskriften_men_inte_den_egna():
+    """Den grova halvan av «gör egna uppgifter», deterministisk och gratis:
+    står uttrycket ORDAGRANT i bokblocket är exemplet avskrivet. Den nära
+    varianten är domarens sak, inte vaktens."""
+    bok = ("UR LÄROBOKEN — Origo 2a, s. 27–30.\n\n1220 Utveckla "
+           "3(x + 1)(x + 12) på två sätt.")
+    def tavla(latex):
+        return {"boards": [{"sections": []},
+                           {"columns": [{"sections": [
+                               {"kind": "heading", "text": "Exempel 1"},
+                               {"kind": "math", "latex": latex}]}]}]}
+    fynd = lb.bokkopior(tavla("3(x + 1)(x + 12)"), bok)
+    assert [f["code"] for f in fynd] == ["bokkopia"], fynd
+    assert "GÖR EGNA" in fynd[0]["message"]
+    assert fynd[0]["path"] == "boards[1].columns[0].sections[1]"
+    # Egen uppgift i samma form: fälls inte.
+    assert lb.bokkopior(tavla("3(x + 2y)(x - 5y)"), bok) == []
+    # Mellanslag, \cdot och unicode får inte gömma en avskrift.
+    assert lb.bokkopior(tavla("3(x+1)(x+12)"), bok)
+    assert lb.bokkopior(tavla("3(x + 1)\\cdot(x + 12)"), bok)
+    # Och utan bok finns ingenting att jämföra med.
+    assert lb.bokkopior(tavla("3(x + 1)(x + 12)"), "") == []
+
+
+def test_bokkopievakten_faller_inte_ett_kort_allmant_uttryck():
+    """«x^2 + 8x» står i varenda bok på sidan och är ingen avskriven uppgift.
+    Vakten fäller bara det som är långt nog att vara en uppgift."""
+    bok = "UR LÄROBOKEN — Origo 2a.\n\n1219 Rita en figur med arean x² + 8x."
+    tavla = {"boards": [{"sections": []},
+                        {"columns": [{"sections": [
+                            {"kind": "math", "latex": "x^2 + 8x"}]}]}]}
+    assert lb.bokkopior(tavla, bok) == []
+
+
+def test_generate_board_far_bokkopiorna_som_fel_att_ratta():
+    """Vakten går in FÖRE reparationsrundorna: en avskriven uppgift rättas i
+    samma varv som ett schemafel, inte som en varning läraren får läsa."""
+    bok = "UR LÄROBOKEN — Origo 2a.\n\n1220 Utveckla 3(x + 1)(x + 12)."
+    doc = _valid_doc()
+    doc["boards"][1]["columns"][0]["sections"].append(
+        {"kind": "math", "latex": "3(x + 1)(x + 12)"})
+    llm, calls = _stub_llm([json.dumps(doc)])
+    res = lb.generate_board("Ma2a", "IndA", "andragradsuttryck", model="",
+                            bok=bok, doma=False, llm=llm)
+    assert any(f.get("code") == "bokkopia" for f in res["errors"]), res["errors"]
+    assert res["rounds"] > 1                 # den kostade en rättningsrunda
+    assert "GÖR EGNA" in calls[1]["prompt"]
+
+
+def test_domaren_provar_tackningen_mot_centralt_innehall_utan_bok():
+    """«I andra hand luta sig på det centrala innehållet.» (2026-09-05,
+    kväll.) Utan bok prövades täckningen mot ingenting."""
+    ci = course_data.centralt_innehall_block(
+        "Matematik, nivå 2a", "Andragradsuttryck: multiplicera binom")
+    t = lb.build_tackning_prompt({"boards": []}, ci)
+    assert "CENTRALT INNEHÅLL (Gy25)" in t
+    assert "PUNKTERNA kontraktet" in t
+    assert "kan eleven påbörja det den här punkten beskriver" in t
+    assert "Andragradsfunktioner" in t
+
+
+def test_ci_blocket_gar_in_i_prompten_pa_bokens_plats():
+    """Blocket är byggt så att det går in där bokblocket går in: då når det
+    både skrivningen och täckningsdomaren utan att någon väg behöver ändras."""
+    ci = course_data.centralt_innehall_block(
+        "Matematik, nivå 2a", "Andragradsuttryck: multiplicera binom")
+    p = lb.build_prompt("Matematik, nivå 2a", "IndA",
+                        "Andragradsuttryck: multiplicera binom", bok=ci)
+    assert "CENTRALT INNEHÅLL (Gy25), kursens punkter för momentet" in p
+    assert "Andragradsfunktioner" in p
+    # Och utan block är prompten precis som förut.
+    assert "CENTRALT INNEHÅLL" not in lb.build_prompt("Ma2a", "IndA", "x")
 
 
 def test_ren_dom_ror_inte_tavlan():
