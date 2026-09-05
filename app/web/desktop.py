@@ -7,7 +7,6 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import socket
 import threading
 import time
 from urllib.request import urlopen
@@ -16,6 +15,8 @@ import uvicorn
 import webview
 
 from app import debug_log, filhanterare
+from app.web import port as port_kalla
+from app.web import portvakt
 from app.web.server import create_app
 
 _MEDIA_TYPES = (
@@ -70,17 +71,10 @@ class Api:
             return False
 
 
-def _free_port(candidates=(8731, 8732, 8733, 0)) -> int:
-    for port in candidates:
-        s = socket.socket()
-        try:
-            s.bind(("127.0.0.1", port))
-            return s.getsockname()[1]
-        except OSError:
-            continue
-        finally:
-            s.close()
-    return 8731
+# Porten bor i app/web/port.py sedan 2026-09-06, inte i den här raden: den
+# stod på fem ställen och Windows reserverade spannet den låg i.
+def _free_port(candidates=None) -> int:
+    return port_kalla.ledig_port(candidates)[0]
 
 
 def _vem_har(port: int) -> str:
@@ -89,7 +83,8 @@ def _vem_har(port: int) -> str:
     något annat.
 
     Kvällen 2026-08-20 höll en förhandsvisningsserver som ingen visste om
-    port 8750 i tre timmar medan läraren trodde att hon satt i appen. Blir
+    port 18750 (hette 8750 då) i tre timmar medan läraren trodde att hon
+    satt i appen. Blir
     förstahandsporten upptagen ska namnet på ockupanten stå i loggen — inte
     bara att appen tyst gled en port åt sidan."""
     try:
@@ -108,7 +103,11 @@ class _ThreadedServer(uvicorn.Server):
 
 
 def main() -> None:
-    port = _free_port()
+    logg = debug_log.get_logger()
+    # Fråga Windows FÖRE bind. Ett reserverat spann syns bara i netsh, och utan
+    # den här raden såg spärren ut som «upptagen» i loggen (2026-09-06).
+    portvakt.kolla(port_kalla.FORSTAHAND, logg)
+    port, hinder = port_kalla.ledig_port()
     # Appen stämplar sig i miljön INNAN servern byggs: create_app läser
     # TRANSKRIBERA_START och skriver läge, port och pid i transkribera.log, och
     # varje server som INTE kan säga att den är appen märker sin egen sida med
@@ -116,10 +115,18 @@ def main() -> None:
     os.environ["TRANSKRIBERA_START"] = "app"
     os.environ["TRANSKRIBERA_PORT"] = str(port)
     app = create_app()
-    if port != 8731:
-        debug_log.get_logger().warning(
-            "8731 var upptagen av %s — appen startade på %s i stället",
-            _vem_har(8731), port)
+    if port != port_kalla.FORSTAHAND:
+        # Två olika fel, två olika rader. «Spärrad» går aldrig över av sig
+        # självt och ska peka på netsh; «upptagen» ska namnge ockupanten.
+        if hinder == "sparrad":
+            logg.warning(
+                "%s är reserverad av Windows (netsh int ipv4 show "
+                "excludedportrange protocol=tcp), appen startade på %s i "
+                "stället", port_kalla.FORSTAHAND, port)
+        else:
+            logg.warning(
+                "%s var upptagen av %s, appen startade på %s i stället",
+                port_kalla.FORSTAHAND, _vem_har(port_kalla.FORSTAHAND), port)
     config = uvicorn.Config(app, host="127.0.0.1", port=port,
                             log_level="warning")
     server = _ThreadedServer(config)
