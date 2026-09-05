@@ -133,6 +133,13 @@ INSTRUCTION = (
     "som gånger sig självt ger A» — och handlar lektionen också om kubikroten "
     "får den sin egen rad). En vardagsmening som bär idén får följa. Sedan "
     "inga fler meningar.\n"
+    # Lärarens dom (2026-09-05): «vad är ett uttryck? Vad INNEHÅLLER ett
+    # uttryck?» Den andra frågan är lika viktig som den första, men den
+    # besvaras inte med fler meningar i sidflödet: delarna döps i figuren
+    # (7) och begreppen får sina rader i spalten (8c).
+    "5b. Vad begreppet INNEHÅLLER hör också hemma på vänstern, men inte som "
+    "fler meningar: delarna döps i figurraden och begreppen får varsin rad i "
+    "spalten bredvid figuren.\n"
     "6. Figuren och formlerna SIDA VID SIDA i en row: figuren till vänster, "
     "och till höger om den en col med formelkedjan och \"Vanligt fel:\". "
     "Vänstertavlan är 900 px bred — staplas allt under varandra blir den en "
@@ -147,7 +154,11 @@ INSTRUCTION = (
     "7. Figuren är generisk: shape eller graph med bokstäver som beteckningar "
     "(a, b, c, x_1, y_1), aldrig konkreta tal, gärna med arrows och korta "
     "etiketter att peka på. Saknar momentet naturlig figur står den generiska "
-    "uppställningen där i stället — bokstäver, inte siffror.\n"
+    "uppställningen där i stället — bokstäver, inte siffror — och då är den "
+    "DÖPT: en col med width (t.ex. 300), uttrycket i en math-sektion "
+    "(ax + b) och under den korta etiketter, en per del («ax och b är "
+    "termer», «a och x är faktorer», «a koefficient, x variabel»). Läraren "
+    "ska kunna peka på termen när hon säger ordet term.\n"
     "7b. EN bokstavsuppsättning för hela tavlan: de bokstäver figuren inför "
     "(a, b …) är de som används i varje formel och exempel därefter. En ny "
     "bokstav får aldrig dyka upp från ingenstans — behövs den ska den "
@@ -175,16 +186,36 @@ INSTRUCTION = (
     "bokstäver. Detsamma gäller jämförelser som exakt-mot-närmevärde: de bärs "
     "naturligt av ett exempel på högertavlan («låt roten stå kvar — det är "
     "det exakta svaret»), aldrig av en egen sifferruta på vänstern.\n"
-    # ALLMÄNT PÅ VÄNSTERN, TILLÄMPAT I EXEMPLET. Lärarens dom (2026-08-21
-    # kväll), på en vänstertavla med både räknelagarna och A=a²⇒a=√A: «väldigt
-    # mycket fram och tillbaka. Allmänna reglerna, absolut — men att arean är
-    # a² och sidan roten ur A, det kommer när vi tar upp exemplen på högra
-    # sidan. Det ska inte komma här.»
-    "8c. Vänsterns formelkedja är de ALLMÄNNA reglerna: definitioner och "
-    "räknelagar i bokstäver. Momentets tillämpningsformel (A = a^2 "
-    "\\Rightarrow a = \\sqrt{A}) skrivs som FÖRSTA led i det exempel som "
-    "använder den — inte på vänstern. Vänstern säger vad roten ÄR och hur "
-    "den räknas; exemplet visar vad den används till.\n"
+    # BEGREPPEN FÖRST. Lärarens dom (2026-09-05): «Vi behöver trycka mer på
+    # begreppen. Utgå från grunden, från de begrepp vi berör. Snackar vi om
+    # uttryck: vad är ett uttryck? Vad innehåller ett uttryck? Allt det kör vi
+    # på vänstra tavlan. Inte en massa räknelagar och skit, det hör till deras
+    # formelsamling.»
+    #
+    # Domen skriver om den gamla 8c (2026-08-21), som sa att vänsterns
+    # formelkedja är de ALLMÄNNA räknelagarna. Räknelagarna var aldrig
+    # poängen: de står i formelsamlingen, och en spalt full av dem trängde ut
+    # just det lektionen handlar om. Kvar ur den gamla regeln är dess andra
+    # halva, att momentets tillämpningsformel hör till exemplet.
+    "8c. Domen gäller ALL matematik tavlan kan bära: varje moment och varje "
+    "källa (boken, ett tidigare arbete, minnet, en förlaga eller ett fritt "
+    "uppdrag). Spalten till höger om figuren öppnar med BEGREPPSRADERNA: en "
+    "text-rad per begrepp och verb MOMENTET bär, formen «Ord: vad det är», "
+    "högst ~60 tecken, i den ordning exemplen använder dem. Verben ÄR "
+    "begrepp: det momentet ber eleven GÖRA får varsin rad, precis som de "
+    "substantiv momentet inför. Vilka orden blir avgörs av momentet, aldrig "
+    "av en färdig lista — derivera, lösa ut, bestämma, avrunda, förkorta, "
+    "konstruera och uppskatta är begrepp lika mycket som utveckla och "
+    "faktorisera. Först EFTER raderna kommer bokstavsformeln som visar vad "
+    "verbet GÖR, EN per verb: a(b + c) = ab + ac läst åt höger är utveckla, "
+    "åt vänster faktorisera. Sist Vanligt fel.\n"
+    "8d. Aldrig en lista räknelagar. Tumregeln för vad som INTE ska skrivas: "
+    "kan eleven slå upp regeln, och är den inte dagens begrepp, skriv den "
+    "inte — «inte en massa räknelagar och skit, det hör till deras "
+    "formelsamling». Momentets tillämpningsformel (A = a^2 \\Rightarrow "
+    "a = \\sqrt{A}) skrivs som FÖRSTA led i det exempel som använder den, "
+    "inte på vänstern: vänstern säger vad begreppet ÄR, exemplet visar vad "
+    "det används till.\n"
     "9. Sist i den högra spalten: \"Vanligt fel:\" i rött (text med weight 700) "
     "följt av en underline-sektion i rött, sedan det felaktiga ledet i en "
     "math-sektion och en kort rad om varför. Inne i en row/col ritar motorn "
@@ -210,6 +241,20 @@ INSTRUCTION = (
     # uppgifter på ett bättre sätt.»
     "Exemplen — de är genomgångens kärna:\n"
     "- 1–3 exempel, aldrig fler. Ett enkelt exempel räcker ofta; tre är taket.\n"
+    # BEGREPPEN I EXEMPLEN. Samma dom (2026-09-05): «Sen exemplen: jaha, nu
+    # ska man utveckla det här uttrycket. Då trycker man på vad utveckla
+    # betyder. Så trycker man på begreppen samtidigt som man visar med
+    # exemplen.» Ett steg som bara säger vad handen gör lär ut en handrörelse.
+    # Ett steg som börjar med ordet lär ut begreppet, och läraren kan peka
+    # från steget tillbaka till raden där ordet står.
+    "- Varje metodsteg BÖRJAR med verbet eller begreppet från vänstertavlan, "
+    "sedan kolon och vad det betyder i just det här talet: «Utveckla: "
+    "multiplicera in 3:an i parentesen», «Derivera: produktregeln, u och v "
+    "var för sig», «Avrunda: två värdesiffror», «Konstruera: "
+    "mittpunktsnormalen till AB». Uttrycket och dess verb är bara ett exempel "
+    "på formen; momentet ger sina egna ord. Går ett steg inte att namnge med "
+    "ett begrepp från vänstern saknar det antingen sin rad där (komplettera "
+    "vänstern) eller hör inte hemma på tavlan.\n"
     # LÄSRIKTNINGEN. Lärarens dom (2026-08-20), på en tavla med två figurer
     # och «Hel area: A = 2·18   A = 50/2» i samma rad: «man får kolla korsvis
     # med ögonen för att hänga med. Onödigt komplicerat. Och arean finns i en
@@ -237,6 +282,18 @@ INSTRUCTION = (
     "vändning per exempel, inte en ny värld. Ett tal som redan räknats fram "
     "får bli nästa exempels ingång — det sparar tavlyta och låter läraren "
     "peka bakåt.\n"
+    # Trådens föredöme, i lärarens egna ord (2026-09-05): «nu ska man utveckla
+    # det här uttrycket … och nu ska vi faktorisera samma uttryck igen, då går
+    # vi tillbaka … sen ett exempel till: nu ska vi ha ett bråk i stället. Vad
+    # händer då? Vi kanske måste förlänga bråket.» Det är VERBET som byts
+    # mellan exemplen, inte världen.
+    "- Kedjan är BEGREPPSDRIVEN, inte bara taldriven: exempel 1 gör något med "
+    "ett uttryck, exempel 2 tar SAMMA uttryck baklänges («vi går tillbaka») "
+    "och exempel 3 lägger det i en ny form där ett nytt verb behövs "
+    "(uttrycket i ett bråk: förlänga, sedan förenkla genom att faktorisera "
+    "och stryka den gemensamma faktorn). Det är FORMEN som är regeln, inte "
+    "algebran: momentet avgör vilka verb som finns, och saknar det motsatta "
+    "verb bygger tråden vidare på situationen som förut.\n"
     "- Exemplens kroppar HÄMTAS från vänstertavlan: «kvadraten, nu med arean "
     "108 cm²» — exemplets figur är en liten kopia med bara måttet, inget mer. "
     "En kropp som inte synts på vänstern (en kub med volymen 216 från "
@@ -326,7 +383,9 @@ INSTRUCTION = (
     "och metodsteg exemplet använder ska finnas bland vänsterns formler och "
     "metoder, så att läraren kan peka från exemplets rad tillbaka till raden "
     "där den står. Kräver exemplet något som inte står där — komplettera "
-    "vänstertavlan först, eller välj ett annat exempel.\n"
+    "vänstertavlan först, eller välj ett annat exempel. Förankringen gäller "
+    "BEGREPPEN och verben lika mycket som formlerna: använder ett metodsteg "
+    "ordet förlänga ska raden «Förlänga: …» stå på vänstern.\n"
     "- Visa det vanliga felet INNE i ett exempel när det går: det felaktiga "
     "ledet i rött bredvid det rätta, i just den uppgift klassen tittar på. Ett "
     "fel som bara står som en regel känns inte igen; ett fel som står i "
@@ -389,6 +448,11 @@ INSTRUCTION = (
     "tavla: ingen lärare hinner skriva upp den, och ingen elev hinner av.\n"
     "- Hellre math, tabell och figur än text. Ett steg som går att skriva som "
     "en formel skrivs som en formel.\n"
+    # Begreppsraderna (8c) är text och äter av samma budget som allt annat.
+    # Taket rörs inte: läraren har fällt det själv.
+    "- Begreppsraderna räknas som text. Håll dem vid ~60 tecken och se till "
+    "att definitionsmeningen, raderna och Vanligt fel ryms tillsammans. Är "
+    "det trångt: färre verb, inte längre rader.\n"
     # Kedjans pris, uppmätt när röda tråden kom: uppföljarnas «Samma kurva,
     # men nu …»-rader och en avslutande kontrollrad sprängde budgeten två
     # inspelningar i rad (473 och 445 tecken mot taket ~400).
@@ -465,8 +529,12 @@ def _cirkel(cx: float, cy: float, r: float, n: int = 48) -> list[list[float]]:
 # genom validate_board_json). En utan graf, en med graf/expr, en med
 # sammanfattningstabell och en med fallgalleri, så modellen ser alla mönstren.
 # ALLA fyra har samma vänstertavla i formen: rubrik → agenda → divider →
-# öppningsfråga → en mening → figur → formel → vanligt fel. Prompttext utan
-# few-shot-stöd följs dåligt; det är shotarna som lär ut dramaturgin.
+# öppningsfråga → en mening → figur → BEGREPPSRADERNA → formel → vanligt fel.
+# Begreppsraderna kom med domen 2026-09-05, och de står i alla fyra av ett
+# skäl: formen bär utan algebra. Pythagoras har «Sätt in» och «Lös ut» där
+# uttrycken har «Utveckla» och «Faktorisera», och exemplens metodsteg
+# börjar med sitt eget moments verb. Prompttext utan few-shot-stöd följs
+# dåligt; det är shotarna som lär ut dramaturgin.
 FEW_SHOTS: list[tuple[str, dict]] = [
     (
         "Ma1b, klass 9A — Pythagoras sats (introduktion)",
@@ -509,7 +577,28 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                              "width": 300, "height": 210,
                              "labels": {"left": "a", "bottom": "b", "right": "c",
                                         "inside": "v"}},
+                            # BEGREPPSRADERNA först, formeln efter dem
+                            # (2026-09-05): «utgå från grunden, från de begrepp
+                            # vi berör». Satsen talar om kateter och hypotenusa,
+                            # och de orden ska stå skrivna innan formeln som
+                            # använder dem. En rad var, «Ord: vad det är».
                             {"kind": "col", "gap": 10, "children": [
+                                {"kind": "text",
+                                 "text": "Katet: sidan vid räta vinkeln",
+                                 "size": 18},
+                                {"kind": "text",
+                                 "text": "Hypotenusa: sidan mitt emot vinkeln",
+                                 "size": 18},
+                                # Verben är momentets egna. Pythagoras har inga
+                                # algebraverb, och behöver inga: satsen sätts in
+                                # och sidan löses ut. Det är de orden exemplens
+                                # steg börjar med.
+                                {"kind": "text",
+                                 "text": "Sätt in: byt bokstäverna mot talen",
+                                 "size": 18},
+                                {"kind": "text",
+                                 "text": "Lös ut: få den okända sidan ensam",
+                                 "size": 18, "gapAfter": 12},
                                 {"kind": "math", "latex": "a^2 + b^2 = c^2",
                                  "size": 30, "gapAfter": 14},
                                 {"kind": "math", "latex": "c = \\sqrt{a^2 + b^2}",
@@ -548,9 +637,9 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                              "labels": {"left": "3", "bottom": "4", "right": "c"},
                              "gapAfter": 16},
                             {"kind": "list", "bullet": "–", "size": 19, "gap": 6,
-                             "items": ["Sätt in kateterna i satsen",
-                                       "Räkna ut c² först",
-                                       "Dra roten ur — och sätt ut enheten"]},
+                             "items": [
+                                 "Sätt in: kateterna 3 och 4 i satsen",
+                                 "Lös ut: dra roten ur c² och sätt ut enheten"]},
                         ]},
                         # KEDJANS UPPFÖLJARE (domen 2026-08-21): samma triangel
                         # som exempel 1 — c är redan framräknad till 5 — och en
@@ -564,8 +653,9 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                              "text": "Samma triangel: c = 5. Hur lång är kateten?",
                              "size": 20, "gapAfter": 14},
                             {"kind": "list", "bullet": "–", "size": 19, "gap": 6,
-                             "items": ["Samma sats — lös ut kateten",
-                                       "Subtrahera, dra sedan roten ur"],
+                             "items": [
+                                 "Lös ut: skriv om satsen för kateten",
+                                 "Sätt in: c och den kända kateten"],
                              "gapAfter": 18},
                             {"kind": "text", "text": "Vanligt fel:", "size": 19,
                              "color": "red", "weight": 700, "gapAfter": 2},
@@ -623,7 +713,21 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                                         "text": "symmetrilinje", "size": 15,
                                         "color": "blue", "anchor": "start"}],
                              "points": [{"x": -1, "y": -2}]},
+                            # Samma form som i shot 1: orden lektionen bär
+                            # står före formlerna som använder dem.
                             {"kind": "col", "gap": 10, "children": [
+                                {"kind": "text",
+                                 "text": "Symmetrilinje: linjen kurvan speglas i",
+                                 "size": 18},
+                                {"kind": "text",
+                                 "text": "Vändpunkt: där kurvan byter riktning",
+                                 "size": 18},
+                                {"kind": "text",
+                                 "text": "Bestäm: räkna fram båda talen",
+                                 "size": 18},
+                                {"kind": "text",
+                                 "text": "Avläs: läs punkten ur formen",
+                                 "size": 18, "gapAfter": 12},
                                 {"kind": "math", "latex": "f(x) = ax^2 + bx + c",
                                  "size": 24, "gapAfter": 12},
                                 {"kind": "math", "latex": "x = -\\frac{b}{2a}",
@@ -659,16 +763,15 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                             # man gör; själva räknandet sker på lektionen.
                             {"kind": "text", "text": "Väg 1: symmetrilinjen",
                              "size": 19, "weight": 700, "gapAfter": 6},
-                            {"kind": "text",
-                             "text": "Räkna x, sätt sedan in x i f(x).",
-                             "size": 19, "gapAfter": 14},
+                            {"kind": "list", "bullet": "–", "size": 19, "gap": 6,
+                             "items": ["Bestäm: räkna x, sätt sedan in x i f(x)"],
+                             "gapAfter": 14},
                             {"kind": "text", "text": "Väg 2: kvadratkomplettering",
                              "size": 19, "weight": 700, "gapAfter": 6},
                             {"kind": "math", "latex": "f(x) = (x - p)^2 + q",
                              "size": 22, "gapAfter": 6},
-                            {"kind": "text",
-                             "text": "Vändpunkten avläses direkt: (p, q).",
-                             "size": 19},
+                            {"kind": "list", "bullet": "–", "size": 19, "gap": 6,
+                             "items": ["Avläs: vändpunkten står i (p, q)"]},
                         ]},
                         {"weight": 1, "sections": [
                             # Grafen är utgångspunkten att peka i — punkten
@@ -687,76 +790,100 @@ FEW_SHOTS: list[tuple[str, dict]] = [
             ],
         },
     ),
-    # ── Destillat ur lärarens egen tavla (docs/forlagor/ ─────────────────────
-    # activity_text_to_equation.html, HÖGRA tavlan). Formen, inte innehållet:
-    # uppgiftsrad på högst två rader → klassificeringsfrågan med ETT svar på en
-    # rad → metodsteg → SAMMANFATTNINGSTABELLEN.
+    # ── Begreppen först ─────────────────────────────────────────────────────
+    # Lärarens dom (2026-09-05): «Vi behöver trycka mer på begreppen. Utgå från
+    # grunden, från de begrepp vi berör. Snackar vi om uttryck: vad är ett
+    # uttryck? Vad innehåller ett uttryck? Allt det kör vi på vänstra tavlan.
+    # Inte en massa räknelagar och skit, det hör till deras formelsamling. Sen
+    # exemplen: jaha, nu ska man utveckla det här uttrycket. Då trycker man på
+    # vad utveckla betyder. Och nu ska vi faktorisera samma uttryck igen. Då
+    # går vi tillbaka. Sen ett exempel till: nu ska vi ha ett bråk i stället.
+    # Vad händer då? Vi kanske måste förlänga bråket. Vad betyder det att
+    # förlänga? Och sen förenkla, genom att faktorisera och stryka faktorer i
+    # täljaren och nämnaren. Så trycker man på begreppen samtidigt som man
+    # visar med exemplen.»
     #
-    # Tabellen är själva poängen. Grupperna löser först var för sig, sedan löser
-    # klassen uppgifterna tillsammans på tavlan och tabellen fylls i gemensamt —
-    # det är lektionens samlingspunkt, och den läraren är stoltast över. Därför
-    # står bara första raden ifylld: resten skrivs på plats.
-    #
-    # Momentet är MEDVETET ett annat än förlagans (som handlar om exponential-
-    # mot potensekvationer): modellen ska härma formen, inte skriva av
-    # innehållet.
+    # Shoten ÄR den domen, och den ersatte derivering-shoten («Vilken regel?»)
+    # som lärde ut precis det domen fäller: en vänsterspalt full av räknelagar.
+    # Nu bär vänstern uppställningen ax + b med delarna döpta (term, faktor,
+    # koefficient, variabel) och en rad per verb, och de tre exemplen går genom
+    # SAMMA uttryck framåt, baklänges och i ett bråk. Tabellen som fylls i
+    # tillsammans med klassen flyttade med hit: den var det shoten var värd att
+    # behållas för.
     (
-        "Ma3c, klass NA25 — Derivera: vilken regel gäller?",
+        "Ma1c, klass EK25 — Uttryck: utveckla, faktorisera och förenkla bråk",
         {
-            "title": "Vilken deriveringsregel?",
+            "title": "Uttryck",
             "boards": [
                 {
                     "width": 900, "height": 780,
                     "padding": {"top": 30, "right": 30, "bottom": 30, "left": 40},
                     "chrome": "aluminium", "tray": True, "name": "vanster",
                     "sections": [
-                        {"kind": "heading", "text": "Vilken regel?", "size": 32,
+                        {"kind": "heading", "text": "Uttryck", "size": 32,
                          "align": "center",
                          "underline": {"amplitude": 2, "thickness": 3,
                                        "reserve": 16},
                          "gapAfter": 14},
                         {"kind": "list", "bullet": "–", "size": 19, "gap": 4,
-                         "align": "center", "items": ["Reglerna vi redan kan",
-                                                      "Ett exempel tillsammans",
-                                                      "Arbetar i boken s. 61–63"],
+                         "align": "center", "items": ["Vad ett uttryck är",
+                                                      "Utveckla och faktorisera",
+                                                      "Arbetar i boken s. 54–57"],
                          "gapAfter": 12},
                         {"kind": "divider", "width": 620, "gapAfter": 14},
-                        {"kind": "heading",
-                         "text": "Vilka deriveringsregler minns ni?",
+                        {"kind": "heading", "text": "Vad är ett uttryck?",
                          "size": 22, "gapAfter": 12},
                         {"kind": "text",
-                         "text": "Regeln väljs efter hur uttrycket är byggt.",
+                         "text": "Ett uttryck är tal och variabler som räknas ihop.",
                          "size": 20, "gapAfter": 14},
-                        # Momentet har ingen naturlig figur — då är den
-                        # generiska UPPSTÄLLNINGEN figuren, och den står till
-                        # vänster om formlerna precis som en figur hade gjort.
-                        {"kind": "row", "gap": 30, "children": [
-                            # Listan ligger i en col MED width: motorn ger en
-                            # list ingen egen bredd (punkterna är absolut
-                            # placerade), och utan bredd lade formlerna sig
-                            # rakt ovanpå den i raden.
-                            {"kind": "col", "width": 360, "children": [
-                                {"kind": "list", "bullet": "–", "size": 19,
-                                 "gap": 8,
-                                 "items": ["Ren potens → potensregeln",
-                                           "Två faktorer → produktregeln",
-                                           "Funktion i funktion → kedjeregeln"]}]},
-                            {"kind": "col", "gap": 10, "children": [
-                                {"kind": "math", "latex": "(uv)' = u'v + uv'",
-                                 "size": 24, "gapAfter": 12},
+                        # ANATOMIN ÄR FIGUREN. Momentet har ingen geometrisk
+                        # kropp, och då står den generiska uppställningen där i
+                        # stället, med delarna döpta så att läraren kan peka på
+                        # termen när hon säger ordet term. Bokstäver, inga
+                        # siffror: siffrorna bor på högertavlan.
+                        {"kind": "row", "gap": 26, "children": [
+                            {"kind": "col", "width": 300, "gap": 6, "children": [
+                                {"kind": "math", "latex": "ax + b", "size": 34,
+                                 "gapAfter": 12},
+                                {"kind": "text", "text": "ax och b är termer",
+                                 "size": 18},
+                                {"kind": "text", "text": "a och x är faktorer",
+                                 "size": 18},
+                                {"kind": "text",
+                                 "text": "a koefficient, x variabel",
+                                 "size": 18}]},
+                            # BEGREPPSRADERNA öppnar spalten, en rad per verb
+                            # lektionen bär, i den ordning exemplen använder
+                            # dem. Efter dem, inte före, kommer bokstavsformeln
+                            # som visar vad verbet GÖR: a(b + c) = ab + ac läst
+                            # åt höger är utveckla, åt vänster faktorisera.
+                            {"kind": "col", "gap": 8, "children": [
+                                {"kind": "text",
+                                 "text": "Utveckla: multiplicera in i parentesen",
+                                 "size": 18},
+                                {"kind": "text",
+                                 "text": "Faktorisera: bryt ut, sätt tillbaka parentesen",
+                                 "size": 18},
+                                {"kind": "text",
+                                 "text": "Förlänga: multiplicera täljare och nämnare",
+                                 "size": 18},
+                                {"kind": "text",
+                                 "text": "Förenkla: stryk gemensam faktor",
+                                 "size": 18, "gapAfter": 12},
+                                {"kind": "math", "latex": "a(b + c) = ab + ac",
+                                 "size": 24, "gapAfter": 10},
                                 {"kind": "math",
-                                 "latex": "f(g(x))' = f'(g)\\cdot g'",
-                                 "size": 24, "gapAfter": 18},
+                                 "latex": "\\frac{a}{b} = \\frac{ac}{bc}",
+                                 "size": 24, "gapAfter": 16},
                                 {"kind": "text", "text": "Vanligt fel:",
                                  "size": 19, "color": "red", "weight": 700,
                                  "gapAfter": 2},
                                 {"kind": "underline", "width": 120,
                                  "color": "red", "gapAfter": 8},
-                                {"kind": "math",
-                                 "latex": "(uv)' = u'v'",
+                                {"kind": "math", "latex": "a(b + c) = ab + c",
                                  "size": 19, "color": "red", "gapAfter": 6},
                                 {"kind": "text",
-                                 "text": "Faktorerna deriveras inte var för sig.",
+                                 "text": "Andra termen i parentesen glöms bort.",
                                  "size": 17, "color": "red"}]}]},
                     ],
                 },
@@ -765,38 +892,67 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                     "padding": {"top": 30, "right": 30, "bottom": 30, "left": 30},
                     "chrome": "aluminium", "tray": True, "name": "hoger",
                     "columns": [
+                        # Varje metodsteg BÖRJAR med verbet från vänstern och
+                        # säger vad det betyder i just det här talet. Då kan
+                        # läraren peka från steget tillbaka till raden där ordet
+                        # står, och begreppet får sitt innehåll av exemplet.
                         {"weight": 1, "sections": [
-                            {"kind": "heading", "text": "Exempel A", "size": 28,
+                            {"kind": "heading", "text": "Exempel 1", "size": 28,
                              "underline": {}, "gapAfter": 12},
-                            {"kind": "text", "text": "Derivera funktionen nedan.",
-                             "size": 20, "gapAfter": 14},
-                            {"kind": "math", "latex": "f(x) = x^2\\sin x",
-                             "size": 26, "gapAfter": 16},
-                            # Klassificeringsfrågan — och svaret på EN rad.
-                            {"kind": "text", "text": "Hur är den byggd?",
-                             "size": 21, "weight": 700, "gapAfter": 4},
                             {"kind": "text",
-                             "text": "Två faktorer → produktregeln",
-                             "size": 20, "gapAfter": 16},
+                             "text": "Utveckla och förenkla uttrycket.",
+                             "size": 20, "gapAfter": 10},
+                            {"kind": "math", "latex": "4(x + 3) + 2x",
+                             "size": 26, "gapAfter": 16},
                             {"kind": "list", "bullet": "–", "size": 19, "gap": 6,
-                             "items": ["Namnge u och v",
-                                       "Derivera u och v var för sig",
-                                       "Sätt in i produktregeln"]},
+                             "items": [
+                                 "Utveckla: multiplicera in 4:an i parentesen",
+                                 "Förenkla: dra ihop termerna med x"],
+                             "gapAfter": 22},
+                            # «Och nu ska vi faktorisera samma uttryck igen. Då
+                            # går vi tillbaka.» Samma tal, andra hållet: det är
+                            # där eleven ser att verben är varandras motsatser.
+                            {"kind": "heading",
+                             "text": "Exempel 2: samma uttryck baklänges",
+                             "size": 26, "underline": {}, "gapAfter": 12},
+                            {"kind": "math", "latex": "6x + 12", "size": 26,
+                             "gapAfter": 16},
+                            {"kind": "list", "bullet": "–", "size": 19, "gap": 6,
+                             "items": [
+                                 "Faktorisera: bryt ut den gemensamma faktorn",
+                                 "Utveckla: multiplicera tillbaka och kontrollera"]},
                         ]},
                         {"weight": 1, "sections": [
-                            # SAMMANFATTNINGEN: en rad per fall. Första raden
-                            # visar formen — resten fylls i tillsammans med
-                            # klassen. Korta celler, ingen cellW: motorn ger
-                            # varje kolumn sin egen bredd.
+                            # «Nu ska vi ha ett bråk i stället. Vad händer då?»
+                            # Förlängningen ger gemensam nämnare, och förenklingen
+                            # sker genom att faktorisera täljaren och stryka
+                            # faktorn. Samma parentes som i exempel 1 står kvar på
+                            # slutet, och talen går jämnt ut när läraren räknar.
+                            {"kind": "heading",
+                             "text": "Exempel 3: uttrycket i ett bråk",
+                             "size": 26, "underline": {}, "gapAfter": 12},
+                            {"kind": "math",
+                             "latex": "\\frac{x + 2}{3} + \\frac{x}{6}",
+                             "size": 26, "gapAfter": 16},
+                            {"kind": "list", "bullet": "–", "size": 19, "gap": 6,
+                             "items": [
+                                 "Förlänga: multiplicera första bråket med 2",
+                                 "Faktorisera: bryt ut 3 ur täljaren",
+                                 "Förenkla: stryk 3:an mot 6:an"],
+                             "gapAfter": 22},
+                            # SAMLINGSPUNKTEN: en rad per uttryck, där första
+                            # raden visar formen och resten fylls i tillsammans
+                            # med klassen. Korta celler, ingen cellW: motorn ger
+                            # varje kolumn bredden ur sitt innehåll.
                             {"kind": "heading", "text": "Fyller vi i tillsammans",
                              "size": 24, "underline": {}, "gapAfter": 14},
                             {"kind": "table",
-                             "headers": ["Uttryck", "Byggt av", "Regel", "Svar"],
+                             "headers": ["Uttryck", "Vad görs", "Begrepp"],
                              "rows": [
-                                 ["x² sin x", "två faktorer", "produkt", ""],
-                                 ["(3x + 1)⁵", "", "", ""],
-                                 ["4x³", "", "", ""],
-                                 ["x² + sin x", "", "", ""]]},
+                                 ["4(x + 3)", "gångra in", "utveckla"],
+                                 ["6x + 12", "", ""],
+                                 ["2(x + 5)", "", ""],
+                                 ["3x + 9", "", ""]]},
                         ]},
                     ],
                 },
@@ -862,7 +1018,16 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                                   "anchor": "start"},
                                  {"x": 0, "y": 1.2, "text": "C", "size": 16,
                                   "anchor": "middle"}]},
+                            # Satsen handlar om två sorters vinklar, och då
+                            # är det de två orden som ska stå först: u = 2v
+                            # betyder ingenting förrän u och v har namn.
                             {"kind": "col", "gap": 10, "children": [
+                                {"kind": "text",
+                                 "text": "Randvinkel: hörnet ligger på cirkeln",
+                                 "size": 18},
+                                {"kind": "text",
+                                 "text": "Medelpunktsvinkel: hörnet i centrum",
+                                 "size": 18, "gapAfter": 12},
                                 {"kind": "math", "latex": "u = 2v", "size": 28,
                                  "gapAfter": 12},
                                 {"kind": "math", "latex": "v = \\frac{u}{2}",
@@ -1581,6 +1746,18 @@ TACKNING_INSTRUKTION = (
     "en diagonal») — en halvering som inte är hälften, ett led skrivet åt "
     "fel håll, ett svar som inte stämmer. Ett räknefel på en genomgångstavla "
     "är alltid ett fynd, aldrig en detalj.\n"
+    # BEGREPPSKOPPLINGEN. Lärarens dom (2026-09-05) kom med ett villkor:
+    # hon vill inte sitta och iterera varje tavla för hand. Slirar formen är
+    # domaren rätt plats att fånga det på, inte fler promptrader.
+    "Pröva sist BEGREPPSKOPPLINGEN: varje verb och begrepp exemplen använder "
+    "ska ha sin egen rad på vänstertavlan i formen «Ord: vad det är». Vilka "
+    "orden är avgör momentet, inte en färdig lista — derivera, lösa ut, "
+    "bestämma, avrunda, förkorta, konstruera, utveckla och faktorisera är "
+    "alla exempel, inget urval att välja ur. Saknas raden "
+    "är det ett fynd, och forslag är raden som ska in. Omvänt: står en "
+    "räknelag på vänstern som inget exempel använder och som eleven kan slå "
+    "upp i sin formelsamling är tavlan för tjock där — ett fynd med förslag "
+    "att stryka raden.\n"
     "Svara med enbart JSON: {\"saknas\": [{\"uppgifter\": [nummer, …], "
     "\"vad\": \"det som saknas eller är felräknat, kort\", \"forslag\": "
     "\"vad som ska läggas till eller rättas på tavlan — en formel, en rad, "

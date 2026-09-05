@@ -103,8 +103,15 @@ def test_alla_few_shots_foljer_dramaturgin():
         rad = s[-1]["children"]
         assert len(rad) == 2 and rad[1]["kind"] == "col", uppdrag
         assert rad[0]["kind"] in ("shape", "graph", "col"), uppdrag
+        # Spalten öppnar i BEGREPPEN, inte i formeln (2026-09-05): «utgå från
+        # grunden, från de begrepp vi berör». Formeln kommer efter raderna,
+        # aldrig före dem.
         spalt = [c["kind"] for c in rad[1]["children"]]
-        assert spalt[0] == "math", uppdrag
+        i_math = spalt.index("math")
+        assert i_math >= 1, uppdrag
+        assert set(spalt[:i_math]) == {"text"}, (uppdrag, spalt)
+        assert all(": " in c["text"] and len(c["text"]) <= 60
+                   for c in rad[1]["children"][:i_math]), uppdrag
         # Vanligt fel sist i spalten: röd rubrik + understrykning, ingen ruta.
         rubrik = next(c for c in rad[1]["children"]
                       if c.get("text", "").startswith("Vanligt fel:"))
@@ -168,6 +175,67 @@ def test_few_shotarna_haller_textbudgeten():
             assert volym <= ws._MAX_BOARD_TEXT, f"{uppdrag}, tavla {i}: {volym}"
 
 
+def _begreppsrader(doc: dict) -> list[str]:
+    """Raderna spalten öppnar med, före första formeln — «Ord: vad det är»."""
+    spalt = _vanstersektioner(doc)[-1]["children"][1]["children"]
+    ut = []
+    for sek in spalt:
+        if sek["kind"] == "math":
+            break
+        if sek["kind"] == "text" and ": " in sek["text"]:
+            ut.append(sek["text"])
+    return ut
+
+
+def _algebrashoten() -> dict:
+    return next(doc for uppdrag, doc in lb.FEW_SHOTS if "Uttryck" in uppdrag)
+
+
+def _metodsteg(doc: dict) -> list[str]:
+    """Högertavlans listpunkter — exemplens metodsteg."""
+    return [i for kol in doc["boards"][1].get("columns") or []
+            for sek in kol["sections"] if sek["kind"] == "list"
+            for i in sek["items"]]
+
+
+def test_vanstern_borjar_i_begreppen():
+    """«Vi behöver trycka mer på begreppen. Utgå från grunden, från de begrepp
+    vi berör. Snackar vi om uttryck: vad är ett uttryck?» (2026-09-05.) Alla
+    fyra shotarna bär formen, för domen gäller all matematik appen skriver —
+    uttrycket är exemplet på formen, inte formens gräns."""
+    for uppdrag, doc in lb.FEW_SHOTS:
+        assert _begreppsrader(doc), uppdrag
+    ord_i_verbshoten = " ".join(_begreppsrader(_algebrashoten())).lower()
+    for verb in ("utveckla", "faktorisera", "förlänga"):
+        assert verb in ord_i_verbshoten, verb
+    # Och orden kommer ur MOMENTET, inte ur en fast lista: Pythagoras och
+    # uttrycken delar inte ett enda begrepp.
+    pythagoras = next(d for u, d in lb.FEW_SHOTS if "Pythagoras" in u)
+    assert not (_prefix(pythagoras) & _prefix(_algebrashoten()))
+
+
+def _prefix(doc: dict) -> set:
+    return {r.split(":")[0].strip().lower() for r in _begreppsrader(doc)}
+
+
+def test_exempelstegen_pekar_pa_vanstern():
+    """«Nu ska man utveckla det här uttrycket. Då trycker man på vad utveckla
+    betyder.» Steget börjar i ordet, och ordet står på vänstern — annars finns
+    ingen rad att peka tillbaka på. Prövas på ALLA shotar: formen bär utan
+    algebra («Sätt in», «Lös ut», «Bestäm», «Avläs»)."""
+    med_steg = 0
+    for uppdrag, doc in lb.FEW_SHOTS:
+        orden = _prefix(doc)
+        punkter = _metodsteg(doc)
+        if punkter:
+            med_steg += 1
+        for punkt in punkter:
+            assert punkt.split(":")[0].strip().lower() in orden, (uppdrag, punkt)
+    # Fallgalleriet har inga metodsteg alls (läraren pratar och pekar) — men
+    # tre av fyra ska ha dem, annars kan testet gå tomt utan att någon märker.
+    assert med_steg >= 3, med_steg
+
+
 # ------------------------------------------------------------------ prompt --
 
 def test_build_prompt_contains_conventions_and_task():
@@ -193,6 +261,24 @@ def test_prompten_bar_dramaturgin():
     assert "EFTER figuren (till höger om den), aldrig före" in p
     assert "Skriv INTE någon lektionstid" in p
     assert "Fallgalleri" in p
+
+
+def test_prompten_satter_begreppen_forst():
+    """Prompten måste bära domen själv, inte bara shotarna: «inte en massa
+    räknelagar och skit, det hör till deras formelsamling» (2026-09-05)."""
+    p = lb.build_prompt("Ma1c", "EK25", "utveckla och faktorisera uttryck")
+    assert "BEGREPPSRADERNA" in p
+    assert "Ord: vad det är" in p
+    assert "formelsamling" in p
+    assert "Verben ÄR begrepp" in p
+    # Aldrig en fast ordlista: momentet ger orden, och exemplen i prompten
+    # ska komma ur olika områden.
+    assert "aldrig " in p and "av en färdig lista" in p
+    for verb in ("derivera", "avrunda", "konstruera"):
+        assert verb in p, verb
+    # Och i exemplen: steget börjar i ordet från vänstern.
+    assert "BÖRJAR med verbet eller begreppet" in p
+    assert "BEGREPPSDRIVEN" in p
 
 
 def test_prompten_forbjuder_rutor_och_kraver_bredden():
@@ -530,6 +616,17 @@ BOKBLOCK = (BOKBLOCK_UTAN_URVAL + "\n\nLÄRARENS URVAL: klassen ska räkna "
 
 def _dom(saknas):
     return json.dumps({"saknas": saknas}, ensure_ascii=False)
+
+
+def test_domaren_provar_ocksa_begreppskopplingen():
+    """Läraren vill inte iterera varje tavla för hand (2026-09-05) — slirar
+    formen ska domaren fånga det, inte fler promptrader."""
+    t = lb.build_tackning_prompt({"boards": []}, "LÄRARENS URVAL: 1201, 1202")
+    assert "BEGREPPSKOPPLINGEN" in t
+    assert "formelsamling" in t
+    # Fyndformen är oförändrad, och fejk.py matchar fortfarande på ordet.
+    assert '{"saknas"' in t
+    assert "täckningsdomare" in t
 
 
 def test_ren_dom_ror_inte_tavlan():
