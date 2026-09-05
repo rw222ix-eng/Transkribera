@@ -1,5 +1,6 @@
 """Lektionstavlor: promptbygge och reparationsloop med stubbat LLM."""
 import copy
+import re
 import json
 
 from app import lesson_board as lb
@@ -275,6 +276,50 @@ FORKUNSKAPSORD = {"multiplicera", "förenkla", "beräkna", "beräkna värdet",
                   "bestäm", "bestämma", "avläs", "avläsa", "förkorta"}
 
 
+def _exempelgrupper(doc: dict) -> list[tuple[str, list[str]]]:
+    """(uppgiftens text och matte, dess metodsteg) per exempel på högern.
+    Ett exempel börjar i sin «Exempel»-rubrik och räcker till nästa."""
+    ut: list[list] = []
+    for kol in doc["boards"][1].get("columns") or []:
+        aktuellt = None
+        for sek in kol["sections"]:
+            if (sek["kind"] == "heading"
+                    and sek.get("text", "").startswith("Exempel")):
+                aktuellt = ["", []]
+                ut.append(aktuellt)
+            elif aktuellt is None:
+                continue
+            elif sek["kind"] in ("text", "math"):
+                aktuellt[0] += " " + (sek.get("text") or sek.get("latex") or "")
+            elif sek["kind"] == "list":
+                aktuellt[1].extend(sek["items"])
+    return [(u, steg) for u, steg in ut if steg]
+
+
+# «i» och «o» är svenska småord, inte algebra — resten av gemenerna som står
+# ensamma i uppgiften är dess egna bokstäver (c, x, p, q, f).
+_SYMBOL_RE = re.compile(r"(?<![^\W\d_])([a-zA-Z])(?![^\W\d_])")
+
+
+def test_exempelstegen_bar_uppgiftens_tal():
+    """«Varje term mot varje term säger ju inget om just det här talet.»
+    (2026-09-05, del 2.) Regeln står på vänstern; steget ska säga vad den
+    gör HÄR. Minst ett steg per exempel måste därför bära uppgiftens egna
+    tal eller bokstäver — annars är det bara vänsterraden en gång till."""
+    provade = 0
+    for uppdrag, doc in lb.FEW_SHOTS:
+        for uppgift, steg in _exempelgrupper(doc):
+            provade += 1
+            symboler = {s for s in _SYMBOL_RE.findall(uppgift)
+                        if s not in ("i", "o")}
+            konkret = [
+                p for p in steg
+                if any(t.isdigit() for t in p)
+                or symboler & {s for s in _SYMBOL_RE.findall(p)}]
+            assert konkret, (uppdrag, uppgift, steg)
+    assert provade >= 4, provade      # shotarna får inte tappa sina exempel
+
+
 def test_en_regel_star_en_gang():
     """«I stället för all den texten är det bättre att skriva upp typ två
     regler.» Regeln stod två gånger på tavlan som fälldes: som mening i
@@ -381,6 +426,27 @@ def test_prompten_bar_exempelkraven():
     assert "Räkna INTE ut svaret" in p
     # Och när boken är källan: tavlan ska räcka för sidornas alla uppgifter.
     assert "SAMTLIGA uppgifter på just de" in p
+
+
+def test_prompten_valjer_exemplen_ur_urvalet():
+    """«Speglar exemplen det faktiska innehållet eleverna ska arbeta med i
+    boken?» (2026-09-05, del 2.) Tavlan hon fällde hade ett «samma uttryck,
+    nu med tal» — en nivå 1-uppgift ingen av hennes valda uppgifter ber om —
+    medan tre valda typer saknades helt. Kravet måste stå i prompten: det är
+    urvalet som väljer exemplen, inte bokens text och inte bortvalda nivåer."""
+    p = lb.build_prompt("Ma2a", "IndA", "andragradsuttryck")
+    assert "Exemplen väljs ur URVALETS uppgiftstyper" in p
+    assert "aldrig en nivå läraren valde bort" in p
+    assert "ETT exempel per NY metodtyp i urvalet" in p
+    # Tråden är underordnad urvalet: vändningen får inte köpa ett exempel
+    # utanför det.
+    assert "Vändningen MÅSTE vara en metodtyp som finns i urvalet" in p
+    # Steget är uppgiftens, inte regelns.
+    assert "Resten av steget är UPPGIFTENS, inte regelns" in p
+    assert "återger en vänsterrad eller en formel stryks" in p
+    # Och tillämpningarna hör till högern, som uppgifter.
+    assert "Tillämpningar (area, volym, pengar) står på HÖGERN" in p
+    assert "Fallgropen väljs ur urvalets SVÅRASTE typ" in p
 
 
 def test_prompten_tonar_ner_fargerna():
@@ -906,6 +972,26 @@ def test_domaren_provar_ocksa_begreppskopplingen():
     assert "täckningsdomare" in t
 
 
+def test_domaren_provar_exemplen_mot_urvalet():
+    """Domen 2026-09-05 (del 2): domaren letade bara LUCKOR, och därför fick
+    ett «beräkna värdet»-exempel stå kvar fast ingen vald uppgift bad om det.
+    Nu döms också åt andra hållet — ett exempel utanför urvalet byts ut, och
+    ett metodsteg som bara återger vänstern skrivs om med uppgiftens tal."""
+    t = lb.build_tackning_prompt({"boards": []}, "LÄRARENS URVAL: 1218–1227")
+    assert "Pröva sedan EXEMPLEN åt andra hållet" in t
+    assert "ingen vald uppgift har" in t
+    assert "BYTA UT hela exemplet" in t
+    assert "bara återger en vänsterrad eller en formel" in t
+    assert "uppgiftens egna tal" in t
+    # Och domen får inte spränga exempeltaket: kontrollkörningen 2026-09-05
+    # fick ett fjärde exempel av kompletteringen, inte av skrivrundan.
+    assert "HÖGST TRE exempel" in t
+    assert "aldrig att lägga till ett fjärde exempel" in t
+    # Bytet ska gå att uttrycka som lappar, inte bara som en helomskrivning.
+    lapp = lb.build_lapp_prompt(_valid_doc(), [{"kod": "x", "text": "y"}])
+    assert "Ett HELT exempel byts" in lapp
+
+
 def test_ren_dom_ror_inte_tavlan():
     doc = _valid_doc()
     llm, calls = _stub_llm([_dom([])])
@@ -1099,6 +1185,29 @@ def test_lappen_satter_in_efter_och_tar_bort():
     # Elementet på plats 2 är borta, och resten står i sin gamla ordning.
     assert doc["boards"][0]["sections"][2] not in sek
     assert sek[2] == doc["boards"][0]["sections"][1]
+
+
+def test_lappen_byter_ut_ett_helt_exempel_i_en_kolumn():
+    """Domaren får sedan 2026-09-05 föreslå att BYTA UT ett exempel som ligger
+    utanför lärarens urval. Ett exempel är flera sektioner i rad (rubrik,
+    uppgiftsrad, figur, steg), så bytet blir flera nycklar i samma lapp plus
+    en borttagning — och grannkolumnen får inte röras av det."""
+    doc = _valid_doc()
+    granne = copy.deepcopy(doc["boards"][1]["columns"][1]["sections"])
+    ut = lb.applicera_lappar(
+        doc,
+        [{"nyckel": "boards[1].columns[0].sections[0]",
+          "element": {"kind": "heading", "text": "Exempel 1"}},
+         {"nyckel": "boards[1].columns[0].sections[1]",
+          "element": {"kind": "text", "text": "Minus framför en produkt."}},
+         {"nyckel": "boards[1].columns[0].sections[2]",
+          "element": {"kind": "math", "latex": "x^2 - (x + 2)(x + 4)"}}],
+        ["boards[1].columns[0].sections[3]"])
+    kol = ut["boards"][1]["columns"][0]["sections"]
+    assert [s["kind"] for s in kol] == ["heading", "text", "math"]
+    assert kol[2]["latex"] == "x^2 - (x + 2)(x + 4)"
+    assert ut["boards"][1]["columns"][1]["sections"] == granne
+    assert doc == _valid_doc()           # originalet rörs inte
 
 
 def test_nyckeln_nar_in_i_en_row():

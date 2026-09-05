@@ -168,6 +168,8 @@ INSTRUCTION = (
     "«förstagradsterm», «konstant»). Bär momentet två former ritas båda, den "
     "andra under den första ((x + 3)(x + 2): «två binom»). Läraren ska kunna "
     "peka på termen när hon säger ordet term.\n"
+    # Lärarens fällning (2026-08-20) på ett exempel som plötsligt införde ett
+    # K: «var kommer K ifrån? Vi har använt a och b överallt.»
     "7b. EN bokstavsuppsättning för hela tavlan: de bokstäver figuren inför "
     "(a, b …) är de som används i varje formel och exempel därefter. En ny "
     "bokstav får aldrig dyka upp från ingenstans — behövs den ska den "
@@ -199,8 +201,7 @@ INSTRUCTION = (
     # exempel på högertavlan, aldrig av en egen sifferruta på vänstern. Raden
     # om det ströks 2026-09-05 — exempelreglerna säger redan samma sak, och
     # prompten skulle KORTAS.
-    "regel ($\\sqrt[3]{-8} = -2$) hör till exemplen — på vänstern står bara "
-    "bokstäver.\n"
+    "regel ($\\sqrt[3]{-8} = -2$) hör dit: på vänstern står bokstäver.\n"
     # BEGREPPEN FÖRST. Lärarens dom (2026-09-05): «Vi behöver trycka mer på
     # begreppen. Utgå från grunden, från de begrepp vi berör. Snackar vi om
     # uttryck: vad är ett uttryck? Vad innehåller ett uttryck? Allt det kör vi
@@ -267,6 +268,19 @@ INSTRUCTION = (
     # uppgifter på ett bättre sätt.»
     "Exemplen — de är genomgångens kärna:\n"
     "- 1–3 exempel, aldrig fler. Ett enkelt exempel räcker ofta; tre är taket.\n"
+    # URVALET VÄLJER EXEMPLEN. Lärarens dom (2026-09-05, del 2) över en tavla
+    # vars exempel 2 var «samma uttryck, nu med tal»: «speglar exemplen det
+    # faktiska innehållet eleverna ska arbeta med i boken? Det där är en nivå
+    # 1-uppgift. Ingen av uppgifterna jag valde ber om det.» Röda tråden
+    # krävde en vändning, och modellen tog den billigaste — därför står
+    # urvalet först, före tråden.
+    "- Exemplen väljs ur URVALETS uppgiftstyper. Står lärarens urval i "
+    "bokblocket är det urvalets typer som får exempel — aldrig bokens "
+    "förklaringstext, aldrig en nivå läraren valde bort. ETT exempel per NY "
+    "metodtyp i urvalet, högst tre steg var; en typ som vänsterns formel "
+    "redan täcker utan nytt handgrepp behöver inget exempel, den pratar "
+    "läraren om. Saknas urval gäller sidornas typer. Pröva valet mot "
+    "täckningen baklänges (nedan).\n"
     # BEGREPPEN I EXEMPLEN. Samma dom (2026-09-05): «Sen exemplen: jaha, nu
     # ska man utveckla det här uttrycket. Då trycker man på vad utveckla
     # betyder. Så trycker man på begreppen samtidigt som man visar med
@@ -283,6 +297,18 @@ INSTRUCTION = (
     "har en rad på vänstern — bara momentets EGNA verb kräver sin rad där "
     "(se 8c). Går ett steg inte att namnge alls hör det inte hemma på "
     "tavlan.\n"
+    # STEGET ÄR UPPGIFTENS. Samma dom (2026-09-05, del 2): tavlans tre steg
+    # var vänsterns regler skrivna en gång till. «Varje term mot varje term
+    # säger ju inget om just det här talet.» Regeln står på vänstern; steget
+    # ska säga vad den gör HÄR, så att läraren kan peka på siffran.
+    "- Resten av steget är UPPGIFTENS, inte regelns: det säger vad verbet gör "
+    "i just de här talen («3:an in i första parentesen», «minuset gäller "
+    "alla tre termerna»), aldrig regeln i allmänhet («varje term mot varje "
+    "term»). Ett steg som bara återger en vänsterrad eller en formel stryks. "
+    # Mätt på kontrollkörningen 2026-09-05: kravet på uppgiftens tal drog med
+    # sig färdiga uträkningar in i exemplen. Talen hör till steget, ledet
+    # inte — läraren räknar på plats.
+    "Steget säger vad man GÖR, aldrig vad det BLIR.\n"
     # LÄSRIKTNINGEN. Lärarens dom (2026-08-20), på en tavla med två figurer
     # och «Hel area: A = 2·18   A = 50/2» i samma rad: «man får kolla korsvis
     # med ögonen för att hänga med. Onödigt komplicerat. Och arean finns i en
@@ -292,73 +318,45 @@ INSTRUCTION = (
     "uppifrån och ned. Aldrig två figurer sida vid sida i samma exempel, "
     "aldrig två parallella uträkningar i samma rad («A = 2·18   A = 50/2») "
     "— ögat ska aldrig behöva läsa korsvis. Är det andra scenariot värt att "
-    "visa är det ett EGET exempel med egen rubrik, och det räknas mot taket; "
-    "annars stryks det.\n"
+    "visa blir det ett eget exempel som räknas mot taket; annars stryks det.\n"
     # Kravet stod förut två gånger — här och som en egen punkt längre ned om
     # bokens flera vägar. Slogs ihop 2026-09-05 för att korta prompten.
     "- Finns flera vägar till svaret (som i boken) visas TVÅ: \"Väg 1\" och "
     "\"Väg 2\" under varandra, ett par ord var om vad vägen går ut på, som "
-    "två egna rader — aldrig ihopklämda på en rad med «resp.», och aldrig en "
-    "punktlista som väver ihop stegen ur båda. Eleverna löser olika, och "
-    "genomgången ska rymma båda.\n"
+    "två egna rader — aldrig ihopklämda på en rad med «resp.», aldrig en "
+    "punktlista som väver ihop båda. Eleverna löser olika.\n"
     # RÖDA TRÅDEN. Lärarens dom (2026-08-20): «exemplen måste bygga på
-    # varandra, så att det blir en röd tråd. Dels för att inte hoppa för
-    # mycket, men även vara så pass smarta att vi kan återanvända uträkningar
-    # — exempel 2 bygger på exempel 1, exempel 3 på exempel 2. Det kommer
-    # vara en utmaning, men det går säkert att få till på ett smart sätt.»
-    # Tavlan hittade formen själv en gång — samma kvadrat, arean 36 byttes
-    # mot 30 för exakt-mot-närmevärde — och det är den formen som är regeln.
+    # varandra, så att det blir en röd tråd … exempel 2 bygger på exempel 1,
+    # exempel 3 på exempel 2.» Trådens föredöme, i hennes egna ord
+    # (2026-09-05): «nu ska man utveckla det här uttrycket … och nu ska vi
+    # faktorisera samma uttryck igen, då går vi tillbaka … sen ett exempel
+    # till: nu ska vi ha ett bråk i stället.» Det är VERBET som byts mellan
+    # exemplen, inte världen.
     "- Exemplen bildar EN berättelse, inte tre världar: exempel 2 utgår från "
-    "exempel 1:s situation eller resultat (samma figur, samma tal där det "
-    "går — «samma kvadrat, men nu …»), exempel 3 från exempel 2. En NY "
-    "vändning per exempel, inte en ny värld. Ett tal som redan räknats fram "
-    "får bli nästa exempels ingång — det sparar tavlyta och låter läraren "
-    "peka bakåt.\n"
-    # Trådens föredöme, i lärarens egna ord (2026-09-05): «nu ska man utveckla
-    # det här uttrycket … och nu ska vi faktorisera samma uttryck igen, då går
-    # vi tillbaka … sen ett exempel till: nu ska vi ha ett bråk i stället. Vad
-    # händer då? Vi kanske måste förlänga bråket.» Det är VERBET som byts
-    # mellan exemplen, inte världen.
-    "- Kedjan är BEGREPPSDRIVEN, inte bara taldriven: exempel 1 gör något med "
-    "ett uttryck, exempel 2 tar SAMMA uttryck baklänges («vi går tillbaka») "
-    "och exempel 3 lägger det i en ny form där ett nytt verb behövs "
-    "(uttrycket i ett bråk: förlänga och sedan förenkla). Det är FORMEN som "
-    "är regeln, inte "
-    "algebran: momentet avgör vilka verb som finns, och saknar det motsatta "
-    "verb bygger tråden vidare på situationen som förut.\n"
+    "exempel 1:s situation eller resultat («samma uttryck, men nu …»), "
+    "exempel 3 från exempel 2, och ett tal som redan räknats fram får bli "
+    "nästa exempels ingång — det sparar tavlyta och låter läraren peka "
+    "bakåt. Kedjan är BEGREPPSDRIVEN: vändningen är ett nytt VERB eller en "
+    "ny metodtyp, aldrig en ny värld eller bara nya tal.\n"
     "- Bär vänstern kroppar (geometrimoment) HÄMTAS exemplens kroppar därifrån: "
     "«kvadraten, nu med arean 108 cm²» — en liten kopia med bara måttet. En "
     "kropp som inte synts på vänstern får inte bära ett exempel.\n"
-    "- Tråden får ALDRIG kosta täckningen: varje metodtyp urvalet kräver ska "
-    "fortfarande beröras — välj vändningarna så att nästa metodtyp landar i "
-    "samma berättelse. Går berättelsen inte att förlänga naturligt: byt "
-    "hellre situation rent än att tvinga en krystad koppling.\n"
-    # Trådens första skarpa försök (2026-08-20) gick fel på fyra sätt, och
-    # läraren pekade ut vart och ett: en tredje kvadratvändning som prövade
-    # SAMMA metod igen («tre lika kvadrater i rad — lite onödigt, det är ju
-    # lite samma sak»), en serie stödomskrivningar där en räckte («det räcker
-    # med 3 = √9, vi behöver inte 2 = √4 och 5 = √25»), bokens formulering
-    # oöversatt («bryt ut kvadratfaktorn — då måste man förklara vad
-    # kvadratfaktorn menas med»), och en bokstav från ingenstans («var kommer
-    # K ifrån? Vi har använt a och b överallt»).
-    "- En vändning ska tillföra en NY metodtyp ur urvalet. En vändning som "
-    "prövar samma metod igen med nya tal är utfyllnad — stryk den; boken har "
-    "redan drillen.\n"
-    # OMVÄNT-FÄLLAN. Lärarens dom (2026-08-21), på en «Omvänt: fyra lika
-    # kvadrater, ihop 100 cm²» inklämd sist i exempel 1: «jag fattar inte
-    # riktigt detta exempel — vad ska den visa egentligen?» Samma metod
-    # baklänges är fortfarande samma metod, och raden hade ingen egen fråga —
-    # den bara stod där.
-    "- En «Omvänt:»-rad inklämd i ett färdigt exempel är samma metod åt andra "
-    "hållet — stryk den. Är vändningen verkligen ny får den ett eget exempel "
-    "med egen rubrik och egen fråga.\n"
-    # MINIFALLEN. Samma dom, samma kväll, på en rad småfigurer under exempel
-    # 1 («Halva kvadraten: dubbla arean», «Två i rad: dela arean»): «så pass
-    # enkla och oväsentliga — de kan eleverna själva upptäcka i boken. De ska
-    # tas bort helt och hållet, de tar bara onödigt mycket plats.»
-    "- Samma fälla i galleriform: en rad småfigurer med varsin trivial "
-    "variant under ett exempel — varianter eleven upptäcker själv i boken "
-    "skrivs inte på tavlan, stryk hela raden.\n"
+    # VÄNDNINGENS VILLKOR. Domen 2026-09-05 (del 2): tråden köpte ett exempel
+    # utanför urvalet därför att det var den billigaste fortsättningen. Tråden
+    # är underordnad urvalet, aldrig tvärtom. De tre utfyllnadsformerna är
+    # lärarens egna fällningar (2026-08-20 och 21): «tre lika kvadrater i rad
+    # — lite onödigt, det är ju lite samma sak»; «jag fattar inte riktigt
+    # detta exempel — vad ska den visa egentligen?» om en «Omvänt:»-rad
+    # inklämd sist i exempel 1; «så pass enkla och oväsentliga — de kan
+    # eleverna själva upptäcka i boken» om en rad småfigurer under ett exempel.
+    "- Vändningen MÅSTE vara en metodtyp som finns i urvalet, och varje "
+    "metodtyp urvalet kräver ska beröras. Går berättelsen inte att förlänga "
+    "inom urvalet: byt situation rent, hellre det än en krystad koppling. "
+    "Utfyllnad är samma metod igen med nya tal, samma metod baklänges "
+    "inklämd som en «Omvänt:»-rad, och en rad småfigurer med varsin trivial "
+    "variant — stryk alla tre: boken har redan drillen, och varianterna "
+    "upptäcker eleven själv. Är vändningen verkligen ny får den ett EGET "
+    "exempel med egen rubrik och egen fråga.\n"
     # Trådens dyraste fälla, uppmätt på tredje varvet: «samma kvadrat delad
     # av en diagonal — triangelns area är 20 cm²» när kvadraten var 36.
     # Återbruk gör talen BEROENDE av varandra, och ett felräknat återbruk
@@ -368,6 +366,9 @@ INSTRUCTION = (
     "diagonal ger trianglar på 18 — aldrig något annat), och skriv ledet åt "
     "det håll klassen räknar det (arean ur sidorna, halvan ur helheten). Är "
     "du osäker på härledningen: ta ett nytt rent tal i stället.\n"
+    # Två fällningar till ur samma kväll (2026-08-20): «det räcker med 3 = √9,
+    # vi behöver inte 2 = √4 och 5 = √25», och «bryt ut kvadratfaktorn — då
+    # måste man förklara vad kvadratfaktorn menas med».
     "- Behöver ett steg en stödomskrivning (som $3 = \\sqrt{9}$) visas den EN "
     "gång, med exakt det tal steget använder — aldrig en serie av samma "
     "omskrivning med olika tal.\n"
@@ -399,11 +400,16 @@ INSTRUCTION = (
     "- Välj ändå talen så att uträkningen GÅR JÄMNT UT när läraren räknar den "
     "på plats — heltal eller enkla decimaltal. Eleven ska se metoden, inte "
     "fastna i aritmetiken.\n"
-    "- Exemplen ska spegla den TYP och NIVÅ av uppgifter eleverna sedan möter i "
-    "boken — det är dem de ska klara. Men skriv ALLTID egna uppgifter: bokens "
-    "får aldrig skrivas av, inte ens med utbytta tal. Poängen med ett eget "
-    "exempel är att det kan göras enklare, renare och mer pedagogiskt än "
-    "bokens, så att eleven klarar bokens efteråt.\n"
+    "- Exemplen speglar den TYP och NIVÅ urvalet har, men skriv ALLTID egna "
+    "uppgifter: bokens får aldrig skrivas av, inte ens med utbytta tal. Ett "
+    "eget exempel kan göras enklare, renare och mer pedagogiskt än bokens, "
+    "så att eleven klarar bokens efteråt.\n"
+    # TILLÄMPNINGARNA HÖR TILL HÖGERN. Domen 2026-09-05 (del 2), efter att en
+    # areamodell hade definierat andragradsuttrycket på vänstern: arean är
+    # inte vad uttrycket ÄR, men den är en av de uppgifter urvalet innehåller.
+    "- Tillämpningar (area, volym, pengar) står på HÖGERN som uppgifter när "
+    "urvalet har dem («rita en figur med arean x^2 + 8x»); de definierar "
+    "aldrig begreppet, det gör vänstern (7c).\n"
     # FÖRANKRINGEN. Lärarens dom efter första skarpa tavlan (2026-08-20):
     # «när vi väljer våra exempel ska de relatera till det vi har skrivit på
     # vänstra delen av tavlan — de ska finnas där helt enkelt.» Exemplet är
@@ -411,14 +417,18 @@ INSTRUCTION = (
     # rad att peka tillbaka på, och då hänger genomgången inte ihop.
     "- Exemplet får bara VILA på det som står på vänstertavlan: varje formel "
     "och metodsteg exemplet använder ska finnas bland vänsterns formler och "
-    "metoder, så att läraren kan peka från exemplets rad tillbaka till raden "
-    "där den står. Kräver exemplet något som inte står där — komplettera "
-    "vänstertavlan först, eller välj ett annat exempel. Men förankringen får "
+    "metoder, så att läraren kan peka tillbaka. Kräver exemplet något som "
+    "inte står där — komplettera vänstern först, eller välj ett annat "
+    "exempel. Men förankringen får "
     "ALDRIG bli fler rader: kräver ett steg bara ett förkunskapsverb säger "
     "läraren det, och vänstern lämnas som den är.\n"
-    "- Visa det vanliga felet INNE i ett exempel när det går: det felaktiga "
-    "ledet i rött bredvid det rätta, i just den uppgift klassen tittar på. Ett "
-    "fel som bara står som en regel känns inte igen; ett fel som står i "
+    # FALLGROPEN KOMMER UR URVALET (2026-09-05, del 2): det är den svåraste
+    # valda typen eleverna går bet på, inte den typ som råkade bli exempel 1.
+    "- Fallgropen väljs ur urvalets SVÅRASTE typ, och MINST ETT exempel går "
+    "rakt genom den: det felaktiga ledet i rött bredvid det rätta, i just "
+    "den uppgift klassen tittar på (är teckenfel fallgropen har exemplet en "
+    "negativ koefficient, är enheter fallgropen byts enhet på vägen). "
+    "Ett fel som bara står som en regel känns inte igen; ett fel som står i "
     "exemplet gör det.\n"
     # EXAKT OCH NÄRMEVÄRDE. Lärarens dom (2026-08-21 kväll), på ett exempel
     # som bara visade ≈: «vi har inte nämnt det här med att svara exakt eller
@@ -448,8 +458,8 @@ INSTRUCTION = (
     # kuben: vad gör man om det står ett negativt tal under rotstecknet, fast
     # det är i kubik? Vad händer då?»
     "- Momentets RANDFALL ska upp: fråga var begreppet tar slut eller "
-    "överraskar (negativt tal under rotmärket — stopp för kvadratroten, helt "
-    "lagligt för kubikroten: $\\sqrt[3]{-27} = -3$) och ge det en egen "
+    "överraskar (negativt tal under rotmärket: stopp för kvadratroten, "
+    "lagligt för kubikroten) och ge det en egen "
     "vändning i det exempel där det hör hemma («och ett negativt tal under "
     "roten?») — aldrig en regelrad på vänstern (se 8b).\n"
     # PEDAGOGISK FRIHET ÄVEN I FÖRKLARINGEN, inte bara i exemplen. «Boken är
@@ -501,9 +511,10 @@ INSTRUCTION = (
     "visa felet konkret — helst det felaktiga ledet i en math-sektion — med "
     "en kort mening om varför. En förmaning räcker inte: eleven ska känna "
     "igen sitt eget misstag.\n"
-    "- Välj exemplen så att MINST ETT går rakt genom en av fallgroparna. Är "
-    "teckenfel fallgropen ska ett exempel ha en negativ koefficient; är "
-    "enheter fallgropen ska ett exempel byta enhet på vägen.\n"
+    # Raden om att minst ett exempel ska gå genom fallgropen stod förut här
+    # också. Den slogs 2026-09-05 ihop med exempelavsnittets fallgropsregel,
+    # som nu väljer fallgropen ur urvalets svåraste typ.
+
 )
 
 # Åtgärdsråd som följer med reparationsprompten — motorns varningstexter
@@ -781,7 +792,11 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                             {"kind": "text", "text": "Väg 1: symmetrilinjen",
                              "size": 19, "weight": 700, "gapAfter": 6},
                             {"kind": "list", "bullet": "–", "size": 19, "gap": 6,
-                             "items": ["Bestäm: räkna x, sätt sedan in x i f(x)"],
+                             # Steget bär uppgiftens tal, inte formeln en gång
+                             # till (domen 2026-09-05, del 2): koefficienterna
+                             # står i f(x) ovanför, och det är dem läraren
+                             # pekar på när hon räknar symmetrilinjen.
+                             "items": ["Bestäm: a och b ur f(x), sedan in i formeln"],
                              "gapAfter": 14},
                             {"kind": "text", "text": "Väg 2: kvadratkomplettering",
                              "size": 19, "weight": 700, "gapAfter": 6},
@@ -942,10 +957,14 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                              "size": 26, "underline": {}, "gapAfter": 12},
                             {"kind": "math", "latex": "6x + 12", "size": 26,
                              "gapAfter": 16},
+                            # STEGET ÄR UPPGIFTENS, inte regelns (domen
+                            # 2026-09-05, del 2): «bryt ut den gemensamma
+                            # faktorn» är vänsterraden en gång till. Steget
+                            # ska säga vad handen gör i just 6x + 12.
                             {"kind": "list", "bullet": "–", "size": 19, "gap": 6,
                              "items": [
-                                 "Faktorisera: bryt ut den gemensamma faktorn",
-                                 "Utveckla: multiplicera tillbaka och kontrollera"]},
+                                 "Faktorisera: 6 finns i både 6x och 12",
+                                 "Utveckla: multiplicera tillbaka 6:an"]},
                         ]},
                         {"weight": 1, "sections": [
                             # «Nu ska vi ha ett bråk i stället. Vad händer då?»
@@ -1348,6 +1367,13 @@ LAPP_INSTRUKTION = (
     "rakt av, ingenting ärvs.\n"
     "- \"efter\" SÄTTER IN ett nytt element direkt efter elementet på vägen.\n"
     "- \"ta_bort\" tar bort elementen på vägarna.\n"
+    # Ett helt exempel är flera sektioner i rad (rubrik, uppgiftsrad, math,
+    # metodsteg). Domaren får sedan 2026-09-05 föreslå att BYTA UT ett exempel
+    # som ligger utanför lärarens urval, och då måste lappvägen bära bytet —
+    # annars faller svaret tillbaka på en helomskrivning av tavlan.
+    "- Ett HELT exempel byts genom att lappa var och en av dess sektioner "
+    "(rubriken, uppgiftsraden, stegen) och ta bort dem som blir över — flera "
+    "nycklar i samma svar. Grannkolumnens nycklar rörs inte.\n"
     "- Skicka BARA det du ändrar. Allt du inte nämner står kvar orört — skriv "
     "aldrig ut oförändrade element.\n"
     "- Alla regler ovan gäller fortfarande för de element du skriver.\n"
@@ -2088,6 +2114,27 @@ TACKNING_INSTRUKTION = (
     "en diagonal») — en halvering som inte är hälften, ett led skrivet åt "
     "fel håll, ett svar som inte stämmer. Ett räknefel på en genomgångstavla "
     "är alltid ett fynd, aldrig en detalj.\n"
+    # EXEMPLEN MOT URVALET. Domen 2026-09-05 (del 2): domaren letade bara
+    # LUCKOR, och därför fick «samma uttryck, nu med tal» — en nivå 1-typ som
+    # ingen vald uppgift ber om — stå kvar medan tre valda typer saknades.
+    # «Speglar exemplen det faktiska innehållet eleverna ska arbeta med?»
+    "Pröva sedan EXEMPLEN åt andra hållet, ett i taget: motsvarar det här "
+    "exemplets metodtyp någon VALD uppgift? Ett exempel vars typ ingen vald "
+    "uppgift har (att beräkna uttryckets värde när urvalet bara utvecklar "
+    "parenteser) är ett fynd, och forslag är att BYTA UT hela exemplet mot "
+    "en av urvalets saknade typer — skriv då uppgiften och stegen. Pröva "
+    "också stegen: ett metodsteg som bara återger en vänsterrad eller en "
+    "formel («Multiplicera: varje term mot varje term») är ett fynd, och "
+    "forslag är att skriva om steget med uppgiftens egna tal.\n"
+    # TAKET GÄLLER OCKSÅ KOMPLETTERINGEN. Kontrollkörningen 2026-09-05: tavlan
+    # hade tre exempel som täckte tre valda typer, domaren såg fem luckor och
+    # kompletteringen skrev dit ett fjärde exempel. «Max tre» är lärarens tak,
+    # och en dom som spränger det gör tavlan sämre än luckan gjorde.
+    "Tavlan får ha HÖGST TRE exempel. Står det redan tre och en typ ändå "
+    "saknas är forslag att BYTA UT det exempel som ligger längst från "
+    "urvalet, eller att lägga saknaden som ett steg eller en vändning i ett "
+    "av de tre — aldrig att lägga till ett fjärde exempel. Ryms det som "
+    "saknas inte alls: lämna det, läraren pratar också.\n"
     # BEGREPPSKOPPLINGEN. Lärarens dom (2026-09-05) kom med ett villkor:
     # hon vill inte sitta och iterera varje tavla för hand. Slirar formen är
     # domaren rätt plats att fånga det på, inte fler promptrader.
