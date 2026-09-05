@@ -56,7 +56,11 @@ from datetime import date, timedelta
 from pathlib import Path
 
 ROT = Path(__file__).resolve().parent.parent
-PORT = 8753                      # inte 8751 (sviten), inte 8752 (soaken)
+sys.path.insert(0, str(ROT))            # portkällan, app/web/port.py
+
+from app.web import port as port_kalla   # noqa: E402  (efter sys.path)
+
+PORT = port_kalla.VOLYM          # inte E2E (sviten), inte SOAK (soaken)
 BAS = Path(tempfile.gettempdir()) / "transkribera-volym"
 
 # Ett läsår, i det som faktiskt hamnar i basen. `--ar` multiplicerar allt.

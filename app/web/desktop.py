@@ -96,6 +96,26 @@ def _vem_har(port: int) -> str:
         return "något som inte svarar som Transkribera"
 
 
+def _logga_portbyte(logg, port: int, hinder: str) -> None:
+    """Två olika fel, två olika rader (2026-09-06).
+
+    «Spärrad» går aldrig över av sig självt och ska peka på netsh: det var
+    just den raden som saknades när appen i dagar skyllde en Windows-reservation
+    på en ockupant som inte fanns. «Upptagen» ska tvärtom namnge ockupanten,
+    för då finns det någon att stänga."""
+    if port == port_kalla.FORSTAHAND:
+        return
+    if hinder == "sparrad":
+        logg.warning(
+            "%s är reserverad av Windows (netsh int ipv4 show "
+            "excludedportrange protocol=tcp), appen startade på %s i stället",
+            port_kalla.FORSTAHAND, port)
+    else:
+        logg.warning(
+            "%s var upptagen av %s, appen startade på %s i stället",
+            port_kalla.FORSTAHAND, _vem_har(port_kalla.FORSTAHAND), port)
+
+
 class _ThreadedServer(uvicorn.Server):
     # Signal handlers can only be installed on the main thread; we run on a worker.
     def install_signal_handlers(self) -> None:
@@ -115,18 +135,7 @@ def main() -> None:
     os.environ["TRANSKRIBERA_START"] = "app"
     os.environ["TRANSKRIBERA_PORT"] = str(port)
     app = create_app()
-    if port != port_kalla.FORSTAHAND:
-        # Två olika fel, två olika rader. «Spärrad» går aldrig över av sig
-        # självt och ska peka på netsh; «upptagen» ska namnge ockupanten.
-        if hinder == "sparrad":
-            logg.warning(
-                "%s är reserverad av Windows (netsh int ipv4 show "
-                "excludedportrange protocol=tcp), appen startade på %s i "
-                "stället", port_kalla.FORSTAHAND, port)
-        else:
-            logg.warning(
-                "%s var upptagen av %s, appen startade på %s i stället",
-                port_kalla.FORSTAHAND, _vem_har(port_kalla.FORSTAHAND), port)
+    _logga_portbyte(logg, port, hinder)
     config = uvicorn.Config(app, host="127.0.0.1", port=port,
                             log_level="warning")
     server = _ThreadedServer(config)

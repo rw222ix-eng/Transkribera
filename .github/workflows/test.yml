@@ -8,7 +8,7 @@
 #             KRAV_TECTONIC=1 så de kompilerande testerna inte får hoppa över
 #             sig själva. En grön svit som inte prövat en enda PDF är värre än
 #             en röd.
-#   e2e     — Playwright mot den riktiga servern, som lokalt (port 8751,
+#   e2e     — Playwright mot den riktiga servern, som lokalt (port 18751,
 #             channel chrome). Servern kör mot en tom temporär bas
 #             (e2e/testserver.py), aldrig mot något i repot.
 #   beroenden — att requirements.txt går att lösa. pypdfium2 saknades i ett

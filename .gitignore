@@ -69,7 +69,7 @@ nul
 # och ignoreras fortfarande.
 .claude/*
 !.claude/settings.json
-# launch.json är också delad: den bär förhandsvisningsservern (port 8750), och
+# launch.json är också delad: den bär förhandsvisningsservern (port 18750), och
 # just den konfigurationen kostade en kväll. Den startade med --reload, som
 # aldrig startar om på riktigt på Windows: fönstret svarade i timmar med gammal
 # kod mot lärarens riktiga bas, och reload-barnet ärvde lyssnarsocketen och höll

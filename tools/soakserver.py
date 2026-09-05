@@ -36,6 +36,7 @@ from pathlib import Path
 
 import uvicorn
 
+from app.web import port as port_kalla
 from app.web import server
 
 # Tjugofem bildrutor: en allokering inne i json eller sqlite3 säger ingenting
@@ -160,7 +161,7 @@ def montera(app) -> None:
 
 def main() -> None:
     bas = Path(os.environ["SOAK_BAS"])
-    port = int(os.environ.get("SOAK_PORT", "8752"))
+    port = int(os.environ.get("SOAK_PORT", str(port_kalla.SOAK)))
     # Två lägen. SOAK_MINNE ger den billiga bilden (RSS, block, objekt per typ)
     # och går att läsa i en ren körning. SOAK_SPARNING lägger till tracemalloc,
     # som säger VAR objekten skapades men kostar minne och tid.

@@ -14,7 +14,7 @@ const CHROME = process.env.CHROME_PATH || "/opt/pw-browsers/chromium";
  * är också precis det som är lätt att förstöra av misstag. När backen kopplas in
  * växer sviten med den.
  *
- * Egen port (8751), skild från utvecklingsserverns 8750, så en igångvarande
+ * Egen port (18751), skild från utvecklingsserverns 18750, så en igångvarande
  * dev-server inte tystar en trasig svit genom att svara i dess ställe.
  */
 /* Pythonen sviten startar servern med. Macen har ingen `python` alls — bara
@@ -34,7 +34,11 @@ const PY = existsSync(join(ROT, ".venv/bin/python"))
  * varje gång. Då ska sviten återanvända den servern i stället för att starta en
  * egen och tömma basen. */
 const SOAK = !!process.env.SOAK;
-const PORT = SOAK ? Number(process.env.SOAK_PORT || 8752) : 8751;
+/* Siffrorna står också i app/web/port.py (E2E, SOAK) och måste följas åt.
+ * En .ts-fil kan inte importera dem, så testet test_port.py greppar repot
+ * efter de gamla portarna i stället (2026-09-06: Windows reserverade hela
+ * 8700-8799 och sviten kunde inte binda 8751). */
+const PORT = SOAK ? Number(process.env.SOAK_PORT || 18752) : 18751;
 
 export default defineConfig({
   testDir: ".",

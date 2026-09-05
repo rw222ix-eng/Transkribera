@@ -13,10 +13,10 @@ Två behov möts här, och det är samma server som löser båda:
 
 `python -m app.web` gör nästan det här, men två saker gör den olämplig:
 
-* **Porten flyttar sig.** Den tar första lediga av 8731-8733. En ny port är en
+* **Porten flyttar sig.** Den tar första lediga av 18731-18733. En ny port är en
   ny origin, och webbläsaren knyter allt till origin: breakpoints, Sources-
   mappningar, localStorage, DevTools-inställningar. Efter varje omstart står man
-  därför i en tom inspektör igen. Den här filen tar 8760 och BARA 8760 — är den
+  därför i en tom inspektör igen. Den här filen tar 18760 och BARA 18760 — är den
   upptagen är svaret ett fel, inte en annan port, för en annan port är precis
   felet.
 * **Basen är lärarens.** `python -m app.web` kör mot repo-roten, alltså den
@@ -52,7 +52,7 @@ Python-ändringar kräver omstart härifrån.
 Kör:
     python tools/skarp.py
     python tools/skarp.py --tom          # börja om från en tom bas
-    python tools/skarp.py 8761           # annan port (samma sak som --port)
+    python tools/skarp.py 18761          # annan port (samma sak som --port)
     python tools/skarp.py --bas /nagon/annan/mapp
 """
 from __future__ import annotations
@@ -67,10 +67,12 @@ from pathlib import Path
 ROT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROT))
 
-# 8760 är vald för att stå fri från allt annat som lyssnar i det här repot:
-# fönstret tar 8731-8733, e2e-sviten 8751 och soaken 8752. Ingen av dem ska
+from app.web import port as port_kalla   # noqa: E402  (efter sys.path)
+
+# 18760 är vald för att stå fri från allt annat som lyssnar i det här repot:
+# fönstret tar 18731-18733, e2e-sviten 18751 och soaken 18752. Ingen av dem ska
 # behöva stängas för att den här ska kunna köras samtidigt.
-PORT = 8760
+PORT = port_kalla.SKARP        # se app/web/port.py
 BAS = ROT / ".skarp"
 
 # Hemligheterna bor i basmappen, och en tom bas har dem inte: utan dem är
@@ -160,7 +162,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(
         description="Servern utan fönster, på en fast port, mot en egen bas")
     ap.add_argument("port_pos", nargs="?", type=int, metavar="PORT",
-                    help=argparse.SUPPRESS)      # `skarp.py 8761` som förut
+                    help=argparse.SUPPRESS)      # `skarp.py 18761` som förut
     ap.add_argument("--bas", default=str(BAS), type=Path,
                     help=f"basmapp (standard: {BAS})")
     ap.add_argument("--port", default=PORT, type=int)

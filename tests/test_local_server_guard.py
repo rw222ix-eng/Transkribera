@@ -31,7 +31,7 @@ def test_localhost_origin_post_allowed(tmp_path, monkeypatch):
     client = _client(tmp_path, monkeypatch)
     f = _file_under_base(tmp_path)
     r = client.post("/api/open", json={"path": str(f)},
-                    headers={"origin": "http://127.0.0.1:8731"})
+                    headers={"origin": "http://127.0.0.1:18731"})
     assert r.status_code == 200
 
 
@@ -53,7 +53,7 @@ def test_foreign_host_rejected(tmp_path, monkeypatch):
 
 def test_localhost_host_ok(tmp_path, monkeypatch):
     client = _client(tmp_path, monkeypatch)
-    r = client.get("/api/calendar/status", headers={"host": "127.0.0.1:8731"})
+    r = client.get("/api/calendar/status", headers={"host": "127.0.0.1:18731"})
     assert r.status_code == 200
 
 

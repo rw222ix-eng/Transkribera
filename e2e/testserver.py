@@ -29,20 +29,21 @@ from pathlib import Path
 ROT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROT))
 
+from app.web import port as port_kalla      # noqa: E402  (efter sys.path)
 from tests import fejk                       # noqa: E402  (efter sys.path)
 from tests.fejk import skriv_claude          # noqa: E402
 
 
-def bas(port: int = 8751) -> Path:
+def bas(port: int = port_kalla.E2E) -> Path:
     """Färsk bas per körning. Samma sökväg varje gång så en trasig körning går
     att titta i efteråt — men tömd, så ingen körning ärver förra körningens
     dokument.
 
-    Porten går in i namnet för allt UTOM sviten själv (8751). Nattutforskaren
-    (tools/nattutforskaren.ps1, port 8753) startar samma server, och med en
+    Porten går in i namnet för allt UTOM sviten själv (18751). Nattutforskaren
+    (tools/nattutforskaren.ps1, port 18753) startar samma server, och med en
     delad sökväg hade dess första rad tömt basen under en e2e-körning som
     råkade pågå."""
-    namn = "transkribera-e2e" if port == 8751 else f"transkribera-e2e-{port}"
+    namn = "transkribera-e2e" if port == port_kalla.E2E else f"transkribera-e2e-{port}"
     b = Path(tempfile.gettempdir()) / namn
     if b.exists():
         shutil.rmtree(b, ignore_errors=True)
@@ -55,7 +56,7 @@ def main() -> None:
 
     import uvicorn
 
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8751
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else port_kalla.E2E
     b = bas(port)
     os.environ["CLAUDE_CODE_BIN"] = str(skriv_claude(b / "fejkbin"))
     # Auto: fejk-CLI:t väljer kassett ur prompten. En lärardag (Etapp 4) skriver

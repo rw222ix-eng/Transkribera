@@ -56,7 +56,11 @@ import urllib.request
 from pathlib import Path
 
 ROT = Path(__file__).resolve().parent.parent
-PORT = 8752                      # inte 8751: sviten ska kunna köras samtidigt
+sys.path.insert(0, str(ROT))            # portkällan, app/web/port.py
+
+from app.web import port as port_kalla   # noqa: E402  (efter sys.path)
+
+PORT = port_kalla.SOAK           # inte E2E: sviten ska kunna köras samtidigt
 BAS = Path(tempfile.gettempdir()) / "transkribera-soak"
 
 # Gränser för larmet. Servern växer en del under första varvet (moduler som

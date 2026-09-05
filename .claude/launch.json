@@ -6,18 +6,18 @@
       "runtimeExecutable": "python",
       "runtimeArgs": [
         "-c",
-        "import os, uvicorn; os.environ['TRANSKRIBERA_START'] = 'webb'; os.environ['TRANSKRIBERA_PORT'] = os.environ.get('PORT', '8731'); uvicorn.run('app.web.server:create_app', factory=True, host='127.0.0.1', port=int(os.environ.get('PORT', '8731')), timeout_graceful_shutdown=3)"
+        "import os, uvicorn; os.environ['TRANSKRIBERA_START'] = 'webb'; os.environ['TRANSKRIBERA_PORT'] = os.environ.get('PORT', '18731'); uvicorn.run('app.web.server:create_app', factory=True, host='127.0.0.1', port=int(os.environ.get('PORT', '18731')), timeout_graceful_shutdown=3)"
       ],
-      "port": 8731
+      "port": 18731
     },
     {
       "name": "transkribera-dev",
       "runtimeExecutable": "python",
       "runtimeArgs": [
         "-c",
-        "import os, uvicorn; os.environ['TRANSKRIBERA_START'] = 'dev'; os.environ['TRANSKRIBERA_PORT'] = os.environ.get('PORT', '8750'); uvicorn.run('app.web.server:create_app', factory=True, host='127.0.0.1', port=int(os.environ.get('PORT', '8750')), timeout_graceful_shutdown=3)"
+        "import os, uvicorn; os.environ['TRANSKRIBERA_START'] = 'dev'; os.environ['TRANSKRIBERA_PORT'] = os.environ.get('PORT', '18750'); uvicorn.run('app.web.server:create_app', factory=True, host='127.0.0.1', port=int(os.environ.get('PORT', '18750')), timeout_graceful_shutdown=3)"
       ],
-      "port": 8750,
+      "port": 18750,
       "autoPort": true
     },
     {
@@ -39,9 +39,9 @@
       "runtimeExecutable": "python",
       "runtimeArgs": [
         "e2e/testserver.py",
-        "8765"
+        "18765"
       ],
-      "port": 8765
+      "port": 18765
     }
   ]
 }

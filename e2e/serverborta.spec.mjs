@@ -55,7 +55,7 @@ test("en server som startat om ber om en omladdning i stället för att göra de
     await page.route("**/api/var-kors", route => route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ hus: { lage: "app", namn: "Superappen", port: "8751",
+      body: JSON.stringify({ hus: { lage: "app", namn: "Superappen", port: "18751",
                                     pid: 999999, startad: "10:00", varna: false } }),
     }));
 

@@ -67,7 +67,7 @@ python -m pytest -q
 cd e2e && npx playwright test
 ```
 
-E2E-sviten kör mot en riktig server på port 8751 och kräver Chrome
+E2E-sviten kör mot en riktig server på port 18751 och kräver Chrome
 (`channel: "chrome"`). Det viktigaste testet är `offline.spec.mjs`: appen får
 inte göra ett enda anrop utanför datorn.
 

@@ -485,7 +485,7 @@
      och sedan var och en av dess formler igen — och ögonblicksbilden tas inte
      en gång per varv utan upp till åttio: `vantaDiff` läser om varje bildruta
      tills något ändrats (tak 40) och `naste` var 30:e ms med samma tak.
-     MÄTT i Chrome mot FEW_SHOTS[0] (32 rutor, e2e-servern på 8751):
+     MÄTT i Chrome mot FEW_SHOTS[0] (32 rutor, e2e-servern på 18751):
      klon per ruta 0,3–0,5 ms · en klon per papper 0,1–0,3 ms.
      Samma text ut: nålarna och svepet stryks ur klonen, precis som förut. */
   /* Senaste varvets före/efter, per element-id. Prickarna i pappret läser den

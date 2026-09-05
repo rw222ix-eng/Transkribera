@@ -25,15 +25,15 @@ def test_favicon_serveras(client):
 
 # ── Vem lyssnar? ────────────────────────────────────────────────────────────
 # Kvällen 2026-08-20 satt läraren i tre timmar i ett fönster som pratade med en
-# annan server än appen (Claude Codes förhandsvisning på 8750, gammal kod, samma
+# annan server än appen (Claude Codes förhandsvisning på 18750, gammal kod, samma
 # riktiga bas). Ingenting sa det. Nu säger varje server vem den är.
 def test_hus_beskriver_servern(client, monkeypatch):
     monkeypatch.delenv("TRANSKRIBERA_START", raising=False)
-    monkeypatch.setenv("TRANSKRIBERA_PORT", "8750")
+    monkeypatch.setenv("TRANSKRIBERA_PORT", "18750")
     hus = client.get("/api/var-kors").json()["hus"]
     assert hus["lage"] == "okänd"
     assert hus["varna"] is True            # okänd startväg = säg det högt
-    assert hus["port"] == "8750"
+    assert hus["port"] == "18750"
     assert hus["pid"] > 0 and hus["startad"]
 
 

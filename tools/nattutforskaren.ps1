@@ -42,14 +42,14 @@ param(
     # sjalv kan prioritera) och i en hard timeout (sa en agent som fastnar inte
     # kor till frukost).
     [int]$TidsbudgetMinuter = 45,
-    # Inte 8751 (e2e) och inte 8752 (soaken): nattkorningen ska kunna ligga
+    # Inte 18751 (e2e) och inte 18752 (soaken): nattkorningen ska kunna ligga
     # parallellt med en glomd svit utan att de tar varandras port eller bas.
     # ValidateRange for att en provkorning pa port 1 gick igenom halsokollen
     # (uvicorn band porten, HTTP-klienten fick 200) men var oanvandbar for
     # agenten: Chrome vagrar lag-portar med net::ERR_UNSAFE_PORT, sa natten
     # brann utan att loggen sa varfor.
     [ValidateRange(1024, 65535)]
-    [int]$Port = 8753,
+    [int]$Port = 18753,   # app/web/port.py, VOLYM
     [string]$Kalla = 'E:\Transkribera',
     [string]$Klon = (Join-Path $env:LOCALAPPDATA 'transkribera-natt'),
     [string]$Rapportrot = (Join-Path $env:USERPROFILE '.claude\projects\E--Transkribera\nattutforskaren'),

@@ -153,7 +153,8 @@ def _hw_view(hw) -> dict:
 
 # ── Vem är servern som svarar? ───────────────────────────────────────────────
 # Kvällen 2026-08-20 satt läraren i tre timmar i ett fönster som pratade med en
-# ANNAN server än appen: Claude Codes förhandsvisning på 8750, startad ur
+# ANNAN server än appen: Claude Codes förhandsvisning på 18750 (då 8750),
+# startad ur
 # .claude/launch.json och automatiskt ÅTERSTARTAD av Claude-appen varje gång den
 # dog (dess main.log: «[Preview] Process exited … Starting server with config»).
 # Den körde gammal kod — uvicorns --reload startar aldrig om på riktigt här —
@@ -311,7 +312,7 @@ def create_app(base_dir: Path | None = None,
     app = FastAPI(title="Transkribera Web")
 
     # Skydd för den lokala servern (binds på 127.0.0.1 med förutsägbara portar
-    # 8731–8733, se app/web/desktop.py). Utan detta kan vilken webbsida som helst
+    # 18731–18733, se app/web/port.py). Utan detta kan vilken webbsida som helst
     # i användarens vanliga webbläsare göra state-ändrande POST hit — t.ex. skriva
     # över google_client_secret.json med en angripares OAuth-klient (en "simple
     # request" som inte kräver preflight) — och DNS-rebinding kan göra en
