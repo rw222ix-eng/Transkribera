@@ -229,8 +229,17 @@ _RAKNING = "räknedomare"
 # uppgiften lämnas som den var. Fail-open hela vägen.
 _BEDOMNING = "bedömningsskrivare"
 
+# Mål-låsta omskrivningen av tavlan (lesson_board._mallapp_runda) prövas FÖRST
+# av precis samma skäl som täckningsdomaren: dess prompt bär hela tavlans JSON
+# och därmed «lektionstavla», och hade annars fått en HEL tavla tillbaka som
+# svar på en fråga om en lapp. Markören är nyckelraden i prompten och står
+# ingen annanstans i appen (lesson_board.MALNYCKELMARKOR).
+_MALLAPP = "MÅLRUTORNAS NYCKLAR"
+
 
 def _auto(prompt):
+    if _MALLAPP in prompt:
+        return os.path.join(BAND, "tavellapp.json")
     if _TACKNING in prompt:
         return os.path.join(BAND, "tackningsdomare.json")
     if _RAKNING in prompt:

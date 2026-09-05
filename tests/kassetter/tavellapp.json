@@ -1,0 +1,10 @@
+{
+ "namn": "tavellapp",
+ "vad": "Mål-låst omskrivning av tavlan (lesson_board._mallapp_runda): läraren markerade EN ruta och lappen rör bara den. Handskriven, inte CLI-inspelad — som tackningsdomare.json: ett enda result-event, och lappen pekar på derivatans definition i tavla.json-bandets tavla (boards[0].sections[6].children[1].children[1]).",
+ "inspelad": false,
+ "modell": "-",
+ "rader": [
+  "{\"type\": \"result\", \"result\": \"{\\\"lappar\\\": [{\\\"nyckel\\\": \\\"boards[0].sections[6].children[1].children[1]\\\", \\\"element\\\": {\\\"kind\\\": \\\"math\\\", \\\"latex\\\": \\\"f'(a) = \\\\\\\\lim_{h \\\\\\\\to 0} \\\\\\\\frac{f(a+h) - f(a)}{h}\\\"}}], \\\"ta_bort\\\": []}\", \"is_error\": false, \"total_cost_usd\": 0.0}"
+ ],
+ "inspelad_datum": "2026-09-05"
+}

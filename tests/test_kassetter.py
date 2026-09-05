@@ -15,6 +15,7 @@ form, men ingen modell har skrivit det. Byt ut dem mot riktiga svar med
 """
 from __future__ import annotations
 
+import copy
 import json
 
 import pytest
@@ -248,6 +249,37 @@ def test_ett_namn_som_anda_kommer_tillbaka_stoppas(fejk_claude):
     texter = " ".join(i["text"] + " " + (i["ref"] or "") for i in insikter)
     assert "Lindqvist" not in texter and "Svensson" not in texter
     assert "A.L." in texter and "E.S." in texter
+
+
+def test_mal_last_omskrivning_ror_bara_rutan_lararen_pekade_pa(fejk_claude):
+    """Hela mål-låset genom den riktiga sömmen: tavlan ur bandet, läraren
+    markerar EN formel i figur-och-formler-raden, och lappen som kommer
+    tillbaka får bara röra den.
+
+    Bandet (tavellapp.json) är handskrivet som täckningsdomarens: ett enda
+    result-event. Auto-läget väljer det på nyckelraden i prompten
+    (lesson_board.MALNYCKELMARKOR) — glider de två isär faller det här testet i
+    stället för att en skarp omskrivning tyst får en HEL tavla tillbaka som
+    svar på en fråga om en lapp."""
+    fejk_claude("auto")
+    board = lesson_board.generate_board(
+        "Matematik 3c", "NA25", "Derivatans definition", model="")["board"]
+    rad = board["boards"][0]["sections"][6]
+    assert rad["kind"] == "row"          # klumpen läraren inte kunde peka i
+    fore = copy.deepcopy(rad["children"][1]["children"][1])
+
+    ut = lesson_board.refine_board(board, "skriv definitionen med a i stället",
+                                   model="", mal={"el": "tav7.1.1",
+                                                  "namn": "Formel 2",
+                                                  "innehall": fore["latex"]})
+    assert ut["errors"] == []
+    assert ut["rounds"] == 1             # en lapp, inte en hel tavla
+    efter = ut["board"]["boards"][0]["sections"][6]["children"][1]["children"][1]
+    assert "f'(a)" in efter["latex"] and "f'(a)" not in fore["latex"]
+    # …och ALLT annat på båda tavlorna står kvar, byte för byte.
+    kopia = copy.deepcopy(ut["board"])
+    kopia["boards"][0]["sections"][6]["children"][1]["children"][1] = fore
+    assert kopia == board
 
 
 def test_auto_laget_lagger_i_bandet_prompten_ber_om(fejk_claude):

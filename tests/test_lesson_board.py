@@ -598,6 +598,201 @@ def test_refine_board_far_bokdorren_med_sig():
     assert "UR LÄROBOKEN" not in calls2[0]["prompt"]
 
 
+# ---------------------------------------------------------------- mål-låset --
+# Lärarens dom 2026-09-05: «när man skriver att man ska ändra någonting, då är
+# det något annat som tas bort helt plötsligt». Löftet i refine-prompten var
+# prompttext; nu finns en grind. FEW_SHOTS[0] har raden vi behöver: sista
+# sektionen på vänstertavlan är en `row` med en graf och en `col`, och det är
+# den klumpen läraren inte kunde peka in i.
+
+_MALVAG = "boards[0].sections[5].children[1]"
+
+
+def _lappsvar(nyckel, element, ta_bort=()):
+    return json.dumps({"lappar": [{"nyckel": nyckel, "element": element}],
+                       "ta_bort": list(ta_bort)})
+
+
+def test_malvagar_oversatter_lararens_markering_till_en_vag():
+    doc = _valid_doc()
+    assert doc["boards"][0]["sections"][5]["kind"] == "row"
+    assert lb.malvagar(doc, {"el": "tav6.1", "namn": "Formel 3"}) \
+        == [("Formel 3", _MALVAG)]
+    # Utan `el` (gamla utkast, sviternas fixturer) och med ett id som inte
+    # finns i JSON:en: dagens väg, alltså tom lista.
+    assert lb.malvagar(doc, {"namn": "Formel 3"}) == []
+    assert lb.malvagar(doc, {"el": "tav999", "namn": "Formel 3"}) == []
+    # Ett av två mål utan väg fäller HELA låset: ett halvt lås hade tyst tappat
+    # halva önskemålet.
+    assert lb.malvagar(doc, None, [{"el": "tav6.1", "namn": "a"},
+                                   {"el": "tav999", "namn": "b"}]) == []
+
+
+def test_lappvakten_faller_varje_nyckel_utanfor_malet():
+    doc = _valid_doc()
+    vagar = [("Formel 3", _MALVAG)]
+    assert lb.lappvakten(doc, [{"nyckel": _MALVAG + ".children[2]",
+                                "element": {"kind": "text", "text": "x"}}],
+                         [], vagar) == ""
+    assert lb.lappvakten(doc, [{"nyckel": "boards[0].sections[1]",
+                                "element": {"kind": "text", "text": "x"}}],
+                         [], vagar) == "boards[0].sections[1]"
+    # Ett borttag av en granne är ordagrant det läraren klagade på.
+    assert lb.lappvakten(doc, [], ["boards[0].sections[4]"], vagar) \
+        == "boards[0].sections[4]"
+    # Målet självt får tas bort.
+    assert lb.lappvakten(doc, [], [_MALVAG], vagar) == ""
+
+
+def test_lappvakten_slapper_ett_tillagg_direkt_efter_malet():
+    """«Lägg till en rad under» — både i lappformens egen skrivning (`efter` på
+    målets nyckel) och som en append sist i listan."""
+    doc = _valid_doc()
+    sist = len(doc["boards"][0]["sections"]) - 1
+    vagar = [("raden", f"boards[0].sections[{sist}]")]
+    ny = {"kind": "text", "text": "ny rad"}
+    assert lb.lappvakten(doc, [{"efter": f"boards[0].sections[{sist}]",
+                                "element": ny}], [], vagar) == ""
+    assert lb.lappvakten(doc, [{"nyckel": f"boards[0].sections[{sist + 1}]",
+                                "element": ny}], [], vagar) == ""
+    # …men platsen efter ett mål MITT i listan är ingen append: den BYTER UT
+    # grannen, och den formen släpps aldrig igenom.
+    mitt = [("rutan", "boards[0].sections[1]")]
+    assert lb.lappvakten(doc, [{"nyckel": "boards[0].sections[2]",
+                                "element": ny}], [], mitt) \
+        == "boards[0].sections[2]"
+
+
+def test_sammanfoga_riktat_tavla_behaller_allt_utanfor_malet_byte_for_byte():
+    orig = _valid_doc()
+    kandidat = copy.deepcopy(orig)
+    kandidat["boards"][0]["sections"][5]["children"][1] = {"kind": "text",
+                                                           "text": "MÅLET"}
+    kandidat["boards"][0]["sections"][1] = {"kind": "text", "text": "smög in"}
+    kandidat["boards"][1]["sections"] = []
+    ihop, skal = lb.sammanfoga_riktat_tavla(orig, kandidat,
+                                            [("Formel 3", _MALVAG)])
+    assert skal == ""
+    assert ihop["boards"][0]["sections"][5]["children"][1] == {"kind": "text",
+                                                               "text": "MÅLET"}
+    # Allt annat är originalet, byte för byte.
+    ihop["boards"][0]["sections"][5]["children"][1] = \
+        orig["boards"][0]["sections"][5]["children"][1]
+    assert ihop == orig
+
+
+def test_sammanfoga_riktat_tavla_faller_nar_kandidaten_saknar_vagen():
+    orig = _valid_doc()
+    kandidat = {"title": "T", "boards": [{"width": 900, "height": 780,
+                                          "sections": []}]}
+    ihop, skal = lb.sammanfoga_riktat_tavla(orig, kandidat,
+                                            [("Formel 3", _MALVAG)])
+    assert ihop is None
+    assert "Formel 3" in skal
+
+
+def test_refine_med_mal_lappar_bara_den_markerade_rutan():
+    """Ett modellanrop, en lapp, och resten av tavlan orörd — inte 9 000
+    tokens tavla en gång till."""
+    doc = _valid_doc()
+    llm, calls = _stub_llm([_lappsvar(_MALVAG, {"kind": "text",
+                                                "text": "NY RUTA"})])
+    res = lb.refine_board(doc, "skriv om den", model="m", llm=llm,
+                          mal={"el": "tav6.1", "namn": "Formel 3",
+                               "innehall": ""})
+    assert res["errors"] == []
+    assert res["rounds"] == 1 and len(calls) == 1
+    assert res["board"]["boards"][0]["sections"][5]["children"][1] \
+        == {"kind": "text", "text": "NY RUTA"}
+    assert res["board"]["boards"][1] == doc["boards"][1]
+    p = calls[0]["prompt"]
+    assert lb.MALNYCKELMARKOR in p and _MALVAG in p
+    assert "Elementkarta" in p
+    assert calls[0]["max_tokens"] == lb.LAPP_MAX_TOKENS
+
+
+def test_refine_med_mal_forsoker_en_gang_till_nar_lappen_gick_utanfor():
+    doc = _valid_doc()
+    llm, calls = _stub_llm([
+        _lappsvar("boards[0].sections[1]", {"kind": "text", "text": "fel"}),
+        _lappsvar(_MALVAG, {"kind": "text", "text": "rätt"})])
+    res = lb.refine_board(doc, "skriv om den", model="m", llm=llm,
+                          mal={"el": "tav6.1", "namn": "Formel 3"})
+    assert len(calls) == 2
+    assert "utanför målet" in calls[1]["prompt"]
+    # Den fällda lappen sys ALDRIG in, inte ens delvis.
+    assert res["board"]["boards"][0]["sections"][1] \
+        == doc["boards"][0]["sections"][1]
+    assert res["board"]["boards"][0]["sections"][5]["children"][1]["text"] \
+        == "rätt"
+
+
+def test_refine_med_mal_faller_tillbaka_pa_dagens_prompt_och_sammanfogar():
+    doc = _valid_doc()
+    kandidat = copy.deepcopy(doc)
+    kandidat["boards"][0]["sections"][5]["children"][1] = {"kind": "text",
+                                                           "text": "MÅLET"}
+    kandidat["boards"][0]["sections"][1] = {"kind": "text", "text": "smög in"}
+    mal = {"el": "tav6.1", "namn": "Formel 3"}
+    llm, calls = _stub_llm(["inte json alls", json.dumps(kandidat)])
+    res = lb.refine_board(doc, "skriv om den", model="m", llm=llm, mal=mal)
+    assert len(calls) == 2
+    # Reserven är DAGENS prompt, byte för byte — bara tillämpningen är ny.
+    assert calls[1]["prompt"] == lb.build_refine_prompt(doc, "skriv om den",
+                                                        mal, "", None, None)
+    assert res["board"]["boards"][0]["sections"][5]["children"][1]["text"] \
+        == "MÅLET"
+    assert res["board"]["boards"][0]["sections"][1] \
+        == doc["boards"][0]["sections"][1]
+
+
+def test_refine_med_mal_lamnar_tavlan_orord_nar_kandidaten_byggde_om_allt():
+    """Ingen tyst helomskrivning när läraren pekat: skälet går hem i klartext
+    och granska.js svarText säger det («Ingenting på pappret ändrades: …»)."""
+    doc = _valid_doc()
+    kandidat = {"title": "T", "boards": [{"width": 900, "height": 780,
+                                          "sections": [{"kind": "text",
+                                                        "text": "helt nytt"}]}]}
+    llm, _calls = _stub_llm(["inte json alls", json.dumps(kandidat)])
+    res = lb.refine_board(doc, "skriv om den", model="m", llm=llm,
+                          mal={"el": "tav6.1", "namn": "Formel 3"})
+    assert res["board"] == doc
+    assert res["errors"][0]["code"] == "mal"
+    assert "Formel 3" in res["errors"][0]["message"]
+
+
+def test_reparationsrundan_ar_ocksa_last_till_malet():
+    """Runda två är den läraren aldrig ser. Utan grinden smiter
+    helomskrivningen in där i stället."""
+    doc = _valid_doc()
+    kandidat = copy.deepcopy(doc)
+    kandidat["boards"][0]["sections"][5]["children"][1] = {"kind": "text",
+                                                           "text": "LAGAD"}
+    kandidat["boards"][0]["sections"][1] = {"kind": "text", "text": "smög in"}
+    llm, calls = _stub_llm([json.dumps(kandidat)])
+    res = lb._repair_until_valid(
+        doc, [{"path": "x", "code": "regel", "message": "z"}], model="m",
+        llm=llm, rounds_used=1, max_rounds=2,
+        vagar=[("Formel 3", _MALVAG)])
+    assert res["board"]["boards"][0]["sections"][5]["children"][1]["text"] \
+        == "LAGAD"
+    assert res["board"]["boards"][0]["sections"][1] \
+        == doc["boards"][0]["sections"][1]
+    # Lappvägen är avstängd när målet finns — se kommentaren i
+    # _repair_until_valid: en lapp kan lägga till ett syskon efter målet, och
+    # sammanfogningen hade tyst tagit bort tillägget igen.
+    assert "Elementkarta" not in calls[0]["prompt"]
+
+
+def test_refine_utan_mal_ar_exakt_dagens_prompt():
+    doc = _valid_doc()
+    llm, calls = _stub_llm([json.dumps(_valid_doc())])
+    lb.refine_board(doc, "gör om", model="m", llm=llm)
+    assert calls[0]["prompt"] == lb.build_refine_prompt(doc, "gör om", None,
+                                                        "", None, None)
+    assert lb.MALNYCKELMARKOR not in calls[0]["prompt"]
+
+
 # ------------------------------------------------------- täckningsdomaren --
 # Lärarens beställning 2026-08-20: prompten bar «klara SAMTLIGA uppgifter»
 # men ingen grind räknade efter — domaren gör jämförelsen uppgift för uppgift

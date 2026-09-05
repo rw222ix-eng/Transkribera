@@ -27,6 +27,7 @@ from typing import Callable
 
 from pydantic import BaseModel, ConfigDict
 
+from app import dokumentdiff
 from app import llm_client
 from app import whiteboard_spec as ws
 
@@ -1541,6 +1542,303 @@ def build_refine_prompt(board_json: dict, instruction: str,
     )
 
 
+# ── MÅL-LÅSET (lärarens dom 2026-09-05) ─────────────────────────────────────
+#
+# «När man skriver att man ska ändra någonting, då är det något annat som tas
+# bort helt plötsligt. Det känns som att modellen är dum. Jag vet att den inte
+# är dum. Så den saknar kontext eller verktyg för att ändra tavlan på det man
+# just har markerat på ett smart sätt.»
+#
+# Hon har rätt, och verktyget saknades. Löftet i refine-prompten («Skriv om
+# HELA tavlan … ändra så lite som möjligt i övrigt») är PROMPTTEXT, ingenting
+# annat: ingen grind räknade efter. Provet har haft en riktig grind länge
+# (exam_gen.sammanfoga_riktat: originalet plus kandidatens mål), tavlan hade
+# ingen.
+#
+# Nu har den två, i ordning:
+#
+# 1. LAPPEN. Markerar läraren en ruta skickas lappprompten i stället för
+#    helomskrivningen: modellen svarar med de element som ändras, inte med
+#    tavlan en gång till. En deterministisk vakt (`lappvakten`) fäller varje
+#    nyckel som ligger utanför målets delträd innan någonting sys in. Det är
+#    ALLTSÅ inte modellen som håller löftet längre.
+# 2. RESERVEN. Duger lappen inte körs dagens refine-prompt, byte för byte som
+#    förut, men svaret tillämpas som provets: originalet med målens delträd
+#    hämtade ur kandidaten (`sammanfoga_riktat_tavla`). Bär kandidaten inte
+#    målets väg alls (den byggde om strukturen) lämnas tavlan ORÖRD och skälet
+#    går hem i klartext. Ingen tyst helomskrivning när läraren pekat.
+#
+# Lappen är dessutom en tiondel så många tokens som en helomskrivning, och det
+# är samma klagomål: «sen tar det relativt lång tid för vissa saker».
+
+MALNYCKELMARKOR = "MÅLRUTORNAS NYCKLAR"
+
+
+def malvagar(board: dict, mal: dict | None = None,
+             malen=None, log=None) -> list[tuple[str, str]]:
+    """(lärarens namn, JSON-väg) för varje markerad ruta — eller tom lista.
+
+    Tom lista betyder «gå dagens väg». Det gäller tre fall, och alla tre är
+    med flit: läraren markerade ingenting, målet kom utan `el` (gamla utkast
+    och testernas fixturer), eller ett av målen går inte att hitta i JSON:en.
+    Det sista är det viktiga: kan vi inte låsa ALLA rutor hon pekade på ska vi
+    inte låsa några — ett halvt lås hade tyst tappat hälften av önskemålet."""
+    kandidater = [m for m in (malen or []) if isinstance(m, dict)]
+    if not kandidater and isinstance(mal, dict):
+        kandidater = [mal]
+    ut: list[tuple[str, str]] = []
+    for m in kandidater:
+        elid = str(m.get("el") or "").strip()
+        if not elid:
+            return []
+        namn = str(m.get("namn") or "").strip() or "rutan"
+        vag = dokumentdiff.tavelvag(board, elid)
+        if vag is None:
+            if log:
+                log(f"«{namn}» går inte att hitta i tavlans JSON — det här "
+                    "varvet skriver om hela tavlan.")
+            return []
+        ut.append((namn, vag))
+    return ut
+
+
+def _las_vag(doc, vag: str):
+    """(hittades, värdet). Vägen har elementkartans form."""
+    cur = doc
+    for d in _nyckeldelar(vag):
+        if isinstance(cur, list):
+            if not d.isdigit() or not 0 <= int(d) < len(cur):
+                return False, None
+            cur = cur[int(d)]
+        elif isinstance(cur, dict):
+            if d not in cur:
+                return False, None
+            cur = cur[d]
+        else:
+            return False, None
+    return True, cur
+
+
+def _skriv_vag(doc, vag: str, varde) -> bool:
+    """Skriv in värdet på vägen. False när vägen inte finns i `doc`."""
+    delar = _nyckeldelar(vag)
+    if not delar:
+        return False
+    finns, forald = _las_vag(doc, ".".join(delar[:-1])) if len(delar) > 1 \
+        else (True, doc)
+    if not finns:
+        return False
+    sista = delar[-1]
+    if isinstance(forald, list):
+        if not sista.isdigit() or not 0 <= int(sista) < len(forald):
+            return False
+        forald[int(sista)] = copy.deepcopy(varde)
+        return True
+    if isinstance(forald, dict) and sista in forald:
+        forald[sista] = copy.deepcopy(varde)
+        return True
+    return False
+
+
+def sammanfoga_riktat_tavla(original: dict, kandidat: dict,
+                            vagar) -> tuple[dict | None, str]:
+    """Originalet med målens delträd hämtade ur kandidaten. ``(tavla, "")``
+    eller ``(None, skäl)`` när kandidaten inte bär målet alls.
+
+    Samma grind som provets (exam_gen.sammanfoga_riktat) och av samma skäl: en
+    omskrivning som lovar att låta resten stå gör det inte, och det märks först
+    framför klassen. Ett mål som saknas fäller HELA sammanfogningen — fyra
+    genomförda ändringar av fem är ett halvfärdigt papper."""
+    ihop = copy.deepcopy(original)
+    for namn, vag in vagar or ():
+        finns, ny = _las_vag(kandidat, vag)
+        if not finns or not isinstance(ny, dict) or not ny.get("kind"):
+            return None, (f"omskrivningen byggde om tavlans struktur, så "
+                          f"«{namn}» inte gick att hämta ur den. Tavlan "
+                          "lämnades orörd.")
+        if not _skriv_vag(ihop, vag, ny):
+            return None, f"«{namn}» finns inte längre på tavlan."
+    return ihop, ""
+
+
+def _malrad_nycklar(vagar) -> str:
+    return "\n".join(f"- {vag}   ({namn})" for namn, vag in vagar)
+
+
+def build_mallapp_prompt(board_json: dict, instruction: str, vagar,
+                         mal: dict | None = None, malen=None, bok: str = "",
+                         historik=None, skarpare: str = "") -> str:
+    """Lärarens önskemål som en LAPP, låst till de rutor hon markerade.
+
+    Samma underlag som helomskrivningen får (bokblocket, tavlan, varvhistoriken,
+    målraden) plus elementkartan och nyckelraden — och LAPP_INSTRUKTION i
+    stället för «skriv om HELA tavlan». `skarpare` är andra försöket: den säger
+    vilken nyckel som gick utanför målet förra gången."""
+    kallor = f"{bok.strip()}\n\n" if bok and bok.strip() else ""
+    return (
+        f"{INSTRUCTION}\n"
+        f"{kallor}"
+        "Här är den nuvarande lektionstavlan:\n"
+        f"{json.dumps(board_json, ensure_ascii=False)}\n\n"
+        "Elementkarta (nyckel → element):\n"
+        f"{elementkarta(board_json)}\n\n"
+        f"{llm_client.varvrad(historik)}"
+        f"{llm_client.malrad(mal, malen)}Lärarens önskemål: {instruction}\n\n"
+        f"{MALNYCKELMARKOR}:\n{_malrad_nycklar(vagar)}\n"
+        "Ändringen får BARA röra de nycklarna och det som ligger under dem. "
+        "Allt annat på tavlan står kvar orört, och en lapp som pekar någon "
+        "annanstans kastas oläst.\n"
+        f"{skarpare}"
+        f"{LAPP_INSTRUKTION}\n"
+    )
+
+
+def _vagdelar(nyckel: str) -> list[str]:
+    return _nyckeldelar(nyckel)
+
+
+def _ar_append(board: dict, nyckel: str) -> bool:
+    """Pekar nyckeln på platsen EFTER sista elementet i sin lista?"""
+    plats = _slot(board, nyckel)
+    return bool(plats and plats[1] == len(plats[0]))
+
+
+def lappvakten(board: dict, lappar, ta_bort, vagar) -> str:
+    """"" när varje nyckel ligger inom målet, annars den första som inte gör
+    det. Deterministisk: modellen får inte avgöra om den höll sig innanför.
+
+    Två former är tillåtna, och bara två:
+
+    * NYCKELN LIGGER I MÅLETS DELTRÄD — målet självt eller något under det.
+      Det täcker också «lägg till en rad under» i lappformens egen skrivning,
+      \"efter\": <målets nyckel>.
+    * PLATSEN DIREKT EFTER MÅLET i samma lista, och bara när den platsen är en
+      APPEND (index == listans längd). Ett index mitt i listan är inget
+      tillägg: det BYTER UT grannen, och det är precis «något annat tas bort
+      helt plötsligt»."""
+    mal = [_vagdelar(v) for _namn, v in vagar or ()]
+    if not mal:
+        return ""
+
+    def inom(nyckel: str, append_ok: bool) -> bool:
+        d = _vagdelar(nyckel)
+        if not d:
+            return False
+        for m in mal:
+            if d[:len(m)] == m:
+                return True
+            if (append_ok and len(d) == len(m) and d[:-1] == m[:-1]
+                    and d[-1].isdigit() and m[-1].isdigit()
+                    and int(d[-1]) == int(m[-1]) + 1
+                    and _ar_append(board, nyckel)):
+                return True
+        return False
+
+    for lapp in lappar if isinstance(lappar, list) else []:
+        if not isinstance(lapp, dict):
+            return "en lapp utan nyckel"
+        efter = lapp.get("efter")
+        nyckel = efter if isinstance(efter, str) and efter.strip() \
+            else lapp.get("nyckel")
+        if not isinstance(nyckel, str) or not inom(nyckel, True):
+            return str(nyckel or "en lapp utan nyckel")
+    for nyckel in ta_bort if isinstance(ta_bort, list) else []:
+        # Borttag får aldrig gälla en granne: en `ta_bort` utanför delträdet är
+        # ordagrant det läraren klagade på.
+        if not isinstance(nyckel, str) or not inom(nyckel, False):
+            return str(nyckel or "ett borttag utan nyckel")
+    return ""
+
+
+def _mallapp_runda(board: dict, instruction: str, vagar, *, model: str, llm,
+                   mal=None, malen=None, bok="", historik=None,
+                   skarpare: str = "") -> tuple[str, object]:
+    """Ett lappvarv mot modellen. ("lapp", tavla) · ("hel", tavla) när modellen
+    skrev om alltihop ändå (tillåtet enligt LAPP_INSTRUKTION, och då gäller
+    reservens sammanfogning) · ("utanfor", nyckel) när vakten fällde ·
+    ("nej", skäl) när svaret inte gick att använda alls."""
+    raw = llm(model,
+              build_mallapp_prompt(board, instruction, vagar, mal, malen, bok,
+                                   historik, skarpare),
+              system=SYSTEM,
+              options={"temperature": 0.2},
+              response_format=lapp_response_format(),
+              max_tokens=LAPP_MAX_TOKENS)
+    data = _json_objekt(raw)
+    if data is None:
+        return "nej", "modellen svarade inte med giltig JSON"
+    if isinstance(data.get("boards"), list):
+        hel = ws.normalize_board(_rensa_toppnycklar(data))
+        return ("hel", hel) if isinstance(hel, dict) else ("nej", "tomt svar")
+    utanfor = lappvakten(board, data.get("lappar"), data.get("ta_bort"), vagar)
+    if utanfor:
+        return "utanfor", utanfor
+    lappad = applicera_lappar(board, data.get("lappar"), data.get("ta_bort"))
+    if lappad is None:
+        return "nej", "lappen gick inte att sy in"
+    return "lapp", ws.normalize_board(lappad)
+
+
+_SKARPARE = ("Ditt förra svar pekade på {nyckel}, som ligger utanför målet, "
+             "och kastades därför oläst. Skriv om lapparna så att VARJE nyckel "
+             "är en av målnycklarna ovan eller något under dem.\n")
+
+
+def _riktad_refine(board: dict, instruction: str, vagar, *, model: str, llm,
+                   mal=None, malen=None, bok="", historik=None,
+                   max_rounds: int = MAX_ROUNDS, log_cb=None,
+                   token_cb=None) -> dict:
+    """Omskrivningen NÄR läraren pekat: lapp först, helomskrivning som reserv,
+    och tavlan orörd hellre än fel."""
+    log = log_cb or (lambda _m: None)
+    namn = llm_client.uppradning([f"«{n}»" for n, _v in vagar]) or "rutan"
+    log(f"Ändrar bara {namn} …")
+    rundor = 0
+    skarpare = ""
+    kandidat: dict | None = None
+    for _forsok in range(2):
+        rundor += 1
+        sort, vad = _mallapp_runda(board, instruction, vagar, model=model,
+                                   llm=llm, mal=mal, malen=malen, bok=bok,
+                                   historik=historik, skarpare=skarpare)
+        if sort == "lapp":
+            _doc, errors = ws.validate_board_json(vad)
+            return _repair_until_valid(vad, errors, model=model, llm=llm,
+                                       rounds_used=rundor,
+                                       max_rounds=max_rounds, log_cb=log_cb,
+                                       token_cb=token_cb, vagar=vagar)
+        if sort == "hel":
+            kandidat = vad          # modellen valde helomskrivningen själv
+            break
+        if sort == "utanfor" and not skarpare:
+            log(f"Lappen pekade på {vad}, utanför {namn}. Jag försöker en "
+                "gång till.")
+            skarpare = _SKARPARE.format(nyckel=vad)
+            continue
+        log("Lappen gick inte att använda. Jag skriver om hela tavlan och "
+            f"behåller allt utanför {namn}.")
+        break
+    if kandidat is None:
+        rundor += 1
+        # Reserven är DAGENS prompt, byte för byte — bara tillämpningen är ny.
+        kandidat = _llm_round(
+            build_refine_prompt(board, instruction, mal, bok, historik, malen),
+            model, llm, token_cb=token_cb)
+    if kandidat is None:
+        return {"board": board, "rounds": rundor,
+                "errors": [{"path": "svar", "code": "json",
+                            "message": "modellen svarade inte med giltig JSON"}]}
+    ihop, skal = sammanfoga_riktat_tavla(board, kandidat, vagar)
+    if ihop is None:
+        log(f"{skal[0].upper()}{skal[1:]}")
+        return {"board": board, "rounds": rundor,
+                "errors": [{"path": "mal", "code": "mal", "message": skal}]}
+    _doc, errors = ws.validate_board_json(ihop)
+    return _repair_until_valid(ihop, errors, model=model, llm=llm,
+                               rounds_used=rundor, max_rounds=max_rounds,
+                               log_cb=log_cb, token_cb=token_cb, vagar=vagar)
+
+
 # ── Tiden ────────────────────────────────────────────────────────────────────
 # Läraren vill ha lektionstiden liten uppe till vänster på vänstertavlan — och
 # hela passet, "09:10–10:20", inte bara starten: «det ska stå starttid och sen
@@ -1659,7 +1957,7 @@ def _repair_until_valid(board: dict | None, errors: list, *, model: str, llm,
                         rounds_used: int, max_rounds: int,
                         log_cb: Callable[[str], None] | None = None,
                         token_cb: Callable[[str], None] | None = None,
-                        lapp: bool = True) -> dict:
+                        lapp: bool = True, vagar=None) -> dict:
     """Kör korrigeringsrundor tills fellistan är tom eller rundorna är slut.
     Returnerar {"board", "errors", "rounds"} — kvarstående fel redovisas
     ärligt (UI:t visar dem i stället för att dölja dem).
@@ -1669,8 +1967,17 @@ def _repair_until_valid(board: dict | None, errors: list, *, model: str, llm,
     inte att sy in, den bär nya fel, eller den lämnade fel kvar — stängs
     lappvägen av och rundorna som är kvar skriver om hela tavlan som förut.
     En misslyckad lapp får INGEN gratisruta: den kostade ett modellanrop och
-    räknas som rundan, precis som en omskrivning som misslyckas gör."""
+    räknas som rundan, precis som en omskrivning som misslyckas gör.
+
+    `vagar` är mål-låset (2026-09-05). Reparationen är också en omskrivning av
+    HELA tavlan, och därför samma grind: har varvet ett mål får rättningsrundan
+    bara röra målet den med. Annars smiter det förbjudna in genom bakdörren i
+    runda två, och det är just den rundan läraren aldrig ser. Lappvägen stängs
+    då av: en lapp KAN lägga till ett syskon efter målet, och en sammanfogning
+    som bara hämtar målets delträd hade tyst tagit bort tillägget igen."""
     log = log_cb or (lambda _m: None)
+    if vagar:
+        lapp = False
     while errors and rounds_used < max_rounds and board is not None:
         rounds_used += 1
         log(f"Rättar tavlan{' med lappar' if lapp else ''} (runda "
@@ -1707,6 +2014,11 @@ def _repair_until_valid(board: dict | None, errors: list, *, model: str, llm,
             errors = [{"path": "svar", "code": "json",
                        "message": "modellen svarade inte med giltig JSON"}]
             continue
+        if vagar:
+            candidate, skal = sammanfoga_riktat_tavla(board, candidate, vagar)
+            if candidate is None:
+                errors = [{"path": "mal", "code": "mal", "message": skal}]
+                continue
         doc, new_errors = ws.validate_board_json(candidate)
         board = candidate
         errors = new_errors
@@ -1978,8 +2290,19 @@ def refine_board(board: dict, instruction: str, *, model: str,
 
     `mal` är rutan läraren pekade på i granskningen (llm_client.malrad), `malen`
     rutorna när de är flera, och `bok` bokdörrens block — sidorna och lärarens
-    uppgiftsurval."""
+    uppgiftsurval.
+
+    Bär målen ett element-id som går att hitta i tavlans JSON går varvet den
+    RIKTADE vägen (se MÅL-LÅSET ovan): lapp först, helomskrivning som reserv,
+    och det läraren inte pekade på står kvar därför att koden håller det kvar.
+    Utan mål, eller med ett mål vi inte kan slå upp, är det exakt som förut."""
     log = log_cb or (lambda _m: None)
+    vagar = malvagar(board, mal, malen, log=log)
+    if vagar:
+        return _riktad_refine(board, instruction, vagar, model=model, llm=llm,
+                              mal=mal, malen=malen, bok=bok, historik=historik,
+                              max_rounds=max_rounds, log_cb=log_cb,
+                              token_cb=token_cb)
     log("Uppdaterar tavlan …")
     candidate = _llm_round(
         build_refine_prompt(board, instruction, mal, bok, historik, malen),
