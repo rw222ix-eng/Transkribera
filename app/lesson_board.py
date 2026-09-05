@@ -926,18 +926,22 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                             # «Nu ska vi ha ett bråk i stället. Vad händer då?»
                             # Förlängningen ger gemensam nämnare, och förenklingen
                             # sker genom att faktorisera täljaren och stryka
-                            # faktorn. Samma parentes som i exempel 1 står kvar på
-                            # slutet, och talen går jämnt ut när läraren räknar.
+                            # faktorn. Parentesen (x + 2) är exempel 2:s (6x + 12
+                            # = 6(x + 2)), och talen går jämnt ut: (2x + 4 + x + 2)/6
+                            # = (3x + 6)/6 = 3(x + 2)/6 = (x + 2)/2. Första
+                            # versionen hade x/6 som andra bråk: täljaren blev
+                            # 3x + 4, och där finns ingen 3:a att bryta ut. En shot
+                            # med räknefel lär ut räknefel; räkna efter varje tal.
                             {"kind": "heading",
                              "text": "Exempel 3: uttrycket i ett bråk",
                              "size": 26, "underline": {}, "gapAfter": 12},
                             {"kind": "math",
-                             "latex": "\\frac{x + 2}{3} + \\frac{x}{6}",
+                             "latex": "\\frac{x + 2}{3} + \\frac{x + 2}{6}",
                              "size": 26, "gapAfter": 16},
                             {"kind": "list", "bullet": "–", "size": 19, "gap": 6,
                              "items": [
                                  "Förlänga: multiplicera första bråket med 2",
-                                 "Faktorisera: bryt ut 3 ur täljaren",
+                                 "Faktorisera: bryt ut 3 ur täljaren 3x + 6",
                                  "Förenkla: stryk 3:an mot 6:an"],
                              "gapAfter": 22},
                             # SAMLINGSPUNKTEN: en rad per uttryck, där första
@@ -947,12 +951,12 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                             {"kind": "heading", "text": "Fyller vi i tillsammans",
                              "size": 24, "underline": {}, "gapAfter": 14},
                             {"kind": "table",
-                             "headers": ["Uttryck", "Vad görs", "Begrepp"],
+                             "headers": ["Uttryck", "Begrepp"],
                              "rows": [
-                                 ["4(x + 3)", "gångra in", "utveckla"],
-                                 ["6x + 12", "", ""],
-                                 ["2(x + 5)", "", ""],
-                                 ["3x + 9", "", ""]]},
+                                 ["4(x + 3)", "utveckla"],
+                                 ["6x + 12", ""],
+                                 ["2(x + 5)", ""],
+                                 ["3x + 9", ""]]},
                         ]},
                     ],
                 },
