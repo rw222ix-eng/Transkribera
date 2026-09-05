@@ -195,10 +195,19 @@
     const ruta = $('#g-mal'), chips = $('#g-malchips');
     chips.innerHTML = '';
     if (!malen.length) {
+      /* «Hela dokumentet» stod här och sa ingenting om VALET. Läraren trodde
+         att hon markerat och skrev en mening som gällde en ruta, och varvet
+         skrev om hela pappret. Raden säger nu båda sakerna: vad varvet gäller
+         just nu, och att det finns ett smalare sätt (2026-09-05). */
       const t = document.createElement('span');
       t.className = 'gmaltext';
-      t.textContent = arkNamn();
-      chips.appendChild(t);
+      const namn = arkNamn();
+      t.textContent = namn === 'Hela dokumentet'
+        ? 'Gäller hela pappret' : `Gäller ${bestamd(namn)}`;
+      const tips = document.createElement('span');
+      tips.className = 'gmaltips';
+      tips.textContent = 'markera en ruta för att ändra bara den';
+      chips.append(t, tips);
     } else malen.forEach(m => {
       const c = document.createElement('span');
       c.className = 'gmalchip';

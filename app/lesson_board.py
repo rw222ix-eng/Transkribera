@@ -1653,9 +1653,11 @@ def sammanfoga_riktat_tavla(original: dict, kandidat: dict,
     for namn, vag in vagar or ():
         finns, ny = _las_vag(kandidat, vag)
         if not finns or not isinstance(ny, dict) or not ny.get("kind"):
-            return None, (f"omskrivningen byggde om tavlans struktur, så "
-                          f"«{namn}» inte gick att hämta ur den. Tavlan "
-                          "lämnades orörd.")
+            # Skälet läses upp av granska.js svarText: «Ingenting på pappret
+            # ändrades: <skäl> <rutan> står alltså kvar som förut …». Det ska
+            # alltså sluta med punkt och INTE självt säga att tavlan står kvar.
+            return None, (f"omskrivningen byggde om tavlans struktur, så att "
+                          f"«{namn}» inte gick att hämta ur den.")
         if not _skriv_vag(ihop, vag, ny):
             return None, f"«{namn}» finns inte längre på tavlan."
     return ihop, ""

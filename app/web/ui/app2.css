@@ -613,6 +613,11 @@
 .gmalchips{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0}
 .gmalchip{display:inline-flex;align-items:center;gap:5px;min-width:0}
 .gmalchip .gmaltext{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Vad varvet gäller när ingenting är markerat, och vägen till det smalare.
+   Tipset är en andra röst i samma rad: svagare, och med punkten som skiljer
+   dem åt — annars läses de som en enda mening. */
+.gmaltips{font-weight:500;opacity:.72}
+.gmaltips::before{content:'·';margin:0 6px;opacity:.6}
 .gmal[data-flera] .gmalchip{border-radius:var(--r-pill);padding:2px 4px 2px 10px;background:color-mix(in srgb,var(--atmosphere) 18%,transparent)}
 /* Krysset i ETT chip. Det syns bara när det finns flera att välja mellan —
    med ett enda val är det målrutans eget kryss som tömmer, och två kryss
