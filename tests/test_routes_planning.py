@@ -925,6 +925,34 @@ def test_urvalet_lases_ur_kroppen(llm_ready):
     assert rp.bok_urval({}) is None
 
 
+def test_bok_texten_skyddar_urvalets_sidor(monkeypatch, tmp_path):
+    """Teckentaket i uppslag_text tog sidorna i ordning, och på ett fyrsidigt
+    uppslag föll den sista bort — den med Nivå 2 och 3, alltså lärarens valda
+    uppgifter (Origo 2a s. 27–30, urvalet 1218–1227, 2026-09-05). Rutten ska
+    tala om för uppslaget vilka sidor som är urvalets."""
+    from app.web import routes_planning as rp
+    sett = {}
+    monkeypatch.setattr(rp.db, "connect", lambda f: _FejkConn())
+    monkeypatch.setattr(rp.db, "get_bok", lambda c, i: {"titel": "Origo 2a"})
+    monkeypatch.setattr(rp.db, "bok_uppgifter",
+                        lambda c, i, f, t: [{"nr": 1218, "sida": 30},
+                                            {"nr": 1201, "sida": 29}])
+
+    def fake_uppslag(conn, bid, fran, till, **kw):
+        sett.update(kw)
+        return "— Sida 30 —\ntext"
+    monkeypatch.setattr(rp.bok, "uppslag_text", fake_uppslag)
+
+    rp.bok_text(tmp_path / "x.db", {"bok": {"id": 3, "fran": 27, "till": 30,
+                                            "remsa": "1218-1227"}})
+    assert sett["viktiga"] == {30}
+
+
+class _FejkConn:
+    def close(self):
+        pass
+
+
 # ── Hela sammanhanget till modellen (varvhistoriken) ─────────────────────────
 
 def test_refine_far_lararens_tidigare_onskemal(llm_ready, monkeypatch):

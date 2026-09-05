@@ -478,16 +478,54 @@ def las_spann(base: Path, conn, bok_id: int, fran: int, till: int, *,
 
 # ── Uppslaget som promptunderlag ──────────────────────────────────────────
 
+_SPANN_RE = re.compile(r"(\d+)\s*(?:[-–—]\s*(\d+))?")
+
+
+def remsnummer(remsa) -> set[int]:
+    """«1218-1227, 1230» → uppgiftsnumren. Både bindestreck och tankstreck:
+    panelen skriver det ena, läraren klistrar in det andra."""
+    ut: set[int] = set()
+    for a, b in _SPANN_RE.findall(str(remsa or "")):
+        start, slut = int(a), int(b) if b else int(a)
+        if slut < start:
+            start, slut = slut, start
+        if slut - start > 500:            # en trasig remsa fyller inte minnet
+            continue
+        ut.update(range(start, slut + 1))
+    return ut
+
+
+def urvalets_sidor(uppgifter, urval: dict | None) -> set[int]:
+    """Sidorna lärarens VALDA uppgifter står på — de som aldrig får klippas.
+
+    Fyndet 2026-09-05: uppslag_text tog sidorna i ordning tills taket slog i,
+    och på Origo 2a s. 27–30 rymdes 27+28+29 (20 770 tecken) men inte s. 30.
+    Just den sidan bär Nivå 2 och Nivå 3, alltså precis de uppgifter läraren
+    valt (1218–1227). Tavlan skrevs alltså ur sidorna FÖRE urvalet, och
+    exemplen blev nivå 1-typer — «beräkna värdet av uttrycket» — medan de
+    valda typerna (faktor framför två parenteser, minus framför en produkt,
+    arean baklänges) inte fanns i prompten över huvud taget."""
+    nummer = remsnummer((urval or {}).get("remsa"))
+    if not nummer:
+        return set()
+    return {u["sida"] for u in uppgifter or []
+            if u.get("nr") in nummer and u.get("sida")}
+
+
 def uppslag_text(conn, bok_id: int, fran: int, till: int,
-                 max_tecken: int = 24000) -> str:
+                 max_tecken: int = 24000, viktiga=None) -> str:
     """Sidorna som text — det tavlan, provet och arbetsbladet skrivs ur.
 
     Bara sidor som FAKTISKT lästs kommer med. En sida som inte är läst nämns
     inte alls: en rad om att den saknas hade blivit en uppmaning till modellen
     att fylla luckan själv, och det är precis vad hela läsningen finns för att
     slippa.
+
+    `viktiga` är sidnummer som ligger utanför taket: urvalets sidor får plats
+    först, och resten fyller på i ordning så långt budgeten räcker.
     """
-    delar, tecken = [], 0
+    viktiga = set(viktiga or ())
+    bitar: list[tuple[int, str]] = []
     for rad in db.bok_sidor(conn, bok_id, fran, till):
         text = (rad.get("text") or "").strip()
         if not text:
@@ -495,14 +533,20 @@ def uppslag_text(conn, bok_id: int, fran: int, till: int,
         rubrik = f"— Sida {rad['sida']}"
         if rad.get("avsnitt") or rad.get("rubrik"):
             rubrik += f" ({' '.join(x for x in (rad.get('avsnitt'), rad.get('rubrik')) if x)})"
-        bit = f"{rubrik} —\n{text}"
-        if delar and tecken + len(bit) > max_tecken:
-            break
+        bitar.append((rad["sida"], f"{rubrik} —\n{text}"))
+
+    med = {s for s, _b in bitar if s in viktiga}
+    tecken = sum(len(b) for s, b in bitar if s in med)
+    for sida, bit in bitar:
+        if sida in med:
+            continue
         # Första sidan följer alltid med, hur lång den än är: ett tomt block
         # hade sett ut som en bok utan innehåll i stället för en lång sida.
-        delar.append(bit)
+        if med and tecken + len(bit) > max_tecken:
+            break
+        med.add(sida)
         tecken += len(bit)
-    return "\n\n".join(delar)
+    return "\n\n".join(b for s, b in bitar if s in med)
 
 
 # ── ORIGINALITETSKRAVET ───────────────────────────────────────────────────

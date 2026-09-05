@@ -514,6 +514,34 @@ def test_uppslagstexten_har_ett_tak(tmp_path, conn, ocr):
     assert "Sida 10" in kort and "Sida 11" not in kort
 
 
+def test_urvalets_sidor_far_plats_i_taket(tmp_path, conn, ocr):
+    """Fyndet 2026-09-05: taket tog sidorna i ordning, och på Origo 2a
+    s. 27–30 rymdes 27, 28 och 29 men inte 30 — sidan med Nivå 2 och 3,
+    alltså precis de uppgifter läraren valt. Tavlan skrevs ur sidorna FÖRE
+    urvalet och exemplen blev nivå 1-typer. Urvalets sidor går nu först."""
+    b = bok.importera(tmp_path, conn, pdf=pdf_fil(tmp_path / "d"))
+    bok.las_spann(tmp_path, conn, b["id"], 10, 14)
+    uppg = [{"nr": 1218, "sida": 13}, {"nr": 1227, "sida": 13},
+            {"nr": 1201, "sida": 10}]
+    sidor = bok.urvalets_sidor(uppg, {"remsa": "1218-1227"})
+    assert sidor == {13}
+    kort = bok.uppslag_text(conn, b["id"], 10, 14, max_tecken=80, viktiga=sidor)
+    assert "Sida 13" in kort              # urvalets sida klipps aldrig
+    assert "Sida 11" not in kort          # och taket gäller fortfarande
+    # Utan urval står texten som förut: sidorna i ordning tills taket slår i.
+    assert bok.urvalets_sidor(uppg, None) == set()
+
+
+def test_remsnummer_tar_bade_bindestreck_och_tankstreck():
+    """Panelen skriver «1218-1227», läraren klistrar in «1101–1103, 1105»."""
+    assert bok.remsnummer("1218-1220") == {1218, 1219, 1220}
+    assert bok.remsnummer("1101–1103, 1105") == {1101, 1102, 1103, 1105}
+    assert bok.remsnummer("") == set() and bok.remsnummer(None) == set()
+    # En bakvänd remsa läses ändå, och en orimlig lämnas därhän.
+    assert bok.remsnummer("1220-1218") == {1218, 1219, 1220}
+    assert bok.remsnummer("1-9999") == set()
+
+
 def test_blocket_sager_vad_det_ar(tmp_path, conn, ocr):
     b = bok.importera(tmp_path, conn, pdf=pdf_fil(tmp_path / "d"))
     bok.las_spann(tmp_path, conn, b["id"], 10, 10)

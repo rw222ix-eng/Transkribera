@@ -269,11 +269,16 @@ def bok_text(db_file: Path, body: dict) -> str:
         rad = db.get_bok(conn, bid)
         if rad is None:
             return ""
-        text = bok.uppslag_text(conn, bid, fran, till)
         uppg = db.bok_uppgifter(conn, bid, fran, till)
+        # Urvalets sidor först i teckenbudgeten: på ett fyrsidigt uppslag föll
+        # sista sidan bort, och det var den som bar lärarens valda uppgifter
+        # (Origo 2a s. 27–30, urvalet 1218–1227 — se bok.urvalets_sidor).
+        urval = bok_urval(body)
+        text = bok.uppslag_text(conn, bid, fran, till,
+                                viktiga=bok.urvalets_sidor(uppg, urval))
     finally:
         conn.close()
-    return bok.build_bok_block(rad, fran, till, text, uppg, bok_urval(body))
+    return bok.build_bok_block(rad, fran, till, text, uppg, urval)
 
 
 # ── Provets väg in i boken ────────────────────────────────────────────────
