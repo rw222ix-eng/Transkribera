@@ -762,6 +762,14 @@
 .minutenhet{font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
 .stepper{display:inline-flex;align-items:center;gap:10px}
 .steppervarde{min-width:26px;text-align:center;font-family:var(--mono);font-size:.88rem;font-variant-numeric:tabular-nums;color:var(--ink)}
+/* Diagnosens antal står på «Räknas ur innehållet» tills läraren styr över det
+   (plan.js TYPVAL.Diagnos). Autoläget bär en MENING och inte en siffra: den
+   ska sättas i brödtexten, inte i sifferfonten, och den ska få sin bredd.
+   «−» är dessutom vägen tillbaka till auto och saknar mening när man redan
+   står där — knappen tonas ner i stället för att försvinna, så att raden inte
+   hoppar i bredd när läraren växlar. */
+.stepper[data-auto] .steppervarde{min-width:0;font-family:var(--sans);font-size:.8rem;color:var(--ink-2);white-space:nowrap}
+.stepper[data-auto] [data-steg='-1']{opacity:.35;pointer-events:none}
 
 .dokverktyg .seg{flex:0 0 auto}
 .dokverktyg .seg[hidden]{display:none}

@@ -1160,7 +1160,8 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
                  profil: str = "prov", koder: list[str] | None = None,
                  grupp: dict | None = None, riktat: str = "",
                  skeleton: list[dict] | None = None,
-                 illustration: bool = True) -> str:
+                 illustration: bool = True,
+                 formelblad: bool = False) -> str:
     """Genereringsprompt: instruktion + valda innehållspunkter +
     minneskontext + tidigare provs teman (undvik upprepning som default).
     `profil` växlar mellan prov och arbetsblad (Fas 5). `utfall` är ett rättat
@@ -1176,7 +1177,14 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
 
     `illustration` är lärarens kryss «Plats för illustration» i planeringen och
     gäller BARA arbetsblad och gruppuppgift (plan.js TYPVAL). Provet har alltid
-    sitt bildstöd — dess form är lärarens förlaga, inte ett val i panelen."""
+    sitt bildstöd — dess form är lärarens förlaga, inte ett val i panelen.
+
+    `formelblad` är krysset «Formelblad» under Bilagor och gäller DIAGNOSEN
+    (2026-09-06): ett formelblad på bänken ändrar vad uppgifterna kan mäta, och
+    det måste modellen veta innan den skriver dem. False lägger ingenting till
+    prompten — den är då byte för byte den som gick i väg före väljaren, och
+    kassetterna står orörda. Provets formelbladskryss går INTE hit: det styr
+    bara utskriftspaketet och hjälpmedelsraden på skärmen, som förut."""
     # Skelettet räknas för ALLA tre profilerna (Del D1b): jämn förmågetäckning
     # ska vara garanterad by construction och inte bero på att modellen råkar
     # sprida poängen rätt. Bara delarna skiljer — arbetsbladet och
@@ -1357,11 +1365,28 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
     elif profil == "diagnos":
         if skeleton:
             block.append(_skelett_plan(skeleton))
+        # «Del A + Del B» i planeringen (2026-09-06). Diagnosen hade inga
+        # delar alls, och det stod i koden som ett faktum i stället för som
+        # ett val. Indelningen är skelettets (exam_spec._diagnosens_delar) och
+        # står redan rad för rad i uppgiftsplanen ovan — raden här säger vad
+        # skillnaden BETYDER för innehållet, och det kan ingen grammatik göra.
+        # Den räknarfria delen ligger först och följer kursens ordning: en
+        # diagnos som skärs om efter svårighet tappar den ordning läraren
+        # letar efter hålet i.
+        diagnos_delar = (
+            "Diagnosen är delad i Del B (utan räknare) och Del C (med "
+            "räknare) — uppgiftsplanen säger vilken uppgift som ligger var, "
+            "och den indelningen är låst. Del C:s uppgifter ska vara sådana "
+            "att räknaren faktiskt hjälper (avläsning, tabellvärden, tyngre "
+            "aritmetik); Del B:s ska gå att göra i huvudet eller på papper. "
+            "Båda delarna är korta sållningsuppgifter — Del C är inte en "
+            "svårare del, den är en annan sorts fråga."
+            if delar else
+            "Inga delar (del: null på alla uppgifter).")
         block.append(
             f"Uppdrag: skriv en DIAGNOS för {kurs}, klass {klass} — ett brett "
             f"och grunt sållningspapper på {tid_min} minuter, med EXAKT "
-            f"{antal} uppgifter (varken fler eller färre). Inga delar "
-            "(del: null på alla uppgifter).\n"
+            f"{antal} uppgifter (varken fler eller färre). {diagnos_delar}\n"
             "Diagnosen är inte ett prov och inte ett arbetsblad. Den ställer "
             "EN fråga per innehållspunkt — «sitter det här?» — och går sedan "
             "vidare. Därför:\n"
@@ -1377,6 +1402,16 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             "punkten ser ut som, inte bara var poängen sitter. Det är den "
             "läraren läser när hon letar efter hålet.\n"
             "Lösningsförslagen blir facit, och facit ska vara kort: svaret och på sin höjd ett par led. Svara med enbart JSON.")
+        # Formelbladet ändrar vad en uppgift kan MÄTA, och det måste sägas före
+        # uppgifterna skrivs — inte städas bort efteråt. Blocket finns bara när
+        # krysset står på; av lämnar prompten ordagrant som den var.
+        if formelblad:
+            block.append(
+                "Eleverna har ett formelblad framme. Skriv därför inga "
+                "uppgifter vars enda fråga är om eleven minns en formel som "
+                "står på bladet — de mäter ingenting när bladet ligger på "
+                "bänken. Fråga i stället om hon kan VÄLJA rätt formel och "
+                "använda den.")
         block.append(niva_rubrik.build_skala_utan_bok("diagnos", kurs))
     elif profil == "arbetsblad":
         if skeleton:
@@ -3363,7 +3398,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                   skeleton: list[dict] | None = None,
                   niva_mal: dict | None = None,
                   grupp: dict | None = None, doma: bool = True,
-                  illustration: bool = True,
+                  illustration: bool = True, formelblad: bool = False,
                   llm=llm_client.generate, max_rounds: int = MAX_ROUNDS,
                   log_cb: Callable[[str], None] | None = None,
                   steg_cb: Callable[[str], None] | None = None) -> dict:
@@ -3395,6 +3430,9 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     `illustration` är lärarens kryss «Plats för illustration» och styr om
     arbetsbladets och gruppuppgiftens uppgifter ska bära en bildbeställning
     (`scen`) alls. Se BILD_PA/BILD_AV.
+
+    `formelblad` är diagnosens kryss under Bilagor och når prompten först när
+    det står PÅ — se build_prompt.
 
     `tidigare` är uppgiftstexterna kursen redan sett
     (db.tidigare_uppgiftstexter) och driver variationsvakten: en undvik-lista
@@ -3446,7 +3484,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                           svart=svart, fokus=fokus,
                           profil=profil, koder=koder, grupp=grupp,
                           riktat=riktat, skeleton=skeleton,
-                          illustration=illustration)
+                          illustration=illustration, formelblad=formelblad)
     exam = _llm_round(prompt, model, llm, antal, grammatik, koder,
                       log_cb=log_cb)
     rounds = 1

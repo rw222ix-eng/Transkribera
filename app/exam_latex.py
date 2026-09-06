@@ -1093,16 +1093,26 @@ def _ci_grupper(vy: dict) -> list[dict]:
 
 def render_diagnos(doc: exam_spec.ExamDoc,
                    bilder: dict[int, str] | None = None,
-                   dokumentkod: str = "") -> str:
+                   dokumentkod: str = "",
+                   utan_rattning: bool = False) -> str:
     """Diagnos (Etapp 2): elevens ark i kursens ordning, och lärarens facit
     grupperat PER INNEHÅLLSPUNKT i stället för per del.
 
     Skillnaden mot arbetsbladet är just den grupperingen. Ett arbetsblad rättas
     uppgift för uppgift; en diagnos rättas för att svara på en fråga — vilken
-    punkt sitter inte? — och då ska pappret vara sorterat efter punkterna."""
+    punkt sitter inte? — och då ska pappret vara sorterat efter punkterna.
+
+    `utan_rattning` släcker den sidan. Krysset «Bilagor · Rättning» i
+    planeringen (2026-09-06) är förvalt PÅ — rättningsbladet är diagnosens hela
+    poäng — men läraren som bara ska dela ut elevarket ska slippa bära
+    lärarsidan till skrivaren. Motsvarigheten till arbetsbladets `utan_facit`.
+
+    Har läraren valt «Del A + Del B» bär vyn delarnas rubriker, och mallen
+    sätter dem över uppgifterna: eleven ska se var räknaren får plockas fram."""
     vy = _build_view(doc, bilder, facit=True)
     return _environment().get_template("diagnos.tex.j2").render(
-        dokumentkod=dokumentkod, ci_grupper=_ci_grupper(vy), **vy)
+        dokumentkod=dokumentkod, ci_grupper=_ci_grupper(vy),
+        utan_rattning=utan_rattning, **vy)
 
 
 def render_anteckningar(doc) -> str:

@@ -24,10 +24,22 @@
 \vspace{4mm}
 {\small Diagnosen sätter inget betyg. Den frågar en gång om varje moment i
 kursen för att ta reda på vad som behöver tas om — svara på det du kan och
-hoppa över det du inte kan, så syns det.((* if tid_min *)) Tid: ((( tid_min ))) minuter.((* endif *))}
+hoppa över det du inte kan, så syns det.((* if tid_min *)) Tid: ((( tid_min ))) minuter.((* endif *))((* if hjalpmedel *)) Hjälpmedel: ((( hjalpmedel )))((* endif *))}
 
 \vspace{4mm}
+((# Delrubriken (2026-09-06). Diagnosen hade inga delar och behövde därför
+    ingen rubrik; sedan «Del A + Del B» blev ett val i planeringen måste
+    eleven se var räknaren får plockas fram. Rubriken kommer ur samma vy som
+    provets (_build_view: titelrad = «Del A – Digitala verktyg är inte
+    tillåtna»), så pappren säger samma sak med samma ord. Är valet «En del»
+    finns bara en namnlös del i vyn och raden uteblir helt — pappret ser då ut
+    precis som före väljaren. #))
 ((* for del in delar *))
+((* if del.titelrad *))
+\vspace{2mm}
+\delprovband{((( del.titelrad )))}
+\vspace{2mm}
+((* endif *))
 ((* for u in del.uppgifter *))
 ((# Inga poäng på elevens ark: en diagnos som visar poäng blir ett prov i
     elevens ögon, och då hoppar den som är osäker över uppgiften i stället för
@@ -56,6 +68,12 @@ hoppa över det du inte kan, så syns det.((* if tid_min *)) Tid: ((( tid_min ))
 ((* endfor *))
 ((* endfor *))
 
+((# Rättningsbladet är ett VAL sedan 2026-09-06 (planeringens «Bilagor ·
+    Rättning»), inte längre en självklarhet. Förvalet står kvar på PÅ — det är
+    diagnosens hela poäng att kunna prickas av moment för moment — men läraren
+    som bara vill dela ut elevarket ska slippa bära lärarsidan till skrivaren.
+    Ett gammalt papper utan valet läses som PÅ; se routes_exam approve. #))
+((* if not utan_rattning *))
 \newpage
 \delprovband{Rättning — moment för moment}
 
@@ -80,5 +98,6 @@ En uppgift som prövar två moment står under båda.}
 \end{uppgift}
 ((* endfor *))
 ((* endfor *))
+((* endif *))
 
 \end{document}

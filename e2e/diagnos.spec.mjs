@@ -58,6 +58,16 @@ async function fejka(page) {
   await page.route("**/api/dokument/**", route => json(route, { ok: true, id: 1 }));
   await page.route("**/api/exams/**", route => {
     const vag = new URL(route.request().url()).pathname;
+    /* Raden under «Antal uppgifter» frågar servern vad autoläget skulle ge
+       (routes_exam /api/exams/diagnosplan). Den svarar JSON och inte SSE —
+       fångas den av strömsvaret nedan tystnar noten, och testet mäter då sin
+       egen fejk i stället för raden. Talen är Ma1c:s riktiga (21 punkter, sju
+       uppgifter på 60 min), så skärmen säger samma sak som servern skulle. */
+    if (vag.endsWith("/diagnosplan")) {
+      anrop.push({ vag, kropp: null });
+      return json(route, { antal: 7, punkter: 21, tid_min: 60,
+                           uppskattad_tid: 55 });
+    }
     anrop.push({ vag, kropp: route.request().postDataJSON() });
     if (vag.endsWith("/approve")) {
       return route.fulfill({ status: 200, contentType: "text/event-stream",
@@ -180,4 +190,92 @@ test("diagnosen bär sin rättning i samma dokument", async ({ page }) => {
   await expect(page.locator('#arkskal .ark[data-form="fa"]')).toHaveCount(1);
   await expect(page.locator("#arkskal .guband").first())
     .toContainText("sätter inget betyg");
+});
+
+
+/* ══════════ DIAGNOSENS UPPLÄGG (2026-09-06) ══════════
+ * Läraren: «Det saknas alternativ för hur man vill utforma diagnosen. Provet
+ * har bra alternativ.» Fyra rader kom till, och den hårdaste regeln är att
+ * ORÖRDA väljare fortfarande ska ge exakt den begäran testet ovan mäter —
+ * annars ryker kassetterna. Därför prövas här bara det som är NYTT: att
+ * raderna finns, att autoläget säger vad det räknar fram, och att ett satt
+ * val faktiskt reser.
+ */
+
+const radInfo = page => page.evaluate(() =>
+  [...document.querySelectorAll("#typval .typrad")].map(r => ({
+    id: r.dataset.id,
+    varde: (r.querySelector(".steppervarde") || {}).textContent || "",
+    auto: !!r.querySelector(".stepper[data-auto]"),
+    seg: [...r.querySelectorAll('.seg button[aria-pressed="true"]')]
+      .map(b => b.textContent),
+    kryss: [...r.querySelectorAll(".kryssknapp")]
+      .map(b => `${b.textContent}=${b.getAttribute("aria-pressed")}`),
+  })));
+
+test("diagnosen har provets rader, med antalet på auto", async ({ page }) => {
+  await fejka(page);
+  await page.goto("/");
+  await hydrerad(page);
+  await planera(page, "Diagnos", "hela kursen");
+
+  const rader = await radInfo(page);
+  expect(rader.map(r => r.id))
+    .toEqual(["nartid", "antal", "nivamix", "delprov", "bilagor"]);
+  const antal = rader.find(r => r.id === "antal");
+  expect(antal.auto).toBe(true);
+  expect(antal.varde).toBe("Räknas ur innehållet");
+  expect(rader.find(r => r.id === "nivamix").seg).toEqual(["Balanserat"]);
+  expect(rader.find(r => r.id === "delprov").seg).toEqual(["En del"]);
+  /* Rättningen är förvald PÅ — den är hela poängen med pappret — och
+     formelbladet av. Etiketten är diagnosens egen: «Rättning», inte provets
+     «Bedömningsanvisning». */
+  expect(rader.find(r => r.id === "bilagor").kryss)
+    .toEqual(["Rättning=true", "Formelblad=false"]);
+});
+
+test("autoläget säger vad det skulle ge, och «−» ger tillbaka räkningen",
+  async ({ page }) => {
+    await fejka(page);
+    await page.goto("/");
+    await hydrerad(page);
+    await planera(page, "Diagnos", "hela kursen");
+
+    const rad = page.locator('#typval .typrad[data-id="antal"]');
+    /* Talet kommer från servern (/api/exams/diagnosplan) och inte ur en andra
+       modell på skärmen: 21 punkter i Ma1c ryms på sju uppgifter på en
+       60-minuterslektion. Ett förval som inte säger vad det räknar fram är en
+       svart låda, och det var precis det läraren saknade alternativ till. */
+    await expect(rad).toContainText("ca 7 uppgifter ur 21 punkter på 60 min",
+      { timeout: 15_000 });
+
+    await rad.locator('[data-steg="1"]').click();
+    await expect(rad.locator(".steppervarde")).toHaveText("3");
+    await rad.locator('[data-steg="-1"]').click();
+    await expect(rad.locator(".steppervarde")).toHaveText("Räknas ur innehållet");
+  });
+
+test("satta val reser med begäran — orörda gör det inte", async ({ page }) => {
+  const anrop = await fejka(page);
+  await page.goto("/");
+  await hydrerad(page);
+  await planera(page, "Diagnos", "hela kursen");
+
+  const rad = page.locator('#typval .typrad[data-id="antal"]');
+  for (let i = 0; i < 3; i++) await rad.locator('[data-steg="1"]').click();
+  await page.locator('#typval .typrad[data-id="nivamix"] button')
+    .filter({ hasText: "C/A-tyngd" }).click();
+  await page.locator('#typval .typrad[data-id="delprov"] button')
+    .filter({ hasText: "Del A + Del B" }).click();
+  await page.locator('#typval .typrad[data-id="bilagor"] .kryssknapp')
+    .filter({ hasText: "Formelblad" }).click();
+
+  await page.locator("#skriv").click();
+  await expect(page.locator("#dokument")).toBeVisible({ timeout: 15_000 });
+
+  const gen = anrop.find(a => a.vag.endsWith("/generate"));
+  expect(gen.kropp.antal).toBe(5);
+  expect(gen.kropp.nivamix).toBe("C/A-tyngd");
+  expect(gen.kropp.delar).toBe(true);
+  expect(gen.kropp.formelblad).toBe(true);
 });

@@ -43,11 +43,15 @@
       med: true
     })).sort((a, b) => (ordning[a.typ] ?? 1) - (ordning[b.typ] ?? 1));
     /* Formelbladet är en bilaga i provet — samma dokument, sista sidan — men
-       den kan skrivas ut med eller utan i paketet. Ingen fjärde dokumenttyp. */
-    const prov = rader.find(r => r.typ === 'Prov' && r.v.inst && r.v.inst.formelblad);
+       den kan skrivas ut med eller utan i paketet. Ingen fjärde dokumenttyp.
+       DIAGNOSEN har samma kryss sedan 2026-09-06 (plan.js TYPVAL.Diagnos) och
+       hör därför hit av exakt samma skäl: raden fanns bara för provet, och en
+       diagnos med formelblad hade tyst tappat bladet i högen. */
+    const prov = rader.find(r => (r.typ === 'Prov' || r.typ === 'Diagnos')
+                                 && r.v.inst && r.v.inst.formelblad);
     if (prov) rader.splice(rader.indexOf(prov) + 1, 0, {
       v: prov.v, namn: 'Formelblad · ' + (prov.v.kurs || 'kursen'), typ: 'Bilaga',
-      under: `Bilaga, sida ${sidorFor(prov.v) + 1} — härledd ur uppgifterna, skrivs ut med provet`,
+      under: `Bilaga, sida ${sidorFor(prov.v) + 1} — härledd ur uppgifterna, skrivs ut med ${prov.typ === 'Diagnos' ? 'diagnosen' : 'provet'}`,
       antal: prov.antal, sidor: 1, med: true
     });
     /* Lösningsförslaget till BOKENS uppgifter är lärarens eget ark, inte ett

@@ -176,10 +176,16 @@ window.Blad = (() => {
     if (!u.length) return [];
     if (v.losningsblad) return [bb.arkfacit(v, u)];
     const ut = [bb.ark(v, u, {})];
-    /* Diagnosen bär ALLTID sin rättning i samma dokument — det är dess form
+    /* Diagnosen bär sin rättning i samma dokument — det är dess form
        (app/templates/diagnos.tex.j2), och läraren ska inte behöva hålla reda på
-       två papper för att pricka av en klass. */
-    if ((v.inst || {}).facit === 'Facit i bladet' || v.typ === 'Diagnos') ut.push(bb.arkfacit(v, u));
+       två papper för att pricka av en klass. Sedan 2026-09-06 är det ett kryss
+       («Bilagor · Rättning», plan.js TYPVAL.Diagnos) och inte en självklarhet:
+       hon som bara ska dela ut elevarket ska slippa bära lärarsidan till
+       skrivaren. Förvalet står kvar på PÅ, och en diagnos skriven innan
+       krysset fanns bär inget fält alls — den läses därför som PÅ, för det är
+       vad den FICK. */
+    const rattning = v.typ === 'Diagnos' && (v.inst || {}).losningar !== false;
+    if ((v.inst || {}).facit === 'Facit i bladet' || rattning) ut.push(bb.arkfacit(v, u));
     return ut;
   }
 
