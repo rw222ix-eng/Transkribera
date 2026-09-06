@@ -27,8 +27,8 @@ from pathlib import Path
 ROT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROT))
 
-from app import (claude_code, exam_gen, exam_spec, lesson_board,   # noqa: E402
-                 llm_client, notes_gen, postprocess)
+from app import (ci_forslag, claude_code, exam_gen, exam_spec,     # noqa: E402
+                 lesson_board, llm_client, notes_gen, postprocess)
 from tests import fejk                                             # noqa: E402
 
 TRANSKRIPT = (
@@ -56,6 +56,44 @@ MOTESTRANSKRIPT = (
     "våras. Sista punkten: mobilerna ligger i lådan vid dörren. Ta det på "
     "första lektionen så slipper ni diskussionen resten av terminen."
 )
+
+# Innehållsdomarens material (CI-förvalet). Formen är den `ci_forslag.kalltext`
+# bygger ur en riktig begäran: avsnittsregistret först, sedan de sidor som
+# FAKTISKT är lästa, sist lärarens moment. Innehållet är ett typiskt Ma2a-kapitel
+# om andragradsekvationer — sidnumren finns i texten, för domarens skäl ska
+# kunna peka på dem utan att hitta på.
+CI_MATERIAL = """AVSNITT I SPANNET (ur bokens innehållsförteckning):
+- 2.1 Kvadreringsreglerna och konjugatregeln
+- 2.2 Faktorisering och nollproduktmetoden
+- 2.3 Andragradsekvationer och pq-formeln
+- 2.4 Andragradsfunktioner och deras grafer
+
+LÄSTA SIDOR UR BOKEN:
+— Sida 44 (2.1 Kvadreringsreglerna) —
+Kvadreringsreglerna (a + b)^2 = a^2 + 2ab + b^2 och (a - b)^2 = a^2 - 2ab + b^2
+motiveras geometriskt med hjälp av en kvadrat som delas i fyra delar. Exempel 1
+utvecklar (x + 5)^2. Uppgifterna 2101-2118 tränar utveckling av binom.
+
+— Sida 47 (2.1 Konjugatregeln) —
+Konjugatregeln (a + b)(a - b) = a^2 - b^2. Exempel 3 visar hur regeln används
+baklänges för att faktorisera x^2 - 9. Uppgifterna 2119-2131.
+
+— Sida 52 (2.2 Nollproduktmetoden) —
+Om en produkt är noll måste minst en av faktorerna vara noll. Ekvationen
+x^2 - 5x = 0 löses genom att bryta ut x. Uppgifterna 2201-2216.
+
+— Sida 55 (2.3 Andragradsekvationer) —
+Ekvationer av typen x^2 + px + q = 0. Kvadratkomplettering införs som metod och
+pq-formeln härleds ur den. Exempel 2 löser x^2 - 6x + 5 = 0. Sidan avslutas med
+en ruta om hur många rötter en andragradsekvation kan ha.
+
+— Sida 61 (2.4 Andragradsfunktioner) —
+Grafen till y = ax^2 + bx + c är en parabel. Symmetrilinje, extrempunkt och
+nollställen. I marginalen står en kort not om att rita parabeln med grafritande
+räknare. Uppgifterna 2401-2422, varav 2418-2422 är tillämpade uppgifter där en
+höjd eller en intäkt beskrivs av en andragradsfunktion.
+
+LÄRARENS MOMENT för lektionen: 2.3 Andragradsekvationer och pq-formeln"""
 
 # Provets skelett räknas EN gång och delas av prompten och grammatiken. Två
 # anrop till balanced_skeleton ger visserligen samma svar (den är
@@ -129,6 +167,22 @@ SCENARIER = {
             datum="2026-08-18"),
         "system": lambda: notes_gen.SYSTEM,
         "schema": lambda: None,
+    },
+    # Innehållsdomaren (CI-förvalet, 2026-09-06). Scenariot är typfallet ur
+    # lärarens beställning: Ma2a, ett bokspann kring andragradsekvationer, och
+    # frågan vilka av nivåns sjutton punkter materialet TYDLIGT behandlar.
+    # Nivån hämtas via nivå-id:t, samma väg som rutten tar — spelas bandet in
+    # mot en handskriven punktlista mäter det inte längre det appen frågar om.
+    "innehallsdomare": {
+        "vad": ("ci_forslag.foresla — vilka Gy25-punkter i Ma2a som ett "
+                "bokspann om andragradsekvationer behandlar"),
+        "prompt": lambda: ci_forslag.build_ci_prompt(
+            ci_forslag.nivans_punkter("mate/2a"), CI_MATERIAL,
+            "2.3 Andragradsekvationer och pq-formeln"),
+        # Ingen systemprompt: foresla anropar llm_client.generate utan en, och
+        # ett band inspelat med en är inspelat mot en annan fråga.
+        "system": lambda: None,
+        "schema": lambda: ci_forslag.schema(),
     },
     "insikter": {
         "vad": "postprocess.extract — insikter ur ett lektionstranskript",
@@ -239,8 +293,15 @@ def spela_in(namn: str) -> Path:
     if schema is not None:
         prompt += claude_code._formatsammanfattning(schema)
         schema = claude_code._minifiera(schema)
+    # MODELLEN MED, av samma skäl som schemat: `claude_code.generate` skickar
+    # alltid `--model claude-opus-5`, och utan den raden spelas bandet in mot
+    # CLI:ts förvalda modell i stället för appens. 2026-09-06 blev det ett
+    # hårt fel: den installerade CLI:n (2.1.220) svarade «does not support this
+    # model» på sin egen förvalda modell medan appens anrop gick igenom, och
+    # inspelningen skrev ett band som bara innehöll felraden.
     argv = claude_code._argv(exe, system=s["system"](), schema=schema,
-                             modell="", verktyg="", extra_dirs=[])
+                             modell=claude_code.MODELL, verktyg="",
+                             extra_dirs=[])
     print(f"Spelar in «{namn}» … (riktigt anrop, kostar några ören)")
     proc = subprocess.run(argv, input=prompt, capture_output=True,
                           text=True, encoding="utf-8", errors="replace",

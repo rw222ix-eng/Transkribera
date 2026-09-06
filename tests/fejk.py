@@ -236,8 +236,18 @@ _BEDOMNING = "bedömningsskrivare"
 # ingen annanstans i appen (lesson_board.MALNYCKELMARKOR).
 _MALLAPP = "MÅLRUTORNAS NYCKLAR"
 
+# Innehållsdomaren (CI-förvalet, app/ci_forslag.py) prövas FÖRE alla andra, och
+# av ett starkare skäl än de övriga: dess prompt bär hela lärarens MATERIAL, och
+# materialet kan vara vad som helst — en tavla, ett arbetsblad, ett provspann,
+# ett mötestranskript. Varje annan nyckel i listorna nedan kan alltså stå i den,
+# och ingen av dem säger något om vad prompten frågar efter. Ordet står bara i
+# ci_forslag.INSTRUKTION och ingen annanstans i appen.
+_CI = "innehållsdomare"
+
 
 def _auto(prompt):
+    if _CI in prompt:
+        return os.path.join(BAND, "innehallsdomare.json")
     if _MALLAPP in prompt:
         return os.path.join(BAND, "tavellapp.json")
     if _TACKNING in prompt:

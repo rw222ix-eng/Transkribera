@@ -21,8 +21,9 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse
 
-from app import (bok, course_data, db, dokumentdiff, forlaga, gpu_arbiter,
-                 lararord, lesson_board, llm_client, rattning, spar)
+from app import (bok, ci_forslag, course_data, db, dokumentdiff, forlaga,
+                 gpu_arbiter, lararord, lesson_board, llm_client, rattning,
+                 spar)
 from app.web import Id64, _kropp
 from app.web.sse import Stege, jobb_response, sse_response
 
@@ -808,6 +809,56 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # den startar — att kasta den för att läraren bytte flik var att kasta
         # pengar och tid hon inte får tillbaka.
         return jobb_response(job, req, typ="tavla", db_file=db_file)
+
+    # ----------------------------------------------------- centralt innehåll --
+
+    @router.post("/api/planning/ci-forslag")
+    async def ci_forslag_rutt(req: Request):
+        """Vilka Gy25-punkter materialet läraren utgår från faktiskt behandlar.
+
+        SSE-jobb som `generate`, men med `sse_response` och inte
+        `jobb_response`: det här jobbet ska INTE överleva fliken. Det är ett
+        förval som körs om medan läraren skriver — nästa bokspann gör det
+        föregående svaret ointressant, och ett jobb som lever vidare hade bara
+        hållit semaforen åt en fråga ingen längre väntar på.
+
+        Fail-open är kontraktet (se app/ci_forslag.foresla): otydliga svar blir
+        `done` med tomma listor och ett skäl, aldrig `error`."""
+        body = await _kropp(req)
+        niva = str(body.get("niva") or "").strip()
+        nivapunkter = ci_forslag.nivans_punkter(niva)
+        if not nivapunkter:
+            return JSONResponse(
+                {"error": f"okänd nivå: {niva or '(ingen)'}"}, status_code=400)
+        if not ci_forslag.har_kalla(body):
+            # Nivån ensam är ingen källa. Svaret hade blivit «hela nivån», och
+            # det förvalet finns redan (plan.js forkryssaAlla).
+            return JSONResponse(
+                {"error": "ange minst en källa: bokspann, förlaga, underlag "
+                          "eller moment"}, status_code=400)
+        moment = (body.get("moment") or "").strip()
+
+        llm = arbiter.try_acquire_llm()
+        if not llm:
+            return JSONResponse(_LLM_BUSY, status_code=409)
+
+        def job(emit):
+            try:
+                emit({"type": "progress",
+                      "message": "Läser underlaget mot centralt innehåll …"})
+                # Källtexten byggs INNE i jobbet: den slår i databasen och kan
+                # läsa ett par tusen tecken boktext, och då ska förloppet redan
+                # synas. Olästa sidor läses aldrig här (se ci_forslag.kalltext).
+                text, kalla = ci_forslag.kalltext(base, db_file, body)
+                res = ci_forslag.foresla(
+                    nivapunkter, text, moment, model=_model_name(),
+                    log_cb=lambda m: emit({"type": "log", "msg": m}))
+                res["kalla"] = kalla
+                return res
+            finally:
+                arbiter.release_llm(llm)
+
+        return sse_response(job, req)
 
     # ------------------------------------------------------- render-report --
 
