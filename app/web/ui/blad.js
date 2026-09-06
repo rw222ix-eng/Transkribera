@@ -313,7 +313,8 @@ window.Blad = (() => {
             + rad('Del B', `${versal(omrade(antalB + 1, plock.length))}.${delB} ${redovisas}`));
     }
     const not = $('.prnot', trav);
-    if (not) not.innerHTML = `Provet ger högst <b>${summa} poäng</b>${enDel ? '' : ` — ${sumB} på del A och ${summa - sumB} på del B`}. Efter varje uppgift står hur många poäng den kan ge.${enDel ? '' : ' Uppgifter märkta «Fullständig lösning krävs» redovisas på separat lösblad — visa hur du räknar och förklara varför.'} Skriv ditt namn på alla papper du lämnar in.${plock.some(u => !arE(u)) ? '' : ' Provet prövar E-nivån — det finns inga uppgifter för C och A på det här provet.'}`;
+    /* Inga tankstreck i anvisningen: läraren skriver aldrig med dem. */
+    if (not) not.innerHTML = `Provet ger högst <b>${summa} poäng</b>${enDel ? '' : `, ${sumB} på del A och ${summa - sumB} på del B`}. Efter varje uppgift står hur många poäng den kan ge.${enDel ? '' : ' Uppgifter märkta «Fullständig lösning krävs» redovisas på separat lösblad. Visa hur du räknar och förklara varför.'} Skriv ditt namn på alla papper du lämnar in.${plock.some(u => !arE(u)) ? '' : ' Provet prövar E-nivån. Det finns inga uppgifter för C och A på det här provet.'}`;
 
     /* ── BETYGSGRÄNSERNA ÄR SERVERNS, INTE SKÄRMENS ──────
        Här räknades gränserna med egna procentsatser — 30 % för E, 53 för C,
@@ -527,9 +528,16 @@ window.Blad = (() => {
     const d = new Date(v.datum + 'T12:00:00');
     return (d.getMonth() < 6 ? 'vt ' : 'ht ') + d.getFullYear();
   };
+  /* BARA FÖRSÄTTSBLADET bär kursraden. Uppgiftsbladen hade den också, på
+     varje blad, och läraren (2026-09-06): «det krävs bara på försättssidan …
+     det är bara i vägen». Delbokstaven i högra hörnet står kvar — den säger
+     vilket papper man håller i. Samma regel som blad-bygg huvud() och som
+     PDF:ens \runningheader (_preamble.tex.j2). */
   function huvud(rot, v) {
     const rad = [v.kurs || 'Matematik', v.klass, termin(v)].filter(Boolean).join(' · ');
-    $$('.prhuvud b:first-child', rot).forEach(b => { b.textContent = rad; });
+    $$('.prhuvud b:first-child', rot).forEach(b => {
+      b.textContent = b.closest('.ark[data-form="pr1"]') ? rad : '';
+    });
   }
 
   /* ── Elementen canvas kan peka på ────────────────────
@@ -586,6 +594,11 @@ window.Blad = (() => {
     $$('.prmeta', rot).forEach(el => salt(el, 'avtal0', 'Provtabellen'));
     $$('.prbetyg', rot).forEach(el => salt(el, 'avtal1', 'Betygsgränserna'));
     $$('.prforsatt', rot).forEach(el => salt(el, 'forsatt', 'Bilden på försättsbladet'));
+    /* Anvisningen på försättsbladet gick inte att markera alls («Välj element»
+       hittade ingen ruta). Den är appens egen text, räknad ur poängen och
+       delarna, och en omskrivning kan inte röra den — plan.js iterationsJobb
+       säger det rakt ut när den är enda målet. Men den ska gå att peka på. */
+    $$('.prnot', rot).forEach(el => salt(el, 'not', 'Anvisningen'));
     /* FACITETS POSTER RÄKNAS I BOKSTÄVER. Arbetsbladets och gruppuppgiftens
        facit numrerar med A, B, C (blad-bygg arkfacit) — provet med siffror.
        parseInt('A.2 p') är NaN, så facitposterna fick INGET data-el alls: de
@@ -1163,16 +1176,70 @@ window.Blad = (() => {
      fullt. provfotter sätter dem igen sist i formge, när delningen är gjord. */
   function atervandProv(trav) {
     $$('.prslut', trav).forEach(p => p.remove());
-    for (let varv = 0; varv < 12; varv++) {
+    /* Taket är antalet fortsättningar plus ett — förr en fast tolva, som
+       räckte så länge inget papper hade fler blad än så. */
+    const tak = $$('.ark[data-forts]', trav).length + 1;
+    for (let varv = 0; varv < tak; varv++) {
       const del = $$('.ark[data-brytbar][data-forts]', trav)[0];
       if (!del) break;
       const alla = $$('.ark[data-brytbar]', trav);
       const forra = alla[alla.indexOf(del) - 1];
       /* Ingen föregångare: märket ljuger, och ett ark utan hem får stå kvar. */
       if (!forra) { del.removeAttribute('data-forts'); continue; }
+      /* En DELAD UPPGIFT först (delaUppgift): fortsättningens tabellrader
+         tillbaka in i sin uppgift, som är föregångarens sista. Fortsättningen
+         står alltid först i sitt ark, så den hör alltid till just den. */
+      $$('.pruppg[data-fortsuppg]', del).forEach(u => {
+        const mal = $$('.pruppg', forra).pop();
+        const kropp = mal && $('.lobed tbody', mal);
+        if (kropp) $$('.lobed tbody > tr', u).forEach(r => kropp.appendChild(r));
+        u.remove();
+      });
       $$('.pruppg', del).forEach(u => forra.appendChild(u));
       (del.closest('.blad') || del).remove();
     }
+  }
+
+  /* ── EN UPPGIFT HÖGRE ÄN PAPPRET ─────────────────────
+     Bedömningsanvisningen bär per uppgift en tabell med facitraden och en
+     elevlösning per poängsteg (blad-bygg bedtabell). En uppgift på fyra poäng
+     med tre elevpapper är ofta högre än ett A4 — och paginera kunde bara
+     flytta HELA uppgifter. Den lämnade alltså en enda uppgift kvar på ett ark
+     som ändå spillde, och allt under kanten (elevlösning C, kommentaren)
+     försvann. Lärarens prov 2026-09-06: uppgift 1, 5 och 7 syntes till hälften.
+
+     Här delas TABELLEN i stället: raderna bakifrån till en fortsättning på
+     nästa ark, tills arket ryms — minst en rad stannar. Fortsättningen är en
+     egen .pruppg med samma nummer och samma data-el (det är samma uppgift sedd
+     på nästa sida, precis som «facit i bladet» bär två noder per uppgift),
+     märkt data-fortsuppg så att atervandProv kan foga ihop den igen.
+     Läraren vill kunna läsa och rätta VARJE uppgift, och en uppgift per sida
+     är henne helt rätt («man kan ju faktiskt ha en uppgift för en sida»). */
+  const delbar = ark => $$('.pruppg', ark).length === 1
+    && $$('.pruppg .lobed tbody > tr', ark).length > 1;
+  function delaUppgift(ark, kopia) {
+    const uppg = $('.pruppg', ark);
+    const kropp = uppg && $('.lobed tbody', uppg);
+    if (!kropp || kropp.children.length <= 1) return false;
+    const forts = document.createElement('div');
+    forts.className = 'pruppg';
+    forts.dataset.fortsuppg = '';
+    if (uppg.dataset.el) { forts.dataset.el = uppg.dataset.el; forts.dataset.namn = uppg.dataset.namn || ''; }
+    const nr = $('.prnr', uppg);
+    forts.innerHTML = `${nr ? nr.outerHTML : ''}<div><p class="prtext lofortsatt">Fortsättning från föregående sida.</p><table class="lobed"><tbody></tbody></table></div>`;
+    const dit = $('tbody', forts);
+    /* Fortsättningen FÖRST i kopian, efter huvudet: de uppgifter som redan
+       flyttats dit står efter den i nummerordning. */
+    const huvud = kopia.firstElementChild;
+    if (huvud && (huvud.classList.contains('lohuvud') || huvud.classList.contains('prhuvud'))) huvud.after(forts);
+    else kopia.prepend(forts);
+    const antal = kropp.children.length;
+    for (let n = 0; n < antal; n++) {
+      if (kropp.children.length <= 1 || !spiller(ark)) break;
+      dit.prepend(kropp.lastElementChild);
+    }
+    if (!dit.children.length) { forts.remove(); return false; }
+    return true;
   }
 
   /* ── Provet: ett ark som svämmar över får ett till ───
@@ -1180,12 +1247,20 @@ window.Blad = (() => {
      ibland inte. I stället för att gissa mäts arket, och de uppgifter som inte
      får plats flyttas till ett nytt blad med samma huvud. */
   function paginera(trav) {
-    for (let varv = 0; varv < 8; varv++) {
+    /* TAKET ÄR ANTALET UPPGIFTER, inte en fast åtta. Varje varv föder högst
+       ett blad, och en bedömningsanvisning där varje uppgift fyller sin egen
+       sida behöver ett varv per uppgift. Lärarens prov 2026-09-06 hade tolv:
+       efter åtta varv stod uppgift 10, 11 och 12 kvar på ett blad som aldrig
+       delades, och uppgift 12 syntes inte alls. Dubbelt, för en uppgift som
+       själv är högre än pappret tar ett varv till (delaUppgift). */
+    const tak = $$('.pruppg', trav).length * 2 + 4;
+    for (let varv = 0; varv < tak; varv++) {
       const trangt = $$('.blad', trav).find(bl => {
         const ark = $('.ark[data-brytbar]', bl);
         /* Gömt ark: clientHeight 0 medan scrollHeight bär innehållet, alltså
            «spiller» även ett halvtomt blad. Samma fälla som delaArk gick i. */
-        return ark && matbar(ark) && ark.scrollHeight - ark.clientHeight > 0 && $$('.pruppg', ark).length > 1;
+        return ark && matbar(ark) && spiller(ark)
+          && ($$('.pruppg', ark).length > 1 || delbar(ark));
       });
       if (!trangt) break;
       const ark = $('.ark[data-brytbar]', trangt);
@@ -1199,9 +1274,10 @@ window.Blad = (() => {
       nytt.appendChild(kopia);
       trangt.insertAdjacentElement('afterend', nytt);
       /* Flytta bakifrån tills arket ryms — och lämna alltid minst en uppgift kvar. */
-      for (let n = 0; n < 12; n++) {
+      const antal = $$('.pruppg', ark).length;
+      for (let n = 0; n < antal; n++) {
         const uppg = $$('.pruppg', ark);
-        if (uppg.length <= 1 || ark.scrollHeight - ark.clientHeight <= 0) break;
+        if (uppg.length <= 1 || !spiller(ark)) break;
         const sist = uppg[uppg.length - 1];
         if (kopia.firstElementChild && kopia.children.length > 1) kopia.children[1].before(sist);
         else kopia.appendChild(sist);
@@ -1210,6 +1286,12 @@ window.Blad = (() => {
          ordningen läses ur numret, som redan står på brickan. */
       const kvar = $$('.pruppg', kopia).sort((x, z) => parseInt($('.prnr', x).textContent, 10) - parseInt($('.prnr', z).textContent, 10));
       kvar.forEach(el => kopia.appendChild(el));
+      /* Står en enda uppgift kvar och arket spiller ändå är uppgiften högre
+         än pappret — då delas dess tabell. */
+      if (spiller(ark) && delbar(ark)) delaUppgift(ark, kopia);
+      /* Blev kopian tom fanns inget att flytta: ta bort den och sluta, annars
+         föds ett tomt blad per varv. */
+      if (!$$('.pruppg', kopia).length) { nytt.remove(); break; }
     }
   }
 
@@ -1649,6 +1731,14 @@ window.Blad = (() => {
          är avgjordes av paginera på raden ovanför. */
       provfotter(trav, v);
       formad = formmarke(trav);
+      /* ── DEN SOM VISAR EN KOPIA MÅSTE FÅ VETA ──────────
+         Canvasen (granska.js) visar en KLON av traven, tagen i det ögonblick
+         pappret ritades. Landar en bild sedan — lärarens egen släppta bild
+         avkodas efter mätningen — pagineras ORIGINALET om här, men klonen
+         står kvar som den var: uppgift 7 låg under kanten på lärarens prov
+         2026-09-06 fast originalet i planeringsvyn hade flyttat den till
+         nästa blad. Ändrade svepet formen sägs det; plan.js klonar om. */
+      if (formad !== avtryck) trav.dispatchEvent(new CustomEvent('blad:formad', { bubbles: true }));
     };
     formge();
     requestAnimationFrame(formge);
