@@ -2581,12 +2581,16 @@ def test_nivaval_defaultlagen_ar_none():
     assert exam_spec.nivaval("prov", "") is None
     assert exam_spec.nivaval("prov", None) is None
     assert exam_spec.nivaval("prov", "påhittat läge") is None
-    assert exam_spec.nivaval("diagnos", "Bara E") is None
+    # Diagnosen fick sina egna Poängnivåer 2026-09-06 och har därmed samma
+    # defaultläge som provet. Gruppuppgiften har fortfarande ingen väljare.
+    assert exam_spec.nivaval("diagnos", "Balanserat") is None
     assert exam_spec.nivaval("gruppuppgift", "Bara E") is None
     # …och de riktiga etiketterna ger mix + band.
     for profil, val in (("prov", "Bara E"), ("prov", "E-tyngd"),
                         ("prov", "C/A-tyngd"), ("arbetsblad", "E-nivå"),
-                        ("arbetsblad", "C-nivå"), ("arbetsblad", "A-nivå")):
+                        ("arbetsblad", "C-nivå"), ("arbetsblad", "A-nivå"),
+                        ("diagnos", "Bara E"), ("diagnos", "E-tyngd"),
+                        ("diagnos", "C/A-tyngd")):
         nv = exam_spec.nivaval(profil, val)
         assert nv and set(nv) == {"mix", "mal"}, (profil, val)
 

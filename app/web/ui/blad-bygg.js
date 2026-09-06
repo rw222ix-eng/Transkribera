@@ -420,8 +420,38 @@ window.BladBygg = (() => {
              mycket väl sakna ordet. */''}
       <div class="guband"${bandtext ? ' data-egen' : ''}>${esc(bandtext || BAND[v.typ] || BAND.Arbetsblad)}${
         v.nyckelfraga ? ` <b>${mat(v.nyckelfraga)}</b>` : ''}</div>
-      ${uppgifter.map((u, k) => kort(u, k, v.typ !== 'Diagnos')).join('')}
+      ${/* DIAGNOSENS HJÄLPMEDELSRAD (2026-09-06). «Upplägg» och «Formelblad»
+            är två kryss i planeringen, och servern skriver deras svar i
+            dokumentets `hjalpmedel` (routes_exam _diagnosens_hjalpmedel) —
+            samma fält provet bär. PDF:en trycker raden (diagnos.tex.j2), och
+            skärmen måste säga samma sak: två papper som säger olika om vad
+            som får ligga på bänken är värre än ett papper som tiger.
+            Tomt fält — ett äldre papper, prototypens — ger ingen rad alls. */''}
+      ${v.typ === 'Diagnos' && (v.hjalpmedel || '').trim()
+        ? `<div class="guhjalp">Hjälpmedel: ${esc(delnamnVisning(v.hjalpmedel.trim()))}</div>` : ''}
+      ${diagnosensRader(v, uppgifter)}
     </div>`;
+  }
+
+  /* Uppgifterna med DELRUBRIKER emellan när diagnosen är tvådelad.
+     `avd` är uppgiftens del ur provets JSON (plan.js franProv, som döpte om
+     fältet för att `del` redan var deluppgifternas). Rubriken sätts vid varje
+     byte, inte per uppgift, och namnen räknar från A precis som PDF:ens
+     (exam_latex._build_view titelrad). Utan delar — och för alla andra typer —
+     är det här exakt den map som stod i ark() förut. */
+  function diagnosensRader(v, uppgifter) {
+    const kortet = (u, k) => kort(u, k, v.typ !== 'Diagnos');
+    if (v.typ !== 'Diagnos' || !uppgifter.some(u => u && u.avd)) {
+      return uppgifter.map(kortet).join('');
+    }
+    let forra = null;
+    return uppgifter.map((u, k) => {
+      const d = (u && u.avd) || null;
+      const byte = d && d !== forra;
+      forra = d || forra;
+      return (byte ? `<div class="gudelband">${esc(DELNAMN[d] || 'Del')} – Digitala verktyg är ${
+        d === 'B' ? 'inte tillåtna' : 'tillåtna'}</div>` : '') + kortet(u, k);
+    }).join('');
   }
 
   /* ── Anteckningar: lärarens eget stödpapper ────────

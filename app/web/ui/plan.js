@@ -357,13 +357,42 @@
          guFacit nedan. */
       { id: 'facit', namn: 'Facit', typ: 'seg', val: ['Inget facit', 'Facit i bladet', 'Separat facit'] }
     ],
-    /* Diagnosen har INGEN antalsväljare — och det är hela formen. Antalet
-       uppgifter räknas ur två saker läraren redan bestämt: hur mycket av
-       kursens centrala innehåll som är kryssat, och hur lång lektionen är.
-       Ryms inte punkterna slås närliggande ihop (exam_spec.diagnosplan), så
-       täckningen är alltid hel. Därför bara tiden här. */
+    /* ── DIAGNOSENS UPPLÄGG ────────────────────────────
+       Raden var EN: när diagnosen skrivs. Läraren 2026-09-06: «Det saknas
+       alternativ för hur man vill utforma diagnosen. Provet har bra
+       alternativ. Diagnosen saknar alternativ helt och hållet.»
+
+       Raderna är därför provets, i provets ordning — men antalet är en
+       ÖVERSTYRNING och inte ett vanligt val. Att antalet räknas ur innehållet
+       och tiden är fortfarande formens kärna: hur mycket av kursen som är
+       kryssat och hur lång lektionen är avgör hur många uppgifter som ryms,
+       och ryms de inte slås närliggande punkter ihop (exam_spec.diagnosplan)
+       så att täckningen förblir hel. Det förvalet står kvar. Nytt är bara att
+       läraren KAN säga ett tal — och då är hennes tal målet: punkterna slås
+       ihop eller får en uppgift extra tills antalet är träffat, och
+       täckningen är fortfarande kravet. Se `auto` i ritaTypval. */
     Diagnos: [
-      { id: 'nartid', namn: 'När skrivs diagnosen?', typ: 'nartid' }
+      { id: 'nartid', namn: 'När skrivs diagnosen?', typ: 'nartid' },
+      /* `auto` är det som skiljer raden från provets: 0 betyder «räknas ur
+         innehållet», och det är förvalet. Golvet 3 och taket 20 är provets —
+         servern klipper mot samma tak (exam_spec.MAX_FORESLAGET_ANTAL), och
+         under golvet finns inget att balansera. Diagnosen har dessutom ett
+         eget golv som varken raden eller servern kan förhandla bort:
+         punkterna ÷ tre. Noten under raden säger det när det slår till. */
+      { id: 'antal', namn: 'Antal uppgifter', typ: 'antal', min: 3, max: 20,
+        auto: 'Räknas ur innehållet' },
+      { id: 'nivamix', namn: 'Poängnivåer', typ: 'seg', val: ['Bara E', 'E-tyngd', 'Balanserat', 'C/A-tyngd'] },
+      /* Samma två delar som provet: Del A utan digitala hjälpmedel, Del B med.
+         Förvalet är EN DEL — en diagnos är kort, och en tvådelad diagnos är
+         ett undantag läraren väljer, inte husets form. */
+      { id: 'delprov', namn: 'Upplägg', typ: 'seg', val: ['En del', 'Del A + Del B'] },
+      /* Fältet heter `losningar` som provets, av exakt samma skäl (id:t är
+         persisterat i sparade dokument) — men ETIKETTEN är diagnosens egen:
+         lärarens andra ark heter «Rättning» i arkNamn, inte
+         «Bedömningsanvisning», för det är en diagnos man prickar av moment
+         för moment. Rättningen är förvald PÅ (den är hela poängen med
+         pappret), formelbladet AV. */
+      { id: 'bilagor', namn: 'Bilagor', typ: 'kryss', delar: [{ id: 'losningar', namn: 'Rättning' }, { id: 'formelblad', namn: 'Formelblad' }] }
     ],
     Arbetsblad: [
       /* Mottagaren först: den avgör vad bladet HANDLAR om. Väljs en elev
@@ -412,7 +441,13 @@
        75 är taket, och det är servern som håller det (exam_spec). Fälten är
        provets — diagnosen skrivs på en lektion precis som provet, och `nartid`
        äger dag, klockslag OCH längd i samma rad. */
-    Diagnos: { nar: 'På lektionen', narDatum: '', narTid: '08:15', provminuter: 60, provtid: '60 min' },
+    /* `antal: 0` ÄR autoläget och inget annat. Ett tomt fält hade dugt, men 0
+       är det enda värdet som överlever både JSON-rundan till Sparat och ett
+       ärvt upplägg utan att bli undefined på vägen — och JOBB.Diagnos skickar
+       fältet först när det är > 0, så en orörd väljare ger exakt den begäran
+       som gick i väg innan raden fanns (kassettregeln). */
+    Diagnos: { nar: 'På lektionen', narDatum: '', narTid: '08:15', provminuter: 60, provtid: '60 min',
+               antal: 0, nivamix: 'Balanserat', delprov: 'En del', losningar: true, formelblad: false },
     Anteckningar: { onskemal: '', lektioner: [] }
   };
   /* Utgår pappret från boken är lösningsförslaget till BOKENS uppgifter något
@@ -438,6 +473,108 @@
   ));
   MED_BOKLOSNING.forEach(t => Object.assign(inst[t], { boklosning: true, boklosniva: 'Nivå 2 och 3' }));
   const STANDARD = JSON.parse(JSON.stringify(inst));
+
+  /* ══════════ DIAGNOSENS UPPLÄGG UR PLANERINGEN ══════════
+     Hjälpmedelsförvalet (se hjalpmedelsforval) läste grovplaneringen och satte
+     provets «Del A + Del B» efter om klassen faktiskt haft räknare framme. Det
+     förvalet hörde hemma på diagnosen i samma stund som den fick sin
+     Upplägg-rad: frågan är densamma — har de här lektionerna varit
+     räknarlektioner? — och svaret ligger på samma ställe.
+
+     Den går INTE genom provetsUnderlag(). Den funktionen sätter också BOKEN
+     och sidspannet, och diagnosen förankras aldrig i boken (exam_gen: den ska
+     mäta kursen, inte det uppslag klassen råkar ha framme). Här hämtas därför
+     bara planeringen — samma fönster, samma två kanter — och bara
+     hjälpmedelsfrågan besvaras.
+
+     Returnerar notraden (samma text provets rad får), tom sträng när
+     planeringen inte hade något att säga. Anropas ur ritaTypval, som körs
+     EFTER planKoll nollat `provgrund` för icke-prov. */
+  function diagnosensUpplagg() {
+    const K = window.Kalender;
+    if (!K || !K.planeringen) return '';
+    const klass = $('#p-klass').value || '', kurs = $('#p-kurs').value || '';
+    /* Samma spärr som provets: utan både klass och kurs släpper filtret igenom
+       kalenderns SAMTLIGA rader, och då är «planeringen» ingens. */
+    if (!klass && !kurs) return '';
+    const { dag: fore } = provkanten('Diagnos', klass);
+    const efter = forraProvet(klass, kurs, fore)
+      || ((K.forraProv ? K.forraProv(klass, fore) : null) || {}).datum || '';
+    const p = K.planeringen(klass, kurs, { fore, efter });
+    return p ? hjalpmedelsforval(p, 'Diagnos') : '';
+  }
+
+  /* ══════════ VAD AUTOLÄGET SKULLE GE ══════════
+     Raden under «Antal uppgifter» på diagnosen. Förvalet är «Räknas ur
+     innehållet», och ett förval som inte säger vad det räknar fram är en svart
+     låda — läraren ska se «ca 7 uppgifter ur 21 punkter på 60 min» innan hon
+     bestämmer sig för att styra över det.
+
+     TALET KOMMER FRÅN SERVERN (routes_exam /api/exams/diagnosplan), av samma
+     skäl som «Föreslå antal»: svaret bygger på det skelett som faktiskt skulle
+     byggas, och ihopslagningen håller sig inom innehållets områden. En andra,
+     ungefärlig modell här hade glidit isär från den riktiga — och då hade
+     raden lovat ett antal pappret inte höll.
+
+     Svaret cachas på sin fråga: ritaTypval körs om vid varje klick i panelen,
+     och samma fråga ska inte gå till servern en gång per omritning. */
+  let autonotSvar = null;
+  function autonot(not, s, arAuto) {
+    const koder = window.Gy ? window.Gy.koder(nivaId, [...vald]) : [];
+    const tid = Number(s.provminuter) || 60;
+    const onskat = Number(s.antal) || 0;
+    if (!koder.length) {
+      return satNot(not, '', arAuto
+        ? 'Antalet räknas ur de innehållspunkter du kryssar — kryssa först.'
+        : `${onskat} uppgifter. Kryssa innehåll, så vet servern vad de ska pröva.`);
+    }
+    if (!(window.API && window.API.json)) {
+      return satNot(not, '', arAuto
+        ? 'Räknas ur innehållet och lektionens längd när diagnosen skrivs.'
+        : `${onskat} uppgifter — punkterna slås ihop eller delas för att träffa talet.`);
+    }
+    const nyckel = [koder.join(','), tid, onskat, s.nivamix, s.delprov].join('|');
+    const skriv = r => {
+      if (!r || !r.antal) return satNot(not, '', '');
+      const langt = r.uppskattad_tid > r.tid_min
+        ? ` · tar ca ${r.uppskattad_tid} min av ${r.tid_min}` : '';
+      if (arAuto) {
+        return satNot(not, langt ? 'krock' : '',
+          `Räknas ur innehållet: ca ${r.antal} ${r.antal === 1 ? 'uppgift' : 'uppgifter'} `
+          + `ur ${r.punkter} ${r.punkter === 1 ? 'punkt' : 'punkter'} på ${r.tid_min} min${langt}.`);
+      }
+      /* Golvet är innehållets och går inte att förhandla bort: punkterna slås
+         ihop högst tre och tre (exam_spec.MAX_CI_PER_UPPGIFT), så en kurs med
+         21 punkter kan inte prövas på färre än sju uppgifter utan att en punkt
+         faller bort. Då säger raden vad hon FÅR, inte vad hon bad om. */
+      if (r.antal !== onskat) {
+        return satNot(not, 'krock',
+          `${r.punkter} punkter ryms på minst ${r.antal} uppgifter — färre går `
+          + `inte utan att en punkt faller bort. Diagnosen skrivs på ${r.antal}${langt}.`,
+          [{ namn: 'Räkna ur innehållet', gor: () => { s.antal = 0; ritaTypval(); planKoll(); } }]);
+      }
+      satNot(not, langt ? 'krock' : '',
+        `${r.antal} uppgifter ur ${r.punkter} punkter — punkterna slås ihop `
+        + `eller delas för att träffa talet, täckningen förblir hel${langt}.`,
+        [{ namn: 'Räkna ur innehållet', gor: () => { s.antal = 0; ritaTypval(); planKoll(); } }]);
+    };
+    if (autonotSvar && autonotSvar.nyckel === nyckel) return skriv(autonotSvar.r);
+    satNot(not, '', arAuto ? 'Räknar ur innehållet …' : `${onskat} uppgifter — räknar …`);
+    window.API.json(`/api/exams/diagnosplan?tid=${tid}`
+      + `&koder=${encodeURIComponent(koder.join(','))}`
+      + (onskat ? `&antal=${onskat}` : '')
+      + `&nivamix=${encodeURIComponent(s.nivamix || '')}`
+      + `&delar=${s.delprov !== 'En del'}`)
+      .then(r => {
+        autonotSvar = { nyckel, r };
+        /* Noten kan ha ritats bort under svaret (typbyte, klassbyte) — då är
+           den här raden inte längre på skärmen och ska inte skrivas i. */
+        if (not.isConnected) skriv(r);
+      })
+      /* Tyst vid fel: en påhittad siffra är värre än ingen rad alls. */
+      .catch(() => { if (not.isConnected) satNot(not, '', ''); });
+  }
+
   /* Lektionens längd står i schemat: «08:15–09:00» är 45 minuter. */
   function schemaminuter() {
     const t = ($('#p-tid') || {}).value || '';
@@ -755,6 +892,12 @@
         s.provminuter = pm; s.provtid = pm + ' min'; s.minSchema = pnyckel;
       }
       if (!pnyckel || pnyckel === '0') s.minSchema = null;
+      /* Upplägget ur grovplaneringen. Provets sätts i provetsUnderlag(), som
+         också äger boken; diagnosens har ingen bok att sätta och hämtas därför
+         här — se diagnosensUpplagg. `provgrund` bär notraden under Upplägg och
+         nollas av planKoll för icke-prov strax innan den här funktionen körs,
+         så skrivningen håller till nästa omritning. */
+      if (typ === 'Diagnos') provgrund = diagnosensUpplagg();
     }
     if (typ === 'Gruppuppgift') {
       /* Lektionen bestämmer längden här också — och står tavlan på samma lektion är
@@ -804,7 +947,10 @@
         : k.typ === 'seg'
         ? `<div class="seg" role="group" data-seg="tv-${k.id}">${k.val.map(v => `<button type="button" aria-pressed="${s[k.id] === v}">${v}</button>`).join('')}</div>`
         : k.typ === 'antal'
-          ? `<span class="antalgrupp">${k.foreslag ? '<button class="ghost minitid" type="button" data-foreslag data-tip="Räknar hur många uppgifter provtiden rymmer med din takt">Föreslå antal</button>' : ''}<span class="stepper"><button class="gzknapp" type="button" data-steg="-1" aria-label="Färre">−</button><span class="steppervarde">${s[k.id]}</span><button class="gzknapp" type="button" data-steg="1" aria-label="Fler">+</button></span></span>`
+          /* `k.auto`: raden får ett läge där INGET tal är satt (0), och det är
+             förvalet på diagnosen. Autoläget märks på stepparen — CSS:en gör
+             plats åt meningen och släcker «−», som redan står i botten. */
+          ? `<span class="antalgrupp">${k.foreslag ? '<button class="ghost minitid" type="button" data-foreslag data-tip="Räknar hur många uppgifter provtiden rymmer med din takt">Föreslå antal</button>' : ''}<span class="stepper"${k.auto && !s[k.id] ? ' data-auto' : ''}><button class="gzknapp" type="button" data-steg="-1" aria-label="Färre">−</button><span class="steppervarde">${k.auto && !s[k.id] ? k.auto : s[k.id]}</span><button class="gzknapp" type="button" data-steg="1" aria-label="Fler">+</button></span></span>`
           : k.typ === 'kryss'
           ? `<span class="kryssval">${k.delar.map(d => `<button class="kryssknapp" type="button" data-del="${d.id}" aria-pressed="${!!s[d.id]}">${d.namn}</button>`).join('')}</span>`
           /* Fritext. Generisk kontrolltyp och inte anteckningarnas egen: en
@@ -1079,27 +1225,53 @@
       const fore = $('[data-foreslag]', rad);
       if (fore) fore.addEventListener('click', () => foreslagAntal(rad, k));
       if (k.typ === 'antal') {
-        /* Ärvda uppägg kan bära ett antal som den här typen inte rymmer. */
-        s[k.id] = Math.min(k.max, Math.max(k.min, Number(s[k.id]) || k.min));
+        /* Autoläget (0) är ett riktigt värde och får inte klampas upp till
+           golvet — det är hela diagnosens förval. Ärvda upplägg kan i övrigt
+           bära ett antal som den här typen inte rymmer. */
+        const auto = () => !!k.auto && !s[k.id];
+        s[k.id] = auto() ? 0
+          : Math.min(k.max, Math.max(k.min, Number(s[k.id]) || k.min));
         /* En kontroll som tar emot utan att säga varför är en gåta. Står man
            vid kanten säger raden under vad kanten ÄR — serverns krav eller
            appens tak — i stället för att bara vägra. Bara typer som har något
-           att säga får en not (`vidMin`/`vidMax`); de andra ser ingen rad. */
-        const gransnot = (k.vidMin || k.vidMax) ? typnot(rad) : null;
+           att säga får en not (`vidMin`/`vidMax`, eller autoläget som måste
+           säga vad det räknar fram); de andra ser ingen rad. */
+        const gransnot = (k.vidMin || k.vidMax || k.auto) ? typnot(rad) : null;
         const visaGrans = () => {
           if (!gransnot) return;
+          /* Autoläget frågar servern vad det SKULLE ge — se autonot. Ett
+             förval som inte säger vad det räknar fram är en svart låda, och
+             det var precis det läraren inte hade något alternativ till. */
+          if (k.auto) return autonot(gransnot, s, auto());
           satNot(gransnot, '',
                  s[k.id] <= k.min ? (k.vidMin || '')
                  : s[k.id] >= k.max ? (k.vidMax || '') : '');
         };
+        const stepper = $('.stepper', rad);
+        const visaVarde = () => {
+          const varde = $('.steppervarde', rad);
+          if (varde) varde.textContent = auto() ? k.auto : String(s[k.id]);
+          if (stepper) {
+            if (auto()) stepper.setAttribute('data-auto', '');
+            else stepper.removeAttribute('data-auto');
+          }
+        };
         $$('[data-steg]', rad).forEach(b => b.addEventListener('click', () => {
-          s[k.id] = Math.min(k.max, Math.max(k.min, s[k.id] + Number(b.dataset.steg)));
-          $('.steppervarde', rad).textContent = String(s[k.id]);
+          const steg = Number(b.dataset.steg);
+          /* Vägen IN i talet och vägen UT ur det är samma två knappar.
+             «+» från autoläget landar på golvet — det är den minsta diagnos
+             appen kan balansera, och därifrån går läraren uppåt. «−» på
+             golvet lämnar tillbaka räkningen till innehållet i stället för
+             att ta emot utan att göra något. */
+          if (k.auto && auto() && steg < 0) return;
+          if (k.auto && auto()) s[k.id] = k.min;
+          else if (k.auto && steg < 0 && s[k.id] <= k.min) s[k.id] = 0;
+          else s[k.id] = Math.min(k.max, Math.max(k.min, s[k.id] + steg));
+          visaVarde();
           visaGrans();
           planKoll();
         }));
-        const varde = $('.steppervarde', rad);
-        if (varde) varde.textContent = String(s[k.id]);
+        visaVarde();
         visaGrans();
       }
       /* ── Promptrutan ──────────────────────────────────
@@ -1456,15 +1628,19 @@
         || (provforval.egenBok && s.bok !== provforval.bok);
   }
   function glomForvalen() { provforval = null; delprovforval = ''; punktforval = null; }
-  function hjalpmedelsforval(p) {
+  /* `typ` är «Prov» eller «Diagnos». Båda har numera en Upplägg-rad och båda
+     ställer samma fråga till planeringen — men bara EN av dem står på skärmen
+     åt gången, så minnet (`delprovforval`) räcker som ett. */
+  function hjalpmedelsforval(p, typ) {
+    const s = inst[typ || 'Prov'];
     const h = p.hjalpmedel || { med: 0, utan: 0, okand: 0 };
     const lasta = h.med + h.utan;
     if (!lasta) return '';
     const forslag = h.med ? 'Del A + Del B' : 'En del';
     /* Har läraren själv bytt upplägg står hennes val kvar — noten säger ändå
        vad planeringen visste, så hon ser vad hon valde bort. */
-    if (!delprovforval || inst.Prov.delprov === delprovforval) {
-      inst.Prov.delprov = forslag;
+    if (!delprovforval || s.delprov === delprovforval) {
+      s.delprov = forslag;
       delprovforval = forslag;
     }
     return h.med
@@ -2959,16 +3135,32 @@
       if (!r.exam) throw new Error('Arbetsbladet gick inte att skriva den här gången. Försök igen.');
       return r;
     });
-    /* Diagnosen skickar INGET antal. Servern räknar det ur de valda punkterna
-       och lektionens längd (exam_spec.diagnosplan) och slår ihop närliggande
-       punkter om de inte ryms — täckningen är kravet, inte antalet. */
+    /* Diagnosen skickar INGET antal så länge raden står på «Räknas ur
+       innehållet». Servern räknar det då ur de valda punkterna och lektionens
+       längd (exam_spec.diagnosplan) och slår ihop närliggande punkter om de
+       inte ryms — täckningen är kravet, inte antalet.
+       Har läraren satt ett tal följer det med som ett MÅL, och servern slår
+       ihop eller delar punkterna för att träffa det. Fältet skickas bara då:
+       en orörd väljare ger exakt den begäran som gick i väg innan raden fanns
+       (kassettregeln), och det gäller alla fyra nya raderna nedan. */
     JOBB.Diagnos = ({ signal, log }) => sidor(log).then(u => window.API.strom('/api/exams/generate', {
       kurs: utkast.kurs, klass: utkast.klass,
       punkter: gyKoder(), punkter_text: [...vald],
       tid_min: Number(i0.provminuter) || 60,
-      delar: false,
+      /* «Upplägg»: En del / Del A + Del B, samma fält och samma tolkning som
+         provets. Förvalet «En del» ger `false` — precis det som stod här som
+         en konstant innan valet fanns. */
+      delar: i0.delprov !== 'En del',
       datum: utkast.datum || '',
       typ: 'diagnos',
+      ...(Number(i0.antal) > 0 ? { antal: Number(i0.antal) } : {}),
+      /* «Poängnivåer» (exam_spec.NIVAVAL["diagnos"]) — bara när den inte står
+         i defaultläget, precis som provets. */
+      ...(i0.nivamix && i0.nivamix !== 'Balanserat' ? { nivamix: i0.nivamix } : {}),
+      /* «Formelblad» når prompten: en uppgift som prövar minnet av en formel
+         mäter ingenting när bladet ligger på bänken (exam_gen build_prompt).
+         Förvalet är AV, och då skickas ingenting. */
+      ...(i0.formelblad ? { formelblad: true } : {}),
       ...utfall(), ...forlagan(), ...egnaOrd(), ...u,
     }, { signal, log })).then(kravDone).then(r => {
       if (!r.exam) throw new Error('Diagnosen gick inte att skriva den här gången. Försök igen.');
@@ -3367,13 +3559,18 @@
         : 'på lektionen';
       return `${s.antal} uppgifter · ${s.nivamix} · ${s.delprov} · ${s.provtid} · ${nar}${s.formelblad ? ' · formelblad' : ''}`;
     }
-    /* Diagnosen har inget antal att sammanfatta — det räknas ur innehållet och
-       tiden när den skrivs. Raden säger därför det som ÄR valt. */
+    /* Diagnosen har samma rader som provet sedan 2026-09-06 och sammanfattas
+       som det — med ett undantag: antalet får stå som «antalet ur innehållet»
+       när läraren låtit räkningen vara. Raden säger vad som ÄR valt, och
+       autoläget ÄR ett val. */
     if (typ === 'Diagnos') {
       const nar = s.nar === 'Annan dag' && s.narDatum
         ? `${window.Kalender ? window.Kalender.ord(s.narDatum) : s.narDatum}${s.narTid ? ' ' + s.narTid : ''}`
         : 'på lektionen';
-      return `hela kursens innehåll · ${s.provtid} · ${nar}`;
+      const antal = Number(s.antal) > 0 ? `${s.antal} uppgifter`
+        : 'antalet ur innehållet';
+      return `${antal} · ${s.nivamix || 'Balanserat'} · ${s.delprov || 'En del'}`
+        + ` · ${s.provtid} · ${nar}${s.formelblad ? ' · formelblad' : ''}`;
     }
     if (typ === 'Arbetsblad') return `${s.antal} uppgifter · ${s.niva} · ${s.facit}`;
     if (typ === 'Gruppuppgift') return `${s.grupp} per grupp · ${s.langd} min · ${s.redovisning.toLowerCase()}`;
@@ -3540,12 +3737,34 @@
       const v = nyVersion(null);
       const ram = Number(inst.Diagnos.provminuter) || 60;
       if (!(v.uppgifter || []).length) {
-        window.toast && window.toast(`Skriv diagnosen först — tiden räknas på uppgifterna. Ramen är ${ram} min.`);
+        /* HAR LÄRAREN SATT ETT ANTAL finns det något att räkna på redan innan
+           pappret är skrivet: skelettet på servern, samma rutt provet frågar
+           (skelettFraga). Står raden kvar på «Räknas ur innehållet» finns
+           inget tal att räkna med — då är svaret fortfarande att diagnosen
+           måste skrivas först, och raden under antalet säger vad räkningen
+           skulle ge. */
+        const onskat = Number(inst.Diagnos.antal) || 0;
+        if (!onskat) {
+          window.toast && window.toast(`Skriv diagnosen först — tiden räknas på uppgifterna. Ramen är ${ram} min.`);
+          return;
+        }
+        skelettFraga(v).then(u => window.toast && window.toast(
+          `Ett upplägg på ${u.antal} uppgifter tar ca ${u.min} min av dina ${ram}`
+          + ` — ${u.poang} p · ${u.e}/${u.c}/${u.a} E/C/A.`))
+          .catch(() => window.toast && window.toast(
+            `Skriv diagnosen först — tiden räknas på uppgifterna. Ramen är ${ram} min.`));
         return;
       }
       const u = uppskatta(v);
+      /* Upplägget står i toasten av samma skäl som provets takt gör det: samma
+         antal uppgifter tar olika lång tid med olika poängnivåer, och valet är
+         det enda som förklarar varför. */
+      const i = inst.Diagnos;
+      const upplagg = [i.nivamix && i.nivamix !== 'Balanserat' ? i.nivamix : null,
+                       i.delprov === 'En del' ? null : 'Del A + Del B']
+        .filter(Boolean).join(' · ');
       window.toast && window.toast(
-        `Diagnosen tar ca ${u.min} min av dina ${ram} — ${u.antal} uppgifter · ${u.poang} p${u.gissat ? ' (uppskattad fördelning)' : ''}.`);
+        `Diagnosen tar ca ${u.min} min av dina ${ram} — ${u.antal} uppgifter · ${u.poang} p${u.gissat ? ' (uppskattad fördelning)' : ''}${upplagg ? ' · ' + upplagg : ''}.`);
       return;
     }
     if (typ !== 'Prov') return;
@@ -5238,6 +5457,12 @@
           separat_facit: (godkant.typ === 'Arbetsblad'
                           || godkant.typ === 'Gruppuppgift')
             && (godkant.inst || {}).facit !== 'Facit i bladet',
+          /* Diagnosens «Bilagor · Rättning». Samma resa och samma skäl:
+             krysset bor bara här i webbläsarens dokument. Nyckeln säger UTAN
+             rättning, så att ett gammalt papper — som inte bär fältet alls —
+             trycks med den sida det en gång trycktes med. */
+          utan_rattning: godkant.typ === 'Diagnos'
+            && (godkant.inst || {}).losningar === false,
           version: godkant.provVersion || null,
           blad,
           /* LÄRARENS EGNA BILDER. De bor bara här i webbläsarens dokument

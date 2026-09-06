@@ -278,3 +278,276 @@ def test_rutten_klipper_tiden_till_taket(client, monkeypatch):
         "course_id": kurs["id"], "typ": "diagnos", "punkter": koder,
         "tid_min": 200}))
     assert fangad["tid_min"] == exam_spec.DIAGNOS_TID_TAK
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# DIAGNOSENS UPPLÄGG (2026-09-06)
+#
+# Läraren: «Det saknas alternativ för hur man vill utforma diagnosen. Provet
+# har bra alternativ. Diagnosen saknar alternativ helt och hållet.» Fyra rader
+# kom till — antal (som överstyrning), Poängnivåer, Upplägg och Bilagor — och
+# varje val ska hedras hela vägen ut på pappret.
+#
+# HÅRDASTE KRAVET STÅR FÖRST: en orörd väljare ska ge exakt samma plan och
+# exakt samma prompt som före raderna fanns. Glider det ryker kassetterna.
+# ══════════════════════════════════════════════════════════════════════════
+
+def test_ororda_valjare_ger_samma_plan_som_forut():
+    """Kassettregeln, mätt: utan antal, mix, band och delar ska diagnosplanen
+    vara identisk med den som räknades fram innan väljarna byggdes."""
+    punkter = _punkter("Ma1c")
+    plan = exam_spec.diagnosplan(punkter, 60)
+    # Förvalens värden skickade explicit ska ge samma sak som att inte skicka
+    # dem alls — det är precis vad klienten gör (plan.js JOBB.Diagnos).
+    lika = exam_spec.diagnosplan(punkter, 60, antal=None, mix=None,
+                                 niva_mal=None, delar=False)
+    assert plan == lika
+    assert all(s["del"] is None for s in plan["skeleton"])
+
+
+def test_ororda_valjare_ger_samma_prompt_som_forut():
+    plan = exam_spec.diagnosplan(_punkter("Ma1c"), 60)
+    gemensamt = dict(antal=plan["antal"], tid_min=60, profil="diagnos",
+                     koder=[k for g in plan["grupper"] for k in g],
+                     skeleton=plan["skeleton"])
+    fore = exam_gen.build_prompt("Ma1c", "TE24", ["G25-M1C-ALG-1 — …: x."],
+                                 delar=False, **gemensamt)
+    efter = exam_gen.build_prompt("Ma1c", "TE24", ["G25-M1C-ALG-1 — …: x."],
+                                  delar=False, formelblad=False, **gemensamt)
+    assert fore == efter
+    assert "Inga delar (del: null på alla uppgifter)." in fore
+    # «Formelblad» står i INSTRUCTION som EXEMPEL på en hjälpmedelsrad och har
+    # alltid gjort det; det som ska saknas är formelbladsblocket.
+    assert "formelblad framme" not in fore
+
+
+# ───────────────────────────────────────────── antalet som överstyrning ──
+
+@pytest.mark.parametrize("onskat", [3, 5, 8, 12, 15, 20])
+def test_lararens_antal_ar_ett_mal_och_tackningen_forblir_hel(onskat):
+    """Sätter läraren ett tal ska pappret få det talet — och varenda punkt ska
+    stå kvar. Golvet är det enda som kan gå emot: punkterna slås ihop högst tre
+    och tre, så en kurs med 21 punkter kan inte prövas på färre än sju."""
+    punkter = _punkter("Ma1c")
+    golv = -(-len(punkter) // exam_spec.MAX_CI_PER_UPPGIFT)
+    plan = exam_spec.diagnosplan(punkter, 60, antal=onskat)
+    assert plan["antal"] == max(onskat, golv)
+    assert plan["punkter"] == len(punkter)
+    tackta = {k for g in plan["grupper"] for k in g}
+    assert tackta == {p["kod"] for p in punkter}
+    doc = exam_spec._skeleton_doc(plan["skeleton"])
+    assert exam_spec.validate_balance(doc, profil="diagnos") == []
+
+
+def test_fler_uppgifter_an_punkter_delar_i_stallet_for_att_kapa():
+    """Ma5 har få punkter. Ber läraren om fler uppgifter än så ska en punkt få
+    en uppgift till — INTILL sin egen, för kursens ordning är hela formen —
+    och ingen punkt får falla bort."""
+    punkter = _punkter("Ma5")
+    plan = exam_spec.diagnosplan(punkter, 60, antal=len(punkter) + 3)
+    assert plan["antal"] == len(punkter) + 3
+    assert plan["punkter"] == len(punkter)
+    koder = [g[0] for g in plan["grupper"]]
+    assert sorted(set(koder)) == sorted({p["kod"] for p in punkter})
+    # Dubbletterna står BREDVID varandra: listan är kursens ordning med
+    # upprepningar, inte kursens ordning plus en svans.
+    for i in range(1, len(koder)):
+        assert koder[i] == koder[i - 1] or koder[i] not in koder[:i]
+
+
+def test_utan_antal_ryms_diagnosen_pa_lektionen_som_forut():
+    """Överstyrningen får inte smitta autoläget: utan tal ska tidssökningen
+    krympa pappret tills det ryms, precis som förut."""
+    plan = exam_spec.diagnosplan(_punkter("Ma1c"), 60)
+    assert plan["uppskattad_tid"] <= 60
+
+
+# ─────────────────────────────────────────────────────────── poängnivåer ──
+
+@pytest.mark.parametrize("etikett", ["Bara E", "E-tyngd", "C/A-tyngd"])
+@pytest.mark.parametrize("kurs", ALLA_KURSER)
+def test_nivavalet_bygger_skelettet_och_haller_sina_egna_band(etikett, kurs):
+    """Väljaren får inte vara en dekoration: mixen ska bygga skelettet och
+    skelettet ska validera rent mot VALETS band — annars slåss
+    reparationsloopen i exam_gen med konstruktionen."""
+    val = exam_spec.nivaval("diagnos", etikett)
+    assert val and set(val) == {"mix", "mal"}
+    plan = exam_spec.diagnosplan(_punkter(kurs), 60, mix=val["mix"],
+                                 niva_mal=val["mal"])
+    doc = exam_spec._skeleton_doc(plan["skeleton"])
+    assert exam_spec.validate_balance(doc, niva_mal=val["mal"],
+                                      profil="diagnos") == [], etikett
+
+
+def test_bara_e_ger_ingen_a_poang_pa_diagnosen():
+    val = exam_spec.nivaval("diagnos", "Bara E")
+    plan = exam_spec.diagnosplan(_punkter("Ma1c"), 60, mix=val["mix"],
+                                 niva_mal=val["mal"])
+    assert all(s["poang"][2] == 0 for s in plan["skeleton"])
+
+
+# ──────────────────────────────────────────────────────────────── delarna ──
+
+def test_delarna_ligger_i_kursens_ordning_och_bada_far_uppgifter():
+    """Diagnosen skärs INTE om efter svårighet när den delas. Del B är den
+    räknarfria första halvan, Del C resten — och kursens ordning är orörd, för
+    det är i den ordningen läraren letar efter hålet."""
+    plan = exam_spec.diagnosplan(_punkter("Ma1c"), 60, delar=True)
+    delar = [s["del"] for s in plan["skeleton"]]
+    assert set(delar) == {"B", "C"}
+    assert delar == ["B"] * delar.count("B") + ["C"] * delar.count("C")
+    # Innehållet står kvar i kursens ordning, del eller inte.
+    utan = exam_spec.diagnosplan(_punkter("Ma1c"), 60)
+    assert [s["ci"] for s in plan["skeleton"]] \
+        == [s["ci"] for s in utan["skeleton"]]
+
+
+def test_prompten_beskriver_delarna_bara_nar_de_finns():
+    plan = exam_spec.diagnosplan(_punkter("Ma1c"), 60, delar=True)
+    prompt = exam_gen.build_prompt(
+        "Ma1c", "TE24", ["G25-M1C-ALG-1 — …: x."], antal=plan["antal"],
+        tid_min=60, delar=True, profil="diagnos",
+        koder=[k for g in plan["grupper"] for k in g],
+        skeleton=plan["skeleton"])
+    assert "Del B (utan räknare)" in prompt
+    assert "Inga delar" not in prompt
+    # Och uppgiftsplanen bär delen per rad, så modellen inte kan gissa fel.
+    assert "Del B," in prompt and "Del C," in prompt
+
+
+def test_delarna_star_som_rubriker_pa_elevens_ark():
+    data = _diagnosdoc()
+    data["uppgifter"][0]["del"] = "B"
+    data["uppgifter"][1]["del"] = "C"
+    data["uppgifter"][2]["del"] = "C"
+    doc, fel = exam_spec.validate_exam_json(data, "diagnos")
+    assert fel == []
+    tex = exam_latex.render_diagnos(doc)
+    elevark = tex[:tex.index("Rättning")]
+    # Pappret räknar från A (exam_latex._delnamn_visning) — internt B och C.
+    assert "Del A" in elevark and "Del B" in elevark
+    assert elevark.index("Del A") < elevark.index("Del B")
+    # En odelad diagnos får ingen rubrik alls.
+    doc2, _ = exam_spec.validate_exam_json(_diagnosdoc(), "diagnos")
+    assert "Digitala verktyg är" not in exam_latex.render_diagnos(doc2)
+
+
+# ──────────────────────────────────────────────────────────────── bilagor ──
+
+def test_rattningen_gar_att_valja_bort():
+    doc, _ = exam_spec.validate_exam_json(_diagnosdoc(), "diagnos")
+    med = exam_latex.render_diagnos(doc)
+    utan = exam_latex.render_diagnos(doc, utan_rattning=True)
+    assert "Rättning — moment för moment" in med
+    assert "Rättning — moment för moment" not in utan
+    # Elevens ark är oförändrat — det är bara lärarsidan som uteblir.
+    assert med[:med.index("\\newpage")].rstrip() \
+        == utan[:utan.index("\\end{document}")].rstrip()
+
+
+def test_formelbladet_nar_prompten_bara_nar_det_star_pa():
+    plan = exam_spec.diagnosplan(_punkter("Ma1c"), 60)
+    gemensamt = dict(antal=plan["antal"], tid_min=60, delar=False,
+                     profil="diagnos",
+                     koder=[k for g in plan["grupper"] for k in g],
+                     skeleton=plan["skeleton"])
+    av = exam_gen.build_prompt("Ma1c", "TE24", ["G25-M1C-ALG-1 — …: x."],
+                               **gemensamt)
+    pa = exam_gen.build_prompt("Ma1c", "TE24", ["G25-M1C-ALG-1 — …: x."],
+                               formelblad=True, **gemensamt)
+    assert "formelblad framme" not in av
+    assert "formelblad framme" in pa
+    assert len(pa) > len(av)
+
+
+# ────────────────────────────────────────────────────────────────── rutten ──
+
+def test_rutten_hedrar_antal_nivamix_och_delar(client, monkeypatch):
+    """Hela vägen: de tre valen ska nå generatorn som antal, skelett och
+    delar — och hjälpmedelsraden på pappret ska bli lärarens, inte modellens."""
+    fangad = {}
+
+    def fake(kurs, klass, punkter, *, model, antal=10, tid_min=120, delar=True,
+             profil="prov", koder=None, skeleton=None, niva_mal=None,
+             formelblad=False, **_kw):
+        fangad.update(antal=antal, delar=delar, skeleton=skeleton,
+                      niva_mal=niva_mal, formelblad=formelblad)
+        return {"exam": _diagnosdoc(), "errors": [], "rounds": 1}
+    monkeypatch.setattr(exam_gen, "generate_exam", fake)
+
+    kurs = next(c for c in client.get("/api/courses").json()
+                if c["namn"] == "Matematik, nivå 1c")
+    koder = [p["kod"] for p in client.get(
+        "/api/exams/content-status", params={"course_id": kurs["id"]}
+    ).json()["punkter"]]
+    res = _done(client.post("/api/exams/generate", json={
+        "course_id": kurs["id"], "typ": "diagnos", "punkter": koder,
+        "tid_min": 60, "antal": 12, "nivamix": "C/A-tyngd", "delar": True,
+        "formelblad": True}))
+
+    assert fangad["antal"] == 12 == len(fangad["skeleton"])
+    assert fangad["delar"] is True
+    assert {s["del"] for s in fangad["skeleton"]} == {"B", "C"}
+    assert fangad["niva_mal"] == exam_spec.NIVAVAL["diagnos"]["C/A-tyngd"]["mal"]
+    assert fangad["formelblad"] is True
+    # Hjälpmedelsraden är lärarens två kryss, inte modellens «Formelblad».
+    assert res["exam"]["hjalpmedel"] == ("Formelblad och linjal. Del B utan "
+                                         "digitala verktyg. Del C med räknare "
+                                         "och digitala verktyg.")
+    assert res["nivaval"] == "C/A-tyngd"
+
+
+def test_rutten_utan_de_nya_falten_ar_som_forut(client, monkeypatch):
+    """Kassettregeln på rutten: en begäran utan de nya fälten ska ge samma
+    antal, samma skelett utan delar och samma tomma nivåval som förut."""
+    fangad = {}
+
+    def fake(kurs, klass, punkter, *, model, antal=10, delar=True,
+             skeleton=None, niva_mal=None, formelblad=False, **_kw):
+        fangad.update(antal=antal, delar=delar, skeleton=skeleton,
+                      niva_mal=niva_mal, formelblad=formelblad)
+        return {"exam": _diagnosdoc(), "errors": [], "rounds": 1}
+    monkeypatch.setattr(exam_gen, "generate_exam", fake)
+
+    kurs = next(c for c in client.get("/api/courses").json()
+                if c["namn"] == "Matematik, nivå 1c")
+    koder = [p["kod"] for p in client.get(
+        "/api/exams/content-status", params={"course_id": kurs["id"]}
+    ).json()["punkter"]]
+    res = _done(client.post("/api/exams/generate", json={
+        "course_id": kurs["id"], "typ": "diagnos", "punkter": koder,
+        "tid_min": 60}))
+
+    assert fangad["antal"] == exam_spec.diagnosplan(_punkter("Ma1c"), 60)["antal"]
+    assert fangad["delar"] is False
+    assert all(s["del"] is None for s in fangad["skeleton"])
+    assert fangad["niva_mal"] is None and fangad["formelblad"] is False
+    assert res["nivaval"] is None
+    # Den gamla raden står kvar: hjälpmedlen är lärarens också utan kryss.
+    assert res["exam"]["hjalpmedel"] == "Linjal. Inga digitala verktyg."
+
+
+def test_diagnosplan_rutten_svarar_pa_vad_autolaget_skulle_ge(client):
+    """Raden under «Antal uppgifter» frågar hit. Talet måste vara SAMMA som
+    genereringen sedan bygger — annars lovar skärmen ett papper den inte får."""
+    punkter = _punkter("Ma1c")
+    koder = [p["kod"] for p in punkter]
+    r = client.get("/api/exams/diagnosplan",
+                   params={"tid": 60, "koder": ",".join(koder)}).json()
+    vantad = exam_spec.diagnosplan(punkter, 60)
+    assert r["antal"] == vantad["antal"] and r["punkter"] == len(punkter)
+    assert r["tid_min"] == 60 and r["uppskattad_tid"] == vantad["uppskattad_tid"]
+    # …och med lärarens tal svarar den om talet inte går att hålla.
+    styrd = client.get("/api/exams/diagnosplan",
+                       params={"tid": 60, "koder": ",".join(koder),
+                               "antal": 3}).json()
+    assert styrd["antal"] > 3            # golvet: 21 punkter, tre per uppgift
+    assert styrd["antal"] == exam_spec.diagnosplan(punkter, 60, antal=3)["antal"]
+
+
+def test_diagnosplan_rutten_tal_tomma_och_okanda_koder(client):
+    assert client.get("/api/exams/diagnosplan",
+                      params={"tid": 60}).json()["antal"] == 0
+    r = client.get("/api/exams/diagnosplan",
+                   params={"tid": 60, "koder": "HITTEPA-1,HITTEPA-2"}).json()
+    assert r["antal"] == 2 and r["punkter"] == 2

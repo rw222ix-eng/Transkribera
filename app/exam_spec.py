@@ -1577,6 +1577,30 @@ NIVAVAL: dict[str, dict[str, dict]] = {
                    "mal": {"e": (0.00, 0.30), "c": (0.10, 0.55),
                            "a": (0.30, 0.80)}},
     },
+    # Diagnosens «Poängnivåer» (2026-09-06). Läraren: «Provet har bra
+    # alternativ. Diagnosen saknar alternativ helt och hållet.» Etiketterna är
+    # provets, för det är samma fråga ställd om ett annat papper — men banden
+    # är diagnosens egna och ligger genomgående lägre, därför att formen är en
+    # sållning: DIAGNOS_NIVA_MAL har redan e 55–90 % som default, och ett
+    # «C/A-tungt» diagnospapper är inte ett prov utan en diagnos som frågar
+    # hur långt det räcker i stället för om det finns.
+    #
+    # A-NIVÅN SLÄPPS IN, men bara här. Profilens default har tak 10 % med
+    # flit (en A-uppgift mäter inte om något SAKNAS), och det skälet gäller
+    # inte längre när läraren uttryckligen ber om tyngden — då är det hennes
+    # papper, och taket ska inte vara husets smak. «Bara E» och «E-tyngd»
+    # bär däremot inget A alls, precis som defaultläget.
+    "diagnos": {
+        "Bara E": {"mix": (1.00, 0.00, 0.00),
+                   "mal": {"e": (0.70, 1.00), "c": (0.00, 0.30),
+                           "a": (0.00, 0.05)}},
+        "E-tyngd": {"mix": (0.80, 0.20, 0.00),
+                    "mal": {"e": (0.60, 0.95), "c": (0.05, 0.40),
+                            "a": (0.00, 0.05)}},
+        "C/A-tyngd": {"mix": (0.25, 0.50, 0.25),
+                      "mal": {"e": (0.05, 0.40), "c": (0.20, 0.60),
+                              "a": (0.10, 0.50)}},
+    },
 }
 
 
@@ -2307,22 +2331,52 @@ def gruppera_innehall(punkter: list[dict], antal: int) -> list[list[str]]:
     return [[p["kod"] for p in g] for g in grupper]
 
 
-def diagnos_skeleton(grupper: list[list[str]]) -> list[dict]:
+def _diagnosens_delar(antal: int) -> list[str | None]:
+    """Vilken del varje diagnosplats hamnar i när läraren valt «Del A + Del B».
+
+    Diagnosen delas INTE som provet. Provets `_dela_del_b` fördelar per
+    karaktärsgrupp, för där ska de svåra uppgifterna helst ligga i räknardelen
+    — men diagnosens ordning är kursens innehåll, och den ordningen är hela
+    formen: läraren läser pappret uppifrån och ner och letar efter hålet.
+    Skärs det om efter karaktär tappar hon den ordningen.
+
+    Snittet läggs därför RAKT AV på samma andel som provet (DEL_B_ANDEL, mätt
+    på NpMa2a): den första delen är den räknarfria, resten är räknardelen, och
+    båda får minst en uppgift när det finns minst två."""
+    if antal <= 1:
+        return [None] * antal
+    utan = min(antal - 1, max(1, round(DEL_B_ANDEL * antal)))
+    return ["B"] * utan + ["C"] * (antal - utan)
+
+
+def diagnos_skeleton(grupper: list[list[str]],
+                     mix: tuple[float, float, float] | None = None,
+                     niva_mal: dict | None = None,
+                     delar: bool = False) -> list[dict]:
     """Diagnosens skelett: EN uppgift per innehållsgrupp, i kursens ordning.
 
     Skillnaden mot balanced_skeleton är vilken dimension som styr. Provet
     dimensioneras efter förmåga × karaktär och innehållet får följa med;
     diagnosen dimensioneras efter INNEHÅLLET och låter förmåga och karaktär
-    följa med. Därför ingen varvning och ingen delindelning: pappret ska läsas
-    i kursens ordning, för det är i den ordningen läraren letar efter hålet.
+    följa med. Därför ingen varvning: pappret ska läsas i kursens ordning, för
+    det är i den ordningen läraren letar efter hålet.
 
     Karaktärerna sprids med samma Sainte-Laguë som provet, förmågorna
     round-robin:as som där, och poängen justeras sist mot diagnosprofilens
-    nivåband."""
+    nivåband.
+
+    `mix` och `niva_mal` är lärarens «Poängnivåer» (NIVAVAL["diagnos"]).
+    Utelämnade gäller profilens egna — och då är skelettet byte för byte det
+    som byggdes före väljaren fanns.
+
+    `delar` är «Del A + Del B» i planeringen. Diagnosen hade inga delar alls
+    förut, och det stod som ett faktum i koden i stället för som ett val:
+    läraren som ville ha en räknarfri första halva hade ingen väg dit."""
     antal = len(grupper)
     if not antal:
         return []
-    karaktarer = _karaktarsfoljd(antal, KARAKTARSMIX["diagnos"])
+    karaktarer = _karaktarsfoljd(antal, mix or KARAKTARSMIX["diagnos"])
+    delfoljd = _diagnosens_delar(antal) if delar else [None] * antal
     slots: list[dict] = []
     raknat = {"E": 0, "C": 0, "A": 0}
     for i, (kar, ci) in enumerate(zip(karaktarer, grupper)):
@@ -2336,18 +2390,57 @@ def diagnos_skeleton(grupper: list[list[str]]) -> list[dict]:
         if f == "K" and poang[0]:
             poang[1] += poang[0]
             poang[0] = 0
-        slots.append({"del": None, "formaga": f,
+        slots.append({"del": delfoljd[i], "formaga": f,
                       "typ": _skelett_typ(f, kar), "poang": poang,
                       "ci": list(ci)})
     if not any(s["typ"] == "rutin" for s in slots):
         slots[0]["typ"] = "rutin"
-    _justera_skelett(slots, "diagnos")
+    _justera_skelett(slots, "diagnos", niva_mal=niva_mal)
     return slots
 
 
-def diagnosplan(punkter: list[dict], tid_min: int = DIAGNOS_TID_STANDARD) -> dict:
+def _fyll_ut(grupper: list[list[str]], mal: int) -> list[list[str]]:
+    """Fler uppgifter än det finns innehållspunkter: låt de första punkterna få
+    en uppgift till, i kursens ordning.
+
+    Bara när läraren SJÄLV bett om ett antal som är större än punktlistan.
+    `gruppera_innehall` kan bara slå ihop — den har inget svar på «tolv punkter,
+    femton uppgifter», och utan det här steget hade en satt siffra tyst blivit
+    ett annat tal än det läraren skrev. Två uppgifter på samma punkt är
+    dessutom precis vad hon ber om när hon ökar antalet: mer att gå på för den
+    punkt som ska prövas ordentligt.
+
+    Täckningen är orörd — varje punkt står kvar i minst en grupp — och den
+    extra uppgiften läggs INTILL sin punkt, inte sist. Kursens ordning är hela
+    diagnosens form: läraren läser pappret uppifrån och ner och letar efter
+    hålet, och två uppgifter om samma punkt ska stå bredvid varandra."""
+    if mal <= len(grupper) or not grupper:
+        return grupper
+    kvot = [1] * len(grupper)
+    for i in range(mal - len(grupper)):
+        kvot[i % len(grupper)] += 1
+    return [list(g) for g, n in zip(grupper, kvot) for _ in range(n)]
+
+
+def diagnosplan(punkter: list[dict], tid_min: int = DIAGNOS_TID_STANDARD,
+                antal: int | None = None,
+                mix: tuple[float, float, float] | None = None,
+                niva_mal: dict | None = None,
+                delar: bool = False) -> dict:
     """Hela dimensioneringen av en diagnos: {tid_min, antal, grupper, skeleton,
     uppskattad_tid, punkter}. Tiden klipps till lärarens tak.
+
+    `antal` är lärarens ÖVERSTYRNING av räkningen (planeringens «Antal
+    uppgifter», som annars står på «Räknas ur innehållet»). Sätts den är den
+    ett MÅL och inte ett tak: punkterna slås ihop eller får en uppgift extra
+    tills antalet är träffat, och täckningen förblir hel. Tidssökningen nedan
+    hoppas då över — läraren har sagt hur stort pappret ska vara, och att
+    krympa det bakom ryggen på henne vore att låtsas att valet inte fanns.
+    `uppskattad_tid` säger som alltid vad det faktiskt kostar.
+
+    `mix`/`niva_mal` är «Poängnivåer» och `delar` «Del A + Del B» — samma två
+    val provet har. Utelämnade är planen byte för byte den som räknades fram
+    innan väljarna fanns (kassettregeln).
 
     Antalet uppgifter gissas först ur en SNITTKOSTNAD per uppgift och prövas
     sedan mot det färdiga skelettet. Gissningen räcker inte: nivåsökningen
@@ -2360,6 +2453,31 @@ def diagnosplan(punkter: list[dict], tid_min: int = DIAGNOS_TID_STANDARD) -> dic
     kortaste planen och `uppskattad_tid` säger som det är. Ett ärligt övertramp
     är bättre än en täckning med hål."""
     tid = max(10, min(DIAGNOS_TID_TAK, int(tid_min or DIAGNOS_TID_STANDARD)))
+
+    def plan_for(grupper: list[list[str]]) -> dict:
+        skeleton = diagnos_skeleton(grupper, mix=mix, niva_mal=niva_mal,
+                                    delar=delar)
+        summor = poangsummor(_skeleton_doc(skeleton)) if skeleton else {
+            "total": 0, "e": 0, "c": 0, "a": 0}
+        return {
+            "tid_min": tid,
+            "antal": len(skeleton),
+            "grupper": grupper,
+            "skeleton": skeleton,
+            # DISTINKTA punkter, inte summan av gruppernas längder. De två är
+            # samma tal så länge grupperna är disjunkta — men med lärarens
+            # antal kan en punkt få två uppgifter (_fyll_ut), och då hade
+            # summan påstått att kursen har fler punkter än den har.
+            "punkter": len({k for g in grupper for k in g}),
+            "uppskattad_tid": tidsatgang(summor, len(skeleton)),
+        }
+
+    # Lärarens egen siffra: ett MÅL, inte ett tak. Ingen tidssökning — se
+    # docstringen.
+    if antal:
+        onskat = max(1, min(MAX_FORESLAGET_ANTAL, int(antal)))
+        return plan_for(_fyll_ut(gruppera_innehall(punkter, onskat), onskat))
+
     forra = None
     bast: dict | None = None
     for onskat in range(uppgifter_som_ryms(tid, "diagnos"), 0, -1):
@@ -2367,17 +2485,7 @@ def diagnosplan(punkter: list[dict], tid_min: int = DIAGNOS_TID_STANDARD) -> dic
         if forra is not None and len(grupper) >= forra:
             break                      # sammanslagningen är uttömd
         forra = len(grupper)
-        skeleton = diagnos_skeleton(grupper)
-        summor = poangsummor(_skeleton_doc(skeleton)) if skeleton else {
-            "total": 0, "e": 0, "c": 0, "a": 0}
-        bast = {
-            "tid_min": tid,
-            "antal": len(skeleton),
-            "grupper": grupper,
-            "skeleton": skeleton,
-            "punkter": sum(len(g) for g in grupper),
-            "uppskattad_tid": tidsatgang(summor, len(skeleton)),
-        }
+        bast = plan_for(grupper)
         if bast["uppskattad_tid"] <= tid:
             break
     return bast or {"tid_min": tid, "antal": 0, "grupper": [], "skeleton": [],
