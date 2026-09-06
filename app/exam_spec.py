@@ -359,6 +359,23 @@ class Forsattsbild(_Model):
     # Själva beställningen. Samma tak som Scen.scene av samma skäl: stycket är
     # fyra till åtta meningar och tusen tecken rymmer dem med marginal.
     scene: str = Field(min_length=80, max_length=1200)
+    # BILDTEXTEN UNDER BILDEN på försättsbladet, och den enda av rutans texter
+    # som ELEVEN ser. Lärarens ord vid granskningen av prov 40 (2026-09-06):
+    # «en liten figurtext till denna, centrerad under bilden, kort, utan em
+    # dash, konkret: vad är det vi ser på bilden, kopplat till det provet
+    # handlar om.»
+    #
+    # Fältet är eget och inte en del av `person`: personraden är LÄRARENS rad i
+    # canvas (vem hen är och varför hen hör hit) och `scene` är beställningen
+    # till bildverktyget. Ingen av dem går att trycka under bilden. Utan ett
+    # eget fält skrev omskrivningen om person/scene när läraren bad om en
+    # bildtext, och pappret fick ingen.
+    #
+    # VALFRITT av samma skäl som hela klassen: kassetterna (tests/kassetter)
+    # spelades in innan fältet fanns, och ett krav hade gjort varje inspelat
+    # prov ogiltigt. Taket är mätt mot raden på pappret: tolv ord i \small
+    # ryms på en rad under en 0,7\textwidth-bild, och 160 tecken rymmer dem.
+    bildtext: str | None = Field(default=None, max_length=160)
 
 
 class SubItem(_Uppgiftsbas):

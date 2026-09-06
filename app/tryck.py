@@ -159,6 +159,41 @@ def spara_egna_bilder(bilder: dict[int, str], ut_dir: Path) -> dict[int, str]:
     return ut
 
 
+# FÖRSÄTTSBLADETS BILD har en egen nyckel och därför en egen väg. Skärmen
+# döper rutan till «forsatt» (blad.js markera, plan.js valjBild) och inte till
+# «uppgN», så egna_bilder ovan, som bara känner uppgiftsserien, lät den falla.
+# Läraren släppte sin egen bild på försättsbladet vid granskningen av prov 40
+# (2026-09-06) och den syntes i canvas men trycktes aldrig.
+def forsattsbild_egen(bilder) -> str | None:
+    """Data-URL:en läraren släppte på försättsbladet, eller None.
+
+    Samma sil som ``egna_bilder``: allt som inte är en PNG-data-URI under
+    nyckeln «forsatt» betyder «ingen bild», aldrig ett undantag mitt i ett
+    godkännande."""
+    if not isinstance(bilder, dict):
+        return None
+    varde = bilder.get("forsatt")
+    if isinstance(varde, str) and varde.startswith(_DATA_PREFIX):
+        return varde
+    return None
+
+
+def spara_forsattsbild(dataurl, ut_dir: Path) -> str | None:
+    """Skriv försättsbladets bild till utkatalogen och returnera FILNAMNET.
+
+    Filnamnet och inte sökvägen, av samma skäl som ``spara_egna_bilder``:
+    Tectonic kompilerar med utkatalogen som arbetskatalog. En bild som inte
+    går att avkoda ger None, och då sätts försättsbladet utan bild i stället
+    för att provet inte kompilerar alls."""
+    bild = _oppna_png(dataurl)
+    if bild is None:
+        return None
+    ut_dir.mkdir(parents=True, exist_ok=True)
+    namn = "egen-forsatt.png"
+    bild.save(ut_dir / namn, format="PNG")
+    return namn
+
+
 def bladbilder(blad, nyckel: str) -> list[str]:
     """Bladbilderna klienten skickade med godkännandet, ett arkläge i taget.
 

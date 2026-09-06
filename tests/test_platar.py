@@ -444,6 +444,46 @@ def test_forsattsbilden_ar_valfri_och_gamla_prov_star_kvar():
                                scene="SCENE.")
 
 
+def test_bildtexten_ar_valfri_och_har_ett_tak():
+    """LÄRAREN VID GRANSKNINGEN AV PROV 40 (2026-09-06), med bilden markerad i
+    canvas: «en liten figurtext till denna, centrerad under bilden, kort, utan
+    em dash, konkret: vad är det vi ser på bilden, kopplat till det provet
+    handlar om.» Omskrivningen låste sig till fältet `forsattsbild` och skrev
+    om person och scene i stället, för det fanns inget fält att skriva i.
+
+    VALFRITT av samma skäl som resten av klassen: kassetterna spelades in
+    innan fältet fanns, och proven i basen har det inte."""
+    falt = exam_spec.Forsattsbild.model_fields["bildtext"]
+    assert falt.default is None
+    grund = {"person": "John Napier (1550–1617), logaritmernas man.",
+             "scene": "SCENE. A dim stone study at night. " + "x" * 80}
+    # Utan fältet: giltigt, och tomt.
+    assert exam_spec.Forsattsbild(**grund).bildtext is None
+    med = exam_spec.Forsattsbild(
+        **grund, bildtext="Napier räknar fram sina logaritmtabeller vid ljus.")
+    assert med.bildtext.startswith("Napier")
+    # Taket är raden på pappret: 160 tecken ryms, mer gör den till två rader
+    # och skjuter namnraderna ner på en andra sida.
+    exam_spec.Forsattsbild(**grund, bildtext="x" * 160)
+    with pytest.raises(Exception):
+        exam_spec.Forsattsbild(**grund, bildtext="x" * 161)
+
+
+def test_bildtexten_star_i_grammatiken_och_i_regeln():
+    """Schemat byggs ur ExamDoc (exam_spec.to_response_format), så fältet ska
+    finnas där utan att någon skriver in det för hand, och REGELN måste be om
+    det, annars fyller modellen aldrig i det."""
+    schema = exam_spec.to_response_format()["json_schema"]["schema"]
+    assert "bildtext" in schema["$defs"]["Forsattsbild"]["properties"]
+    # … men den är inte obligatorisk: gamla dokument utan den ska validera.
+    assert "bildtext" not in schema["$defs"]["Forsattsbild"].get("required", [])
+    r = exam_gen.FORSATTSBILD_REGEL
+    assert "bildtext" in r
+    assert "TOLV ord" in r                       # lärarens «kort»
+    assert "CENTRERAD UNDER BILDEN" in r
+    assert "Inga tankstreck" in r
+
+
 def test_forsattsbilden_sitter_pa_dokumentet_aldrig_pa_en_uppgift():
     """EN bild på EN försättssida. Ett fält per uppgift hade dessutom kostat
     en definition per uppgift i grammatiken, på ett schema som har ett tak."""

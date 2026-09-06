@@ -250,6 +250,47 @@ def test_lararens_egna_bilder_foljer_med_till_mallen(client, monkeypatch):
     assert byggda, "provet kompilerades inte alls"
 
 
+def test_forsattsbladets_egna_bild_har_en_egen_nyckel(tmp_path):
+    """Bilden läraren SLÄPPER på försättsbladet ligger under «forsatt» och inte
+    under «uppgN», så uppgiftsserien silade bort den, och provet trycktes med
+    ett tomt försättsblad medan canvas visade bilden (prov 40, 2026-09-06)."""
+    dataurl = _png(320, 180)
+    # Fel nyckel är ingen bild: uppgiftsserien hör hemma i egna_bilder.
+    assert tryck.forsattsbild_egen({"uppg1": dataurl}) is None
+    assert tryck.forsattsbild_egen(None) is None
+    assert tryck.forsattsbild_egen("forsatt") is None
+    assert tryck.forsattsbild_egen({"forsatt": 7}) is None
+    assert tryck.forsattsbild_egen({"forsatt": "inte-en-data-uri"}) is None
+    # Rätt nyckel ger data-URL:en oförändrad …
+    assert tryck.forsattsbild_egen({"forsatt": dataurl}) == dataurl
+    # … och den skrivs till utkatalogen med sitt eget namn, som FILNAMN:
+    # Tectonic kompilerar med utkatalogen som arbetskatalog.
+    namn = tryck.spara_forsattsbild(dataurl, tmp_path)
+    assert namn == "egen-forsatt.png"
+    assert (tmp_path / namn).is_file()
+    # En bild som inte går att avkoda ger None. Försättsbladet sätts då utan
+    # bild i stället för att provet inte kompilerar alls.
+    assert tryck.spara_forsattsbild("data:image/png;base64,%%", tmp_path) is None
+    assert tryck.spara_forsattsbild(None, tmp_path) is None
+
+
+def test_forsattsbladets_egna_bild_foljer_med_till_mallen(client, monkeypatch):
+    """Hela vägen: godkännandets `bilder` → utkatalogen → prov.tex.j2."""
+    from pathlib import Path
+    result = _skriv(client, monkeypatch)
+    byggda = _tectonic(monkeypatch)
+    res = _done(client.post(f"/api/exams/{result['id']}/approve", json={
+        "bilder": {"forsatt": _png(320, 180), "uppg2": _png(200, 120)}}))
+    ut = Path(res["pdf"]).parent
+    assert (ut / "egen-forsatt.png").is_file(), sorted(
+        q.name for q in ut.iterdir())
+    tex = Path(res["tex"]).read_text(encoding="utf-8")
+    assert "{egen-forsatt.png}" in tex
+    # … och den står på FÖRSÄTTSBLADET, alltså före den första sidbrytningen.
+    assert "egen-forsatt.png" in tex.split(r"\newpage")[0]
+    assert byggda, "provet kompilerades inte alls"
+
+
 def test_skraputforma_bilder_ignoreras():
     """`bilder` kommer från en klient vi inte skrev. Nycklar som inte är en
     uppgift, värden som inte är data-URI:er och rena skräpformer ska betyda

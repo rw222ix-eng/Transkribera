@@ -993,10 +993,19 @@ def test_render_prov_golden_markers():
     assert "\\pointsinrightmargin" in tex
     assert "\\pointformat{\\thepoints~p}" in tex
     assert "\\pointname{}" in tex
-    # sidhuvudet: provets namn till vänster, delen i mitten, linje under
+    # SIDHUVUDET: bara delen, i högra hörnet, med linje under. Vänstra
+    # fältet bar provets namn på varje blad fram till 2026-09-06, då
+    # läraren strök det: «Att ha denna typ av text på varje provblad är
+    # onödigt. Det krävs bara på försättsidan. Däremot kan del A och del B
+    # i högra hörnet vara kvar.»
     assert "\\pagestyle{headandfoot}" in tex
+    assert "\\runningheader{}{}{\\rightmark}" in tex
     assert "\\runningheadrule" in tex
     assert "\\firstpageheader{}{}{}" in tex
+    # … och provrubriken står i INGET runningheader.
+    for rad in tex.splitlines():
+        if rad.startswith("\\runningheader"):
+            assert rad == "\\runningheader{}{}{\\rightmark}", rad
     # försättsbladets ordning
     assert "Provtid:" in tex and "Hjälpmedel:" in tex
     # Lärarens provrutin: båda delarna delas ut samtidigt, räknaren hämtas
@@ -2989,6 +2998,110 @@ def test_bedomningsrader_laser_de_gamla_dokumentens_enradare():
     assert [r["poang"] for r in rader] == [1, 1, 0]
     assert rader[0]["krav"] == "korrekt svar 25,6 mm"
     assert rader[-1]["not"] and rader[-1]["krav"].startswith("Vanligt fel")
+
+
+# ── LÄRARENS GRANSKNING AV PROV 40 (2026-09-06) ───────────────────────
+# Fyra domar i samma pass: bildtext under försättsbladets bild, hennes egen
+# bild ska faktiskt tryckas där, provets namn bort ur sidhuvudet på varje blad,
+# och «Vanligt fel» bort ur bedömningsanvisningen till förmån för korta rader.
+
+
+def _exam_med_forsattsbild(bildtext=None):
+    data = copy.deepcopy(_exam())
+    data["forsattsbild"] = {
+        "person": "John Napier (1550–1617), skotten som räknade fram de "
+                  "första logaritmtabellerna.",
+        "scene": "SCENE. A dim stone study at night. " + "x" * 80,
+    }
+    if bildtext is not None:
+        data["forsattsbild"]["bildtext"] = bildtext
+    doc, fel = exam_spec.validate_exam_json(data)
+    assert doc is not None and fel == [], fel
+    return doc
+
+
+def _forsattsbladet(tex):
+    """Allt före den första sidbrytningen: försättsbladet och bara det."""
+    return tex.split("\\newpage")[0]
+
+
+def test_forsattsbladets_egna_bild_trycks_med_sin_bildtext():
+    """Läraren släppte sin egen bild i porträttrutan och bad om «en liten
+    figurtext till denna, centrerad under bilden». Bilden reste aldrig till
+    mallen (nyckeln «forsatt» är ingen uppgift) och bildtexten fanns inte som
+    fält, så pappret fick varken bilden eller raden."""
+    doc = _exam_med_forsattsbild(
+        "Napier & hans tabeller vid ljuset i arbetsrummet.")
+    tex = exam_latex.render_prov(doc, forsatt_bild="egen-forsatt.png")
+    forsatt = _forsattsbladet(tex)
+    # 58 mm och inte 70: höjden är mätt mot vad som är kvar under
+    # namnraderna när bildtexten tar två rader (se prov.tex.j2).
+    assert (r"\includegraphics[width=0.7\textwidth,height=58mm,"
+            r"keepaspectratio]{egen-forsatt.png}") in forsatt
+    # Bildtexten står under bilden, i \small\itshape, och ESCAPAD: den är ren
+    # text och ett «&» i den skulle annars spräcka kompileringen.
+    assert r"{\small\itshape Napier \& hans tabeller vid ljuset i " \
+        r"arbetsrummet.}" in forsatt
+    assert "Napier & hans" not in forsatt
+
+
+def test_forsattsbladet_utan_egen_bild_star_som_forut():
+    """Bilden är LÄRARENS och kommer bara med godkännandet. Utan den ska
+    försättsbladet se ut precis som innan. Ingen tom ram, ingen includegraphics
+    som pekar på en fil som inte finns."""
+    doc = _exam_med_forsattsbild("En rad som inte ska tryckas utan bild.")
+    forsatt = _forsattsbladet(exam_latex.render_prov(doc))
+    assert "includegraphics" not in forsatt
+    assert "En rad som inte ska tryckas utan bild." not in forsatt
+    # Och ett prov helt utan porträtt kompilerar likaså utan rad.
+    doc_utan, _ = exam_spec.validate_exam_json(_exam())
+    assert "includegraphics" not in _forsattsbladet(
+        exam_latex.render_prov(doc_utan, forsatt_bild=None))
+
+
+def test_bedomningsanvisningen_trycker_inte_notraden():
+    """LÄRAREN (2026-09-06): «detta med vanliga fel kan vi ta bort helt och
+    hållet så att vi sparar plats». Raden är ingen poäng, den stod sist i
+    högerspalten och åt den plats trappan behöver.
+
+    PARSERN rör vi inte: proven i basen bär raden och ska fortsätta gå att
+    läsa (test_bedomningsrader_laser_de_gamla_dokumentens_enradare). Det är
+    TRYCKET som slutar sätta den."""
+    trappa = ("+1 E tecknar sambandet\n+1 C fullständig lösning\n"
+              "Vanligt fel: minustecknet tappas när $-3$ kvadreras")
+    # Parsern ser tre rader, varav en not …
+    assert len(exam_spec.bedomningsrader(trappa)) == 3
+    # … pappret ser två.
+    rader = exam_latex._bedomning_rader(trappa)
+    assert [r["niva"] for r in rader] == ["+1 E", "+1 C"]
+    assert not any("Vanligt fel" in r["krav"] for r in rader)
+
+    data = copy.deepcopy(_exam())
+    data["uppgifter"][0]["bedomning"] = trappa
+    data["uppgifter"][0]["poang"] = [1, 1, 0]
+    doc, fel = exam_spec.validate_exam_json(data)
+    assert doc is not None, fel
+    assert "Vanligt fel" not in exam_latex.render_bedomning(doc)
+
+
+def test_prompterna_ber_om_korta_rader_och_ingen_notrad():
+    """Samma dom, i prompten: ingen extra rad efter trappan, och radernas
+    språk ska bli «otroligt mycket kortare så att det blir mycket tydligare
+    för mig som lärare att läsa dem»."""
+    assert "Vanligt fel" not in exam_gen.INSTRUCTION
+    assert "Vanligt fel" not in exam_gen.FALLGROPAR
+    underlag = exam_gen.bedomningsunderlag(_exam())[0]
+    prompt = exam_gen.build_bedomning_prompt(underlag)
+    # Kassettregeln: markörfrasen står kvar, annars hittar fejk.py inget band.
+    assert "bedömningsskrivare" in prompt
+    assert "Vanligt fel" not in prompt
+    # Trappraderna: ett tak i ord, inte «kort och konkret».
+    assert "ÅTTA ord" in prompt
+    # Kommentaren: EN mening, tolv ord, och exemplet håller den längden.
+    assert "HÖGST TOLV ORD" in prompt
+    assert "+1 C för potensen i täljaren, förenklar sedan inte." in prompt
+    # Elevens papper kortas med en rad.
+    assert "högst FEM rader" in prompt
 
 
 def test_bedomningssignal_faller_flera_poang_pa_samma_rad():

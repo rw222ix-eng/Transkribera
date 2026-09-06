@@ -146,8 +146,8 @@ SCEN_REGEL = (
 # inte här. Textförbudet gäller däremot precis lika hårt: ett bildverktyg som
 # får skriva sätter fel årtal under fel ansikte.
 FORSATTSBILD_REGEL = (
-    "- forsattsbild {person, scene}: PORTRÄTTET PÅ FÖRSÄTTSBLADET, och BARA "
-    "provet har ett sådant — arbetsblad och gruppuppgift lämnar "
+    "- forsattsbild {person, scene, bildtext}: PORTRÄTTET PÅ FÖRSÄTTSBLADET, "
+    "och BARA provet har ett sådant — arbetsblad och gruppuppgift lämnar "
     "fältet tomt. Välj EN historisk matematiker eller vetenskapsperson som "
     "hör till just det här provets centrala innehåll, och välj den som hör "
     "NÄRMAST: potenser och algebraisk notation → Descartes eller Euler, "
@@ -186,6 +186,20 @@ FORSATTSBILD_REGEL = (
     "moonlight on the hills. The far wall is lost in warm brown darkness. The "
     "whole picture is candlelight against night, calm and grave.\\n"
     "Intended use: John Napier, logaritmer.\"\n"
+    # BILDTEXTEN är den enda av rutans tre texter som ELEVEN ser: den
+    # trycks centrerad under bilden på försättsbladet (prov.tex.j2).
+    # Lärarens ord vid granskningen av prov 40 (2026-09-06): «en liten
+    # figurtext till denna, centrerad under bilden, kort, utan em dash,
+    # konkret: vad är det vi ser på bilden, kopplat till det provet
+    # handlar om.» Tolv ord är taket, och det är mätt mot raden: en
+    # längre text bryter till två rader och skjuter namnraderna nedanför
+    # bilden ner på en andra sida.
+    "  bildtext: EN kort mening på SVENSKA, högst TOLV ord, som står "
+    "CENTRERAD UNDER BILDEN på försättsbladet och som eleven läser. Säg "
+    "vad man ser på bilden OCH hur det hör till provets innehåll, "
+    "konkret: \"Napier räknar fram sina första logaritmtabeller "
+    "vid ljus.\" Inga tankstreck, ingen punktlista, ingen matematik. "
+    "Skriv den ALLTID när du fyller forsattsbild.\n"
 )
 
 INSTRUCTION = (
@@ -319,8 +333,7 @@ INSTRUCTION = (
     "ALDRIG flera poäng på samma rad ('+2 C fullständig lösning') och aldrig "
     "en rad vars nivå saknas i poang. Kriteriet är iakttagbart och kort: "
     "'+1 E tecknar sambandet', '+1 E lösning med godtagbart svar', "
-    "'+1 C fullständig lösning med korrekt svar'. Sist får EN extra rad stå: "
-    "'Vanligt fel: …'.\n"
+    "'+1 C fullständig lösning med korrekt svar'.\n"
     "- innehall: KODERNA för de centrala innehållspunkter uppgiften prövar "
     "(t.ex. [\"G25-M1C-ALG-3\"]) — hämtade ur listan över valt centralt "
     "innehåll nedan, en till tre stycken, aldrig egen text. Står ingen sådan "
@@ -526,10 +539,9 @@ FALLGROPAR = (
     "och använder du dem här faller balansen — proceduruppgifternas poäng går "
     "till resonemang i stället. Skriv dem bara när uppgiftsplanen eller "
     "uppdraget ber om det.\n"
-    "- Skriv ut det väntade felet SIST i bedomning, som en egen rad efter "
-    "poängtrappan: \"+1 E korrekt ansats\\n+1 C fullständig lösning\\n"
-    "Vanligt fel: minustecknet tappas när $-3$ kvadreras\". Läraren ska veta "
-    "vad hon letar efter."
+    "- SKRIV INTE UT felet i bedomning. Det ligger i uppgiftens tal och i "
+    "facit, och bedömningsanvisningen bär BARA poängtrappan: en rad per "
+    "poäng, ingenting efter den."
 )
 
 # Gruppuppgiften kan göra mer än att undvika felet: den kan lägga fram det.
@@ -593,9 +605,13 @@ _UTDRAG_GRUPP = [
                           ["b)", "$\\dfrac{48 - 12}{2 + 4}$"]]},
      "svarsfalt": ["Svar a)", "Svar b)"],
      "losning": "a) $57$, ur $9 + 3 \\cdot 16$. b) $6$, ur $\\dfrac{36}{6}$.",
-     # Trappan: en rad per poäng, radbruten (INSTRUCTION, bedomning).
-     "bedomning": "+1 E rätt svar i a)\n+1 E rätt svar i b)\n"
-                  "Vanligt fel: $3 \\cdot 4$ kvadreras i a) ($153$)."},
+     # Trappan: en rad per poäng, radbruten (INSTRUCTION, bedomning),
+     # och INGENTING efter den. Utdraget bar en «Vanligt fel:»-rad sist
+     # så länge anvisningen fick ha en. Läraren tog bort den raden
+     # 2026-09-06 («detta med vanliga fel kan vi ta bort helt och hållet
+     # så att vi sparar plats»), och ett mönster som visar raden väger
+     # tyngre än regeln som förbjuder den.
+     "bedomning": "+1 E rätt svar i a)\n+1 E rätt svar i b)"},
     # Begreppsuppgiften: uttrycket står färdigt i texten, och gruppen ska
     # NAMNGE dess delar innan den räknar. Situationen är verkstaden, alltså
     # klassens egen värld.
@@ -651,9 +667,7 @@ _UTDRAG_GRUPP = [
           "losning": "$K = 500 + 200d$. $500 + 200d = 2500$ ger $d = 10$ "
                      "dagar.",
           "bedomning": "+1 E korrekt formel $K = 500 + 200d$\n"
-                       "+1 C rätt svar $10$ dagar\n"
-                       "Vanligt fel: startavgiften $500$ multipliceras med "
-                       "$d$."}]},
+                       "+1 C rätt svar $10$ dagar"}]},
 ]
 
 FORLAGA_GRUPP = (
@@ -2052,20 +2066,25 @@ def build_bedomning_prompt(underlag: dict, *, skala: str = "") -> str:
         "övrigt korrekt förenkling med rätt svar», «+1 E rätt alternativ». "
         "Aldrig kursplanesvenska som «allmän härledning ur divisionsregeln "
         "med godtyckliga a och n» — skriv «visar regeln för alla a och n, "
-        "inte bara ett tal». Sist får EN extra rad stå: «Vanligt fel: …».\n\n"
+        "inte bara ett tal». Raden är BARA poängen: ingenting efter trappan, "
+        "ingen rad om vanliga fel.\n\n"
+        "HÅLL DEM KORTA: högst ÅTTA ord efter nivån, och hellre färre. Läraren "
+        "läser trappan under rättningen, inte som text: «+1 C korrekt potens i "
+        "täljaren» räcker, «+1 C eleven visar att potensen i täljaren har "
+        "beräknats på ett korrekt sätt» gör det inte.\n\n"
         f"2. SKRIV ELEVLÖSNINGARNA i `elevlosningar`. Uppgiften är värd {tak} "
         f"poäng, och du skriver en lösning per LÄGRE poängsteg: {steg}. "
         "Full pott skriver du INTE — facit står redan överst på pappret. "
         "Ordningen är stigande, den lägsta först.\n"
         "- `rader` är elevens papper, rad för rad, precis som en elev skulle "
-        "skriva det (matte inom $…$, högst sex rader). Har uppgiften "
+        "skriva det (matte inom $…$, högst FEM rader). Har uppgiften "
         "deluppgifter börjar raderna med «a)», «b)» …\n"
         "- `poang` är trippeln [E, C, A] lösningen får, och summan ska vara "
         "just det poängsteget.\n"
-        "- `kommentar` säger TVÅ saker på enkel svenska, i en eller två korta "
-        "meningar: vilken rad i trappan lösningen fick, och varför den inte "
-        "fick nästa. Till exempel «Får +1 C för korrekt potens i täljaren, "
-        "men förenklar aldrig efter potensregeln.» Lösningen på noll poäng "
+        "- `kommentar` säger TVÅ saker på enkel svenska i EN ENDA mening på "
+        "HÖGST TOLV ORD: vilken rad i trappan lösningen fick, och varför den "
+        "inte fick nästa. Precis den längden: «+1 C för potensen i täljaren, "
+        "förenklar sedan inte.» Lösningen på noll poäng "
         "skriver BARA varför — pappret sätter rubriken «Inga poäng» självt, "
         "och kommentaren ska inte börja om med samma två ord.\n"
         "Svara med enbart JSON."

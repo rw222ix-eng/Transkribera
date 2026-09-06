@@ -76,6 +76,22 @@ def test_forsattsbildens_portratt_har_eget_id():
     assert dd.andrade_element("prov", fore, _prov("a")) == []
 
 
+def test_bildtexten_marks_pa_bilden_och_inte_pa_rubriken():
+    """Läraren markerar bilden och ber om en figurtext (2026-09-06). Modellen
+    lägger till `bildtext` och rör ingenting annat, och nålen ska sitta på bilden.
+    Diffen jämför hela `forsattsbild`, så den nya nyckeln räcker."""
+    grund = {"person": "John Napier (1550–1617), logaritmernas man.",
+             "scene": "SCENE. A dim stone study at night. " + "x" * 80}
+    fore = _prov("a") | {"forsattsbild": grund}
+    efter = _prov("a") | {"forsattsbild": dict(
+        grund, bildtext="Napier räknar fram sina logaritmtabeller vid ljus.")}
+    assert dd.andrade_element("prov", fore, efter) == ["forsatt"]
+    # … och en omskriven bildtext, med samma person och samma scen, likaså.
+    igen = _prov("a") | {"forsattsbild": dict(
+        grund, bildtext="Napier vid ljuset, mitt i logaritmernas första tabell.")}
+    assert dd.andrade_element("prov", efter, igen) == ["forsatt"]
+
+
 def _giltigt(*poang, **extra):
     """Ett dokument som ExamDoc verkligen kan läsa — kravgränserna räknas ur
     poängen, så de går inte att pröva på ett skelett."""

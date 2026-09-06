@@ -373,9 +373,20 @@ def _ar_led(enhet) -> bool:
 # Trappan byggs HÄR och inte i mallen: raderna måste delas innan de escapas,
 # annars blir radbrytningen ett «\n» i löptexten.
 def _bedomning_rader(bedomning) -> list[dict]:
+    # NOTRADEN TRYCKS INTE. Anvisningen fick länge bära en avslutande
+    # «Vanligt fel: …» efter poängtrappan, och läraren tog bort den vid
+    # granskningen av prov 40 (2026-09-06): «detta med vanliga fel kan vi
+    # ta bort helt och hållet så att vi sparar plats». Raden är inte en
+    # poäng, den stod i högerspalten och åt den plats trappan behöver.
+    #
+    # Filtret sitter HÄR och inte i parsern: exam_spec.bedomningsrader
+    # läser det som STÅR i dokumentet, och proven som redan ligger i basen
+    # bär raden. Den ska fortsätta gå att läsa (och syns på skärmen), den
+    # ska bara inte sättas på pappret.
     return [{"niva": (f"+{r['poang']} {r['niva']}" if r["niva"] else None),
              "krav": escape_mixed(r["krav"])}
-            for r in exam_spec.bedomningsrader(bedomning) if r["krav"]]
+            for r in exam_spec.bedomningsrader(bedomning)
+            if r["krav"] and not r["not"]]
 
 
 def _trapprader_uppgift(it) -> list[dict]:
@@ -601,7 +612,8 @@ def _provtid(doc: exam_spec.ExamDoc) -> str | None:
             + (escape_latex(f" ({minuter})") if minuter else "") + ".")
 
 
-def _forsatt_vy(doc: exam_spec.ExamDoc, delar: list[dict]) -> dict:
+def _forsatt_vy(doc: exam_spec.ExamDoc, delar: list[dict],
+                forsatt_bild: str | None = None) -> dict:
     """Försättsbladet, rad för rad i förlagans ordning.
 
     Titel och klass, en linje, delöversikten, provtiden, hjälpmedlen,
@@ -683,6 +695,13 @@ def _forsatt_vy(doc: exam_spec.ExamDoc, delar: list[dict]) -> dict:
         # och… – Matematik 3c» — kursen kvar och momentet avhugget. _provrubrik
         # med sidhuvudets tak stryker i stället kursen och behåller momentet
         # helt, vilket är det enda som skiljer det här provet från nästa.
+        #
+        # TRYCKS INTE LÄNGRE. Läraren strök provets namn ur sidhuvudet
+        # 2026-09-06 («Att ha denna typ av text på varje provblad är
+        # onödigt»), och prov.tex.j2 sätter sidhuvud = '' i stället.
+        # Fältet står kvar därför att taket det räknas mot är mätt (se
+        # ovan) och rubriken kan behöva tillbaka; det kostar ingenting
+        # att bygga och ingenting att sätta.
         "sidhuvud": escape_latex(_provrubrik(doc.titel, doc.kurs)),
         "underrad": escape_latex(" · ".join(under)) if under else None,
         "delrader": delrader,
@@ -690,13 +709,28 @@ def _forsatt_vy(doc: exam_spec.ExamDoc, delar: list[dict]) -> dict:
         "inlamningsrad": inlamning,
         "total": total,
         "betyg": betyg,
+        # BILDEN LÄRAREN SLÄPPTE PÅ FÖRSÄTTSBLADET, som filnamn i
+        # utkatalogen (app/tryck.spara_forsattsbild). Rutan fanns bara på
+        # skärmen: nyckeln heter «forsatt» och inte «uppgN», så
+        # tryck.egna_bilder lät den falla och pappret fick den aldrig.
+        # Läraren såg bilden i canvas och inte i PDF:en (prov 40,
+        # 2026-09-06).
+        "bild_fil": forsatt_bild,
+        # BILDTEXTEN under bilden, centrerad. Modellens fält
+        # (exam_spec.Forsattsbild.bildtext) och den enda av porträttrutans
+        # texter eleven ser. escape_latex och inte escape_mixed: det är en
+        # mening om vad bilden föreställer, aldrig matematik.
+        "bildtext": (escape_latex(doc.forsattsbild.bildtext)
+                     if doc.forsattsbild and doc.forsattsbild.bildtext
+                     else None),
     }
 
 
 def _build_view(doc: exam_spec.ExamDoc,
                 bilder: dict[int, str] | None = None,
                 *, facit: bool = False,
-                egna: dict[int, str] | None = None) -> dict:
+                egna: dict[int, str] | None = None,
+                forsatt_bild: str | None = None) -> dict:
     """Mallens vy: uppgifter numrerade löpande, grupperade per del
     (B, C, D, sedan del-lösa). `bilder` mappar uppgiftens bildindex
     (1-baserat) till filnamn i utkatalogen — filnamnet, inte sökvägen,
@@ -921,7 +955,7 @@ def _build_view(doc: exam_spec.ExamDoc,
         "poang_rad_eca": (lambda s: f"{s['total']} poäng ({s['e']}/{s['c']}/{s['a']})")(
             exam_spec.poangsummor(doc)),
         "delar": delar,
-        "forsatt": _forsatt_vy(doc, delar),
+        "forsatt": _forsatt_vy(doc, delar, forsatt_bild),
         # Delad preamble (PR 1). kurs/titel escapas här på nytt ur doc —
         # inte ur vyns redan escapade fält, som skulle dubbelescapas.
         # Tankstrecket skrivs som KOMMANDO och inte som tecken: Computer Modern
@@ -1004,7 +1038,8 @@ def _grupp_vy(grupp, nyckelfraga: str | None = None,
 def render_prov(doc: exam_spec.ExamDoc,
                 bilder: dict[int, str] | None = None,
                 dokumentkod: str = "",
-                egna_bilder: dict[int, str] | None = None) -> str:
+                egna_bilder: dict[int, str] | None = None,
+                forsatt_bild: str | None = None) -> str:
     """`dokumentkod` sätts bara av den anpassade kopian (app/tryck.py). Den
     står i foten och är det ENDA som skiljer kopian från provet — ingen
     etikett, ingen text som talar om för klassen vem som fick den.
@@ -1012,9 +1047,16 @@ def render_prov(doc: exam_spec.ExamDoc,
     `egna_bilder` är de bilder läraren själv lagt in på en uppgift i canvas,
     nycklade på uppgiftens nummer. De bodde tidigare bara i webbläsaren och
     kom med på pappret genom avritningen; nu när provet sätts i LaTeX måste de
-    resa hela vägen hit."""
+    resa hela vägen hit.
+
+    `forsatt_bild` är FÖRSÄTTSBLADETS bild, som filnamn i utkatalogen. Den
+    reser samma väg men i ett eget argument: rutan har nyckeln «forsatt» på
+    skärmen och inget uppgiftsnummer, så den ryms inte i `egna_bilder`.
+    Bara provet har ett försättsblad, så bara den här mallen tar emot den."""
     return _environment().get_template("prov.tex.j2").render(
-        dokumentkod=dokumentkod, **_build_view(doc, bilder, egna=egna_bilder))
+        dokumentkod=dokumentkod,
+        **_build_view(doc, bilder, egna=egna_bilder,
+                      forsatt_bild=forsatt_bild))
 
 
 def render_bedomning(doc: exam_spec.ExamDoc,

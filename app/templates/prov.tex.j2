@@ -29,9 +29,15 @@
     sida, tror att de är klara och lämnar in» (läraren, 2026-08-22).
     Bedömningsanvisningen delar preamblen men inte flaggan. #))
 ((* set med_vand = true *))
-((# Sidhuvudets vänsterrad ÄR provets namn. Delen står i mitten och kommer ur
+((# SIDHUVUDET BÄR BARA DELEN. Vänsterraden var provets namn på varje blad
+    (forsatt.sidhuvud) fram till 2026-09-06, då läraren strök den: «Att ha
+    denna typ av text på varje provblad är onödigt. Det krävs bara på
+    försättsidan. Däremot kan del A och del B i högra hörnet vara kvar.»
+    Försättsbladet bär namnet i sin egen titelrad och får inget huvud alls
+    (\firstpageheader), så raden sa samma sak en gång per blad utan att
+    eleven behövde den. Delen står kvar i högerfältet och kommer ur
     \markboth. #))
-((* set sidhuvud = forsatt.sidhuvud *))
+((* set sidhuvud = '' *))
 ((* include '_preamble.tex.j2' *))
 ((* import '_former.tex.j2' as former *))
 
@@ -125,6 +131,39 @@ Provet kan ge totalt \textbf{((( forsatt.total ))) poäng}.
 
 \noindent
 \textbf{Klass:} \hrulefill
+
+((# ---------- Försättsbladets bild ----------
+    LÄRARENS EGEN BILD, släppt på porträttrutan i canvas och sparad i
+    utkatalogen som «egen-forsatt.png» (app/tryck.spara_forsattsbild).
+    Rutan har nyckeln «forsatt» och inget uppgiftsnummer, så den reste
+    aldrig med `egna_bilder` och pappret fick den aldrig: läraren såg
+    bilden i canvas och inte i PDF:en (prov 40, 2026-09-06).
+
+    SIST PÅ SIDAN, under namnraderna, och HÖJDTAKET ÄR MÄTT: försättsbladet
+    ska rymmas på EN sida. Klassradens baslinje ligger 99,6 mm över papprets
+    underkant (mätt i den kompilerade PDF:en) och satsytan slutar vid 25 mm,
+    så 74 mm är allt som finns kvar. 6 mm luft, bilden och en bildtext som
+    får bli TVÅ rader ska rymmas i dem. 70 mm sköt bildtexten till en andra
+    sida i värsta fallet (stående bild, bildtext i takhöjd); 58 mm håller
+    både stående och 16:9 på en sida med marginal. keepaspectratio gör att
+    breddangivelsen gäller liggande bilder och höjden stående.
+
+    BILDTEXTEN under bilden, centrerad, i \small\itshape. Lärarens ord:
+    «en liten figurtext till denna, centrerad under bilden, kort, utan em
+    dash, konkret». Texten är modellens fält (exam_spec.Forsattsbild
+    .bildtext) och står bara när det är ifyllt \textendash{} gamla prov
+    har det inte. #))
+((* if forsatt.bild_fil *))
+\vspace{6mm}
+
+\begin{center}
+  \includegraphics[width=0.7\textwidth,height=58mm,keepaspectratio]{((( forsatt.bild_fil )))}
+((* if forsatt.bildtext *))
+
+  {\small\itshape ((( forsatt.bildtext )))}
+((* endif *))
+\end{center}
+((* endif *))
 
 ((# ═══════════════════════════════════════════ UPPGIFTERNA ════════════ #))
 ((* for del in delar *))

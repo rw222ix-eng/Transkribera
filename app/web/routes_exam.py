@@ -1000,6 +1000,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # stund som mallen tog över.
         egna_bilder = tryck.egna_bilder(body.get("bilder")
                                         if isinstance(body, dict) else None)
+        # FÖRSÄTTSBLADETS BILD kommer i samma kropp men under nyckeln
+        # «forsatt», och den serien känner egna_bilder inte igen: den
+        # läser bara «uppgN». Bilden föll alltså bort på vägen och
+        # försättsbladet trycktes tomt, medan canvas visade den läraren
+        # själv hade släppt där (prov 40, 2026-09-06).
+        forsatt_egen = tryck.forsattsbild_egen(
+            body.get("bilder") if isinstance(body, dict) else None)
         # PLÅTVÄLJAREN i canvas. Appen matchade en plåt vid genereringen
         # (`scen.plat`); läraren kan byta till en annan ur katalogen eller
         # välja bort den helt, och det valet bor bara i webbläsarens dokument
@@ -1074,6 +1081,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 egna_map = dict(platar.plat_bilder(exam, platval, out_dir,
                                                    base=base))
                 egna_map.update(tryck.spara_egna_bilder(egna_bilder, out_dir))
+                # Försättsbladets bild har ingen plats i egna_map (den
+                # nycklas på uppgiftsnummer) och skrivs därför för sig,
+                # till samma katalog och med samma kontrakt: filnamnet,
+                # inte sökvägen. None betyder «ingen bild» hela vägen ner
+                # i mallen.
+                forsatt_fil = tryck.spara_forsattsbild(forsatt_egen,
+                                                       out_dir)
                 # PROVET SÄTTS I LaTeX. Se kommentaren där avritningen tas
                 # emot: mallen är lärarens egen förlaga, och skärmen kan inte
                 # se ut som den. Övriga papper ritas av precis som förut.
@@ -1133,8 +1147,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
                             egna_bilder=egna_map)
                         bed = None
                     else:
-                        tex = exam_latex.render_prov(doc, bilder=bilder_map,
-                                                     egna_bilder=egna_map)
+                        # Bara provet har ett försättsblad, så bara här
+                        # skickas dess bild med.
+                        tex = exam_latex.render_prov(
+                            doc, bilder=bilder_map, egna_bilder=egna_map,
+                            forsatt_bild=forsatt_fil)
                         bed = exam_latex.render_bedomning(doc, bilder=bilder_map)
                     # Det separata facit: samma facitband som ligger sist i
                     # bladet, som ETT eget papper bredvid. Det är filen
