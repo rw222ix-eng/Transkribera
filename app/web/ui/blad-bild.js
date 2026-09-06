@@ -240,7 +240,13 @@ window.BladBild = (() => {
   function namn(blad, reserv) {
     const h = blad && blad.querySelector('.lohuvud, .prhuvud');
     if (!h) return reserv || 'Blad';
-    const titel = String(((h.querySelector('b') || {}).textContent) || '').trim();
+    /* FÖRSTA <b> MED TEXT, inte första <b>. Provets uppgiftsblad bär sedan
+       2026-09-06 en TOM första <b> (blad-bygg huvud: kursraden står bara på
+       försättsbladet, men lådan måste finnas kvar för att flexens
+       space-between ska lägga delbokstaven till höger). Med `querySelector('b')`
+       blev filnamnet därför tomt och varje provblad hette «Blad». */
+    const titel = Array.from(h.querySelectorAll('b'))
+      .map(b => String(b.textContent || '').trim()).find(Boolean) || '';
     const delar = String(((h.querySelector('span') || {}).textContent) || '')
       .split('·').map(s => s.trim()).filter(Boolean);
     const uppg = delar.find(d => /^uppgift\s/i.test(d));

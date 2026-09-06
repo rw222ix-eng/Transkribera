@@ -3844,6 +3844,32 @@
     if ((forsok || 0) > 30) return;
     requestAnimationFrame(() => omGranska(ark, (forsok || 0) + 1));
   }
+  /* ── CANVASENS KLON FÅR INTE BLI GAMMAL ──
+     Granskningen visar en KLON av traven (granska.js oppna/sattOm:
+     `o.nod.cloneNode(true)`), och en klon vet ingenting om vad originalet gör
+     efteråt.
+
+     Fyndet i prov 40 (läraren, 2026-09-06): hon släppte en bild på en uppgift.
+     Originalet i #arkskal ritades om (visa → ritaIn → Blad.rita) och klonades
+     om direkt, men bilden AVKODAS efter det, och när den fick sin höjd
+     paginerade blad.js om originalet och flyttade uppgift 7 till nästa blad.
+     Klonen stod kvar med den gamla sättningen, så i canvasen låg uppgift 7
+     kvar under papperskanten fast pappret hon skulle skriva ut var rätt.
+
+     blad.js formge() säger till när ett mätsvep ÄNDRADE formen
+     (CustomEvent 'blad:formad'), och då klonas det om. Utan ark-argument:
+     sattOm behåller det ark läraren står på när det är undefined.
+
+     Koalesceras med requestAnimationFrame. Ett mätsvep kan ge flera besked i
+     samma bildruta (bilder, figurer, KaTeX), och varje omklonning är hela
+     traven. Bara besked från pappret i #arkskal räknas; tavlan och
+     förhandsvisningens egna travar har sina egna. */
+  let formadBild = 0;
+  document.addEventListener('blad:formad', e => {
+    if (!e.target || !e.target.closest || !e.target.closest('#arkskal')) return;
+    if (formadBild) return;
+    formadBild = requestAnimationFrame(() => { formadBild = 0; omGranska(); });
+  });
   /* ── ITERATIONEN ──────────────────────────────────
      `andrat` styr vilka element som får en numrerad nål i canvas.
 
@@ -4010,6 +4036,23 @@
     const mal = (valda || []).filter(m => m && m.namn).map(m => ({
       el: m.el || '', namn: m.namn, innehall: m.innehall || '',
       renderat: m.renderat || '' }));
+    /* ── ANVISNINGEN ÄR RÄKNAD, INTE SKRIVEN ──
+       `.prnot` på försättsbladet («Provet ger totalt 24 poäng, varav …») sätts
+       av blad.js ur provets poäng och delar. Den står inte i dokumentets JSON
+       och servern har ingenting att skriva om. Läraren försökte peka på den i
+       prov 40 (2026-09-06) och kunde inte ens markera den; nu går den att
+       markera (blad.js markera, `not`), och då måste svaret på ett önskemål
+       vara ärligt i stället för ett «Skrivet om» från ett anrop som inte kan
+       göra något.
+
+       Hellre ett nej som säger var raden ändras. Villkoret är ALLA mål och
+       inte något: pekade hon på anvisningen OCH en uppgift är uppgiften ett
+       riktigt mål, och då ska önskemålet gå iväg. */
+    if (mal.length && mal.every(m => m.el === 'not')) {
+      return Promise.reject(new Error(
+        'Anvisningen skrivs av appen ur provets poäng och delar och går inte att'
+        + ' skriva om här. Ändra uppgifternas poäng eller provtabellen i stället.'));
+    }
     const malDel = !mal.length ? {}
       : mal.length === 1 ? { mal: mal[0] } : { mal: mal[0], malen: mal };
     /* KÄLLORNA MÅSTE OCKSÅ MED. Genereringen skickar boken, urvalet och de

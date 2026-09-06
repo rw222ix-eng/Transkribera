@@ -447,6 +447,18 @@ test("provets försättsblad bär avtalet — och ingen OBS-ruta upprepar det",
     const delnamn = await page.locator("#dokument .prhuvud b:nth-child(2)")
       .allTextContents();
     expect(delnamn).toEqual(["Del A", "Del B"]);
+    /* KURSRADEN BARA PÅ FÖRSÄTTSBLADET. Läraren om prov 40 (2026-09-06): «Att
+       ha denna typ av text på varje provblad är onödigt. Det krävs bara på
+       försättsidan. Däremot kan del A och del B i högra hörnet vara kvar.»
+       Lådan står kvar TOM på uppgiftsbladen: .prhuvud är flex med
+       space-between, och utan den hade delbokstaven hamnat till vänster. */
+    await expect(forsatt.locator(".prhuvud b").first())
+      .toContainText(/Matematik.*·/);
+    const kursrader = await page
+      .locator("#dokument .ark:not([data-form='pr1']) .prhuvud b:first-child")
+      .allTextContents();
+    expect(kursrader.length).toBeGreaterThan(0);
+    expect(kursrader.every(t => t.trim() === "")).toBe(true);
     // Foten säger var delen slutar och vad den är värd — annars slutar bladet
     // bara i tomt papper.
     await expect(page.locator("#dokument .prslut[data-slut]").first())

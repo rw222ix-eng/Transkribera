@@ -17,7 +17,16 @@
    Kurskod till vänster, delprovet till höger. Ingen regel under — huvudet bärs
    av sin grad och sin plats. Det är det enda
    som återkommer på varje sida i förlagan, så det är det som gör att ett blad
-   känns som ett prov och inte som ett arbetsblad. */
+   känns som ett prov och inte som ett arbetsblad.
+
+   Kursraden står bara på försättsbladet sedan 2026-09-06 (blad-bygg huvud,
+   blad.js huvud); uppgiftsbladen har en TOM första <b> så att space-between
+   lägger delbokstaven till höger. Ett prov med «En del» får då ett huvud utan
+   text i båda lådorna, och det behöver ingen egen regel: här finns varken
+   ram, min-höjd eller marginal, så tomma flexbarn ger noll höjd och bladet
+   börjar helt enkelt vid sin egen översta marginal. Lägger någon till en linje
+   under huvudet måste den villkoras på :not(:empty)-vis, annars ritas ett
+   streck över ett papper som inte har något huvud. */
 .prhuvud{display:flex;justify-content:space-between;align-items:baseline;gap:16px;padding-bottom:0;font-size:15px;letter-spacing:.02em;color:#000}
 .prhuvud b{font-weight:700}
 
@@ -287,3 +296,10 @@
    kanten på lärarens prov 2026-08-22. Lärarens egna inlagda bilder och
    underlagets sidor bär sina egna mått inline (blad.js) och rörs inte. */
 .prbild img{display:block;width:70%;height:auto;margin:0 auto}
+/* ── BILDTEXTEN UNDER FÖRSÄTTSBILDEN ──
+   Porträttet på försättsbladet säger ingenting av sig självt: eleven ser en
+   person i ett ljus och vet inte vem. Fältet är dokumentets
+   (exam_spec.Forsattsbild.bildtext) och skrivs UTANFÖR .prbild, för blad.js
+   byter rutans innerHTML mot lärarens släppta bild, se blad-bygg
+   forsattsbild. Centrerad under bilden, i svart som allt annat på pappret. */
+.prbildtext{margin:8px 0 0;text-align:center;font-size:12.5px;line-height:1.45;color:#000}

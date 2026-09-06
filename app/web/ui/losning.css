@@ -177,12 +177,13 @@
    etikett hade lämnat en ojämn lucka mitt på raden. Grön som poängen i
    lösningsgången: det är samma poäng.
 
-   Notraden (det väntade felet) bär ingen nivå och sätts kursiv — den delar inte
-   ut något, den varnar. */
+   Notraden (det väntade felet) hade en egen kursiv form här. Den är borta:
+   läraren om prov 40 (2026-09-06), «detta med vanliga fel kan vi ta bort helt
+   och hållet så att vi sparar plats», och blad-bygg trappaHtml trycker inte
+   längre rader utan nivå. Regeln gick med raden. Trappan bär bara poäng nu. */
 .lotrappa{margin:0;padding:0;list-style:none;display:grid;gap:3px;font-size:calc(13px * var(--fsk, 1));line-height:1.4;color:#000}
 .lotrappa>li{display:grid;grid-template-columns:calc(38px * var(--fsk, 1)) minmax(0,1fr);gap:0 9px;align-items:baseline}
 .lotrappa>li>i{font-style:normal;font-weight:700;font-size:calc(11.5px * var(--fsk, 1));letter-spacing:.02em;color:#1B7A46;white-space:nowrap;font-variant-numeric:tabular-nums}
-.lotrappa>li[data-not]{font-style:italic;color:#333}
 
 /* ══════════ BEDÖMNINGSTABELLEN ══════════
    Lärarens beställning 2026-08-23: en tvåspaltstabell per enhet — vänster
@@ -242,6 +243,14 @@
    Inne i tabellen flyter raden som vanlig text i stället, med matematiken
    inline där den står. */
 .lobed .loskannrad{display:block}
+/* ── FORTSÄTTNINGSRADEN ──
+   En ENDA uppgift kan vara högre än pappret. En bedömningstabell med fem
+   elevlösningar är det ofta. blad.js delaUppgift flyttar då tabellraderna som
+   inte ryms till en fortsättning på nästa blad (.pruppg[data-fortsuppg]) och
+   sätter den här raden överst, så att läraren ser att tabellen börjar mitt i
+   och inte att uppgiften har två facit. Kursiv och grå: den är en upplysning
+   om pappret, inte något som står i uppgiften. */
+.lofortsatt{margin:0;font-style:italic;font-size:calc(12px * var(--fsk, 1));color:#555}
 
 /* Lösningsgången till delprov C bär tre fullständiga lösningar per blad. Den
    luft ett kortsvarsfacit har råd med finns inte här — måtten är stramare, och

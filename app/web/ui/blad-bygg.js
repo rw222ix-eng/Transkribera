@@ -11,6 +11,45 @@ window.BladBygg = (() => {
      så att en formel aldrig kan halveras av HTML-escapen. */
   const mat = s => String(s == null ? '' : s).split('$').map((bit, i) =>
     i % 2 ? `<span class="mat" data-tex="${attr(bit)}"></span>` : esc(bit)).join('');
+  /* ── EN HÄRLEDNING ÄR FLERA LED, INTE EN LÅDA ──
+     Läraren om prov 40 (2026-09-06): elevlösningarna i bedömningsanvisningen
+     hade en vågrät rullningslist i cellen, «ser jättefult ut».
+
+     Skälet: modellen skriver hela härledningen i ETT dollarpar, «$A(15) =
+     120 - 4 \cdot 15 = 120 - 60 = 60$», och den är en enda oböjlig låda.
+     `.mat` är white-space:nowrap (matte.css) och KaTeX bryter aldrig inuti ett
+     uttryck; dessutom sätter matte.js `\sf ` framför hela texten, så allt
+     hamnar i EN .base som inte ens white-space:normal på .katex kan dela.
+     Cellen (.lobed td, overflow-x:auto) fick därför en scrollbar.
+
+     Delningen görs där en människa också bryter: vid likhetstecknet. Varje led
+     blir en egen .mat-låda och `<wbr>` mellan dem ger webbläsaren stället att
+     bryta på. Likhetstecknet INLEDER nästa led, för det är så ledet läses («=
+     120 − 60»), och korta uttryck rörs inte alls. En delad «$x = 4$» vore två
+     lådor där en räcker.
+
+     Djupräkningen: bara `=` på toppnivå delar. Ett likhetstecken inuti
+     `\begin{cases}`, ett bråk eller en parentes hör till sitt led, och `\=`
+     är ett tecken och inte en operator (backslash hoppar över nästa tecken). */
+  const MATBRYT_MIN = 24;
+  function texled(tex) {
+    const ut = [];
+    let djup = 0, start = 0;
+    for (let i = 0; i < tex.length; i++) {
+      const c = tex[i];
+      if (c === '\\') { i++; continue; }
+      if (c === '{' || c === '(' || c === '[') djup++;
+      else if (c === '}' || c === ')' || c === ']') djup--;
+      else if (c === '=' && djup === 0 && i > start) { ut.push(tex.slice(start, i)); start = i; }
+    }
+    ut.push(tex.slice(start));
+    return ut.filter(b => b.trim());
+  }
+  const matBryt = s => String(s == null ? '' : s).split('$').map((bit, i) => {
+    if (!(i % 2)) return esc(bit);
+    const led = bit.length > MATBRYT_MIN ? texled(bit) : [bit];
+    return led.map(b => `<span class="mat" data-tex="${attr(b)}"></span>`).join('<wbr>');
+  }).join('');
   /* ── Tomraderna ──
      Modellens radbrytningar SKA synas: läraren bad om «A:» och «B:» på var sin
      rad och fick det (white-space:pre-line i blad.css och prov.css). Men den
@@ -480,8 +519,26 @@ window.BladBygg = (() => {
   /* ── Provet ──────────────────────────────────────
      Skelettet är förlagans; blad.js fyller provtid, poäng och betygsgränser
      efter planeringen (planvalProv). Här sätts uppgifterna. */
+  /* ── KURSRADEN STÅR BARA PÅ FÖRSÄTTSBLADET ──
+     Läraren om prov 40 (2026-09-06): «Att ha denna typ av text på varje
+     provblad är onödigt. Det krävs bara på försättsidan. Däremot kan del A och
+     del B i högra hörnet vara kvar.»
+
+     `andra === undefined` ÄR försättsbladet: provforsatt anropar huvud(v) utan
+     andra argument, provblad alltid huvud(v, etikett), och etiketten är TOM
+     sträng när provet har «En del». Skillnaden mellan «ingen etikett» och
+     «tom etikett» är alltså skillnaden mellan de två pappren, och en
+     sanningsvärdesprövning hade gjort «En del»-arket till ett försättsblad.
+
+     Första <b> står kvar TOM på uppgiftsbladen: .prhuvud är flex med
+     space-between (prov.css), och utan den vänstra lådan hade delbokstaven
+     hamnat till vänster i stället för i högra hörnet.
+
+     Spegel av blad.js huvud(), som fyller raden om igen efter planeringen. */
   function huvud(v, andra) {
-    const t = [v.kurs || 'Matematik', v.klass || '', 'ht 2026'].filter(Boolean).join(' · ');
+    const forsatt = andra === undefined;
+    const t = forsatt
+      ? [v.kurs || 'Matematik', v.klass || '', 'ht 2026'].filter(Boolean).join(' · ') : '';
     return `<div class="prhuvud"><b>${esc(t)}</b>${andra ? `<b>${esc(andra)}</b>` : ''}</div>`;
   }
   function provuppg(u) {
@@ -671,10 +728,19 @@ window.BladBygg = (() => {
 
      Saknas fältet — prototypens papper, ett prov skrivet innan fältet fanns —
      står platshållaren kvar precis som förut. Ingen migrering. */
+  /* ── BILDTEXTEN LIGGER UTANFÖR BILDRUTAN ──
+     Fältet är dokumentets (exam_spec.Forsattsbild.bildtext, högst 160 tecken)
+     och säger vem eleven ser och varför hen hör hit. Den skrivs EFTER
+     .prbild-rutan och inte inuti den, för blad.js byter hela .prbild:s
+     innerHTML mot lärarens egen släppta bild (v.bilder.forsatt). Hade
+     bildtexten legat inne i rutan hade den försvunnit i samma ögonblick som
+     bilden kom på plats, alltså precis när den behövs. */
   function forsattsbild(v) {
     const f = (v || {}).forsattsbild;
+    const bildtext = ((f || {}).bildtext || '').trim();
+    const under = bildtext ? `<p class="prbildtext">${esc(bildtext)}</p>` : '';
     if (!f || !(f.scene || '').trim()) {
-      return '<div class="prbild gufigur"><span class="gufigtext">plats för bild — läggs in i canvas</span></div>';
+      return '<div class="prbild gufigur"><span class="gufigtext">plats för bild — läggs in i canvas</span></div>' + under;
     }
     return `<div class="prbild gufigur prscen" data-plat="forsatt">
       <p class="prscenrub">Bild att skapa — ${esc(f.person || '')}</p>
@@ -683,7 +749,7 @@ window.BladBygg = (() => {
         <button type="button" class="prscenkopiera" data-plat-kopiera="forsatt">Kopiera scen</button>
       </div>
       <p class="prscenhint">Släpp bilden här när den är klar — eller klicka.</p>
-    </div>`;
+    </div>${under}`;
   }
   /* Provets rubrik, med dokumentets egen först. Samma regel som arkets: skrev
      modellen en titel är det den som står på pappret, annars appens «Prov —
@@ -802,13 +868,16 @@ window.BladBygg = (() => {
   };
   function losvar(u) {
     if (!u.f) return '';
-    return `<div class="losvar"><b class="losetikett">Svar</b><span>${mat(u.f)}</span>${
+    /* matBryt och inte mat: svaret står också i bedömningsanvisningens
+       facitrad, i en 60-procentsspalt, och en hel härledning i ett dollarpar
+       gav den en scrollbar (se matBryt ovan). */
+    return `<div class="losvar"><b class="losetikett">Svar</b><span>${matBryt(u.f)}</span>${
       u.enhet && !ENHET_SLUT(u.f, u.enhet) ? `<em>${enhetHtml(u.enhet)}</em>` : ''}</div>`;
   }
   /* Vägen till svaret — och på en uppgift med deluppgifter ÄR den svaret:
      `vag` bär «a) …», «b) …» med sin poäng (plan.js franProv). */
   const losvag = u => (u.vag && u.vag.length
-    ? `<ul class="lovag">${u.vag.map(s => `<li><span class="losteg">${mat(s[0])}<em>${esc(s[1])}</em></span></li>`).join('')}</ul>`
+    ? `<ul class="lovag">${u.vag.map(s => `<li><span class="losteg">${matBryt(s[0])}<em>${esc(s[1])}</em></span></li>`).join('')}</ul>`
     : '');
 
   /* ── POÄNGTRAPPAN ──
@@ -840,10 +909,23 @@ window.BladBygg = (() => {
     if (!rader.length) trappsteg(u.bed).forEach(r => rader.push(r));
     return rader;
   }
-  const trappaHtml = rader => (rader.length
-    ? `<ul class="lotrappa">${rader.map(r => `<li${r.niva ? '' : ' data-not'}>${
-      r.niva ? `<i>${esc(r.niva)}</i>` : '<i></i>'}<span>${mat(r.krav)}</span></li>`).join('')}</ul>`
-    : '');
+  /* ── NOTRADEN TRYCKS INTE ──
+     «Vanligt fel»-raden bär ingen poäng, och läraren om prov 40 (2026-09-06):
+     «detta med vanliga fel kan vi ta bort helt och hållet så att vi sparar
+     plats». Bedömningsanvisningen ska visa vad som GER poäng, en rad per
+     poäng, och notraden tog en rad till utan att svara på den frågan.
+
+     Filtreringen görs HÄR och inte i trappsteg: parsern läser fortfarande
+     kommaformen som de gamla dokumenten i basen bär, och de raderna finns kvar
+     i JSON:en. Det är sättningen som väljer bort dem, alltså går det att ta
+     tillbaka utan att röra ett enda papper. */
+  const trappaHtml = rader0 => {
+    const rader = rader0.filter(r => r.niva);
+    return rader.length
+      ? `<ul class="lotrappa">${rader.map(r => `<li><i>${esc(r.niva)}</i><span>${
+        mat(r.krav)}</span></li>`).join('')}</ul>`
+      : '';
+  };
   const BOKSTAVER = 'abcdefghijkl';
 
   /* ══════════ BEDÖMNINGSTABELLEN ══════════
@@ -901,7 +983,7 @@ window.BladBygg = (() => {
     if (beddel.length) {
       beddel.forEach((b, k) => rader.push({
         facit: true, etikett: `Facit ${BOKSTAVER[k] || k + 1}) · full pott`,
-        vanster: `<div class="lobedfacit">${mat((vag[k] || [])[0] || '')}${
+        vanster: `<div class="lobedfacit">${matBryt((vag[k] || [])[0] || '')}${
           (vag[k] || [])[1] ? `<em>${esc(vag[k][1])}</em>` : ''}</div>`,
         hoger: trappaHtml(trappsteg(b)) }));
     } else {
@@ -927,8 +1009,11 @@ window.BladBygg = (() => {
       }
       rader.push({
         utan: !total, etikett: `${total} p`,
+        /* Elevens rader är det som fick scrollbaren: bedömningspasset skriver
+           «$A(15) = 120 - 4 \cdot 15 = 120 - 60 = 60$» som EN formel. matBryt
+           delar den vid likhetstecknen så att raden kan brytas i spalten. */
         vanster: `<div class="loskann">${skrivna.map(
-          r => `<div class="loskannrad">${mat(r)}</div>`).join('')}</div>`,
+          r => `<div class="loskannrad">${matBryt(r)}</div>`).join('')}</div>`,
         hoger: (total ? trappaHtml(fickrader(alla, poang))
           : '<p class="lobedinga">Inga poäng</p>')
           + (dom ? `<p class="lobedvarfor">${mat(dom)}</p>` : '') });

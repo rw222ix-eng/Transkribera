@@ -529,12 +529,19 @@ def test_poangtrappan_syns_pa_facit():
 def test_trappan_tar_ocksa_de_gamla_dokumentens_enradare():
     """Proven i basen skrev hela trappan på en rad med komman. De skrivs ut i
     morgon och ska visa samma trappa (spegel av exam_spec.bedomningsrader).
-    Notraden — det väntade felet — bär ingen poäng och sätts för sig."""
+
+    Notraden trycks INTE. Läraren om prov 40 (2026-09-06): «detta med vanliga
+    fel kan vi ta bort helt och hållet så att vi sparar plats». Parsern läser
+    den fortfarande, raden står kvar i de gamla dokumentens JSON, men
+    sättningen väljer bort den, så bedömningsanvisningen bär bara rader som ger
+    poäng."""
     html = _losark([_uppg(p=2, f="$x = 4$",
                           bed="+1 C tecknar ekvationen, +1 C löser ut $x$; "
                               "vanligt fel: minskningen delas med 5")])
     assert html.count("+1 C</i>") == 2
-    assert "data-not" in html and "Vanligt fel" in html
+    assert "tecknar ekvationen" in html
+    assert "data-not" not in html
+    assert "Vanligt fel" not in html and "vanligt fel" not in html
 
 
 def test_deluppgifternas_trappor_far_var_sin_facitrad():
@@ -589,6 +596,43 @@ def test_elevraden_far_de_trappsteg_den_faktiskt_fick():
     assert facit.count("+1 E</i>") == 1 and facit.count("+1 C</i>") == 2
     assert elev.count("+1 E</i>") == 1 and elev.count("+1 C</i>") == 0
     assert '<p class="lobedvarfor">tecknar men stannar</p>' in elev
+
+
+def test_elevens_harledning_delas_vid_likhetstecknen():
+    """Läraren om prov 40 (2026-09-06): elevlösningen fick en vågrät
+    rullningslist i cellen, «ser jättefult ut».
+
+    Modellen skriver hela härledningen i ETT dollarpar, och `.mat` är
+    white-space:nowrap (matte.css) medan matte.js dessutom lägger `\\sf` framför
+    hela uttrycket, så KaTeX ger en enda oböjlig låda som inte går att bryta.
+    blad-bygg matBryt delar den vid likhetstecknen på toppnivå och lägger
+    `<wbr>` emellan, så att raden kan brytas i spalten. Likhetstecknet INLEDER
+    nästa led: det är så ledet läses."""
+    html = _losark([_uppg(p=2, f="$A(15) = 60$", ut="rakna",
+                          bed="+2 E räknar",
+                          elever=[{"etikett": "2 p", "partier": [
+                              {"rader": ["$A(15) = 120 - 4 \\cdot 15 "
+                                         "= 120 - 60 = 60$"],
+                               "poang": [2, 0, 0], "dom": "rätt"}]}])],
+                   delB=0)
+    rad = html.split('<div class="loskannrad">')[1].split("</div>")[0]
+    assert rad.count('class="mat"') == 4, "härledningen delades inte i led"
+    assert rad.count("<wbr>") == 3, "utan wbr finns ingen plats att bryta på"
+    assert 'data-tex="A(15) "' in rad
+    assert 'data-tex="= 120 - 60 "' in rad
+    # Korta uttryck rörs inte. En delad «$x = 4$» vore två lådor där en räcker.
+    kort = _losark([_uppg(p=2, f="$x = 4$", bed="+1 E räknar")])
+    assert "<wbr>" not in kort
+
+
+def test_bedomningens_facitrad_bryter_ocksa():
+    """Samma cell, samma spalt: facitraden överst i bedömningstabellen bar
+    också hela lösningen i ett dollarpar, och den är lika oböjlig som elevens.
+    Deluppgifternas väg (`vag`) går genom samma delning."""
+    html = _losark([_uppg(p=2, f="", vag=[
+        ["a) $A(15) = 120 - 4 \\cdot 15 = 120 - 60 = 60$", "2 p"]])])
+    facit = html.split('<div class="lobedfacit">')[1].split("</div>")[0]
+    assert facit.count("<wbr>") == 3
 
 
 def test_facitraden_star_ensam_nar_elevexempel_saknas():
