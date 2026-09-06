@@ -32,6 +32,8 @@ import time
 from pathlib import Path
 from typing import Callable
 
+from app import debug_log
+
 # Statusen frågas ofta (varje vy som visar «Var arbetet körs»), och varje fråga
 # startar en nodeprocess. Ett kort minne räcker för att det ska kännas direkt.
 _STATUS_CACHE: dict = {"tid": 0.0, "varde": None}
@@ -519,7 +521,18 @@ def generate(prompt: str, *, system: str | None = None,
     if fel:
         raise RuntimeError(fel)
     if proc.returncode not in (0, None) and not delar:
-        raise RuntimeError("".join(stderr_delar).strip()[-400:] or
+        besked = "".join(stderr_delar).strip()[-400:]
+        # SCHEMAT SOM FÖLL LOGGAS I SIN HELHET. 2026-09-06 nekade CLI:n ett
+        # arbetsblad med «unknown keyword: "0"» (ett schema som är en lista
+        # där ett objekt väntas), och ingen rekonstruktion utanför servern gav
+        # samma schema. Beskedet ovan säger bara VAD ajv ogillade, aldrig var;
+        # utan raden här går felet inte att hitta annat än genom att gissa
+        # begäran. Loggen tål 30 000 tecken, det är kommandoradens tak.
+        if schema is not None and "JSON Schema" in besked:
+            debug_log.get_logger().error(
+                "CLI:n nekade schemat: %s SCHEMA: %s", besked,
+                json.dumps(schema, ensure_ascii=False, separators=(",", ":")))
+        raise RuntimeError(besked or
                            f"Claude Code avslutades med kod {proc.returncode}.")
     return "".join(delar).strip()
 
