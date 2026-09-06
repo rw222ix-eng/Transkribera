@@ -1043,3 +1043,72 @@ def test_trasig_planering_ar_inget_lage_alls(tmp_path):
                  ("trasig", "2026-08-17T10:00:00", "{inte json"))
     conn.commit()
     assert db.get_planering(conn, "trasig") is None
+
+
+# ───────────────── lärarens skärpning av E-gränsen (v30) ─────────────────
+
+def test_v30_e_extra_kolumn_och_rollback(tmp_path):
+    """Kolumnen är ADDITIV: NULL betyder «NP:s tal orört», och den dokumenterade
+    rollbacken är att lämna kolumnen kvar och backa user_version."""
+    conn = _conn(tmp_path)
+    kolumner = {r[1] for r in conn.execute("PRAGMA table_info(exams)")}
+    assert "e_extra" in kolumner
+    cid = db.get_or_create_course(conn, "Ma1c")
+    utan = db.create_exam(conn, exam=_mini_exam(), course_id=cid)
+    assert utan["e_extra"] is None
+    med = db.create_exam(conn, exam=_mini_exam(), course_id=cid, e_extra=2)
+    assert med["e_extra"] == 2
+    # Rollbacken: kolumnen lämnas, versionen backas, och migreringen kör om
+    # utan att falla på att kolumnen redan finns.
+    conn.executescript("PRAGMA user_version=29;")
+    conn.commit()
+    db._apply_migrations(conn)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
+    assert db.get_exam(conn, med["id"])["e_extra"] == 2
+
+
+def test_satt_dokument_granser_traffar_bara_provets_egna_papper(tmp_path):
+    """Skärmens papper och PDF:en är två avbildningar av samma prov, och båda
+    bär gränserna. Flyttas E-gränsen måste dokumentet följa med. Annars säger
+    förhandsvisningen ett tal och den utskrivna PDF:en ett annat.
+
+    Ett papper UTAN gränser rörs inte: det är skrivet före stämpeln, och
+    blad.js tar då bort betygstabellen hellre än att fylla den med tal appen
+    hittat på."""
+    conn = _conn(tmp_path)
+    gamla = {"total": 20, "E": {"minst": 6}, "C": {"minst": 11, "varav_ca": 4},
+             "A": {"minst": 16, "varav_a": 3}, "regel": "gammal"}
+    provet = db.create_dokument(
+        conn, dokument={"typ": "Prov", "provId": 7, "granser": gamla})
+    bladet = db.create_dokument(
+        conn, dokument={"typ": "Prov", "provId": 7, "losningsblad": True,
+                        "granser": gamla})
+    utan = db.create_dokument(
+        conn, dokument={"typ": "Prov", "provId": 7})
+    annat = db.create_dokument(
+        conn, dokument={"typ": "Prov", "provId": 8, "granser": gamla})
+    nya = dict(gamla, E={"minst": 8, "extra": 2}, regel="ny")
+    rorda = db.satt_dokument_granser(conn, 7, nya)
+    assert set(rorda) == {provet["id"], bladet["id"]}
+    for i in rorda:
+        assert db.get_dokument(conn, i)["dokument"]["granser"]["E"]["minst"] == 8
+    assert "granser" not in db.get_dokument(conn, utan["id"])["dokument"]
+    assert db.get_dokument(
+        conn, annat["id"])["dokument"]["granser"]["E"]["minst"] == 6
+
+
+def test_stampla_granser_skrivs_over_bara_pa_begaran(tmp_path):
+    """Regeln «ett skrivet prov äger sina gränser» skyddar pappret mot att
+    APPEN ändrar sig. Läraren är undantaget, och hon måste be om det."""
+    conn = _conn(tmp_path)
+    cid = db.get_or_create_course(conn, "Ma1c")
+    ex = db.create_exam(conn, exam=_mini_exam(), course_id=cid)
+    ver = ex["current_version"]
+    forst = {"total": 20, "E": {"minst": 6}, "C": {"minst": 11, "varav_ca": 4},
+             "A": {"minst": 16, "varav_a": 3}, "regel": "först"}
+    db.stampla_exam_granser(conn, ex["id"], ver, forst)
+    sedan = dict(forst, E={"minst": 8, "extra": 2}, regel="sedan")
+    db.stampla_exam_granser(conn, ex["id"], ver, sedan)
+    assert db.get_exam(conn, ex["id"])["exam"]["granser"]["E"]["minst"] == 6
+    db.stampla_exam_granser(conn, ex["id"], ver, sedan, skriv_over=True)
+    assert db.get_exam(conn, ex["id"])["exam"]["granser"]["E"]["minst"] == 8

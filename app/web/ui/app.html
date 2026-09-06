@@ -1456,6 +1456,17 @@
          läraren nästan alltid vill är mindre än så: rätta en siffra i uppgift
          3 på det papper som redan finns. -->
     <p class="fhlast" id="fh-last">Godkänt är låst — pappret skrivs inte om mer. <b>Fortsätt ändra</b> lägger tillbaka det som utkast, och då går det att ändra i canvas och godkänna på nytt.</p>
+    <!-- E-gränsen efter rättningen. Valet finns i planeringen innan provet
+         skrivs, men det är efter en rättad klass läraren ser att sju poäng var
+         för lågt. Knapparna flyttar talet inom NP-modellens gräns ... gränsen
+         plus tre, och servern bygger om PDF:en ur de artefakter som redan
+         ligger på disk (PATCH /api/exams/{id}/granser). -->
+    <p class="fhegrans" id="fh-egrans" hidden>
+      <span>E-gräns: <b id="fh-egrans-tal"></b></span>
+      <button class="ghost liten" id="fh-egrans-ner" type="button" aria-label="Sänk E-gränsen ett poäng">&minus;</button>
+      <button class="ghost liten" id="fh-egrans-upp" type="button" aria-label="Höj E-gränsen ett poäng">+</button>
+      <span class="fhegransnot" id="fh-egrans-not"></span>
+    </p>
     <div class="fhfot">
       <button class="primar" id="fh-oppna" type="button">Bygg vidare på den här</button>
       <button class="ghost" id="fh-fortsatt" type="button">Fortsätt ändra</button>

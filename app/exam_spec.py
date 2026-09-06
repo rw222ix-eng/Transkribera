@@ -1443,29 +1443,182 @@ KRAV_DEFAULT = {
     "d_varav_ca": 0.1875,  # ... varav minst 19 % av C+A-poängen (NP: 6/32)
     "b_andel": 0.68,       # B: minst 68 % av totalpoängen (NP: 67 %/69 %) ...
     "b_varav_a": 0.30,     # ... varav minst 30 % av A-poängen (NP: 4/13, 4/12)
+
+    # ── LÄRARENS SKÄRPNING AV E ──
+    # «Göra kravet för godkänt betyg mer strängt med kanske upp till tre poäng
+    # mer för att få E.» Poäng som läggs på E-gränsen EFTER avrundningen, alltså
+    # ovanpå NP-modellens tal och aldrig i stället för det: gränsen kan bara bli
+    # strängare, aldrig svagare. Noll är förvalet och betyder «NP:s tal, orört».
+    #
+    # Bara E. Läraren pekade på godkäntgränsen och ingenting annat, och C och A
+    # står kvar på NP:s modell. D (mellanbetyget, bara räknat) höjs inte heller
+    # Höjs E utan att D följer med krymper D-spannet, och det är precis den
+    # skärpning läraren bad om.
+    "e_extra": 0,
+}
+
+# ══ KURSENS EGNA GRÄNSER ══════════════════════════════════════════════════
+# KRAV_DEFAULT ovan är Ma 2a:s, och den var EN regel för alla kurser. Läraren
+# skrev ett prov i Ma 1c på 26 poäng (8 E, 11 C, 7 A) och fick E 7, C 15, A 21.
+# NP i Ma 1c ger lägre gränser än NP i Ma 2a på samma poängsumma, och skälet är
+# inte godtycke: c-spåret lägger 30 % av poängen på E-nivå mot a-spårets 40 %
+# (niva_rubrik.NP_FORDELNING_PER_KURS), så samma andel av totalen betyder inte
+# samma prestation. Ett Ma 1c-prov som säger «NP-modellen» och trycker Ma 2a:s
+# procentsatser kräver mer av eleven än det nationella provet gör.
+#
+# ══ MÄTNINGEN, 2026-09-06 ══
+# Samma metod som 2a-kalibreringen: gränserna är LÄSTA, inte valda. Kurs 1:s
+# tal står på sidan «Kravgränser» i Delprov B-häftet och poängsummorna per nivå
+# i bedömningsanvisningarnas kapitel 4 («Detta prov kan ge maximalt N poäng
+# fördelade på …»). Kurs 2 bär båda på provhäftets sida 1. Ingen andel är
+# härledd ur NP_FORDELNING_PER_KURS. Varje summa är avläst ur sitt eget prov.
+#
+#   kurs  termin  total  E/C/A-poäng   E    D (varav C+)  C (varav C+)  B (varav A)  A (varav A)
+#   1a    vt17     76     33/27/16     18    30 (8)        40 (15)       51 (5)       60 (9)
+#   1a    vt22     66     25/25/16     14    26 (9)        34 (14)       44 (4)       51 (8)
+#   1b    vt22     67     23/26/18     14    25 (9)        33 (14)       43 (6)       51 (10)
+#   1c    vt17     87     26/37/24     19    32 (12)       43 (22)       55 (7)       66 (13)
+#   1c    vt22     70     21/30/19     14    27 (12)       35 (18)       46 (6)       55 (11)
+#   2a    vt17     55     23/19/13     14    22 (6)        29 (11)       37 (4)       43 (6)
+#   2a    vt18     55     22/20/13     14    23 (7)        30 (12)       38 (4)       44 (7)
+#   2a    vt22     55     23/20/12     15    23 (6)        30 (11)       38 (4)       44 (7)
+#   2c    vt18     57     20/20/17     13    22 (7)        29 (12)       37 (5)       44 (9)
+#   2c    vt22     58     21/20/17     14    22 (6)        29 (11)       38 (5)       45 (9)
+#
+# PRINCIPEN ÄR 2a:S, oförändrad: 0 ≤ appens gräns − NP:s gräns ≤ 1, för varje
+# årgång och varje gräns. En gräns UNDER NP:s delar ut ett betyg NP inte hade
+# gett; en ett poäng över är strängare och går att försvara för en elev. Låst i
+# tests/test_exam.py::test_kurskalibreringen_ligger_aldrig_under_np.
+#
+# 2a står kvar på KRAV_DEFAULT: talen där klarar även vt18, som inte fanns med
+# i den ursprungliga mätningen. Kurser UTAN läst prov (3c, 4, 5) faller tillbaka
+# på 2a, samma svar som niva_rubrik ger. Den gissar inte heller.
+#
+# ══ TVÅ CELLER SOM INTE GÅR ATT TRÄFFA ══
+# I Ma 1c kan ingen fast procentsats klara ±1 på både vt17 och vt22 för
+# `a_andel` och `d_varav_ca`. Det är räknat och inte gissat:
+#
+#   a_andel:    vt17 kräver x ≤ 67/87 = 0,7701 för att ligga högst +1;
+#               vt22 kräver x > 54/70 = 0,7714 för att inte ligga UNDER.
+#   d_varav_ca: vt22 kräver x > 11/49 = 0,2245; då blir vt17 ceil(0,2245·61)
+#               = 14 mot NP:s 12.
+#
+# Spannen är tomma. Då väljer principen sida som den alltid gjort: aldrig
+# under. Båda cellerna landar +2 på vt17 och exakt rätt på vt22, och det är den
+# MINSTA avvikelsen som finns när «aldrig under» hålls. Att 2017 är det prov
+# som får ta smällen är inte slump. Det är 87 poäng i fyra delprov med
+# digitala verktyg redan i delprov C, en annan provkonstruktion än den appen
+# bygger (samma prov som niva_rubrik utelämnar ur sitt räknarfria band).
+KRAV_PER_KURS: dict[str, dict[str, float]] = {
+    # E 0,224 (NP 18/76 och 14/66); C 52 % varav 34 % av C+A; A 78 % varav 52 %
+    # av A-poängen. D 39 % varav 20 %; B 66 % varav 30 %.
+    "1a": {"e_andel": 0.224, "c_andel": 0.52, "c_varav_ca": 0.34,
+           "a_andel": 0.78, "a_varav_a": 0.52,
+           "d_andel": 0.39, "d_varav_ca": 0.20,
+           "b_andel": 0.66, "b_varav_a": 0.30},
+    # EN årgång (vt22). Alla nio talen träffar NP exakt, och det är svagare
+    # belagt än de andra kurserna: med ett prov finns inget spann att välja i.
+    # 1b är ändå med av samma skäl som i niva_rubrik: den är kontrollpunkten
+    # mellan a- och c-spåret, och en kurs läraren en dag kan få.
+    "1b": {"e_andel": 0.20, "c_andel": 0.48, "c_varav_ca": 0.30,
+           "a_andel": 0.75, "a_varav_a": 0.52,
+           "d_andel": 0.36, "d_varav_ca": 0.1875,
+           "b_andel": 0.63, "b_varav_a": 0.30},
+    # LÄRARENS KURS, den som utlöste hela mätningen. E 21 % (NP 19/87, 14/70)
+    # mot 2a:s 26. På ett prov om 26 poäng blir det 6 i stället för 7.
+    # a_andel och d_varav_ca ligger +2 på vt17, se resonemanget ovan.
+    "1c": {"e_andel": 0.21, "c_andel": 0.49, "c_varav_ca": 0.35,
+           "a_andel": 0.78, "a_varav_a": 0.53,
+           "d_andel": 0.372, "d_varav_ca": 0.225,
+           "b_andel": 0.643, "b_varav_a": 0.27},
+    # KRAV_DEFAULT:s egna tal, upprepade här så tabellen är fullständig. En
+    # kurs som saknas i tabellen och en kurs som råkar ha defaultens tal ska
+    # inte se likadana ut för den som läser.
+    "2a": {"e_andel": 0.26, "c_andel": 0.54, "c_varav_ca": 0.34,
+           "a_andel": 0.79, "a_varav_a": 0.52,
+           "d_andel": 0.41, "d_varav_ca": 0.1875,
+           "b_andel": 0.68, "b_varav_a": 0.30},
+    "2c": {"e_andel": 0.23, "c_andel": 0.50, "c_varav_ca": 0.30,
+           "a_andel": 0.76, "a_varav_a": 0.52,
+           "d_andel": 0.37, "d_varav_ca": 0.1875,
+           "b_andel": 0.64, "b_varav_a": 0.24},
 }
 
 
-def kravgranser_ur_summor(summor: dict, config: dict | None = None) -> dict:
+def kravkonfig(kurs: str = "", config: dict | None = None) -> dict:
+    """Den kravkonfiguration som gäller för `kurs`, med anroparens tillägg överst.
+
+    Ordningen är en rangordning: KRAV_DEFAULT (2a:s mätning) i botten, kursens
+    egen tabell ovanpå den, och `config`, ett uttryckligt val i anropet som
+    lärarens `e_extra`, allra överst. Okänd kurs betyder KRAV_DEFAULT och
+    ingenting annat; att gissa närmaste kurs vore att hitta på en mätning."""
+    return {**KRAV_DEFAULT,
+            **KRAV_PER_KURS.get(niva_rubrik.kursnyckel(kurs or "") or "", {}),
+            **(config or {})}
+
+
+def kursetikett(kurs: str = "") -> str:
+    """«Ma 1c» ur kursnamnet, eller «Ma 2a» när kursen inte går att läsa.
+
+    Regeltexten på försättsbladet och i bedömningsanvisningen ska säga VILKEN
+    kurs modellen är mätt på. Går kursen inte att läsa är svaret 2a, för det
+    ÄR talen som används då, och en regel som tiger om sin källa är samma sak
+    som en regel utan källa."""
+    return f"Ma {niva_rubrik.kursnyckel(kurs or '') or '2a'}"
+
+
+def e_skarpning(config: dict | None = None) -> int:
+    """Lärarens skärpning av E-gränsen, klämd till 0..3 poäng.
+
+    Klämd och inte validerad: talet kommer från en väljare i planeringen och
+    kan komma från en gammal klient, ett API-anrop eller en rad i basen som
+    skrevs innan taket fanns. Ett orimligt tal ska ge NP:s gräns eller taket,
+    aldrig ett undantag mitt i ett godkännande."""
+    try:
+        return max(0, min(3, int((config or {}).get("e_extra") or 0)))
+    except (TypeError, ValueError):
+        return 0
+
+
+def kravgranser_ur_summor(summor: dict, config: dict | None = None,
+                          kurs: str = "") -> dict:
     """Kravgränserna ur färdiga poängsummor ({total, e, c, a}).
 
     Bruten ur :func:`kravgranser` när elevens betyg kom till (app/rattning.py):
     rättningens rader bär samma poängbärande enheter som poangsummor räknar,
     men inget ExamDoc — och ett prov vars gränser räknas på två ställen får
-    förr eller senare två kravgränser."""
-    cfg = {**KRAV_DEFAULT, **(config or {})}
+    förr eller senare två kravgränser.
+
+    `kurs` väljer kursens egen mätning (KRAV_PER_KURS). Tom sträng betyder
+    KRAV_DEFAULT, alltså Ma 2a:s tal, och det är vad appen gjorde för alla
+    kurser före 2026-09-06."""
+    cfg = kravkonfig(kurs, config)
+    etikett = kursetikett(kurs)
     total = int(summor.get("total") or 0)
     ca = int(summor.get("c") or 0) + int(summor.get("a") or 0)
     a = int(summor.get("a") or 0)
+    # Skärpningen läggs på EFTER avrundningen: den är lärarens poäng ovanpå
+    # NP:s tal, inte en procentsats som ska rundas med. Taket är provets egen
+    # totalpoäng. En E-gräns över maxpoängen är ingen skärpning, den är ett
+    # prov ingen kan bli godkänd på.
+    regelns_e = math.ceil(total * cfg["e_andel"])
+    extra = min(e_skarpning(cfg), max(total - regelns_e, 0))
+    e_minst = regelns_e + extra
     granser = {
         "total": total,
-        "E": {"minst": math.ceil(total * cfg["e_andel"])},
+        # `extra` står med bara när den är satt: en stämplad gräns ska kunna
+        # säga VARFÖR den ligger över regelns tal, och ett papper utan
+        # skärpning ska se ut precis som det gjorde före väljaren.
+        "E": {"minst": e_minst, **({"extra": extra} if extra else {})},
         "C": {"minst": math.ceil(total * cfg["c_andel"]),
               "varav_ca": math.ceil(ca * cfg["c_varav_ca"])},
         "A": {"minst": math.ceil(total * cfg["a_andel"]),
               "varav_a": math.ceil(a * cfg["a_varav_a"])},
         "regel": (
-            f"E: minst {cfg['e_andel']:.0%} av totalpoängen. "
+            f"NP-modellen för {etikett}. "
+            f"E: minst {cfg['e_andel']:.0%} av totalpoängen"
+            + (f", plus lärarens skärpning på {extra} p" if extra else "")
+            + ". "
             f"C: minst {cfg['c_andel']:.0%} av totalpoängen, varav minst "
             f"{cfg['c_varav_ca']:.0%} av C- och A-poängen. "
             f"A: minst {cfg['a_andel']:.0%} av totalpoängen, varav minst "
@@ -1509,7 +1662,7 @@ def giltiga_granser(granser, total: int) -> bool:
 
 
 def kravgranser(doc: ExamDoc, config: dict | None = None,
-                papper: dict | None = None) -> dict:
+                papper: dict | None = None, kurs: str | None = None) -> dict:
     """Kravgränser för E/C/A — provets egna om det bär några.
 
     Ordningen är en rangordning i tid, och den finns för att ett SKRIVET prov
@@ -1525,7 +1678,9 @@ def kravgranser(doc: ExamDoc, config: dict | None = None,
        ha tryckts om med andra gränser än det skrevs med.
 
     `config` gäller bara steg 3: sparade gränser är tal, inte en regel att
-    räkna om."""
+    räkna om. Detsamma för `kurs`, som styr vilken NP-mätning steg 3 använder
+    (KRAV_PER_KURS). None betyder dokumentets egen kurs, vilket är svaret i
+    alla anrop utom de som prövar en annan kurs mot samma papper."""
     summor = poangsummor(doc)
     total = int(summor.get("total") or 0)
     egna = getattr(doc, "granser", None)
@@ -1541,7 +1696,8 @@ def kravgranser(doc: ExamDoc, config: dict | None = None,
         _LOG.info("«%s» bär inga sparade kravgränser — räknas ur KRAV_DEFAULT "
                   "(%d p). Ett gammalt papper kan ha skrivits med andra.",
                   doc.titel, total)
-    return kravgranser_ur_summor(summor, config)
+    return kravgranser_ur_summor(
+        summor, config, doc.kurs if kurs is None else kurs)
 
 
 # Karaktärsmix per profil: hur stor andel av UPPGIFTERNA som ska vara E-, C-

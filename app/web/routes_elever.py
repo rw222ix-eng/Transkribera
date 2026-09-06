@@ -56,9 +56,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
             gid = db.get_or_create_group(conn, papper.get("klass") or "")
             # Pappret egna `granser` går före: ett prov som redan skrivits har
             # sina gränser, och en kalibrering av regeln får inte räkna om
-            # betyg i efterhand (rattning.granser).
+            # betyg i efterhand (rattning.granser). Saknas de räknas de ur
+            # KURSENS mätning: ett Ma 1c-prov mot Ma 1c:s NP, aldrig mot 2a:s.
             return (papper, rader,
-                    rattning.granser(rader, sparade=papper.get("granser")),
+                    rattning.granser(rader, sparade=papper.get("granser"),
+                                     kurs=papper.get("kurs") or ""),
                     gid)
         finally:
             conn.close()

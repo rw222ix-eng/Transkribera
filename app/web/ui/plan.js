@@ -300,6 +300,22 @@
         vidMax: 'Tjugo är appens tak. Fler går att skriva men blir sällan ett '
                 + 'prov som hinns med på en lektion.' },
       { id: 'nivamix', namn: 'Poängnivåer', typ: 'seg', val: ['Bara E', 'E-tyngd', 'Balanserat', 'C/A-tyngd'] },
+      /* ── Skärpt godkäntgräns ────────────────────────────
+         Lärarens ord: «göra kravet för godkänt betyg mer strängt med kanske
+         upp till tre poäng mer för att få E». Poängen läggs ovanpå
+         NP-modellens E-gräns (exam_spec.e_skarpning), efter avrundningen,
+         och rör varken C, A eller D. Noll är förvalet och betyder att NP:s
+         tal står orört. Då skickas fältet inte alls, precis som med
+         «Poängnivåer», så en orörd panel ger samma begäran som förut.
+
+         Taket är tre och det är LÄRARENS, inte en mätning: fyra poäng på
+         ett prov om tjugosex är en tiondel av provet, och då är det inte
+         längre NP-modellen som gäller utan en annan regel utan källa.
+         Talet går att ändra efteråt på ett godkänt prov, i
+         förhandsvisningen (PATCH /api/exams/{id}/granser). */
+      { id: 'eextra', namn: 'Skärpt E-gräns', typ: 'antal', min: 0, max: 3,
+        vidMin: 'Noll betyder NP-modellens gräns, orörd.',
+        vidMax: 'Tre poäng är taket. Mer än så är inte längre NP-modellen.' },
       /* Del A är utan digitala hjälpmedel, del B med räknare och GeoGebra.
          Skillnaden är hjälpmedlen — båda delarna bär korta svar och uppgifter
          som redovisas på lösblad. */
@@ -396,7 +412,7 @@
        kunna dra den mot NP:s 4,4 för ett tyngre prov eller mot sin gamla 2,4
        för ett tätare, och valet ska följa med dokumentet så att ett prov går
        att förstå ett halvår senare. */
-    Prov: { nar: 'På lektionen', narDatum: '', narTid: '08:15', provminuter: 90, provtid: '90 min', antal: 6, nivamix: 'Balanserat', delprov: 'Del A + Del B', losningar: true, formelblad: true, takt: 3.5 },
+    Prov: { nar: 'På lektionen', narDatum: '', narTid: '08:15', provminuter: 90, provtid: '90 min', antal: 6, nivamix: 'Balanserat', eextra: 0, delprov: 'Del A + Del B', losningar: true, formelblad: true, takt: 3.5 },
     Arbetsblad: { antal: 3, niva: 'Blandat', facit: 'Facit i bladet', illustration: true,
                   klassblad: true, elever: [], syfte: 'Stötta' },
     Gruppuppgift: { antal: 4, grupp: 3, langd: 60, redovisning: 'Muntligt', illustration: true,
@@ -2925,6 +2941,10 @@
            inte står i defaultläget: en orörd väljare ska ge exakt samma
            begäran som före fältet, annars ryker kassetterna. */
         ...(i0.nivamix && i0.nivamix !== 'Balanserat' ? { nivamix: i0.nivamix } : {}),
+        /* Skärpningen av E följer samma regel som nivåvalet: bara när den
+           är satt. Noll ÄR defaultläget, och en orörd väljare ska ge exakt
+           samma kropp som före fältet. */
+        ...(Number(i0.eextra) ? { e_extra: Number(i0.eextra) } : {}),
         ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(), ...u,
       }, { signal, log })).then(kravDone).then(r => {
         if (!r.exam) throw new Error('Provet gick inte att skriva den här gången. Försök igen.');
@@ -5112,6 +5132,7 @@
     const kanAndras = !v.losningsblad;
     if ($('#fh-fortsatt')) $('#fh-fortsatt').hidden = !kanAndras;
     if ($('#fh-last')) $('#fh-last').hidden = !kanAndras;
+    ritaEgrans(v);
     ritaIn($('#fh-ark'), v);
     fhskal.hidden = false;
     requestAnimationFrame(() => fhskal.setAttribute('data-pa', ''));
@@ -5128,6 +5149,72 @@
     speglaExamen(v).then(bytt => {
       if (bytt && fhIndex === i && !fhskal.hidden) ritaIn($('#fh-ark'), v);
     });
+  }
+  /* ── E-GRÄNSEN PÅ ETT GODKÄNT PROV ────────────────────
+     «Göra kravet för godkänt betyg mer strängt.» Valet finns i panelen
+     innan provet skrivs, men det är ju EFTER rättningen läraren ser att
+     sju poäng var för lågt. Då ska talet gå att flytta utan att pappret
+     skrivs om: rutten stämplar om gränserna, bygger om PDF:en ur de
+     artefakter som redan ligger på disk och svarar med de nya talen.
+
+     Spannet är regelns tal … regelns tal + 3, det som väljaren erbjuder.
+     Golvet är NP-modellens gräns och går inte att gå under. En E-gräns
+     UNDER nationella provets är inte en skärpning, och den ska inte
+     finnas bakom två knapptryck i en förhandsvisning.
+
+     Raden syns bara på det den gäller: ett godkänt PROV med gränser, på
+     servern. Lösningsbladet är en klon och har ingen egen betygstabell
+     att flytta. */
+  const egransBas = v => {
+    const g = v && v.granser;
+    if (!g || !g.E || g.E.minst == null) return null;
+    return Number(g.E.minst) - Number(g.E.extra || 0);
+  };
+  function ritaEgrans(v) {
+    const rad = $('#fh-egrans');
+    if (!rad) return;
+    const bas = egransBas(v);
+    const gar = serverPa() && !v.losningsblad && v.typ === 'Prov'
+      && pdfId(v) && bas != null;
+    rad.hidden = !gar;
+    if (!gar) return;
+    const nu = Number(v.granser.E.minst);
+    $('#fh-egrans-tal').textContent = `${nu} p`;
+    /* Talet ensamt säger inte om det är NP:s eller lärarens. */
+    $('#fh-egrans-not').textContent = nu > bas
+      ? `NP-modellen ger ${bas} p, skärpt med ${nu - bas}`
+      : 'NP-modellens gräns';
+    $('#fh-egrans-ner').disabled = nu <= bas;
+    $('#fh-egrans-upp').disabled = nu >= bas + 3;
+  }
+  function flyttaEgrans(steg) {
+    const v = sparat[fhIndex];
+    const bas = egransBas(v);
+    if (!v || bas == null) return;
+    const onskad = Math.max(bas, Math.min(bas + 3,
+      Number(v.granser.E.minst) + steg));
+    if (onskad === Number(v.granser.E.minst)) return;
+    const knappar = [$('#fh-egrans-ner'), $('#fh-egrans-upp')];
+    knappar.forEach(k => { if (k) k.disabled = true; });
+    skicka(`/api/exams/${pdfId(v)}/granser`, 'PATCH', { e_minst: onskad })
+      .then(res => {
+        if (!res || !res.granser) throw new Error('inget svar');
+        /* Ingen dokSpara här: servern skrev redan om dokumentets `granser`
+           i samma anrop (db.satt_dokument_granser). Ett POST till /api/dokument
+           hade lagt en NY rad i högen, samma papper två gånger. */
+        v.granser = res.granser;
+        ritaEgrans(v);
+        /* Arket ritas om: betygstabellen på försättsbladet är det läraren
+           ser, och den ska ändras i samma gest som talet. */
+        ritaIn($('#fh-ark'), v);
+        window.toast && window.toast(res.varning
+          ? `E-gränsen är ${res.e_minst} p. ${res.varning}`
+          : `E-gränsen är ${res.e_minst} p. PDF:en är ombyggd.`);
+      })
+      .catch(() => {
+        ritaEgrans(v);
+        window.toast && window.toast('E-gränsen gick inte att ändra.');
+      });
   }
   function fhStang() {
     if (!fhskal || fhskal.hidden) return;
@@ -5162,6 +5249,10 @@
       if (fhIndex < 0 || !sparat[fhIndex]) return;
       fragaRadera($('.modal', fhskal), sparat[fhIndex], fhStang);
     });
+    $('#fh-egrans-ner') && $('#fh-egrans-ner').addEventListener(
+      'click', () => flyttaEgrans(-1));
+    $('#fh-egrans-upp') && $('#fh-egrans-upp').addEventListener(
+      'click', () => flyttaEgrans(1));
   }
   $('#godkann').addEventListener('click', () => {
     if (nu < 0) return;

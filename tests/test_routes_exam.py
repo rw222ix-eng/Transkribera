@@ -1732,3 +1732,156 @@ def test_refine_mater_mot_dokumentets_nivaval(client, monkeypatch):
     _done(client.post(f"/api/exams/{result2['id']}/refine",
                       json={"message": "kortare"}))
     assert sett["niva_mal"] is None
+
+
+# ────────────────── lärarens skärpning av E-gränsen (v30) ──────────────────
+#
+# «Göra kravet för godkänt betyg mer strängt med kanske upp till tre poäng mer
+# för att få E.» Valet görs i planeringen, stämplas vid godkännandet och går att
+# ändra efteråt på ett godkänt prov utan att pappret skrivs om.
+
+
+def _fejkad_tectonic(monkeypatch, sedda=None):
+    """Tectonic som skriver en fil och kommer ihåg vad den satte.
+
+    Samma mönster som resten av sviten. `sedda` samlar jobbnamn → .tex så att
+    ett test kan läsa vad som FAKTISKT hamnade i provets tabell."""
+    sedda = {} if sedda is None else sedda
+
+    def fake_compile(tex, out_dir, jobname, **kw):
+        sedda[jobname] = tex
+        out_dir.mkdir(parents=True, exist_ok=True)
+        pdf = out_dir / f"{jobname}.pdf"
+        pdf.write_bytes(b"%PDF-1.5 fejk")
+        return pdf, ""
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: True)
+    monkeypatch.setattr(exam_pdf, "compile_pdf", fake_compile)
+    return sedda
+
+
+def _stamplade(client, exam_id):
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    try:
+        vy = appdb.get_exam(conn, exam_id)
+    finally:
+        conn.close()
+    return vy["exam"].get("granser"), vy
+
+
+def test_e_extra_persisteras_och_stamplas_pa_pappret(client, monkeypatch):
+    """Kedjan hela vägen: väljaren i planeringen → exams-raden → stämpeln vid
+    godkännandet → betygstabellen i .tex:en.
+
+    Fixturens prov ger 20 poäng, alltså E ceil(20 · 0,26) = 6. Med tre poängs
+    skärpning är gränsen 9, och F-raden slutar på 8."""
+    result, _ = _make_exam(client, monkeypatch, e_extra=3)
+    assert result["e_extra"] == 3
+    assert result["granser"]["E"]["minst"] == 9
+    assert result["granser"]["E"]["extra"] == 3
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    try:
+        rad = conn.execute("SELECT e_extra FROM exams WHERE id = ?",
+                           (result["id"],)).fetchone()
+    finally:
+        conn.close()
+    assert rad["e_extra"] == 3
+
+    sedda = _fejkad_tectonic(monkeypatch)
+    _done(client.post(f"/api/exams/{result['id']}/approve", json={}))
+    prov = next(t for n, t in sedda.items() if "bedomning" not in n)
+    assert r"0\textendash{}8" in prov and r"9\textendash{}10" in prov
+    granser, _vy = _stamplade(client, result["id"])
+    assert granser["E"] == {"minst": 9, "extra": 3}
+
+
+def test_utan_e_extra_star_np_gransen_orord(client, monkeypatch):
+    """Kassettregeln: en orörd väljare skickar inget fält, och då ska svaret
+    vara bokstavligen det appen gav före väljaren fanns."""
+    result, _ = _make_exam(client, monkeypatch)
+    assert result["e_extra"] == 0
+    assert result["granser"]["E"] == {"minst": 6}
+
+
+def test_patch_granser_flyttar_e_och_bygger_om_pdfen(client, monkeypatch):
+    """Läraren har rättat en klass och sett att sex poäng var för lågt.
+
+    Rutten ska (1) stämpla om gränserna på den aktuella versionen, (2) skriva
+    om dokumentets `granser` så skärmen och PDF:en säger samma sak, och
+    (3) bygga om provet OCH bedömningsanvisningen till samma filer, utan
+    klient, ur de artefakter som redan ligger på disk."""
+    result, _ = _make_exam(client, monkeypatch)
+    sedda = _fejkad_tectonic(monkeypatch)
+    godkant = _done(client.post(f"/api/exams/{result['id']}/approve", json={}))
+    assert godkant["pdf"]
+    stam = {n for n in sedda}
+    sedda.clear()
+
+    r = client.patch(f"/api/exams/{result['id']}/granser", json={"e_minst": 8})
+    assert r.status_code == 200, r.text
+    svar = r.json()
+    assert svar["e_minst"] == 8 and svar["e_extra"] == 2
+    assert svar["regelns_e"] == 6 and svar["varning"] is None
+    assert svar["granser"]["E"] == {"minst": 8, "extra": 2}
+    # C och A rörs inte: skärpningen gäller godkäntgränsen och ingenting annat.
+    assert svar["granser"]["C"]["minst"] == 11
+
+    # SAMMA filer, inte nya bredvid. Annars står läraren med två papper.
+    assert set(sedda) == stam
+    prov = next(t for n, t in sedda.items() if "bedomning" not in n)
+    assert r"0\textendash{}7" in prov and r"8\textendash{}10" in prov
+    bed = next(t for n, t in sedda.items() if "bedomning" in n)
+    assert "E minst 8" in bed
+
+    granser, _vy = _stamplade(client, result["id"])
+    assert granser["E"] == {"minst": 8, "extra": 2}
+    # Och valet ligger kvar på raden: godkänns provet om ska det NYA talet
+    # vara utgångspunkten.
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    try:
+        rad = conn.execute("SELECT e_extra FROM exams WHERE id = ?",
+                           (result["id"],)).fetchone()
+    finally:
+        conn.close()
+    assert rad["e_extra"] == 2
+
+
+def test_patch_granser_klams_till_regelns_spann(client, monkeypatch):
+    """Golvet är NP-modellens gräns och taket tre poäng över. En E-gräns UNDER
+    nationella provets är ingen skärpning, och den ska inte gå att smyga in
+    genom rutten heller."""
+    result, _ = _make_exam(client, monkeypatch)
+    _fejkad_tectonic(monkeypatch)
+    _done(client.post(f"/api/exams/{result['id']}/approve", json={}))
+    lagt = client.patch(f"/api/exams/{result['id']}/granser",
+                        json={"e_minst": 2}).json()
+    assert lagt["e_minst"] == 6 and lagt["e_extra"] == 0
+    hogt = client.patch(f"/api/exams/{result['id']}/granser",
+                        json={"e_minst": 99}).json()
+    assert hogt["e_minst"] == 9 and hogt["e_extra"] == 3
+    # `e_extra` är den andra vägen in och kläms likadant.
+    via_extra = client.patch(f"/api/exams/{result['id']}/granser",
+                             json={"e_extra": 1}).json()
+    assert via_extra["e_minst"] == 7
+
+
+def test_patch_granser_bara_prov_och_bara_kant_papper(client, monkeypatch):
+    """Arbetsbladet har ingen betygstabell att flytta, och ett okänt id är
+    ett 404, inte ett tyst nej."""
+    blad, _ = _make_exam(client, monkeypatch, typ="arbetsblad", delar=False)
+    r = client.patch(f"/api/exams/{blad['id']}/granser", json={"e_minst": 8})
+    assert r.status_code == 400
+    assert client.patch("/api/exams/999999/granser",
+                        json={"e_minst": 8}).status_code == 404
+
+
+def test_patch_granser_kravs_ingen_godkand_pdf(client, monkeypatch):
+    """Ett prov som aldrig kompilerats (PDF-motorn saknades) ska ändå kunna få
+    nya gränser: talen är lärarens, och det som saknas är papper att trycka
+    dem på. Varningen säger vad som inte hände i stället för att ljuga."""
+    result, _ = _make_exam(client, monkeypatch)
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: False)
+    svar = client.patch(f"/api/exams/{result['id']}/granser",
+                        json={"e_minst": 8}).json()
+    assert svar["e_minst"] == 8 and svar["pdf"] is None and svar["varning"]
+    granser, _vy = _stamplade(client, result["id"])
+    assert granser["E"]["minst"] == 8

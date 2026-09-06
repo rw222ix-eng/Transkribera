@@ -297,7 +297,7 @@ def moment_som_foll(rattat: dict | None) -> list[str]:
 # räknandet, finns bara id:n ändå.
 
 def granser(rader: list[dict], config: dict | None = None,
-            sparade: dict | None = None) -> dict:
+            sparade: dict | None = None, kurs: str = "") -> dict:
     """Provets kravgränser, räknade på RADERNA.
 
     Samma regel och samma tal som försättsbladet trycker
@@ -310,7 +310,12 @@ def granser(rader: list[dict], config: dict | None = None,
     kalibrering av KRAV_DEFAULT (NP-kalibreringen 2026-08-22 flyttade C med
     nio procentenheter) räknat om betygen på prov klassen redan skrivit — och
     en elev som fick C i maj hade blivit E i juni utan att någon rört hennes
-    papper. Nya dokument får de nya gränserna; gamla behåller sina."""
+    papper. Nya dokument får de nya gränserna; gamla behåller sina.
+
+    `kurs` väljer kursens egen NP-mätning (exam_spec.KRAV_PER_KURS) och gäller
+    bara när pappret INTE bär egna gränser. Annars räknades ett Ma 1c-prov
+    utan stämpel mot Ma 2a:s tal, och rättningen hade satt ett annat betyg än
+    försättsbladet lovade."""
     e = c = a = 0
     for r in rader or []:
         if r.get("grupp"):
@@ -319,7 +324,7 @@ def granser(rader: list[dict], config: dict | None = None,
         e, c, a = e + int(p[0]), c + int(p[1]), a + int(p[2])
     grund = (dict(sparade) if exam_spec.giltiga_granser(sparade, e + c + a)
              else exam_spec.kravgranser_ur_summor(
-                 {"total": e + c + a, "e": e, "c": c, "a": a}, config))
+                 {"total": e + c + a, "e": e, "c": c, "a": a}, config, kurs))
     return grund | {
         # Utan C- och A-poäng (gamla papper utan tripel, allt föll på E) är
         # varav-kraven noll och A kan nås på enbart E-poäng. Sant enligt

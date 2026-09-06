@@ -23,7 +23,7 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 29
+SCHEMA_VERSION = 30
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -758,6 +758,23 @@ _LEKTIONSRUBRIK_MIGRATION = """
 ALTER TABLE lektionsinnehall ADD COLUMN rubrik TEXT;
 """
 
+# Lärarens skärpning av E-gränsen (v30), ENDAST additiv. Rollback: kolumnen kan
+# lämnas kvar (NULL = 0 = NP:s tal orört) + PRAGMA user_version=29.
+#
+# «Göra kravet för godkänt betyg mer strängt med kanske upp till tre poäng mer
+# för att få E.» Väljs i planeringen för PROV och måste överleva dokumentet av
+# samma skäl som `nivaval` (v26): godkännandet STÄMPLAR gränserna på pappret,
+# och stämpeln sker långt efter att kroppen som bar valet är glömd.
+#
+# En DB-kolumn och INTE ett fält i ExamDoc, med flit och av exakt samma skäl som
+# nivåvalet: ett nytt fält i modellen ändrar model_json_schema, alltså
+# to_response_format-grammatiken, och då blir varje inspelad LLM-kassett i
+# tests/ ogiltig. Talet är dessutom lärarens och aldrig modellens, precis som
+# `klockslag` och `granser`, som poppas ur grammatiken av samma anledning.
+_EGRANS_MIGRATION = """
+ALTER TABLE exams ADD COLUMN e_extra INTEGER;
+"""
+
 # Bokens genomräknade exempel (v24) — ENDAST additiv; rollback: kolumnen kan
 # lämnas kvar (NULL är giltigt) + PRAGMA user_version=23.
 #
@@ -890,12 +907,14 @@ _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                26: _NIVAVAL_MIGRATION,
                                27: _JOBB_MIGRATION,
                                28: _SPAR_MIGRATION,
-                               29: _LEKTIONSRUBRIK_MIGRATION}
+                               29: _LEKTIONSRUBRIK_MIGRATION,
+                               30: _EGRANS_MIGRATION}
 
 # Migreringar som bara innehåller ALTER TABLE … ADD COLUMN. De körs sats för
 # sats så att en redan tillagd kolumn hoppas över i stället för att fälla hela
 # migreringen — se _apply_migrations.
-_ALTER_MIGRATIONER = {6, 12, 13, 14, 16, 17, 18, 21, 22, 23, 24, 25, 26, 29}
+_ALTER_MIGRATIONER = {6, 12, 13, 14, 16, 17, 18, 21, 22, 23, 24, 25, 26, 29,
+                      30}
 
 _LESSON_SELECT = """
 SELECT l.*, g.namn AS group_namn, c.namn AS course_namn
@@ -2928,6 +2947,37 @@ def stada_losningsblad(conn: sqlite3.Connection, dokument_id: int) -> list[int]:
     return borta
 
 
+def satt_dokument_granser(conn: sqlite3.Connection, exam_id: int,
+                          granser: dict) -> list[int]:
+    """Skriv nya kravgränser i de dokument som ritar PROVET `exam_id`.
+
+    Skärmens papper och PDF:en är två avbildningar av samma prov, och gränserna
+    finns i båda: prov-JSON:ens `granser` (stämpeln) och dokumentblobens, som
+    plan.js satte ur serverns svar när pappret skrevs. Flyttar läraren
+    E-gränsen på ett godkänt prov måste BÅDA följa med, annars säger
+    förhandsvisningen ett tal och den utskrivna PDF:en ett annat, precis det
+    fel blad.js en gång byggdes för att stoppa.
+
+    Bara dokument som REDAN bär gränser rörs. Ett papper utan fältet är ett
+    papper skrivet före stämpeln (eller av prototypen), och blad.js tar då bort
+    betygstabellen hellre än att fylla den med tal appen hittat på. Att smyga in
+    ett fält där vore att svara på en fråga ingen ställt.
+
+    Lösningsbladet är en KLON med samma provId och ska med: läraren tittar på
+    samma betygstabell där."""
+    rorda: list[int] = []
+    for r in conn.execute("SELECT id, markor FROM dokument").fetchall():
+        blob = _dokument_blob(conn, r["id"], r["markor"])
+        if str(blob.get("provId") or "") != str(exam_id):
+            continue
+        if not blob.get("granser"):
+            continue
+        blob["granser"] = granser
+        update_dokument(conn, r["id"], dokument=blob)
+        rorda.append(r["id"])
+    return rorda
+
+
 def set_dokument_ordning(conn: sqlite3.Connection, ids: list[int]) -> list[dict]:
     """Högens ordning som klienten håller den. Ett syskon ligger direkt efter
     sitt original, och en ångrad radering hamnar tillbaka på sin plats — det är
@@ -3519,18 +3569,23 @@ def create_exam(conn: sqlite3.Connection, *, exam: dict, typ: str = "prov",
                 group_id: int | None = None,
                 course_id: int | None = None,
                 underlag: str | None = None,
-                nivaval: str | None = None) -> dict:
+                nivaval: str | None = None,
+                e_extra: int | None = None) -> dict:
     """Skapa ett prov/arbetsblad med version 1 av dess prov-JSON.
 
     `nivaval` är lärarens nivåväljar-etikett (v25) — den ska överleva
-    dokumentet, för refine mäter varje varv mot valets band."""
+    dokumentet, för refine mäter varje varv mot valets band.
+
+    `e_extra` är lärarens skärpning av E-gränsen (v30, 0..3 poäng) och överlever
+    av samma skäl: godkännandet stämplar kravgränserna på pappret, och det sker
+    långt efter att begäran som bar valet är glömd."""
     now = _now()
     cur = conn.execute(
         "INSERT INTO exams (typ, titel, datum, group_id, course_id, status, "
-        "underlag, nivaval, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, ?, 'utkast', ?, ?, ?, ?)",
+        "underlag, nivaval, e_extra, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, 'utkast', ?, ?, ?, ?, ?)",
         (typ, titel or exam.get("titel") or "", datum, group_id, course_id,
-         underlag, nivaval, now, now))
+         underlag, nivaval, e_extra, now, now))
     exam_id = cur.lastrowid
     ver = conn.execute(
         "INSERT INTO exam_versions (exam_id, version, exam_json, created_at) "
@@ -3586,7 +3641,8 @@ def add_exam_version(conn: sqlite3.Connection, exam_id: int,
 
 
 def stampla_exam_granser(conn: sqlite3.Connection, exam_id: int,
-                         version_id: int | None, granser: dict) -> dict | None:
+                         version_id: int | None, granser: dict,
+                         *, skriv_over: bool = False) -> dict | None:
     """Skriv kravgränserna i en BEFINTLIG versions JSON — ingen ny version.
 
     Gränserna är inte en ändring av pappret; de är en anteckning om vad som
@@ -3595,7 +3651,13 @@ def stampla_exam_granser(conn: sqlite3.Connection, exam_id: int,
     hela poängen med `version_id` i set_exam_artifacts — och gett en ångra-
     historik full av varv som ser identiska ut.
 
-    Stämplas bara en gång: bär versionen redan gränser rörs den inte."""
+    Stämplas bara en gång: bär versionen redan gränser rörs den inte.
+
+    `skriv_over` är det ENDA undantaget, och det är lärarens egen hand:
+    PATCH /api/exams/{id}/granser flyttar E-gränsen på ett prov som redan är
+    godkänt (routes_exam satt_granser). Regeln «ett skrivet prov äger sina
+    gränser» skyddar pappret mot att APPEN ändrar sig; den ska inte hindra
+    läraren från att ändra sig om sitt eget prov."""
     if version_id is None:
         return None
     row = conn.execute(
@@ -3604,7 +3666,7 @@ def stampla_exam_granser(conn: sqlite3.Connection, exam_id: int,
     if row is None:
         return None
     data = json.loads(row["exam_json"])
-    if data.get("granser"):
+    if data.get("granser") and not skriv_over:
         return data
     data["granser"] = granser
     conn.execute("UPDATE exam_versions SET exam_json = ? WHERE id = ? "

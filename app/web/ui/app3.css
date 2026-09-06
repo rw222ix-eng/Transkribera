@@ -246,6 +246,13 @@ html{font-size:clamp(14.5px,13px + .3vw,18.5px)}
    den innan man trycker, och i samma dämpade ton som noten i foten. */
 .fhlast{margin:0;padding:12px 22px 0;font-size:.78rem;line-height:1.5;color:var(--ink-3);background:var(--surface)}
 .fhlast b{color:var(--ink-2);font-weight:600}
+/* E-gränsraden i förhandsvisningen: ett tal, två små knappar och en not som
+   säger om talet är NP-modellens eller lärarens. Liten med flit, den hör inte
+   till knappraden nedanför. */
+.fhegrans{display:flex;align-items:center;gap:8px;margin:0;padding:12px 22px 0;font-size:.8rem;color:var(--ink-2);background:var(--surface)}
+.fhegrans b{font-weight:600;font-variant-numeric:tabular-nums}
+.fhegrans .liten{min-width:28px;padding:2px 8px;line-height:1.4;font-size:.9rem}
+.fhegransnot{color:var(--ink-3);font-size:.74rem}
 .fhnot{display:inline-flex;align-items:center;gap:8px;margin-left:auto;font-size:.76rem;color:var(--ink-3)}
 .fhnot .pk{width:6px;height:6px;border-radius:50%;background:var(--ok)}
 @media (max-width:560px){.fhnot{margin-left:0;flex:1 1 100%;order:3}}

@@ -726,7 +726,7 @@ def test_np_kalibrering_ligger_aldrig_under_np():
     """PRINCIPEN, och den är hela kalibreringens dom: 0 ≤ appens gräns − NP:s
     gräns ≤ 1, för varje gräns och båda årgångarna.
 
-    En gräns UNDER NP:s delar ut ett betyg NP inte hade gett — det får inte
+    En gräns UNDER NP:s delar ut ett betyg NP inte hade gett. Det får inte
     hända på ett papper som säger «NP-modellen». Ett snäpp ÖVER är strängare än
     NP och går att försvara. Faller det här testet är det inte talen som ska
     justeras förrän någon förklarat vilken elev som ska förlora på det."""
@@ -739,6 +739,186 @@ def test_np_kalibrering_ligger_aldrig_under_np():
             krav += [(b, "minst", facit[b][0]), (b, falt, facit[b][1])]
         for b, falt, np in krav:
             assert 0 <= g[b][falt] - np <= 1, f"{ar} {b}.{falt}: {g[b][falt]} mot NP:s {np}"
+
+
+# ── Kalibreringen per kurs ───────────────────────────────────────────────────
+# Samma mätning som _NP ovan, men för HELA korpusen: fem kurser och tio prov.
+# Kurs 1:s gränser står på sidan «Kravgränser» i Delprov B-häftet och
+# poängsummorna per nivå i bedömningsanvisningarnas kapitel 4; kurs 2 bär båda
+# på provhäftets sida 1. Talen är avlästa, inte härledda.
+#
+# Testet nedan är hela skälet till att exam_spec.KRAV_PER_KURS har de tal den
+# har, precis som _NP är skälet till KRAV_DEFAULT:s.
+
+_NP_KURSER = {
+    #             summor {total,e,c,a}                     E, D(+varav), C(+varav), B(+varav), A(+varav)
+    ("1a", "vt17"): ({"total": 76, "e": 33, "c": 27, "a": 16},
+                     {"E": 18, "D": (30, 8), "C": (40, 15), "B": (51, 5), "A": (60, 9)}),
+    ("1a", "vt22"): ({"total": 66, "e": 25, "c": 25, "a": 16},
+                     {"E": 14, "D": (26, 9), "C": (34, 14), "B": (44, 4), "A": (51, 8)}),
+    ("1b", "vt22"): ({"total": 67, "e": 23, "c": 26, "a": 18},
+                     {"E": 14, "D": (25, 9), "C": (33, 14), "B": (43, 6), "A": (51, 10)}),
+    ("1c", "vt17"): ({"total": 87, "e": 26, "c": 37, "a": 24},
+                     {"E": 19, "D": (32, 12), "C": (43, 22), "B": (55, 7), "A": (66, 13)}),
+    ("1c", "vt22"): ({"total": 70, "e": 21, "c": 30, "a": 19},
+                     {"E": 14, "D": (27, 12), "C": (35, 18), "B": (46, 6), "A": (55, 11)}),
+    ("2a", "vt17"): ({"total": 55, "e": 23, "c": 19, "a": 13},
+                     {"E": 14, "D": (22, 6), "C": (29, 11), "B": (37, 4), "A": (43, 6)}),
+    ("2a", "vt18"): ({"total": 55, "e": 22, "c": 20, "a": 13},
+                     {"E": 14, "D": (23, 7), "C": (30, 12), "B": (38, 4), "A": (44, 7)}),
+    ("2a", "vt22"): ({"total": 55, "e": 23, "c": 20, "a": 12},
+                     {"E": 15, "D": (23, 6), "C": (30, 11), "B": (38, 4), "A": (44, 7)}),
+    ("2c", "vt18"): ({"total": 57, "e": 20, "c": 20, "a": 17},
+                     {"E": 13, "D": (22, 7), "C": (29, 12), "B": (37, 5), "A": (44, 9)}),
+    ("2c", "vt22"): ({"total": 58, "e": 21, "c": 20, "a": 17},
+                     {"E": 14, "D": (22, 6), "C": (29, 11), "B": (38, 5), "A": (45, 9)}),
+}
+
+# De två celler i Ma 1c där inget tal klarar ±1 på båda årgångarna. Räknat:
+# a_andel kräver x ≤ 67/87 för vt17 och x > 54/70 för vt22, alltså tomt spann. Samma
+# för d_varav_ca (x > 11/49 för vt22 ger ceil(x·61) = 14 mot NP:s 12 på vt17).
+# Principen «aldrig under NP» väljer sida, och avvikelsen blir +2 på vt17.
+# Undantaget står här och inte i en lösare gräns för alla: en dag någon lägger
+# till en kurs ska testet fälla den, inte tiga.
+_KURS_UNDANTAG = {("1c", "vt17", "A", "minst"), ("1c", "vt17", "D", "varav_ca")}
+
+
+def _kursnamn(nyckel: str) -> str:
+    return f"Matematik, nivå {nyckel}"
+
+
+@pytest.mark.parametrize("kurs,ar", sorted(_NP_KURSER))
+def test_kurskalibreringen_ligger_aldrig_under_np(kurs, ar):
+    """PRINCIPEN, nu per kurs: 0 ≤ appens gräns − NP:s gräns ≤ 1, för varje
+    kurs, varje årgång och varje gräns.
+
+    En gräns UNDER NP:s delar ut ett betyg NP inte hade gett. Det får inte
+    hända på ett papper som säger «NP-modellen för Ma 1c». Ett snäpp ÖVER är
+    strängare än NP och går att försvara för en elev.
+
+    Faller det här är det inte talen som ska justeras förrän någon förklarat
+    vilken elev som ska förlora på det."""
+    summor, facit = _NP_KURSER[(kurs, ar)]
+    g = exam_spec.kravgranser_ur_summor(summor, {"mellanbetyg": True},
+                                        _kursnamn(kurs))
+    krav = [("E", "minst", facit["E"])]
+    for b in ("D", "C", "B", "A"):
+        falt = "varav_a" if b in ("A", "B") else "varav_ca"
+        krav += [(b, "minst", facit[b][0]), (b, falt, facit[b][1])]
+    for b, falt, np in krav:
+        tak = 2 if (kurs, ar, b, falt) in _KURS_UNDANTAG else 1
+        assert 0 <= g[b][falt] - np <= tak, \
+            f"{kurs} {ar} {b}.{falt}: {g[b][falt]} mot NP:s {np}"
+
+
+def test_kurskalibreringens_undantag_ar_verkligen_omojliga():
+    """De två cellerna i _KURS_UNDANTAG får inte bli en bekvämlighet.
+
+    Testet räknar om omöjligheten: finns det NÅGON andel som klarar ±1 på båda
+    1c-årgångarna ska undantaget bort och talet rättas."""
+    for falt, betyg, nyckel, bas in (("a_andel", "A", "minst", "total"),
+                                     ("d_varav_ca", "D", "varav_ca", "ca")):
+        spann = []
+        for ar in ("vt17", "vt22"):
+            summor, facit = _NP_KURSER[("1c", ar)]
+            b = (summor["total"] if bas == "total"
+                 else summor["c"] + summor["a"])
+            np = facit[betyg] if betyg == "E" else facit[betyg][
+                0 if nyckel == "minst" else 1]
+            # ceil(x·b) ∈ {np, np+1}  ⟺  (np−1)/b < x ≤ (np+1)/b
+            spann.append(((np - 1) / b, (np + 1) / b))
+        lo = max(a for a, _ in spann)
+        hi = min(b for _, b in spann)
+        assert lo >= hi, (f"{falt}: spannet ({lo:.4f}, {hi:.4f}] är INTE tomt "
+                          f"rätta talet och ta bort undantaget")
+
+
+def test_okand_kurs_faller_tillbaka_pa_2a():
+    """Ma 4 och Ma 5 har inga lästa prov. Då gäller KRAV_DEFAULT, och regeln
+    säger det rakt ut. En gissning på närmaste kurs vore en påhittad
+    mätning."""
+    summor = {"total": 26, "e": 8, "c": 11, "a": 7}
+    assert (exam_spec.kravgranser_ur_summor(summor, None, "Matematik 4")
+            == exam_spec.kravgranser_ur_summor(summor))
+    assert "Ma 2a" in exam_spec.kravgranser_ur_summor(summor)["regel"]
+
+
+def test_lararens_ma1c_prov_far_kursens_granser():
+    """Lärarens eget prov, 26 poäng (8 E, 11 C, 7 A). Ma 2a:s regel gav E 7,
+    C 15, A 21; Ma 1c:s NP är lägre, och det är den kursen provet gäller."""
+    summor = {"total": 26, "e": 8, "c": 11, "a": 7}
+    som_2a = exam_spec.kravgranser_ur_summor(summor)
+    som_1c = exam_spec.kravgranser_ur_summor(summor, None, "Matematik 1c")
+    assert (som_2a["E"]["minst"], som_2a["C"]["minst"]) == (7, 15)
+    assert (som_1c["E"]["minst"], som_1c["C"]["minst"]) == (6, 13)
+    assert "Ma 1c" in som_1c["regel"]
+
+
+def test_kursens_granser_nar_dokumentet_utan_extra_argument():
+    """kravgranser() läser kursen ur dokumentet självt. Varje anropsställe
+    hade annars behövt komma ihåg att skicka den, och ett enda som glömde hade
+    tryckt 2a:s tal på ett 1c-prov."""
+    rad = _exam() | {"kurs": "Matematik, nivå 1c"}
+    doc, fel = exam_spec.validate_exam_json(rad)
+    assert fel == [] and doc is not None
+    assert "Ma 1c" in exam_spec.kravgranser(doc)["regel"]
+
+
+# ── Lärarens skärpning av E ──────────────────────────────────────────────────
+
+def test_e_extra_lagger_poang_pa_e_gransen():
+    """«Göra kravet för godkänt betyg mer strängt med kanske upp till tre poäng
+    mer för att få E.» Poängen läggs på EFTER avrundningen: de är lärarens
+    poäng ovanpå NP:s tal, inte en procentsats som ska rundas med."""
+    summor = {"total": 26, "e": 8, "c": 11, "a": 7}
+    utan = exam_spec.kravgranser_ur_summor(summor, None, "Matematik 1c")
+    med = exam_spec.kravgranser_ur_summor(summor, {"e_extra": 2},
+                                          "Matematik 1c")
+    assert utan["E"]["minst"] == 6 and "extra" not in utan["E"]
+    assert med["E"]["minst"] == 8 and med["E"]["extra"] == 2
+    assert "skärpning på 2 p" in med["regel"]
+    # C, A och D står orörda: skärpningen gäller godkäntgränsen och ingenting
+    # annat. Höjs E utan att D följer med krymper D-spannet, och det är precis
+    # vad läraren bad om.
+    for b in ("C", "A"):
+        assert med[b] == utan[b]
+    mellan = exam_spec.kravgranser_ur_summor(
+        summor, {"e_extra": 3, "mellanbetyg": True}, "Matematik 1c")
+    utan_mellan = exam_spec.kravgranser_ur_summor(
+        summor, {"mellanbetyg": True}, "Matematik 1c")
+    assert mellan["D"] == utan_mellan["D"]
+
+
+def test_e_extra_klams_till_noll_till_tre():
+    """Talet kommer från en väljare, en gammal klient eller en rad i basen.
+    Skräp ska ge NP:s gräns eller taket, aldrig ett undantag mitt i ett
+    godkännande, och aldrig en gräns UNDER NP:s."""
+    assert exam_spec.e_skarpning({"e_extra": -5}) == 0
+    assert exam_spec.e_skarpning({"e_extra": 9}) == 3
+    assert exam_spec.e_skarpning({"e_extra": "två"}) == 0
+    assert exam_spec.e_skarpning({}) == 0
+    assert exam_spec.e_skarpning(None) == 0
+
+
+def test_e_extra_kan_inte_passera_maxpoangen():
+    """En E-gräns över provets maxpoäng är ingen skärpning. Den är ett prov
+    ingen kan bli godkänd på."""
+    g = exam_spec.kravgranser_ur_summor({"total": 4, "e": 4, "c": 0, "a": 0},
+                                        {"e_extra": 3})
+    assert g["E"]["minst"] <= 4
+
+
+def test_e_extra_star_pa_forsattsbladets_betygstabell():
+    """Det höjda talet, inte regelns. Betygstabellen på pappret är det löfte
+    eleven läser."""
+    rad = _exam()
+    doc, _ = exam_spec.validate_exam_json(rad)
+    doc.granser = exam_spec.kravgranser_ur_summor(
+        exam_spec.poangsummor(doc), {"e_extra": 3})
+    assert doc.granser["E"]["minst"] == 9         # ceil(20 · 0,26) = 6, plus 3
+    tex = exam_latex.render_prov(doc)
+    # F 0–8, E 9–10: E-raden börjar på det skärpta talet.
+    assert r"0\textendash{}8" in tex and r"9\textendash{}10" in tex
 
 
 # ── Provet bär sina egna gränser ─────────────────────────────────────────────

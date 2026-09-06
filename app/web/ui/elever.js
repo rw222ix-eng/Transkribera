@@ -34,7 +34,14 @@
      TALEN ÄR SERVERNS (exam_spec.KRAV_DEFAULT), kalibrerade mot NpMa2a vt17 och
      vt22. Står de två uppsättningarna isär lovar skärmen ett betyg pappret inte
      ger — det var precis felet blad.js beskriver längre ned. Ändras KRAV_DEFAULT
-     ändras raden här i samma commit. */
+     ändras raden här i samma commit.
+
+     KURSENS EGNA TAL FINNS BARA PÅ SERVERN (exam_spec.KRAV_PER_KURS, mätt per
+     kurs 2026-09-06): Ma 1c ger lägre gränser än Ma 2a på samma poängsumma.
+     Raden nedan är 2a:s, alltså fallbacken, och den gäller när servern inte
+     svarat. Då finns ingen kurs att slå upp heller. Så fort svaret landar
+     vinner serverns tal, och de är kursens. Samma sak med lärarens skärpning
+     av E (`granser.E.extra`): den bor i provets stämpel och räknas aldrig här. */
   const KRAV = { e: 0.26, c: 0.54, cCa: 0.34, a: 0.79, aA: 0.52 };
   function granserAv(rad) {
     let e = 0, c = 0, a = 0;

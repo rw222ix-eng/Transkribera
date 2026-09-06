@@ -321,7 +321,11 @@ window.Blad = (() => {
        77 för A, plus 23 och 45 procent av del B som varav-krav. Serverns regel
        (exam_spec.KRAV_DEFAULT) är en annan: 26, 54 och 79 procent av totalen,
        varav 34 % av C- och A-poängen respektive 52 % av A-poängen — mätta på
-       NpMa2a vt17 och vt22, inte valda. Talen räknas
+       NpMa2a vt17 och vt22, inte valda. Sedan 2026-09-06 är procentsatserna
+       dessutom KURSENS (exam_spec.KRAV_PER_KURS: 1a, 1b, 1c, 2a, 2c), och
+       E-gränsen kan bära lärarens skärpning på upp till tre poäng
+       (`granser.E.extra`). Skärmen räknar ingenting av det, den läser
+       `granser`, och det är hela poängen. Talen räknas
        redan och följer med pappret som `granser` — de trycks på PDF:ens
        försättsblad (prov.tex.j2) — men skärmen ritade sina egna.
 

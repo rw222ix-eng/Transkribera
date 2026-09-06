@@ -17,6 +17,7 @@ webbläsaren); servern exponerar bara GET /tex.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import threading
 from pathlib import Path
@@ -33,6 +34,8 @@ from app import (ci_profil, course_data, db, dokumentdiff, exam_gen,
 from app import kalibrering as kalibrering_modul
 from app.web import Id64, _kropp, routes_planning
 from app.web.sse import Stege, jobb_response
+
+_LOG = logging.getLogger(__name__)
 
 # ── DOMÄNSTEGEN ──────────────────────────────────────────────────────────────
 # Ladderna för de tre långa jobben. De ligger HÄR, i en tabell, och inte
@@ -233,7 +236,15 @@ def create_router(base: Path, arbiter) -> APIRouter:
             "underlag": view.get("underlag"),
             "status": view["status"], "versions": view["versions"],
             "errors": errors, "rounds": rounds,
-            "granser": exam_spec.kravgranser(doc) if doc else None,
+            # Kursens egen NP-mätning (exam_spec.KRAV_PER_KURS) och lärarens
+            # skärpning av E, båda innan pappret godkänts. Skärmens
+            # betygstabell ritas ur just de här talen (blad.js prbetyg) och ska
+            # visa samma sak som PDF:en kommer att trycka.
+            "granser": (exam_spec.kravgranser(
+                doc, {"e_extra": view.get("e_extra") or 0}) if doc else None),
+            # Lärarens skärpning av E-gränsen (v30), med i svaret av samma
+            # skäl som nivåvalet: skärmen ska kunna visa vad pappret skrevs mot.
+            "e_extra": int(view.get("e_extra") or 0),
             "summor": summor,
             # Tiden pappret tar, räknad på de FÄRDIGA uppgifterna. Frontenden
             # har samma modell (plan.js uppskatta) men bara efter att arket
@@ -471,6 +482,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
                               or "").strip()
         nivaval = exam_spec.nivaval(typ, nivaval_etikett)
         niva_mal = nivaval["mal"] if nivaval else None
+        # Lärarens skärpning av E-gränsen, 0..3 poäng ovanpå NP:s tal
+        # (exam_spec.e_skarpning). Bara provet har en betygstabell, så bara
+        # provet bär valet. Ett arbetsblad som skickar fältet får det
+        # persisterat men ingenting trycker det. Skickas inte fältet alls
+        # (äldre klient, API-anrop, pytest) är svaret noll, alltså NP orört.
+        e_extra = exam_spec.e_skarpning(body if isinstance(body, dict) else None)
         # Gruppuppgiftens upplägg (Fas 0.6): namnraderna, tiden och
         # redovisningsformen ÄR pappersformen (se gruppark.css) — de kommer ur
         # planeringens väljare och ska in i både prompten och dokumentet.
@@ -751,7 +768,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         course_id=int(course_id), underlag=underlag_pid,
                         # Etiketten, inte banden: banden bor i exam_spec och
                         # kan justeras utan att gamla papper byter mening.
-                        nivaval=nivaval_etikett if nivaval else None)
+                        nivaval=nivaval_etikett if nivaval else None,
+                        # Noll skrivs som NULL: en rad utan skärpning ska inte
+                        # gå att skilja från en rad skriven före väljaren.
+                        e_extra=e_extra or None)
                     for c in valda:
                         db.tag_content(conn, c["id"], exam_id=view["id"])
                 finally:
@@ -1138,9 +1158,15 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     # renderades (db.stampla_exam_granser), efter att
                     # version_id är avgjort längre ner — annars hade .tex/.pdf
                     # hamnat på ett varv läraren aldrig pekade ut.
+                    #
+                    # KURSEN och LÄRARENS SKÄRPNING följer med hit: gränserna
+                    # är Ma 1c:s när pappret är ett Ma 1c-prov (KRAV_PER_KURS),
+                    # och E-gränsen bär de poäng läraren lade på i planeringen.
+                    # Båda måste in i stämpeln. Det är den som gäller sedan.
                     if not exam.get("granser"):
                         exam["granser"] = exam_spec.kravgranser_ur_summor(
-                            exam_spec.poangsummor(doc))
+                            exam_spec.poangsummor(doc),
+                            {"e_extra": view.get("e_extra") or 0}, doc.kurs)
                     doc.granser = exam["granser"]
                     steg.na("latex")
                     emit({"type": "log", "msg": "Renderar LaTeX …"})
@@ -1462,6 +1488,167 @@ def create_router(base: Path, arbiter) -> APIRouter:
         if vy is None:
             return JSONResponse({"error": "okänt prov"}, status_code=404)
         return {"id": exam_id, "status": vy["status"]}
+
+    # -------------------------------------------------- ändra kravgränserna --
+
+    def _bilder_ur_utkatalogen(exam: dict,
+                               out_dir: Path) -> tuple[dict, dict, str | None]:
+        """Bildindexen ur de filer godkännandet REDAN skrev i utkatalogen.
+
+        Ett omtryck utan klient har ingen kropp att läsa bilder ur: läraren
+        släppte dem i canvas för en vecka sedan, och webbläsaren som bar dem är
+        stängd. Men filerna ligger kvar: godkännandet skrev underlagets sidor
+        som «bild-NN.png», lärarens egna som «egen-NN.png» och försättsbladets
+        som «egen-forsatt.png» (app/tryck), och mallen vill ändå bara ha
+        filnamn, aldrig bilddata. Katalogen ÄR alltså kroppen.
+
+        Plåtarna räknas fram på nytt ur dokumentets `scen.plat` i stället för
+        att läsas av disk: filnamnet bär plåtens namn men inte vilken uppgift
+        den satt på, och den kopplingen finns bara i JSON:en. Skalningen skriver
+        över en fil som redan är skalad, alltså samma bild igen. Väljarens
+        plåtbyte i canvas (`platar` i godkännandets kropp) bor bara i
+        webbläsaren och går inte att återskapa här. Därför läggs lärarens EGNA
+        bilder överst, precis som i godkännandet, och de vinner ändå."""
+        bilder: dict[int, str] = {}
+        egna: dict[int, str] = {}
+        for fil in sorted(out_dir.glob("bild-*.png")):
+            try:
+                bilder[int(fil.stem.removeprefix("bild-"))] = fil.name
+            except ValueError:
+                continue
+        egna.update(platar.plat_bilder(exam, None, out_dir, base=base))
+        for fil in sorted(out_dir.glob("egen-*.png")):
+            try:
+                egna[int(fil.stem.removeprefix("egen-"))] = fil.name
+            except ValueError:
+                continue            # «egen-forsatt.png» går sin egen väg nedan
+        forsatt = ("egen-forsatt.png"
+                   if (out_dir / "egen-forsatt.png").is_file() else None)
+        return bilder, egna, forsatt
+
+    def _tryck_om_provet(view: dict, doc,
+                         out_dir: Path) -> tuple[Path | None, str]:
+        """Sätt provet och bedömningsanvisningen på nytt ur det som finns.
+
+        Bruten ur `approve` och medvetet MYCKET mindre än den: här finns ingen
+        modell, ingen fixrunda, ingen avritning från skärmen och ingen ny
+        version. Det enda som ändrats är ett tal i en tabellcell, och ett prov
+        som kompilerade i går kompilerar med en annan siffra där. Faller
+        Tectonic ändå sägs det rakt ut, i stället för att en PDF med gamla
+        gränser blir kvar och ser färdig ut.
+
+        BEDÖMNINGSANVISNINGEN byggs om i samma andetag: den trycker
+        kravgränserna överst (exam_latex.render_bedomning), och en anvisning som
+        säger «E minst 7» bredvid ett prov som säger 8 är värre än ingen alls.
+
+        Samma stam och samma katalog som godkännandet valde, alltså SAMMA
+        pdf_path. Rutten /api/exams/{id}/pdf pekar redan dit, och en ny fil
+        hade lämnat läraren med två papper och inget sätt att se vilket som
+        gäller."""
+        slug = _safe_component(doc.titel, view.get("typ") or "prov")
+        bilder, egna, forsatt = _bilder_ur_utkatalogen(view["exam"], out_dir)
+        tex = exam_latex.render_prov(doc, bilder=bilder, egna_bilder=egna,
+                                     forsatt_bild=forsatt)
+        (out_dir / f"{slug}.tex").write_text(tex, encoding="utf-8")
+        bed = exam_latex.render_bedomning(doc, bilder=bilder)
+        (out_dir / f"{slug} - bedomning.tex").write_text(bed, encoding="utf-8")
+        if not exam_pdf.engine_available():
+            return None, ("PDF-motorn saknas. .tex är uppdaterad, "
+                          "PDF:en är kvar som den var.")
+        pdf, log = exam_pdf.compile_pdf(tex, out_dir, slug)
+        if pdf is None:
+            return None, "PDF:en gick inte att bygga om:\n" + log
+        exam_pdf.compile_pdf(bed, out_dir, f"{slug} - bedomning")
+        return pdf, ""
+
+    @router.patch("/api/exams/{exam_id:int}/granser")
+    async def satt_granser(exam_id: Id64, req: Request):
+        """Flytta E-gränsen på ett prov som redan är godkänt.
+
+        «Göra kravet för godkänt betyg mer strängt.» Ett godkänt prov äger sina
+        gränser (exam_spec.kravgranser rang 1) och det är hela poängen med
+        stämpeln. Men regeln skyddar pappret mot att APPEN ändrar sig, inte mot
+        att läraren gör det. Hon har rättat en klass och sett att sju poäng var
+        för lågt; då ska talet gå att flytta utan att provet skrivs om.
+
+        Kroppen är antingen `{"e_minst": 8}` (talet hon vill ha) eller
+        `{"e_extra": 2}` (poängen ovanpå regelns tal). Båda kläms till regelns
+        tal … regelns tal + 3, alltså exakt det spann väljaren i planeringen
+        erbjuder: en E-gräns UNDER NP-modellens är ingen skärpning, och den ska
+        inte gå att smyga in bakvägen.
+
+        C och A står orörda, och D likaså. Höjs E utan att D följer med krymper
+        D-spannet, vilket är precis vad en skärpning av godkäntgränsen betyder.
+
+        PDF:en byggs om HÄR, utan klient: LaTeX renderas ur exam_json och de
+        bilder godkännandet redan lade i utkatalogen. Läraren har inget papper
+        framme när hon ändrar det här. Hon står i förhandsvisningen."""
+        body = await _kropp(req)
+        conn = db.connect(db_file)
+        try:
+            view = db.get_exam(conn, exam_id)
+        finally:
+            conn.close()
+        if view is None or view.get("exam") is None:
+            return JSONResponse({"error": "okänt prov"}, status_code=404)
+        if (view.get("typ") or "prov") != "prov":
+            return JSONResponse(
+                {"error": "bara provet har en betygstabell"}, status_code=400)
+        view["exam"] = exam_gen._repair_ctrl_chars(view["exam"])
+        _satt_lararens_datum(view["exam"], view.get("datum"))
+        doc, fel = exam_spec.validate_exam_json(view["exam"], "prov")
+        if doc is None:
+            return JSONResponse({"error": "provet går inte att läsa",
+                                 "errors": fel}, status_code=400)
+        # REGELNS TAL, alltid räknat på nytt: det är golvet skärpningen mäts
+        # ifrån, och det ska komma ur kursens NP-mätning och inte ur den
+        # stämplade E-gränsen, som ju redan kan bära en skärpning.
+        summor = exam_spec.poangsummor(doc)
+        regelns = exam_spec.kravgranser_ur_summor(summor, None, doc.kurs)
+        golv = int(regelns["E"]["minst"])
+        if body.get("e_minst") is not None:
+            try:
+                onskad = int(body["e_minst"])
+            except (TypeError, ValueError):
+                return JSONResponse({"error": "e_minst måste vara ett tal"},
+                                    status_code=400)
+            extra = max(0, min(3, onskad - golv))
+        else:
+            extra = exam_spec.e_skarpning(body)
+        granser = exam_spec.kravgranser_ur_summor(
+            summor, {"e_extra": extra}, doc.kurs)
+        conn = db.connect(db_file)
+        try:
+            # Valet på raden också, inte bara i stämpeln: godkänner läraren om
+            # provet efteråt ska det NYA talet vara utgångspunkten, annars
+            # hoppar gränsen tillbaka utan att någon rört väljaren.
+            conn.execute("UPDATE exams SET e_extra = ? WHERE id = ?",
+                         (extra or None, exam_id))
+            conn.commit()
+            db.stampla_exam_granser(conn, exam_id, view.get("current_version"),
+                                    granser, skriv_over=True)
+            db.satt_dokument_granser(conn, exam_id, granser)
+        finally:
+            conn.close()
+        doc.granser = granser
+        view["exam"]["granser"] = granser
+        out_dir = _artifact_dir(view)
+        pdf, varning = None, "utkatalogen gick inte att räkna ut"
+        if out_dir is not None and out_dir.is_dir():
+            try:
+                pdf, varning = _tryck_om_provet(view, doc, out_dir)
+            except Exception as exc:                    # noqa: BLE001
+                _LOG.exception("Omtrycket av prov %s föll", exam_id)
+                pdf, varning = None, f"PDF:en gick inte att bygga om: {exc}"
+        elif out_dir is not None:
+            # Godkänt utan att någon fil hann skrivas (PDF-motorn saknades).
+            # Gränserna är ändå lärarens och sparas; det som saknas är papper
+            # att trycka dem på.
+            varning = "provet har inga sparade filer att bygga om"
+        return {"id": exam_id, "granser": granser, "e_extra": extra,
+                "e_minst": granser["E"]["minst"], "regelns_e": golv,
+                "pdf": str(pdf) if pdf else None,
+                "varning": varning or None}
 
     # ----------------------------------------------------------- artefakter --
 
