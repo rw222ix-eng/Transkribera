@@ -12,6 +12,7 @@ allt runt omkring den, och det är där pengarna och sanningen sitter:
 Den skarpa avläsningen mäts i `ocr-eval/`, inte här.
 """
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -493,6 +494,62 @@ def test_vit_attrapp_pa_disken_skrivs_over(tmp_path):
     assert not (ut / "sida-001-f420.png").exists()
 
 
+# ------------------------------------------------------- en pdfium i taget --
+
+def test_tva_tradar_ar_aldrig_inne_i_pdfium_samtidigt(tmp_path):
+    """Kärnan i felet 2026-09-06 (se app/pdfvakt.py).
+
+    pdfium är inte trådsäkert, och två trådar i biblioteket samtidigt förstör
+    det för HELA processen: efteråt föll varje öppning med «Data format
+    error», även ensam, även efter att biblioteket startats om. Appen körde
+    två vägar mot samma bok samtidigt — SSE-jobbet som läser ett uppslag och
+    de två sidbildsbegärandena bakom uppslagets blad, en tråd var ur FastAPI:s
+    trådpool.
+
+    Testet mäter det som går att mäta utan att förstöra testprocessen: att
+    ingen andra tråd kommer in i `_oppna` medan en första är inne."""
+    import threading
+    pdf = pdf_fil(tmp_path / "d", sidor=4)
+    inne = 0
+    mest = 0
+    rakning = threading.Lock()
+    riktiga = bok._oppna
+
+    def langsam(p):
+        nonlocal inne, mest
+        with rakning:
+            inne += 1
+            mest = max(mest, inne)
+        try:
+            time.sleep(0.05)
+            return riktiga(p)
+        finally:
+            with rakning:
+                inne -= 1
+
+    bok._oppna = langsam
+    try:
+        tradar = [threading.Thread(target=bok.rendera,
+                                   args=(pdf, [i % 4], tmp_path / f"ut{i}"))
+                  for i in range(4)]
+        for t in tradar:
+            t.start()
+        for t in tradar:
+            t.join()
+    finally:
+        bok._oppna = riktiga
+    assert mest == 1
+
+
+def test_vakten_slapper_in_samma_trad_igen(tmp_path):
+    """RLock, inte Lock: tryck.foga_ihop anropar _sidor innanför sin egen
+    vakt, och en vanlig Lock hade låst processen där."""
+    from app import pdfvakt
+    with pdfvakt.ensam():
+        with pdfvakt.ensam():
+            assert bok.sidantal(pdf_fil(tmp_path / "d", sidor=3)) == 3
+
+
 # ------------------------------------------------------------- promptblocket --
 
 def test_bara_lasta_sidor_kommer_med_i_prompten(tmp_path, conn, ocr):
@@ -864,6 +921,38 @@ def test_sidbilden_sager_nej_i_stallet_for_att_gissa(client, ocr):
     conn.commit()
     conn.close()
     assert client.get(f"/api/bocker/{b['id']}/sida/10.png").status_code == 404
+
+
+def test_sidbilden_sager_varfor_den_inte_gick(client, ocr):
+    """«kunde inte rendera sidan» ensamt var vad läraren hade 2026-09-06.
+
+    Bilden försvinner tyst i webbläsaren (uppslag.js tar bort <img> på fel),
+    så skälet måste finnas i SVARET — annars har hon ingenting alls. Nu bär
+    felet bok._oppna:s mening: filen, storleken och pdfiums egen text, och
+    bladet skriver den vid arket."""
+    b = _importera(client, sidor=30)
+    fil = Path(db.get_bok(db.connect(client.base_dir / "transkribera.db"),
+                          b["id"])["fil"])
+    fil.write_bytes(b"%PDF-1.7 men resten ar sonder")
+    r = client.get(f"/api/bocker/{b['id']}/sida/25.png")
+    assert r.status_code == 500
+    fel = r.json()["error"]
+    assert fel.startswith("kunde inte rendera sidan: ")
+    assert "PDF:en gick inte att öppna" in fel and fil.name in fel
+
+
+def test_las_jobbet_skickar_felet_till_skarmen(client, ocr):
+    """Felvägen hela vägen ut: jobbet på /las faller, och strömmen bär ett
+    `error` med en mening läraren kan läsa. uppgifter.js sätter «Sidorna 10–10
+    kunde inte läsas: …» framför den och Fraga ritar «Försök igen»."""
+    b = _importera(client, sidor=30)
+    fil = Path(db.get_bok(db.connect(client.base_dir / "transkribera.db"),
+                          b["id"])["fil"])
+    fil.write_bytes(b"%PDF-1.7 men resten ar sonder")
+    ev = _events(client.post(f"/api/bocker/{b['id']}/las",
+                             json={"fran": 10, "till": 10, "bara": "fakta"}))
+    fel = [e for e in ev if e.get("type") == "error"]
+    assert fel and "PDF:en gick inte att öppna" in fel[0]["message"]
 
 
 def test_sidbilden_utan_kallfil_ger_nej_inte_krasch(client, ocr):

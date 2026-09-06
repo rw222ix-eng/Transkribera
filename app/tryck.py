@@ -42,7 +42,7 @@ import re
 import shutil
 from pathlib import Path
 
-from app import exam_gen, exam_latex, exam_pdf, exam_spec
+from app import exam_gen, exam_latex, exam_pdf, exam_spec, pdfvakt
 
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 _DATA_PREFIX = "data:image/png;base64,"
@@ -209,37 +209,42 @@ def png_till_pdf(dataurl, ut_dir: Path, stam: str) -> Path | None:
     import pypdfium2 as pdfium
     ut_dir.mkdir(parents=True, exist_ok=True)
     mal = ut_dir / f"{stam}.pdf"
-    doc = pdfium.PdfDocument.new()
-    try:
-        for bild in bilder:
-            b, h = bild.size
-            # ORIENTERINGEN är bildens, inte pappersfackets. Ett bräde är
-            # bredare än högt, och på stående A4 blev tavlan en remsa i mitten
-            # med halva pappret vitt över och under — läraren såg det och sa
-            # «man skulle kunna vända den 90 grader». Sidstorleken sätts per
-            # sida i PDF:en, så blandade orienteringar i samma fil är fria; en
-            # skrivare vänder själv. Kvadratiskt räknas som stående: den
-            # naturliga vilan för ett papper.
-            papper = (A4_PT[1], A4_PT[0]) if b > h else A4_PT
-            # Marginalboxen, inte papperskanten. Skalan mäts mot den — det är
-            # hela skillnaden mot förut.
-            ruta = (papper[0] - 2 * MARGINAL_PT, papper[1] - 2 * MARGINAL_PT)
-            skala = min(ruta[0] / b, ruta[1] / h)
-            sida = doc.new_page(*papper)
-            objekt = pdfium.PdfImage.new(doc)
-            objekt.set_bitmap(pdfium.PdfBitmap.from_pil(bild))
-            # Matrisen ÄR placeringen: pdfium ritar bilden i enhetskvadraten,
-            # så matrisen bär både storleken och hörnet. Största möjliga med
-            # bevarad proportion, centrerad i marginalboxen — som av sig själv
-            # är centrerad på pappret.
-            objekt.set_matrix(pdfium.PdfMatrix(
-                b * skala, 0, 0, h * skala,
-                (papper[0] - b * skala) / 2, (papper[1] - h * skala) / 2))
-            sida.insert_obj(objekt)
-            sida.gen_content()
-        doc.save(str(mal))
-    finally:
-        doc.close()
+    # Tryckpaketet byggs på en jobbtråd medan bokens sidor kan renderas på en
+    # annan. pdfium delar globalt tillstånd mellan ALLA sina användare i
+    # processen, så vakten gäller den som skriver PDF:er också — inte bara den
+    # som läser böcker (app/pdfvakt.py).
+    with pdfvakt.ensam():
+        doc = pdfium.PdfDocument.new()
+        try:
+            for bild in bilder:
+                b, h = bild.size
+                # ORIENTERINGEN är bildens, inte pappersfackets. Ett bräde är
+                # bredare än högt, och på stående A4 blev tavlan en remsa i mitten
+                # med halva pappret vitt över och under — läraren såg det och sa
+                # «man skulle kunna vända den 90 grader». Sidstorleken sätts per
+                # sida i PDF:en, så blandade orienteringar i samma fil är fria; en
+                # skrivare vänder själv. Kvadratiskt räknas som stående: den
+                # naturliga vilan för ett papper.
+                papper = (A4_PT[1], A4_PT[0]) if b > h else A4_PT
+                # Marginalboxen, inte papperskanten. Skalan mäts mot den — det är
+                # hela skillnaden mot förut.
+                ruta = (papper[0] - 2 * MARGINAL_PT, papper[1] - 2 * MARGINAL_PT)
+                skala = min(ruta[0] / b, ruta[1] / h)
+                sida = doc.new_page(*papper)
+                objekt = pdfium.PdfImage.new(doc)
+                objekt.set_bitmap(pdfium.PdfBitmap.from_pil(bild))
+                # Matrisen ÄR placeringen: pdfium ritar bilden i enhetskvadraten,
+                # så matrisen bär både storleken och hörnet. Största möjliga med
+                # bevarad proportion, centrerad i marginalboxen — som av sig själv
+                # är centrerad på pappret.
+                objekt.set_matrix(pdfium.PdfMatrix(
+                    b * skala, 0, 0, h * skala,
+                    (papper[0] - b * skala) / 2, (papper[1] - h * skala) / 2))
+                sida.insert_obj(objekt)
+                sida.gen_content()
+            doc.save(str(mal))
+        finally:
+            doc.close()
     return mal
 
 
@@ -277,11 +282,12 @@ def anpassad_pdf(exam: dict, typ: str, ut_dir: Path, stam: str, *,
 
 def _sidor(pdf: Path) -> int:
     import pypdfium2 as pdfium
-    doc = pdfium.PdfDocument(str(pdf))
-    try:
-        return len(doc)
-    finally:
-        doc.close()
+    with pdfvakt.ensam():
+        doc = pdfium.PdfDocument(str(pdf))
+        try:
+            return len(doc)
+        finally:
+            doc.close()
 
 
 def foga_ihop(delar: list[tuple[Path, int]], ut: Path) -> int:
@@ -289,22 +295,25 @@ def foga_ihop(delar: list[tuple[Path, int]], ut: Path) -> int:
     Returnerar sidantalet. Kopiorna ligger i FILEN — det är därför högen är
     rätt när den kommer ur skrivaren."""
     import pypdfium2 as pdfium
-    paket = pdfium.PdfDocument.new()
-    oppna = []
-    try:
-        for pdf, kopior in delar:
-            src = pdfium.PdfDocument(str(pdf))
-            oppna.append(src)
-            sidor = list(range(len(src)))
-            for _ in range(max(1, min(MAX_KOPIOR, int(kopior or 1)))):
-                paket.import_pages(src, sidor)
-        ut.parent.mkdir(parents=True, exist_ok=True)
-        paket.save(str(ut))
-        antal = len(paket)
-    finally:
-        for d in oppna:
-            d.close()
-        paket.close()
+    # Samma vakt som resten (app/pdfvakt.py). RLock, så att `_sidor` innanför
+    # ett större tryckpass inte låser sig själv.
+    with pdfvakt.ensam():
+        paket = pdfium.PdfDocument.new()
+        oppna = []
+        try:
+            for pdf, kopior in delar:
+                src = pdfium.PdfDocument(str(pdf))
+                oppna.append(src)
+                sidor = list(range(len(src)))
+                for _ in range(max(1, min(MAX_KOPIOR, int(kopior or 1)))):
+                    paket.import_pages(src, sidor)
+            ut.parent.mkdir(parents=True, exist_ok=True)
+            paket.save(str(ut))
+            antal = len(paket)
+        finally:
+            for d in oppna:
+                d.close()
+            paket.close()
     return antal
 
 

@@ -24,7 +24,7 @@ import re
 import time
 from pathlib import Path
 
-from app import bok_ocr, db
+from app import bok_ocr, db, pdfvakt
 
 # Innehållsförteckningen ligger tidigt: omslag, titelsida, förord, sedan
 # «Innehåll». Tolv sidor räcker med marginal och kostar ett anrop, eftersom
@@ -58,6 +58,10 @@ def _oppna(pdf: Path):
     Meddelandet går hela vägen ut till läraren: jobbet som läser ett uppslag
     skickar sitt fel till skärmen (app/web/sse.py), och «PDF:en gick inte att
     öppna» med filnamnet är begripligt där. Traceback:en var det inte.
+
+    Anropas ALDRIG utanför `pdfvakt.ensam()`. Det var själva felet 2026-09-06:
+    filen var hel, processen var trasig, för två trådar hade varit inne i
+    pdfium samtidigt. Se app/pdfvakt.py för mätningen och skadans varaktighet.
     """
     import pypdfium2 as pdfium
     try:
@@ -74,11 +78,12 @@ def _oppna(pdf: Path):
 
 
 def sidantal(pdf: Path) -> int:
-    doc = _oppna(pdf)
-    try:
-        return len(doc)
-    finally:
-        doc.close()
+    with pdfvakt.ensam():
+        doc = _oppna(pdf)
+        try:
+            return len(doc)
+        finally:
+            doc.close()
 
 
 def _helvit(bild) -> bool:
@@ -137,37 +142,44 @@ def rendera(pdf: Path, index: list[int], ut: Path) -> list[Path]:
     över här i stället för att hoppas över, miniatyren bredvid med.
     """
     ut.mkdir(parents=True, exist_ok=True)
-    doc = _oppna(pdf)
-    try:
-        filer = []
-        for i in index:
-            if not (0 <= i < len(doc)):
-                continue
-            f = ut / f"sida-{i + 1:03d}.png"
-            if not f.exists() or _attrapp(f):
-                sida = doc[i]
-                bild = sida.render(scale=PDF_SKALA).to_pil()
-                if _misslyckad(sida, bild):
-                    raise RuntimeError(
-                        f"Sida {i + 1} i {pdf.name} renderades helt vit trots "
-                        "att sidan har innehåll — pdfium läste inte PDF:en. "
-                        "Ingen bild sparades.")
-                if not (f.exists() and _helvit(bild)):
-                    # Ett verkligt tomt blad ser likadant ut varje gång: filen
-                    # som redan ligger där ÄR renderingen, och att skriva om
-                    # den skulle bara flytta tidsstämpeln på en sida som ingen
-                    # rört (test_bilderna_renderas_bara_en_gang).
-                    bild.save(f)
-                    # Miniatyren (routes_bok._miniatyr) skapas en gång och
-                    # lever sitt eget liv bredvid originalet. Byts originalet
-                    # ut måste den gå, annars visar väljaren den vita kopian
-                    # vidare.
-                    for liten in ut.glob(f"sida-{i + 1:03d}-f*.png"):
-                        liten.unlink(missing_ok=True)
-            filer.append(f)
-        return filer
-    finally:
-        doc.close()
+    # HELA renderingen ligger innanför vakten, inte bara öppningen: sidorna och
+    # bilderna delar pdfiums globala tillstånd med dokumentet. Det var den här
+    # funktionen som kördes från två håll samtidigt när appen dog 2026-09-06 —
+    # SSE-jobbet läste ett uppslag medan remsans två blad hämtades genom
+    # routes_bok.sidbild, en tråd per begäran. Se app/pdfvakt.py.
+    with pdfvakt.ensam():
+        doc = _oppna(pdf)
+        try:
+            filer = []
+            for i in index:
+                if not (0 <= i < len(doc)):
+                    continue
+                f = ut / f"sida-{i + 1:03d}.png"
+                if not f.exists() or _attrapp(f):
+                    sida = doc[i]
+                    bild = sida.render(scale=PDF_SKALA).to_pil()
+                    if _misslyckad(sida, bild):
+                        raise RuntimeError(
+                            f"Sida {i + 1} i {pdf.name} renderades helt vit "
+                            "trots att sidan har innehåll — pdfium läste inte "
+                            "PDF:en. Ingen bild sparades.")
+                    if not (f.exists() and _helvit(bild)):
+                        # Ett verkligt tomt blad ser likadant ut varje gång:
+                        # filen som redan ligger där ÄR renderingen, och att
+                        # skriva om den skulle bara flytta tidsstämpeln på en
+                        # sida som ingen rört
+                        # (test_bilderna_renderas_bara_en_gang).
+                        bild.save(f)
+                        # Miniatyren (routes_bok._miniatyr) skapas en gång och
+                        # lever sitt eget liv bredvid originalet. Byts
+                        # originalet ut måste den gå, annars visar väljaren den
+                        # vita kopian vidare.
+                        for liten in ut.glob(f"sida-{i + 1:03d}-f*.png"):
+                            liten.unlink(missing_ok=True)
+                filer.append(f)
+            return filer
+        finally:
+            doc.close()
 
 
 def pdf_index(fil: Path | str) -> int | None:

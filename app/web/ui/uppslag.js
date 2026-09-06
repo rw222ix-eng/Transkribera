@@ -33,7 +33,8 @@
      bokens första blad: i Matematik 5000+ 1a är tryckt s. 6 PDF-sida 1, och
      s. 1–5 finns ingenstans att hämta. Remsan ska inte erbjuda sidor som bara
      kan bli tomma blad — routes_bok.sidbild svarar 404 «sidan ligger före
-     bokens början», och `onerror` tar då bort bilden utan att säga varför. */
+     bokens början», och bladet skriver då den noten i stället för att visa en
+     sida (kopplaBlad). */
   const forsta = () => (window.Bok.forstaFor ? window.Bok.forstaFor(bok) : 1);
   /* Spannet hålls innanför BOKENS pärmar, och byter man bok byter man pärmar.
      Ett spann som slutade på s. 349 i en bok på 349 sidor pekar utanför en bok
@@ -75,13 +76,29 @@
      blir kvar som enda innehåll när ingen bild går att få: prototypens böcker
      har inget id, och en importerad bok vars PDF flyttats kan bara visa de
      sidor som redan renderats. Bladet ska säga sidnummer och avsnitt även då. */
+  /* Räknare för «Försök igen»: en ny siffra i adressen tvingar webbläsaren att
+     fråga servern på nytt i stället för att visa sitt misslyckande igen. */
+  let omtag = 0;
+  /* Egna omtag har ett TAK. Svarar rutten 200 med något som inte går att visa
+     som bild — en JSON-kropp, en trasig fil — skulle «bilden gick inte, men
+     servern säger ju att den finns, rita om» annars bli en slinga som hämtar
+     sidan i evighet. Två försök, sedan får läraren knappen. */
+  const AUTOMTAG = 2;
+  let egnaOmtag = 0;
+
   function ritaUppslag() {
     const id = window.Bok.bokId ? window.Bok.bokId(bok) : null;
     const blad = (nr, roll) => {
       const a = avsnittFor(nr);
       const rader = [92, 78, 96, 64, 88].map(w => `<i style="width:${w}%"></i>`).join('');
-      /* onerror tar bort bilden i stället för att lämna en trasig ikon —
-         underlägget under den är redan ett fullgott blad. */
+      /* Bilden tas bort vid fel i stället för att lämna en trasig ikon —
+         underlägget under den är redan ett fullgott blad — men INTE tyst
+         längre. Det var precis vad läraren såg 2026-09-06: hon valde en sida
+         som inte var renderad, appen kunde inte läsa PDF:en (pdfium var
+         förstört i den processen, se app/pdfvakt.py), bilden försvann utan ett
+         ord och «jag såg ingen indikation på att det laddade in». Noten under
+         arket säger nu båda sakerna: att sidan hämtas, och varför den inte
+         kom. Kopplingen sker i `kopplaBlad` efter innehållet skrivits. */
       /* LADDNING i adressen: en omladdning ska alltid kunna rädda bladet.
          Rutten skickade länge max-age=86400, och kvällen 2026-08-31 satt
          läraren med vita blad ett dygn efter att bilderna på disken lagats —
@@ -92,11 +109,65 @@
          förbi dem. Inom samma laddning är nyckeln konstant, så att bläddra
          tillbaka till ett uppslag kostar fortfarande ingenting. */
       const bild = id
-        ? `<img class="bkbild" alt="Sida ${nr}" src="/api/bocker/${id}/sida/${nr}.png?laddning=${LADDNING}" onerror="this.remove()">`
+        ? `<img class="bkbild" alt="Sida ${nr}" src="/api/bocker/${id}/sida/${nr}.png?laddning=${LADDNING}${omtag ? '&omtag=' + omtag : ''}">`
         : '';
-      return `<div class="bkblad"><span class="bkark"><span class="bkbrub"></span>${rader}${bild}</span><span class="bkbnr">${nr} · ${roll}</span><span class="bkbavs">${a ? a.nr + ' ' + a.titel : 'utanför registret'}</span></div>`;
+      return `<div class="bkblad" data-nr="${nr}"><span class="bkark"><span class="bkbrub"></span>${rader}${bild}</span><span class="bkbnr">${nr} · ${roll}</span><span class="bkbavs">${a ? a.nr + ' ' + a.titel : 'utanför registret'}</span>${id ? `<span class="bkstatus" data-lage="laser" aria-live="polite">Läser in s. ${nr} …</span>` : ''}</div>`;
     };
     uppslag.innerHTML = blad(fran, 'första sidan') + blad(till, 'sista sidan');
+    [...uppslag.children].forEach(kopplaBlad);
+  }
+
+  /* ── Bladets besked: hämtas, kom fram, eller gick inte ──
+     En sida som ingen läst än renderas ur PDF:en vid första begäran
+     (routes_bok.sidbild), och det är en pdfium-öppning av en fil på ett par
+     hundra megabyte. Det tar tid, och tiden ska synas. Går det fel ska SKÄLET
+     synas — serverns egen svenska mening, hämtad ur felsvaret — med en väg
+     tillbaka. Aldrig tyst: ett blad som bara står kvar med sina grå streck ser
+     likadant ut som ett som aldrig efterfrågades. */
+  function kopplaBlad(bladet) {
+    const img = bladet.querySelector('.bkbild');
+    const status = bladet.querySelector('.bkstatus');
+    if (!status) return;
+    if (!img) { status.hidden = true; return; }
+    const url = img.getAttribute('src');
+    const klar = () => { status.hidden = true; };
+    let sagt = false;
+    const igenknapp = () => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'lank bkigen';
+      b.textContent = 'Försök igen';
+      /* Ny adress, inte bara ett nytt anrop: webbläsaren minns ett misslyckat
+         bildsvar på samma URL. */
+      b.addEventListener('click', () => { omtag++; ritaUppslag(); });
+      status.appendChild(document.createTextNode(' '));
+      status.appendChild(b);
+    };
+    const misslyckat = () => {
+      if (sagt) return;
+      sagt = true;
+      img.remove();
+      status.hidden = false;
+      status.dataset.lage = 'fel';
+      status.textContent = 'Sidan kunde inte läsas in.';
+      /* Varför? Bilden bär inget skäl — men rutten svarar med ett på svenska
+         («kunde inte rendera sidan: PDF:en gick inte att öppna …»). Frågan
+         ställs BARA på felvägen, och kostar där ett misslyckat försök till. */
+      fetch(url).then(r => (r.ok ? 'ok' : r.json().catch(() => null)))
+        .then(d => {
+          if (d === 'ok' && egnaOmtag < AUTOMTAG) {
+            /* Sidan finns ju: rita om bladet i stället för att skylla på
+               något som inte längre är sant. Med tak — se AUTOMTAG. */
+            egnaOmtag++; omtag++; ritaUppslag(); return;
+          }
+          if (d && d.error) status.textContent = `Sidan kunde inte läsas: ${d.error}`;
+          igenknapp();
+        })
+        .catch(() => igenknapp());
+    };
+    if (img.complete) { img.naturalWidth ? klar() : misslyckat(); return; }
+    img.addEventListener('load', klar);
+    img.addEventListener('error', misslyckat);
   }
 
   /* ── Remsan: hela boken, sida för sida ── */

@@ -304,9 +304,21 @@
       window.API.swrGlom && window.API.swrGlom('/api/bocker/' + id + '/uppslag');
       if (nyckelNu() === nyck) hamta();
     };
+    /* Felet från passet får ALDRIG bli en tom ruta. Fraga.kor ritar
+       `e.message` och en «Försök igen»-knapp, så meningen som kastas här är
+       den läraren läser — och serverns egen text hänger med efter kolonet
+       («PDF:en gick inte att öppna: … Data format error»). Morgonen
+       2026-09-06 föll just det här jobbet i skrivbordsappen och läraren såg
+       ingenting alls; se app/pdfvakt.py för varför det föll. */
     const jobb = ({ signal, log }) => window.API.strom(
       `/api/bocker/${id}/las`,
-      { fran: s.fran, till: s.till, bara: 'fakta' }, { signal, log });
+      { fran: s.fran, till: s.till, bara: 'fakta' }, { signal, log })
+      .catch(e => {
+        if (e && e.name === 'AbortError') throw e;
+        const m = (e && e.message) || '';
+        throw new Error(`Sidorna ${s.fran}–${s.till} kunde inte läsas`
+                        + (m ? `: ${m}` : '.'));
+      });
     if (window.Fraga && window.Fraga.kor) {
       window.Fraga.kor(host, {
         enkel: true, jobb,
