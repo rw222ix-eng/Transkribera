@@ -2867,6 +2867,67 @@ def stada_utkast_for_lektion(conn: sqlite3.Connection, dokument_id: int) -> list
     return borta
 
 
+def _dokument_blob(conn: sqlite3.Connection, dokument_id: int, markor: int) -> dict:
+    """Pappret som markören står på. Samma klämning som _dokument_view gör: en
+    markör utanför arrayen betyder inte att dokumentet saknas."""
+    rader = conn.execute(
+        "SELECT data FROM dokument_versioner WHERE dokument_id = ? ORDER BY version",
+        (dokument_id,)).fetchall()
+    if not rader:
+        return {}
+    i = min(max(int(markor or 0), 0), len(rader) - 1)
+    try:
+        v = json.loads(rader[i]["data"])
+    except (TypeError, ValueError):
+        return {}
+    return v if isinstance(v, dict) else {}
+
+
+def stada_losningsblad(conn: sqlite3.Connection, dokument_id: int) -> list[int]:
+    """Ett lösningsblad ERSÄTTER sitt tidigare syskon, det läggs inte bredvid.
+
+    Lärarens fynd 2026-09-06: samma prov godkänt två gånger (en omskrivning via
+    «Fortsätt ändra», och en gång till för att PDF:en inte byggdes första
+    gången) lämnade ett nytt lösningsblad varje varv. Dokument 76 och 83 var
+    båda lösningsblad till prov 41, och lektionen bar två «Lösningar»-chips.
+    Provets EGEN rad byter bara status vid godkännandet och dubblerades därför
+    inte, men bladet sparas som en ny rad och hade ingen som röjde undan den
+    gamla. plan.js gör det numera i samma gest; det här är skyddet under, för
+    den flik som inte kände till det andra bladet.
+
+    Originalet identifieras av provets/anteckningens id när båda bladen bär ett
+    (bladet är en klon och ärver det rakt av). Saknar något av dem id:t faller
+    frågan tillbaka på lektionens identitet: samma slag av papper, samma
+    moment, samma dag, samma grupp. Det är samma jämförelse som plan.js
+    `sammaOriginal`. Bara godkända blad rörs: ett utkast är lärarens pågående
+    arbete och får aldrig försvinna under händerna på henne."""
+    rad = conn.execute("SELECT * FROM dokument WHERE id = ?", (dokument_id,)).fetchone()
+    if rad is None:
+        return []
+    ny = _dokument_blob(conn, dokument_id, rad["markor"])
+    if not ny.get("losningsblad"):
+        return []
+    nyckel = ny.get("provId") or ny.get("antId")
+    borta: list[int] = []
+    for r in conn.execute(
+            "SELECT id, moment, datum, markor FROM dokument WHERE id <> ? "
+            "AND status = 'godkant' AND typ IS ? AND group_id IS ?",
+            (dokument_id, rad["typ"], rad["group_id"])).fetchall():
+        gammal = _dokument_blob(conn, r["id"], r["markor"])
+        if not gammal.get("losningsblad"):
+            continue
+        gnyckel = gammal.get("provId") or gammal.get("antId")
+        if nyckel and gnyckel:
+            if str(gnyckel) != str(nyckel):
+                continue
+        elif r["moment"] != rad["moment"] or r["datum"] != rad["datum"]:
+            continue
+        borta.append(r["id"])
+    for i in borta:
+        delete_dokument(conn, i)
+    return borta
+
+
 def set_dokument_ordning(conn: sqlite3.Connection, ids: list[int]) -> list[dict]:
     """Högens ordning som klienten håller den. Ett syskon ligger direkt efter
     sitt original, och en ångrad radering hamnar tillbaka på sin plats — det är

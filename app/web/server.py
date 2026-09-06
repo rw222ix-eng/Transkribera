@@ -1402,6 +1402,15 @@ def create_app(base_dir: Path | None = None,
             # ett utkast ligger under händerna, och det får inte dras undan.
             if status == "godkant" and body.get("stada"):
                 ny["stadade"] = len(db.stada_utkast_for_lektion(conn, ny["id"]))
+            # Ett lösningsblad ERSÄTTER sitt tidigare syskon. Lärarens fynd
+            # 2026-09-06: samma prov godkänt två gånger gav två blad (dokument
+            # 76 och 83, båda till prov 41) och två «Lösningar»-chips på
+            # lektionen. plan.js röjer undan det gamla bladet innan det nya
+            # sparas; skyddet här är för den flik som inte kände till det.
+            # Villkorslöst, för flaggan sitter på pappret självt: är raden
+            # inget lösningsblad gör stada_losningsblad ingenting.
+            if status == "godkant":
+                ny["ersatte"] = len(db.stada_losningsblad(conn, ny["id"]))
             return ny
         finally:
             conn.close()

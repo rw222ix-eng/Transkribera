@@ -589,6 +589,102 @@ def test_lakningen_hanger_pa_bada_ingangarna():
     assert js.count("speglaExamen(v)") == 3   # definitionen + de två ingångarna
 
 
+# ---------------------------------- lösningsbladet ersätter, det dubbleras inte --
+# Lärarens fynd 2026-09-06: samma prov godkänt två gånger (en omskrivning via
+# «Fortsätt ändra», och en gång till för att PDF:en inte byggdes) gav ett nytt
+# lösningsblad varje varv. Dokument 76 och 83 var båda lösningsblad till prov 41,
+# och lektionen bar två «Lösningar»-chips. Provets egen rad byter bara status vid
+# godkännandet och dubblerades därför inte; bladet sparas som en NY rad.
+
+
+def _blad(**extra):
+    return papper(**dict({"losningsblad": True, "provId": 41}, **extra))
+
+
+def test_ett_nytt_losningsblad_ersatter_det_gamla(client):
+    gammalt = client.post("/api/dokument", json={
+        "dokument": _blad(), "status": "godkant"}).json()
+    nytt = client.post("/api/dokument", json={
+        "dokument": _blad(anteckning="omskrivet"), "status": "godkant"}).json()
+
+    assert nytt["ersatte"] == 1
+    kvar = [d["id"] for d in client.get("/api/dokument").json()["sparade"]]
+    assert kvar == [nytt["id"]]
+    assert gammalt["id"] not in kvar
+
+
+def test_provet_sjalvt_rors_aldrig_av_bladet(client):
+    """Provet och dess blad bär SAMMA provId. Skyddet får bara ta blad."""
+    provet = client.post("/api/dokument", json={
+        "dokument": papper(provId=41), "status": "godkant"}).json()
+    bladet = client.post("/api/dokument", json={
+        "dokument": _blad(), "status": "godkant"}).json()
+
+    assert bladet["ersatte"] == 0
+    kvar = [d["id"] for d in client.get("/api/dokument").json()["sparade"]]
+    assert kvar == [provet["id"], bladet["id"]]
+
+
+def test_ett_annat_provs_losningsblad_star_kvar(client):
+    annat = client.post("/api/dokument", json={
+        "dokument": _blad(provId=42), "status": "godkant"}).json()
+    nytt = client.post("/api/dokument", json={
+        "dokument": _blad(), "status": "godkant"}).json()
+
+    assert nytt["ersatte"] == 0
+    kvar = [d["id"] for d in client.get("/api/dokument").json()["sparade"]]
+    assert kvar == [annat["id"], nytt["id"]]
+
+
+def test_utan_provid_racker_lektionen_som_identitet(client):
+    """Papper skrivna innan provId fanns bär inget. Då är lektionen svaret:
+    samma slag av papper, samma moment, samma dag, samma klass."""
+    gammalt = client.post("/api/dokument", json={
+        "dokument": papper(losningsblad=True), "status": "godkant"}).json()
+    annan_dag = client.post("/api/dokument", json={
+        "dokument": papper(losningsblad=True, datum="2026-05-21"),
+        "status": "godkant"}).json()
+    nytt = client.post("/api/dokument", json={
+        "dokument": papper(losningsblad=True), "status": "godkant"}).json()
+
+    assert nytt["ersatte"] == 1
+    kvar = [d["id"] for d in client.get("/api/dokument").json()["sparade"]]
+    assert kvar == [annan_dag["id"], nytt["id"]]
+    assert gammalt["id"] not in kvar
+
+
+def test_ett_utkast_ror_bladet_aldrig(client):
+    """Lärarens pågående arbete får aldrig dras undan under händerna på henne."""
+    utkast = client.post("/api/dokument", json={"dokument": _blad()}).json()
+    nytt = client.post("/api/dokument", json={
+        "dokument": _blad(), "status": "godkant"}).json()
+
+    assert nytt["ersatte"] == 0
+    assert client.get("/api/dokument").json()["utkast"]["id"] == utkast["id"]
+
+
+def test_bladet_ersatter_bara_i_sin_egen_grupp(client):
+    """Två klasser kan skriva samma prov. Bladen är då olika papper."""
+    annan_klass = client.post("/api/dokument", json={
+        "dokument": _blad(klass="9B"), "status": "godkant"}).json()
+    nytt = client.post("/api/dokument", json={
+        "dokument": _blad(), "status": "godkant"}).json()
+
+    assert nytt["ersatte"] == 0
+    kvar = [d["id"] for d in client.get("/api/dokument").json()["sparade"]]
+    assert kvar == [annan_klass["id"], nytt["id"]]
+
+
+def test_klienten_rojer_undan_det_gamla_bladet_sjalv():
+    """Skyddet på servern är det undre. Godkännandet i plan.js ska ta bladet ur
+    högen OCH ur basen i samma gest, annars står chippet kvar tills sidan
+    laddas om."""
+    js = PLAN_JS.read_text(encoding="utf-8")
+    assert "const gamla = sparat.filter(x => x.losningsblad && sammaOriginal(x, l));" in js
+    assert "dokTaBort(g);" in js
+    assert "if (gamla.length) dokOrdna();" in js
+
+
 def test_lakningen_gor_aldrig_om_en_angring():
     """Har läraren ångrat sig tittar hon MED FLIT på ett äldre varv, och examen
     i basen står på det nyaste. Att bygga om det varv hon backat ifrån vore att

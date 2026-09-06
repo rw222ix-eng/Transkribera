@@ -4501,10 +4501,24 @@
      förhandsvisningens fot. Två kopior av samma splice hade glidit isär, och
      det som skulle glida isär är just facitet: pappret OCH dess lösningsblad
      ska följas åt, för ett facit utan sitt blad är skräp. */
+  /* Vilket original ett papper hör till. Provets/anteckningens id svarar när
+     BÅDA bär ett: bladet är en klon och ärver `provId`/`antId` rakt av. Saknar
+     något av dem id:t (papper skrivna innan de fanns gör det) faller frågan
+     tillbaka på lektionens identitet, samma form som raderingen alltid läst
+     syskonen på: samma slag av papper, samma moment, samma dag. Klassen är
+     med på köpet, för två klasser kan ha samma moment samma dag. */
+  const dokIdOrig = v => (v && (v.provId || v.antId)) || '';
+  const sammaOriginal = (a, b) => {
+    if (!a || !b) return false;
+    const na = dokIdOrig(a), nb = dokIdOrig(b);
+    if (na && nb) return String(na) === String(nb);
+    return a.typ === b.typ && a.moment === b.moment && a.datum === b.datum
+      && (a.klass || '') === (b.klass || '');
+  };
   function raderaDok(v) {
     const i = sparat.indexOf(v);
     if (i < 0) return false;
-    const syskon = sparat.filter(x => x !== v && x.losningsblad && x.typ === v.typ && x.moment === v.moment && x.datum === v.datum);
+    const syskon = sparat.filter(x => x !== v && x.losningsblad && sammaOriginal(x, v));
     const bort = [{ i, v }].concat(syskon.map(s => ({ i: sparat.indexOf(s), v: s })));
     bort.sort((a, b) => b.i - a.i).forEach(b => sparat.splice(b.i, 1));
     bort.forEach(b => dokTaBort(b.v));
@@ -5281,12 +5295,29 @@
       window.Klass && window.Klass.rita && window.Klass.rita();
     }
     const i = v.inst || {};
+    /* ── BLADET ERSÄTTER SITT SYSKON, LÄGGER SIG INTE BREDVID ──
+       Lärarens fynd 2026-09-06: samma prov godkänt två gånger (en omskrivning
+       via «Fortsätt ändra», och en gång till för att PDF:en inte byggdes)
+       lämnade ETT NYTT lösningsblad varje varv. I basen låg dokument 76 och 83
+       som båda var lösningsblad till prov 41, och lektionen bar två
+       «Lösningar»-chips. Provets egen rad dubblerades inte: godkännandet BYTER
+       status på den (utkastGodkann PATCH). Bladet går en annan väg: det är en
+       avskrift av pappret och sparas som en ny rad. Därför måste den gamla
+       avskriften bort i samma gest, både ur högen och ur basen. */
     if ((v.typ === 'Prov' && i.losningar) || harEgetFacit(v)) {
       const l = JSON.parse(JSON.stringify(v));
       delete l.id;
       l.losningsblad = true;
+      const gamla = sparat.filter(x => x.losningsblad && sammaOriginal(x, l));
+      gamla.forEach(g => {
+        const gi = sparat.indexOf(g);
+        if (gi > -1) sparat.splice(gi, 1);
+        dokTaBort(g);
+      });
       sparat.push(l);
       dokSpara(l);
+      // Högen tappade rader; positionerna skrivs om så ordningen håller.
+      if (gamla.length) dokOrdna();
     }
     ritaSparat();
     omprovAv = null;

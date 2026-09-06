@@ -699,7 +699,10 @@
   font:500 13px/1.3 var(--sans,system-ui);color:var(--ink,#000);
   opacity:0;transition:opacity .26s var(--ease,ease),transform .26s var(--ease,ease)}
 .jater[data-in]{opacity:1;transform:translateX(-50%) translateY(0)}
-.jater .jtext{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.jater .jtext{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  cursor:pointer}
+.jater .jtext:hover{text-decoration:underline}
+.jater .jtext:focus-visible{outline:2px solid var(--accent,#117BC8);outline-offset:2px;border-radius:4px}
 .jater .jspar{flex:0 0 74px;height:4px;border-radius:9999px;background:var(--track,#E8F1F8);overflow:hidden}
 .jater .jspar i{display:block;height:100%;width:4%;border-radius:9999px;
   background:var(--accent,#117BC8);transition:width .4s linear}
@@ -714,6 +717,38 @@
                     gruppuppgift: 'Gruppuppgiften',
                     tavla: 'Tavlan', anteckningar: 'Anteckningarna' };
 
+  /* ── REMSAN ÄR EN VÄG, INTE ETT KVITTO ──────────────
+     Lärarens fynd 2026-09-06: hon klickade på remsans text för att komma DIT
+     jobbet skrivs, och ingenting hände. Texten säger vad som pågår, och det
+     enda stället där det syns på riktigt är planeringens statusruta. Fliken
+     klickas, precis som brief.js gör det: appen har ingen vy-växlare att
+     kalla på, bara knapparna. */
+  function tillPlaneringen() {
+    const flik = [...document.querySelectorAll('.flik')]
+      .find(f => f.textContent.trim() === 'Planering');
+    if (flik) flik.click();
+    const ruta = document.getElementById('skrivstatus');
+    if (!ruta || ruta.hidden) return;
+    const y = Math.max(0, ruta.getBoundingClientRect().top + window.scrollY - 84);
+    (window.rullaTill || (v => window.scrollTo(0, v)))(y, 620);
+  }
+
+  /* Vilket papper i Sparat jobbet skrev. `dokument_id` är INTE en rad i högen:
+     för ett prov är det exam-id:t, för en tavla planeringens pid. Pappret bär
+     dem som `provId`/`antId` respektive `wbId`, och det är vägen tillbaka.
+     Hittas inget papper (jobbet blev klart i en annan flik, högen här är den
+     som laddades) står «Ladda om» kvar. En knapp som öppnar fel papper är
+     värre än en som ber om en omladdning. */
+  function dokIndex(jobb) {
+    const id = jobb && jobb.dokument_id;
+    if (!id || !window.Dokument || !window.Dokument.sparade
+        || !window.Dokument.visa) return -1;
+    const lika = (a) => a !== undefined && a !== null && a !== ''
+      && String(a) === String(id);
+    return (window.Dokument.sparade() || []).findIndex(
+      v => v && !v.losningsblad && (lika(v.provId) || lika(v.antId) || lika(v.wbId)));
+  }
+
   function remsa(jobb) {
     if (!document.getElementById('jaterstil')) {
       const s = document.createElement('style');
@@ -724,7 +759,8 @@
     const el = document.createElement('div');
     el.className = 'jater';
     el.setAttribute('role', 'status');
-    el.innerHTML = '<span class="jtext"></span><span class="jspar"><i></i></span>'
+    el.innerHTML = '<span class="jtext" role="button" tabindex="0" '
+      + 'data-tip="Gå till planeringen"></span><span class="jspar"><i></i></span>'
       + '<button class="jstopp" type="button">Avbryt</button>';
     document.body.appendChild(el);
     requestAnimationFrame(() => el.setAttribute('data-in', ''));
@@ -746,6 +782,14 @@
       if (window.API.avbrytJobb) window.API.avbrytJobb(jobb.id);
       ut();
     });
+    // Texten är vägen till planeringen. Tangentbordet med, för remsan är det
+    // enda som ligger framme medan appen skriver.
+    txt.addEventListener('click', tillPlaneringen);
+    txt.addEventListener('keydown', e => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      tillPlaneringen();
+    });
     return {
       steg: d => {
         if (!d.av) return;
@@ -756,7 +800,20 @@
       klar: () => {
         fyll.style.width = '100%';
         txt.textContent = `${namn} blev klart medan du var borta.`;
-        knapp('Ladda om', () => window.location.reload());
+        /* Ligger pappret i högen är «Öppna» det läraren vill: omladdningen är
+           en omväg till samma sida. Platsen slås upp igen vid klicket, för
+           högen kan ha rört sig sedan remsan skrevs. */
+        if (dokIndex(jobb) > -1) {
+          knapp('Öppna', () => {
+            const i = dokIndex(jobb);
+            if (i < 0) { window.location.reload(); return; }
+            tillPlaneringen();
+            window.Dokument.visa(i);
+            ut();
+          });
+        } else {
+          knapp('Ladda om', () => window.location.reload());
+        }
       },
       fel: m => {
         txt.textContent = `${namn}: ${kortRad(m || 'det gick inte', 48)}`;

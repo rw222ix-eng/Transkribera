@@ -63,6 +63,44 @@ test("ett skrivet prov lämnar ett jobb med sin historik efter sig", async ({ pa
   for (const s of steg) expect(s.steg).toBeLessThanOrEqual(s.av);
 });
 
+/* REMSAN ÄR EN VÄG, INTE ETT KVITTO
+ *
+ * Lärarens fynd 2026-09-06: hon klickade på remsans text för att komma DIT
+ * jobbet skrivs, och ingenting hände. Texten säger vad som pågår; det enda
+ * stället där det syns på riktigt är planeringens statusruta, en flik bort.
+ */
+test("klick på remsans text går till planeringen", async ({ page }) => {
+  await page.route("**/api/jobb/aktiva*", r => r.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({
+      jobb: [], kor: [{ id: 4712, typ: "tavla", status: "running",
+                        seq: 1, senaste: "Täckningsdomaren läser urvalet",
+                        dokument_id: "c1c82511fd3d", fel: null, resultat_ref: null }],
+    }),
+  }));
+  let forsta = true;
+  await page.route("**/api/jobb/4712/strom*", r => {
+    if (!forsta) return new Promise(() => {});
+    forsta = false;
+    return r.fulfill({
+      contentType: "text/event-stream",
+      body: 'data: {"type":"log","msg":"Täckningsdomaren läser urvalet","seq":1}\n\n',
+    });
+  });
+
+  await L.oppna(page);
+  const remsa = page.locator(".jater");
+  await expect(remsa).toBeVisible({ timeout: 15_000 });
+  // Klickbar på riktigt: en knapp för skärmläsaren och för tangentbordet.
+  await expect(remsa.locator(".jtext")).toHaveAttribute("role", "button");
+
+  await expect(page.locator("#vy-planering")).toBeHidden();
+  await remsa.locator(".jtext").click();
+  await expect(page.locator("#vy-planering")).toBeVisible();
+  // Remsan står kvar: jobbet går fortfarande, och Avbryt ska finnas kvar.
+  await expect(remsa).toBeVisible();
+});
+
 test("remsan tar upp ett jobb som fortfarande går, och Avbryt går till servern", async ({ page }) => {
   const avbrutna = [];
 

@@ -378,6 +378,53 @@ test("«Fortsätt ändra» lägger tillbaka pappret som utkast", async ({ page }
   await expect(page.locator("#arkskal")).toContainText("Beräkna");
 });
 
+/* ETT LÖSNINGSBLAD, INTE ETT PER GODKÄNNANDE
+ *
+ * Lärarens fynd 2026-09-06: hon godkände samma prov igen (en omskrivning via
+ * «Fortsätt ändra», och en gång till för att PDF:en inte byggdes) och fick ett
+ * nytt lösningsblad varje varv. I basen låg dokument 76 och 83, båda
+ * lösningsblad till prov 41, och lektionen bar två «Lösningar»-chips. Provets
+ * EGEN rad byter bara status vid godkännandet (utkastGodkann PATCH) och
+ * dubblerades därför inte; bladet sparas som en ny rad och hade ingen som
+ * röjde undan den gamla.
+ */
+test("samma prov godkänt två gånger ger ETT lösningsblad, inte två", async ({ page }) => {
+  await page.route("**/api/exams/**", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ id: 41, status: "utkast" }) }));
+  const provet = () => papper({
+    typ: "Prov", provId: 41, moment: "derivator",
+    inst: { antal: 3, losningar: true, provtid: "90 min", delprov: "Del A + Del B" },
+  });
+  const anrop = await fejka(page, {
+    utkast: { id: 7, status: "utkast", markor: 0, sort: 0, foljd: null,
+              versioner: [provet()], dokument: provet() } });
+  await page.goto("/");
+  await hydrerad(page);
+  await page.getByRole("tab", { name: "Planering" }).click();
+  await expect(page.locator("#dokument")).toBeVisible();
+
+  await page.locator("#godkann").click();
+  // Provet och dess lösningsblad.
+  await expect.poll(() => page.evaluate(() => window.Dokument.sparade().length)).toBe(2);
+
+  // Tillbaka i rutan och godkänn en gång till: lärarens andra varv.
+  await visa(page, 0);
+  await page.locator("#fh-fortsatt").click();
+  await expect(page.locator("#forhandsskal")).toBeHidden();
+  await expect(page.locator("#dokument")).toBeVisible();
+  await page.locator("#godkann").click();
+
+  // Ett blad, inte två. Och det gamla gick bort på servern, inte bara i högen:
+  // annars ligger det kvar och är tillbaka efter nästa omladdning.
+  await expect.poll(() => page.evaluate(() =>
+    window.Dokument.sparade().filter(v => v.losningsblad).length)).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.Dokument.sparade().length)).toBe(2);
+  await expect.poll(() => anrop.filter(a => a.metod === "DELETE").length).toBe(1);
+  // Ordningen skrivs om när högen tappat en rad.
+  expect(anrop.some(a => a.vag === "/api/dokument/ordning")).toBe(true);
+});
+
 test("«Behåll» i förhandsvisningen raderar ingenting", async ({ page }) => {
   const anrop = await fejka(page, { sparade: [rad(1, papper())] });
   await page.goto("/");
