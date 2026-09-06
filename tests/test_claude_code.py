@@ -180,6 +180,29 @@ def test_svar_utan_deltan_tas_ur_resultatfaltet(monkeypatch):
     assert claude_code.generate("fråga") == '{"titel":"Bråk"}'
 
 
+def test_prosa_fore_det_strukturerade_svaret_vinner_inte(monkeypatch):
+    """Med --json-schema resonerar modellen ibland i ett textblock innan den
+    kallar StructuredOutput. Prosan strömmar som text_delta, JSON:en ligger i
+    result-radens structured_output — och det är den anroparen ska få."""
+    _inloggad(monkeypatch)
+    rader = ['{"type":"system","subtype":"init"}',
+             json.dumps({"type": "stream_event", "event": {
+                 "type": "content_block_delta",
+                 "delta": {"type": "text_delta", "text": "Jag har läst sidorna. "}}}),
+             json.dumps({"type": "result", "is_error": False,
+                         "result": '{"punkter":[]}',
+                         "structured_output": {"punkter": [], "osakra": [
+                             {"kod": "G25-M2A-ALG-2", "skal": "två obekanta"}]},
+                         "total_cost_usd": 0.01})]
+    monkeypatch.setattr(claude_code.subprocess, "Popen", lambda *a, **k: _FejkProc(rader))
+    bitar = []
+    svar = json.loads(claude_code.generate("fråga", schema={"type": "object"},
+                                           token_cb=bitar.append))
+    assert svar["osakra"][0]["kod"] == "G25-M2A-ALG-2"
+    assert svar["osakra"][0]["skal"] == "två obekanta"      # ensure_ascii=False
+    assert bitar == ["Jag har läst sidorna. "]               # prosan blev lägesrad
+
+
 def test_fel_fran_claude_code_reses_som_fel(monkeypatch):
     _inloggad(monkeypatch)
     rader = [json.dumps({"type": "result", "is_error": True,

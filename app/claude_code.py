@@ -487,6 +487,20 @@ def generate(prompt: str, *, system: str | None = None,
                                       default=""))
             if h.get("is_error"):
                 fel = str(h.get("result") or "Claude Code misslyckades.")
+            elif h.get("structured_output") is not None:
+                # MED --json-schema svarar modellen ibland i två steg: först ett
+                # textblock i prosa («Jag har läst sidorna 12–13 och stämt av
+                # …»), sedan StructuredOutput-verktyget med själva JSON:en.
+                # Prosan kom som text_delta och låg i `delar`, och grenen
+                # nedanför läste därför aldrig resultatfältet: anroparen fick
+                # ett resonemang i stället för sitt schema, och innehålls-
+                # domaren (app/ci_forslag.py) svarade «Modellen svarade
+                # otydligt» på ett svar som var helt i ordning. Sett skarpt
+                # 2026-09-06 på Origo 2a s. 12–18. Bär raden ett strukturerat
+                # svar är DET svaret, oavsett vad modellen sa på vägen dit;
+                # prosan har redan gått till token_cb som lägesrad.
+                delar[:] = [json.dumps(h["structured_output"],
+                                       ensure_ascii=False)]
             elif not delar and h.get("result"):
                 # Svaret kom aldrig som deltan (t.ex. med --json-schema) —
                 # resultatfältet är då hela texten.
