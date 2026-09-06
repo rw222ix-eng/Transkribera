@@ -230,7 +230,7 @@ def bok_las_text(base: Path, db_file: Path, body: dict, emit=None) -> str:
     Det är HÄR sidorna faktiskt kostar sina 96 sekunder, och det är rätt ställe:
     läraren har tryckt Skriv och väntar på ett papper. För lektionsmaterialet
     lästes uppslagets uppgiftsnummer redan när spannet valdes (uppgiftspanelens
-    faktapass), så det som återstår är innehållet. Provet och diagnosen fäller
+    faktapass), så det som återstår är innehållet. Provet fäller
     panelen och hoppar det passet (uppgifter.js hamta — ett provspann på trettio
     sidor hade fyllt en panel ingen ser), så för dem tas faktan HÄR i stället:
     prompten vill ha uppgiftsnumren, och textpasset vill ha faktapassets

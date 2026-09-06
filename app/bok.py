@@ -377,7 +377,7 @@ def las_spann(base: Path, conn, bok_id: int, fran: int, till: int, *,
     väljs — uppgiftslistan ska stå framme på en minut, inte på en kvart), och
     `bara="text"` hoppar över det. Skrivningen skickar inget `bara`: har
     panelen redan tagit faktapasset är det gratis, och har den inte det (provet
-    och diagnosen fäller panelen) måste det tas här — textpasset läser annars
+    fäller panelen) måste det tas här — textpasset läser annars
     på gissad offset, se `pdf_for` nedan.
     """
     logg = emit or (lambda _h: None)
@@ -567,8 +567,8 @@ def uppslag_text(conn, bok_id: int, fran: int, till: int,
 # uppgifter som bokens.»
 #
 # Raden bor i en egen konstant därför att BÅDA bokblocken bär den: det hela
-# uppslaget (tavlan, arbetsbladet, gruppuppgiften) och urvalet (provet,
-# diagnosen). Skärpningen gick annars in i det ena och glömdes i det andra,
+# uppslaget (tavlan, arbetsbladet, gruppuppgiften) och urvalet (provet).
+# Skärpningen gick annars in i det ena och glömdes i det andra,
 # och då hade samma bok gett två olika order beroende på vilket papper som
 # skrevs. Den säger vad som ska ÄRVAS (typ, begrepp, notation, nivå) och vad
 # som ska vara nytt (sammanhang, scenario, tal) — ett förbud mot avskrift

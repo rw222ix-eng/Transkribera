@@ -485,7 +485,7 @@ def test_ordern_om_forsattsbilden_star_bara_i_provets_uppdrag():
     for profil in ("arbetsblad", "gruppuppgift"):
         assert order not in exam_gen.build_prompt(*args, antal=6,
                                                   profil=profil), profil
-    assert "arbetsblad, gruppuppgift och diagnos lämnar" \
+    assert "arbetsblad och gruppuppgift lämnar" \
         in exam_gen.FORSATTSBILD_REGEL
 
 

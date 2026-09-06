@@ -198,8 +198,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
     async def tavla_pdf(req: Request):
         """Tavlan som EGEN PDF — inte som en rad i ett paket.
 
-        Tavlan är det enda dokumentet utan en byggd fil. Prov, arbetsblad,
-        diagnos och anteckningar får sin PDF vid godkännandet och serveras ur
+        Tavlan är det enda dokumentet utan en byggd fil. Prov, arbetsblad
+        och anteckningar får sin PDF vid godkännandet och serveras ur
         databasen (routes_exam ``_serve_artifact``); tavlan finns bara som
         ritad DOM i webbläsaren, och motorn som ritar den bor DÄR, inte här.
         Klienten ritar därför av den (app/web/ui/tavla-bild.js) och skickar

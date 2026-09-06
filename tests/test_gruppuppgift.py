@@ -642,7 +642,7 @@ def test_en_okand_kurs_faller_tillbaka_pa_matten_i_monstret():
 def test_monstret_ror_inte_provet_eller_arbetsbladet():
     """Förlagan är gruppuppgiftens. Prov och arbetsblad har egna uppdrag och
     egna nivåskalor, och ett byggpapper får inte läcka in i dem."""
-    for profil in ("prov", "arbetsblad", "diagnos"):
+    for profil in ("prov", "arbetsblad"):
         p = exam_gen.build_prompt(
             "Matematik, nivå 1a", "BA26B", ["Räkneordning"], antal=6,
             profil=profil)

@@ -15,8 +15,8 @@ facit, inte efter sida 47 i en bunt.
 
 Källorna är olika för olika papper, och det är därför den här modulen finns:
 
-* **Arbetsblad, gruppuppgifter och diagnoser** har redan en PDF — den som
-  byggdes vid godkännandet. Den är en bild av SKÄRMEN: klienten ritar av varje
+* **Arbetsblad och gruppuppgifter** har redan en PDF — den som byggdes
+  vid godkännandet. Den är en bild av SKÄRMEN: klienten ritar av varje
   blad (app/web/ui/blad-bild.js) och rutten lägger bilderna på A4 här nere
   (``png_till_pdf``, samma väg som tavlan). Tectonic är kvar som reserv när
   godkännandet kommer utan bilder. Den tas som den är.

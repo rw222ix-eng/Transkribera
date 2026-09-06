@@ -464,8 +464,8 @@ def test_kryssrutorna_ar_kvar_som_egen_svarsplats():
 
 def test_latexvyn_slapper_svarsfaltet_pa_en_redovisningsuppgift():
     """Andra änden av samma dom: `svarsfalt_rad` är provmallens svarsplats och
-    får bara finnas på kortsvaren. Listan `svarsfalt` står kvar — arbetsbladet,
-    gruppuppgiften och diagnosen bygger sin form på den."""
+    får bara finnas på kortsvaren. Listan `svarsfalt` står kvar — arbetsbladet
+    och gruppuppgiften bygger sin form på den."""
     vy_kort = exam_latex._enhet_vy(
         poang=(1, 0, 0), typ="rutin", formaga="P", text="t", losning="l",
         bedomning="b", alternativ=None, ratt_alternativ=None, notis=None,

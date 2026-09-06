@@ -249,14 +249,12 @@ def test_takten_ger_ett_tatare_prov_an_np():
     assert hennes["antal"] > np["antal"]
 
 
-def test_diagnosen_behaller_np_takten():
-    """Diagnosen räknar UPPGIFTER ur en given lektion. Att pressa takten där
-    vore att fylla lektionen i stället för att mäta den."""
-    assert exam_spec.takt_for("diagnos") == exam_spec.NP_MIN_PER_POANG
-    assert exam_spec.takt_for("prov") == exam_spec.PROV_MIN_PER_POANG
-    assert exam_spec.takt_for("arbetsblad") == exam_spec.PROV_MIN_PER_POANG
-    js = PLAN_JS.read_text(encoding="utf-8")
-    assert "v.typ === 'Diagnos' ? NP_TAKT" in js
+def test_varje_papper_raknas_med_lararens_kapiteltakt():
+    """Takten var typberoende: ett papper räknades med NP:s 4,4 min/poäng och
+    resten med lärarens 3,5. Den grenen ströks när dokumenttypen bakom den
+    togs bort, och nu gäller hennes takt allt appen skriver."""
+    for typ in ("prov", "arbetsblad", "gruppuppgift"):
+        assert exam_spec.takt_for(typ) == exam_spec.PROV_MIN_PER_POANG, typ
 
 
 def test_takten_reser_med_dokumentet():

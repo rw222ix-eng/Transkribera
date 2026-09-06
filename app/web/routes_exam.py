@@ -75,17 +75,13 @@ def _safe_component(raw: str, fallback: str) -> str:
 # rutt-familj: den är ett ark med uppgifter, precis som arbetsbladet, och delar
 # därför generering, versionering, iteration och PDF-vägen. Skillnaden ligger i
 # balansprofilen (exam_spec.PROFILER), prompten och mallen.
-# Diagnosen (Etapp 2) är den fjärde. Den delar rutt av samma skäl som de andra
-# — ett ark med uppgifter — men är den enda vars ANTAL uppgifter inte kommer ur
-# en väljare: det räknas ur kursens centrala innehåll och lektionens längd
-# (exam_spec.diagnosplan).
-_TYPER = ("prov", "arbetsblad", "gruppuppgift", "diagnos")
-
-
-def _profil(typ: str) -> str:
-    """Skärmens typnamn («Prov», «Diagnos») till exam_spec-profilen. Diagnosen
-    är den enda som byter modell — den räknas med NP:s takt."""
-    return "diagnos" if str(typ or "").lower().startswith("diagnos") else "prov"
+# Här stod en fjärde typ: diagnosen. Den togs bort 2026-09-06. Läraren
+# använder provet med nivåval i stället, och en typ som är «ett prov med annan
+# etikett» kostar en egen mall, en egen profil och en egen rutt utan att ge
+# henne något. En typ utanför listan faller tillbaka på provet, precis som
+# vilket annat påhitt som helst (se `generate` nedan). Ett gammalt utkast
+# eller ett anrop utifrån skrivs alltså som ett prov i stället för att kasta.
+_TYPER = ("prov", "arbetsblad", "gruppuppgift")
 
 
 def create_router(base: Path, arbiter) -> APIRouter:
@@ -165,22 +161,6 @@ def create_router(base: Path, arbiter) -> APIRouter:
         finally:
             conn.close()
 
-    def _diagnosens_hjalpmedel(delar: bool, formelblad: bool) -> str:
-        """Diagnosens hjälpmedelsrad, byggd ur planeringens två kryss.
-
-        Formuleringen är provets (exam_latex._delnamn_visning översätter de
-        interna delnamnen B/C till Del A/Del B på pappret, så raden skrivs med
-        de INTERNA namnen precis som modellens egen gör). Utan delar är det en
-        mening: vad som får ligga på bänken.
-
-        Linjalen står med av samma skäl som på provet — den är inte ett
-        digitalt verktyg och har aldrig varit förbjuden."""
-        blad = "Formelblad och linjal" if formelblad else "Linjal"
-        if delar:
-            return (f"{blad}. Del B utan digitala verktyg. "
-                    "Del C med räknare och digitala verktyg.")
-        return f"{blad}. Inga digitala verktyg."
-
     def _satt_lararens_datum(exam: dict | None, datum: str | None,
                              klockslag: str | None = None) -> None:
         """Pappersdatumet — och klockslagen — är LÄRARENS, aldrig modellens.
@@ -257,12 +237,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
             "summor": summor,
             # Tiden pappret tar, räknad på de FÄRDIGA uppgifterna. Frontenden
             # har samma modell (plan.js uppskatta) men bara efter att arket
-            # ritats; diagnosen behöver siffran med en gång, för den skrevs för
-            # att rymmas på en lektion och läraren ska se om den gjorde det.
-            # TAKTEN FÖLJER TYPEN. Provet räknas med lärarens kapiteltakt
-            # (exam_spec.PROV_MIN_PER_POANG, 3,5 min/poäng), diagnosen med
-            # NP:s — den räknar uppgifter ur en given lektion och ska inte
-            # pressas. Samma val som plan.js gör på skärmen.
+            # ritats; skärmen behöver siffran med en gång, för pappret skrevs
+            # för att rymmas på en lektion och läraren ska se om det gjorde
+            # det. Takten kommer ur exam_spec.takt_for (lärarens kapiteltakt,
+            # 3,5 min/poäng) — samma val som plan.js gör på skärmen.
             "tid": (exam_spec.tidsatgang(
                 summor, len(doc.uppgifter),
                 takt=exam_spec.takt_for(view.get("typ") or "prov"))
@@ -283,8 +261,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
     def foreslag_antal(tid: int = Query(ge=1, le=1440), typ: str = "prov",
                        nivamix: str | None = None,
                        takt: float | None = None):
-        """Hur många uppgifter provtiden rymmer — lärarens motsvarighet till
-        diagnosens dimensionering, fast åt andra hållet.
+        """Hur många uppgifter provtiden rymmer.
+
+        `typ` är skärmens dokumenttyp. Den valde förut mellan provets och
+        diagnosens balansprofil; diagnosen togs bort 2026-09-06 (läraren
+        använder provet med nivåval i stället) och alla papper räknas nu mot
+        provets profil. Fältet står kvar därför att skärmen skickar det.
 
         RÄKNAS HÄR OCH INTE PÅ SKÄRMEN, därför att svaret bygger på det
         SKELETT som skulle byggas (exam_spec.foreslag_antal): poängsumman
@@ -293,7 +275,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         behöva en andra, ungefärlig modell, och två modeller för samma tal
         glider isär. Med takten från exam_spec landar «Föreslå antal» följt av
         «Uppskatta tiden» inom fem minuter från ingångstiden."""
-        profil = _profil(typ)
+        profil = "prov"
         val = exam_spec.nivaval(profil, nivamix)
         # TAKTEN FÖLJER MED. Skärmen skrev den i toasten men skickade den inte,
         # så en lärare som satte 2,4 min/p fick ett antal räknat på 3,5 med
@@ -318,53 +300,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
         samma tal glider isär, och den här rutten är den enda kvar: skärmen
         frågar hit så länge provet är oskrivet, och räknar på dokumentets egna
         tripplar (`peca`) så fort det ÄR skrivet."""
-        profil = _profil(typ)
+        profil = "prov"
         val = exam_spec.nivaval(profil, nivamix)
         return exam_spec.skelettsummor(
             antal, profil, delar=delar, takt=takt,
             mix=(val or {}).get("mix"), niva_mal=(val or {}).get("mal"))
-
-    # ------------------------------------------------- diagnosens storlek --
-
-    @router.get("/api/exams/diagnosplan")
-    def diagnosplan(tid: int = Query(ge=1, le=1440), koder: str = "",
-                    antal: int | None = Query(default=None, ge=1, le=200),
-                    nivamix: str | None = None, delar: bool = False):
-        """Vad diagnosen SKULLE bli av de här punkterna och den här tiden:
-        {antal, punkter, tid_min, uppskattad_tid}.
-
-        Rutten finns för raden under «Antal uppgifter» i planeringen. Förvalet
-        där är «Räknas ur innehållet», och ett förval som inte säger vad det
-        räknar fram är en svart låda — läraren ska se «ca 7 uppgifter ur 21
-        punkter på 60 min» innan hon bestämmer sig för att styra över det.
-
-        RÄKNAS HÄR OCH INTE PÅ SKÄRMEN, av samma skäl som «Föreslå antal»
-        (foreslag_antal ovan): svaret bygger på det skelett som faktiskt skulle
-        byggas, och ihopslagningen håller sig inom innehållets områden. Ett tal
-        som räknas på två ställen blir förr eller senare två tal.
-
-        Punkternas ORDNING och OMRÅDE är hela grunden för ihopslagningen, så
-        koderna kommer som en kommaseparerad lista i väljarens ordning och
-        rubrikerna slås upp i de bundlade Gy25-filerna (course_data) — inte i
-        databasen. Rutten rör alltså ingen tabell och skapar ingen kurs.
-        Okända koder räknas som egna punkter utan område; de finns inte i
-        nivån, men att tiga om dem hade gett ett antal som inte stämmer med
-        det pappret sedan får."""
-        rubriker = {p["kod"]: p.get("rubrik") or ""
-                    for fil in course_data.load_centralt_innehall()
-                    for p in fil.get("innehall") or []}
-        # Taket på 200 punkter är fuzzvakten: varje punkt kan bli en plats i
-        # skelettet, och en kilometerlång koderad hade byggt ett skelett i
-        # samma storlek (samma fynd som `tid`/`antal` ovan).
-        punkter = [{"kod": k, "rubrik": rubriker.get(k, "")}
-                   for k in (s.strip() for s in koder.split(","))
-                   if k][:200]
-        val = exam_spec.nivaval("diagnos", nivamix)
-        plan = exam_spec.diagnosplan(
-            punkter, tid, antal=antal, mix=(val or {}).get("mix"),
-            niva_mal=(val or {}).get("mal"), delar=delar)
-        return {k: plan[k] for k in ("antal", "punkter", "tid_min",
-                                     "uppskattad_tid")}
 
     # ---------------------------------------------------- innehållsstatus --
 
@@ -519,27 +459,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # ensamma, som förut.
         klockslag = (body.get("klockslag") or "").strip() or None
         typ = body.get("typ") if body.get("typ") in _TYPER else "prov"
-        # Diagnosens förval är EN DEL, provets är Del A + Del B. `delar` läses
-        # ovan med provets default (True) — en diagnos utan fältet är däremot
-        # ett papper skrivet innan väljaren fanns, och det hade inga delar.
-        # Klienten skickar alltid fältet; raden här gäller gamla utkast och
-        # anrop utifrån, och håller dem vid det de faktiskt fick.
-        if typ == "diagnos" and "delar" not in body:
-            delar = False
-        # «Formelblad» under Bilagor. Krysset styrde bara utskriftspaketet och
-        # skärmens hjälpmedelsrad; för diagnosen ska det också nå PROMPTEN (en
-        # uppgift som prövar minnet av en formel mäter ingenting när bladet
-        # ligger på bänken) och papprets egen hjälpmedelsrad. Av som default —
-        # då lägger build_prompt inget block alls och prompten är ordagrant den
-        # som gick i väg förut.
-        formelblad = bool(body.get("formelblad"))
         # Lärarens nivåval (exam_spec.NIVAVAL): «Poängnivåer» på provet,
         # «Nivå» på arbetsbladet. Fältet skickas BARA när det inte står i
         # defaultläget (plan.js) — en tom ruta ger exakt samma begäran som
         # före väljaren, och kassetterna står orörda. Okänd etikett tolkas
         # likadant: som default, inte som fel. Valet gör tre saker som måste
-        # hänga ihop: mixen bygger skelettet HÄR (som diagnosen bygger sitt),
-        # banden följer med genereringens validering, och etiketten
+        # hänga ihop: mixen bygger skelettet HÄR, banden följer med
+        # genereringens validering, och etiketten
         # persisteras på exams-raden så refine mäter mot samma band.
         nivaval_etikett = str(body.get("nivamix") or body.get("niva")
                               or "").strip()
@@ -615,10 +541,6 @@ def create_router(base: Path, arbiter) -> APIRouter:
             punkter = [f"{c['kod']} — {c['rubrik']}: {c['text']}"
                        for c in valda] or punkter_text
             koder = [c["kod"] for c in valda]
-            # Diagnosen dimensioneras här, före genereringen: lektionen är
-            # given och antalet uppgifter faller ut ur den. Ryms inte alla
-            # punkter slås närliggande ihop så att TÄCKNINGEN är kvar — det är
-            # skillnaden mot att korta ner listan.
             # Elevens CI-profil in i prompten. Punkterna som VALTS vinner —
             # läraren kan kryssa själv — men saknas ett val plockas de svaga
             # (eller starka) ur profilen, för det är hela vitsen med att välja
@@ -640,35 +562,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     valda = db.content_by_kod(conn, koder, int(course_id))
                     punkter = [f"{c['kod']} — {c['rubrik']}: {c['text']}"
                                for c in valda] or punkter
-            plan = None
-            if typ == "diagnos" and valda:
-                # LÄRARENS ANTAL VINNER (2026-09-06). Diagnosen räknade alltid
-                # ut antalet själv, och det var rätt så länge det inte fanns
-                # något val — läraren: «Det saknas alternativ för hur man vill
-                # utforma diagnosen.» Nu är «Räknas ur innehållet» förvalet och
-                # ett satt tal en överstyrning: `antal` läses RÅTT ur kroppen
-                # och inte ur variabeln ovan, som redan fallit tillbaka på tio.
-                # Utan fält är planen byte för byte den gamla (kassettregeln).
-                onskat_antal = body.get("antal")
-                plan = exam_spec.diagnosplan(
-                    valda, int(body.get("tid_min")
-                               or exam_spec.DIAGNOS_TID_STANDARD),
-                    antal=int(onskat_antal) if onskat_antal else None,
-                    # «Poängnivåer» och «Upplägg» — samma två väljare provet
-                    # har. Mixen måste in HÄR och inte efteråt: diagnosens
-                    # skelett byggs ur innehållet, och ett skelett som byggts
-                    # mot profilens band och sedan valideras mot lärarens
-                    # skulle slåss med sig självt.
-                    mix=(nivaval or {}).get("mix"),
-                    niva_mal=niva_mal, delar=delar)
-                antal = plan["antal"]
-                tid_min = plan["tid_min"]
             # Nivåvalets skelett byggs här, inte i exam_gen: mixen är känd
-            # bara där valet är känt (samma mönster som diagnosplanen ovan).
-            # Utan val lämnas None och generate_exam bygger profilens
-            # defaultskelett precis som förut.
-            skelett = plan["skeleton"] if plan else None
-            if skelett is None and nivaval:
+            # bara där valet är känt. Utan val lämnas None och generate_exam
+            # bygger profilens defaultskelett precis som förut.
+            skelett = None
+            if nivaval:
                 skelett = exam_spec.balanced_skeleton(
                     antal, typ, delar=(typ == "prov" and delar),
                     mix=nivaval["mix"], niva_mal=niva_mal, kurs=kurs)
@@ -722,13 +620,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # noggrann analys av sidorna man valt. Provet är mer
                 # översiktligt vad man gått igenom. Gruppuppgifter är likaså
                 # mer detaljerade i sin analys av bokens uppgifter än provet.»
-                #   * prov och diagnos: URVALET (routes_planning.bok_prov_text)
+                #   * provet: URVALET (routes_planning.bok_prov_text)
                 #     — spannet är ett kapitel, och den gamla vägen läste varje
                 #     oläst sida à 96 s för att sedan skicka de tre första.
                 #   * arbetsblad och gruppuppgift: HELA uppslaget, samma väg som
                 #     tavlan (bok_las_text) — spannet är en lektion och
                 #     uppgifterna ska spegla bokens i detalj.
-                oversikt = typ in ("prov", "diagnos")
+                oversikt = typ == "prov"
                 steg.na("bok")
                 bok_block = (routes_planning.bok_prov_text(base, db_file, body,
                                                            emit=emit)
@@ -754,7 +652,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     svart=svart_block, fokus=fokus_block, profil=typ,
                     koder=koder, skeleton=skelett, niva_mal=niva_mal,
                     riktat=riktat_block, grupp=grupp,
-                    illustration=illustration, formelblad=formelblad,
+                    illustration=illustration,
                     # ── TVÅ SPÅR, INGEN PROCENT PÅ NÅGOT AV DEM ───────
                     # Det stod länge bara EN kanal här: loggraden. Generatorn
                     # skickar «Skriver uppgift 4 av 12 …» ur strömmen
@@ -792,9 +690,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     res["exam"]["elev"] = elev_namn
                 # Provtiden också: läraren valde minuterna, kalenderposten
                 # använder dem — försättsbladet får inte säga något annat bara
-                # för att modellen skrev sitt eget tal i dokumentet. Diagnosen
-                # undantas inte: dess tid_min är redan framräknad ur lektionen
-                # (diagnosplan ovan skriver över variabeln).
+                # för att modellen skrev sitt eget tal i dokumentet.
                 #
                 # OVILLKORLIGT, precis som _satt_lararens_datum: fältet är
                 # valfritt i schemat (exam_spec.ExamDoc.tid_min), så en vakt på
@@ -804,17 +700,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # minuter, kl. …» — pappret och skärmen om samma prov.
                 if res["exam"] is not None:
                     res["exam"]["tid_min"] = tid_min
-                # DIAGNOSENS HJÄLPMEDELSRAD ÄR LÄRARENS, INTE MODELLENS.
-                # Samma skäl som tid_min ovan: «Upplägg» och «Formelblad» är
-                # två kryss i planeringen, och pappret får inte säga något
-                # annat än det hon klickade. Provet undantas — där är raden
-                # modellens (den skiljer delarna åt med hennes egna ord) och
-                # skärmen har läst dokumentets regel sedan blad.js planvalProv.
-                # Diagnosmallen hade ingen hjälpmedelsrad alls förut; den
-                # skrivs här och trycks av diagnos.tex.j2.
-                if res["exam"] is not None and typ == "diagnos":
-                    res["exam"]["hjalpmedel"] = _diagnosens_hjalpmedel(
-                        delar, formelblad)
+                # Hjälpmedelsraden är MODELLENS: den skiljer delarna åt med
+                # lärarens egna ord, och skärmen har läst dokumentets regel
+                # sedan blad.js planvalProv.
                 _satt_lararens_datum(res["exam"], datum, klockslag or "")
                 if res["exam"] is None:
                     return {"id": None, "exam": None,
@@ -961,10 +849,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
         nivaval = exam_spec.nivaval(view.get("typ") or "prov",
                                     view.get("nivaval"))
         # SAMMA bokblock som skrivningen fick, annars byter modellen bok mitt i
-        # arbetspasset: urvalet för prov/diagnos, hela (redan lästa) uppslaget
+        # arbetspasset: urvalet för provet, hela (redan lästa) uppslaget
         # för arbetsblad/gruppuppgift. Läser inga sidor.
         bok_block = (routes_planning.bok_urval_text(db_file, body)
-                     if (view.get("typ") or "prov") in ("prov", "diagnos")
+                     if (view.get("typ") or "prov") == "prov"
                      else routes_planning.bok_text(db_file, body))
 
         def job(emit):
@@ -1072,14 +960,6 @@ def create_router(base: Path, arbiter) -> APIRouter:
         except Exception:
             body = {}
         separat_facit = bool(isinstance(body, dict) and body.get("separat_facit"))
-        # Diagnosens «Bilagor · Rättning», samma väg och av samma skäl:
-        # krysset bor i webbläsarens dokument (inst.losningar) och finns inte i
-        # provets JSON. Nyckeln säger «UTAN rättning» och inte «rättning» för
-        # att en klient som inte skickar något ska få den sida diagnosen alltid
-        # burit — förvalet är PÅ, och ett gammalt papper ska tryckas som det en
-        # gång trycktes.
-        utan_rattning = bool(isinstance(body, dict)
-                             and body.get("utan_rattning"))
         # ── SKÄRMEN ÄR PDF:ENS FÖRLAGA ────────────────────────────────
         # «Jag vill ha PDF-filerna exakt som de ser ut i appen.» LaTeX-mallen
         # var snarlik men aldrig identisk — brickorna satt ihop, tabellerna såg
@@ -1107,7 +987,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # sätter Arimo i 794 px, LaTeX sätter Computer Modern på A4.
         #
         # Avritningen gäller alltså inte längre för PROVET. Övriga papper —
-        # arbetsblad, gruppuppgift, diagnos — har sin egen form på skärmen och
+        # arbetsblad och gruppuppgift — har sin egen form på skärmen och
         # ritas av precis som förut. Faller LaTeX-vägen (ingen PDF-motor, ett
         # kompileringsfel som inte går att laga) tas skärmens bild ändå emot
         # längre ner: hellre ett papper som är snarlikt än inget papper alls.
@@ -1251,15 +1131,6 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         tex = exam_latex.render_arbetsblad(
                             doc, bilder=bilder_map, utan_facit=separat_facit,
                             egna_bilder=egna_map)
-                        bed = None
-                    elif typ == "diagnos":
-                        # Diagnosen bär sin rättning i samma dokument, sorterad
-                        # per innehållspunkt — det är det bladet läraren sitter
-                        # med, och ett separat bedömningsdokument hade bara
-                        # varit ett papper till att hålla reda på.
-                        tex = exam_latex.render_diagnos(
-                            doc, bilder=bilder_map,
-                            utan_rattning=utan_rattning)
                         bed = None
                     else:
                         tex = exam_latex.render_prov(doc, bilder=bilder_map,

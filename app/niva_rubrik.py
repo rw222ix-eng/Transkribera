@@ -934,7 +934,7 @@ def build_niva_block(typer: list[str] | None = None,
     gör den inte i nationella provet heller — men den lägger till kursens
     uppmätta mix och form, och den avgör vilka ankarexempel som serveras.
 
-    `kursrubrik` stängs av för arbetsblad, gruppuppgift och diagnos. Kursraden
+    `kursrubrik` stängs av för arbetsblad och gruppuppgift. Kursraden
     är mätt på PROV och talar om prov («38–45 % av poängen är E», «halva provet
     är kortsvar»); på ett arbetsblad skulle den säga emot bladets egna
     nivåmål (exam_spec.ARBETSBLAD_NIVA_MAL är E-tungt med flit). Kursen styr
@@ -978,17 +978,7 @@ def build_skala_utan_bok(profil: str, kurs: str = "") -> str:
     boknivåskala att förankra i, och då är NP-rubriken skalan i stället. Ett
     arbetsblad utan någon skala alls är precis det läget planen skrevs för —
     «stigande svårighet» utan att någonstans säga vad svårare betyder."""
-    if profil == "diagnos":
-        # Diagnosen har ingen trappa alls — den frågar om varje punkt en gång.
-        # Skalan behövs ändå: E-uppgiften ska vara igenkännbar rutin och
-        # C-uppgiften ska kräva ett steg till, annars mäter pappret ingenting.
-        ram = ("Diagnosen är INGEN stegring: uppgifterna kommer i kursens "
-               "ordning, inte i svårighetsordning, och uppgift 11 ska inte "
-               "vara svårare än uppgift 1 — den ska handla om något annat. "
-               "Skalan nedan säger i stället vad EN uppgifts nivå betyder: en "
-               "E-uppgift är den igenkännbara standarduppgiften på punkten, en "
-               "C-uppgift kräver ett steg till eller en motivering.")
-    elif profil == "gruppuppgift":
+    if profil == "gruppuppgift":
         # Spannet stod redan rätt här (E-ingång, A-fördjupning); det som var
         # fel var ORDNINGEN. «Gruppuppgiften är inte en trappa» sa emot lärarens
         # skarpa lektion, där stegringen var det som fungerade (Del F, dom 1).

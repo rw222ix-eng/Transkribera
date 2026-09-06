@@ -1662,7 +1662,7 @@ def test_refine_far_reparerad_json(client, monkeypatch):
 
 def test_nivaval_bygger_skelettet_och_persisteras(client, monkeypatch):
     """«Poängnivåer» var en dekoration — värdet nådde aldrig servern. Nu ska
-    rutten (1) bygga skelettet ur valets mix (som diagnosen bygger sitt),
+    rutten (1) bygga skelettet ur valets mix,
     (2) skicka valets band till genereringen och (3) persistera etiketten på
     exams-raden, för refine mäter varje varv mot den."""
     from app import exam_spec

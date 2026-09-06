@@ -159,7 +159,7 @@ def _elev_med_profil(client):
          "ci": ["G25-M1C-ALG-1"]},
     ]
     did = client.post("/api/dokument", json={"status": "godkant", "dokument": {
-        "typ": "Diagnos", "moment": "diagnos", "klass": "NA25",
+        "typ": "Prov", "moment": "hela kursen", "klass": "NA25",
         "kurs": "Matematik, nivå 1c", "datum": "2026-09-01",
         "uppgifter": uppgifter}}).json()["id"]
     grupp = next(g for g in client.get("/api/groups").json() if g["namn"] == "NA25")

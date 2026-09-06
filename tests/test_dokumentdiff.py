@@ -118,11 +118,14 @@ def test_gruppuppgiftens_namnrader_och_loftesrad():
     assert dd.andrade_element("gruppuppgift", fore, ny_form) == ["instr"]
 
 
-def test_diagnosen_diffas_som_arbetsbladet():
-    """Typen saknades i tabellen, och tystnaden var inte harmlös: okänd typ ger
-    tom lista, och klienten läser tom lista som «ingenting på pappret ändrades»
-    — alltså sa panelen just det efter varje omskrivning av en diagnos."""
-    assert dd.andrade_element("diagnos", _prov("a"), _prov("b")) == ["uppg1"]
+def test_varje_uppgiftspapper_diffas_som_provet():
+    """En typ som saknas i tabellen är inte harmlös: okänd typ ger tom lista,
+    och klienten läser tom lista som «ingenting på pappret ändrades». Panelen
+    säger alltså just det efter VARJE omskrivning av ett sådant papper.
+    Det har hänt en gång, och raden här är vakten."""
+    for typ in ("prov", "arbetsblad", "gruppuppgift"):
+        assert dd.andrade_element(typ, _prov("a"), _prov("b")) == ["uppg1"], typ
+    assert dd.andrade_element("pahitt", _prov("a"), _prov("b")) == []
 
 
 def test_bandtexten_ar_instruktionen():

@@ -784,7 +784,7 @@ def test_skrivningen_laser_de_sidor_som_saknas(client, ocr, monkeypatch):
 
 def test_skrivningen_tar_faktapasset_nar_panelen_hoppat_det(client, ocr,
                                                             monkeypatch):
-    """Provet och diagnosen fäller uppgiftspanelen, och panelen hoppar då
+    """Provet fäller uppgiftspanelen, och panelen hoppar då
     faktapasset (uppgifter.js hamta — minuters läsning för en lista ingen ser).
     Skrivningen måste därför ta passet själv: prompten vill ha uppgiftsnumren,
     och textpasset ska läsa på faktapassets sidplacering, inte gissad offset."""
@@ -1622,7 +1622,7 @@ def test_bokdorren_foljer_pappret(client, monkeypatch):
     sidorna. Provet är mer översiktligt. Gruppuppgifter är likaså mer
     detaljerade i sin analys av bokens uppgifter än provet.»
 
-    Samma rutt skriver prov, diagnos, arbetsblad och gruppuppgift — så valet
+    Samma rutt skriver prov, arbetsblad och gruppuppgift — så valet
     mellan urvalet och hela uppslaget måste göras PER PAPPER, inte per rutt."""
     from app import exam_gen
     from app.web import routes_planning
@@ -1637,10 +1637,10 @@ def test_bokdorren_foljer_pappret(client, monkeypatch):
                                          "rounds": 1})
     kurs = next(c for c in client.get("/api/courses").json()
                 if c["namn"] == "Matematik, nivå 1c")
-    for typ in ("prov", "diagnos", "arbetsblad", "gruppuppgift"):
+    for typ in ("prov", "arbetsblad", "gruppuppgift"):
         vag.clear()
         client.post("/api/exams/generate",
                        json={"course_id": kurs["id"], "typ": typ,
                              "punkter": [], "antal": 4})
-        vantat = "urval" if typ in ("prov", "diagnos") else "hela"
+        vantat = "urval" if typ == "prov" else "hela"
         assert vag == [vantat], (typ, vag)

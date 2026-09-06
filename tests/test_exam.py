@@ -1029,7 +1029,7 @@ def test_preamble_definierar_layoutmakron():
 
     Mätt på ARBETSBLADET och inte på provet: provet lämnade designsystemet när
     lärarens förlaga blev mall (exam-klassen, egna mått), medan arbetsbladet,
-    gruppuppgiften och diagnosen har kvar sin egen form."""
+    gruppuppgiften har kvar sin egen form."""
     doc, _ = exam_spec.validate_exam_json(_exam())
     tex = exam_latex.render_arbetsblad(doc)
     assert r"\newcommand{\delprovband}" in tex
@@ -2581,16 +2581,12 @@ def test_nivaval_defaultlagen_ar_none():
     assert exam_spec.nivaval("prov", "") is None
     assert exam_spec.nivaval("prov", None) is None
     assert exam_spec.nivaval("prov", "påhittat läge") is None
-    # Diagnosen fick sina egna Poängnivåer 2026-09-06 och har därmed samma
-    # defaultläge som provet. Gruppuppgiften har fortfarande ingen väljare.
-    assert exam_spec.nivaval("diagnos", "Balanserat") is None
+    # Gruppuppgiften har ingen väljare alls.
     assert exam_spec.nivaval("gruppuppgift", "Bara E") is None
     # …och de riktiga etiketterna ger mix + band.
     for profil, val in (("prov", "Bara E"), ("prov", "E-tyngd"),
                         ("prov", "C/A-tyngd"), ("arbetsblad", "E-nivå"),
-                        ("arbetsblad", "C-nivå"), ("arbetsblad", "A-nivå"),
-                        ("diagnos", "Bara E"), ("diagnos", "E-tyngd"),
-                        ("diagnos", "C/A-tyngd")):
+                        ("arbetsblad", "C-nivå"), ("arbetsblad", "A-nivå")):
         nv = exam_spec.nivaval(profil, val)
         assert nv and set(nv) == {"mix", "mal"}, (profil, val)
 

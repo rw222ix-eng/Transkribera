@@ -245,7 +245,7 @@ def test_planeringsrutten_tar_tomma_stangar_som_franvarande(llm_ready, monkeypat
     assert "VÄGA TYNGST" not in prompter[0]
 
 
-@pytest.mark.parametrize("typ", ["prov", "arbetsblad", "gruppuppgift", "diagnos"])
+@pytest.mark.parametrize("typ", ["prov", "arbetsblad", "gruppuppgift"])
 def test_provrutten_bar_bada_falten(llm_ready, monkeypatch, typ):
     cid = llm_ready.post("/api/courses",
                          json={"namn": "Matematik, nivå 2c"}).json()["id"]

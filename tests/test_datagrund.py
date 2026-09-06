@@ -1206,11 +1206,13 @@ def test_proven_markeras_som_prov():
     ("4UVÄ18 Föreläsning 4: Provteori (Zoom)", None),
     ("Prövning bokad: Malmö – Försvarsmakten", None),
     ("Ämneslagsmöte", None),
-    # Diagnosen skrivs ihop: skolan skriver «Matematikdiagnos åk 1», och
-    # ordgränser hade missat den. Den är också det precisa ordet när båda står.
-    ("Matematikdiagnos åk 1 genomförs under veckan", "diagnos"),
-    ("Diagnos 2 – bråk och procent", "diagnos"),
-    ("Diagnostiskt prov MA 1c", "diagnos"),
+    # «Diagnos» skrivs ihop: skolan skriver «Matematikdiagnos åk 1», och
+    # ordgränser hade missat den. Slaget är PROV sedan 2026-09-06, då appens
+    # diagnostyp togs bort. En sådan post i schemat är en provtid som alla
+    # andra.
+    ("Matematikdiagnos åk 1 genomförs under veckan", "prov"),
+    ("Diagnos 2 – bråk och procent", "prov"),
+    ("Diagnostiskt prov MA 1c", "prov"),
 ])
 def test_provslag_pa_ordet_inte_pa_bokstaverna(titel, vantat):
     assert calendar_google.provslag(titel) == vantat

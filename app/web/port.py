@@ -4,7 +4,7 @@
 «8731 var upptagen av något som inte svarar som Transkribera», men ingen satt
 på 8731. Windows (Hyper-V/WinNAT) hade reserverat hela 8600-8699 och
 8700-8799, och en reserverad port ger WinError 10013 (permission denied) vid
-bind, inte «adressen upptagen». Diagnosen var alltså fel och porten blev en
+bind, inte «adressen upptagen». Felsökningen sa alltså fel och porten blev en
 slumpad femsiffrig, olika vid varje start.
 
 Blocken flyttar sig vid omstart, så det kommer igen. Windows dynamiska spann

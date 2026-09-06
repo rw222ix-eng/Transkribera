@@ -160,7 +160,7 @@ def _lagg(conn, *, moment: str, datum: str, uppgifter: list[dict],
     """Ett rättat papper med elevpoäng — hela vägen genom de riktiga
     funktionerna, inte handskrivna rader."""
     dok = db.create_dokument(conn, dokument={
-        "typ": "Diagnos", "titel": moment, "moment": moment, "kurs": "Ma1c",
+        "typ": "Prov", "titel": moment, "moment": moment, "kurs": "Ma1c",
         "klass": "NA25", "datum": datum, "uppgifter": uppgifter})
     rader = rattning.bygg(uppgifter)
     rent = rattning.stada(rader, elevpoang)
@@ -175,7 +175,7 @@ def _lagg(conn, *, moment: str, datum: str, uppgifter: list[dict],
 
 def test_ci_och_peca_overlever_lagringen(bas):
     bas, elev_id = bas
-    did = _lagg(bas, moment="diagnos", datum="2026-09-01", uppgifter=[
+    did = _lagg(bas, moment="algebra", datum="2026-09-01", uppgifter=[
         {"nr": 1, "t": "Förenkla", "p": 2, "peca": [2, 0, 0],
          "ci": ["G25-M1C-ALG-1"]}],
         elevpoang={elev_id: {"1": [2, None, None]}})
@@ -222,7 +222,7 @@ def test_gammalt_papper_utan_kolumnerna_laser_som_okant(bas):
 # ─────────────────────────────────────────────────────────────────── rutterna ──
 
 def _prov(uppgifter: list[dict], datum: str) -> dict:
-    return {"typ": "Diagnos", "moment": "hela kursen", "klass": "NA25",
+    return {"typ": "Prov", "moment": "hela kursen", "klass": "NA25",
             "kurs": "Ma1c", "datum": datum, "uppgifter": uppgifter}
 
 

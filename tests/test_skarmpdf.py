@@ -1,8 +1,8 @@
 """PDF:EN SOM ÄR SKÄRMEN.
 
 Lärarens ord: «exporten av alla pdf:er ska renderas korrekt — jag vill ha
-pdf-filerna EXAKT som de ser ut i appen». Prov, arbetsblad, diagnos,
-gruppuppgift och anteckningar sattes om i LaTeX vid godkännandet — snarlikt,
+pdf-filerna EXAKT som de ser ut i appen». Prov, arbetsblad, gruppuppgift
+och anteckningar sattes om i LaTeX vid godkännandet — snarlikt,
 aldrig identiskt, och lärarens egna inlagda bilder (som bara finns i
 webbläsarens dokument) kom inte med alls.
 
@@ -29,7 +29,7 @@ definition inte se ut som den: skärmen sätter Arimo i 794 px, LaTeX sätter
 Computer Modern på A4. Provet sätts därför ALLTID i LaTeX, även när klienten
 skickar blad, och lärarens egna inlagda bilder reser med anropet i stället
 (`bilder` i kroppen → app.tryck.egna_bilder). Övriga papper — arbetsblad,
-gruppuppgift, diagnos, anteckningar — har sin form på skärmen och ritas av som
+gruppuppgift, anteckningar — har sin form på skärmen och ritas av som
 förut. Provets LÖSNINGSARK är också kvar på skärmvägen: det är lärarens eget
 papper och inte elevens.
 

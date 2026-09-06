@@ -326,14 +326,13 @@ def _tavla(fore: dict, efter: dict) -> list[str]:
     return ut
 
 
-# Diagnosen saknades i listan, och tystnaden var inte harmlös: `andrade_element`
-# svarar tomt på en okänd typ, klienten läser tom lista som «ingenting på
-# pappret ändrades» (plan.js iterera, granska.js svarText) — och alltså sa
-# panelen just det efter VARJE omskrivning av en diagnos, hur mycket servern än
-# skrivit om. Diagnosen ritas som arbetsbladet (blad.js bladen) och diffas som
-# det.
+# VARJE PAPPERSTYP MÅSTE STÅ HÄR. `andrade_element` svarar tomt på en okänd
+# typ, och klienten läser tom lista som «ingenting på pappret ändrades»
+# (plan.js iterera, granska.js svarText). En typ som glöms bort får därför
+# panelen att säga just det efter VARJE omskrivning, hur mycket servern än
+# skrivit om. Det har hänt en gång, för en typ som glömdes bort här.
 _DIFFAR = {"tavla": _tavla, "prov": _prov, "arbetsblad": _prov,
-           "gruppuppgift": _prov, "diagnos": _prov,
+           "gruppuppgift": _prov,
            "anteckningar": _anteckningar}
 
 

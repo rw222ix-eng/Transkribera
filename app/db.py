@@ -3680,7 +3680,7 @@ def exam_themes_for_prompt(conn: sqlite3.Connection, course_id: int,
 # `exam_themes_for_prompt` ovan läser de tre senaste GODKÄNDA proven, och det
 # är rätt underlag för sin fråga («vilka teman är förbrukade?»). Det är fel
 # underlag för variationsvakten, som ska svara på en annan: «har jag skrivit
-# precis den här uppgiften förut?» Den frågan gäller arbetsblad, diagnoser och
+# precis den här uppgiften förut?» Den frågan gäller arbetsblad och
 # gruppuppgifter lika mycket som prov, och den gäller utkast lika mycket som
 # godkända papper. En uppgift som skrevs i går och ligger kvar i högen är
 # lika förbrukad som en som trycktes.

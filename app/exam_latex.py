@@ -474,7 +474,7 @@ def _enhet_vy(*, poang, typ, formaga, text, losning, bedomning,
         "svarsfalt": [escape_mixed(e) for e in svarsfalt] if svarsfalt else None,
         # Förlagans egen variant: samma etiketter, men med kolon där de behövs
         # och avsedda att sättas på EN rad (prov.tex.j2). Den gamla listan står
-        # kvar för arbetsblad, gruppuppgift och diagnos — de sätter en rad per
+        # kvar för arbetsbladet och gruppuppgiften — de sätter en rad per
         # etikett, och den formen är deras.
         #
         # BARA PÅ KORTSVAREN. Lärarens dom 2026-08-22: «Fullständig lösning
@@ -483,8 +483,8 @@ def _enhet_vy(*, poang, typ, formaga, text, losning, bedomning,
         # endast_svar, så ett svarsfält som modellen råkat lägga på en
         # redovisningsuppgift smög förbi kravet och satte «Svar: ______» ändå
         # — samma fel som canvas gjorde i andra änden. Fältet självt rörs inte
-        # (`svarsfalt` ovan): arbetsbladet, gruppuppgiften och diagnosen bygger
-        # sin form på det och har inte lärarens provregel.
+        # (`svarsfalt` ovan): arbetsbladet och gruppuppgiften bygger sin form
+        # på det och har inte lärarens provregel.
         "svarsfalt_rad": _faltrad(svarsfalt) if typ == "rutin" else None,
         "stycken": _stycken(text),
         "tabell": _tabell_vy(tabell),
@@ -852,10 +852,6 @@ def _build_view(doc: exam_spec.ExamDoc,
             # förstöra den) — mallen renderar den oescapad.
             item_vy["figur_tex"] = (exam_figures.render_figur(it.figur)
                                     if it.figur is not None else None)
-            # Uppgiftens centrala innehåll som koder. Diagnosmallen grupperar
-            # bedömningen på dem — läraren rättar per punkt, inte per uppgift,
-            # för det är punkten hon letar efter hålet i.
-            item_vy["ci"] = list(it.innehall or [])
             vy_items.append(item_vy)
         # Förlagans delrubrik är EN mening: «Del A – Digitala verktyg är inte
         # tillåtna». Räknaren är det enda som skiljer delarna åt på pappret, så
@@ -1056,63 +1052,6 @@ def render_arbetsblad(doc: exam_spec.ExamDoc, visa_poang: bool = False,
     return _environment().get_template("arbetsblad.tex.j2").render(
         visa_poang=visa_poang, dokumentkod=dokumentkod, only_facit=only_facit,
         utan_facit=utan_facit, **_build_view(doc, bilder, egna=egna_bilder))
-
-
-def _ci_grupper(vy: dict) -> list[dict]:
-    """Uppgifterna grupperade per innehållspunkt, i kursens ordning.
-
-    Det är diagnosens bedömningsblad: läraren läser inte «uppgift 7» utan
-    «linjära olikheter», och vill se alla uppgifter som prövar punkten under
-    samma rubrik. En uppgift som taggar två punkter står under båda — det är
-    samma uppgift, läst med två frågor.
-
-    Uppgifter utan CI (papper som aldrig gått genom väljaren) samlas sist under
-    en egen rubrik i stället för att tappas."""
-    kort = course_data.kod_till_kort()
-    ordning: list[str] = []
-    per_kod: dict[str, list[dict]] = {}
-    utan: list[dict] = []
-    for delen in vy["delar"]:
-        for u in delen["uppgifter"]:
-            if not u["ci"]:
-                utan.append(u)
-                continue
-            for kod in u["ci"]:
-                if kod not in per_kod:
-                    per_kod[kod] = []
-                    ordning.append(kod)
-                per_kod[kod].append(u)
-    grupper = [{"kod": escape_latex(k),
-                "rubrik": escape_latex(kort.get(k) or k),
-                "uppgifter": per_kod[k]} for k in ordning]
-    if utan:
-        grupper.append({"kod": "", "rubrik": "Övriga uppgifter",
-                        "uppgifter": utan})
-    return grupper
-
-
-def render_diagnos(doc: exam_spec.ExamDoc,
-                   bilder: dict[int, str] | None = None,
-                   dokumentkod: str = "",
-                   utan_rattning: bool = False) -> str:
-    """Diagnos (Etapp 2): elevens ark i kursens ordning, och lärarens facit
-    grupperat PER INNEHÅLLSPUNKT i stället för per del.
-
-    Skillnaden mot arbetsbladet är just den grupperingen. Ett arbetsblad rättas
-    uppgift för uppgift; en diagnos rättas för att svara på en fråga — vilken
-    punkt sitter inte? — och då ska pappret vara sorterat efter punkterna.
-
-    `utan_rattning` släcker den sidan. Krysset «Bilagor · Rättning» i
-    planeringen (2026-09-06) är förvalt PÅ — rättningsbladet är diagnosens hela
-    poäng — men läraren som bara ska dela ut elevarket ska slippa bära
-    lärarsidan till skrivaren. Motsvarigheten till arbetsbladets `utan_facit`.
-
-    Har läraren valt «Del A + Del B» bär vyn delarnas rubriker, och mallen
-    sätter dem över uppgifterna: eleven ska se var räknaren får plockas fram."""
-    vy = _build_view(doc, bilder, facit=True)
-    return _environment().get_template("diagnos.tex.j2").render(
-        dokumentkod=dokumentkod, ci_grupper=_ci_grupper(vy),
-        utan_rattning=utan_rattning, **vy)
 
 
 def render_anteckningar(doc) -> str:

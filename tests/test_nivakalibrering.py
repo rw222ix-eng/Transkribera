@@ -628,13 +628,12 @@ def test_doma_false_stanger_av_bada_domarna():
     assert len(anrop) == 1
 
 
-def test_talreglerna_star_i_prompten_for_alla_fyra_profilerna():
-    for profil in ("prov", "arbetsblad", "gruppuppgift", "diagnos"):
+def test_talreglerna_star_i_prompten_for_alla_profilerna():
+    for profil in ("prov", "arbetsblad", "gruppuppgift"):
         p = exam_gen.build_prompt("Matematik, nivå 2c", "NA25", [], antal=6,
                                   profil=profil,
                                   skeleton=exam_spec.balanced_skeleton(
-                                      6, profil if profil != "diagnos"
-                                      else "arbetsblad", delar=False))
+                                      6, profil, delar=False))
         assert exam_gen.TALREGLER in p, profil
 
 

@@ -1,4 +1,4 @@
-"""Hela kedjan i ett svep: diagnos → rättning → CI-profil → riktat blad.
+"""Hela kedjan i ett svep: prov → rättning → CI-profil → riktat blad.
 
 De fyra etapperna har var sin svit, och varje svit prövar sitt led. Den här
 prövar SKARVARNA — det som ingen av dem äger och som därför kan gå sönder utan
@@ -8,7 +8,8 @@ att något test säger ifrån:
     → elevens profil → nästa papper
 
 Kedjan kördes skarpt mot riktiga servern och riktiga Claude Code 2026-08-14
-(diagnos på 11 uppgifter som täckte alla 21 punkter i Ma1c, PDF via Tectonic,
+(ett papper på 11 uppgifter som täckte alla 21 punkter i Ma1c, PDF via
+Tectonic,
 två rättade elever, profiler som skilde sig åt, riktat blad på rätt punkter).
 Det här testet är samma väg med generatorn stubbad, så att den går att köra om
 på en sekund.
@@ -68,7 +69,7 @@ def _fran_prov(exam: dict) -> list[dict]:
     return ut
 
 
-def _stub_diagnos(monkeypatch, koder: list[str]):
+def _stub_generator(monkeypatch, koder: list[str]):
     """Generatorn svarar med ett dokument som FÖLJER skelettet den fick — det
     är så den riktiga fungerar (grammatiken låser platserna)."""
     fangat = {}
@@ -84,7 +85,7 @@ def _stub_diagnos(monkeypatch, koder: list[str]):
                                 "poang": [2, 0, 0], "ci": [k]}
                                for k in (koder or ["x"])]
         return {"exam": {
-            "titel": "Diagnos", "kurs": kurs, "klass": klass,
+            "titel": "Prov", "kurs": kurs, "klass": klass,
             "hjalpmedel": "Formelblad",
             "uppgifter": [{"del": s.get("del"), "formaga": s["formaga"],
                            "typ": s["typ"], "poang": list(s["poang"]),
@@ -104,22 +105,22 @@ def test_hela_kedjan(client, monkeypatch):
     ).json()["punkter"]]
     assert len(koder) == 21
 
-    # ── 1. Diagnosen: hela kursen, en lektion ───────────────────────────
-    fangat = _stub_diagnos(monkeypatch, koder)
+    # ── 1. Provet: hela kursens punkter ─────────────────────────────────
+    fangat = _stub_generator(monkeypatch, koder)
     res = _done(client.post("/api/exams/generate", json={
-        "kurs": KURS, "klass": KLASS, "typ": "diagnos",
+        "kurs": KURS, "klass": KLASS, "typ": "prov",
         "punkter": koder, "tid_min": 60}))
-    assert fangat["profil"] == "diagnos"
+    assert fangat["profil"] == "prov"
     # Skolverkets ordagranna text nådde prompten, med koden först.
     assert all(rad.startswith("G25-M1C-") for rad in fangat["punkter"])
-    # Varje punkt fick en plats, och pappret ryms på lektionen.
+    # Varje punkt fick en plats. Det är kedjans förutsättning, för utan
+    # CI-taggar finns det ingen profil att räkna längre fram.
     tackta = {k for u in res["exam"]["uppgifter"] for k in u["innehall"]}
     assert tackta == set(koder)
-    assert res["tid"] <= 60
 
     # ── 2. Pappret i högen, med CI kvar på uppgifterna ───────────────────
     did = client.post("/api/dokument", json={"status": "godkant", "dokument": {
-        "typ": "Diagnos", "moment": "hela kursen", "klass": KLASS,
+        "typ": "Prov", "moment": "hela kursen", "klass": KLASS,
         "kurs": KURS, "datum": "2026-09-07", "provId": res["id"],
         "uppgifter": _fran_prov(res["exam"])}}).json()["id"]
 
@@ -169,7 +170,7 @@ def test_hela_kedjan(client, monkeypatch):
     assert klass["punkter"], "klassprofilen är tom"
 
     # ── 5. Riktat blad ur profilen ──────────────────────────────────────
-    fangat = _stub_diagnos(monkeypatch, koder)
+    fangat = _stub_generator(monkeypatch, koder)
     blad = _done(client.post("/api/exams/generate", json={
         "kurs": KURS, "klass": KLASS, "typ": "arbetsblad", "antal": 4,
         "elev_id": alva["id"], "elev": "Alva Nyström", "syfte": "stotta"}))

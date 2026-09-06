@@ -53,8 +53,7 @@ def test_tom_lista_ger_tomt_block():
     assert exam_gen.build_variation(None) == ""
 
 
-@pytest.mark.parametrize("profil", ["prov", "arbetsblad", "gruppuppgift",
-                                    "diagnos"])
+@pytest.mark.parametrize("profil", ["prov", "arbetsblad", "gruppuppgift"])
 def test_tom_lista_ger_byte_identisk_prompt(profil):
     """Byte för byte, inte «i stort sett». Ett enda blanksteg till i prompten
     är en ny prompt, och då är kassetterna inspelade mot något annat än det
