@@ -348,12 +348,19 @@ def generate(model: str, prompt: str,
              base_url: str | None = None, system: str | None = None,
              options: dict | None = None,
              response_format: dict | None = None,
-             max_tokens: int | None = None) -> str:
+             max_tokens: int | None = None,
+             avbruten: Callable[[], bool] | None = None) -> str:
     """En fråga, ett svar.
 
     ``options`` (temperatur) och ``max_tokens`` hörde till llama-serverns
     samplingsparametrar och har ingen motsvarighet i Claude Code — de tas emot
     och ignoreras hellre än att tvinga fram en ändring på tjugo anropsställen.
+
+    ``avbruten`` frågas medan svaret strömmar in (app/claude_code.generate) och
+    dödar processen när den blir sann. Utan den kör claude.exe klart även för
+    en fråga ingen väntar på, och den fråga som läraren själv ställt får stå i
+    kö bakom den.
     """
     return claude_code.generate(prompt, system=system, token_cb=token_cb,
-                                schema=_schema_ur(response_format))
+                                schema=_schema_ur(response_format),
+                                avbruten=avbruten)

@@ -74,6 +74,12 @@ def sse_response(job, request) -> StreamingResponse:
             raise KlientBorta
         q.put(ev)
 
+    # Flaggan hängd på funktionen. Ett jobb som vill avbryta ett MODELLANROP
+    # mitt i (och inte först vid nästa emit, som kan ligga en halv minut bort)
+    # läser `emit.borta` härifrån. Jobbsignaturen är fortfarande job(emit), så
+    # de tjugotalet jobb som inte bryr sig märker ingenting.
+    emit.borta = borta
+
     def run():
         try:
             result = job(emit)

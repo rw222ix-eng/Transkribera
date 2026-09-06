@@ -135,3 +135,62 @@ def test_ingen_process_att_stoppa_eller_forvarma(tmp_path, monkeypatch):
     arb = _arb(tmp_path)
     assert arb.stop_llm() is False
     assert arb.prewarm_async() is None
+
+
+# ---- Bakgrundsförslagens egen plats ---------------------------------------
+#
+# Mätt 2026-09-06: tre automatiska Gy25-förslag tog alla tre molnplatserna och
+# lärarens egen tavla fick 409. Platsen ligger därför utanför LLM_TAK.
+
+def test_forslaget_raknas_inte_mot_molntaket(tmp_path):
+    arb = _arb(tmp_path)
+    for _ in range(ga.LLM_TAK):
+        assert arb.try_acquire_llm()
+    assert arb.try_acquire_llm() is None            # molnet är fullt
+    nyckel = arb.acquire_forslag(arb.forslag_biljett(), timeout=0.5)
+    assert nyckel, "förslaget blockerades av molntaket"
+
+    # …och tvärtom: ett pågående förslag tar ingen molnplats ifrån läraren.
+    arb2 = _arb(tmp_path)
+    assert arb2.acquire_forslag(arb2.forslag_biljett(), timeout=0.5)
+    assert all(arb2.try_acquire_llm() for _ in range(ga.LLM_TAK)), \
+        "förslaget åt en av lärarens molnplatser"
+
+
+def test_bara_ett_forslag_i_taget(tmp_path):
+    arb = _arb(tmp_path)
+    forsta = arb.acquire_forslag(arb.forslag_biljett(), timeout=0.5)
+    assert forsta
+    # Samma biljett igen: platsen är tagen, och väntan tar slut i timeouten.
+    assert arb.acquire_forslag(arb._forslag_biljett, timeout=0.3) is None
+    assert arb.release_forslag(forsta) is True
+    assert arb.acquire_forslag(arb.forslag_biljett(), timeout=0.5)
+
+
+def test_den_aldre_biljetten_ger_upp(tmp_path):
+    """Läraren skriver vidare medan hon väntar. Varje ändring föder ett nytt
+    förslag, och då ska det gamla lämna walkover, inte köa."""
+    arb = _arb(tmp_path)
+    gammal = arb.forslag_biljett()
+    ny = arb.forslag_biljett()
+    assert arb.forslag_aktuell(ny) and not arb.forslag_aktuell(gammal)
+    assert arb.acquire_forslag(gammal, timeout=5) is None    # ger upp direkt
+    assert arb.acquire_forslag(ny, timeout=0.5)              # platsen var fri
+
+
+def test_avbruten_ger_upp_utan_att_halla_nagot(tmp_path):
+    arb = _arb(tmp_path)
+    n = arb.forslag_biljett()
+    assert arb.acquire_forslag(n, timeout=5, avbruten=lambda: True) is None
+    # Ingenting hölls: nästa förslag kommer in direkt.
+    assert arb.acquire_forslag(arb.forslag_biljett(), timeout=0.5)
+
+
+def test_ingen_slapper_nagon_annans_forslagsplats(tmp_path):
+    arb = _arb(tmp_path)
+    mitt = arb.acquire_forslag(arb.forslag_biljett(), timeout=0.5)
+    assert arb.release_forslag(None) is False
+    assert arb.release_forslag("hittepå") is False
+    assert arb.acquire_forslag(arb._forslag_biljett, timeout=0.1) is None
+    assert arb.release_forslag(mitt) is True
+    assert arb.release_forslag(mitt) is False       # nyckeln biter en gång

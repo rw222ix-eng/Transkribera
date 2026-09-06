@@ -1129,3 +1129,47 @@ def test_underlagsrutten_slapper_inte_ut_ur_base_dir(client):
     # Och sidnumret måste vara siffror — annars matchar rutten inte alls.
     assert client.get("/api/underlag/0123456789ab/sida/..%2f..%2fx.png") \
         .status_code == 404
+
+
+# ── Förslagens egen plats ────────────────────────────────────────────────────
+# Mätt 2026-09-06 ur spar-tabellen: tre automatiska ci-förslag inom elva
+# sekunder tog alla tre molnplatserna (LLM_TAK), och sexton sekunder senare
+# fick lärarens EGEN tavla 409. Rutten kör därför på gpu_arbiter.FORSLAG_TAK.
+
+def test_ci_forslag_gar_igenom_med_fullt_molntak(llm_ready, monkeypatch):
+    from app import ci_forslag, gpu_arbiter
+    from app.web import routes_planning as rp
+
+    arb = llm_ready.app.state.arbiter
+    nycklar = [arb.try_acquire_llm() for _ in range(gpu_arbiter.LLM_TAK)]
+    assert all(nycklar) and arb.try_acquire_llm() is None   # molnet är fullt
+
+    monkeypatch.setattr(
+        rp.ci_forslag, "foresla",
+        lambda *a, **kw: ci_forslag.tomt("") | {
+            "punkter": [{"kod": "G25-M2A-ALG-8", "skal": "s. 55"}]})
+
+    r = llm_ready.post("/api/planning/ci-forslag",
+                       json={"niva": "mate/2a", "moment": "Andragradsekvationer"})
+    assert r.status_code == 200                      # inget 409 längre
+    assert _done(r)["punkter"] == [{"kod": "G25-M2A-ALG-8", "skal": "s. 55"}]
+    # Och lärarens platser är orörda: förslaget tog ingen av dem.
+    assert arb.try_acquire_llm() is None
+    assert all(arb.release_llm(k) for k in nycklar)
+
+
+def test_ci_forslag_slapper_sin_plats_aven_nar_det_smaller(llm_ready, monkeypatch):
+    """Utan finally hade en enda krasch låst bort alla senare förval."""
+    from app.web import routes_planning as rp
+
+    def sprick(*a, **kw):
+        raise RuntimeError("nätet är nere")
+
+    monkeypatch.setattr(rp.ci_forslag, "foresla", sprick)
+    r = llm_ready.post("/api/planning/ci-forslag",
+                       json={"niva": "mate/2a", "moment": "Andragradsekvationer"})
+    assert any(e["type"] == "error" for e in _events(r))
+
+    arb = llm_ready.app.state.arbiter
+    assert arb.acquire_forslag(arb.forslag_biljett(), timeout=0.5), \
+        "förslagsplatsen hölls kvar efter kraschen"

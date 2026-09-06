@@ -372,13 +372,20 @@ def schema() -> dict:
     }
 
 
-def _tomt(skal: str = "") -> dict:
+def tomt(skal: str = "") -> dict:
+    """Kontraktets tomma svar med ett svenskt skäl. Publik för att rutten
+    behöver samma form när den lämnar walkover åt ett nyare förslag."""
     return {"punkter": [], "osakra": [], "kalla": "", "tomt_skal": skal}
+
+
+# Gamla namnet, kvar för anropsställena inne i modulen.
+_tomt = tomt
 
 
 def foresla(nivapunkter: list[dict], text: str, moment: str = "", *,
             model: str = "", llm=llm_client.generate,
-            log_cb: Callable[[str], None] | None = None) -> dict:
+            log_cb: Callable[[str], None] | None = None,
+            avbruten: Callable[[], bool] | None = None) -> dict:
     """Modellens förslag, filtrerat mot nivån. Formen är kontraktets:
     {"punkter": [{kod, skal}], "osakra": [...], "kalla": "", "tomt_skal": ""}.
 
@@ -386,7 +393,11 @@ def foresla(nivapunkter: list[dict], text: str, moment: str = "", *,
     doma_tackning): nätet som dör, JSON som inte går att läsa, koder som inte
     finns — allt blir tomma listor och ett svenskt skäl att visa i noten. Ett
     förval får aldrig kosta läraren ett felmeddelande, för hon bad aldrig om
-    det; hon skrev bara in ett bokspann."""
+    det; hon skrev bara in ett bokspann.
+
+    `avbruten` skickas VIDARE till modellen bara när den faktiskt getts. Ett
+    extra nyckelord in i en fejkad `llm` hade ändrat anropet i sviten, och
+    kassetterna slås upp på byte-identisk payload."""
     log = log_cb or (lambda _m: None)
     kanda = {str(p.get("kod") or ""): p for p in nivapunkter if p.get("kod")}
     if not kanda:
@@ -400,7 +411,8 @@ def foresla(nivapunkter: list[dict], text: str, moment: str = "", *,
                   options={"temperature": 0.1},
                   response_format={"type": "json_schema",
                                    "json_schema": {"name": "ci_forslag",
-                                                   "schema": schema()}})
+                                                   "schema": schema()}},
+                  **({"avbruten": avbruten} if avbruten is not None else {}))
     except Exception as e:
         log(f"Innehållsdomaren kunde inte nås ({e}) — inga punkter förvaldes.")
         return _tomt("Punkterna kunde inte läsas ur underlaget just nu.")

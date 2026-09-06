@@ -183,6 +183,23 @@ def test_tom_kalltext_fragar_aldrig_modellen():
     assert "lästa" in res["tomt_skal"]
 
 
+def test_avbruten_skickas_bara_nar_den_ges():
+    """Kassettregeln: ett mål är en byte-identisk payload. Ett extra nyckelord
+    i anropet när ingen avbrytare finns hade ändrat varenda befintlig fejk."""
+    sedda = []
+
+    def llm(model, prompt, **kw):
+        sedda.append(kw)
+        return json.dumps({"punkter": [], "osakra": []})
+
+    ci_forslag.foresla(_punkter(), "material", llm=llm)
+    assert "avbruten" not in sedda[-1]
+
+    stopp = lambda: False
+    ci_forslag.foresla(_punkter(), "material", llm=llm, avbruten=stopp)
+    assert sedda[-1]["avbruten"] is stopp
+
+
 def test_tomma_listor_ar_ett_giltigt_svar():
     res = ci_forslag.foresla(_punkter(), "material",
                              llm=_svar({"punkter": [], "osakra": []}))
@@ -307,12 +324,39 @@ def test_rutten_kraver_en_kand_niva(llm_ready):
     assert r.status_code == 400
 
 
-def test_rutten_409_nar_modellen_ar_upptagen(llm_ready, monkeypatch):
-    monkeypatch.setattr(llm_ready.app.state.arbiter, "try_acquire_llm",
-                        lambda: None)
+def test_rutten_tar_ingen_molnplats_ifran_lararen(llm_ready, monkeypatch,
+                                                  fejk_claude):
+    """Mätt 2026-09-06: tre bakgrundsförslag åt alla tre molnplatserna och
+    lärarens egen tavla fick 409. Förslaget har nu en egen plats, så ett fullt
+    molntak syns inte alls här."""
+    fejk_claude("auto")
+    arb = llm_ready.app.state.arbiter
+    monkeypatch.setattr(arb, "try_acquire_llm", lambda: None)   # molnet fullt
+    r = llm_ready.post("/api/planning/ci-forslag",
+                       json={"niva": "mate/2a",
+                             "moment": "2.3 Andragradsekvationer och pq-formeln"})
+    assert r.status_code == 200
+    assert _done(r)["punkter"]
+
+
+def test_ett_nyare_forslag_tar_over(llm_ready, monkeypatch):
+    """Läraren ändrade källorna medan förslaget väntade på platsen. Då ska det
+    gamla lämna walkover i kontraktets form, inte köa och inte falla."""
+    arb = llm_ready.app.state.arbiter
+    monkeypatch.setattr(arb, "acquire_forslag",
+                        lambda n, **kw: None)       # biljetten blev gammal
+    monkeypatch.setattr(ci_forslag, "foresla", _aldrig)
     r = llm_ready.post("/api/planning/ci-forslag",
                        json={"niva": "mate/2a", "moment": "Andragradsekvationer"})
-    assert r.status_code == 409
+    assert r.status_code == 200
+    res = _done(r)
+    assert set(res) == {"punkter", "osakra", "kalla", "tomt_skal"}
+    assert res["punkter"] == [] and res["osakra"] == []
+    assert "nyare" in res["tomt_skal"]
+
+
+def _aldrig(*a, **kw):
+    raise AssertionError("modellen frågades trots att förslaget var överspelat")
 
 
 def test_rutten_spelar_upp_kassetten_och_ger_kontraktets_form(llm_ready,

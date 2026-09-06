@@ -851,8 +851,16 @@ def create_router(base: Path, arbiter) -> APIRouter:
         föregående svaret ointressant, och ett jobb som lever vidare hade bara
         hållit semaforen åt en fråga ingen längre väntar på.
 
+        Kör på förslagens EGNA plats (gpu_arbiter.FORSLAG_TAK), inte på
+        molntaket. Skälet står vid FORSLAG_TAK: tre bakgrundsförslag hann ta
+        alla tre molnplatserna och gav lärarens egen tavla ett 409. Härifrån
+        kan de inte det, och två förslag köar inte heller bakom varandra: det
+        nyare drar en biljett som gör det äldre överspelat, både i väntan och
+        mitt i modellanropet.
+
         Fail-open är kontraktet (se app/ci_forslag.foresla): otydliga svar blir
-        `done` med tomma listor och ett skäl, aldrig `error`."""
+        `done` med tomma listor och ett skäl, aldrig `error`. Det gäller även
+        walkovern, för ett överspelat förslag svarar `done` med tomma listor."""
         body = await _kropp(req)
         niva = str(body.get("niva") or "").strip()
         nivapunkter = ci_forslag.nivans_punkter(niva)
@@ -867,25 +875,39 @@ def create_router(base: Path, arbiter) -> APIRouter:
                           "eller moment"}, status_code=400)
         moment = (body.get("moment") or "").strip()
 
-        llm = arbiter.try_acquire_llm()
-        if not llm:
-            return JSONResponse(_LLM_BUSY, status_code=409)
+        # Biljetten dras HÄR, före jobbet: den ska göra föregående förslag
+        # överspelat i samma ögonblick läraren ändrade källorna, inte först när
+        # en tråd hunnit starta.
+        n = arbiter.forslag_biljett()
 
         def job(emit):
+            # Två skäl att sluta, samma fråga: strömmen är död (klienten rev
+            # sin fetch, se plan.js forslagNu) eller ett nyare förslag har
+            # tagit över. Frågan ställs både i väntan på platsen och medan
+            # modellen skriver (ci_forslag.foresla → llm_client.generate).
+            def avbruten():
+                borta = getattr(emit, "borta", None)
+                return bool(borta is not None and borta.is_set()) \
+                    or not arbiter.forslag_aktuell(n)
+
+            emit({"type": "progress",
+                  "message": "Läser underlaget mot centralt innehåll …"})
+            nyckel = arbiter.acquire_forslag(n, avbruten=avbruten)
+            if nyckel is None:
+                return ci_forslag.tomt("Ett nyare förslag tog över.")
             try:
-                emit({"type": "progress",
-                      "message": "Läser underlaget mot centralt innehåll …"})
                 # Källtexten byggs INNE i jobbet: den slår i databasen och kan
                 # läsa ett par tusen tecken boktext, och då ska förloppet redan
                 # synas. Olästa sidor läses aldrig här (se ci_forslag.kalltext).
                 text, kalla = ci_forslag.kalltext(base, db_file, body)
                 res = ci_forslag.foresla(
                     nivapunkter, text, moment, model=_model_name(),
-                    log_cb=lambda m: emit({"type": "log", "msg": m}))
+                    log_cb=lambda m: emit({"type": "log", "msg": m}),
+                    avbruten=avbruten)
                 res["kalla"] = kalla
                 return res
             finally:
-                arbiter.release_llm(llm)
+                arbiter.release_forslag(nyckel)
 
         return sse_response(job, req)
 
