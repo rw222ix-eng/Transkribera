@@ -262,6 +262,39 @@ def test_schemat_ryms_pa_kommandoraden_med_scenfaltet():
             f"{antal} uppgifter ger {len(minifierat)} tecken"
 
 
+def _ref_i_faltkarta(nod, karta=False):
+    """Sökvägar där en fältkarta (properties, $defs …) själv är en $ref."""
+    FALT = {"properties", "$defs", "patternProperties", "dependentSchemas"}
+    if isinstance(nod, dict):
+        ut = ["karta"] if karta and "$ref" in nod else []
+        for k, v in nod.items():
+            ut += _ref_i_faltkarta(v, karta=(k in FALT))
+        return ut
+    if isinstance(nod, list):
+        return [x for v in nod for x in _ref_i_faltkarta(v)]
+    return []
+
+
+def test_hyveln_byter_aldrig_ut_en_faltkarta():
+    """Arbetsbladet 2026-09-06: tolv uppgifter där två rader i skelettet var
+    identiska. Hyveln (exam_spec._hyvla) räknade då `properties`-kartan som ett
+    delschema som stod två gånger och bytte ut den mot en $ref. Det är inte
+    JSON Schema: CLI:ns validerare läste definitionen som ett schema med
+    fältnamnen som okända nyckelord («unknown keyword: "0"») och skrev
+    ingenting. Kartans värden får hyvlas, aldrig kartan."""
+    from app import claude_code, llm_client
+    for profil in ("arbetsblad", "prov"):
+        for antal in (6, 12, 20):
+            sk = exam_spec.balanced_skeleton(antal, profil,
+                                             delar=(profil == "prov"))
+            # Två identiska rader, oavsett vad skelettet råkade ge.
+            sk[1] = dict(sk[0], nr=sk[1].get("nr", 2))
+            rå = llm_client._schema_ur(exam_spec.to_response_format(
+                antal, sk, ["G25-M1C-ALG-3"]))
+            assert not _ref_i_faltkarta(claude_code._minifiera(rå)), \
+                f"{profil} {antal}: en fältkarta är en $ref"
+
+
 # ── Pappret ───────────────────────────────────────────────────────────
 
 def _prov_med_kortsvar(alternativ=True):

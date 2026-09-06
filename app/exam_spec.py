@@ -877,6 +877,11 @@ MIN_DELPROV_FOR_ORDNING = 4     # kortare delar mäts inte på ordning
 # Minsta delschema som ÖVER HUVUD TAGET prövas. Under den gränsen är noden så
 # liten att bokföringen kostar mer än den kan spara.
 _HYVEL_MIN = 30
+
+# Nycklar vars värde är en karta fältnamn → schema, inte ett schema (samma
+# lista som claude_code._FALTKARTOR, och av samma skäl).
+_FALTKARTOR = frozenset({"properties", "$defs", "definitions",
+                         "patternProperties", "dependentSchemas"})
 # Vad en referens kostar i tecken: `{"$ref":"#/$defs/D12"},` plus definitionens
 # egen nyckel i $defs. Räknat, inte gissat — se _lonar_hyvla.
 _REF_KOSTNAD = 24
@@ -926,15 +931,23 @@ def _hyvla(schema: dict) -> None:
 
     rakning: dict[str, int] = {}
 
-    def rakna(nod, rot: bool = False):
+    # FÄLTKARTORNA ÄR INTE SCHEMAN. Värdet under `properties` (och $defs,
+    # patternProperties, dependentSchemas) är en karta fältnamn → schema, och
+    # den får varken räknas eller bytas ut: en `properties: {"$ref": …}` är
+    # inte JSON Schema, och CLI:ns validerare läser då definitionen som ett
+    # schema med fältnamnen som okända nyckelord («unknown keyword: "0"»,
+    # arbetsbladet 2026-09-06, tolv uppgifter där två rader var identiska så
+    # att kartan stod två gånger). Kartans VÄRDEN är scheman och hyvlas som
+    # förut.
+    def rakna(nod, rot: bool = False, karta: bool = False):
         if isinstance(nod, dict):
-            if not rot and "$ref" not in nod:
+            if not rot and not karta and "$ref" not in nod:
                 nyckel = kanon(nod)
                 if len(nyckel) >= _HYVEL_MIN:
                     rakning[nyckel] = rakning.get(nyckel, 0) + 1
             for k, v in nod.items():
                 if k != "discriminator":
-                    rakna(v)
+                    rakna(v, karta=(not karta and k in _FALTKARTOR))
         elif isinstance(nod, list):
             for v in nod:
                 rakna(v)
@@ -954,16 +967,18 @@ def _hyvla(schema: dict) -> None:
     for i, nyckel in enumerate(valda):
         namn[nyckel] = f"D{i}"
 
-    def byt(nod, rot: bool = False):
+    def byt(nod, rot: bool = False, karta: bool = False):
         if isinstance(nod, dict):
-            if not rot and "$ref" not in nod:
+            if not rot and not karta and "$ref" not in nod:
                 n = namn.get(kanon(nod))
                 if n is not None:
                     if n not in defs:
-                        defs[n] = {k: (v if k == "discriminator" else byt(v))
+                        defs[n] = {k: (v if k == "discriminator" else
+                                       byt(v, karta=(k in _FALTKARTOR)))
                                    for k, v in nod.items()}
                     return {"$ref": f"#/$defs/{n}"}
-            return {k: (v if k == "discriminator" else byt(v))
+            return {k: (v if k == "discriminator" else
+                        byt(v, karta=(not karta and k in _FALTKARTOR)))
                     for k, v in nod.items()}
         if isinstance(nod, list):
             return [byt(v) for v in nod]
