@@ -38,7 +38,15 @@ def _exam() -> dict:
                          "scene": "SCENE. A scholar in a ninth-century Baghdad "
                                   "study, bent over a manuscript by lamplight, "
                                   "dust motes in a shaft of morning sun. "
-                                  "Intended use: exam cover portrait."},
+                                  "Intended use: exam cover portrait.",
+                         # Bildtexten är den enda av rutans texter eleven ser,
+                         # och exam_gen.forsattsignaler kräver den sedan
+                         # 2026-09-06: två till tre korta meningar.
+                         "bildtext": "En lärd man böjd över ett manuskript i "
+                                     "Bagdad. Al-Khwarizmi levde på "
+                                     "800-talet och skrev boken som gav "
+                                     "algebran dess namn. Det är hans "
+                                     "ekvationer du löser på provet."},
         "uppgifter": [
             {"del": "B", "formaga": "B", "typ": "rutin", "poang": [3, 0, 0],
              "text": "Ange nollställena till $f(x) = (x-1)(x+3)$.",
@@ -3029,20 +3037,80 @@ def test_forsattsbladets_egna_bild_trycks_med_sin_bildtext():
     """Läraren släppte sin egen bild i porträttrutan och bad om «en liten
     figurtext till denna, centrerad under bilden». Bilden reste aldrig till
     mallen (nyckeln «forsatt» är ingen uppgift) och bildtexten fanns inte som
-    fält, så pappret fick varken bilden eller raden."""
+    fält, så pappret fick varken bilden eller raden.
+
+    TRE MENINGAR sedan hennes andra beställning (2026-09-06): «Texten ska
+    beskriva kort vad man ser, och förklara … Det kan vara tre meningar.»"""
     doc = _exam_med_forsattsbild(
-        "Napier & hans tabeller vid ljuset i arbetsrummet.")
+        "En man böjd över ett räknebord vid ljuset & i lugn och ro. "
+        "Napier levde 1550 till 1617 och räknade fram de första "
+        "logaritmtabellerna, som gjorde multiplikation till addition. "
+        "Det är samma räknelagar du använder på det här provet.")
     tex = exam_latex.render_prov(doc, forsatt_bild="egen-forsatt.png")
     forsatt = _forsattsbladet(tex)
-    # 58 mm och inte 70: höjden är mätt mot vad som är kvar under
-    # namnraderna när bildtexten tar två rader (se prov.tex.j2).
-    assert (r"\includegraphics[width=0.7\textwidth,height=58mm,"
+    # 50 mm och inte 58: höjden räknades om när bildtexten fick bli TRE rader
+    # i stället för två (se höjdbudgeten i prov.tex.j2).
+    assert (r"\includegraphics[width=0.7\textwidth,height=50mm,"
             r"keepaspectratio]{egen-forsatt.png}") in forsatt
-    # Bildtexten står under bilden, i \small\itshape, och ESCAPAD: den är ren
-    # text och ett «&» i den skulle annars spräcka kompileringen.
-    assert r"{\small\itshape Napier \& hans tabeller vid ljuset i " \
-        r"arbetsrummet.}" in forsatt
-    assert "Napier & hans" not in forsatt
+    # Bildtexten står under bilden, i \small\itshape och i en \parbox som är
+    # smalare än satsytan, och den är ESCAPAD: den är ren text och ett «&» i
+    # den skulle annars spräcka kompileringen.
+    assert r"\parbox{0.8\textwidth}{\centering\small\itshape En man böjd " \
+        r"över ett räknebord vid ljuset \& i lugn och ro." in forsatt
+    assert "ljuset & i lugn" not in forsatt
+
+
+@pytest.mark.tectonic
+def test_forsattsbladet_ryms_pa_en_sida_med_tre_meningars_bildtext(tmp_path):
+    """HÖJDBUDGETEN, mätt i den kompilerade PDF:en och inte i .tex-källan.
+
+    En bildtext på tre meningar under en STÅENDE bild är det värsta fallet:
+    stående bild betyder att höjdangivelsen (och inte bredden) styr, och regelns
+    45 ord blir fyra rader \\small under den. Räknar man fel skjuts
+    namnraderna, eller bildtexten, till en andra sida, och läraren ser det
+    först på utskriften. Sidorna räknas därför på den riktiga PDF:en:
+    försättsbladet plus provets två delar är TRE sidor, och en fjärde betyder
+    att försättsbladet spruckit. Sista textraden mäts också: den ska ligga
+    ovanför sidfoten, annars står bildtexten i sidnumrets rad.
+    """
+    import pypdfium2
+    from PIL import Image
+
+    # Stående testbild, 3:4 på höjden: keepaspectratio låter då höjdmåttet
+    # (50 mm) styra, vilket är precis det fall som spränger sidan om budgeten
+    # är fel räknad.
+    bild = tmp_path / "egen-forsatt.png"
+    Image.new("RGB", (300, 400), (120, 120, 160)).save(bild)
+
+    doc = _exam_med_forsattsbild(
+        "En man sitter böjd över ett räknebord i ett ljust rum i Bagdad. "
+        "Al-Khwarizmi levde på 800-talet och skrev boken som gav algebran "
+        "dess namn och dess första metod att lösa andragradsekvationer. "
+        "Det är samma sorts ekvationer som du löser på det här provet.")
+    # 45 ord är regelns tak, och testet ska ligga i takhöjd.
+    assert 40 <= len(doc.forsattsbild.bildtext.split()) <= 45
+
+    tex = exam_latex.render_prov(doc, forsatt_bild=bild.name)
+    pdf, logg = exam_pdf.compile_pdf(tex, tmp_path, "prov")
+    assert pdf is not None and pdf.exists(), logg[-2000:]
+    sidor = pypdfium2.PdfDocument(str(pdf))
+    assert len(sidor) == tex.count("\\newpage") + 1, (
+        f"försättsbladet spred sig: {len(sidor)} sidor, "
+        f"{tex.count(chr(92) + 'newpage') + 1} väntade")
+    # Och bildtexten står verkligen på sida ETT, hos bilden.
+    tp = sidor[0].get_textpage()
+    forsta = " ".join(tp.get_text_range().split())
+    assert "Al-Khwarizmi levde på 800-talet" in forsta
+    assert "du löser på det här provet." in forsta
+    # SISTA TEXTRADEN, mätt i mm över papprets underkant. Sidfoten sitter runt
+    # 11 mm; bildtexten ska sluta klart ovanför den, annars är det ingen
+    # marginal kvar och nästa ordval spränger sidan. 25 mm är satsytans
+    # underkant och bildtexten får ligga strax under den, inte i sidfoten.
+    baslinjer = sorted({tp.get_charbox(i)[1] / 72 * 25.4
+                        for i in range(tp.count_chars())})
+    utom_sidfot = [y for y in baslinjer if y > 15]
+    assert utom_sidfot and utom_sidfot[0] > 20, (
+        f"bildtexten når ner till {utom_sidfot[:1]} mm över underkanten")
 
 
 def test_forsattsbladet_utan_egen_bild_star_som_forut():

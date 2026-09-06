@@ -797,5 +797,28 @@ def test_provet_utan_portratt_gar_till_reparation():
     assert exam_gen.forsattsignaler({"uppgifter": []}, "arbetsblad") == []
     fel = exam_gen.forsattsignaler({"uppgifter": []}, "prov")
     assert len(fel) == 1 and fel[0]["code"] == "forsatt"
-    ok = {"forsattsbild": {"person": "Euler", "scene": "SCENE. x"}}
+    # Meddelandet ber om alla tre fälten, bildtexten inräknad.
+    assert "bildtext" in fel[0]["message"]
+    ok = {"forsattsbild": {"person": "Euler", "scene": "SCENE. x",
+                           "bildtext": "Euler vid sitt bord. Han byggde upp "
+                                       "funktionsläran på 1700-talet. Samma "
+                                       "funktioner står på provet."}}
     assert exam_gen.forsattsignaler(ok, "prov") == []
+
+
+def test_portrattet_utan_bildtext_gar_ocksa_till_reparation():
+    """LÄRAREN (2026-09-06): «Det ska ALLTID skapas en passande undertext till
+    bilden på försättssidan.» Fältet måste ändå förbli valfritt i schemat
+    (kassetterna och proven i basen saknar det), så det är vakten som gör
+    «alltid» till ett krav. Ett porträtt utan bildtext ger eleven ett ansikte
+    utan förklaring, och det är precis vad hon bad om att slippa."""
+    from app import exam_gen
+    utan = {"forsattsbild": {"person": "Euler", "scene": "SCENE. x"}}
+    fel = exam_gen.forsattsignaler(utan, "prov")
+    assert len(fel) == 1 and fel[0]["code"] == "bildtext"
+    assert fel[0]["path"] == "forsattsbild.bildtext"
+    # Tom sträng är detsamma som inget fält.
+    tom = {"forsattsbild": dict(utan["forsattsbild"], bildtext="   ")}
+    assert exam_gen.forsattsignaler(tom, "prov")[0]["code"] == "bildtext"
+    # … men bara för provet: arbetsbladet har inget försättsblad.
+    assert exam_gen.forsattsignaler(utan, "arbetsblad") == []

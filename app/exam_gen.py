@@ -188,18 +188,32 @@ FORSATTSBILD_REGEL = (
     "Intended use: John Napier, logaritmer.\"\n"
     # BILDTEXTEN är den enda av rutans tre texter som ELEVEN ser: den
     # trycks centrerad under bilden på försättsbladet (prov.tex.j2).
-    # Lärarens ord vid granskningen av prov 40 (2026-09-06): «en liten
-    # figurtext till denna, centrerad under bilden, kort, utan em dash,
-    # konkret: vad är det vi ser på bilden, kopplat till det provet
-    # handlar om.» Tolv ord är taket, och det är mätt mot raden: en
-    # längre text bryter till två rader och skjuter namnraderna nedanför
-    # bilden ner på en andra sida.
-    "  bildtext: EN kort mening på SVENSKA, högst TOLV ord, som står "
-    "CENTRERAD UNDER BILDEN på försättsbladet och som eleven läser. Säg "
-    "vad man ser på bilden OCH hur det hör till provets innehåll, "
-    "konkret: \"Napier räknar fram sina första logaritmtabeller "
-    "vid ljus.\" Inga tankstreck, ingen punktlista, ingen matematik. "
-    "Skriv den ALLTID när du fyller forsattsbild.\n"
+    # Lärarens ord (2026-09-06): «Det ska alltid skapas en passande
+    # undertext till bilden på försättssidan. Texten ska beskriva kort
+    # vad man ser, och förklara, t.ex. Al-Khwarizmi som vi har på det
+    # här provet: varför är det en bild på honom ens? Vad kom han på?
+    # Kort. Och hur relaterar det till provet, kort. Det kan vara tre
+    # meningar. Det är roligt för eleven att veta lite grann. Men det
+    # ska vara kort och utan em dash.»
+    #
+    # TRE MENINGAR alltså, inte en, och 45 ord är taket. Det är mätt mot
+    # ytan under bilden och inte gissat: 45 ord blir fyra rader i
+    # parboxen på försättsbladet, och de ryms innanför satsytan med
+    # bilden sänkt till 50 mm (höjdbudgeten står i prov.tex.j2).
+    # Den förra regeln bad om EN mening på tolv ord, och eleven fick då
+    # bildbeskrivningen men aldrig varför personen står där eller vad hon
+    # har med provet att göra.
+    "  bildtext: TVÅ till TRE korta meningar på SVENSKA, högst 45 ord "
+    "sammanlagt, som står CENTRERAD UNDER BILDEN på försättsbladet och "
+    "som eleven läser. Mening 1: vad man ser på bilden. Mening 2: vem "
+    "personen är och vad hen kom på (årtal får stå). Mening 3: hur det "
+    "hör ihop med det här provets innehåll. Inga tankstreck, ingen "
+    "punktlista, ingen matematik och inga formler. Ett exempel, och det "
+    "är formen: \"En man sitter böjd över ett räknebord i ett ljust rum "
+    "i Bagdad. Al-Khwarizmi levde på 800-talet och skrev boken som gav "
+    "algebran dess namn och dess första metod att lösa andragrads"
+    "ekvationer. Det är samma sorts ekvationer du löser på det här "
+    "provet.\" Skriv den ALLTID när du fyller forsattsbild.\n"
 )
 
 INSTRUCTION = (
@@ -3285,19 +3299,38 @@ def _skala(profil: str, boknivaer: str, skeleton: list[dict] | None,
 
 
 def forsattsignaler(exam: dict, profil: str) -> list[dict]:
-    """Provet utan porträtt. Fältet är VALFRITT i schemat (gamla papper och
-    kassetter saknar det), så ordern i uppdragsblocket är det enda som ber om
-    det — och det första skarpa provet efter ec30741 kom utan. Då ska
-    reparationsrundan be om det, inte läraren stå med en tom bildplats."""
+    """Provet utan porträtt, och provet utan bildtext under porträttet.
+
+    Fältet är VALFRITT i schemat (gamla papper och kassetter saknar det), så
+    ordern i uppdragsblocket är det enda som ber om det, och det första
+    skarpa provet efter ec30741 kom utan. Då ska reparationsrundan be om det,
+    inte läraren stå med en tom bildplats.
+
+    BILDTEXTEN vaktas av samma skäl ett steg senare: läraren bad om att den
+    ALLTID ska skrivas (2026-09-06), men fältet måste förbli valfritt för
+    kassetternas skull. En modell som fyller porträttet och hoppar över
+    bildtexten ger eleven ett ansikte utan förklaring, och det är precis vad
+    hon bad om att slippa. Kassetten tests/kassetter/prov.json saknar
+    forsattsbild helt och fälls redan på första raden, så bildtextkravet
+    kostar ingen extra runda i testerna."""
     if profil != "prov":
         return []
     fb = exam.get("forsattsbild") or {}
-    if isinstance(fb, dict) and (fb.get("scene") or "").strip():
-        return []
-    return [_err("forsattsbild", "forsatt",
-                 "provet saknar forsattsbild — fyll person (namn, årtal, vad "
-                 "hen gjorde, en svensk mening) och scene (SCENE-stycket på "
-                 "engelska) med den som hör till provets innehåll.")]
+    if not (isinstance(fb, dict) and (fb.get("scene") or "").strip()):
+        return [_err("forsattsbild", "forsatt",
+                     "provet saknar forsattsbild. Fyll person (namn, årtal, "
+                     "vad hen gjorde, en svensk mening), scene (SCENE-stycket "
+                     "på engelska) och bildtext (två till tre korta meningar "
+                     "på svenska som eleven läser under bilden) med den som "
+                     "hör till provets innehåll.")]
+    if not (fb.get("bildtext") or "").strip():
+        return [_err("forsattsbild.bildtext", "bildtext",
+                     "porträttet saknar bildtext. Skriv bildtext: två till "
+                     "tre korta meningar på svenska, högst 45 ord, som står "
+                     "under bilden och som eleven läser. Vad man ser, vem "
+                     "personen är och vad hen kom på, och hur det hör ihop "
+                     "med provets innehåll. Inga tankstreck.")]
+    return []
 
 
 def _signaler(exam: dict) -> list[dict]:
