@@ -166,9 +166,12 @@ _ANDELSER = (".py", ".js", ".mjs", ".ts", ".json")
 # just den porten i just de spann Windows hade 2026-09-06. Den är alltså det
 # enda stället där en gammal port SKA stå kvar i kod.
 _EGET_UNDANTAG = Path(__file__).resolve()
+# .claude: agenternas worktrees (.claude/worktrees/<agent>/) är hela kopior
+# av repot, med sin egen test_port.py och sitt eget undantag. Skannades de
+# föll testet på sin egen fixturrad i varje kopia, så länge en agent arbetade.
 _HOPPA = {".git", ".venv", "node_modules", "__pycache__", "vendor",
           "kassetter", "test-results", "downloads", "Transkriberingar",
-          ".skarp", "dist", "build", ".pytest_cache"}
+          ".skarp", "dist", "build", ".pytest_cache", ".claude"}
 
 
 def _kodrader(text: str, andelse: str):
