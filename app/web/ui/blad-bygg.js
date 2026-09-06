@@ -729,7 +729,9 @@ window.BladBygg = (() => {
      Saknas fältet — prototypens papper, ett prov skrivet innan fältet fanns —
      står platshållaren kvar precis som förut. Ingen migrering. */
   /* ── BILDTEXTEN LIGGER UTANFÖR BILDRUTAN ──
-     Fältet är dokumentets (exam_spec.Forsattsbild.bildtext, högst 160 tecken)
+     Fältet är dokumentets (exam_spec.Forsattsbild.bildtext, högst 400 tecken
+     sedan läraren bad om två till tre meningar 2026-09-06: vad man ser, vem
+     personen är och vad hen kom på, och hur det hör ihop med provet)
      och säger vem eleven ser och varför hen hör hit. Den skrivs EFTER
      .prbild-rutan och inte inuti den, för blad.js byter hela .prbild:s
      innerHTML mot lärarens egen släppta bild (v.bilder.forsatt). Hade

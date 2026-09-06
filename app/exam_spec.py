@@ -361,9 +361,17 @@ class Forsattsbild(_Model):
     scene: str = Field(min_length=80, max_length=1200)
     # BILDTEXTEN UNDER BILDEN på försättsbladet, och den enda av rutans texter
     # som ELEVEN ser. Lärarens ord vid granskningen av prov 40 (2026-09-06):
-    # «en liten figurtext till denna, centrerad under bilden, kort, utan em
-    # dash, konkret: vad är det vi ser på bilden, kopplat till det provet
-    # handlar om.»
+    # «Det ska alltid skapas en passande undertext till bilden på
+    # försättssidan. Texten ska beskriva kort vad man ser, och förklara, t.ex.
+    # Al-Khwarizmi som vi har på det här provet: varför är det en bild på
+    # honom ens? Vad kom han på? Kort. Och hur relaterar det till provet,
+    # kort. Det kan vara tre meningar. Det är roligt för eleven att veta lite
+    # grann. Men det ska vara kort och utan em dash.»
+    #
+    # TVÅ TILL TRE MENINGAR alltså, inte en rad: vad man ser på bilden, vem
+    # personen är och vad hen kom på, och hur det hör ihop med provets
+    # innehåll. Det gamla taket (en mening, tolv ord) rymde bara det första av
+    # de tre.
     #
     # Fältet är eget och inte en del av `person`: personraden är LÄRARENS rad i
     # canvas (vem hen är och varför hen hör hit) och `scene` är beställningen
@@ -373,9 +381,14 @@ class Forsattsbild(_Model):
     #
     # VALFRITT av samma skäl som hela klassen: kassetterna (tests/kassetter)
     # spelades in innan fältet fanns, och ett krav hade gjort varje inspelat
-    # prov ogiltigt. Taket är mätt mot raden på pappret: tolv ord i \small
-    # ryms på en rad under en 0,7\textwidth-bild, och 160 tecken rymmer dem.
-    bildtext: str | None = Field(default=None, max_length=160)
+    # prov ogiltigt. Taket är mätt mot ytan på pappret: tre meningar om
+    # sammanlagt högst 45 ord (regelns tak, exam_gen.FORSATTSBILD_REGEL) blir
+    # fyra rader i \small under bilden och 253 tecken, så 400 är ett tak med
+    # luft. Att det ÄR ett tak och inte en önskan är mätt i den kompilerade
+    # PDF:en: vid 386 tecken går sista raden ner till 22,9 mm över papprets
+    # underkant, alltså en bit in i undermarginalen, men försättsbladet är
+    # fortfarande EN sida (höjdbudgeten står i prov.tex.j2).
+    bildtext: str | None = Field(default=None, max_length=400)
 
 
 class SubItem(_Uppgiftsbas):

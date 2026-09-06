@@ -301,5 +301,11 @@
    person i ett ljus och vet inte vem. Fältet är dokumentets
    (exam_spec.Forsattsbild.bildtext) och skrivs UTANFÖR .prbild, för blad.js
    byter rutans innerHTML mot lärarens släppta bild, se blad-bygg
-   forsattsbild. Centrerad under bilden, i svart som allt annat på pappret. */
-.prbildtext{margin:8px 0 0;text-align:center;font-size:12.5px;line-height:1.45;color:#000}
+   forsattsbild. Centrerad under bilden, i svart som allt annat på pappret.
+
+   MAX-WIDTH 80 %, med auto-marginaler: sedan bildtexten blev två till tre
+   meningar (lärarens beställning 2026-09-06) löpte den över hela textspalten och
+   blev bredare än bilden ovanför. Pappret sätter samma sak med en
+   \parbox{0.8\textwidth} i prov.tex.j2, så skärmen och PDF:en bryter på
+   samma bredd. Texten är fortfarande centrerad, det är BOXEN som smalnar. */
+.prbildtext{margin:8px auto 0;max-width:80%;text-align:center;font-size:12.5px;line-height:1.45;color:#000}

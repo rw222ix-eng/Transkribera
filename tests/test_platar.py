@@ -451,6 +451,12 @@ def test_bildtexten_ar_valfri_och_har_ett_tak():
     handlar om.» Omskrivningen låste sig till fältet `forsattsbild` och skrev
     om person och scene i stället, för det fanns inget fält att skriva i.
 
+    SENARE SAMMA DAG växte beställningen: «Texten ska beskriva kort vad man
+    ser, och förklara, t.ex. Al-Khwarizmi som vi har på det här provet: varför
+    är det en bild på honom ens? Vad kom han på? Kort. Och hur relaterar det
+    till provet, kort. Det kan vara tre meningar.» Taket gick då från 160 till
+    400 tecken.
+
     VALFRITT av samma skäl som resten av klassen: kassetterna spelades in
     innan fältet fanns, och proven i basen har det inte."""
     falt = exam_spec.Forsattsbild.model_fields["bildtext"]
@@ -460,13 +466,15 @@ def test_bildtexten_ar_valfri_och_har_ett_tak():
     # Utan fältet: giltigt, och tomt.
     assert exam_spec.Forsattsbild(**grund).bildtext is None
     med = exam_spec.Forsattsbild(
-        **grund, bildtext="Napier räknar fram sina logaritmtabeller vid ljus.")
+        **grund, bildtext="Napier räknar fram sina logaritmtabeller vid ljus. "
+                          "Han levde 1550 till 1617 och gjorde multiplikation "
+                          "till addition. Samma räknelagar används på provet.")
     assert med.bildtext.startswith("Napier")
-    # Taket är raden på pappret: 160 tecken ryms, mer gör den till två rader
-    # och skjuter namnraderna ner på en andra sida.
-    exam_spec.Forsattsbild(**grund, bildtext="x" * 160)
+    # Taket är ytan på pappret: tre meningar om högst 45 ord ryms i 400 tecken
+    # och blir tre rader under bilden (prov.tex.j2 räknar höjdbudgeten mot dem).
+    exam_spec.Forsattsbild(**grund, bildtext="x" * 400)
     with pytest.raises(Exception):
-        exam_spec.Forsattsbild(**grund, bildtext="x" * 161)
+        exam_spec.Forsattsbild(**grund, bildtext="x" * 401)
 
 
 def test_bildtexten_star_i_grammatiken_och_i_regeln():
@@ -479,7 +487,11 @@ def test_bildtexten_star_i_grammatiken_och_i_regeln():
     assert "bildtext" not in schema["$defs"]["Forsattsbild"].get("required", [])
     r = exam_gen.FORSATTSBILD_REGEL
     assert "bildtext" in r
-    assert "TOLV ord" in r                       # lärarens «kort»
+    # Lärarens «kort», men tre meningar och inte en: vad man ser, vem hen är
+    # och vad hen kom på, och hur det hör ihop med provet.
+    assert "TVÅ till TRE korta meningar" in r
+    assert "45 ord" in r
+    assert "TOLV ord" not in r
     assert "CENTRERAD UNDER BILDEN" in r
     assert "Inga tankstreck" in r
 

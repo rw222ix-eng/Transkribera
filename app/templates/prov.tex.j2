@@ -142,25 +142,38 @@ Provet kan ge totalt \textbf{((( forsatt.total ))) poäng}.
     SIST PÅ SIDAN, under namnraderna, och HÖJDTAKET ÄR MÄTT: försättsbladet
     ska rymmas på EN sida. Klassradens baslinje ligger 99,6 mm över papprets
     underkant (mätt i den kompilerade PDF:en) och satsytan slutar vid 25 mm,
-    så 74 mm är allt som finns kvar. 6 mm luft, bilden och en bildtext som
-    får bli TVÅ rader ska rymmas i dem. 70 mm sköt bildtexten till en andra
-    sida i värsta fallet (stående bild, bildtext i takhöjd); 58 mm håller
-    både stående och 16:9 på en sida med marginal. keepaspectratio gör att
-    breddangivelsen gäller liggande bilder och höjden stående.
+    så 74 mm är allt som finns kvar. I dem ska rymmas 6 mm luft, bilden, och
+    en bildtext som numera är två till tre MENINGAR i stället för en rad.
 
-    BILDTEXTEN under bilden, centrerad, i \small\itshape. Lärarens ord:
-    «en liten figurtext till denna, centrerad under bilden, kort, utan em
-    dash, konkret». Texten är modellens fält (exam_spec.Forsattsbild
-    .bildtext) och står bara när det är ifyllt \textendash{} gamla prov
-    har det inte. #))
+    RÄKNINGEN gjordes om mot den kompilerade PDF:en när bildtexten växte
+    (2026-09-06). Regelns tak är 45 ord, och 45 ord blir FYRA rader \small i
+    parboxen nedan, inte tre: ungefär 18 mm text, 6 mm luft ovanför bilden och
+    knappt 4 mm mellan bild och bildtext. Kvar till bilden blir då drygt 45 mm,
+    och 50 mm går ändå in eftersom center-omgivningens luft ger med sig. MÄTT
+    på en STÅENDE bild (då styr höjden och inte bredden) med en bildtext på 44
+    ord: sista textraden lade sig 26,8 mm över underkanten, alltså innanför
+    satsytan, och pappret blev tre sidor: försättsblad plus provets två delar.
+    Schemats hårda tak (400 tecken, exam_spec.Forsattsbild.bildtext) provades
+    också: 386 tecken går ner till 22,9 mm, alltså en bit in i undermarginalen,
+    men fortfarande på samma sida. 58 mm höjd höll bara så länge bildtexten
+    fick bli TVÅ rader. keepaspectratio gör att breddangivelsen gäller
+    liggande bilder och höjden stående.
+
+    BILDTEXTEN under bilden, centrerad, i \small\itshape, och i en \parbox på
+    0,8\textwidth: utan boxen sätts raderna över HELA satsytan och blir
+    bredare än bilden de hör till. Lärarens ord (2026-09-06): «Det ska alltid
+    skapas en passande undertext till bilden på försättssidan … Det kan vara
+    tre meningar … kort och utan em dash.» Texten är modellens fält
+    (exam_spec.Forsattsbild.bildtext) och står bara när det är ifyllt
+    \textendash{} gamla prov har det inte. #))
 ((* if forsatt.bild_fil *))
 \vspace{6mm}
 
 \begin{center}
-  \includegraphics[width=0.7\textwidth,height=58mm,keepaspectratio]{((( forsatt.bild_fil )))}
+  \includegraphics[width=0.7\textwidth,height=50mm,keepaspectratio]{((( forsatt.bild_fil )))}
 ((* if forsatt.bildtext *))
 
-  {\small\itshape ((( forsatt.bildtext )))}
+  \parbox{0.8\textwidth}{\centering\small\itshape ((( forsatt.bildtext )))}
 ((* endif *))
 \end{center}
 ((* endif *))
