@@ -139,6 +139,14 @@
 .bkblad i{display:block;height:4px;border-radius:2px;background:var(--line-2)}
 .bkbnr{margin-top:auto;padding-top:8px;font-size:.74rem;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
 .bkbavs{font-size:.72rem;color:var(--ink-3)}
+/* Bladets besked (uppslag.js kopplaBlad). En sida som inte är renderad hämtas
+   ur PDF:en vid första begäran och det tar tid; går det fel står skälet här
+   med en väg tillbaka. Raden är dold så fort bilden kommit. */
+.bkstatus{font-size:.72rem;color:var(--ink-3);line-height:1.35}
+.bkstatus[data-lage="laser"]{animation:bkpuls 1.4s var(--ease) infinite}
+.bkstatus[data-lage="fel"]{color:var(--warn);animation:none}
+.bkigen{font-size:.72rem}
+@keyframes bkpuls{0%,100%{opacity:1}50%{opacity:.45}}
 .bkremsa{position:relative;display:flex;gap:4px;align-items:flex-end;margin-top:12px;padding:14px 12px 12px;border-radius:var(--r-card);background:var(--sunken);overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;-ms-overflow-style:none;scroll-behavior:smooth;cursor:ew-resize}
 .bkremsa::-webkit-scrollbar{width:0;height:0;display:none}
 .bksida{flex:0 0 auto;width:28px;height:42px;display:grid;align-content:end;justify-items:center;padding:0 0 4px;border:none;border-radius:3px;background:#fff;box-shadow:inset 0 0 0 1px var(--line);font-family:inherit;font-size:.62rem;color:var(--ink-3);font-variant-numeric:tabular-nums;cursor:pointer;transition:background-color var(--dur-1) var(--ease),height var(--dur-2) var(--ease),color var(--dur-1) var(--ease)}

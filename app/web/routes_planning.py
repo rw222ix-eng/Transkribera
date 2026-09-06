@@ -22,7 +22,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from app import (bok, course_data, db, dokumentdiff, forlaga, gpu_arbiter,
-                 lararord, lesson_board, llm_client, rattning, spar)
+                 lararord, lesson_board, llm_client, pdfvakt, rattning, spar)
 from app.web import Id64, _kropp
 from app.web.sse import Stege, jobb_response, sse_response
 
@@ -614,17 +614,23 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     continue
                 import io
                 import pypdfium2 as pdfium
-                pdf = pdfium.PdfDocument(raw)
-                try:
-                    for pi in range(len(pdf)):
-                        if len(pages) >= _MAX_UNDERLAG_SIDOR:
-                            break
-                        bitmap = pdf[pi].render(scale=_PDF_SCALE)
-                        buf = io.BytesIO()
-                        bitmap.to_pil().save(buf, format="PNG")
-                        pages.append((f"{namn} — sida {pi + 1}", buf.getvalue()))
-                finally:
-                    pdf.close()
+                # Underlaget renderas i en begärans egen trådpoolstråd, alltså
+                # gärna samtidigt som ett SSE-jobb läser en boksida. Två trådar
+                # i pdfium förstör biblioteket för HELA processen och det läker
+                # inte (app/pdfvakt.py) — vakten gäller här också.
+                with pdfvakt.ensam():
+                    pdf = pdfium.PdfDocument(raw)
+                    try:
+                        for pi in range(len(pdf)):
+                            if len(pages) >= _MAX_UNDERLAG_SIDOR:
+                                break
+                            bitmap = pdf[pi].render(scale=_PDF_SCALE)
+                            buf = io.BytesIO()
+                            bitmap.to_pil().save(buf, format="PNG")
+                            pages.append((f"{namn} — sida {pi + 1}",
+                                          buf.getvalue()))
+                    finally:
+                        pdf.close()
         except Exception as e:
             return JSONResponse({"error": f"kunde inte läsa PDF: {e}"},
                                 status_code=400)

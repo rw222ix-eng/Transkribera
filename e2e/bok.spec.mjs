@@ -331,6 +331,61 @@ test("importen är fyra steg som beskriver något som händer", async ({ page })
                     { timeout: 15_000 }).toBeGreaterThan(1);
 });
 
+/* ── Bladet säger till ──
+   «Klickade på appen på skrivbordet, valde en sida i boken. Sidan fanns inte
+   inskannad och jag såg ingen indikation på att det laddade in.» (2026-09-06)
+   Sidan renderades ur PDF:en vid begäran, renderingen föll (pdfium var
+   förstört i appens process, se app/pdfvakt.py) och `onerror` tog bort bilden
+   utan ett ord. De två testerna nedan håller båda halvorna: att hämtningen
+   syns, och att felet blir en svensk mening med en väg tillbaka. */
+
+test("bladet säger att sidan läses in", async ({ page }) => {
+  await fejka(page);
+  // Bilden dröjer: rutten svarar först efter en stund, precis som en
+  // pdfium-rendering av en bok på ett par hundra megabyte.
+  await page.route("**/api/bocker/*/sida/*.png**", async route => {
+    await new Promise(r => setTimeout(r, 3000));
+    return route.fulfill({ status: 404, contentType: "application/json",
+                           body: JSON.stringify({ error: "källfilen saknas" }) });
+  });
+  await page.goto("/");
+  await hydrerad(page);
+  await oppnaBoken(page);
+  await page.evaluate(() => window.Uppslag.satt(15, 16));
+
+  await expect(page.locator(".bkblad", { hasText: "första sidan" })
+                   .locator(".bkstatus")).toHaveText(/Läser in s\. 15/);
+});
+
+test("en sida som inte gick att läsa säger varför, och går att försöka igen",
+     async ({ page }) => {
+  await fejka(page);
+  let forsok = 0;
+  await page.route("**/api/bocker/*/sida/*.png**", route => {
+    forsok++;
+    return route.fulfill({ status: 500, contentType: "application/json",
+      body: JSON.stringify({ error: "kunde inte rendera sidan: PDF:en gick "
+        + "inte att öppna: Liber Ma 1c komplett.pdf — Data format error." }) });
+  });
+  await page.goto("/");
+  await hydrerad(page);
+  await oppnaBoken(page);
+  await page.evaluate(() => window.Uppslag.satt(15, 16));
+
+  const not = page.locator(".bkblad", { hasText: "första sidan" }).locator(".bkstatus");
+  await expect(not).toContainText("Sidan kunde inte läsas: kunde inte rendera sidan");
+  await expect(not).toContainText("Data format error");
+  /* Steget öppnas här med PlanSteg.gaTill, och då står `.plansteg` kvar med
+     display:none — hela bokdörren mäter noll. Därför prövas innehållet och
+     klicket, inte pixlarna, precis som i sviten i övrigt. */
+  const igen = not.locator("button.bkigen");
+  await expect(igen).toHaveCount(1);
+  await expect(igen).toHaveText("Försök igen");
+  const fore = forsok;
+  await igen.dispatchEvent("click");
+  await expect.poll(() => forsok).toBeGreaterThan(fore);
+});
+
 test("uppslaget följer med skrivningen", async ({ page }) => {
   const anrop = await fejka(page);
   await page.goto("/");

@@ -25,7 +25,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 from app import bok as bok_mod
-from app import bok_losning, db, gpu_arbiter
+from app import bok_losning, db, debug_log, gpu_arbiter
 from app.web import Id64, _kropp
 from app.web.sse import sse_response
 
@@ -382,9 +382,18 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 if not bok_mod.rendera(pdf, [pdf_sida - 1], mapp):
                     return JSONResponse({"error": "sidan finns inte i PDF:en"},
                                         status_code=404)
-            except Exception:
-                return JSONResponse({"error": "kunde inte rendera sidan"},
-                                    status_code=500)
+            except Exception as fel:
+                # SKÄLET följer med ut, och det står i loggen. «kunde inte
+                # rendera sidan» ensamt var vad läraren hade när appen inte
+                # kunde läsa boken 2026-09-06: bilden försvann tyst i
+                # uppslag.js (onerror → this.remove()) och ingen visste att
+                # felet var pdfium, än mindre varför. Nu bär svaret bok._oppna:s
+                # mening — filen, storleken och pdfiums egen text — och
+                # uppslaget skriver den vid bladet.
+                debug_log.get_logger().exception("Sidbilden gick inte att rendera")
+                return JSONResponse(
+                    {"error": f"kunde inte rendera sidan: {fel}"},
+                    status_code=500)
         if not full:
             fil = _miniatyr(fil)
         # `no-cache` betyder «fråga alltid», inte «spara aldrig»: webbläsaren
