@@ -281,27 +281,7 @@ test("anteckningarna har inget centralt innehåll och frågar aldrig",
     expect(anrop.length).toBe(1);
   });
 
-/* ── 6 · Diagnosen ─────────────────────────────────── */
-
-test("diagnosen utan källa är hela nivån och frågar inte", async ({ page }) => {
-  const anrop = await fejka(page);
-  await planeringen(page, "Diagnos");
-  await tillSteg(page, 4);
-  await stillhet(page);
-  /* Diagnosen ÄR hela kursens innehåll så länge inget avgränsar den. */
-  expect((await valda(page)).length).toBe(I_NIVAN);
-  expect(anrop).toEqual([]);
-});
-
-test("diagnosen med ett bokspann smalnar av mot underlaget", async ({ page }) => {
-  await fejka(page);
-  await planeringen(page, "Diagnos");
-  await slarUpp(page);
-  await expect(noten(page)).toContainText("Ur underlaget: 3 punkter", SVAR_TID);
-  expect((await valda(page)).sort()).toEqual(PUNKTER);
-});
-
-/* ── 7 · Samma källa frågas inte två gånger ─────────── */
+/* ── 6 · Samma källa frågas inte två gånger ─────────── */
 
 test("en omkörning kostar inget nytt anrop, svaret ritas om ur minnet",
   async ({ page }) => {

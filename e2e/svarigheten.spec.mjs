@@ -180,12 +180,12 @@ for (const [typ, vag] of [["Arbetsblad", "/api/exams/generate"],
   });
 }
 
-/* … men PROVET och DIAGNOSEN mäter, och ett mätinstrument som lutas efter vad
-   läraren sett var svårt är inte representativt — åt något håll. Båda rutorna
-   går därför ner när typen väljs, och fälten utelämnas ur begäran även om de
-   bär text från en tidigare typ i samma session. Det senare är hela poängen:
-   en gömd ruta som ändå skickas är den värsta sorten. */
-for (const typ of ["Prov", "Diagnos"]) {
+/* … men PROVET mäter, och ett mätinstrument som lutas efter vad läraren sett
+   var svårt är inte representativt — åt något håll. Båda rutorna går därför
+   ner när typen väljs, och fälten utelämnas ur begäran även om de bär text
+   från en tidigare typ i samma session. Det senare är hela poängen: en gömd
+   ruta som ändå skickas är den värsta sorten. */
+for (const typ of ["Prov"]) {
   test(`${typ} varken visar eller skickar lärarens egna ord`, async ({ page }) => {
     const anrop = await fejka(page);
     await planering(page);

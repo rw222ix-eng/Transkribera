@@ -118,7 +118,7 @@
 .lekttid{font-size:.74rem;font-weight:500;font-variant-numeric:tabular-nums;color:var(--ink-2)}
 .lektklass{margin-left:auto;padding:2px 8px;border-radius:var(--r-pill);background:var(--track);font-size:.7rem;font-weight:600;letter-spacing:.02em;color:var(--ink-2)}
 .lekt[data-prov] .lektklass{background:var(--ink);color:#fff}
-/* Svenska sammansättningar («Matematikdiagnos») går annars ut i kortkanten i
+/* Svenska sammansättningar («Matematikundervisning») går annars ut i kortkanten i
    veckans smala kolumner — avstava hellre än att klippa. */
 .lektnamn{margin:0;font-size:.86rem;font-weight:500;line-height:1.3;color:var(--ink);overflow-wrap:break-word;hyphens:auto}
 /* Salen är information läraren letar efter, inte dekor: den satt på 10 px i 75 %

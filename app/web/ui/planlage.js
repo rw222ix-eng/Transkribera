@@ -19,12 +19,12 @@
   /* Böjningen bor i en tabell och inte i en kedja av frågetecken sedan
      anteckningarna kom: de är PLURAL («anteckningarna», «nya anteckningar»),
      och en femte gren i kedjan hade tigit om det. */
-  const BEST = { Tavla: 'tavlan', Prov: 'provet', Arbetsblad: 'arbetsbladet', Gruppuppgift: 'gruppuppgiften', Diagnos: 'diagnosen', Anteckningar: 'anteckningarna' };
+  const BEST = { Tavla: 'tavlan', Prov: 'provet', Arbetsblad: 'arbetsbladet', Gruppuppgift: 'gruppuppgiften', Anteckningar: 'anteckningarna' };
   const best = t => BEST[t] || String(t || '').toLowerCase();
   /* Rubriken är inte dekor: den säger vad man håller på att göra, och följer därför
      valet i det här steget — ett, två, eller det andra i ett par. */
-  const RUB = { Tavla: 'Dagens tavla', Prov: 'Nytt prov', Arbetsblad: 'Nytt arbetsblad', Gruppuppgift: 'Ny gruppuppgift', Diagnos: 'Ny diagnos', Anteckningar: 'Nya anteckningar' };
-  const OBEST = { Tavla: 'en tavla', Prov: 'ett prov', Arbetsblad: 'ett arbetsblad', Gruppuppgift: 'en gruppuppgift', Diagnos: 'en diagnos', Anteckningar: 'anteckningar' };
+  const RUB = { Tavla: 'Dagens tavla', Prov: 'Nytt prov', Arbetsblad: 'Nytt arbetsblad', Gruppuppgift: 'Ny gruppuppgift', Anteckningar: 'Nya anteckningar' };
+  const OBEST = { Tavla: 'en tavla', Prov: 'ett prov', Arbetsblad: 'ett arbetsblad', Gruppuppgift: 'en gruppuppgift', Anteckningar: 'anteckningar' };
   const versal = s => s.charAt(0).toUpperCase() + s.slice(1);
   function ritaRubrik() {
     const h = document.querySelector('#planrubrik');

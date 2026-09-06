@@ -207,7 +207,7 @@
      (plankon.js fyll). Utan dem gör kalendern ingenting: en annan klass
      uppgifter är värre än inga.
 
-     Provet och diagnosen hoppas över. Panelen är fälld där, och uppgifterna på
+     Provet hoppas över. Panelen är fälld där, och uppgifterna på
      sidorna är det klassen ÖVADE med — inte det den prövas på (plan.js
      HELHETSTYPER). */
   function franPlaneringen() {
@@ -272,7 +272,7 @@
       vidCache: ta, vidFarskt: ta,
     }).then(d => {
       if (nyckelNu() !== nyck) return;
-      /* Faktapasset fyller panelen — och för provet och diagnosen är panelen
+      /* Faktapasset fyller panelen — och för provet är panelen
          fälld (rita ovan). Ett provspann över trettio sidor hade blivit
          minuters LLM-anrop för en lista ingen ser, så passet hoppas här och
          tas av servern när det skrivs (routes_planning.bok_las_text), där
@@ -400,7 +400,7 @@
   function rita() {
     const u = alla();
     /* «Uppgifterna på sidorna» är en LEKTIONSGEST: det här räknar vi, det här
-       hoppar vi över. Provet och diagnosen utgår från helheten klassen tränat
+       hoppar vi över. Provet utgår från helheten klassen tränat
        på, och där hör blocket inte hemma — dessutom listar det bara uppgifter
        på de sidor som hunnit läsas in, så på ett provspann över trettio sidor
        visade det tre av dem och såg ut som ett svar. Bokdörren visar spannet
@@ -596,7 +596,7 @@
     /* Steg 3 frågar om raden ska finnas alls: lösningsförslag till bokens
        uppgifter går bara att välja när boken faktiskt är en av källorna. */
     finns: () => !!(dorr && dorr.getAttribute('aria-pressed') === 'true' && alla().length),
-    /* Skrivtypen bytte — rita om så att blocket följer med ner (prov, diagnos)
+    /* Skrivtypen bytte — rita om så att blocket följer med ner (provet)
        eller upp igen (tavla, arbetsblad, gruppuppgift). Hoppades faktapasset
        för att en mätning skrevs tas det nu: panelen är uppe igen och behöver
        sina uppgifter. `hoppat` skrivs om av hämtningen själv, så varvet
@@ -636,7 +636,7 @@
         /* Posterna bär NIVÅN, inte bara numret: lösningsbladet sätter nivå 3 som
            bedömd elevlösning och nivå 1–2 som svarsfacit, och utan nivån här kan
            det inte veta vilken form uppgiften ska få. */
-        /* Inget lösningsblad till bokens uppgifter för provet och diagnosen:
+        /* Inget lösningsblad till bokens uppgifter för provet:
            de har sitt eget lösningsförslag och sitt formelblad, och bokens
            lösningar är det klassen ÖVADE med. Utan raden här hade tryck.js
            lagt en «Lösningsförslag · boken»-flik i provets paket, eftersom

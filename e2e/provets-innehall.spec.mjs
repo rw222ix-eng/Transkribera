@@ -29,8 +29,8 @@ const POSTER = [
     ci: ["G25-M2C-ALG-2", "G25-M2C-ALG-6", "G25-M2C-ALG-7"], ci_okant: 2 },
   { datum: "2026-10-15", tid: "09:05–10:20", titel: "NA25: PROV 2",
     klass: "NA25", slag: "prov", kalla: "schema", ci: [] },
-  { datum: "2026-10-20", tid: "09:05–10:20", titel: "NA25: Diagnos 2",
-    klass: "NA25", slag: "diagnos", kalla: "schema",
+  { datum: "2026-10-20", tid: "09:05–10:20", titel: "NA25: Avstämning 2",
+    klass: "NA25", slag: "prov", kalla: "schema",
     ci: ["G25-M2C-STA-2"] },
   { datum: "2026-11-10", tid: "09:00–12:00", titel: "NP MAT nivå 2c NA25",
     klass: "NA25", slag: "np", kalla: "schema" },
@@ -163,13 +163,13 @@ test("förvalet följer med när provdagen flyttas — om läraren inte rört kr
     await expect(page.locator("#gykalender")).toContainText("Ur kalendern: 3 punkter");
   });
 
-test("diagnosen tar kalenderns punkter framför hela kursen", async ({ page }) => {
-  /* Diagnosen kryssar annars i ALLA nivåns punkter — det är dess definition.
-     Men har läraren skrivit vad just den här diagnosen mäter är det hennes
-     svar, och det går före. */
+test("en post med en enda punkt kryssar bara den", async ({ page }) => {
+  /* Posten den 20 oktober nämner ett enda innehåll i beskrivningen. Då är det
+     lärarens eget svar på vad provet mäter, och väljaren ska säga precis det
+     och ingenting mer. */
   await fejka(page);
   await planeringen(page, "2026-10-20");
-  await skriver(page, "Diagnos");
+  await skriver(page, "Prov");
   expect(await valda(page)).toEqual(["Normalfördelning"]);
   await expect(page.locator("#gykalender")).toContainText("Ur kalendern: 1 punkt");
 });
@@ -179,8 +179,7 @@ test("diagnosen tar kalenderns punkter framför hela kursen", async ({ page }) =
  * Provet planeras oftast från en lektion — kortet i veckan — och då står
  * lektionens dag i steg 1. Punkterna läses ur den post som ska skrivas: nästa
  * bokade prov för klassen (samma kant som sidförvalets fönster, plan.js
- * provkanten). Diagnosen läser diagnosposter av samma skäl: det är två sorters
- * dagar och två sorters papper.
+ * provkanten).
  */
 test("punkterna kommer ur nästa bokade prov när dagen är lektionens",
   async ({ page }) => {
@@ -192,16 +191,6 @@ test("punkterna kommer ur nästa bokade prov när dagen är lektionens",
     await expect(page.locator("#gykalender"))
       .toContainText("Ur kalendern: 3 punkter (PROV 1 (kap 1 och 2))");
   });
-
-test("diagnosen läser diagnosposten, inte provet", async ({ page }) => {
-  await fejka(page);
-  await planeringen(page, "2026-09-28");
-  await skriver(page, "Diagnos");
-  /* Provet den 1 oktober ligger närmast i tiden, men det är en DIAGNOS som
-     skrivs — och den bokade diagnosen står den 20 oktober. */
-  expect(await valda(page)).toEqual(["Normalfördelning"]);
-  await expect(page.locator("#gykalender")).toContainText("(Diagnos 2)");
-});
 
 /* ── 2 · Frånvaron ──────────────────────────────────── */
 

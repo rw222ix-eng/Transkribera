@@ -83,12 +83,9 @@ window.Klass = (() => {
      svaret — titeln gissas bara på när slaget saknas: prototypens poster och
      det läraren själv skrivit in. Skolans NP heter «NP MAT nivå 1c», aldrig
      «nationellt prov», och gick därför inte att känna igen på titeln alls. */
-  const PROVSLAG = ['prov', 'diagnos', 'np'];
+  const PROVSLAG = ['prov', 'np'];
   const arProv = p => (p.slag ? PROVSLAG.includes(p.slag)
                               : /prov/i.test(p.titel || '')) && !egetProv(p);
-  /* Diagnosen är ett prov i allt som rör veckan — den tar en lektion i anspråk
-     och behöver material — men den heter diagnos, och korten ska säga det. */
-  const provOrd = p => p.slag === 'diagnos' ? 'Diagnos' : 'Prov';
   /* Ett nationellt prov är inte lärarens att skriva — det ligger i kalendern som
      en tid att hålla, inte som en uppgift att göra. */
   const egetProv = p => p.slag === 'np' || /nationell/i.test(p.titel || '');
@@ -642,16 +639,12 @@ window.Klass = (() => {
     if (p.klass) $('.lektklass', el).textContent = p.klass;
     $('.lektnamn', el).textContent = p.titel;
     if (!prov) { el.insertAdjacentHTML('beforeend', `<span class="lektbokat">${egetProv(p) ? 'Nationellt prov · skrivs inte här' : 'Ur kalendern'}</span>`); return el; }
-    const ord = provOrd(p);
-    el.insertAdjacentHTML('beforeend', `<span class="lektbokat">${ord === 'Diagnos' ? 'Diagnos bokad · inte skriven' : 'Prov bokat · inte skrivet'}</span>`);
+    el.insertAdjacentHTML('beforeend', '<span class="lektbokat">Prov bokat · inte skrivet</span>');
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'lektplanera';
-    b.textContent = ord === 'Diagnos' ? 'Skriv diagnosen' : 'Skriv provet';
-    /* Står det diagnos i kalendern är det en DIAGNOS som ska skrivas, inte ett
-       prov. Knappen sa redan rätt sak men öppnade fel typ, och läraren fick
-       börja med att välja om i steg 2. */
-    b.addEventListener('click', () => planera({ datum: p.datum, tid: p.tid || '', kurs: p.kurs || (K.schemaFor(p.datum).find(s => s.klass === p.klass) || {}).kurs || '', klass: p.klass || '', titel: p.titel, slag: p.slag === 'diagnos' ? 'diagnos' : 'prov' }, ord === 'Diagnos' ? 'Diagnos' : 'Prov'));
+    b.textContent = 'Skriv provet';
+    b.addEventListener('click', () => planera({ datum: p.datum, tid: p.tid || '', kurs: p.kurs || (K.schemaFor(p.datum).find(s => s.klass === p.klass) || {}).kurs || '', klass: p.klass || '', titel: p.titel, slag: 'prov' }, 'Prov'));
     el.appendChild(b);
     return el;
   }

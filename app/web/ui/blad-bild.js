@@ -313,7 +313,7 @@ window.BladBild = (() => {
   /* ══════════ HELA DOKUMENTET, VID GODKÄNNANDET ══════════
      «Jag vill ha PDF-filerna EXAKT som de ser ut i appen.»
 
-     Fram till nu byggdes prov, arbetsblad, diagnos och gruppuppgift om i LaTeX
+     Fram till nu byggdes prov, arbetsblad och gruppuppgift om i LaTeX
      vid godkännandet — snarlikt, aldrig identiskt. Brickorna satt ihop,
      tabellerna hade andra linjer, och lärarens egna inlagda bilder (v.bilder)
      fanns bara i webbläsarens dokument och kom aldrig med alls. Här ritas
@@ -366,9 +366,7 @@ window.BladBild = (() => {
        elevlösningar — och det är ett ANNAT papper än lösningsarket på
        skärmen. Läraren bad om skärmens. Anvisningen byggs kvar bredvid
        (routes_exam approve) och har sin egen rutt; den är också reserven när
-       godkännandet kommer utan bilder.
-     Diagnosen bär alltid sin rättning i huvuddokumentet (blad.js `bladen`)
-     och har inget eget läge att hämta. */
+       godkännandet kommer utan bilder. */
   const EGEN_FACITFIL = v => v && (v.typ === 'Arbetsblad'
                                    || v.typ === 'Gruppuppgift');
   const EGEN_LOSNINGSFIL = v => v && v.typ === 'Prov';
