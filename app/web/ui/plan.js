@@ -1235,6 +1235,23 @@
      finns i kursregistret och som en uppgift kan taggas med. Översättningen sker
      här, i sista stund, mot den nivå väljaren faktiskt står på. */
   const gyKoder = () => (window.Gy ? window.Gy.koder(nivaId, [...vald]) : []);
+  /* ── FÖRSLAGSBRICKORNA ────────────────────
+     AI-förvalet (punkterUrUnderlaget längre ner) lämnar två sorters punkter
+     efter sig. De TYDLIGA kryssas i som vanliga brickor och bär sitt skäl på
+     hover, «s. 44–51 löser andragradsekvationer med pq-formeln», för ett
+     förval som inte kan säga varför är ett påstående, och läraren ska kunna se
+     kopplingen utan att fråga någon.
+     De OSÄKRA kryssas inte alls. De ligger som ljusa förslagsbrickor bredvid,
+     räknas inte i täckningen, och blir ett val först när hon klickar. Ett
+     förslag som räknas är inte längre ett förslag. */
+  let osakra = [];                 // [{kort, skal}]: förslag, inte kryss
+  const skalen = new Map();        // kort → skälet förslaget bar
+  /* Brickraden ritas om på NYCKEL (motion.js ritaBrickor). En förslagsbricka
+     och en ikryssad bricka för samma punkt är två olika brickor. Med samma
+     nyckel hade klicket bara bytt ut brickans innehåll under handen på läraren
+     i stället för att låta den ena kollapsa och den andra växa fram. Ingen
+     Gy25-etikett börjar med ett frågetecken. */
+  const FORSLAGSMARK = '?';
   function ritaGy() {
     const n = window.Gy ? window.Gy.niva(nivaId) : null;
     const namn = gyPunkter().map(p => p.kort);
@@ -1242,19 +1259,51 @@
     /* Brickorna ritas om utan att blinka: nya växer fram, borttagna kollapsar. */
     const chips = $('#gychips');
     const onskade = gyPunkter().filter(p => vald.has(p.kort)).map(p => p.kort);
+    /* Ett förslag som läraren hunnit kryssa i, eller som hör till en nivå hon
+       bytt bort, är inte längre ett förslag. */
+    const forslagen = osakra.filter(o => namn.includes(o.kort) && !vald.has(o.kort))
+                            .map(o => o.kort);
     const gor = kort => {
       const b = document.createElement('button');
       b.className = 'gychip';
       b.type = 'button';
       b.setAttribute('aria-pressed', 'true');
       b.textContent = kort;
+      /* Skälet följer med brickan så länge förslaget är det som satte den. Kom
+         punkten ur kalendern, ur elevprofilen eller ur lärarens egen hand finns
+         inget skäl att visa, och då står brickan tyst som förut. */
+      const skal = skalen.get(kort);
+      if (skal) b.dataset.tip = skal;
       b.setAttribute('aria-label', `Ta bort ${kort} ur planeringen`);
       b.addEventListener('click', () => { vald.delete(kort); ritaGy(); planKoll(); });
       return b;
     };
-    if (window.ritaBrickor) window.ritaBrickor(chips, onskade, gor);
-    else { chips.innerHTML = ''; onskade.forEach(k => chips.appendChild(gor(k))); }
-    if (onskade.length) chips.hidden = false;
+    const gorForslag = kort => {
+      const b = document.createElement('button');
+      b.className = 'gychip gyforslag';
+      b.type = 'button';
+      b.setAttribute('aria-pressed', 'false');
+      b.textContent = kort;
+      const skal = skalen.get(kort);
+      if (skal) b.dataset.tip = skal;
+      b.setAttribute('aria-label', `Lägg till ${kort}, förslag ur underlaget`);
+      b.addEventListener('click', () => {
+        /* Klicket gör förslaget till HENNES val. `punktforval` rörs därför inte:
+           nästa omkörning ser att urvalet inte längre är det förvalet lämnade och
+           håller sig borta, precis som när hon kryssar i listan. */
+        vald.add(kort);
+        osakra = osakra.filter(o => o.kort !== kort);
+        ritaGy();
+        planKoll();
+      });
+      return b;
+    };
+    const nycklar = onskade.concat(forslagen.map(k => FORSLAGSMARK + k));
+    const bygg = nyckel => nyckel.startsWith(FORSLAGSMARK)
+      ? gorForslag(nyckel.slice(1)) : gor(nyckel);
+    if (window.ritaBrickor) window.ritaBrickor(chips, nycklar, bygg);
+    else { chips.innerHTML = ''; nycklar.forEach(k => chips.appendChild(bygg(k))); }
+    if (nycklar.length) chips.hidden = false;
     else setTimeout(() => { if (!chips.querySelector('[data-nyckel]:not([data-ut])')) chips.hidden = true; }, 260);
     /* En knapp bär både nivån och hur mycket av den som är taget. */
     const t = $('#gyknapp .valjtext'), not = $('#nivanot');
@@ -1287,6 +1336,9 @@
       nivaId = id;
       ritaGy();
       planKoll();
+      /* Nya nivån, nya punkter: det förslaget läst ur underlaget gällde den
+         förra och måste läsas om mot den här. */
+      punkterUrUnderlaget();
       const n = window.Gy.niva(id), kvar = vald.size;
       window.toast && window.toast(foreDetta && kvar < foreDetta
         ? `${n.etikett} — ${foreDetta - kvar} punkter hörde till förra nivån och togs bort`
@@ -1545,6 +1597,10 @@
     p.textContent = text || '';
   }
   function kalenderpunkter() {
+    /* Vem som svarade sist är hela rangordningen mellan förvalen: tog kalendern
+       frågan håller AI-förvalet nedan sig borta. Flaggan nollställs här och
+       ingen annanstans: varje väg ut ur funktionen är ett «nej» utom den sista. */
+    kalendernTog = false;
     const K = window.Kalender;
     if (!K || !K.provpunkter) return gynot('');
     const typ = valt('skrivtyp');
@@ -1567,10 +1623,204 @@
       ritaGy();
       punktforval = punktnyckel();
     }
+    kalendernTog = true;
     gynot(`Ur kalendern: ${korta.length} ${korta.length === 1 ? 'punkt' : 'punkter'}`
           + (p.rubrik ? ` (${p.rubrik})` : '')
           + (p.okant ? ` · ${p.okant} ${p.okant === 1 ? 'rad kändes' : 'rader kändes'} inte igen`
                      : ''));
+  }
+
+  /* ══════════ PUNKTERNA UR DET MAN UTGÅR IFRÅN ══════════
+     Läraren: «AI-modellen ska analysera det man utgår ifrån, exempelvis boken
+     eller en tidigare uppgift, scanna innehållet och korskorrelera det med det
+     centrala innehållet så att punkterna kan väljas automatiskt. Tydligt
+     kopplat, inte långsökt. Förvalt, så man slipper klicka i, men går att
+     klicka bort.»
+
+     Det fjärde förvalet i samma familj, och det lyder samma lagar som de tre
+     andra: det skriver bara om det som fortfarande står precis som förvalet
+     lämnade det (punktforval/punktnyckel), noten säger varifrån punkterna kom,
+     och tystnaden är alltid ett giltigt svar.
+
+     Ordningen mellan förvalen är en rangordning av VEMS svar det är:
+       1. kalendern: läraren har SKRIVIT punkterna i provets beskrivning.
+       2. det här: modellen har LÄST det hon utgår ifrån.
+       3. diagnosens «hela nivån» och elevprofilens punkter.
+     Hann kalendern före rörs ingenting.
+
+     Servern: POST /api/planning/ci-forslag, ett SSE-jobb som allt annat som
+     kostar en modell (app/ci_forslag.py). Fail-open hela vägen: ett fel blir
+     tystnad, aldrig en påhittad förvalsrad. */
+  const FORSLAG_PAUS = 600;    // ms: läraren får skriva klart innan modellen läser
+  let forslagT = null;         // debouncen
+  let forslagNr = 0;           // löpnummer: bara det SENASTE svaret får rita
+  let forslagAvbryt = null;    // begäran som är i luften
+  let forslaget = null;        // {nyckel, punkter, osakra, kalla, tomt_skal}
+  let kalendernTog = false;    // kalenderpunkter() hann före (sätts där)
+  let momenteget = false;      // momentfältet bär lärarens egna ord, inte appens
+
+  /* Vad förslaget ska vila på. Null betyder «fråga inte», och det är inte
+     samma sak som ett tomt svar. */
+  function forslagsKallor() {
+    const typ = valt('skrivtyp');
+    /* Anteckningarna har inget centralt innehåll att kryssa i. */
+    if (!typ || typ === 'Anteckningar') return null;
+    const kallor = {};
+    /* Bokdörren i exakt den form varje rutt läser den (bokKalla), men utan
+       remsorna: frågan här är vad SIDORNA handlar om, inte vilka uppgifter som
+       ska räknas. */
+    const b = (bokKalla() || {}).bok;
+    if (b && b.id && b.fran) kallor.bok = { id: b.id, fran: b.fran, till: b.till };
+    /* Förlagan måste vara SPARAD för att servern ska kunna läsa den; en hög som
+       aldrig nått databasen har inget id att peka på. */
+    if (refDok && refDok.id) kallor.forlaga = { id: refDok.id };
+    /* Uppladdade sidor tolkas LATT, först när Skriv trycks (plan-sidor.js
+       sakra): tolkningen kostar ett visionsanrop per sida och ska inte betalas
+       för filer läraren hinner ångra. Ligger de redan uppe, alltså har hon
+       skrivit en gång på samma sidor, går underlaget med. Annars inte. */
+    const pid = window.Sidor && window.Sidor.pid ? window.Sidor.pid() : null;
+    if (pid) kallor.underlag = pid;
+    /* Ett moment hon skrivit SJÄLV är också ett underlag, men bara då.
+       Momentfältet står nästan aldrig tomt: bokdörren fyller det åt henne redan
+       vid uppstart (uppslag.js skrivMoment) med «s. 1–2 ur Matematik 5000+», och
+       räknades det som en källa hade appen frågat modellen om bokens första
+       uppslag innan läraren rört något alls. `momenteget` skiljer handen från
+       appen på händelsens isTrusted (se lyssnaren längre ner).
+       Och först när det säger något: «1.3» är fyra tangenttryckningar från
+       «1.3 Andragradsekvationer», och ett förslag ur en halv rubrik är långsökt. */
+    const m = moment.value.trim();
+    if (momenteget && m.length >= 4) kallor.moment = m;
+    kallor.egen = !!(kallor.bok || kallor.forlaga || kallor.underlag);
+    /* Diagnosen kryssar i HELA nivån som förval, och det är dess definition.
+       Bara en riktig källa får smalna av den. Då är källan lärarens egen gest
+       att avgränsa. Momentfältet räcker inte: det fylls i åt henne av bokdörren
+       och av gissningen ur uppladdade sidor. */
+    if (typ === 'Diagnos' && !kallor.egen) return null;
+    if (!kallor.egen && !kallor.moment) return null;
+    return kallor;
+  }
+  /* Vad begäran vilar på, i EN sträng. Två saker hänger på den: modellen frågas
+     inte om igen för källor som inte ändrats, och ett svar vi redan har ritas om
+     ur minnet när en omkörning (forvalenOm → kalenderpunkter → gynot('')) råkat
+     sudda noten. */
+  const forslagsnyckel = k => JSON.stringify([nivaId, k.moment || '', k.bok || null,
+                                              k.forlaga || null, k.underlag || '']);
+
+  /* Ingången. Debouncad, för den anropas från varje gest som kan byta källa,
+     och plankon fyller klass, kurs, datum och tid i ett svep. */
+  function punkterUrUnderlaget(opt) {
+    clearTimeout(forslagT);
+    /* Har vi redan svaret ritas det om DIREKT, utan att blinka och utan att
+       kosta något: typbytet suddar noten (window.planKoll) en gång per klick. */
+    const kallor = forslagsKallor();
+    if (kallor && forslaget && !kalendernTog
+        && forslaget.nyckel === forslagsnyckel(kallor)) ritaForslaget(forslaget);
+    /* `baraKalla` skiljer bokdörrens gest från lärarens skrivande: momentfältets
+       `input` kommer både när uppslaget skriver i det och när hon knappar. Ett
+       moment hon skriver för hand väntar därför på `change`, annars hade varje
+       paus i skrivandet kostat ett modellanrop. */
+    const bara = !!(opt && opt.baraKalla);
+    forslagT = setTimeout(() => forslagNu(bara), FORSLAG_PAUS);
+  }
+  async function forslagNu(baraKalla) {
+    /* Läraren har svarat själv i kalendern. Hennes svar väger tyngre än ett
+       modellen läst sig till, och två förval om samma sak är ett för många. */
+    if (kalendernTog) return;
+    const kallor = forslagsKallor();
+    if (!kallor) return;
+    if (baraKalla && !kallor.egen) return;
+    const nyckel = forslagsnyckel(kallor);
+    if (forslaget && forslaget.nyckel === nyckel) return ritaForslaget(forslaget);
+    /* Prototypläget har ingen server att fråga. */
+    if (!(window.API && window.API.pa && window.API.strom)) return;
+    const nr = ++forslagNr;
+    if (forslagAvbryt) forslagAvbryt.abort();
+    const styr = forslagAvbryt = new AbortController();
+    gynot('Läser underlaget mot centralt innehåll …');
+    let svar = null;
+    try {
+      svar = await window.API.strom('/api/planning/ci-forslag', {
+        niva: nivaId,
+        moment: moment.value.trim(),
+        ...(kallor.bok ? { bok: kallor.bok } : {}),
+        ...(kallor.forlaga ? { forlaga: kallor.forlaga } : {}),
+        ...(kallor.underlag ? { underlag: kallor.underlag } : {}),
+      }, { signal: styr.signal });
+    } catch (e) {
+      /* Tyst. Ett fel i modellen eller i nätet är inget läraren bett om, och en
+         rad som säger «det gick inte» där ett förval skulle stått är en
+         påminnelse om något hon inte saknade. Är svaret dessutom överspelat av
+         ett nyare rörs ingenting alls. */
+      if (nr === forslagNr) gynot('');
+      return;
+    }
+    if (nr !== forslagNr) return;
+    forslaget = tolkaForslaget(svar, nyckel);
+    ritaForslaget(forslaget);
+  }
+  /* Servern filtrerar bort koder som inte finns i nivån, men koden tolkas här i
+     den nivå VÄLJAREN står på: samma regel som gyKoder(), och nivån kan ha
+     bytts medan svaret var i luften. En punkt som står i båda listorna är
+     tydlig: den starkare listan vinner. */
+  function tolkaForslaget(r, nyckel) {
+    const rad = x => {
+      const p = gyPunkter().find(y => y.kod === (x || {}).kod);
+      return p ? { kort: p.kort, skal: String((x || {}).skal || '').slice(0, 120) } : null;
+    };
+    const ur = lista => (Array.isArray(lista) ? lista : []).map(rad).filter(Boolean);
+    const sedda = new Set(), punkter = [], osakraNu = [];
+    ur((r || {}).punkter).forEach(p => {
+      if (sedda.has(p.kort)) return;
+      sedda.add(p.kort);
+      punkter.push(p);
+    });
+    ur((r || {}).osakra).forEach(p => {
+      if (sedda.has(p.kort)) return;
+      sedda.add(p.kort);
+      osakraNu.push(p);
+    });
+    return { nyckel, punkter, osakra: osakraNu,
+             kalla: String((r || {}).kalla || ''),
+             tomt_skal: String((r || {}).tomt_skal || '') };
+  }
+  function ritaForslaget(f) {
+    /* Källetiketten säger allt: «Origo 2a s. 40–65 · 1.1 Uttryck …». Noten tar
+       dess FÖRSTA led, boken och sidorna, för det är det läraren känner igen
+       på en rad; resten står i brickornas skäl. */
+    const kalla = f.kalla.split(' · ')[0].trim();
+    const om = kalla ? ` (${kalla})` : '';
+    skalen.clear();
+    f.punkter.concat(f.osakra).forEach(p => { if (p.skal) skalen.set(p.kort, p.skal); });
+    if (!f.punkter.length && !f.osakra.length) {
+      /* Ett tomt svar är ett giltigt svar och rör ingenting: kryssen står kvar,
+         raden säger modellens egen förklaring om den gav någon. */
+      osakra = [];
+      ritaGy();
+      return gynot(f.tomt_skal || 'Underlaget matchar ingen punkt i nivån');
+    }
+    /* VAKTEN, ord för ord som kalenderns: förvalet får bara skriva om det som
+       fortfarande står precis som förvalet lämnade det. Har läraren kryssat
+       själv står hennes urval kvar, och modellens punkter läggs som FÖRSLAG
+       bredvid i stället. De går att ta, men de tar ingenting. */
+    const fritt = punktforval === null || punktnyckel() === punktforval;
+    if (fritt && f.punkter.length) {
+      vald.clear();
+      f.punkter.forEach(p => vald.add(p.kort));
+      osakra = f.osakra.filter(p => !vald.has(p.kort));
+      ritaGy();
+      punktforval = punktnyckel();
+      planKoll();
+      return gynot(`Ur underlaget: ${f.punkter.length} `
+                   + `${f.punkter.length === 1 ? 'punkt' : 'punkter'}${om}`);
+    }
+    osakra = (fritt ? [] : f.punkter).concat(f.osakra).filter(p => !vald.has(p.kort));
+    ritaGy();
+    planKoll();
+    if (!osakra.length) return gynot('');
+    gynot(`Underlaget pekar på ${osakra.length} `
+          + `${osakra.length === 1 ? 'punkt' : 'punkter'}${om}`
+          + (fritt ? ' · osäkra, klicka för att ta med'
+                   : ' · dina kryss står kvar'));
   }
 
   /* Väljs en elev som mottagare kryssas HENNES punkter för — de svaga när
@@ -1637,10 +1887,14 @@
        kvar precis som förut. */
     if (typ === 'Prov' || typ === 'Diagnos') {
       if (forra !== typ) kalenderpunkter();
-    } else gynot('');
+    } else { gynot(''); kalendernTog = false; }
     ritaTypval();
     speglaHelheten();
     planKoll();
+    /* Sist av allt: punkterna ur det man utgår ifrån. Typbytet suddade nyss
+       noten, och står källorna kvar sedan förra typen ritas samma svar om ur
+       minnet i samma tick, utan att fråga modellen igen. */
+    punkterUrUnderlaget();
   };
   /* ══════════ FÖRVALEN FÖLJER MED NÄR LEKTIONEN ÄNDRAS ══════════
      Förvalen satt bara vid TYPBYTET, och läraren väljer inte alltid i den
@@ -1666,6 +1920,9 @@
       ritaTypval();
       if (typ === 'Prov') provetsUnderlag();
       kalenderpunkter();
+      /* Provets underlag kan just ha lagt ett NYTT bokspann i dörren (sidorna
+         ur grovplaneringen), och då är det ett annat underlag att läsa. */
+      punkterUrUnderlaget();
       ritaTypval();
       planKoll();
     }, 0);
@@ -1675,6 +1932,18 @@
     if (f) f.addEventListener('change', forvalenOm);
   });
   moment.addEventListener('input', planKoll);
+  /* Bokdörrens gest når hit som ett `input` på momentfältet (uppslag.js
+     skrivMoment), och det är samma händelse som säger att spannet ändrats. Ett
+     moment läraren knappar in för hand får däremot vänta till `change`: ett
+     modellanrop per paus i skrivandet är både dyrt och blinkande. */
+  moment.addEventListener('input', e => {
+    /* Skrev appen i fältet är momentet inte längre lärarens ord utan bokens:
+       uppslaget skriver över hennes text när spannet byts, och då ska minnet av
+       att hon skrivit själv falla bort med texten. */
+    momenteget = !!e.isTrusted;
+    punkterUrUnderlaget({ baraKalla: true });
+  });
+  moment.addEventListener('change', () => punkterUrUnderlaget());
   $('#p-klass').addEventListener('change', planKoll);
   $('#p-kurs').addEventListener('change', () => {
     /* Kursen i steg 1 pekar ut nivån — men bara så länge man inte valt innehåll själv.
@@ -1689,6 +1958,9 @@
     }
     ritaGy();
     planKoll();
+    /* Samma sak som i sattNiva, men den här vägen går inte genom den: kursen i
+       steg 1 byter nivå åt läraren. */
+    punkterUrUnderlaget();
   });
   /* Byter man lektion byter också lektionslängden — tavlan läser om schemat. */
   $('#p-klass').addEventListener('change', () => { ritaTypval(); });
@@ -3582,6 +3854,10 @@
   function ritaRef() {
     const ruta = $('#refruta');
     if (!ruta) return;
+    /* Förlagan är en källa som alla andra: väljs den eller släpps den ska
+       punkterna läsas om mot den. Varje väg in och ut ur «Bygg vidare»,
+       omprovet och «ta bort förlagan» passerar just den här funktionen. */
+    punkterUrUnderlaget();
     ruta.hidden = !refDok;
     if (window.Kallor && window.Kallor.speglaForlaga) window.Kallor.speglaForlaga();
     if (!refDok) return;

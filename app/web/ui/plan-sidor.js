@@ -79,6 +79,11 @@
     lista: () => lista.map(r => ({ namn: r.namn, typ: r.typ })),
     antal: () => lista.length,
     sakra,
+    /* Underlagets id NÄR det redan ligger uppe, aldrig en uppladdning i sig.
+       Planeringens förval (plan.js punkterUrUnderlaget) vill läsa sidorna mot
+       det centrala innehållet, men det får inte utlösa tolkningen: den kostar
+       ett visionsanrop per sida och betalas först när läraren trycker Skriv. */
+    pid: () => (uppladdat ? uppladdat.pid : null),
   };
   /* Sidorna ligger som små papper i en rad — dragbara, med appens tolkning under.
      Utan tolkningsraden vet läraren aldrig varför utkastet blev som det blev. */

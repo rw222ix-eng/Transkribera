@@ -270,6 +270,13 @@
 .gychip[aria-pressed='true']:hover{background-color:var(--sky-pale);border-color:var(--sky-deep);transform:translateY(-1px)}
 .gychip:hover::before{opacity:1}
 .gychip:active{transform:translateY(0) scale(.976)}
+/* Förslagsbrickan: en punkt modellen läst ur underlaget men INTE kryssat i.
+   Den ska synas som ett erbjudande och aldrig som ett val. Streckad ram,
+   ljusare text och ett '+' som inte är bockens släkting. Klickas den blir den
+   en vanlig bricka, och då först räknas den i täckningen. */
+.gychip.gyforslag{border-style:dashed;background-color:transparent;color:var(--ink-3);font-weight:400}
+.gychip.gyforslag::before{content:'+';opacity:.55}
+.gychip.gyforslag:hover{border-style:solid;color:var(--ink)}
 .tackning{display:flex;align-items:center;gap:12px;margin:14px 0 0;font-size:.82rem;color:var(--ink-2)}
 .tackspar{flex:1;max-width:220px;height:4px;border-radius:var(--r-pill);background:var(--track);overflow:hidden}
 .tackspar span{display:block;height:100%;width:0;border-radius:var(--r-pill);background:linear-gradient(90deg,var(--sky-deep),var(--atmosphere));transition:width var(--dur-3) var(--ease)}
