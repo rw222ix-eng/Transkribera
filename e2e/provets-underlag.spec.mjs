@@ -15,8 +15,7 @@ import { expect, test } from "@playwright/test";
  *   3. «Lösningar till bokens uppgifter» — provet har sitt eget lösningsförslag
  *      och sitt formelblad; bokens lösningsblad är det klassen övade med.
  *
- * Diagnosen mäter av samma skäl och behandlas likadant. Tavlan, arbetsbladet
- * och gruppuppgiften är övning och rörs inte.
+ * Tavlan, arbetsbladet och gruppuppgiften är övning och rörs inte.
  *
  * Det som prövas här är alltså mest FRÅNVARO — och frånvaro måste prövas mot
  * en närvaro i samma svit, annars är en trasig lokator ett grönt test. Varje
@@ -175,14 +174,6 @@ test("urvalsblocket står framme för tavlan men inte för provet", async ({ pag
   await expect(page.locator("#uppgblock")).toBeVisible();
 });
 
-test("diagnosen behandlas som provet — den mäter också", async ({ page }) => {
-  await fejka(page);
-  await medBoken(page, "Diagnos");
-  await expect(page.locator("#uppgblock")).toBeHidden();
-  await tillSteg(page, 4);
-  await expect(page.locator("#svartruta")).toBeHidden();
-});
-
 /* ── 2 · Remsan i begäran ───────────────────────────── */
 
 test("provets begäran bär spannet men ingen uppgiftsremsa", async ({ page }) => {
@@ -226,9 +217,6 @@ test("boklösningsraden hör till lektionsmaterialet, inte till provet", async (
   await expect(page.locator('.typrad[data-id="boklosniva"]')).toHaveCount(0);
   /* Provets egna bilagor står kvar — det är DEM raden förväxlades med. */
   await expect(page.locator('.typrad[data-id="bilagor"]')).toHaveCount(1);
-
-  await page.evaluate(() => window.SattLage("Diagnos"));
-  await expect(page.locator('.typrad[data-id="boklosniva"]')).toHaveCount(0);
 });
 
 test("ett sparat prov får inget lösningsblad till bokens uppgifter", async ({ page }) => {

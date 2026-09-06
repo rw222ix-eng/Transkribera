@@ -193,7 +193,11 @@ window.Kalender = (() => {
 
      Rubriken följer med som grund, utan klassnamnet: «NA26F: PROV 1 (kap 1 och
      2)» säger «PROV 1 (kap 1 och 2)» i en app där klassen redan står i steg 1. */
-  const PROVSLAG = ['prov', 'diagnos'];
+  /* Bara slaget 'prov' finns. Diagnosen togs bort 2026-09-06 — läraren
+     använder provet med nivåval i stället — och kalendersynken märker numera
+     en «diagnos» i schemat som ett prov (calendar_google), så en bokad
+     diagnos föreslår typen Prov och bär sina punkter hit som vilket prov som
+     helst. Det här är den enda plats i frontenden där ordet står kvar. */
   const utanKlass = (titel, klass) => {
     const t = String(titel || '').trim();
     if (!klass) return t;
@@ -202,11 +206,11 @@ window.Kalender = (() => {
   };
   function provpunkter(klass, datum) {
     if (!datum) return null;
-    const p = poster.find(x => x.datum === datum && PROVSLAG.includes(x.slag)
+    const p = poster.find(x => x.datum === datum && x.slag === 'prov'
       && (!klass || !x.klass || x.klass === klass)
       && Array.isArray(x.ci) && x.ci.length);
     return p ? { koder: p.ci.slice(), okant: p.ci_okant || 0,
-                 rubrik: utanKlass(p.titel, p.klass), slag: p.slag } : null;
+                 rubrik: utanKlass(p.titel, p.klass) } : null;
   }
 
   /* ── PROVDAGEN STÅR OCKSÅ I KALENDERN ─────────────────
@@ -218,23 +222,21 @@ window.Kalender = (() => {
 
      FÖRSTA posten på eller efter `fran`, aldrig den sista: det som skrivs nu är
      nästa prov, inte terminens. Posten måste bära klassen — en post utan klass
-     («Avstämning av matematikdiagnoser åk1») är ingens provdag.
+     («Avstämning av matematiken åk1») är ingens provdag.
 
      «Komplettering och omprov» är slag 'prov' i kalendern (ordet omprov), men
      det prövar GAMMALT stoff igen: som högerkant hade det kapat fönstret mitt i
      sträckan, och som vänsterkant avslutar det ingenting nytt. Ingen kant. */
   const omprov = p => /\b(omprov|komplettering\w*)\b/i.test(p.titel || '');
-  function nastaProv(klass, fran, slag) {
-    const s = slag === 'diagnos' ? 'diagnos' : 'prov';
-    return poster.filter(p => p.slag === s && p.datum && !omprov(p)
+  function nastaProv(klass, fran) {
+    return poster.filter(p => p.slag === 'prov' && p.datum && !omprov(p)
                           && (!fran || p.datum >= fran)
                           && (!klass || p.klass === klass))
       .sort((a, b) => a.datum.localeCompare(b.datum))[0] || null;
   }
   /* Vänsterkanten av samma skäl: det klassen redan prövats på är avklarat. Ett
      godkänt prov i appen väger tyngre (plan.js forraProvet) — det här är svaret
-     när förra provet aldrig skrevs här. Bara riktiga prov: en diagnos mäter,
-     den avslutar ingenting. */
+     när förra provet aldrig skrevs här. */
   function forraProv(klass, fore) {
     return poster.filter(p => p.slag === 'prov' && p.datum && !omprov(p)
                           && (!fore || p.datum < fore)

@@ -556,17 +556,16 @@ test("lösningsbladet laddar ner sin EGEN fil, inte originalets", async ({ page 
 });
 
 test("varje pappersort hämtar sin egen byggda fil", async ({ page }) => {
-  /* Fem sorter delar exams-tabellen och därmed rutten: prov, arbetsblad,
-     gruppuppgift och diagnos bär `provId`, anteckningarna `antId` (samma
-     tabell, egen router). Knappen ska fungera för alla fem — det är lätt att
-     tro att den gör det och lika lätt att en sort tappar sitt id på vägen. */
+  /* Fyra sorter delar exams-tabellen och därmed rutten: prov, arbetsblad och
+     gruppuppgift bär `provId`, anteckningarna `antId` (samma tabell, egen
+     router). Knappen ska fungera för alla fyra — det är lätt att tro att den
+     gör det och lika lätt att en sort tappar sitt id på vägen. */
   const hamtat = [];
   await fejka(page, { sparade: [
     rad(1, papper({ typ: "Prov", provId: 11 })),
     rad(2, papper({ typ: "Arbetsblad", provId: 12 })),
     rad(3, papper({ typ: "Gruppuppgift", provId: 13 })),
-    rad(4, papper({ typ: "Diagnos", provId: 14 })),
-    rad(5, papper({ typ: "Anteckningar", antId: 15 })),
+    rad(4, papper({ typ: "Anteckningar", antId: 15 })),
   ] });
   await page.route("**/api/exams/**", route => {
     const p = new URL(route.request().url()).pathname;
@@ -579,10 +578,10 @@ test("varje pappersort hämtar sin egen byggda fil", async ({ page }) => {
   });
   await page.goto("/");
   await hydrerad(page);
-  await expect.poll(() => page.evaluate(() => window.Dokument.sparade().length)).toBe(5);
+  await expect.poll(() => page.evaluate(() => window.Dokument.sparade().length)).toBe(4);
 
   await page.getByRole("tab", { name: "Planering" }).click();
-  for (const i of [0, 1, 2, 3, 4]) {
+  for (const i of [0, 1, 2, 3]) {
     await visa(page, i);
     const nedladdning = page.waitForEvent("download", { timeout: 15_000 });
     await page.locator("#fh-pdf").click();
@@ -590,8 +589,7 @@ test("varje pappersort hämtar sin egen byggda fil", async ({ page }) => {
     await expect(page.locator("#fh-pdf")).toHaveText("Ladda ner PDF");
   }
   expect(hamtat).toEqual(["/api/exams/11/pdf", "/api/exams/12/pdf",
-                          "/api/exams/13/pdf", "/api/exams/14/pdf",
-                          "/api/exams/15/pdf"]);
+                          "/api/exams/13/pdf", "/api/exams/15/pdf"]);
 });
 
 test("ett papper utan byggd PDF ger serverns besked, inte «Sparad»", async ({ page }) => {

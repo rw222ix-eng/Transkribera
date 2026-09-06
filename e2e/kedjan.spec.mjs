@@ -2,9 +2,9 @@ import { expect, test } from "@playwright/test";
 
 /* HELA KEDJAN GENOM GRÄNSSNITTET
  *
- * Diagnos → rättning elev för elev → CI-profil → riktat arbetsblad. Varje led
+ * Prov → rättning elev för elev → CI-profil → riktat arbetsblad. Varje led
  * har sin egen svit; den här prövar SKARVARNA, och den gör det genom att gå
- * lärarens väg: skriv diagnosen, godkänn den, öppna elevmodalen på den, rätta,
+ * lärarens väg: skriv provet, godkänn det, öppna elevmodalen på det, rätta,
  * läs profilen, och skriv sedan bladet till den som föll.
  *
  * Kedjan kördes också skarpt mot riktiga servern och riktiga Claude Code
@@ -20,9 +20,9 @@ const SCHEMA = {
 
 const ELEVER = [{ id: 21, namn: "Alva Nyström", sort: 0, aktiv: true }];
 
-/* Diagnosen: tre uppgifter, tre innehållspunkter, platt och E-tung. */
-const DIAGNOS = {
-  titel: "Diagnos · Matematik 1c",
+/* Provet: tre uppgifter, tre innehållspunkter, platt och E-tung. */
+const PROV = {
+  titel: "Prov · Matematik 1c",
   kurs: "Matematik, nivå 1c", klass: "9Z", datum: "2026-09-07", tid_min: 60,
   hjalpmedel: "Formelblad och digitala verktyg",
   uppgifter: [
@@ -66,7 +66,7 @@ const BLAD = {
   ],
 };
 
-const RADER = DIAGNOS.uppgifter.map((u, i) => ({
+const RADER = PROV.uppgifter.map((u, i) => ({
   nyckel: String(i + 1), kod: String(i + 1), nr: String(i + 1),
   text: u.text, p: u.poang[0] + u.poang[1], peca: u.poang,
   formaga: "Räkning i standardfall", ci: u.innehall,
@@ -104,12 +104,12 @@ async function fejka(page) {
       return route.fulfill({ status: 200, contentType: "text/event-stream",
         body: strom([{ type: "done", result: { id: 3, pdf: "d.pdf", tex: "d.tex", errors: [] } }]) });
     }
-    const diagnos = kropp && kropp.typ === "diagnos";
+    const prov = kropp && kropp.typ === "prov";
     return route.fulfill({ status: 200, contentType: "text/event-stream",
       body: strom([{ type: "done", result: {
-        id: diagnos ? 3 : 4, exam: diagnos ? DIAGNOS : BLAD,
-        typ: diagnos ? "diagnos" : "arbetsblad", status: "utkast",
-        errors: [], rounds: 1, tid: diagnos ? 55 : 20,
+        id: prov ? 3 : 4, exam: prov ? PROV : BLAD,
+        typ: prov ? "prov" : "arbetsblad", status: "utkast",
+        errors: [], rounds: 1, tid: prov ? 55 : 20,
         summor: { total: 6, e: 4, c: 2, a: 0 } } }]) });
   });
   await page.route("**/api/dokument/**", route => json(route, { ok: true, id: 5 }));
@@ -151,22 +151,29 @@ async function planera(page, typ, moment) {
   }, [typ, moment]);
 }
 
-test("diagnos → rättning → CI-profil → riktat blad", async ({ page }) => {
+test("prov → rättning → CI-profil → riktat blad", async ({ page }) => {
   const anrop = await fejka(page);
   await page.goto("/");
   await hydrerad(page);
 
-  // ── 1. Diagnosen: hela kursens innehåll, en lektion ──────────────────
-  await planera(page, "Diagnos", "hela kursen");
+  // ── 1. Provet: hela kursens innehåll, en lektion ─────────────────────
+  await planera(page, "Prov", "hela kursen");
+  /* Läraren kryssar innehållet själv: kedjan behöver koderna på uppgifterna
+     för att profilen ska ha något att räkna på. */
+  await page.evaluate(() => window.Gy.punkter(window.GyVal.niva())
+    .forEach(p => { if (!window.GyVal.har(p.kort)) window.GyVal.vaxla(p.kort); }));
   await page.locator("#skriv").click();
   await expect(page.locator("#dokument")).toBeVisible({ timeout: 15_000 });
   const gen = anrop.find(a => a.vag && a.vag.endsWith("/generate"));
-  expect(gen.kropp.typ).toBe("diagnos");
+  expect(gen.kropp.typ).toBe("prov");
   expect(gen.kropp.punkter).toHaveLength(21);
 
   await page.locator("#godkann").click();
+  /* Två papper, inte ett: provets bedömningsanvisning sparas som ett eget
+     dokument (plan.js losningsblad). Kedjan går vidare på provet, som ligger
+     först. */
   await expect.poll(() => page.evaluate(
-    () => window.Dokument.sparade().length), { timeout: 15_000 }).toBe(1);
+    () => window.Dokument.sparade().length), { timeout: 15_000 }).toBe(2);
 
   // ── 2. Rättningen elev för elev ──────────────────────────────────────
   await page.evaluate(() => window.Elever.oppna(window.Dokument.sparade()[0]));

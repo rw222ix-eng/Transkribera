@@ -711,7 +711,7 @@
      (routes_exam `typ`), som är samma ord — men i gemener och i den form
      rutterna använder, inte i den form en mening börjar med. */
   const TYPNAMN = { prov: 'Provet', arbetsblad: 'Arbetsbladet',
-                    gruppuppgift: 'Gruppuppgiften', diagnos: 'Diagnosen',
+                    gruppuppgift: 'Gruppuppgiften',
                     tavla: 'Tavlan', anteckningar: 'Anteckningarna' };
 
   function remsa(jobb) {

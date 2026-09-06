@@ -5,7 +5,7 @@ import { forbiNivavarningen } from "./larardag.mjs";
  *
  * Lärarens ord: «exporten av alla pdf:er ska renderas korrekt — jag vill ha
  * pdf-filerna EXAKT som de ser ut i appen». Fram till nu sattes prov,
- * arbetsblad, diagnos, gruppuppgift och anteckningar om i LaTeX vid
+ * arbetsblad, gruppuppgift och anteckningar om i LaTeX vid
  * godkännandet. Snarlikt, aldrig identiskt: brickorna satt ihop, tabellerna
  * hade andra linjer, och lärarens egna inlagda bilder — som bara finns i
  * webbläsarens dokument (v.bilder) och aldrig i provets JSON — kom inte med

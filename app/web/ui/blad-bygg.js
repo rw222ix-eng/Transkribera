@@ -257,11 +257,9 @@ window.BladBygg = (() => {
      motiverade bokstäverna motiverar alltså att de går.
      Serien tog dessutom slut: BOKSTAV har åtta poster, och det skarpa bladet
      hade femton uppgifter — brickorna löd A…H och sedan 9, 10, 11. Halva
-     bladet numrerade redan i siffror.
-     Diagnosen står utanför och behåller sina bokstäver: dess rättningsblad
-     paras mot brickan, och den formen är dess egen. */
-  function kort(u, i, siffra) {
-    const bricka = siffra ? String(i + 1) : (BOKSTAV[i] || String(i + 1));
+     bladet numrerade redan i siffror. */
+  function kort(u, i) {
+    const bricka = String(i + 1);
     const alt = u.alt
       ? `<ul class="gudel guval">${u.alt.map((a, k) => `<li><i>${BOKSTAV[k]}.</i> ${mat(a)}</li>`).join('')}</ul>` : '';
     /* Deluppgiften bär numera sin egen kropp — formerna, ledtråden och de
@@ -355,11 +353,7 @@ window.BladBygg = (() => {
      fanns ska se likadana ut som förut. */
   const BAND = {
     Arbetsblad: 'Skriv svaret på svarsraden där det står «Svar». De uppgifter som ska redovisas är märkta — skriv uppgiftens nummer överst på lösbladet. Visa hur du räknar, inte bara svaret.',
-    Gruppuppgift: 'Läs uppgiften tillsammans innan ni börjar räkna. Bestäm vem som skriver. Alla i gruppen ska kunna förklara lösningen efteråt.',
-    /* Diagnosens band är det enda som säger åt eleven att HOPPA ÖVER. Det är
-       hela mätningen: ett tomrum som eleven kämpat sig förbi med en gissning
-       ser ut som ett hål som inte finns, och då tas fel moment om. */
-    Diagnos: 'Diagnosen sätter inget betyg — den tar reda på vad som behöver tas om. Svara på det du kan och hoppa över det du inte kan. Korta svar räcker.'
+    Gruppuppgift: 'Läs uppgiften tillsammans innan ni börjar räkna. Bestäm vem som skriver. Alla i gruppen ska kunna förklara lösningen efteråt.'
   };
 
   function ark(v, uppgifter, o) {
@@ -420,38 +414,8 @@ window.BladBygg = (() => {
              mycket väl sakna ordet. */''}
       <div class="guband"${bandtext ? ' data-egen' : ''}>${esc(bandtext || BAND[v.typ] || BAND.Arbetsblad)}${
         v.nyckelfraga ? ` <b>${mat(v.nyckelfraga)}</b>` : ''}</div>
-      ${/* DIAGNOSENS HJÄLPMEDELSRAD (2026-09-06). «Upplägg» och «Formelblad»
-            är två kryss i planeringen, och servern skriver deras svar i
-            dokumentets `hjalpmedel` (routes_exam _diagnosens_hjalpmedel) —
-            samma fält provet bär. PDF:en trycker raden (diagnos.tex.j2), och
-            skärmen måste säga samma sak: två papper som säger olika om vad
-            som får ligga på bänken är värre än ett papper som tiger.
-            Tomt fält — ett äldre papper, prototypens — ger ingen rad alls. */''}
-      ${v.typ === 'Diagnos' && (v.hjalpmedel || '').trim()
-        ? `<div class="guhjalp">Hjälpmedel: ${esc(delnamnVisning(v.hjalpmedel.trim()))}</div>` : ''}
-      ${diagnosensRader(v, uppgifter)}
+      ${uppgifter.map(kort).join('')}
     </div>`;
-  }
-
-  /* Uppgifterna med DELRUBRIKER emellan när diagnosen är tvådelad.
-     `avd` är uppgiftens del ur provets JSON (plan.js franProv, som döpte om
-     fältet för att `del` redan var deluppgifternas). Rubriken sätts vid varje
-     byte, inte per uppgift, och namnen räknar från A precis som PDF:ens
-     (exam_latex._build_view titelrad). Utan delar — och för alla andra typer —
-     är det här exakt den map som stod i ark() förut. */
-  function diagnosensRader(v, uppgifter) {
-    const kortet = (u, k) => kort(u, k, v.typ !== 'Diagnos');
-    if (v.typ !== 'Diagnos' || !uppgifter.some(u => u && u.avd)) {
-      return uppgifter.map(kortet).join('');
-    }
-    let forra = null;
-    return uppgifter.map((u, k) => {
-      const d = (u && u.avd) || null;
-      const byte = d && d !== forra;
-      forra = d || forra;
-      return (byte ? `<div class="gudelband">${esc(DELNAMN[d] || 'Del')} – Digitala verktyg är ${
-        d === 'B' ? 'inte tillåtna' : 'tillåtna'}</div>` : '') + kortet(u, k);
-    }).join('');
   }
 
   /* ── Anteckningar: lärarens eget stödpapper ────────
@@ -487,10 +451,6 @@ window.BladBygg = (() => {
 
   /* ── Facit till arbetsbladet ─────────────────────── */
   function arkfacit(v, uppgifter) {
-    /* Facit numrerar som uppgiftsarket: siffror på arbetsblad och
-       gruppuppgift, bokstäver på diagnosen — annars pekar «1.» och «A.» på
-       samma uppgift på två papper. */
-    const siffra = v.typ !== 'Diagnos';
     /* Arbetsbladets facit bär inga poäng (lärarens dom 2026-08-26): bladet är
        övning utan betygsgränser, så «3 p» vid svaret är en siffra som inte
        delas ut någonstans. PDF:ns facitband skriver redan tomt där
@@ -498,7 +458,7 @@ window.BladBygg = (() => {
        Gruppuppgiften behåller poängen: dess facit läses MED bedömningen. */
     const poang = u => v.typ === 'Arbetsblad' ? '' : `<span class="prvarde">${u.p} p</span>`;
     const post = (u, k) => `<div class="pruppg">
-      <span class="prnr">${siffra ? k + 1 : (BOKSTAV[k] || k + 1)}.${poang(u)}</span>
+      <span class="prnr">${k + 1}.${poang(u)}</span>
       <div><p class="prtext" data-ref="">${ref(u.t)}</p>
         ${losvar(u)}${losvag(u)}
       </div></div>`;

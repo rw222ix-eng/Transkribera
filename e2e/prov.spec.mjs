@@ -340,8 +340,8 @@ test("delarna är dokumentets, numreringen löper och enheten är matematik",
   });
 
 test("«Föreslå antal» räknar antalet uppgifter ur provtiden", async ({ page }) => {
-  /* Lärarens beställning: diagnosen dimensioneras redan ur en lektion, och
-     provet ska kunna göra samma sak. Räkningen bor på servern (den behöver
+  /* Lärarens beställning: provet ska kunna dimensioneras ur en lektion.
+     Räkningen bor på servern (den behöver
      skelettet); knappen sätter steppern och säger vad det kostar i poäng. */
   await fejka(page);
   await page.route("**/api/exams/foreslag-antal*", route => {
