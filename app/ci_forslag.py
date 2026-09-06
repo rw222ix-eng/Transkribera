@@ -44,11 +44,12 @@ MAX_OSAKRA = 4
 # Skälet ska rymmas på en bricka som läraren hinner läsa i förbifarten.
 MAX_SKAL = 120
 
-# Källtextens tak. Bokens `uppslag_text` har sitt eget på 24 000 tecken för
-# skrivrundan; det här är snålare med flit — frågan är «vilka punkter rör det
-# här materialet», inte «skriv en lektion ur det», och den frågan besvaras av
-# rubriker, begrepp och uppgiftstyper långt innan sista sidan är läst.
-MAX_KALLTECKEN = 16000
+# Källtextens tak. Var 16 000 (snålare än bokens uppslag_text på 24 000),
+# men en OCR-sida är 6 000–10 000 tecken och fyra sidor av ett spann på
+# femtiofem är ingen läsning. Sidorna klipps per sida (MAX_PER_SIDA) och
+# sprids över avsnitten, så 36 000 räcker till ett femtontal sidor ur hela
+# spannet: ~9 000 tokens in, några ören per förval.
+MAX_KALLTECKEN = 36000
 # Förlagan och underlaget får en fjärdedel var av budgeten, så att en lång
 # förlaga aldrig kan tränga ut bokens sidor (som är den källa läraren oftast
 # pekar på).
@@ -121,24 +122,17 @@ def kalltext(base: Path, db_file: Path, body: dict) -> tuple[str, str]:
                 avsnitt = _avsnitt_i_spannet(rad, fran, till)
                 if avsnitt:
                     delar.append(
-                        "AVSNITT I SPANNET (ur bokens innehållsförteckning):\n"
-                        + "\n".join(f"- {a}" for a in avsnitt))
+                        "AVSNITT I SPANNET (ur bokens innehållsförteckning, "
+                        "med bokens egna delavsnitt):\n"
+                        + "\n".join(_avsnittsrader(rad, fran, till)))
                     etiketter += avsnitt[:MAX_ETIKETTER]
                     if len(avsnitt) > MAX_ETIKETTER:
                         etiketter.append("…")
                 # Budgeten räknas efter de andra källorna nedan; sidorna är den
                 # feta källan och ska fylla resten, inte tränga ut något.
-                #
-                # `viktiga`: de första sidorna i VARJE avsnitt spannet rör.
-                # uppslag_text fyller annars i sidordning tills taket är nått,
-                # och på s. 4–58 i Origo 2a (kap 1.1–1.3) åt kapitel 1.1:s
-                # lästa sidor hela budgeten: 1.2 och 1.3 nådde modellen bara
-                # som rubriker och hamnade bland de osäkra fast läraren pekat
-                # rakt på dem (skarpt 2026-09-06). Med ett par sidor ur varje
-                # avsnitt först får alla delar av spannet en röst.
-                sidtext = bok.uppslag_text(
-                    conn, bid, fran, till, max_tecken=MAX_KALLTECKEN,
-                    viktiga=_avsnittens_forsta_sidor(rad, fran, till))
+                # Spridd över avsnitten och klippt per sida, se _sidtext_spridd.
+                sidtext = _sidtext_spridd(db.bok_sidor(conn, bid, fran, till),
+                                          rad, fran, till, MAX_KALLTECKEN)
         finally:
             conn.close()
 
@@ -186,24 +180,6 @@ def kalltext(base: Path, db_file: Path, body: dict) -> tuple[str, str]:
     return "\n\n".join(d for d in delar if d.strip()), " · ".join(etiketter)
 
 
-def _avsnittens_forsta_sidor(rad: dict, fran: int, till: int,
-                             per_avsnitt: int = 2) -> set[int]:
-    """De första `per_avsnitt` sidorna i varje avsnitt som överlappar spannet,
-    klippta till spannet. Se kalltext: de går före i textbudgeten."""
-    ut: set[int] = set()
-    for a in (rad.get("avsnitt") or []):
-        try:
-            a_fran, a_till = int(a.get("fran") or 0), int(a.get("till") or 0)
-        except (TypeError, ValueError):
-            continue
-        if a_till < fran or a_fran > till:
-            continue
-        start = max(a_fran, fran)
-        for sida in range(start, min(start + per_avsnitt, till + 1, a_till + 1)):
-            ut.add(sida)
-    return ut
-
-
 def _avsnitt_i_spannet(rad: dict, fran: int, till: int) -> list[str]:
     """Avsnittsnamnen som ÖVERLAPPAR spannet, i bokens ordning. Registret läses
     en gång vid import (db.bok_avsnitt) och finns alltså även när ingen sida i
@@ -224,6 +200,94 @@ def _avsnitt_i_spannet(rad: dict, fran: int, till: int) -> list[str]:
     return ut
 
 
+def _avsnittsrader(rad: dict, fran: int, till: int) -> list[str]:
+    """Raderna i AVSNITT-blocket: avsnittet, kapitlet och DELAVSNITTEN (`vag`,
+    bokens egen underrubriksväg). Det var delavsnitten som saknades: Origo 2a
+    1.2 heter «Andragradsuttryck», men vägen säger «Uttryck av andra graden
+    och Kvadreringsreglerna», och utan den raden hamnade kvadreringsreglerna
+    bland de osäkra fast läraren pekat rakt på avsnittet (skarpt 2026-09-06).
+    Registret läses vid import och finns för olästa sidor också."""
+    ut: list[str] = []
+    for a in (rad.get("avsnitt") or []):
+        try:
+            a_fran, a_till = int(a.get("fran") or 0), int(a.get("till") or 0)
+        except (TypeError, ValueError):
+            continue
+        if a_till < fran or a_fran > till:
+            continue
+        namn = " ".join(x for x in (str(a.get("nr") or "").strip(),
+                                    str(a.get("titel") or "").strip()) if x)
+        if not namn:
+            continue
+        rad_ = f"- {namn} (s. {a_fran}–{a_till}"
+        if a.get("kap"):
+            rad_ += f", {str(a['kap']).strip()}"
+        rad_ += ")"
+        if a.get("vag"):
+            rad_ += f"\n  delavsnitt: {str(a['vag']).strip()}"
+        ut.append(rad_)
+    return ut
+
+
+# Så många tecken per sida i källtexten. En OCR-läst boksida är 6 000–10 000
+# tecken, och med budgeten på 16 000 rymdes FYRA sidor av ett spann på
+# femtiofem: modellen läste s. 8, 9, 27, 28 och inget mer (skarpt 2026-09-06).
+# Frågan «vilka punkter rör det här» besvaras av sidans rubriker, exempel och
+# första uppgifter, inte av dess sista rad. Klippta sidor, spridda över
+# spannets avsnitt, är mer värda än hela sidor ur ett enda avsnitt.
+MAX_PER_SIDA = 2200
+
+
+def _sidtext_spridd(sidor: list[dict], rad: dict, fran: int, till: int,
+                    budget: int) -> str:
+    """De lästa sidornas text, spridd över spannets avsnitt: första sidan ur
+    varje avsnitt, sedan andra sidan ur varje, och så vidare tills budgeten
+    är slut. Varje sida klipps till MAX_PER_SIDA. En oläst sida nämns aldrig,
+    av samma skäl som i bok.uppslag_text."""
+    avsnitt = []
+    for a in (rad.get("avsnitt") or []):
+        try:
+            avsnitt.append((int(a.get("fran") or 0), int(a.get("till") or 0)))
+        except (TypeError, ValueError):
+            continue
+
+    def grupp(sida: int) -> int:
+        for i, (a, b) in enumerate(avsnitt):
+            if a <= sida <= b:
+                return i
+        return -1
+
+    grupper: dict[int, list[dict]] = {}
+    for s in sidor:
+        if not (s.get("text") or "").strip():
+            continue
+        grupper.setdefault(grupp(int(s["sida"])), []).append(s)
+    ordning = [grupper[k] for k in sorted(grupper)]
+    bitar: list[str] = []
+    tecken = 0
+    varv = 0
+    while True:
+        tog = False
+        for g in ordning:
+            if varv >= len(g):
+                continue
+            s = g[varv]
+            text = " ".join((s.get("text") or "").split())[:MAX_PER_SIDA]
+            rubrik = f"— Sida {s['sida']}"
+            etik = " ".join(x for x in (s.get("avsnitt"), s.get("rubrik")) if x)
+            if etik:
+                rubrik += f" ({etik})"
+            bit = f"{rubrik} —\n{text}"
+            if bitar and tecken + len(bit) > budget:
+                return "\n\n".join(bitar)
+            bitar.append(bit)
+            tecken += len(bit)
+            tog = True
+        if not tog:
+            return "\n\n".join(bitar)
+        varv += 1
+
+
 # ── Frågan ──────────────────────────────────────────────────────────────────
 # Ingenting om att TÄCKA nivån och ingenting om att gissa. Täckningsdomaren på
 # tavlan letar luckor med flit; det här är motsatsen — den som kryssar i en
@@ -240,11 +304,21 @@ INSTRUKTION = (
     "uppgiftstypen som visar det. Aldrig ett sidnummer som inte står i "
     "materialet. Skälet skrivs på svenska med å, ä och ö: det skarpa svaret "
     "2026-09-06 skrev «tva obekanta» i det strukturerade fältet.\n"
-    "- AVSNITTSRUBRIKERNA i spannet är starka bevis: läraren valde just de "
-    "sidorna, och ett avsnitt vars rubrik namnger punktens begrepp («1.3 "
-    "Andragradsekvationer» mot punkten Andragradsekvationer) räknas som "
-    "tydligt behandlat även när avsnittets sidtext inte är med. Skälet är då "
-    "avsnittet.\n"
+    "- AVSNITTEN i spannet är starka bevis: läraren valde just de sidorna. "
+    "Ett avsnitt vars rubrik ELLER delavsnitt namnger punktens begrepp eller "
+    "metod («1.3 Andragradsekvationer» mot punkten Andragradsekvationer, "
+    "delavsnittet «Kvadreringsreglerna» mot punkten Kvadreringsregler) "
+    "räknas som tydligt behandlat även när avsnittets sidtext inte är med. "
+    "Skälet är då avsnittet. Lästa sidor visar bara en DEL av spannet; att en "
+    "sida inte finns med i texten betyder inte att den saknas i boken.\n"
+    "- Kalibrering: ett helt kapitel i en lärobok behandlar normalt 2–5 "
+    "punkter i kursens innehåll. Ett svar med en enda punkt för ett kapitel "
+    "på femtio sidor är nästan alltid för snålt; gå igenom varje avsnitt och "
+    "fråga vilken punkt det är skrivet för.\n"
+    "- Genomgående punkter (problemlösning, modeller, digitala verktyg, "
+    "historia, yrkesanknytning) väljs bara när materialet VISAR det: "
+    "tillämpade uppgifter ur arbets- eller samhällsliv, formler som modeller, "
+    "räknare eller GeoGebra i texten. Annars hör de till `osakra`.\n"
     "- Punkter som materialet MÖJLIGEN rör, men inte tydligt, läggs i "
     "`osakra`. De kryssas inte i åt läraren.\n"
     "- Att båda listorna är tomma är ett giltigt och ofta riktigt svar.\n"

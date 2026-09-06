@@ -355,20 +355,40 @@ def test_rutten_ar_fail_open_nar_modellen_svarar_skrap(llm_ready, fejk_claude):
 # sidor åt hela budgeten, 1.2 och 1.3 nådde modellen bara som rubriker och
 # blev «osäkra» fast läraren pekat rakt på dem.
 
-def test_varje_avsnitt_i_spannet_far_sina_forsta_sidor_forst():
-    rad = {"avsnitt": [{"nr": "1.1", "titel": "Uttryck", "fran": 8, "till": 26},
-                       {"nr": "1.2", "titel": "Andragradsuttryck", "fran": 27, "till": 38},
-                       {"nr": "1.3", "titel": "Andragradsekvationer", "fran": 39, "till": 69},
-                       {"nr": "2.1", "titel": "Koordinatsystem", "fran": 70, "till": 76}]}
-    assert ci_forslag._avsnittens_forsta_sidor(rad, 4, 58) == {8, 9, 27, 28, 39, 40}
-    # Klipps till spannet: börjar spannet mitt i ett avsnitt är det spannets
-    # första sida som räknas, och ett avsnitt utanför spannet ger ingenting.
-    assert ci_forslag._avsnittens_forsta_sidor(rad, 30, 39) == {30, 31, 39}
-    assert ci_forslag._avsnittens_forsta_sidor({"avsnitt": []}, 4, 58) == set()
+_RAD = {"avsnitt": [
+    {"nr": "1.1", "titel": "Uttryck", "kap": "Kapitel 1 · Algebra",
+     "vag": "Algebraiska uttryck och Ekvationer", "fran": 8, "till": 26},
+    {"nr": "1.2", "titel": "Andragradsuttryck", "kap": "Kapitel 1 · Algebra",
+     "vag": "Uttryck av andra graden och Kvadreringsreglerna", "fran": 27, "till": 38},
+    {"nr": "1.3", "titel": "Andragradsekvationer", "fran": 39, "till": 69},
+    {"nr": "2.1", "titel": "Koordinatsystem", "fran": 70, "till": 76}]}
 
 
-def test_prompten_sager_att_avsnittsrubriken_ar_ett_bevis():
+def test_avsnittsraderna_bar_kapitel_och_delavsnitt():
+    rader = ci_forslag._avsnittsrader(_RAD, 4, 58)
+    assert len(rader) == 3                       # 2.1 ligger utanför spannet
+    assert rader[1].startswith("- 1.2 Andragradsuttryck (s. 27–38, Kapitel 1 · Algebra)")
+    assert "delavsnitt: Uttryck av andra graden och Kvadreringsreglerna" in rader[1]
+    assert "delavsnitt" not in rader[2]          # 1.3 saknar väg: ingen tom rad
+
+
+def test_sidtexten_sprids_over_avsnitten_och_klipps_per_sida():
+    sidor = [{"sida": s, "avsnitt": None, "rubrik": None, "text": f"S{s} " + "x" * 5000}
+             for s in range(8, 31)]              # 1.1 hela, 1.2 fyra sidor, som Origo 2a
+    text = ci_forslag._sidtext_spridd(sidor, _RAD, 4, 58, budget=4 * 2400)
+    ordning = [int(m) for m in __import__("re").findall(r"— Sida (\d+)", text)]
+    # Varv för varv: första sidan ur 1.1, första ur 1.2, andra ur 1.1, andra ur 1.2.
+    assert ordning == [8, 27, 9, 28]
+    assert all(len(bit) <= ci_forslag.MAX_PER_SIDA + 60 for bit in text.split("\n\n"))
+    # Olästa sidor nämns aldrig.
+    assert "Sida 31" not in ci_forslag._sidtext_spridd(
+        sidor + [{"sida": 31, "text": ""}], _RAD, 4, 58, budget=10 ** 6)
+
+
+def test_prompten_kalibrerar_och_gor_avsnitten_till_bevis():
     prompt = ci_forslag.build_ci_prompt(
         [{"kod": "G25-M2A-ALG-5", "kort": "Andragradsekvationer", "text": "…"}],
         "AVSNITT I SPANNET:\n- 1.3 Andragradsekvationer", "1.3 Andragradsekvationer")
-    assert "AVSNITTSRUBRIKERNA i spannet är starka bevis" in prompt
+    assert "AVSNITTEN i spannet är starka bevis" in prompt
+    assert "delavsnitt" in prompt
+    assert "2–5 punkter" in prompt
