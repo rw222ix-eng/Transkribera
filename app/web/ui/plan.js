@@ -1598,10 +1598,11 @@
       punktforval = punktnyckel();
     }
     kalendernTog = true;
-    gynot(`Ur kalendern: ${korta.length} ${korta.length === 1 ? 'punkt' : 'punkter'}`
+    kalendernot = `Ur kalendern: ${korta.length} ${korta.length === 1 ? 'punkt' : 'punkter'}`
           + (p.rubrik ? ` (${p.rubrik})` : '')
           + (p.okant ? ` · ${p.okant} ${p.okant === 1 ? 'rad kändes' : 'rader kändes'} inte igen`
-                     : ''));
+                     : '');
+    gynot(kalendernot);
   }
 
   /* ══════════ PUNKTERNA UR DET MAN UTGÅR IFRÅN ══════════
@@ -1631,6 +1632,7 @@
   let forslagAvbryt = null;    // begäran som är i luften
   let forslaget = null;        // {nyckel, punkter, osakra, kalla, tomt_skal}
   let kalendernTog = false;    // kalenderpunkter() hann före (sätts där)
+  let kalendernot = '';        // kalenderns egen not, så att förslaget kan ställa sig bredvid den
   let momenteget = false;      // momentfältet bär lärarens egna ord, inte appens
 
   /* Vad förslaget ska vila på. Null betyder «fråga inte», och det är inte
@@ -1682,7 +1684,7 @@
     /* Har vi redan svaret ritas det om DIREKT, utan att blinka och utan att
        kosta något: typbytet suddar noten (window.planKoll) en gång per klick. */
     const kallor = forslagsKallor();
-    if (kallor && forslaget && !kalendernTog
+    if (kallor && forslaget
         && forslaget.nyckel === forslagsnyckel(kallor)) ritaForslaget(forslaget);
     /* `baraKalla` skiljer bokdörrens gest från lärarens skrivande: momentfältets
        `input` kommer både när uppslaget skriver i det och när hon knappar. Ett
@@ -1692,9 +1694,12 @@
     forslagT = setTimeout(() => forslagNu(bara), FORSLAG_PAUS);
   }
   async function forslagNu(baraKalla) {
-    /* Läraren har svarat själv i kalendern. Hennes svar väger tyngre än ett
-       modellen läst sig till, och två förval om samma sak är ett för många. */
-    if (kalendernTog) return;
+    /* Kalendern hindrar inte längre frågan. Förr stod `if (kalendernTog)
+       return` här, och det gav läraren en not som ljög: hon bytte spann till
+       s. 8–67 med ett prov i kalendern, ingen fråga gick, och raden sa fortfarande
+       «Ur underlaget: 1 punkt (s. 27–30)» från förra spannet. Kalenderns punkter
+       väger fortfarande tyngst: de står kvar ikryssade, och modellens punkter
+       läggs BREDVID som förslag (se `fritt` i ritaForslaget). */
     const kallor = forslagsKallor();
     if (!kallor) return;
     if (baraKalla && !kallor.egen) return;
@@ -1762,16 +1767,22 @@
     f.punkter.concat(f.osakra).forEach(p => { if (p.skal) skalen.set(p.kort, p.skal); });
     if (!f.punkter.length && !f.osakra.length) {
       /* Ett tomt svar är ett giltigt svar och rör ingenting: kryssen står kvar,
-         raden säger modellens egen förklaring om den gav någon. */
+         raden säger modellens egen förklaring om den gav någon. Har kalendern
+         redan svarat är det hennes rad som ska stå, inte modellens tomma. */
       osakra = [];
       ritaGy();
-      return gynot(f.tomt_skal || 'Underlaget matchar ingen punkt i nivån');
+      return gynot(kalendernTog ? kalendernot
+                   : (f.tomt_skal || 'Underlaget matchar ingen punkt i nivån'));
     }
     /* VAKTEN, ord för ord som kalenderns: förvalet får bara skriva om det som
        fortfarande står precis som förvalet lämnade det. Har läraren kryssat
        själv står hennes urval kvar, och modellens punkter läggs som FÖRSLAG
-       bredvid i stället. De går att ta, men de tar ingenting. */
-    const fritt = punktforval === null || punktnyckel() === punktforval;
+       bredvid i stället. De går att ta, men de tar ingenting.
+       Kalenderns punkter är lärarens egna ord i provhändelsen och räknas som
+       hennes hand: står de där är ingenting fritt, och modellen får bara
+       föreslå. */
+    const fritt = !kalendernTog
+      && (punktforval === null || punktnyckel() === punktforval);
     if (fritt && f.punkter.length) {
       vald.clear();
       f.punkter.forEach(p => vald.add(p.kort));
@@ -1785,6 +1796,12 @@
     osakra = (fritt ? [] : f.punkter).concat(f.osakra).filter(p => !vald.has(p.kort));
     ritaGy();
     planKoll();
+    /* Med kalenderns punkter ikryssade står kalenderns rad först, och
+       underlagets förslag hängs på — läraren ser båda källorna på en rad. */
+    if (kalendernTog) {
+      return gynot(kalendernot + (osakra.length
+        ? ` · underlaget föreslår ${osakra.length} till${om}` : ''));
+    }
     if (!osakra.length) return gynot('');
     gynot(`Underlaget pekar på ${osakra.length} `
           + `${osakra.length === 1 ? 'punkt' : 'punkter'}${om}`
