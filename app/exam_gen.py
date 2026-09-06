@@ -460,7 +460,7 @@ INSTRUCTION = (
     # De skrivs i ett eget pass efter domarna (bedomningspass), ett anrop per
     # uppgift och parallellt. Skälet är budgeten: en elevlösning per poängsteg
     # på varje uppgift är trettio små papper till, i ett anrop som redan tar
-    # 7–10 minuter och vars grammatik ligger på 29 015 av 30 000 tecken. Här
+    # 7–10 minuter och vars grammatik ligger på 29 844 av 30 000 tecken. Här
     # kostade de dessutom kvalitet — modellen skrev dem sist av allt, med det
     # den hade kvar.
     #
@@ -1160,11 +1160,105 @@ BILD_AV = (
     "gärna de än hade kunnat målas.")
 
 
+# ── KAPITELRAMEN (2026-09-06) ────────────────────────────────────────────────
+#
+# Prov 40 skulle täcka hela kapitel 1 i Liber Ma 2a («1.1 Uttryck, ekvationer
+# och formler · 1.2 Andragradsuttryck · 1.3 Andragradsekvationer», s. 8–67) och
+# blev tolv andragradsekvationer. Ingenting var trasigt: prompten fick de
+# kryssade innehållspunkterna och bokens urvalsblock, och modellen skrev mot
+# punkterna. Felet var att MOMENTET aldrig nådde prompten som en ram. Gy25 för
+# Ma 2a har ingen punkt som motsvarar 1.1 (det är repetition av kurs 1), och en
+# modell som får «pröva de här fem punkterna» prövar de fem punkterna.
+#
+# Ramen är därför en egen sak, skild från punkterna: avsnitten säger VAR provet
+# ska hämta uppgifter, punkterna säger VILKEN KOD uppgiften ska bära. Fältet
+# `innehall` är fortfarande grammatiklåst till koderna, och det ska det vara.
+
+def avsnitt_ur_moment(moment: str) -> list[dict]:
+    """Momentraden som avsnittslista, när boken är stängd.
+
+    Reserven för ett prov utan bokdörr: dokumentets `moment` är lärarens egen
+    uppräkning («1.1 Uttryck … · 1.2 Andragradsuttryck · …») och bär exakt de
+    avsnitt kapitlet består av, bara utan sidantal. Samma form som
+    bok.avsnittslista, med `sidor` = 0. Spridningen viktar då jämnt i stället
+    för efter sidantal.
+
+    Delar som inte börjar med ett avsnittsnummer hoppas över: ett moment som
+    heter «Repetition inför provet» är ingen ram att fördela uppgifter över."""
+    ut: list[dict] = []
+    for del_ in re.split(r"\s*·\s*", moment or ""):
+        d = " ".join(del_.split())
+        m = re.match(r"^(\d+\.\d+)(\s|$)", d)
+        if not m:
+            continue
+        ut.append({"avsnitt": m.group(1), "etikett": d,
+                   "fran": 0, "till": 0, "sidor": 0})
+    return ut
+
+
+def mal_per_avsnitt(avsnitt: list[dict], antal: int) -> list[int]:
+    """Hur många uppgifter varje avsnitt ska bära.
+
+    Viktat efter SIDANTAL när sidorna är kända (ett avsnitt på trettio sidor
+    är trettio sidor värt matematik), jämnt annars. Golvet är ETT: ett avsnitt
+    som är med i kapitlet ska prövas, hur kort det än är. Det var precis
+    nollan som gjorde prov 40 till ett andragradsprov.
+
+    Summan justeras till `antal` genom att dra från det största och lägga på
+    det minsta. Har kapitlet fler avsnitt än provet har uppgifter går ekvationen
+    inte ihop, och då vinner golvet: hellre ett avsnitt per uppgift än ett
+    avsnitt utan uppgifter."""
+    n = len(avsnitt)
+    if n == 0 or antal <= 0:
+        return []
+    sidor = [int(a.get("sidor") or 0) for a in avsnitt]
+    tot = sum(sidor)
+    if tot > 0:
+        mal = [max(1, round(antal * s / tot)) for s in sidor]
+    else:
+        mal = [max(1, antal // n + (1 if i < antal % n else 0))
+               for i in range(n)]
+    while sum(mal) > antal and any(m > 1 for m in mal):
+        j = max(range(n), key=lambda i: (mal[i], -i))
+        mal[j] -= 1
+    while sum(mal) < antal:
+        j = min(range(n), key=lambda i: (mal[i], i))
+        mal[j] += 1
+    return mal
+
+
+def build_spridning(avsnitt: list[dict], antal: int) -> str:
+    """Kapitelramen som promptblock, eller TOM STRÄNG.
+
+    Tomt vid färre än två avsnitt, och det är kassetteregeln och inte en
+    optimering (samma villkor som `build_variation`): saknas underlaget ska
+    prompten vara byte för byte den som gick i väg innan blocket fanns, annars
+    är varje inspelad kassett omspelningsmogen. Ett ENDA avsnitt är dessutom
+    ingen spridning, för då finns inget att fördela över."""
+    if len(avsnitt or []) < 2:
+        return ""
+    mal = mal_per_avsnitt(avsnitt, antal)
+    rader = [f"- {a.get('etikett') or a.get('avsnitt')}: {m} uppgift"
+             + ("er" if m != 1 else "")
+             for a, m in zip(avsnitt, mal)]
+    rad = "\n".join(rader)
+    return (
+        "PROVET SPÄNNER ÖVER HELA KAPITLET, och det är avsnitten nedan som är "
+        "ramen, inte innehållspunkterna ovan. Fördela de "
+        f"{antal} uppgifterna över ALLA avsnitten:\n{rad}\n"
+        "Innehållspunkterna säger vilka koder som ska stå i \"innehall\", inte "
+        "vilka avsnitt provet får hoppa över: ett avsnitt som saknar en egen "
+        "punkt (repetition av en tidigare kurs) prövas ändå, och uppgiften får "
+        "då den kod som ligger närmast. Skriv i varje uppgifts fält "
+        "\"avsnitt\" avsnittets nummer, t.ex. \"1.2\".")
+
+
 def build_prompt(kurs: str, klass: str, punkter: list[str], *,
                  antal: int = 10, tid_min: int = 120, delar: bool = True,
                  memory: str = "", teman: str = "", variation: str = "",
                  referens: str = "", bilder: str = "", utfall: str = "",
                  bok: str = "", boknivaer: str = "", forlaga: str = "",
+                 spridning: str = "",
                  svart: str = "", fokus: str = "",
                  profil: str = "prov", koder: list[str] | None = None,
                  grupp: dict | None = None, riktat: str = "",
@@ -1230,6 +1324,13 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
     # egenskrivna uppgifter (blocket självt förbjuder avskrift).
     if bok:
         block.append(bok)
+    # Kapitelramen står DIREKT EFTER boken, och det är inte en slump: blocket
+    # räknar upp bokens egna avsnitt med bokens egna sidspann, och läses det
+    # inte i samma andetag som urvalet blir det en lista siffror utan hem.
+    # Tom sträng när underlaget saknas (build_spridning) och prompten är då
+    # ordagrant den som gick i väg innan ramen fanns.
+    if spridning:
+        block.append(spridning)
     # Förlagan (källdörr 4, pardokumentets andra hand) står närmast uppdraget:
     # «gör som det här pappret» är det starkaste önskemålet läraren kan ge, och
     # det ska inte tappas bakom minnet, boken eller undvik-listan.
@@ -1926,7 +2027,7 @@ def doma_rakning(exam: dict, *, model: str, llm=llm_client.generate,
 # VARFÖR ETT EGET PASS OCH INTE HUVUDANROPET. Elevexempel per poängsteg är
 # mycket text: ett tiouppgiftsprov med tre poäng per uppgift är trettio små
 # lösningar utöver provet självt. Huvudanropet tar redan 7–10 minuter och dess
-# grammatik ligger på 29 015 av 30 000 tecken (claude_code.SCHEMA_TAK_EXE,
+# grammatik ligger på 29 844 av 30 000 tecken (claude_code.SCHEMA_TAK_EXE,
 # mätt i tests/test_platar.py) — det finns varken tid eller schema kvar. Det
 # här passet kostar i stället ETT litet anrop per uppgift, och anropen är
 # oberoende av varandra, alltså går de parallellt: väggtiden blir en handfull
@@ -3205,6 +3306,93 @@ def _signaler(exam: dict) -> list[dict]:
     return nivasignaler(exam) + talsignaler(exam) + bedomningssignaler(exam)
 
 
+def avsnittstackning(exam: dict, avsnitt: list[dict], antal: int) -> list[dict]:
+    """Fick varje avsnitt i kapitlet sina uppgifter? Deterministiskt, ingen
+    modell, ingen kostnad.
+
+    FAIL-OPEN i två lägen, och båda är villkor och inte undantag:
+
+    * Färre än två avsnitt: då finns ingen ram att svika. Samma villkor som
+      build_spridning, av samma skäl.
+    * INGEN uppgift bär fältet `avsnitt`: pappret skrevs innan fältet fanns
+      (kassetterna, varje prov i basen), eller ramen nådde aldrig prompten.
+      Att fälla då vore att fälla ett gammalt papper för att appen blivit
+      klokare.
+
+    Fälls gör ett avsnitt som fick NOLL uppgifter, eller som fick under hälften
+    av sitt mål när målet är minst två. Halvan är golvet och inte målet med
+    flit: modellen ska inte tvingas räkna om hela provet för att ett avsnitt
+    fick tre uppgifter i stället för fyra. Nollan är det som gjorde prov 40
+    till ett andragradsprov."""
+    if len(avsnitt or []) < 2:
+        return []
+    uppgifter = (exam or {}).get("uppgifter") or []
+    burna = [str(u.get("avsnitt") or "").strip() for u in uppgifter
+             if isinstance(u, dict)]
+    if not any(burna):
+        return []
+    rakning: dict[str, int] = {}
+    for a in burna:
+        if a:
+            rakning[a] = rakning.get(a, 0) + 1
+    mal = mal_per_avsnitt(avsnitt, antal)
+    # Det avsnitt som fick flest uppgifter är det uppgiften ska tas IFRÅN:
+    # reparationen ska byta ut en uppgift, inte lägga till en trettonde.
+    storst = max(avsnitt, key=lambda a: rakning.get(a["avsnitt"], 0))
+    n_storst = rakning.get(storst["avsnitt"], 0)
+    fel: list[dict] = []
+    for a, m in zip(avsnitt, mal):
+        k = rakning.get(a["avsnitt"], 0)
+        if k == 0 or (m >= 2 and k < m / 2):
+            fel.append(_err(
+                "uppgifter", "avsnittstackning",
+                f"Inget ur avsnitt {a.get('etikett') or a['avsnitt']} "
+                f"({k} uppgifter, målet {m}). Byt ut en uppgift ur avsnittet "
+                f"med flest ({storst.get('etikett') or storst['avsnitt']} har "
+                f"{n_storst}) mot en ny uppgift ur "
+                f"{a.get('etikett') or a['avsnitt']}, samma del och samma "
+                "poäng, och sätt fältet avsnitt."))
+    return fel
+
+
+def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
+                   antal: int | None, skeleton: list[dict] | None,
+                   avsnitt: list[dict], rounds_used: int, max_rounds: int,
+                   koder: list[str] | None = None,
+                   niva_mal: dict | None = None,
+                   log_cb: Callable[[str], None] | None = None) -> dict:
+    """Kapitelramens kontroll, med SAMMA kontrakt som _rakneverk_pass: högst EN
+    reparationsrunda, samma budget, samma «rent före, trasigt efter»-grind, och
+    fynd som inte lagades visas som varningar i stället för att tigas ihjäl.
+
+    Ligger FÖRE räkneverket och efter balansreparationen: byter rundan ut en
+    uppgift ska räkneverket räkna på DEN uppgiften, inte på den som byttes
+    bort. Omvänd ordning hade betalat en sympy-runda för ett facit som sedan
+    skrevs om ändå."""
+    log = log_cb or (lambda _m: None)
+    fel = avsnittstackning(exam, avsnitt, antal or 0)
+    if not fel:
+        return {"exam": exam, "errors": errors, "rounds": rounds_used}
+    # Loggraden namnger avsnitten, inte antalet fynd: «Täckningen: 1.1 saknar
+    # uppgifter» säger vad som är fel, «1 problem» säger ingenting.
+    saknade = ", ".join(f["message"].split("avsnitt ", 1)[-1].split(" ", 1)[0]
+                        for f in fel)
+    if rounds_used >= max_rounds:
+        return {"exam": exam, "errors": errors + fel, "rounds": rounds_used}
+    log(f"Täckningen: {saknade} saknar uppgifter, justerar …")
+    kandidat = _llm_round(build_repair_prompt(exam, fel + errors, profil),
+                          model, llm, antal, skeleton, koder, log_cb=log_cb,
+                          etikett=f"Justerar provet (runda {rounds_used + 1} "
+                                  f"av {max_rounds}) —")
+    rounds_used += 1
+    if kandidat is None:
+        return {"exam": exam, "errors": errors + fel, "rounds": rounds_used}
+    _doc, nya = _validate(kandidat, profil, koder, niva_mal)
+    if nya and not errors:
+        return {"exam": exam, "errors": fel, "rounds": rounds_used}
+    return {"exam": kandidat, "errors": nya, "rounds": rounds_used}
+
+
 def _rakneverk_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                     antal: int | None, skeleton: list[dict] | None,
                     rounds_used: int, max_rounds: int,
@@ -3337,6 +3525,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                   tidigare: list[str] | None = None,
                   bilder: str = "", utfall: str = "", bok: str = "",
                   boknivaer: str = "", forlaga: str = "",
+                  avsnitt: list[dict] | None = None,
                   svart: str = "", fokus: str = "", profil: str = "prov",
                   koder: list[str] | None = None, riktat: str = "",
                   skeleton: list[dict] | None = None,
@@ -3378,7 +3567,14 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     (db.tidigare_uppgiftstexter) och driver variationsvakten: en undvik-lista
     med talen utbytta mot # går in i prompten, och det som ändå blev en gammal
     uppgift med nya tal kommer tillbaka i svarets `likheter`. En TOM lista
-    lämnar prompten ordagrant som den var. Se build_variation."""
+    lämnar prompten ordagrant som den var. Se build_variation.
+
+    `avsnitt` är KAPITELRAMEN (bok.avsnittslista eller avsnitt_ur_moment):
+    kapitlets egna avsnitt med sina sidantal. Den gör två saker som hör ihop:
+    spridningsblocket går in i prompten (build_spridning) och täckningen
+    kontrolleras på det som kom tillbaka (_tackning_pass). Utan den, eller med
+    färre än två avsnitt, är prompten byte för byte den som gick i väg förut
+    och ingen kontroll körs."""
     log = log_cb or (lambda _m: None)
     # `steg` NAMNGER var i arbetet vi är; `log` säger vad som händer just nu.
     # Skillnaden syns i gränssnittet: namnet flyttar mätaren ett helt steg,
@@ -3414,11 +3610,16 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # STRÄNG och prompten byte för byte densamma som förut. Det villkoret är
     # inte en optimering utan kassetteregeln: testernas databas är tom.
     variation = build_variation(tidigare)
+    # Kapitelramen (2026-09-06). Tom lista, None, eller ett enda avsnitt ger en
+    # TOM STRÄNG och därmed en oförändrad prompt: samma kassetteregel som
+    # variationen ovan.
+    spridning = build_spridning(avsnitt or [], antal)
     prompt = build_prompt(kurs, klass, punkter, antal=antal, tid_min=tid_min,
                           delar=delar, memory=memory, teman=teman,
                           variation=variation,
                           referens=referens, bilder=bilder, utfall=utfall,
                           bok=bok, boknivaer=boknivaer, forlaga=forlaga,
+                          spridning=spridning,
                           svart=svart, fokus=fokus,
                           profil=profil, koder=koder, grupp=grupp,
                           riktat=riktat, skeleton=skeleton,
@@ -3447,6 +3648,17 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                               rounds_used=rounds, max_rounds=max_rounds,
                               profil=profil, antal=antal, skeleton=grammatik,
                               koder=koder, niva_mal=niva_mal, log_cb=log_cb)
+    # ── KAPITELTÄCKNINGEN (2026-09-06) ───────────────────────────────
+    # Direkt efter balansreparationen och FÖRE räkneverket: byts en uppgift ut
+    # här ska sympy räkna på den nya, inte på den som försvann. Körs bara när
+    # ramen faktiskt skickades in, och fäller aldrig ett papper vars uppgifter
+    # saknar fältet (se avsnittstackning).
+    if res["exam"] is not None and avsnitt:
+        res = _tackning_pass(res["exam"], res["errors"], model=model, llm=llm,
+                             profil=profil, antal=antal, skeleton=grammatik,
+                             avsnitt=avsnitt, koder=koder, niva_mal=niva_mal,
+                             rounds_used=res["rounds"], max_rounds=max_rounds,
+                             log_cb=log_cb)
     # ── RÄKNEVERKET (Etapp 4) ────────────────────────────────────────
     # Deterministiskt och FÖRE modelldomarna: det som går att räkna ut ska
     # räknas ut, inte gissas av ett andra modellanrop. Se _rakneverk_pass.

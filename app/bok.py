@@ -819,6 +819,35 @@ def _etikett(grupp: dict) -> str:
     return f"{namn} ({spann})"
 
 
+def avsnittslista(sidor: list[dict]) -> list[dict]:
+    """Avsnitten i spannet som en RAM, inte som text.
+
+    `avsnittsgrupper` grupperar sidorna, `_etikett` namnger gruppen, och det
+    här är samma sak sammanfattad: vilka avsnitt spannet består av, hur många
+    sidor vart och ett har, och vad de heter. Provet behöver det därför att
+    ETT KAPITEL inte är samma sak som en lista innehållspunkter: kryssen i
+    planeringen säger vad som ska provas, men de säger inget alls om ett
+    avsnitt som repeterar en tidigare kurs och därför saknar egen punkt i
+    Gy25. Utan ramen skrev modellen tolv uppgifter ur de avsnitt punkterna
+    pekade på och hoppade över resten av kapitlet (prov 40, 2026-09-06).
+
+    Grupper UTAN avsnittsnummer hoppas över så länge det finns numrerade:
+    kapitelöppningen och aktivitetssidan är sidor, inte avsnitt, och ett prov
+    ska inte fördela uppgifter över dem. Saknas numren helt (en bok vars
+    sidfötter inte lästes av) lämnas grupperna som de är, och anroparen ser då
+    en enda post, vilket är rätt, för då finns ingen ram att sprida över."""
+    grupper = [g for g in avsnittsgrupper(sidor) if g["sidor"]]
+    numrerade = [g for g in grupper if g["avsnitt"]]
+    if numrerade:
+        grupper = numrerade
+    ut: list[dict] = []
+    for g in grupper:
+        ut.append({"avsnitt": g["avsnitt"], "etikett": _etikett(g),
+                   "fran": g["sidor"][0]["sida"], "till": g["sidor"][-1]["sida"],
+                   "sidor": len(g["sidor"])})
+    return ut
+
+
 def jamnt(rader: list, antal: int) -> list:
     """`antal` element jämnt spridda över listan — första, sista och mellan.
 

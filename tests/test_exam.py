@@ -3551,3 +3551,194 @@ def test_trappstegets_niva_star_forst_pa_fast_position():
     # En rad per poäng även när kriterierna är långa — raderna är egna stycken
     # och bryts som löptext inne i sin spalt.
     assert tex.count(r"\bedsteg{") == exam_spec.poangsummor(doc)["total"]
+
+
+# ── Kapitelramen (2026-09-06) ─────────────────────────────────────────────
+#
+# Prov 40 skulle täcka hela kapitel 1 i Liber Ma 2a och blev tolv
+# andragradsekvationer. Testerna nedan håller de tre lederna isär: ramen in i
+# prompten, fältet på uppgiften, och kontrollen av det som kom tillbaka.
+
+_MOMENT_KAP1 = ("1.1 Uttryck, ekvationer och formler · 1.2 Andragradsuttryck "
+                "· 1.3 Andragradsekvationer")
+
+
+def test_avsnitt_ur_moment_ar_reserven_utan_bok():
+    """Momentraden är lärarens egen uppräkning av kapitlets avsnitt, och den
+    finns även när bokdörren är stängd. Sidantalet är noll: momentet vet inte
+    hur långa avsnitten är, och spridningen viktar då jämnt."""
+    lista = exam_gen.avsnitt_ur_moment(_MOMENT_KAP1)
+    assert [a["avsnitt"] for a in lista] == ["1.1", "1.2", "1.3"]
+    assert lista[0]["etikett"] == "1.1 Uttryck, ekvationer och formler"
+    assert all(a["sidor"] == 0 for a in lista)
+
+
+def test_avsnitt_ur_moment_hoppar_over_det_som_inte_ar_ett_avsnitt():
+    """«Repetition inför provet» är ingen ram att fördela uppgifter över."""
+    assert exam_gen.avsnitt_ur_moment("Repetition inför provet") == []
+    assert exam_gen.avsnitt_ur_moment("") == []
+    blandat = exam_gen.avsnitt_ur_moment("Repetition · 2.4 Derivator")
+    assert [a["avsnitt"] for a in blandat] == ["2.4"]
+
+
+def test_spridningen_ar_tom_med_farre_an_tva_avsnitt():
+    """Kassetteregeln: saknas ramen ska prompten vara byte för byte den som
+    gick i väg innan blocket fanns. Ett enda avsnitt är dessutom ingen
+    spridning."""
+    ett = exam_gen.avsnitt_ur_moment("1.1 Uttryck, ekvationer och formler")
+    assert exam_gen.build_spridning([], 12) == ""
+    assert exam_gen.build_spridning(ett, 12) == ""
+
+
+def test_spridningens_mal_viktas_efter_sidantal():
+    """Ett avsnitt på trettio sidor är trettio sidor värt matematik. Golvet är
+    ett: ett avsnitt som är med i kapitlet ska prövas hur kort det än är."""
+    avsnitt = [{"avsnitt": "1.1", "etikett": "1.1 A", "sidor": 30},
+               {"avsnitt": "1.2", "etikett": "1.2 B", "sidor": 15},
+               {"avsnitt": "1.3", "etikett": "1.3 C", "sidor": 15}]
+    mal = exam_gen.mal_per_avsnitt(avsnitt, 12)
+    assert mal == [6, 3, 3] and sum(mal) == 12
+    # Ett pyttelitet avsnitt får ändå sin uppgift, och summan hålls.
+    smatt = [{"avsnitt": "1.1", "sidor": 40}, {"avsnitt": "1.2", "sidor": 1}]
+    m2 = exam_gen.mal_per_avsnitt(smatt, 10)
+    assert m2 == [9, 1] and sum(m2) == 10
+    # Utan sidantal (momentraden) blir det jämnt, och resten läggs uppifrån.
+    jamnt = exam_gen.mal_per_avsnitt(exam_gen.avsnitt_ur_moment(_MOMENT_KAP1),
+                                     11)
+    assert jamnt == [4, 4, 3] and sum(jamnt) == 11
+    # Fler avsnitt än uppgifter: golvet vinner över summan. Hellre ett avsnitt
+    # per uppgift än ett avsnitt utan uppgifter.
+    trangt = exam_gen.mal_per_avsnitt([{"avsnitt": f"1.{i}", "sidor": 0}
+                                       for i in range(1, 6)], 3)
+    assert trangt == [1, 1, 1, 1, 1]
+
+
+def test_spridningsblocket_sager_att_ramen_ar_avsnitten():
+    lista = exam_gen.avsnitt_ur_moment(_MOMENT_KAP1)
+    block = exam_gen.build_spridning(lista, 12)
+    assert "PROVET SPÄNNER ÖVER HELA KAPITLET" in block
+    assert "inte innehållspunkterna ovan" in block
+    for a in ("1.1 Uttryck, ekvationer och formler", "1.2 Andragradsuttryck",
+              "1.3 Andragradsekvationer"):
+        assert f"- {a}: 4 uppgifter" in block
+    # Punkterna säger vilken KOD uppgiften bär, inte vilket avsnitt som får
+    # hoppas över. Det var precis den förväxlingen som gjorde prov 40 platt.
+    assert "repetition av en tidigare kurs" in block
+    assert '"avsnitt" avsnittets nummer' in block
+
+
+def test_prompten_ar_oforandrad_utan_spridning():
+    """Samma villkor som variationsvakten: ett tomt block lämnar inget spår."""
+    utan = exam_gen.build_prompt("Ma2a", "NA23", ["kod"], antal=8)
+    tom = exam_gen.build_prompt("Ma2a", "NA23", ["kod"], antal=8, spridning="")
+    assert utan == tom
+    med = exam_gen.build_prompt("Ma2a", "NA23", ["kod"], antal=8,
+                                bok="UR LÄROBOKEN: bokblocket.",
+                                spridning="RAMEN.")
+    # Blocket står DIREKT efter bokblocket: ramen räknar upp bokens egna
+    # avsnitt och ska läsas i samma andetag som urvalet.
+    assert "UR LÄROBOKEN: bokblocket.\n\nRAMEN." in med
+
+
+def _prov_med_avsnitt(fordelning: list[str]) -> dict:
+    exam = _exam()
+    for u, a in zip(exam["uppgifter"], fordelning):
+        u["avsnitt"] = a
+    return exam
+
+
+def test_tackningen_ar_fail_open():
+    """Två lägen, båda villkor och inte undantag: ingen ram att svika, och ett
+    papper som skrevs innan fältet fanns (kassetterna, basen)."""
+    lista = exam_gen.avsnitt_ur_moment(_MOMENT_KAP1)
+    assert exam_gen.avsnittstackning(_prov_med_avsnitt(["1.1"] * 7),
+                                     lista[:1], 7) == []
+    # Ingen uppgift bär fältet, alltså tyst. Att fälla då vore att fälla ett
+    # gammalt papper för att appen blivit klokare.
+    assert exam_gen.avsnittstackning(_exam(), lista, 7) == []
+    assert exam_gen.avsnittstackning({}, lista, 7) == []
+
+
+def test_tackningen_faller_avsnittet_som_ingen_uppgift_kom_ur():
+    """Prov 40 i miniatyr: alla uppgifter ur 1.3, ingenting ur 1.1 och 1.2."""
+    lista = exam_gen.avsnitt_ur_moment(_MOMENT_KAP1)
+    fel = exam_gen.avsnittstackning(_prov_med_avsnitt(["1.3"] * 7), lista, 7)
+    assert [f["code"] for f in fel] == ["avsnittstackning"] * 2
+    assert [f["path"] for f in fel] == ["uppgifter"] * 2
+    assert "Inget ur avsnitt 1.1 Uttryck" in fel[0]["message"]
+    # Reparationen ska BYTA UT en uppgift, inte lägga till en åttonde, och den
+    # ska tas ur avsnittet med flest.
+    assert "1.3 Andragradsekvationer har 7" in fel[0]["message"]
+    assert "samma del och samma poäng" in fel[0]["message"]
+    # Jämn fördelning fäller ingenting.
+    assert exam_gen.avsnittstackning(
+        _prov_med_avsnitt(["1.1", "1.1", "1.2", "1.2", "1.3", "1.3", "1.1"]),
+        lista, 7) == []
+
+
+def test_tackningen_faller_ocksa_det_som_bara_fick_smulor():
+    """Under halva målet när målet är minst två. Halvan är golvet och inte
+    målet: modellen ska inte räkna om hela provet för en uppgifts skull."""
+    avsnitt = [{"avsnitt": "1.1", "etikett": "1.1 A", "sidor": 30},
+               {"avsnitt": "1.2", "etikett": "1.2 B", "sidor": 30}]
+    # Målet är 5/5. En uppgift ur 1.2 är under hälften.
+    fel = exam_gen.avsnittstackning(
+        _prov_med_avsnitt(["1.1"] * 6 + ["1.2"]), avsnitt, 10)
+    assert len(fel) == 1 and "Inget ur avsnitt 1.2 B" in fel[0]["message"]
+
+
+def test_tackningspasset_lagar_pa_en_runda():
+    """Samma kontrakt som räkneverket: högst EN reparationsrunda, och det
+    lagade dokumentet är det som går vidare."""
+    lista = exam_gen.avsnitt_ur_moment(_MOMENT_KAP1)
+    platt = _prov_med_avsnitt(["1.3"] * 7)
+    lagat = _prov_med_avsnitt(["1.1", "1.1", "1.2", "1.2", "1.3", "1.3", "1.1"])
+    llm, calls = _stub_llm([json.dumps(lagat)])
+    rader: list[str] = []
+    res = exam_gen._tackning_pass(platt, [], model="m", llm=llm, profil="prov",
+                                  antal=7, skeleton=None, avsnitt=lista,
+                                  rounds_used=1, max_rounds=4,
+                                  log_cb=rader.append)
+    assert res["rounds"] == 2 and len(calls) == 1
+    assert [u["avsnitt"] for u in res["exam"]["uppgifter"]][0] == "1.1"
+    assert res["errors"] == []
+    assert any("Täckningen: 1.1, 1.2 saknar uppgifter" in r for r in rader)
+
+
+def test_tackningspasset_behaller_det_gamla_nar_omskrivningen_ar_samre():
+    """«Rent före, trasigt efter», samma grind som räkneverket och domarna.
+    Fyndet visas som en varning i stället för att pappret försämras."""
+    lista = exam_gen.avsnitt_ur_moment(_MOMENT_KAP1)
+    platt = _prov_med_avsnitt(["1.3"] * 7)
+    trasigt = _prov_med_avsnitt(["1.1"] * 7)
+    trasigt["uppgifter"][0]["poang"] = [99, 0, 0]
+    llm, _calls = _stub_llm([json.dumps(trasigt)])
+    res = exam_gen._tackning_pass(platt, [], model="m", llm=llm, profil="prov",
+                                  antal=7, skeleton=None, avsnitt=lista,
+                                  rounds_used=1, max_rounds=4)
+    assert res["exam"] is platt
+    assert [e["code"] for e in res["errors"]] == ["avsnittstackning"] * 2
+
+
+def test_tackningspasset_kostar_ingen_runda_nar_budgeten_ar_slut():
+    lista = exam_gen.avsnitt_ur_moment(_MOMENT_KAP1)
+    platt = _prov_med_avsnitt(["1.3"] * 7)
+    llm, calls = _stub_llm(["{}"])
+    res = exam_gen._tackning_pass(platt, [], model="m", llm=llm, profil="prov",
+                                  antal=7, skeleton=None, avsnitt=lista,
+                                  rounds_used=4, max_rounds=4)
+    assert calls == [] and res["exam"] is platt
+    assert len(res["errors"]) == 2
+
+
+def test_avsnittsfaltet_star_i_grammatiken_och_ryms():
+    """Fältet måste stå i schemat för att modellen ska kunna fylla i det, och
+    schemat är ett kommandoradsargument med ett hårt tak. Själva måttet står i
+    tests/test_platar.py."""
+    from app import claude_code, llm_client
+    sk = exam_spec.balanced_skeleton(20, "prov")
+    schema = llm_client._schema_ur(exam_spec.to_response_format(skeleton=sk))
+    minifierat = json.dumps(claude_code._minifiera(schema),
+                            separators=(",", ":"), ensure_ascii=False)
+    assert '"avsnitt"' in minifierat
+    assert len(minifierat) < claude_code.SCHEMA_TAK_EXE

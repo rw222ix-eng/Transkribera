@@ -358,6 +358,29 @@ def bok_urval_text(db_file: Path, body: dict) -> str:
     return bok.build_urval_block(rad, fran, till, sidor, uppg, bok_urval(body))
 
 
+def bok_avsnitt(db_file: Path, body: dict) -> list[dict]:
+    """Avsnitten i det valda bokspannet, provets RAM för spridningen.
+
+    Ingen text läses (med_text=False): det som behövs är sidnummer, sidfotens
+    avsnittsnummer och rubriken, och de kom in med faktapasset. Rutten kostar
+    alltså en SELECT och inget modellanrop.
+
+    Tom lista när bokdörren är stängd eller boken saknar det spannet, och
+    anroparen faller då tillbaka på momentraden (exam_gen.avsnitt_ur_moment).
+    Tystnaden är inte ett fel: ett prov utan bok har ingen kapitelram, och då
+    ska prompten se ut precis som den gjorde innan ramen fanns."""
+    val = bok_val(body)
+    if val is None:
+        return []
+    bid, fran, till = val
+    conn = db.connect(db_file)
+    try:
+        sidor = db.bok_sidor(conn, bid, fran, till, med_text=False)
+    finally:
+        conn.close()
+    return bok.avsnittslista(sidor)
+
+
 def bok_nivaer(db_file: Path, body: dict, *, profil: str,
                urval: bool = False) -> str:
     """Bokens nivåskala för det valda uppslaget (Del C, C2b) — arbetsbladets

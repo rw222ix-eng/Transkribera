@@ -642,6 +642,27 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     routes_planning.bok_nivaer(db_file, body, profil=typ,
                                                urval=oversikt)
                     if typ in ("arbetsblad", "gruppuppgift") else "")
+                # KAPITELRAMEN, och bara för PROVET (2026-09-06). Prov 40 skulle
+                # täcka hela kapitel 1 och blev tolv andragradsekvationer: de
+                # kryssade innehållspunkterna var ramen prompten fick, och Gy25
+                # har ingen punkt för ett avsnitt som repeterar kurs 1. Nu går
+                # kapitlets EGNA avsnitt in som ram, och täckningen kontrolleras
+                # på det som kommer tillbaka (exam_gen.build_spridning,
+                # avsnittstackning).
+                #
+                # Boken först, momentraden som reserv: bokens avsnitt bär
+                # sidantal och kan därför viktas, momentets kan bara delas
+                # jämnt. Är båda tomma blir prompten ordagrant som förut.
+                #
+                # Efter bokblocket med flit: faktapasset ovanför kan ha läst in
+                # sidor, och avsnitten ska läsas ur det boken faktiskt vet nu.
+                # Arbetsbladet och gruppuppgiften får ingen ram: deras spann är
+                # EN lektion, och där finns inget kapitel att sprida över.
+                avsnitt: list[dict] = []
+                if typ == "prov":
+                    avsnitt = (routes_planning.bok_avsnitt(db_file, body)
+                               or exam_gen.avsnitt_ur_moment(
+                                   body.get("moment") or ""))
                 res = exam_gen.generate_exam(
                     kurs, klass or "klassen", punkter, model=_model_name(),
                     antal=antal, tid_min=tid_min, delar=delar,
@@ -649,6 +670,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     tidigare=tidigare_uppgifter,
                     bilder=bilder_block, utfall=utfall_block, bok=bok_block,
                     boknivaer=nivaer_block, forlaga=forlaga_block,
+                    avsnitt=avsnitt,
                     svart=svart_block, fokus=fokus_block, profil=typ,
                     koder=koder, skeleton=skelett, niva_mal=niva_mal,
                     riktat=riktat_block, grupp=grupp,

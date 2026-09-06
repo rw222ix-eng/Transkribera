@@ -1511,6 +1511,39 @@ def test_avsnitten_arver_numret_fran_sidan_innan():
     assert [s["sida"] for s in grupper[0]["sidor"]] == [2, 3, 4, 5, 6, 7]
 
 
+def test_avsnittslistan_ar_kapitlets_ram():
+    """Provets ram: vilka avsnitt spannet består av, hur många sidor vart och
+    ett har, och vad de heter. Sidantalet är det spridningen viktar efter."""
+    sidor, _u = _kapitel(sidor=39)
+    lista = bok.avsnittslista(sidor)
+    assert [a["avsnitt"] for a in lista] == ["1.1", "1.2", "1.3"]
+    # 14/12/13 och inte 13/13/13: numret står bara på varannan sida, och sidan
+    # som byter avsnitt råkar vara en av de tysta. Den ärver då föregående
+    # sidas nummer, precis som avsnittsgrupper ska. Ramen är alltså ungefärlig
+    # på sidan, och det räcker gott för en viktning.
+    assert [a["sidor"] for a in lista] == [14, 12, 13]
+    assert lista[0]["fran"] == 2 and lista[0]["till"] == 15
+    assert lista[0]["etikett"].startswith("1.1 Rubriken (s. 2–15)")
+    assert sum(a["sidor"] for a in lista) == 39
+
+
+def test_avsnittslistan_hoppar_over_sidor_utan_avsnittsnummer():
+    """Kapitelöppningen står före det första numret och blir en egen grupp i
+    avsnittsgrupper. Den är en sida, inte ett avsnitt, och ett prov ska inte
+    fördela uppgifter över den."""
+    sidor, _u = _kapitel(sidor=4)
+    sidor.insert(0, {"sida": 1, "avsnitt": None, "rubrik": "Kapitel 1",
+                     "text": ""})
+    grupper = bok.avsnittsgrupper(sidor)
+    assert grupper[0]["avsnitt"] == ""
+    lista = bok.avsnittslista(sidor)
+    assert [a["avsnitt"] for a in lista] == ["1.1"]
+
+
+def test_avsnittslistan_ar_tom_utan_sidor():
+    assert bok.avsnittslista([]) == []
+
+
 def test_avsnittsraden_har_flera_nummerserier():
     """Boken börjar om på 1 i Blandade uppgifter. Ett enda «1–1344» hade sagt
     att avsnittet har 1344 uppgifter i en följd."""

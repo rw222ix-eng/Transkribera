@@ -244,7 +244,12 @@ def test_scenregeln_bar_lararens_form():
 def test_schemat_ryms_pa_kommandoraden_med_scenfaltet():
     """Grammatiktvånget faller om schemat inte får plats som argument
     (claude_code.SCHEMA_TAK_EXE). Scenfältet kostade 636 tecken på ett prov med
-    sex uppgifter och 990 på tolv — mätt före och efter."""
+    sex uppgifter och 990 på tolv — mätt före och efter.
+
+    Avsnittsfältet (2026-09-06, kapitelramen) kostade 756 tecken på tjugo
+    uppgifter och lyfte måttet till 29 844 av 30 000. Marginalen är alltså
+    tunn: nästa fält på ExamItem ska mätas här FÖRE det skrivs, och behöver det
+    en beskrivning i schemat får den plats först när något annat gett vika."""
     from app import claude_code, llm_client
     # Tjugo är panelens tak (plan.js: «Antal uppgifter», min 3, max 20) och
     # alltså det största schema appen kan komma att skicka.

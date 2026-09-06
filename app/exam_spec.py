@@ -411,6 +411,18 @@ class ExamItem(_Uppgiftsbas):
     sekundara: list[Formaga] | None = None
     typ: Uppgiftstyp
     innehall: list[str] | None = None    # taggar mot centralt innehåll
+    # BOKENS AVSNITT uppgiften hämtar sitt stoff ur («1.2»). Skilt från
+    # `innehall` med flit: koden säger vilken kursplanepunkt uppgiften prövar,
+    # avsnittet säger var i kapitlet den hör hemma, och de två går isär precis
+    # där det gör ont. Ett avsnitt som repeterar en tidigare kurs (Ma 2a:s 1.1)
+    # har ingen egen Gy25-punkt, och utan det här fältet gick det inte att se
+    # att provet hoppat över det. Se exam_gen.build_spridning och
+    # avsnittstackning.
+    #
+    # VALFRITT, och det är fail-open-villkoret: kassetterna och varje papper i
+    # basen skrevs innan fältet fanns, och täckningskontrollen tiger när ingen
+    # uppgift bär det. max_length=12 rymmer «1.2» med god marginal.
+    avsnitt: str | None = Field(default=None, max_length=12)
     bild: int | None = None              # 1-baserat index i provets bildunderlag
     losning: str = ""                    # tomt tillåtet när deluppgifter finns
     bedomning: str = ""                  # tomt tillåtet när deluppgifter finns
