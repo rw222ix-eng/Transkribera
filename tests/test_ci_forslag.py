@@ -348,3 +348,27 @@ def test_rutten_ar_fail_open_nar_modellen_svarar_skrap(llm_ready, fejk_claude):
     assert res["punkter"] == [] and res["osakra"] == []
     assert res["tomt_skal"]
     assert not [e for e in _events(r) if e["type"] == "error"]
+
+
+# ── Sidtexten sprids över spannets avsnitt ───────────────────────────────
+# Skarpt 2026-09-06: s. 4–58 i Origo 2a (kap 1.1–1.3). Kapitel 1.1:s lästa
+# sidor åt hela budgeten, 1.2 och 1.3 nådde modellen bara som rubriker och
+# blev «osäkra» fast läraren pekat rakt på dem.
+
+def test_varje_avsnitt_i_spannet_far_sina_forsta_sidor_forst():
+    rad = {"avsnitt": [{"nr": "1.1", "titel": "Uttryck", "fran": 8, "till": 26},
+                       {"nr": "1.2", "titel": "Andragradsuttryck", "fran": 27, "till": 38},
+                       {"nr": "1.3", "titel": "Andragradsekvationer", "fran": 39, "till": 69},
+                       {"nr": "2.1", "titel": "Koordinatsystem", "fran": 70, "till": 76}]}
+    assert ci_forslag._avsnittens_forsta_sidor(rad, 4, 58) == {8, 9, 27, 28, 39, 40}
+    # Klipps till spannet: börjar spannet mitt i ett avsnitt är det spannets
+    # första sida som räknas, och ett avsnitt utanför spannet ger ingenting.
+    assert ci_forslag._avsnittens_forsta_sidor(rad, 30, 39) == {30, 31, 39}
+    assert ci_forslag._avsnittens_forsta_sidor({"avsnitt": []}, 4, 58) == set()
+
+
+def test_prompten_sager_att_avsnittsrubriken_ar_ett_bevis():
+    prompt = ci_forslag.build_ci_prompt(
+        [{"kod": "G25-M2A-ALG-5", "kort": "Andragradsekvationer", "text": "…"}],
+        "AVSNITT I SPANNET:\n- 1.3 Andragradsekvationer", "1.3 Andragradsekvationer")
+    assert "AVSNITTSRUBRIKERNA i spannet är starka bevis" in prompt

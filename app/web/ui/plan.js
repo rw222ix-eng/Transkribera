@@ -1475,6 +1475,16 @@
       ? gorForslag(nyckel.slice(1)) : gor(nyckel);
     if (window.ritaBrickor) window.ritaBrickor(chips, nycklar, bygg);
     else { chips.innerHTML = ''; nycklar.forEach(k => chips.appendChild(bygg(k))); }
+    /* ritaBrickor ÅTERANVÄNDER en bricka som redan står där (samma nyckel), och
+       då körs `gor` aldrig om. Diagnosens sjutton förkryssade brickor stod
+       redan när förslaget kom, så «Andragradsekvationer» behöll sin plats men
+       fick aldrig skälet — brickan som förvalet just satt var den enda utan
+       tooltip (skarpt 2026-09-06). Skälen skrivs därför om på plats, och tas
+       bort där de inte längre gäller. */
+    $$('.gychip', chips).forEach(b => {
+      const skal = skalen.get(b.textContent.trim());
+      if (skal) b.dataset.tip = skal; else delete b.dataset.tip;
+    });
     if (nycklar.length) chips.hidden = false;
     else setTimeout(() => { if (!chips.querySelector('[data-nyckel]:not([data-ut])')) chips.hidden = true; }, 260);
     /* En knapp bär både nivån och hur mycket av den som är taget. */

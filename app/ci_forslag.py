@@ -128,8 +128,17 @@ def kalltext(base: Path, db_file: Path, body: dict) -> tuple[str, str]:
                         etiketter.append("…")
                 # Budgeten räknas efter de andra källorna nedan; sidorna är den
                 # feta källan och ska fylla resten, inte tränga ut något.
-                sidtext = bok.uppslag_text(conn, bid, fran, till,
-                                           max_tecken=MAX_KALLTECKEN)
+                #
+                # `viktiga`: de första sidorna i VARJE avsnitt spannet rör.
+                # uppslag_text fyller annars i sidordning tills taket är nått,
+                # och på s. 4–58 i Origo 2a (kap 1.1–1.3) åt kapitel 1.1:s
+                # lästa sidor hela budgeten: 1.2 och 1.3 nådde modellen bara
+                # som rubriker och hamnade bland de osäkra fast läraren pekat
+                # rakt på dem (skarpt 2026-09-06). Med ett par sidor ur varje
+                # avsnitt först får alla delar av spannet en röst.
+                sidtext = bok.uppslag_text(
+                    conn, bid, fran, till, max_tecken=MAX_KALLTECKEN,
+                    viktiga=_avsnittens_forsta_sidor(rad, fran, till))
         finally:
             conn.close()
 
@@ -177,6 +186,24 @@ def kalltext(base: Path, db_file: Path, body: dict) -> tuple[str, str]:
     return "\n\n".join(d for d in delar if d.strip()), " · ".join(etiketter)
 
 
+def _avsnittens_forsta_sidor(rad: dict, fran: int, till: int,
+                             per_avsnitt: int = 2) -> set[int]:
+    """De första `per_avsnitt` sidorna i varje avsnitt som överlappar spannet,
+    klippta till spannet. Se kalltext: de går före i textbudgeten."""
+    ut: set[int] = set()
+    for a in (rad.get("avsnitt") or []):
+        try:
+            a_fran, a_till = int(a.get("fran") or 0), int(a.get("till") or 0)
+        except (TypeError, ValueError):
+            continue
+        if a_till < fran or a_fran > till:
+            continue
+        start = max(a_fran, fran)
+        for sida in range(start, min(start + per_avsnitt, till + 1, a_till + 1)):
+            ut.add(sida)
+    return ut
+
+
 def _avsnitt_i_spannet(rad: dict, fran: int, till: int) -> list[str]:
     """Avsnittsnamnen som ÖVERLAPPAR spannet, i bokens ordning. Registret läses
     en gång vid import (db.bok_avsnitt) och finns alltså även när ingen sida i
@@ -213,6 +240,11 @@ INSTRUKTION = (
     "uppgiftstypen som visar det. Aldrig ett sidnummer som inte står i "
     "materialet. Skälet skrivs på svenska med å, ä och ö: det skarpa svaret "
     "2026-09-06 skrev «tva obekanta» i det strukturerade fältet.\n"
+    "- AVSNITTSRUBRIKERNA i spannet är starka bevis: läraren valde just de "
+    "sidorna, och ett avsnitt vars rubrik namnger punktens begrepp («1.3 "
+    "Andragradsekvationer» mot punkten Andragradsekvationer) räknas som "
+    "tydligt behandlat även när avsnittets sidtext inte är med. Skälet är då "
+    "avsnittet.\n"
     "- Punkter som materialet MÖJLIGEN rör, men inte tydligt, läggs i "
     "`osakra`. De kryssas inte i åt läraren.\n"
     "- Att båda listorna är tomma är ett giltigt och ofta riktigt svar.\n"
