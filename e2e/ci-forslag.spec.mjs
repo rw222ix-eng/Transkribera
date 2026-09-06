@@ -57,7 +57,8 @@ const strom = h => h.map(x => `data: ${JSON.stringify(x)}\n\n`).join("");
 /** Fejkar datagrunden och hyllan. Förslagsrutten går till den RIKTIGA servern
     om inte `svar` eller `fel` ges. `anrop` samlar kropparna, så «ingen begäran
     alls» går att pröva lika hårt som en begäran. */
-async function fejka(page, { poster = [], svar = null, fel = false } = {}) {
+async function fejka(page, { poster = [], svar = null, fel = false,
+                             drojsmal = 0 } = {}) {
   const anrop = [];
   /* Begäran räknas på vägen ut och inte i en rutt: då mäter samma rad både den
      mockade och den riktiga vägen. */
@@ -90,9 +91,14 @@ async function fejka(page, { poster = [], svar = null, fel = false } = {}) {
          ska tiga om det, inte skriva en rad om något läraren inte bett om. */
       if (fel) return route.fulfill({ status: 500, contentType: "application/json",
                                       body: JSON.stringify({ error: "nej" }) });
-      return route.fulfill({ status: 200, contentType: "text/event-stream",
+      /* `drojsmal` håller svaret i luften, så att en gest hinner före det.
+         Avbryter klienten under tiden finns ingen begäran att fylla, och det
+         ska inte fälla testet. */
+      const svara = () => route.fulfill({ status: 200, contentType: "text/event-stream",
         body: strom([{ type: "progress", message: "Läser underlaget …" },
-                     { type: "done", result: svar }]) });
+                     { type: "done", result: svar }]) }).catch(() => {});
+      if (drojsmal) return new Promise(r => setTimeout(r, drojsmal)).then(svara);
+      return svara();
     });
   }
   return anrop;
@@ -252,16 +258,27 @@ test("ett fel är tyst, ingen påhittad förvalsrad", async ({ page }) => {
 
 /* ── 5 · Rangordningen mellan förvalen ──────────────── */
 
-test("har läraren skrivit punkterna i kalendern frågas modellen inte",
+test("har läraren skrivit punkterna i kalendern står de kvar, modellen får bara föreslå",
   async ({ page }) => {
-    const anrop = await fejka(page, { poster: [KALENDERPROV] });
+    /* Förr tystade kalendern frågan helt. Sedan 2026-09-05 frågas modellen
+       ändå (plan.js forslagNu: bytet av spann gav annars en not som ljög),
+       men kalenderns punkter är lärarens egna ord och räknas som hennes hand:
+       de står kvar ikryssade, och modellens punkter läggs BREDVID som förslag.
+       Testet mätte den gamla regeln och stod rött. */
+    const anrop = await fejka(page, {
+      poster: [KALENDERPROV],
+      svar: { punkter: [{ kod: "G25-M2A-ALG-8", skal: "x" }],
+              osakra: [], kalla: "Boken", tomt_skal: "" },
+    });
     await planeringen(page, "Prov", "2026-10-01");
     await slarUpp(page);
-    await stillhet(page);
     /* Kalendern svarade, och det är lärarens eget svar. */
-    await expect(noten(page)).toContainText("Ur kalendern: 1 punkt");
+    await expect(noten(page)).toContainText("Ur kalendern: 1 punkt", SVAR_TID);
+    await expect(noten(page)).toContainText("underlaget föreslår", SVAR_TID);
     expect(await valda(page)).toEqual(["Exponentialekvationer"]);
-    expect(anrop).toEqual([]);
+    expect(anrop.length).toBe(1);
+    /* Modellens punkt ligger som förslag, inte som kryss. */
+    await expect(page.locator("#gychips .gyforslag")).toHaveCount(1);
   });
 
 test("anteckningarna har inget centralt innehåll och frågar aldrig",
@@ -297,5 +314,45 @@ test("en omkörning kostar inget nytt anrop, svaret ritas om ur minnet",
     await tillSteg(page, 4);
     await expect(noten(page)).toContainText("Ur underlaget");
     await stillhet(page);
+    expect(anrop.length).toBe(1);
+  });
+
+/* ── 4 · Skriv före förslaget ───────────────────────── */
+
+test("trycker läraren Skriv innan förslaget kommit skrivs pappret utan det",
+  async ({ page }) => {
+    /* Lärarens ord (2026-09-06): «om man klickar på generera innan detta har
+       laddats klart och blivit förvalt skall det bara genereras utan det
+       centrala innehållet i beaktning. Det är ett aktivt val.» Förr byggdes
+       begäran först när sidorna var lästa, och kryssen lästes då: ett förslag
+       som kom emellan förkryssade punkterna och de följde med i provet. */
+    const anrop = await fejka(page, {
+      svar: { punkter: [{ kod: "G25-M2A-ALG-5", skal: "x" }],
+              osakra: [], kalla: "Boken", tomt_skal: "" },
+      drojsmal: 4000,
+    });
+    const skrivningar = [];
+    await page.route("**/api/exams/generate", route => {
+      skrivningar.push(route.request().postDataJSON());
+      return route.fulfill({ status: 200, contentType: "text/event-stream",
+        body: strom([{ type: "error", message: "fejkad skrivning" }]) });
+    });
+    await planeringen(page, "Prov");
+    await slarUpp(page);
+    await expect(noten(page)).toContainText("Läser underlaget");
+
+    /* Nivåvarningen kan be om ett andra tryck: klicka tills begäran gått. */
+    await expect.poll(async () => {
+      await page.locator("#skriv").click();
+      await page.waitForTimeout(400);
+      return skrivningar.length;
+    }, { timeout: 8000 }).toBeGreaterThan(0);
+
+    expect(skrivningar[0].punkter).toEqual([]);
+    expect(skrivningar[0].punkter_text).toEqual([]);
+    await expect(noten(page)).toContainText("avbröts");
+    /* Det sena svaret får inte rita: kryssen står tomma också efter dröjsmålet. */
+    await page.waitForTimeout(4500);
+    expect(await valda(page)).toEqual([]);
     expect(anrop.length).toBe(1);
   });

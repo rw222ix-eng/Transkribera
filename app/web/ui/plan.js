@@ -1630,6 +1630,7 @@
   let forslagT = null;         // debouncen
   let forslagNr = 0;           // löpnummer: bara det SENASTE svaret får rita
   let forslagAvbryt = null;    // begäran som är i luften
+  let forslagIluften = false;  // sant från avsändning till svar (eller avbrott)
   let forslaget = null;        // {nyckel, punkter, osakra, kalla, tomt_skal}
   let kalendernTog = false;    // kalenderpunkter() hann före (sätts där)
   let kalendernot = '';        // kalenderns egen not, så att förslaget kan ställa sig bredvid den
@@ -1710,6 +1711,7 @@
     const nr = ++forslagNr;
     if (forslagAvbryt) forslagAvbryt.abort();
     const styr = forslagAvbryt = new AbortController();
+    forslagIluften = true;
     gynot('Läser underlaget mot centralt innehåll …');
     let svar = null;
     try {
@@ -1725,10 +1727,11 @@
          rad som säger «det gick inte» där ett förval skulle stått är en
          påminnelse om något hon inte saknade. Är svaret dessutom överspelat av
          ett nyare rörs ingenting alls. */
-      if (nr === forslagNr) gynot('');
+      if (nr === forslagNr) { forslagIluften = false; gynot(''); }
       return;
     }
     if (nr !== forslagNr) return;
+    forslagIluften = false;
     forslaget = tolkaForslaget(svar, nyckel);
     ritaForslaget(forslaget);
   }
@@ -2778,6 +2781,27 @@
     }
     skrivVarnat = 0;
     $('#skriv').disabled = true;
+    /* ── KLICKET FRYSER VALET AV CENTRALT INNEHÅLL ──────────
+       Kroppen till begäran byggs först när sidorna är lästa (`sidor(log)`
+       nedan), och kryssen lästes då, inte vid klicket. Kom underlagets förslag
+       (forslagNu) under tiden förkryssade det punkterna, och de följde med i
+       pappret fast läraren tryckt innan de fanns. Lärarens ord (2026-09-06):
+       «om man klickar på generera innan detta har laddats klart och blivit
+       förvalt skall det bara genereras utan det centrala innehållet i
+       beaktning. Det är ett aktivt val.» Så: valet fryses här, som det står,
+       och ett förslag i luften avbryts i stället för att få skriva om
+       kryssen efter att pappret redan skrivits mot dem. */
+    const punktval = { punkter: gyKoder(), punkter_text: [...vald] };
+    if (forslagIluften || forslagT) {
+      clearTimeout(forslagT);
+      forslagT = null;
+      forslagNr++;                          // ett sent svar får inte rita
+      if (forslagAvbryt) forslagAvbryt.abort();
+      forslagIluften = false;
+      gynot(punktval.punkter_text.length
+        ? 'Underlagets förslag avbröts: du tryckte Skriv innan det kom, pappret skrivs mot dina kryss.'
+        : 'Underlagets förslag avbröts: du tryckte Skriv innan det kom, pappret skrivs utan centralt innehåll.');
+    }
     const not = $('#plannot');
     const gammal = not.textContent;
     const underlag = valdaNamn();
@@ -2886,7 +2910,7 @@
          dokumentet och ingen bedömningsanvisning (routes_exam approve). */
       Prov: ({ signal, log }) => sidor(log).then(u => window.API.strom('/api/exams/generate', {
         kurs: utkast.kurs, klass: utkast.klass,
-        punkter: gyKoder(), punkter_text: [...vald],
+        ...punktval,
         antal: Number(i0.antal) || undefined,
         tid_min: Number(i0.provminuter) || undefined,
         delar: i0.delprov !== 'En del',
@@ -2912,7 +2936,7 @@
        ett papper i taget, för läraren ska läsa igenom varje. */
     JOBB.Arbetsblad = ({ signal, log }) => sidor(log).then(u => window.API.strom('/api/exams/generate', {
       kurs: utkast.kurs, klass: utkast.klass,
-      punkter: gyKoder(), punkter_text: [...vald],
+      ...punktval,
       antal: Number(i0.antal) || undefined,
       delar: false,
       datum: utkast.datum || '',
@@ -2954,7 +2978,7 @@
        väljarna här — inte ur modellens fantasi. */
     JOBB.Gruppuppgift = ({ signal, log }) => sidor(log).then(u => window.API.strom('/api/exams/generate', {
       kurs: utkast.kurs, klass: utkast.klass,
-      punkter: gyKoder(), punkter_text: [...vald],
+      ...punktval,
       /* Fyra är förvalet och kommer ur pappret: fyra rutor är vad ett A4 rymmer
          med plats att skriva på (gruppark.css). Det är inte längre ett lås —
          se «Antal uppgifter» i TYPVAL. */
