@@ -205,6 +205,21 @@ _DOMAR_VAL = [
     ("det här bladet", "nivadomare-blad"),
 ]
 
+# Kriteriedomaren (2026-09-07) är den ANDRA nivådomen och prövas FÖRE den blinda
+# av samma skäl som räknedomaren prövas före båda: dess prompt bär samma
+# uppgifter och samma rubrik, och den skiljs bara på sitt eget nyckelord
+# (exam_gen.KRITERIEDOMARE), som står i den prompten och ingen annanstans.
+# Banden delas per dokumenttyp på samma skala som de blinda, och av samma skäl:
+# uppgift 2a betyder olika saker i olika band.
+# HELA frasen, inte bara ordet: nivåfynden i en reparationsprompt SÄGER
+# «kriteriedomaren», och en repareringsrunda hade då fått domarbandet till svar
+# på en fråga om ett helt prov. Raden nedan står bara i build_kriterie_prompt.
+_KRITERIE = "Du är kriteriedomare"
+_KRITERIE_VAL = [
+    ("Gruppuppgiften är inte en trappa", "kriteriedomare-grupp"),
+    ("det här bladet", "kriteriedomare-blad"),
+]
+
 
 # Täckningsdomaren (tavlan) prövas FÖRST, av samma skäl som nivådomaren:
 # dess prompt bär hela tavlans JSON och bokblocket, och hade annars matchat
@@ -256,6 +271,11 @@ def _auto(prompt):
         return os.path.join(BAND, "raknedomare.json")
     if _BEDOMNING in prompt:
         return os.path.join(BAND, "bedomning.json")
+    if _KRITERIE in prompt:
+        for nyckel, namn in _KRITERIE_VAL:
+            if nyckel in prompt:
+                return os.path.join(BAND, namn + ".json")
+        return os.path.join(BAND, "kriteriedomare.json")
     if _DOMARE in prompt:
         for nyckel, namn in _DOMAR_VAL:
             if nyckel in prompt:

@@ -1637,35 +1637,41 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
 # anvisningar och utan elevlösningar — allt tre avslöjar facit — och klassar dem
 # blint. Avviker domen från poängsättningen går skillnaden in i den BEFINTLIGA
 # reparationsloopen som ett problem bland andra.
+#
+# SEDAN 2026-09-07 ÄR DOMEN DUBBEL. Läraren: «Domaren ska vara så pålitlig att
+# jag är tvärsäker på att en A-uppgift är A, en C-uppgift C och en E-uppgift E.»
+# Två anrop mot SAMMA rubrik med olika prompt — den blinda klassningen här och
+# kriteriedomaren längre ner — och en enhet är godkänd bara när BÅDA säger exakt
+# den nivå poängen påstår. Se avvikelser.
 
 DOMAR_MAX_TOKENS = 4_000
-# Hur många hela nivåsteg domen måste skilja sig för att fälla. 1 = E mot C
-# fäller. Höj till 2 om mätningen visar att domaren bråkar om gränsfall.
+# TOLERANSEN ÄR BORTA. Konstanten hette TOLERANS_STEG, sa hur många hela
+# nivåsteg domen måste skilja sig för att fälla, och stod på 1 — den fällde
+# alltså redan varje skillnad. Det som SLÄPPTE IGENOM var något annat: tystnad
+# (en enhet domaren inte nämnde) och «oklart» passerade båda, och en domare som
+# hoppade över halva pappret godkände det därmed. Nu frågas de överhoppade
+# enheterna EN gång till, och tiger domaren då är det ett fynd.
 #
-# MÄTT (planens C7, punkt 4) över de skarpa kassetterna, två inspelnings-
-# omgångar av samma tre dokument:
+# Vad den ENSAMMA blinda domaren fällde, mätt före omläggningen (planens C7,
+# punkt 4) över de skarpa kassetterna, två inspelningsomgångar av samma tre
+# dokument:
 #
 #     omgång 1:  prov 1/8    arbetsblad 0/6   gruppuppgift 1/12   =  2/26  (8 %)
 #     omgång 2:  prov 2/11   arbetsblad 0/7   gruppuppgift 6/11   =  8/29  (28 %)
 #
-# Spridningen mellan omgångarna är alltså större än skillnaden en toleranshöjning
-# skulle göra, och underlaget är ett dokument per typ och omgång. Därför står
-# toleransen kvar på 1: att skruva på den här siffran utifrån n=2 vore att
-# kalibrera mot brus. Två saker är ändå värda att veta innan någon rör den:
-# arbetsbladet föll ALDRIG (dess uppgifter är rutin, och där är domaren och
-# poängsättningen enkelt eniga), och gruppuppgiften står för nästan hela
-# utfallet. Det är väntat — gruppuppgiften är den enda profilen utan
-# balanserat skelett, så poängen är modellens eget påstående och ingen
-# grammatik håller emot. Domaren är därför mest värd där.
+# Två saker är värda att veta: arbetsbladet föll ALDRIG (dess uppgifter är
+# rutin, och där var domaren och poängsättningen enkelt eniga), och
+# gruppuppgiften stod för nästan hela utfallet. Det är väntat — gruppuppgiften
+# är den enda profilen utan balanserat skelett, så poängen är modellens eget
+# påstående och ingen grammatik håller emot. Siffrorna säger INGENTING om vad
+# den dubbla domen fäller; den är omätt.
 #
-# Domaren svarade «oklart» noll gånger i båda omgångarna. Toleransen bärs i
-# praktiken av tystnad (en enhet domaren inte nämner fälls aldrig), inte av
-# att den hedgar.
-TOLERANS_STEG = 1
-# Taket på hur många nivåproblem som får gå in i EN reparationsprompt. Fler än
-# så är inte en lista fel utan ett underkänt prov, och då är det bättre att
-# rätta de tyngsta och visa resten för läraren än att be om allt på en gång.
-MAX_DOMAR_PROBLEM = 6
+# Taket på hur många fynd som får gå in i EN reparationsprompt. Det var 6, med
+# skälet att fler än så är ett underkänt prov och att det då är bättre att rätta
+# de tyngsta. Skälet höll inte när grinden kom (se _niva_grind): ett fynd som
+# faller utanför taket blir aldrig lagat OCH står inte kvar i listan, och då
+# passerar det grinden tyst. Hellre en lång prompt än ett osynligt fynd.
+MAX_DOMAR_PROBLEM = 30
 
 _NIVA_ORD = {"E": 0, "C": 1, "A": 2}
 
@@ -1721,6 +1727,13 @@ def _niva_ur_poang(poang) -> str | None:
     if c > 0:
         return "C"
     return "E" if e > 0 else None
+
+
+def _uppgiftsnr(nr: str) -> int:
+    """«7b» → 7. Enhetens nummer är uppgiftens med bokstav för deluppgift, och
+    det är UPPGIFTEN en riktad omskrivning kan peka på."""
+    siffror = re.match(r"\d+", str(nr or ""))
+    return int(siffror.group()) if siffror else 0
 
 
 def domarenheter(exam: dict) -> list[dict]:
@@ -1800,7 +1813,114 @@ def build_domar_prompt(enheter: list[dict], *, skala: str = "") -> str:
         "en kort motivering på en mening. Döm på vad uppgiften KRÄVER av "
         "eleven, inte på hur den låter. Ligger en uppgift ärligt mitt emellan "
         "två nivåer svarar du \"oklart\" — det är ett riktigt svar, och bättre "
-        "än en gissning. Svara med enbart JSON."
+        "än en gissning; uppgiften skrivs då om tills nivån är otvetydig. "
+        "Svara med enbart JSON."
+    )
+
+
+# ── Kriteriedomaren: den andra domen ──────────────────────────────────────
+# Samma rubrik, samma uppgifter, samma temperature 0 — men modellen får INTE
+# svara med en nivå först. Den fyller en checklista ur rubriken, och nivån
+# faller ut ur kryssen. Skälet är att den blinda klassningen är en helhets-
+# känsla, och två helhetskänslor från samma modell är inte två oberoende domar:
+# de missar samma sak. Checklistan tvingar fram det uppgiften KRÄVER innan
+# nivån får sägas, och det var precis där prov 51 sprack — uppgift 7 (teckna
+# (x+2)²−x² och förenkla) kräver kvadreringsregeln, och rubriken säger själv
+# att en omskrivning FÖRE standardmetoden är C.
+#
+# Varje kriterium nedan är en mening ur niva_rubrik.RUBRIK_GENERELL eller
+# STEGET_UPP, inget påhittat: rubriken är destillerad ur tio nationella prov,
+# och en checklista med egna kriterier hade mätt något annat än pappret skrevs
+# mot.
+KRITERIEDOMARE = "kriteriedomare"       # nyckelordet står BARA i prompten nedan
+
+# (fält, frågan modellen svarar på, nivån ett ja betyder)
+KRITERIER: list[tuple[str, str, str]] = [
+    ("rakneregel",
+     "Krävs en omskrivning eller en räknelag INNAN standardmetoden går att "
+     "använda — kvadreringsregeln, konjugatregeln, en potenslag, en "
+     "logaritmlag?", "C"),
+    ("generellt",
+     "Ska eleven visa att ett påstående gäller GENERELLT — «visa att», "
+     "«bevisa», «gäller för alla x» — med sanningsvärdet givet på förhand?",
+     "C"),
+    ("flerstegs",
+     "Ska eleven själv ställa upp modellen ur en text, hålla flera villkor "
+     "samman samtidigt, eller binda ihop två representationer?", "C"),
+    ("insikt",
+     "Löser ingen standardmetod uppgiften direkt — krävs det att eleven SER "
+     "något (ett uttryck som en enhet, symmetri, att diskriminanten är "
+     "negativ)? Fler räknesteg räknas INTE som insikt.", "A"),
+    ("motexempel",
+     "Är sanningsvärdet okänt («undersök om», «går det?»), eller krävs ett "
+     "motexempel med ett tal som inte är det uppenbara, eller att ALLA fall "
+     "täcks?", "A"),
+]
+
+# Resonemangsordet är rubrikens eget: enkelt = E, välgrundat = C, nyanserat = A.
+_RESONEMANG_NIVA = {"inget": "E", "enkelt": "E", "välgrundat": "C",
+                    "valgrundat": "C", "nyanserat": "A"}
+
+DOMAR_KRIT_SYSTEM = (
+    "Du är kriteriedomare för svenska nationella prov i matematik. Du får "
+    "uppgifter UTAN poängsättning. För varje uppgift fyller du FÖRST i "
+    "checklistan och säger nivån EFTERÅT — aldrig tvärtom. Du svarar ALLTID "
+    "med giltig JSON enligt schemat, ingenting annat."
+)
+
+DOMAR_KRIT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "domar": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                # ORDNINGEN ÄR SJÄLVA POÄNGEN. Grammatiken skriver fälten i
+                # schemats ordning, så kryssen är satta innan nivån skrivs —
+                # modellen kan inte välja nivå först och fylla i checklistan så
+                # att den passar.
+                "properties": {
+                    "nr": {"type": "string"},
+                    **{f: {"type": "boolean"} for f, _q, _n in KRITERIER},
+                    "resonemang": {"type": "string",
+                                   "enum": ["inget", "enkelt", "välgrundat",
+                                            "nyanserat"]},
+                    "niva": {"type": "string",
+                             "enum": ["E", "C", "A", "oklart"]},
+                    "motivering": {"type": "string"},
+                },
+                "required": ["nr", *[f for f, _q, _n in KRITERIER],
+                             "resonemang", "niva"],
+            },
+        },
+    },
+    "required": ["domar"],
+}
+
+
+def build_kriterie_prompt(enheter: list[dict], *, skala: str = "") -> str:
+    """Kriteriedomarens prompt. Samma `skala` som den blinda domarens — båda
+    ska mäta mot den rubrik dokumentet skrevs mot, annars är de inte två domar
+    om samma sak utan två svar på olika frågor."""
+    kort = [{"nr": e["nr"], **e["kort"]} for e in enheter]
+    lista = "\n".join(f"- {falt}: {fraga} (ja ⇒ minst {niva})"
+                      for falt, fraga, niva in KRITERIER)
+    return (
+        (skala or niva_rubrik.build_niva_block()) + "\n\n"
+        f"Du är {KRITERIEDOMARE}. Nedan står uppgifterna ur ett dokument, UTAN "
+        "poäng och utan bedömningsanvisningar.\n"
+        f"{json.dumps(kort, ensure_ascii=False)}\n\n"
+        "För VARJE uppgift svarar du först ja eller nej på checklistan, och "
+        "sedan vilken nivå uppgiften ligger på:\n"
+        f"{lista}\n"
+        "- resonemang: vilket resonemang uppgiften kräver — inget, enkelt, "
+        "välgrundat eller nyanserat.\n\n"
+        "Nivån följer kryssen: är något A-kriterium sant, eller är "
+        "resonemanget nyanserat, är nivån A. Annars, är något C-kriterium "
+        "sant eller resonemanget välgrundat, är nivån C. Annars E. Går "
+        "checklistan inte att fylla i för uppgiften — den hänvisar till en "
+        "figur du inte ser, eller är obegriplig — svarar du \"oklart\" på "
+        "nivån. Svara med enbart JSON."
     )
 
 
@@ -1822,15 +1942,36 @@ def _parse_domar(raw: str) -> dict[str, dict]:
         niva = str(d.get("niva") or "").strip().upper()
         if not nr:
             continue
+        # Checklistan följer med när den finns (kriteriedomaren) — den är
+        # domarens SKÄL, och ett fynd som säger «kryssade rakneregel» går att
+        # kontrollera. Den blinda domaren skickar inga kryss och får inga.
+        kryss = [f for f, _q, _n in KRITERIER if d.get(f) is True]
         ut[nr] = {"niva": niva if niva in _NIVA_ORD else "OKLART",
-                  "motivering": str(d.get("motivering") or "").strip()}
+                  "motivering": str(d.get("motivering") or "").strip(),
+                  "kryss": kryss,
+                  "resonemang": str(d.get("resonemang") or "").strip()}
     return ut
 
 
-def _niva_problem(enhet: dict, dom: dict) -> dict:
+def _kryssraden(dom: dict | None) -> str:
+    """Kriteriedomarens kryss som en läsbar rad, tom när det inte fanns några."""
+    if not dom:
+        return ""
+    delar = list(dom.get("kryss") or [])
+    res = dom.get("resonemang") or ""
+    if res and res != "inget":
+        delar.append(f"resonemang: {res}")
+    return ", ".join(delar)
+
+
+def _niva_problem(enhet: dict, dom: dict, andra: dict | None = None) -> dict:
     """Avvikelsen formulerad som en ÅTGÄRD. En rad som bara konstaterar att
     nivåerna skiljer sig ger modellen inget att göra; den här säger vad som ska
-    ändras och enligt vilken beskrivning."""
+    ändras och enligt vilken beskrivning.
+
+    `andra` är den andra domarens svar, och står med när de två är oense: då är
+    det inte en dom mot poängen utan tre olika svar på samma fråga, och
+    reparationen ska veta att uppgiften är otydlig och inte bara felplacerad."""
     pastadd, domd = enhet["niva"], dom["niva"]
     riktning = "höj" if _NIVA_ORD[domd] < _NIVA_ORD[pastadd] else "sänk"
     krav = niva_rubrik.RUBRIK_PER_TYP.get(enhet["typ"], {}).get(pastadd, "")
@@ -1840,55 +1981,161 @@ def _niva_problem(enhet: dict, dom: dict) -> dict:
             f"{pastadd}.")
     if dom.get("motivering"):
         text += f" Bedömarens skäl: {dom['motivering']}"
+    kryss = _kryssraden(dom) or _kryssraden(andra)
+    if kryss:
+        text += f" Kriterier som slog till: {kryss}."
+    if andra and andra.get("niva") != domd:
+        text += (f" Den andra bedömaren sa {andra['niva']} — uppgiften är "
+                 "otydlig och ska skrivas om så nivån blir entydig.")
     if krav:
         text += f" {pastadd} för en {enhet['typ']}suppgift: {krav}"
     if riktning == "höj" and steget:
         text += f" Steget {domd}→{pastadd}: {steget}"
-    return _err(f"uppgift {enhet['nr']}", "niva", text)
+    return _fynd(enhet, domd, text)
 
 
-def avvikelser(enheter: list[dict], domar: dict[str, dict]) -> list[dict]:
-    """Domen mot poängsättningen. Enheter domaren inte nämnde, eller svarade
-    «oklart» om, passerar — toleransen ligger i att INTE tolka tystnad."""
+def _fynd(enhet: dict, domd: str, text: str) -> dict:
+    """Nivåfyndet i felens form PLUS de fält grinden och panelen läser
+    (`nivafel`): numret läraren ser, den påstådda nivån och den dömda."""
+    return {**_err(f"uppgift {enhet['nr']}", "niva", text),
+            "nr": enhet["nr"], "pastadd": enhet["niva"], "domd": domd,
+            "skal": text}
+
+
+def avvikelser(enheter: list[dict], domar: dict[str, dict],
+               krit: dict[str, dict] | None = None) -> list[dict]:
+    """DUBBELDOMEN mot poängsättningen. En enhet är godkänd bara när BÅDA
+    domarna säger exakt den nivå poängen påstår.
+
+    Fyra utfall är fynd, och det tredje och fjärde är de nya:
+
+    * någon domare säger en annan nivå än poängen,
+    * de två domarna säger olika,
+    * någon svarar «oklart» — en uppgift vars nivå inte går att avgöra är inte
+      en uppgift läraren kan vara tvärsäker på,
+    * någon nämner inte enheten alls. Tystnaden är då redan omfrågad en gång
+      (se _fraga_domare); står den kvar är det ett fynd och inte ett medhåll.
+
+    `krit` utelämnad betyder att samma dom prövas mot sig själv — den formen
+    finns för kassettestet, som spelar ETT band."""
+    krit = domar if krit is None else krit
     ut = []
     for e in enheter:
-        dom = domar.get(e["nr"])
-        if not dom or dom["niva"] not in _NIVA_ORD:
+        blind, kri = domar.get(e["nr"]), krit.get(e["nr"])
+        tysta = [namn for namn, d in (("den blinda bedömaren", blind),
+                                      ("kriteriedomaren", kri)) if not d]
+        if tysta:
+            ut.append(_fynd(e, "?",
+                            f"uppgift {e['nr']} är poängsatt {e['niva']} men "
+                            f"{' och '.join(tysta)} nämnde den inte, inte "
+                            "heller på omfrågan. Skriv om uppgiften så att det "
+                            f"går att se att den är {e['niva']}."))
             continue
-        if abs(_NIVA_ORD[dom["niva"]] - _NIVA_ORD[e["niva"]]) < TOLERANS_STEG:
+        oklara = [namn for namn, d in (("den blinda bedömaren", blind),
+                                       ("kriteriedomaren", kri))
+                  if d["niva"] not in _NIVA_ORD]
+        if oklara:
+            ut.append(_fynd(e, "oklart",
+                            f"uppgift {e['nr']} är poängsatt {e['niva']} men "
+                            f"{' och '.join(oklara)} kunde inte avgöra nivån. "
+                            "Skriv om uppgiften så att den entydigt kräver "
+                            f"{e['niva']}-färdighet — och bara den."))
             continue
-        ut.append(_niva_problem(e, dom))
+        if blind["niva"] == e["niva"] == kri["niva"]:
+            continue
+        # Den domare som säger emot poängen får formulera fyndet; är båda oense
+        # med poängen men eniga med varandra är det den blindas ord som står,
+        # och kriteriedomarens kryss läggs till som skäl.
+        oense = kri if blind["niva"] == e["niva"] else blind
+        ut.append(_niva_problem(e, oense, kri if oense is blind else blind))
     return ut[:MAX_DOMAR_PROBLEM]
 
 
-def doma_nivaer(exam: dict, *, model: str, llm=llm_client.generate,
-                skala: str = "",
-                log_cb: Callable[[str], None] | None = None) -> list[dict]:
-    """Ett blint domaranrop → avvikelser mot poängsättningen."""
-    log = log_cb or (lambda _m: None)
-    enheter = domarenheter(exam)
-    if not enheter:
-        return []
-    log("Kontrollerar uppgifternas nivå …")
-    try:
-        raw = llm(
-            model, build_domar_prompt(enheter, skala=skala),
-            system=DOMAR_SYSTEM,
+def _fraga_domare(enheter: list[dict], *, model: str, llm, skala: str,
+                  krit: bool, log) -> tuple[dict[str, dict], bool]:
+    """Ett domaranrop, plus EN omfrågan på de enheter domaren hoppade över.
+
+    Returnerar ``(domar, kördes)``. ``kördes=False`` betyder att anropet FÖLL —
+    modellen borta, kvoten slut, nätet nere. Pappret levereras ändå (det är
+    färdigt och validerat), men då ska läraren få veta att kontrollen inte
+    kördes i stället för att tystnaden ser ut som ett godkännande.
+
+    Omfrågan är inte artighet: tystnad är det enda sättet en domare kan
+    «godkänna» en uppgift utan att ha tittat på den, och att fråga en gång till
+    kostar ett litet anrop på de få enheter som föll bort."""
+    bygg = build_kriterie_prompt if krit else build_domar_prompt
+    system = DOMAR_KRIT_SYSTEM if krit else DOMAR_SYSTEM
+    namn = "kriteriedom" if krit else "nivadom"
+    schema = DOMAR_KRIT_SCHEMA if krit else DOMAR_SCHEMA
+
+    def anrop(rader: list[dict]) -> dict[str, dict]:
+        return _parse_domar(llm(
+            model, bygg(rader, skala=skala),
+            system=system,
             options={"temperature": 0.0},
             response_format={"type": "json_schema",
-                             "json_schema": {"name": "nivadom",
-                                             "schema": DOMAR_SCHEMA}},
+                             "json_schema": {"name": namn, "schema": schema}},
             max_tokens=DOMAR_MAX_TOKENS,
             token_cb=None,
-        )
+        ))
+
+    try:
+        domar = anrop(enheter)
+        saknas = [e for e in enheter if e["nr"] not in domar]
+        if saknas:
+            log(f"{len(saknas)} uppgift(er) fick ingen nivådom — frågar igen …")
+            domar = {**domar, **anrop(saknas)}
     except Exception as e:                          # noqa: BLE001
-        # Domaren är en EXTRA kontroll. Faller anropet — modellen borta, kvoten
-        # slut, nätet nere — ska provet ändå levereras: det är färdigt och
-        # validerat, och att kasta bort det för att en frivillig kvalitetskoll
-        # inte gick igenom vore att straffa läraren för fel sak.
         log(f"Nivåkontrollen kunde inte köras ({e}) — provet levereras ändå.")
-        return []
-    return avvikelser(enheter, _parse_domar(raw))
+        return {}, False
+    if not domar:
+        # INGEN enhet fick en dom. Det är inte tystnad om enskilda uppgifter
+        # utan ett svar som inte gick att tolka alls — modellen svarade med
+        # prosa, schemat föll, strömmen kapades. En trasig kontroll ska aldrig
+        # kunna underkänna ett papper som är rätt; den ska säga att den inte
+        # kördes, och det gör `kördes=False`.
+        log("Nivåkontrollen gav inget svar att tolka — provet levereras ändå.")
+        return {}, False
+    return domar, True
+
+
+def niva_fynd(exam: dict, *, model: str, llm=llm_client.generate,
+              skala: str = "", niva_mal: dict | None = None,
+              bara: list[int] | None = None,
+              log_cb: Callable[[str], None] | None = None
+              ) -> tuple[list[dict], bool]:
+    """Hela nivåkontrollen: två oberoende domar plus de deterministiska
+    E-signalerna. Returnerar ``(fynd, kördes)``.
+
+    `bara` begränsar kontrollen till vissa uppgiftsnummer. Grinden använder det
+    när den prövar om en omskrivning hjälpte: då är det de rörda uppgifterna
+    som ska dömas om, inte hela pappret en gång till."""
+    log = log_cb or (lambda _m: None)
+    enheter = domarenheter(exam)
+    if bara is not None:
+        enheter = [e for e in enheter if _uppgiftsnr(e["nr"]) in set(bara)]
+    if not enheter:
+        return [], True
+    log("Kontrollerar uppgifternas nivå …")
+    blind, ok = _fraga_domare(enheter, model=model, llm=llm, skala=skala,
+                              krit=False, log=log)
+    if not ok:
+        return [], False
+    krit, ok = _fraga_domare(enheter, model=model, llm=llm, skala=skala,
+                             krit=True, log=log)
+    if not ok:
+        return [], False
+    return (avvikelser(enheter, blind, krit)
+            + e_nivasignaler(enheter, niva_mal)), True
+
+
+def doma_nivaer(exam: dict, *, model: str, llm=llm_client.generate,
+                skala: str = "", niva_mal: dict | None = None,
+                log_cb: Callable[[str], None] | None = None) -> list[dict]:
+    """Dubbeldomen → avvikelser mot poängsättningen. Fail-open: föll anropet
+    fälls ingenting här, och att det inte kördes bärs av `niva_fynd`."""
+    return niva_fynd(exam, model=model, llm=llm, skala=skala,
+                     niva_mal=niva_mal, log_cb=log_cb)[0]
 
 
 # ──────────────────────────────────────────────────── räknedomaren ────────
@@ -2493,6 +2740,93 @@ def nivasignaler(exam: dict) -> list[dict]:
                            f"uppgift {nr} är formulerad som en utredning men "
                            "ger bara E-poäng — den formen förekommer inte på "
                            "E-nivå i underlaget."))
+    return ut
+
+
+# ── E-signalerna: deterministiska nivåFYND på ett rent E-papper ───────────
+# Signalerna ovan är varningar och fäller aldrig ensamma. De här FÄLLER, och
+# skillnaden har ett skarpt skäl: exam 51 («Bara E», NA26F) fick uppgift 7
+# (teckna (x+2)²−x² och förenkla), 9 (är √a<a för alla positiva a — motexemplet
+# kräver 0<a<1) och 12 («(x+4)²−(x−4)²=16x för alla x, avgör») som E-uppgifter,
+# fast niva_rubrik SJÄLV säger att en omskrivning före standardmetoden är C och
+# att «visa att det alltid gäller» är C. Ett papper läraren ger den som ska nå E
+# får inte bära tre C-uppgifter som säger E.
+#
+# BARA på rena E-papper (exam_spec.ren_e_band: lärarens nivåval stänger både C
+# och A). På ett blandat papper är samma innehåll inte fel — där är det
+# dubbeldomen som prövar var uppgiften hör hemma — och en vakt som fäller
+# lagliga C-uppgifter vore värdelös på samma sätt som signalerna ovan en gång
+# var.
+
+# Kvadreringsregeln: en parentes med två termer, upphöjd till två. LaTeX skriver
+# både (x+2)^2 och (x+2)^{2}, skärmen ibland (x+2)². Parentesen måste bära en
+# BOKSTAV — «(3+4)^2» är räkneordning och inte kvadreringsregeln.
+_KVADRAT_RE = re.compile(
+    r"\(([^()]{1,40}?[+\-−][^()]{1,40}?)\)\s*(?:\^\s*\{?\s*2|²)")
+_BOKSTAV_RE = re.compile(r"[A-Za-zÅÄÖåäö]")
+# Två parenteser i rad — konjugatregeln prövas på deras termer, se _konjugat.
+_PARPAR_RE = re.compile(r"\(([^()]{1,40})\)\s*\\?[·*]?\s*\(([^()]{1,40})\)")
+_TERMER_RE = re.compile(r"^\s*(.+?)\s*([+\-−])\s*(.+?)\s*$")
+# Generellt bevis: sanningsvärdet är givet och ska visas gälla för ALLA.
+_GENERELLT_RE = re.compile(
+    r"(visa att|bevisa|för alla|för varje|\balltid\b|oavsett vilket)", re.I)
+# Motexempel: lösningen bärs av ETT tal som eleven själv måste hitta.
+_MOTEXEMPEL_RE = re.compile(r"motexempel|ett exempel som visar", re.I)
+
+
+def _kvadrering(text: str) -> bool:
+    """(a+b)² med en bokstav i parentesen — kvadreringsregeln, inte räkneordning."""
+    return any(_BOKSTAV_RE.search(m) for m in _KVADRAT_RE.findall(text or ""))
+
+
+def _konjugat(text: str) -> bool:
+    """(a+b)(a−b) — samma två termer, olika tecken, i två parenteser i rad."""
+    for vanster, hoger in _PARPAR_RE.findall(text or ""):
+        v, h = _TERMER_RE.match(vanster), _TERMER_RE.match(hoger)
+        if not (v and h):
+            continue
+        if (v.group(1) == h.group(1) and v.group(3) == h.group(3)
+                and v.group(2) != h.group(2)):
+            return True
+    return False
+
+
+def e_nivasignaler(enheter: list[dict], niva_mal: dict | None) -> list[dict]:
+    """Nivåfynd som ingen modell behöver för att hittas. Tom lista när pappret
+    inte är ett rent E-papper.
+
+    Tar `enheter` och inte `exam` därför att grinden dömer om en delmängd, och
+    en vakt som ändå läste hela pappret hade fällt uppgifter omskrivningen inte
+    fick röra."""
+    if not exam_spec.ren_e_band(niva_mal):
+        return []
+    ut: list[dict] = []
+    for e in enheter:
+        if e["niva"] != "E":
+            continue
+        nr = e["nr"]
+        text = f"{e['kort'].get('stam', '')} {e['kort'].get('text', '')}"
+        losning = e["kort"].get("losning", "") or ""
+        if _kvadrering(text) or _konjugat(text):
+            ut.append(_fynd(e, "C",
+                            f"uppgift {nr} ger bara E-poäng men kräver "
+                            "kvadreringsregeln eller konjugatregeln: en "
+                            "omskrivning FÖRE standardmetoden är C i "
+                            "nationella provet. Byt uppgiften mot en där "
+                            "metoden är utpekad och räkningen går framlänges."))
+        elif _GENERELLT_RE.search(text):
+            ut.append(_fynd(e, "C",
+                            f"uppgift {nr} ger bara E-poäng men ber eleven "
+                            "visa att något gäller generellt — den formen är C "
+                            "i nationella provet. Fråga i stället efter ett "
+                            "värde eller ett uttryck i ett givet fall."))
+        elif e.get("formaga") == "R" and _MOTEXEMPEL_RE.search(losning):
+            ut.append(_fynd(e, "A",
+                            f"uppgift {nr} ger bara E-poäng men löses med ett "
+                            "motexempel eleven själv måste hitta. Ett tal som "
+                            "inte är det uppenbara är A i nationella provet. "
+                            "Byt mot en uppgift med ett givet fall att räkna "
+                            "på."))
     return ut
 
 
@@ -3538,39 +3872,49 @@ def _domar_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                 log_cb: Callable[[str], None] | None = None) -> dict:
     """Domarrundan + högst EN reparationsrunda på dess fynd (C4).
 
-    TVÅ domare, båda blinda, båda i SAMMA pass och samma reparationsrunda:
-    nivådomaren frågar om uppgiften ligger rätt, räknedomaren om facit stämmer
-    med uppgiftens tal. De kostar ett modellanrop var; reparationen kostar en
-    runda, och den delas.
+    TRE domaranrop, alla blinda, alla i SAMMA pass och samma reparationsrunda:
+    nivådomen är DUBBEL (den blinda klassningen och kriteriedomaren, se
+    avvikelser) och räknedomaren frågar om facit stämmer med uppgiftens tal.
+    Reparationen kostar en runda, och den delas.
 
     Ligger efter balansreparationen med flit: domarna ska läsa det dokument
     läraren annars hade fått, inte ett halvfärdigt mellanläge.
 
-    EN runda, och passet körs bara en gång — domen prövas alltså aldrig om.
-    Det är avsiktligt: en andra runda kan kosta ännu en generering, och en loop
-    som får spinna på nivåbedömningar spinner på subjektiva gränsdragningar.
-    Nivådomarens fällfrekvens är MÄTT över kassetterna (planens C7, punkt 4);
-    RÄKNEDOMARENS ÄR DET INTE — den tillkom 2026-08-23 och har ett band, på ett
-    dokument. Skruva inte upp något innan båda är mätta.
+    EN runda här, och passet körs bara en gång. Nivåfynden får sedan upp till
+    två EXTRA riktade rundor i grinden (_niva_grind) — räknedomens och
+    porträttets fynd får det inte, av samma skäl som förut: en loop som spinner
+    på nivåbedömningar spinner på subjektiva gränsdragningar, och det är bara
+    nivån läraren krävde garanti för.
 
     Talsignalerna är varningar OCH reparationsunderlag: de fäller aldrig
     ensamma (då hade en fråga om talens smak kunnat kosta en runda), men när
     domarna ändå fällt något åker de med in i prompten — rundan är redan
-    betald, och talen är sällan ensamma om att vara fel."""
+    betald, och talen är sällan ensamma om att vara fel.
+
+    Utöver `exam`/`errors`/`rounds` bär svaret tre fält grinden läser:
+    ``nivafynd`` (nivåfynden som de såg ut), ``nivakoll`` (kördes kontrollen
+    alls) och ``nivamatt`` (gäller fynden det dokument som lämnas tillbaka,
+    eller skrevs det om efteråt)."""
     log = log_cb or (lambda _m: None)
     signaler = _signaler(exam)
+    niva, kordes = niva_fynd(exam, model=model, llm=llm, skala=skala,
+                             niva_mal=niva_mal, log_cb=log_cb)
+
+    def svar(ut: dict, matt: bool) -> dict:
+        return {**ut, "nivafynd": niva, "nivakoll": kordes, "nivamatt": matt}
+
     # Det saknade porträttet FÄLLER, till skillnad från signalerna: en tom
     # bildplats är inte en smaksak utan ett hål på försättsbladet.
-    avv = (doma_nivaer(exam, model=model, llm=llm, skala=skala, log_cb=log_cb)
-           + doma_rakning(exam, model=model, llm=llm, log_cb=log_cb)
+    avv = (niva + doma_rakning(exam, model=model, llm=llm, log_cb=log_cb)
            + forsattsignaler(exam, profil))
     if not avv:
-        return {"exam": exam, "errors": errors + signaler, "rounds": rounds_used}
+        return svar({"exam": exam, "errors": errors + signaler,
+                     "rounds": rounds_used}, True)
     if rounds_used >= max_rounds:
         # Budgeten slut. Avvikelserna visas för läraren i stället — läraren är
         # sista domare (planens C5), och en tyst nivåmiss är värre än en synlig.
-        return {"exam": exam, "errors": errors + avv + signaler,
-                "rounds": rounds_used}
+        return svar({"exam": exam, "errors": errors + avv + signaler,
+                     "rounds": rounds_used}, True)
     log(f"Justerar {len(avv)} uppgift(er) …")
     kandidat = _llm_round(build_repair_prompt(exam, avv + signaler, profil),
                           model, llm, antal, skeleton, koder, log_cb=log_cb,
@@ -3578,8 +3922,8 @@ def _domar_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                                   f"av {max_rounds}) —")
     rounds_used += 1
     if kandidat is None:
-        return {"exam": exam, "errors": errors + avv + signaler,
-                "rounds": rounds_used}
+        return svar({"exam": exam, "errors": errors + avv + signaler,
+                     "rounds": rounds_used}, True)
     _doc, fel = _validate(kandidat, profil, koder, niva_mal)
     res = _repair_until_valid(kandidat, fel, model=model, llm=llm,
                               rounds_used=rounds_used, max_rounds=max_rounds,
@@ -3589,9 +3933,109 @@ def _domar_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
     # och trasigt efter är omskrivningen en försämring: behåll det gamla och
     # visa fynden som varningar i stället.
     if res["errors"] and not errors:
-        return {"exam": exam, "errors": avv + signaler, "rounds": res["rounds"]}
-    return {"exam": res["exam"], "rounds": res["rounds"],
-            "errors": res["errors"] + _signaler(res["exam"] or exam)}
+        return svar({"exam": exam, "errors": avv + signaler,
+                     "rounds": res["rounds"]}, True)
+    return svar({"exam": res["exam"], "rounds": res["rounds"],
+                 "errors": res["errors"] + _signaler(res["exam"] or exam)},
+                res["exam"] is exam)
+
+
+# ── GRINDEN: ett papper levereras aldrig med okänd nivå ───────────────────
+# Läraren 2026-09-07: «Domaren ska vara så pålitlig att jag är tvärsäker på att
+# en A-uppgift är A, en C-uppgift C och en E-uppgift E.» Domarpasset ovan ger
+# nivåfynden EN delad runda och släpper sedan igenom pappret med fynden som
+# varningar. Grinden ger dem två egna, riktade rundor till, och det som ändå
+# står kvar sägs RAKT UT i `nivafel` — i jobbets sista loggrad, i svaret och i
+# panelen — i stället för att ligga i en fellista ingen läser.
+#
+# Rundorna är riktade (sammanfoga_riktat): bara de uppgifter fynden pekar på
+# får skrivas om. Utan låset hade en runda om uppgift 7 kunnat skriva om hela
+# pappret, och läraren hade fått ett annat prov än det hon nyss läste.
+EXTRA_NIVARUNDOR = 2
+# Fail-open-märkningen. Föll domaranropet vet vi ingenting om nivån, och det är
+# inte samma sak som att den är rätt.
+NIVAKOLL_FOLL = [{"nr": "*", "pastadd": "", "domd": "",
+                  "skal": "nivåkontrollen kunde inte köras"}]
+
+
+def nivafel_text(nivafel: list[dict] | None) -> str:
+    """Raden läraren läser. Samma mening i loggen, i panelen och i canvasen —
+    klienten bygger sin egen av samma fält (api.js nivafelText)."""
+    if not nivafel:
+        return ""
+    if any(f.get("nr") == "*" for f in nivafel):
+        return "Nivån gick inte att kontrollera: nivåkontrollen kunde inte köras."
+    nummer = [str(f.get("nr") or "?") for f in nivafel]
+    return f"Nivån gick inte att säkra på uppgift {', '.join(nummer)}."
+
+
+def _niva_grind(res: dict, *, model: str, llm, profil: str, skala: str,
+                antal: int | None, skeleton: list[dict] | None,
+                koder: list[str] | None, niva_mal: dict | None,
+                max_rounds: int = EXTRA_NIVARUNDOR,
+                log_cb: Callable[[str], None] | None = None) -> dict:
+    """Upp till två extra riktade rundor på nivåfynden, sedan `nivafel`.
+
+    `res` är domarpassets svar (eller refines, som saknar `nivakoll` och då
+    bara kör de deterministiska E-signalerna — se refine_exam). Svaret är samma
+    dict med `nivafel` ifyllt: tom lista när nivån är säkrad, annars en rad per
+    uppgift med påstådd nivå, dömd nivå och skäl."""
+    log = log_cb or (lambda _m: None)
+    exam = res.get("exam")
+    if exam is None:
+        return {**res, "nivafel": []}
+    if res.get("nivakoll") is False:
+        return {**res, "nivafel": list(NIVAKOLL_FOLL)}
+    fynd = list(res.get("nivafynd") or [])
+    aktuella = res.get("nivamatt", True)
+    for varv in range(max_rounds + 1):
+        if fynd and not aktuella:
+            # Pappret skrevs om efter att fynden mättes — döm om de RÖRDA
+            # uppgifterna innan vi betalar en runda till på ett fynd som
+            # kanske redan är lagat.
+            fynd, kordes = niva_fynd(exam, model=model, llm=llm, skala=skala,
+                                     niva_mal=niva_mal, log_cb=log_cb,
+                                     bara=sorted({_uppgiftsnr(f.get("nr"))
+                                                  for f in fynd}))
+            aktuella = True
+            if not kordes:
+                return {**res, "exam": exam, "nivafel": list(NIVAKOLL_FOLL)}
+        if not fynd or varv == max_rounds:
+            break
+        log(f"Säkrar nivån på {len(fynd)} uppgift(er) "
+            f"(extrarunda {varv + 1} av {max_rounds}) …")
+        nummer = sorted({_uppgiftsnr(f.get("nr")) for f in fynd} - {0})
+        kandidat = _llm_round(build_repair_prompt(exam, fynd, profil),
+                              model, llm, antal, skeleton, koder, log_cb=log_cb,
+                              etikett=f"Säkrar nivån (extrarunda {varv + 1} "
+                                      f"av {max_rounds}) —")
+        if kandidat is None:
+            break
+        ihop, skal = sammanfoga_riktat(exam, kandidat,
+                                       {"uppgifter": nummer, "falt": ()})
+        if ihop is None:
+            log(f"Omskrivningen bar inte uppgiften ({skal}) — nivån står kvar.")
+            break
+        _doc, fel = _validate(ihop, profil, koder, niva_mal)
+        if fel:
+            # En omskrivning som lagar nivån och river balansen är ingen
+            # lagning. Samma grind som domarpassets: behåll det gamla.
+            log("Omskrivningen bröt balansen — pappret står kvar som det var.")
+            break
+        exam, aktuella = ihop, False
+        res = {**res, "exam": exam, "rounds": (res.get("rounds") or 0) + 1}
+    res = {**res, "exam": exam, "nivafel": [
+        {"nr": f.get("nr"), "pastadd": f.get("pastadd"),
+         "domd": f.get("domd"), "skal": f.get("skal") or f.get("message")}
+        for f in fynd]}
+    # Fynden ska också stå kvar i fellistan: den är klientens `provFel`, och ett
+    # fynd som bara syns i loggen försvinner när jobbet är över.
+    kvar = [e for e in (res.get("errors") or []) if e.get("code") != "niva"]
+    res["errors"] = kvar + fynd
+    # Raden LOGGAS INTE här: den ska vara jobbets SISTA, och efter grinden kommer
+    # bedömningspasset med sina egna rader. Anroparen skriver den (generate_exam
+    # flagga, refine_exam).
+    return res
 
 
 def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
@@ -3758,6 +4202,12 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
         for f in likheter:
             log(f"Uppgift {f['nr']} liknar en tidigare uppgift i kursen: "
                 f"«{f['text']}»")
+        r.setdefault("nivafel", [])
+        # SIST av allt som loggas: står nivån kvar osäkrad är det den raden
+        # läraren ska se överst i jobbet när det är över, inte en bildtext om
+        # en uppgift som liknar en gammal.
+        if r["nivafel"]:
+            log(nivafel_text(r["nivafel"]))
         return r
 
     if not doma or res["exam"] is None:
@@ -3770,6 +4220,14 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                       niva_mal=niva_mal,
                       rounds_used=res["rounds"], max_rounds=max_rounds,
                       log_cb=log_cb)
+    # ── GRINDEN ──────────────────────────────────────────────────────
+    # Nivåfynden får två EXTRA riktade rundor, utanför rundbudgeten ovan: den
+    # är delad med schemafel och balans, och nivån ska inte tappas för att en
+    # tidig runda gick åt till en saknad titel. Står fynden kvar bär svaret
+    # `nivafel` och läraren får veta det.
+    res = _niva_grind(res, model=model, llm=llm, profil=profil, skala=skala,
+                      antal=antal, skeleton=grammatik, koder=koder,
+                      niva_mal=niva_mal, log_cb=log_cb)
     # ── BEDÖMNINGSPASSET (2026-08-23) ────────────────────────────────
     # Sist av allt, och bara på PROVET: det är provets bedömningsanvisning
     # läraren rättar efter, och arbetsbladets och gruppuppgiftens facit heter
@@ -3846,6 +4304,31 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
     # tom), det förra upptäcks framför klassen.
     if riktning is not None and res["errors"]:
         res["exam"] = exam
+    # ── GRINDEN, men bara den DETERMINISTISKA halvan ─────────────────
+    # E-signalerna körs: de kostar ingenting, och det är precis dem läraren kan
+    # råka ut för här — «gör uppgift 7 svårare» på ett rent E-papper är en
+    # C-uppgift i nästa varv. Dubbeldomen körs INTE: två modellanrop till på
+    # varje varv i canvasen är en väntetid läraren betalar vid varje önskemål,
+    # och det pris den skulle betala är omätt. Nivån i en omskrivning är alltså
+    # SÄMRE vaktad än i en generering, och det står här för att det ska gå att
+    # ändra med öppna ögon.
+    #
+    # Och den REPARERAR inte (`max_rounds=0`), den märker. En extrarunda här
+    # hade skrivit om en uppgift läraren inte pekade på, och det är precis vad
+    # mål-låset ovan finns för att stoppa. Fynden räknas därför bara på de
+    # uppgifter varvet FAKTISKT ändrade — ett gammalt fynd på uppgift 3 är
+    # inget besked om det önskemål hon just skickade.
+    if res["exam"] is not None:
+        rorda = set(andrade_uppgifter(exam, res["exam"]))
+        fynd = [f for f in e_nivasignaler(domarenheter(res["exam"]), niva_mal)
+                if _uppgiftsnr(f.get("nr")) in rorda]
+        res = _niva_grind({**res, "nivafynd": fynd, "nivamatt": True},
+                          model=model, llm=llm, profil=profil, skala="",
+                          antal=None, skeleton=None, koder=None,
+                          niva_mal=niva_mal, max_rounds=0, log_cb=log_cb)
+    res.setdefault("nivafel", [])
+    if res["nivafel"]:
+        log(nivafel_text(res["nivafel"]))
     # ── BEDÖMNINGSPASSET, men bara på det som FAKTISKT ändrades ──────
     # En omskrivning rör oftast en enda uppgift, och de övriga bär redan sina
     # elevexempel. Att skriva om alla hade kostat elva anrop för att läraren

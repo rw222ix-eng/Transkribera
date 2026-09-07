@@ -173,6 +173,34 @@ def test_anteckningarna_ur_kassetten_haller_stilkontraktet(fejk_claude):
     ("arbetsblad", "nivadomare-blad"),
     ("gruppuppgift", "nivadomare-grupp"),
 ])
+def test_kriteriebandet_speglar_den_blinda_domen(dokument, domarband):
+    """Kriteriebanden är HANDSKRIVNA ur de blinda: samma enheter, samma nivåer,
+    och kryssen satta så att checklistan ger den nivån (C ⇒ flerstegs, A ⇒
+    insikt). Det gör de två domarna eniga i kassettflödena med flit — att
+    dubbeldomen fäller när de är OENSE prövas av enhetstesterna, inte av ett
+    band som svarar likadant varje gång.
+
+    Glider banden isär — någon spelar om det blinda och glömmer det andra —
+    börjar kassettflödena fälla enheter av ett skäl som inte finns i appen."""
+    krit = exam_gen._parse_domar(json.loads(
+        fejk.las_kassett(domarband.replace("nivadomare", "kriteriedomare"))
+        ["rader"][-1])["result"])
+    blind = exam_gen._parse_domar(json.loads(
+        fejk.las_kassett(domarband)["rader"][-1])["result"])
+    assert set(krit) == set(blind), "banden dömer inte samma enheter"
+    assert all(krit[nr]["niva"] == blind[nr]["niva"] for nr in blind)
+    # Kryssen är domarens SKÄL och måste bära nivån: en C utan ett enda
+    # C-kriterium är en checklista som inte säger något.
+    for nr, d in krit.items():
+        if d["niva"] in ("C", "A"):
+            assert d["kryss"] or d["resonemang"] in ("välgrundat", "nyanserat"), nr
+
+
+@pytest.mark.parametrize("dokument,domarband", [
+    ("prov", "nivadomare"),
+    ("arbetsblad", "nivadomare-blad"),
+    ("gruppuppgift", "nivadomare-grupp"),
+])
 def test_nivadomen_ur_kassetten_gar_hela_vagen(fejk_claude, dokument, domarband):
     """Domarbanden genom hela kedjan: CLI → ström → JSON → nivåjämförelse.
 
@@ -244,7 +272,13 @@ def test_provbandet_gar_genom_bada_domarna_och_talvakten(fejk_claude):
       decimaler.» Det är frasen som fick hela talarbetet skrivet — den finns
       inte i något av de tio nationella prov underlaget vilar på, och den kom
       ändå ut på ett riktigt prov. Bandet är alltså beviset på att vakten
-      behövs, och det står kvar tills ett nytt prov spelas in utan frasen."""
+      behövs, och det står kvar tills ett nytt prov spelas in utan frasen.
+
+    Och sedan grinden (2026-09-07) prövas ett tredje: bandet svarar LIKADANT
+    varje gång, så uppgift 6 fortsätter dömas C hur många rundor den än får.
+    Fyra rundor — en generering, domarpassets och grindens två extra — och
+    sedan bär pappret `nivafel`. Det är exakt det utfall läraren bad om: hellre
+    ett papper som SÄGER att nivån inte gick att säkra än ett som tiger."""
     fejk_claude("auto")
     loggat = []
     res = exam_gen.generate_exam("Matematik 3c", "NA25",
@@ -252,10 +286,17 @@ def test_provbandet_gar_genom_bada_domarna_och_talvakten(fejk_claude):
                                  log_cb=loggat.append)
     assert any("Räknar igenom facit" in r for r in loggat), loggat
     assert [e for e in res["errors"] if e["code"] == "rakning"] == []
-    assert res["rounds"] == 2, "en domare till kostade en extra runda"
+    assert res["rounds"] == 4, "grindens två extrarundor kördes inte"
     tal = [e for e in res["errors"] if e["code"] == "talsignal"]
     assert [e["path"] for e in tal] == ["uppgift 6"]
     assert "avrunda till ett antal decimaler" in tal[0]["message"]
+    # Grinden gav upp ärligt: uppgiften står kvar, och den står i klartext.
+    assert [(f["nr"], f["pastadd"], f["domd"]) for f in res["nivafel"]] \
+        == [("6", "A", "C")]
+    assert loggat[-1] == "Nivån gick inte att säkra på uppgift 6."
+    # …och fyndet ligger kvar i fellistan, som är klientens `provFel`.
+    assert [e["path"] for e in res["errors"] if e["code"] == "niva"] \
+        == ["uppgift 6"]
 
 
 def test_insikterna_ur_den_skarpa_kassetten_bar_inga_namn(fejk_claude):

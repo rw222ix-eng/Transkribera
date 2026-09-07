@@ -3041,8 +3041,13 @@
       antal: underlag.length || vald.size || 5,
       /* Svarstexten säger vad som FAKTISKT hände när det gick på riktigt: en
          tavla som behövde tre rundor är inte samma sak som en som satt direkt. */
+      /* NIVÅN FÖRST när den inte gick att säkra. Raden är serverns egen
+         (api.js nivafelText, ur `nivafel`) och står FÖRE «läs igenom extra
+         noga»: «något gick inte att rätta» säger inte vilket, och det här är
+         den enda sortens fel läraren måste titta på med rubriken i handen. */
       svar: res => res
         ? `${Best(typ)} är skriven${(res.rounds || 1) > 1 ? ` — ${res.rounds} rundor innan den satt` : ''}. `
+          + (window.API.nivafelText(res.nivafel) ? window.API.nivafelText(res.nivafel) + ' Läs igenom de uppgifterna med kunskapskraven bredvid. ' : '')
           + `${(res.errors || []).length ? 'Något gick inte att rätta helt; läs igenom extra noga.' : 'Läs igenom och skriv vad som ska bli annorlunda.'}`
         : `Utkastet är skrivet. ${Best(typ)} täcker ${vald.size || 'inga'} valda moment — läs igenom och skriv vad som ska bli annorlunda.`,
       plan: [
@@ -3116,6 +3121,10 @@
           utkast.granser = res.granser || null;
           utkast.summor = res.summor || null;
           utkast.provFel = res.errors || [];
+          /* Nivån som inte gick att säkra (exam_gen._niva_grind). Följer med
+             pappret in i Sparat: fyndet gäller uppgifterna och inte varvet, och
+             en lärare som öppnar dokumentet i morgon ska se samma sak. */
+          utkast.nivafel = res.nivafel || [];
           if (res.exam.titel) utkast.titel = res.exam.titel;
           /* Mottagaren följer med pappret: namnet står på arket och `elevId`
              är det klassvyn skiljer två blad på samma lektion åt med
@@ -4002,6 +4011,9 @@
       v.granser = res.granser || v.granser || null;
       v.summor = res.summor || v.summor || null;
       v.provFel = res.errors || [];
+      /* Samma fält på iterationens varv — en omskrivning kan göra en E-uppgift
+         till en C-uppgift, och då är det det här varvet som bär fyndet. */
+      v.nivafel = res.nivafel || [];
       v.nyckelfraga = res.exam.nyckelfraga || v.nyckelfraga || null;
       /* Samma reserv som nyckelfrågan: skrev modellen inget band i det här
          varvet står det förra kvar. Utan reserven hade en omskrivning som

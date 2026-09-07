@@ -481,5 +481,25 @@
       document.dispatchEvent(new CustomEvent('api-redo', { detail: API }));
     });
 
+  /* ── NIVÅN SOM INTE GICK ATT SÄKRA ────────────────────
+     Serverns svar bär `nivafel` när nivådomarna och de deterministiska
+     E-signalerna fortfarande fäller uppgifter efter grindens extrarundor
+     (exam_gen._niva_grind). Meningen står HÄR och inte i plan.js och granska.js
+     var för sig: panelen och canvasen ska säga samma sak, och två kopior av
+     samma mening glider isär. Tom sträng = nivån är säkrad, och då sägs
+     ingenting alls — ett papper utan fynd ska inte bära en lugnande rad. */
+  API.nivafelText = function (nivafel) {
+    const rader = Array.isArray(nivafel) ? nivafel : [];
+    if (!rader.length) return '';
+    /* nr "*" är serverns märkning för att KONTROLLEN inte kördes (modellen
+       borta, kvoten slut). Det är inte samma sak som att nivån är rätt, och
+       läraren ska inte behöva gissa vilket det var. */
+    if (rader.some(f => f && f.nr === '*')) {
+      return 'Nivån gick inte att kontrollera: nivåkontrollen kunde inte köras.';
+    }
+    const nr = rader.map(f => String((f && f.nr) || '?'));
+    return `Nivån gick inte att säkra på uppgift ${nr.join(', ')}.`;
+  };
+
   window.API = API;
 })();

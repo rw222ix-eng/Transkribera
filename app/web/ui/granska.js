@@ -639,10 +639,19 @@
     const ett = fel[0];
     return ett.charAt(0).toLowerCase() + ett.slice(1);
   }
+  /* Nivån som inte gick att säkra, sist i varvets svar. En omskrivning kan
+     göra en E-uppgift till en C-uppgift utan att någon säger något — «gör
+     uppgift 7 svårare» på ett rent E-papper gör precis det — och då ska det
+     stå i tråden och inte bara i en fellista. Meningen är serverns egen
+     (api.js nivafelText), samma som panelen skriver efter en generering. */
+  const nivaraden = res => {
+    const text = window.API.nivafelText(res && res.nivafel);
+    return text ? ' ' + text : '';
+  };
   /* Vad panelen SÄGER att som hände, byggt ur serverns diff. Se kommentaren
      vid `svar:` nedan — det här är hela poängen med den. */
   function svarText(post, res) {
-    const gjort = `Skrivet om. ${post.namn} följer nu ”${post.text}” — ändringen är markerad i pappret.`;
+    const gjort = `Skrivet om. ${post.namn} följer nu ”${post.text}” — ändringen är markerad i pappret.${nivaraden(res)}`;
     /* `Array.isArray` och inte sanningsvärde: en TOM lista är ett svar
        («ingenting på pappret ändrades»), inte ett saknat fält. Samma regel som
        plan.js iterera följer när den avgör vilka rutor som märks. */
@@ -661,9 +670,10 @@
     /* Servern ändrade något — men inte det läraren pekade på. Då är det den
        skillnaden som är beskedet, och inget annat. */
     const namn = [...new Set(sagt.map(namnFor).filter(Boolean))];
-    return namn.length
+    return (namn.length
       ? `${post.namn} står kvar oförändrad. Det som ändrades var ${raknaUpp(namn)} — markerat i pappret.`
-      : `${post.namn} står kvar oförändrad. Något annat på pappret skrevs om i stället, och det är markerat.`;
+      : `${post.namn} står kvar oförändrad. Något annat på pappret skrevs om i stället, och det är markerat.`)
+      + nivaraden(res);
   }
 
   /* Etiketten SÅ SOM DEN STÅR, till skillnad från namnFor ovan som svarar i

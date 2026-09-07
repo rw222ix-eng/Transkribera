@@ -73,6 +73,30 @@ def test_kurs_och_klass_som_namn_racker(client, monkeypatch):
     assert "NA25" in [g["namn"] for g in client.get("/api/groups").json()]
 
 
+def test_nivafel_foljer_med_svaret_till_klienten(client, monkeypatch):
+    """Grindens fynd (exam_gen._niva_grind) ska nå skärmen. Ligger de bara i
+    generatorns svar ser läraren ingenting — panelen och canvasen läser
+    `nivafel` (api.js nivafelText)."""
+    fynd = [{"nr": "7", "pastadd": "E", "domd": "C", "skal": "kräver kvadrering"}]
+
+    def fake(*a, **kw):
+        return {"exam": _exam_doc(), "errors": [], "rounds": 1, "nivafel": fynd}
+
+    monkeypatch.setattr(exam_gen, "generate_exam", fake)
+    r = client.post("/api/exams/generate", json={
+        "kurs": "Matematik, nivå 2c", "klass": "NA25", "punkter_text": ["x"]})
+    assert _done(r)["nivafel"] == fynd
+
+
+def test_nivafel_ar_alltid_en_lista(client, monkeypatch):
+    """Ett papper utan fynd svarar med tom lista och inte med null: klienten ska
+    inte behöva skilja «inga fynd» från «ingen kontroll»."""
+    _stub(monkeypatch)
+    r = client.post("/api/exams/generate", json={
+        "kurs": "Matematik, nivå 2c", "klass": "NA25", "punkter_text": ["x"]})
+    assert _done(r)["nivafel"] == []
+
+
 def test_utan_kurs_ar_det_400(client, monkeypatch):
     _stub(monkeypatch)
     assert client.post("/api/exams/generate", json={"klass": "NA25"}).status_code == 400

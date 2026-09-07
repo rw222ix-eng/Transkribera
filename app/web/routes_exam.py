@@ -214,7 +214,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
             conn.close()
 
     def _exam_result(view: dict, errors: list, rounds: int,
-                     likheter: list | None = None) -> dict:
+                     likheter: list | None = None,
+                     nivafel: list | None = None) -> dict:
         doc, _ = exam_spec.validate_exam_json(view.get("exam") or {})
         summor = exam_spec.poangsummor(doc) if doc else None
         return {
@@ -224,6 +225,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
             # något som måste lagas. Alltid en lista, aldrig None: klienten ska
             # inte behöva skilja «inga flaggor» från «ingen vakt körde».
             "likheter": likheter or [],
+            # NIVÅN, när den inte gick att säkra (exam_gen._niva_grind). En rad
+            # per uppgift med påstådd nivå, dömd nivå och skäl — eller en enda
+            # rad med nr "*" när domaranropet FÖLL, för «kontrollen kördes
+            # inte» får inte se ut som «nivån är rätt». Alltid en lista, av
+            # samma skäl som `likheter` ovan.
+            "nivafel": nivafel or [],
             "id": view["id"], "exam": view.get("exam"),
             # Vilken exam-version JSON:en ovan kom ur. Klienten fäster den på
             # sitt utkastvarv, så att ett ångrat varv kan säga vilken version
@@ -777,7 +784,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 finally:
                     conn.close()
                 return _exam_result(view, res["errors"], res["rounds"],
-                                    res.get("likheter"))
+                                    res.get("likheter"), res.get("nivafel"))
             finally:
                 arbiter.release_llm(llm)
 
@@ -949,7 +956,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         conn.close()
                 else:
                     newview = view
-                svar = _exam_result(newview, res["errors"], res["rounds"])
+                svar = _exam_result(newview, res["errors"], res["rounds"],
+                                    None, res.get("nivafel"))
                 # Vilka element som faktiskt ändrades — diffat, inte utläst ur
                 # lärarens mening (app/dokumentdiff.py). Klienten märker dem.
                 svar["andrade"] = dokumentdiff.andrade_element(

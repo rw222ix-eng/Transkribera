@@ -3528,7 +3528,8 @@ def test_bedomningssignalen_kostar_aldrig_en_runda():
     aldrig i sig själv kosta läraren en omskrivning."""
     trasigt = _exam()
     trasigt["uppgifter"][0]["bedomning"] = "+3 E för båda nollställena."
-    # Tre anrop: generering + de två blinda domarna (som inte fäller något).
+    # Fyra anrop: generering + nivådomens TVÅ (den blinda och kriterie-
+    # domaren, 2026-09-07) + räknedomaren, och ingen av dem fäller något.
     # Därtill bedömningspassets ETT anrop per uppgift — det skriver, det
     # reparerar inte, och kostar därför ingen RUNDA. Stubbens «{}» går inte att
     # tolka som ett bedömningssvar, så passet lämnar uppgifterna orörda
@@ -3536,7 +3537,7 @@ def test_bedomningssignalen_kostar_aldrig_en_runda():
     llm, calls = _stub_llm([json.dumps(trasigt), "{}", "{}"])
     res = exam_gen.generate_exam("Ma2b", "SA23", [], model="m", llm=llm)
     assert res["rounds"] == 1
-    assert len(calls) == 3 + len(trasigt["uppgifter"])
+    assert len(calls) == 4 + len(trasigt["uppgifter"])
     assert sum("bedömningsskrivare" in c["prompt"] for c in calls) == 7
     assert [e["code"] for e in res["errors"]] == ["bedomningssignal"]
 

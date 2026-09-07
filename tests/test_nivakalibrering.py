@@ -234,29 +234,93 @@ def test_domaren_ser_aldrig_facit():
     assert "Uppgift 1." in prompt
 
 
-def test_avvikelse_bara_vid_riktig_oenighet():
-    enheter = exam_gen.domarenheter(_exam([
-        _uppg(1, (0, 2, 0)), _uppg(2, (0, 2, 0)),
-        _uppg(3, (0, 2, 0)), _uppg(4, (0, 2, 0))]))
-    domar = {
-        "1": {"niva": "C", "motivering": "stämmer"},        # enig
-        "2": {"niva": "OKLART", "motivering": "gränsfall"},  # toleransen
-        "3": {"niva": "E", "motivering": "rutin"},           # fäller
-        # uppgift 4 nämns inte alls → tystnad tolkas aldrig
-    }
-    avv = exam_gen.avvikelser(enheter, domar)
-    assert [a["path"] for a in avv] == ["uppgift 3"]
+def _dom(niva, motivering="skäl"):
+    return {"niva": niva, "motivering": motivering, "kryss": [],
+            "resonemang": ""}
+
+
+def test_dubbeldomen_slapper_igenom_bara_nar_bada_ar_eniga_med_poangen():
+    """Enighetsregeln (2026-09-07). Läraren: «jag ska vara tvärsäker på att en
+    C-uppgift är C.» Då räcker det inte att EN domare håller med."""
+    enheter = exam_gen.domarenheter(_exam([_uppg(1, (0, 2, 0))]))
+    enig = {"1": _dom("C")}
+    assert exam_gen.avvikelser(enheter, enig, enig) == []
+
+
+def test_dubbeldomen_faller_nar_domarna_ar_oense():
+    enheter = exam_gen.domarenheter(_exam([_uppg(1, (0, 2, 0))]))
+    avv = exam_gen.avvikelser(enheter, {"1": _dom("C")}, {"1": _dom("E")})
+    assert [a["path"] for a in avv] == ["uppgift 1"]
     assert "poängsatt C men bedöms som E" in avv[0]["message"]
+    # Att de är OENSE ska stå i klartext: uppgiften är otydlig, inte bara
+    # felplacerad, och reparationen ska veta skillnaden.
+    assert "Den andra bedömaren sa C" in avv[0]["message"]
+    assert avv[0]["pastadd"] == "C" and avv[0]["domd"] == "E"
+
+
+def test_dubbeldomen_faller_nar_bada_sager_samma_fel_niva():
+    enheter = exam_gen.domarenheter(_exam([_uppg(1, (0, 2, 0))]))
+    bada = {"1": _dom("E", "ren rutin")}
+    avv = exam_gen.avvikelser(enheter, bada, bada)
+    assert [a["path"] for a in avv] == ["uppgift 1"]
+    assert "Den andra bedömaren" not in avv[0]["message"]
     # Åtgärden ska stå i felet, inte bara konstaterandet.
     assert niva_rubrik.STEGET_UPP["E→C"] in avv[0]["message"]
 
 
+def test_oklart_ar_ett_fynd_och_inte_langre_toleransen():
+    """«Oklart» var toleransen och passerade. En uppgift vars nivå inte går att
+    avgöra är inte en uppgift läraren kan vara tvärsäker på."""
+    enheter = exam_gen.domarenheter(_exam([_uppg(1, (0, 2, 0))]))
+    avv = exam_gen.avvikelser(enheter, {"1": _dom("OKLART", "gränsfall")},
+                              {"1": _dom("C")})
+    assert [a["path"] for a in avv] == ["uppgift 1"]
+    assert "kunde inte avgöra nivån" in avv[0]["message"]
+    assert avv[0]["domd"] == "oklart"
+
+
+def test_tystnad_efter_omfragan_ar_ett_fynd():
+    """Tystnad var den tolerans som INTE syntes: en domare som hoppade över
+    halva pappret «godkände» det. Omfrågan sker i _fraga_domare; når den hit är
+    enheten obesvarad två gånger."""
+    enheter = exam_gen.domarenheter(_exam([_uppg(1, (0, 2, 0))]))
+    avv = exam_gen.avvikelser(enheter, {}, {"1": _dom("C")})
+    assert [a["path"] for a in avv] == ["uppgift 1"]
+    assert "nämnde den inte" in avv[0]["message"]
+
+
+def test_domaren_fragar_en_gang_till_om_de_overhoppade():
+    """Och omfrågan sker BARA på de enheter som saknas — inte hela pappret en
+    gång till."""
+    prompter = []
+
+    def llm(model, prompt, **kw):
+        prompter.append(prompt)
+        # Första svaret från varje domare hoppar över uppgift 2; omfrågan får
+        # den. Domaren känns igen på att prompten bär uppgift 1.
+        if "Uppgift 1." in prompt:
+            return json.dumps({"domar": [{"nr": "1", "niva": "E"}]})
+        return json.dumps({"domar": [{"nr": "2", "niva": "E"}]})
+
+    exam = _exam([_uppg(1, (1, 0, 0)), _uppg(2, (1, 0, 0))])
+    fynd, kordes = exam_gen.niva_fynd(exam, model="m", llm=llm)
+    assert kordes and fynd == []
+    # blind, omfrågan, kriteriedom, omfrågan — och omfrågorna bär BARA den
+    # uppgift som saknades.
+    assert len(prompter) == 4
+    assert "Uppgift 2." in prompter[1] and "Uppgift 1." not in prompter[1]
+
+
 def test_domarsvar_som_inte_gar_att_tolka_faller_ingenting():
-    """En trasig kontroll får aldrig underkänna ett prov som är rätt."""
+    """En trasig kontroll får aldrig underkänna ett prov som är rätt. Ett svar
+    utan en enda tolkbar dom är inte tystnad om enskilda uppgifter utan en
+    kontroll som inte kördes — och då fälls ingenting, men läraren får veta
+    det (se test_fail_open_markeras_i_nivafel)."""
     assert exam_gen._parse_domar("inte json alls") == {}
     assert exam_gen._parse_domar('{"domar": "fel form"}') == {}
-    enheter = exam_gen.domarenheter(_exam([_uppg(1, (0, 2, 0))]))
-    assert exam_gen.avvikelser(enheter, exam_gen._parse_domar("trasigt")) == []
+    fynd, kordes = exam_gen.niva_fynd(_exam([_uppg(1, (0, 2, 0))]), model="m",
+                                      llm=lambda *a, **k: "trasigt")
+    assert fynd == [] and kordes is False
 
 
 def test_domaren_kapar_langa_fellistor():
@@ -267,7 +331,9 @@ def test_domaren_kapar_langa_fellistor():
     assert len(exam_gen.avvikelser(enheter, domar)) == exam_gen.MAX_DOMAR_PROBLEM
 
 
-def test_doma_nivaer_kor_ett_anrop_och_far_skalan_med_sig():
+def test_doma_nivaer_kor_tva_anrop_och_bada_far_skalan_med_sig():
+    """Två domar per papper, och BÅDA mot den skala dokumentet skrevs mot. Får
+    de olika skalor är de inte två domar om samma sak."""
     anrop = []
 
     def llm(model, prompt, **kw):
@@ -277,8 +343,24 @@ def test_doma_nivaer_kor_ett_anrop_och_far_skalan_med_sig():
 
     avv = exam_gen.doma_nivaer(_exam([_uppg(1, (0, 0, 2))]), model="m", llm=llm,
                                skala="SKALAN SOM GÄLLDE")
-    assert len(anrop) == 1 and "SKALAN SOM GÄLLDE" in anrop[0]
+    assert len(anrop) == 2 and all("SKALAN SOM GÄLLDE" in p for p in anrop)
+    # Prompterna är OLIKA — annars är den andra domen bara en upprepning.
+    assert exam_gen.KRITERIEDOMARE in anrop[1] \
+        and exam_gen.KRITERIEDOMARE not in anrop[0]
     assert len(avv) == 1 and avv[0]["code"] == "niva"
+
+
+def test_kriteriedomaren_kryssar_innan_den_domer():
+    """Checklistan står FÖRE nivån i schemat, och grammatiken skriver fälten i
+    schemats ordning: modellen kan inte välja nivå först och fylla i kryssen så
+    att de passar."""
+    falt = list(exam_gen.DOMAR_KRIT_SCHEMA["properties"]["domar"]["items"]
+                ["properties"])
+    for kriterium, _fraga, _niva in exam_gen.KRITERIER:
+        assert falt.index(kriterium) < falt.index("niva"), kriterium
+    # Kriterierna är rubrikens egna, inte påhittade: varje ja pekar på en nivå
+    # rubriken beskriver.
+    assert {n for _f, _q, n in exam_gen.KRITERIER} <= set(niva_rubrik.NIVAER)
 
 
 def test_domaren_kors_inte_pa_ett_dokument_utan_poang():
@@ -290,12 +372,37 @@ def test_domaren_kors_inte_pa_ett_dokument_utan_poang():
 
 # ─────────────────────────────────────────── nivåpasset i genereringen ────
 
-def _stub(svar: list[str]):
-    anrop = []
+def _stub(svar: list[str], *, dom: str = "{}", krit: str | None = None,
+          rakne: str = "{}"):
+    """En stubbad modell som svarar efter vad prompten FRÅGAR om.
+
+    `svar` är svaren på DOKUMENTprompterna i tur och ordning (den sista
+    upprepas, som förut). `dom` går till nivådomarna — samma svar till båda,
+    för enighet är normalläget — och `krit` när kriteriedomaren ska säga något
+    annat än den blinda. Räknedomaren får `rakne`.
+
+    Dispatchen finns för att nivådomen är TVÅ anrop sedan 2026-09-07 och
+    grinden kan ställa dem flera gånger till. En lista i tur och ordning hade
+    behövt räknas om vid varje ändring i kedjan — och listans sista svar, ett
+    helt prov, hade gått till en domare som svarade med det.
+
+    `dom="{}"` betyder «domaren svarade inget tolkbart» och är alltså
+    fail-open: den kontrollen räknas som icke körd och fäller ingenting."""
+    anrop, dokument = [], []
 
     def llm(model, prompt, **kw):
         anrop.append(prompt)
-        return svar[min(len(anrop) - 1, len(svar) - 1)]
+        # HELA frasen, inte bara ordet: nivåfynden i en reparationsprompt SÄGER
+        # «kriteriedomaren», och dispatchen hade då gett domarsvaret till en
+        # fråga om ett helt prov. Samma skäl som i tests/fejk.py.
+        if f"Du är {exam_gen.KRITERIEDOMARE}" in prompt:
+            return dom if krit is None else krit
+        if "vilken nivå den faktiskt ligger på" in prompt:
+            return dom
+        if "räknedomare" in prompt:
+            return rakne
+        dokument.append(prompt)
+        return svar[min(len(dokument) - 1, len(svar) - 1)]
 
     return llm, anrop
 
@@ -322,27 +429,36 @@ def test_fixturen_ar_verkligen_giltig():
 
 
 def test_domarrundan_lagger_sina_fynd_i_reparationsloopen():
-    dom = json.dumps({"domar": [{"nr": "2", "niva": "E", "motivering": "rutin"}]})
+    """Fyndet ska laga sig själv i den delade rundan — och när det gjort det
+    ska grinden se att det är borta, inte betala en extrarunda till.
+
+    Domsvaret nedan gäller bara uppgift 2 och håller med om uppgift 1: efter
+    reparationen dömer grinden om just uppgift 2, får samma svar, och då står
+    fyndet kvar. Det är därför pappret till slut bär `nivafel` fast
+    reparationen «lyckades» — bandet är en stubbe som inte ändrar sig."""
+    dom = json.dumps({"domar": [{"nr": "1", "niva": "E", "motivering": ""},
+                                {"nr": "2", "niva": "E", "motivering": "rutin"}]})
     battre = json.dumps(_giltigt_prov())
-    llm, anrop = _stub([json.dumps(_giltigt_prov()), dom, "{}", battre])
+    llm, anrop = _stub([json.dumps(_giltigt_prov()), battre], dom=dom)
     res = exam_gen.generate_exam("Ma1a", "NA25", ["ekvationer"], model="m",
                                  antal=2, profil="arbetsblad", llm=llm)
-    # generering, nivådom, räknedom, reparation — DOMARNA kostar ett anrop var
-    # men ingen runda; bara reparationen är en runda, och den delas av båda.
-    assert len(anrop) == 4
-    assert "poängsatt C men bedöms som E" in anrop[3]
-    assert res["rounds"] == 2 and res["errors"] == []
+    dokument = [p for p in anrop if "Skriv ett matteprov" in p
+                or "Skriv ett ARBETSBLAD" in p]
+    assert "poängsatt C men bedöms som E" in dokument[1]
+    assert [(f["nr"], f["domd"]) for f in res["nivafel"]] == [("2", "E")]
 
 
 def test_utan_avvikelser_kostar_domaren_ingen_reparation():
     dom = json.dumps({"domar": [{"nr": "1", "niva": "E", "motivering": ""},
                                 {"nr": "2", "niva": "C", "motivering": ""}]})
-    llm, anrop = _stub([json.dumps(_giltigt_prov()), dom, "{}"])
+    llm, anrop = _stub([json.dumps(_giltigt_prov())], dom=dom)
     res = exam_gen.generate_exam("Ma1a", "NA25", ["ekvationer"], model="m",
                                  antal=2, profil="arbetsblad", llm=llm)
-    # Två domaranrop, noll rundor: en domare som inte fäller får aldrig kosta
-    # läraren en omskrivning.
-    assert len(anrop) == 3 and res["rounds"] == 1 and res["errors"] == []
+    # Generering + två nivådomare + räknedomaren = fyra anrop, noll rundor och
+    # noll extrarundor: domare som inte fäller får aldrig kosta läraren en
+    # omskrivning, och grinden ska inte döma om ett papper som är rent.
+    assert len(anrop) == 4 and res["rounds"] == 1 and res["errors"] == []
+    assert res["nivafel"] == []
 
 
 def test_doma_false_stanger_av_hela_passet():
@@ -355,15 +471,19 @@ def test_doma_false_stanger_av_hela_passet():
 def test_en_nivareparation_som_forstor_dokumentet_kastas():
     """Var provet rent före domaren och trasigt efter är omskrivningen en
     försämring. Då behålls det gamla och nivåfyndet visas som en varning."""
-    dom = json.dumps({"domar": [{"nr": "2", "niva": "E", "motivering": "rutin"}]})
+    dom = json.dumps({"domar": [{"nr": "1", "niva": "E", "motivering": ""},
+                                {"nr": "2", "niva": "E", "motivering": "rutin"}]})
     trasigt = json.dumps(_exam([
         {"del": None, "formaga": "P", "typ": "rutin", "poang": [0, 0, 0],
          "text": "Tom.", "losning": "L", "bedomning": "B"}]))
-    llm, _anrop = _stub([json.dumps(_giltigt_prov()), dom, trasigt])
+    llm, _anrop = _stub([json.dumps(_giltigt_prov()), trasigt], dom=dom)
     res = exam_gen.generate_exam("Ma1a", "NA25", ["ekvationer"], model="m",
                                  antal=2, profil="arbetsblad", llm=llm)
     assert res["exam"] == _giltigt_prov()
     assert [e["code"] for e in res["errors"]] == ["niva"]
+    # …och grinden ger upp på samma sätt: den lagning som river dokumentet är
+    # ingen lagning, och då är nivån osäkrad och SÄGS vara det.
+    assert [f["nr"] for f in res["nivafel"]] == ["2"]
 
 
 # ──────────────────────────────────── deterministiska signaler (C4) ───────
@@ -396,6 +516,162 @@ def test_signal_oppen_formulering_med_bara_e_poang():
 ])
 def test_signalerna_faller_inte_riktiga_np_uppgifter(text, poang):
     assert exam_gen.nivasignaler(_exam([_uppg(1, poang, text=text)])) == []
+
+
+# ─────────────────── E-signalerna: rena E-papper (2026-09-07) ─────────────
+# Exam 51 («Bara E») fick tre C-uppgifter poängsatta E. De tre nedan är just de
+# formerna, och de fälls utan att någon modell körs.
+
+_REN_E = {"e": (1.0, 1.0), "c": (0, 0), "a": (0, 0)}
+
+
+def _e_fynd(text, *, losning="Lösning.", formaga="P", poang=(1, 0, 0),
+            niva_mal=_REN_E):
+    enheter = exam_gen.domarenheter(
+        _exam([_uppg(1, poang, text=text, losning=losning, formaga=formaga)]))
+    return exam_gen.e_nivasignaler(enheter, niva_mal)
+
+
+@pytest.mark.parametrize("text,ord_i_fyndet", [
+    # Uppgift 7 på exam 51, ordagrant i formen.
+    ("Teckna $(x+2)^2 - x^2$ och förenkla uttrycket.", "kvadreringsregeln"),
+    ("Förenkla $(a+b)(a-b)$.", "kvadreringsregeln"),
+    # Uppgift 12: «visa att det alltid gäller» är C i rubriken.
+    ("Visa att $(x+4)^2 - (x-4)^2 = 16x$ för alla $x$.", "kvadreringsregeln"),
+    ("Stämmer det att summan alltid är jämn?", "generellt"),
+])
+def test_e_signalen_faller_c_innehall_pa_ett_rent_e_papper(text, ord_i_fyndet):
+    fynd = _e_fynd(text)
+    assert [f["code"] for f in fynd] == ["niva"], text
+    assert ord_i_fyndet in fynd[0]["message"]
+    assert fynd[0]["pastadd"] == "E" and fynd[0]["domd"] == "C"
+
+
+def test_e_signalen_faller_ett_motexempel_som_ar_losningen():
+    """Uppgift 9 på exam 51: «är √a < a för alla positiva a?» — motexemplet
+    kräver ett tal mellan 0 och 1, och det är A i nationella provet."""
+    fynd = _e_fynd("Gäller olikheten för varje positivt tal?", formaga="R",
+                   losning="Nej. Ett motexempel är $a = 0{,}25$.")
+    assert len(fynd) == 1 and fynd[0]["domd"] == "C"
+    # …och när formuleringen INTE är generell är det motexemplet som fäller,
+    # med A som dömd nivå.
+    ensamt = _e_fynd("Stämmer Almas påstående?", formaga="R",
+                     losning="Nej, ett motexempel är $a = 0{,}25$.")
+    assert len(ensamt) == 1 and ensamt[0]["domd"] == "A"
+
+
+@pytest.mark.parametrize("text,losning", [
+    # Rena rutinuppgifter på E-nivå. Fäller någon signal här är vakten för ivrig
+    # igen — samma lärdom som nivåsignalerna en gång kostade.
+    ("Lös ekvationen $3x + 5 = 20$.", "$x = 5$."),
+    ("Beräkna $(3+4)^2$.", "$49$."),
+    ("Förenkla $(x+2)(x+5)$.", "$x^2 + 7x + 10$."),
+    ("Hur stor är arean av rektangeln?", "$12$ cm$^2$."),
+])
+def test_e_signalen_faller_inte_en_ren_rutinuppgift(text, losning):
+    assert _e_fynd(text, losning=losning) == []
+
+
+def test_e_signalerna_galler_bara_rena_e_papper():
+    """På ett blandat papper är kvadreringsregeln inte fel — där är det
+    dubbeldomen som avgör var uppgiften hör hemma."""
+    text = "Teckna $(x+2)^2 - x^2$ och förenkla uttrycket."
+    assert _e_fynd(text, niva_mal=None) == []
+    assert _e_fynd(text, niva_mal={"e": (0.5, 0.6), "c": (0.2, 0.3),
+                                   "a": (0.1, 0.2)}) == []
+    # …och inte heller på en uppgift som faktiskt ÄR poängsatt C.
+    assert _e_fynd(text, poang=(0, 1, 0)) == []
+
+
+# ─────────────────────────────── grinden (2026-09-07) ─────────────────────
+
+def _ren_e_blad():
+    """Ett arbetsblad som klarar E-bandet — och där uppgift 2 är den sortens
+    kvadreringsuppgift exam 51 var full av."""
+    return _exam([
+        {"del": None, "formaga": "B", "typ": "rutin", "poang": [2, 0, 0],
+         "text": "Lös ekvationen $3x + 5 = 20$.", "losning": "$x = 5$.",
+         "bedomning": "+1 E ansats\n+1 E rätt svar"},
+        {"del": None, "formaga": "P", "typ": "rutin", "poang": [2, 0, 0],
+         "text": "Teckna $(x+2)^2 - x^2$ och förenkla uttrycket.",
+         "losning": "$4x + 4$.",
+         "bedomning": "+1 E utvecklar\n+1 E förenklar"},
+    ])
+
+
+def test_grinden_kor_tva_extrarundor_och_sager_ifran_nar_de_inte_racker():
+    """Hårda grinden: ett papper får inte levereras som klart med kvarstående
+    nivåfynd. Här svarar stubben med SAMMA papper varje gång, så fyndet står
+    kvar — och då ska pappret bära `nivafel` i stället för att tiga."""
+    enig = json.dumps({"domar": [{"nr": "1", "niva": "E"},
+                                 {"nr": "2", "niva": "E"}]})
+    llm, anrop = _stub([json.dumps(_ren_e_blad())], dom=enig)
+    res = exam_gen.generate_exam("Ma1a", "NA25", ["algebra"], model="m",
+                                 antal=2, profil="arbetsblad", llm=llm,
+                                 niva_mal=_REN_E)
+    # Två EXTRA riktade rundor utöver domarpassets egen (rundbudgeten är 3).
+    rundor = [p for p in anrop if "Problem att åtgärda" in p]
+    assert len(rundor) == 1 + exam_gen.EXTRA_NIVARUNDOR
+    # Extrarundorna bär BARA nivåfyndet — inte talsignaler, inte balansfel.
+    assert "kvadreringsregeln eller konjugatregeln" in rundor[-1]
+    assert [(f["nr"], f["pastadd"], f["domd"]) for f in res["nivafel"]] \
+        == [("2", "E", "C")]
+    # Fyndet står kvar i fellistan också: den är klientens `provFel`.
+    assert [e["code"] for e in res["errors"]] == ["niva"]
+
+
+def test_grinden_ar_tyst_nar_omskrivningen_lagade_nivan():
+    """Och när extrarundan FUNGERAR ska pappret levereras utan `nivafel` — och
+    utan en andra extrarunda."""
+    enig = json.dumps({"domar": [{"nr": "1", "niva": "E"},
+                                 {"nr": "2", "niva": "E"}]})
+    lagat = _ren_e_blad()
+    lagat["uppgifter"][1]["text"] = "Förenkla uttrycket $4x + 4 - x$."
+    llm, anrop = _stub([json.dumps(_ren_e_blad()), json.dumps(lagat)], dom=enig)
+    res = exam_gen.generate_exam("Ma1a", "NA25", ["algebra"], model="m",
+                                 antal=2, profil="arbetsblad", llm=llm,
+                                 niva_mal=_REN_E)
+    assert res["nivafel"] == [] and res["errors"] == []
+    assert len([p for p in anrop if "Problem att åtgärda" in p]) == 1
+    assert res["exam"]["uppgifter"][1]["text"] == lagat["uppgifter"][1]["text"]
+
+
+def test_fail_open_markeras_i_nivafel():
+    """Faller domaranropet levereras pappret ändå — men tystnaden får inte se
+    ut som ett godkännande."""
+    def llm(model, prompt, **kw):
+        if "vilken nivå den faktiskt ligger på" in prompt:
+            raise RuntimeError("kvoten slut")
+        return json.dumps(_giltigt_prov())
+
+    loggat = []
+    res = exam_gen.generate_exam("Ma1a", "NA25", ["ekvationer"], model="m",
+                                 antal=2, profil="arbetsblad", llm=llm,
+                                 log_cb=loggat.append)
+    assert res["nivafel"] == exam_gen.NIVAKOLL_FOLL
+    assert res["exam"] is not None, "pappret ska levereras ändå"
+    assert loggat[-1] == ("Nivån gick inte att kontrollera: nivåkontrollen "
+                          "kunde inte köras.")
+
+
+def test_refine_markerar_nivan_men_skriver_inte_om_nagot_annat():
+    """En omskrivning kan göra en E-uppgift till en C-uppgift. Grinden i refine
+    MÄRKER det men reparerar inte: en extrarunda hade rört en uppgift läraren
+    inte pekade på, och det är precis vad mål-låset finns för."""
+    fore = _ren_e_blad()
+    fore["uppgifter"][1]["text"] = "Förenkla uttrycket $4x + 4 - x$."
+    efter = _ren_e_blad()          # modellen gör uppgift 2 till en kvadrering
+    anrop = []
+
+    def llm(model, prompt, **kw):
+        anrop.append(prompt)
+        return json.dumps(efter)
+
+    res = exam_gen.refine_exam(fore, "gör uppgift 2 svårare", model="m",
+                               nummer=2, profil="arbetsblad",
+                               niva_mal=_REN_E, llm=llm)
+    assert len(anrop) == 1, "refine ska inte kosta ett domaranrop"
+    assert [f["nr"] for f in res["nivafel"]] == ["2"]
 
 
 # ──────────────────────────────── talvakterna och räknedomaren (2026-08-23) ──
@@ -582,7 +858,8 @@ def test_raknedomaren_ar_fail_open():
 def test_raknedomaren_kors_i_samma_pass_och_delar_reparationsrundan():
     """Båda domarna i ETT pass och EN reparationsrunda — och talsignalerna
     åker med in i den prompten fastän de aldrig fäller själva."""
-    nivadom = json.dumps({"domar": [{"nr": "2", "niva": "E",
+    nivadom = json.dumps({"domar": [{"nr": "1", "niva": "E", "motivering": ""},
+                                    {"nr": "2", "niva": "E",
                                      "motivering": "rutin"}]})
     raknedom = json.dumps({"domar": [{"nr": "1", "berakning": "$x = 2$",
                                       "stammer": "nej", "ratt_svar": "$x = 2$",
@@ -591,19 +868,20 @@ def test_raknedomaren_kors_i_samma_pass_och_delar_reparationsrundan():
     # En avrundningsfras som talvakten fäller — men som inte får kosta en runda
     # på egen hand (se testet efter det här).
     prov["uppgifter"][0]["text"] += " Avrunda till två decimaler."
-    llm, anrop = _stub([json.dumps(prov), nivadom, raknedom, json.dumps(prov)])
+    llm, anrop = _stub([json.dumps(prov), json.dumps(prov)],
+                       dom=nivadom, rakne=raknedom)
     res = exam_gen.generate_exam("Ma1a", "NA25", ["ekvationer"], model="m",
                                  antal=2, profil="arbetsblad", llm=llm)
-    assert len(anrop) == 4 and res["rounds"] == 2
-    # EN reparationsprompt, alla tre sorters fynd i den.
-    assert "poängsatt C men bedöms som E" in anrop[3]
-    assert "ändras TILLSAMMANS" in anrop[3]
-    assert "finns inte i nationella provet" in anrop[3]
-    # Domarnas fynd gick IN i reparationen och prövas aldrig om (passet körs en
-    # gång) — de står alltså inte kvar. Talsignalerna räknas däremot om på
-    # resultatet, och eftersom uppspelningen gav tillbaka samma papper står de
-    # kvar som varningar läraren ser.
-    assert {e["code"] for e in res["errors"]} == {"talsignal"}
+    reparation = [p for p in anrop if "Problem att åtgärda" in p][0]
+    # EN reparationsprompt DELAD av båda domarna, alla tre sorters fynd i den.
+    assert "poängsatt C men bedöms som E" in reparation
+    assert "ändras TILLSAMMANS" in reparation
+    assert "finns inte i nationella provet" in reparation
+    # Talsignalerna räknas om på resultatet, och eftersom uppspelningen gav
+    # tillbaka samma papper står de kvar som varningar läraren ser. Nivåfyndet
+    # står också kvar — grinden dömde om uppgift 2 och fick samma svar.
+    assert {e["code"] for e in res["errors"]} == {"talsignal", "niva"}
+    assert [f["nr"] for f in res["nivafel"]] == ["2"]
 
 
 def test_talsignaler_ensamma_kostar_aldrig_en_runda():
@@ -611,10 +889,12 @@ def test_talsignaler_ensamma_kostar_aldrig_en_runda():
     signalen att läsa — men inte en omskrivning hon inte bett om."""
     prov = _giltigt_prov()
     prov["uppgifter"][0]["text"] += " Avrunda till två decimaler."
-    llm, anrop = _stub([json.dumps(prov), "{}", "{}"])
+    enig = json.dumps({"domar": [{"nr": "1", "niva": "E"},
+                                 {"nr": "2", "niva": "C"}]})
+    llm, anrop = _stub([json.dumps(prov)], dom=enig)
     res = exam_gen.generate_exam("Ma1a", "NA25", ["ekvationer"], model="m",
                                  antal=2, profil="arbetsblad", llm=llm)
-    assert len(anrop) == 3 and res["rounds"] == 1
+    assert len(anrop) == 4 and res["rounds"] == 1 and res["nivafel"] == []
     # Två signaler: frasen på uppgiften, och pappret som helhet (en av två
     # uppgifter är över andelstaket).
     assert [e["code"] for e in res["errors"]] == ["talsignal", "talsignal"]

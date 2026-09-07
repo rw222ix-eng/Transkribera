@@ -1232,13 +1232,17 @@ def _smafallsregeln(s: dict, barare: int) -> list[dict]:
     return []
 
 
-def _ren_e_band(niva_mal: dict | None) -> bool:
+def ren_e_band(niva_mal: dict | None) -> bool:
     """Sant när lärarens nivåband stänger BÅDE C och A helt — arbetsbladets
     «E-nivå» (NIVAVAL). Då finns ingen laglig C- eller A-poäng på pappret, och
     eftersom nationella provet aldrig delar ut kommunikationspoäng på E-nivå
     finns det heller ingen laglig K-uppgift: förmågan hoppas över i stället för
     att lyftas till C. Det är enda stället där sex förmågor blir fem, så både
-    bandet nedan och sökningens straff måste veta om det."""
+    bandet nedan och sökningens straff måste veta om det.
+
+    PUBLIK sedan 2026-09-07: exam_gen.e_nivasignaler läser den. De
+    deterministiska E-signalerna (kvadreringsregel, generellt bevis, motexempel)
+    gäller bara här — på ett blandat papper är samma innehåll inte fel."""
     if not niva_mal:
         return False
     return all(tuple(niva_mal.get(n) or ()) == (0, 0) for n in ("c", "a"))
@@ -1283,9 +1287,9 @@ def validate_balance(doc: ExamDoc,
     if barare >= MIN_BARARE_FOR_BAND:
         for f, (lo, hi) in fm.items():
             # Ren E: K har inget golv att uppfylla, för förmågan finns inte på
-            # pappret (se _ren_e_band). Utan undantaget hade varje rent
+            # pappret (se ren_e_band). Utan undantaget hade varje rent
             # E-arbetsblad fällts på en förmåga det aldrig fick ha.
-            if f == "K" and _ren_e_band(nm):
+            if f == "K" and ren_e_band(nm):
                 continue
             andel = s["formagor"][f] / total
             if andel < lo or andel > hi:
@@ -2047,7 +2051,7 @@ def balanced_skeleton(antal: int, profil: str = "prov",
     # Provet får sina delar och deluppgifter som vanligt: delningen är en
     # omfördelning av radens trippel (_dela_i_deluppgifter), så en ren E-rad ger
     # rena E-delar.
-    ren_e = _ren_e_band(niva_mal) and mix[1] == 0 and mix[2] == 0
+    ren_e = ren_e_band(niva_mal) and mix[1] == 0 and mix[2] == 0
     ordning = (tuple(f for f in FORMAGE_ORDNING if f != "K")
                if ren_e else FORMAGE_ORDNING)
     slots: list[dict] = []
@@ -2515,7 +2519,7 @@ def _straff(slots: list[dict], profil: str,
         # K-uppgift, och ett straff för en förmåga inget drag kan nå hade bara
         # varit en konstant som säger att skelettet aldrig blir rent.
         band_formagor = [f for f in prof_fm
-                         if not (f == "K" and _ren_e_band(niva_mal))]
+                         if not (f == "K" and ren_e_band(niva_mal))]
         straff += sum(utanfor(s["formagor"][f] / total, prof_fm[f])
                       for f in band_formagor)
         # Bandet är kravet, jämnheten är önskemålet: en tiondels vikt på
