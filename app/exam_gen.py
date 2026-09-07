@@ -1479,14 +1479,26 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
     elif profil == "arbetsblad":
         if skeleton:
             block.append(_skelett_plan(skeleton))
+        # Förmågeraden måste säga samma sak som uppgiftsplanen. Ett rent
+        # E-blad (nivåvalet «E-nivå») bär FEM förmågor: Kommunikation hoppas
+        # över i skelettet, för nationella provet delar aldrig ut
+        # kommunikationspoäng på E-nivå. Att ändå lova «alla sex» hade satt
+        # prompten emot den plan grammatiken låser modellen vid.
+        formageraden = (
+            "alla sex förmågor ska vägas lika, och en kommunikationsuppgift på "
+            "ett arbetsblad är «förklara med ord varför …» i drillformat, inte "
+            "en uppsats. ")
+        if skeleton and not any(s["formaga"] == "K" for s in skeleton):
+            formageraden = (
+                "förmågorna i uppgiftsplanen ska vägas lika. Kommunikation "
+                "saknas med flit: bladet ger bara E-poäng, och nationella "
+                "provet delar aldrig ut kommunikationspoäng på E-nivå. ")
         block.append(
             f"Uppdrag: skriv ett ARBETSBLAD (övningsblad, inte prov) för "
             f"{kurs}, klass {klass}, med EXAKT {antal} uppgifter (varken fler "
             f"eller färre). {ORIGINALITET_UR_BOKEN}Tyngden ligger på övning och rutin — men det är "
-            "uppgifternas FORM som ska vara övande, inte förmågefördelningen: "
-            "alla sex förmågor ska vägas lika, och en kommunikationsuppgift på "
-            "ett arbetsblad är «förklara med ord varför …» i drillformat, inte "
-            "en uppsats. Inga delar behövs (del: null på alla uppgifter). "
+            f"uppgifternas FORM som ska vara övande, inte förmågefördelningen: "
+            f"{formageraden}Inga delar behövs (del: null på alla uppgifter). "
             # Samma skäl som på gruppuppgiften: rutan måste stå i dokumentet
             # för att kunna ändras (exam_spec.instruktion).
             "Skriv instruktionsbandet i fältet \"instruktion\": svaret skrivs "

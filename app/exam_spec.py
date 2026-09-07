@@ -1232,6 +1232,18 @@ def _smafallsregeln(s: dict, barare: int) -> list[dict]:
     return []
 
 
+def _ren_e_band(niva_mal: dict | None) -> bool:
+    """Sant när lärarens nivåband stänger BÅDE C och A helt — arbetsbladets
+    «E-nivå» (NIVAVAL). Då finns ingen laglig C- eller A-poäng på pappret, och
+    eftersom nationella provet aldrig delar ut kommunikationspoäng på E-nivå
+    finns det heller ingen laglig K-uppgift: förmågan hoppas över i stället för
+    att lyftas till C. Det är enda stället där sex förmågor blir fem, så både
+    bandet nedan och sökningens straff måste veta om det."""
+    if not niva_mal:
+        return False
+    return all(tuple(niva_mal.get(n) or ()) == (0, 0) for n in ("c", "a"))
+
+
 def validate_balance(doc: ExamDoc,
                      formaga_mal: dict | None = None,
                      niva_mal: dict | None = None,
@@ -1270,6 +1282,11 @@ def validate_balance(doc: ExamDoc,
     barare = formagebarare(doc)
     if barare >= MIN_BARARE_FOR_BAND:
         for f, (lo, hi) in fm.items():
+            # Ren E: K har inget golv att uppfylla, för förmågan finns inte på
+            # pappret (se _ren_e_band). Utan undantaget hade varje rent
+            # E-arbetsblad fällts på en förmåga det aldrig fick ha.
+            if f == "K" and _ren_e_band(nm):
+                continue
             andel = s["formagor"][f] / total
             if andel < lo or andel > hi:
                 errors.append(_err(f"förmåga {f}", "formagabalans",
@@ -1726,8 +1743,16 @@ KARAKTARSMIX: dict[str, tuple[float, float, float]] = {
 # `mix` byter karaktärsfördelningen i skelettet; `mal` är nivåbanden som ersätter
 # profilens NIVA_MAL i sökning, validering och reparation. Banden är breda
 # (±15 % runt mixens förväntade poängutfall) med flit: K-uppgifter har ingen
-# E-nivå och lyfts till C i skelettet, så «Bara E» bär alltid lite C-poäng, och
-# ett litet papper flyttar flera procentenheter per poäng.
+# E-nivå och lyfts till C i skelettet, så PROVETS «Bara E» bär alltid lite
+# C-poäng, och ett litet papper flyttar flera procentenheter per poäng.
+#
+# ARBETSBLADETS «E-nivå» är undantaget, och det är lärarens dom: ett blad hon
+# ger den som ska nå E ska ha ENBART E-poäng. Ett skarpt blad på 20 uppgifter
+# kom tillbaka med 28 E, 13 C och 1 A — bandet släppte igenom det, för det var
+# byggt för prov. Bandet är därför punkter (1,00 / 0 / 0) i stället för spann,
+# och K hoppas över i skelettets förmågerotation när mixen är ren E (se
+# balanced_skeleton). NP-faktumet «ingen EK-poäng» står kvar: bladet får ingen
+# K-uppgift alls i stället för en K-uppgift med E-poäng.
 NIVAVAL: dict[str, dict[str, dict]] = {
     "prov": {
         "Bara E": {"mix": (1.00, 0.00, 0.00),
@@ -1745,9 +1770,10 @@ NIVAVAL: dict[str, dict[str, dict]] = {
                               "a": (0.20, 0.55)}},
     },
     "arbetsblad": {
-        "E-nivå": {"mix": (0.85, 0.15, 0.00),
-                   "mal": {"e": (0.55, 1.00), "c": (0.00, 0.40),
-                           "a": (0.00, 0.05)}},
+        # Ren E: varje uppgift bär [x, 0, 0] och inget annat.
+        "E-nivå": {"mix": (1.00, 0.00, 0.00),
+                   "mal": {"e": (1.00, 1.00), "c": (0.00, 0.00),
+                           "a": (0.00, 0.00)}},
         "C-nivå": {"mix": (0.15, 0.70, 0.15),
                    "mal": {"e": (0.00, 0.40), "c": (0.40, 0.85),
                            "a": (0.00, 0.30)}},
@@ -1976,11 +2002,22 @@ def balanced_skeleton(antal: int, profil: str = "prov",
     mix = mix or KARAKTARSMIX.get(profil, KARAKTARSMIX["prov"])
     karaktarer = _karaktarsfoljd(antal, mix)
 
+    # REN E (lärarens «E-nivå» på arbetsbladet): mixen ger bara E-karaktärer OCH
+    # bandet stänger C och A helt, så det finns ingen plats för Kommunikation —
+    # NP delar aldrig ut EK-poäng. Förmågan hoppas därför över i rotationen och
+    # nästa förmåga i FORMAGE_ORDNING tar platsen, i stället för att K-raden
+    # lyfts till C. Fem förmågor i stället för sex är priset för ett papper som
+    # bara bär E-poäng, och det är precis vad läraren bad om.
+    # Provets «Bara E» faller INTE hit: dess mix är också ren, men dess band
+    # rymmer C-poäng, och där ska K fortsätta bära sina poäng på C.
+    ren_e = _ren_e_band(niva_mal) and mix[1] == 0 and mix[2] == 0
+    ordning = (tuple(f for f in FORMAGE_ORDNING if f != "K")
+               if ren_e else FORMAGE_ORDNING)
     slots: list[dict] = []
     raknat = {"E": 0, "C": 0, "A": 0}
     for i, kar in enumerate(karaktarer):
-        varv, plats = divmod(i, len(FORMAGE_ORDNING))
-        f = FORMAGE_ORDNING[(plats + varv) % len(FORMAGE_ORDNING)]
+        varv, plats = divmod(i, len(ordning))
+        f = ordning[(plats + varv) % len(ordning)]
         # Kommunikation har ingen E-nivå (uppmätt över de fyra proven i
         # niva_rubrik.ANALYSERADE_PROV: CK och AK förekommer, EK aldrig). En
         # K-uppgift som lottats till E-karaktär skulle bli värd noll poäng —
@@ -2437,14 +2474,23 @@ def _straff(slots: list[dict], profil: str,
 
     straff = sum(utanfor(s[n] / total, nm[n]) for n in ("e", "c", "a"))
     if len(slots) >= MIN_BARARE_FOR_BAND:
+        # Samma undantag som valideringen gör: ett rent E-papper har ingen
+        # K-uppgift, och ett straff för en förmåga inget drag kan nå hade bara
+        # varit en konstant som säger att skelettet aldrig blir rent.
+        band_formagor = [f for f in prof_fm
+                         if not (f == "K" and _ren_e_band(niva_mal))]
         straff += sum(utanfor(s["formagor"][f] / total, prof_fm[f])
-                      for f in prof_fm)
+                      for f in band_formagor)
         # Bandet är kravet, jämnheten är önskemålet: en tiondels vikt på
         # avståndet till 1/6 gör att sökningen väljer det jämnaste av flera
         # godkända skelett i stället för att stanna på första bästa. Vikten är
         # låg med flit — den får aldrig kosta ett bandbrott någon annanstans.
-        straff += 0.1 * sum((s["formagor"][f] / total - JAMN_FORMAGA) ** 2
-                            for f in prof_fm)
+        # Målpunkten räknas på de förmågor som FINNS: ett rent E-papper bär fem,
+        # och att dra deras andelar mot 1/6 hade bett om något som inte går
+        # (fem sjättedelar summerar inte till en hel).
+        jamn = 1 / len(band_formagor)
+        straff += 0.1 * sum((s["formagor"][f] / total - jamn) ** 2
+                            for f in band_formagor)
     if profil == "prov" and not eget_val:
         # NIVA_MAL är mätningen PLUS marginal, och marginalen finns bara för att
         # små prov ska kunna träffa den. Inuti bandet är straffet noll, så utan

@@ -2819,6 +2819,34 @@ def test_nivaval_bara_e_ger_inga_a_poang_och_k_bar_c():
     assert k and all(s["poang"][0] == 0 and s["poang"][1] > 0 for s in k)
 
 
+@pytest.mark.parametrize("antal", [6, 8, 12, 20])
+def test_nivaval_arbetsblad_e_niva_ger_enbart_e_poang(antal):
+    """ARBETSBLADETS «E-nivå» är ren E, till skillnad från provets «Bara E».
+
+    Ett skarpt blad på 20 uppgifter kom tillbaka med 28 E-poäng, 13 C och 1 A,
+    och bandet friade det: mixen var 85/15 och taken låg på 40 % C. Läraren ger
+    bladet till den som ska nå E, alltså ska varje uppgift bära [x, 0, 0].
+
+    Priset är Kommunikation: nationella provet delar aldrig ut K-poäng på
+    E-nivå, så förmågan hoppas över i rotationen i stället för att lyfta raden
+    till C. Fem förmågor, inga C-poäng."""
+    nv = exam_spec.NIVAVAL["arbetsblad"]["E-nivå"]
+    sk = exam_spec.balanced_skeleton(antal, "arbetsblad", delar=False,
+                                     mix=nv["mix"], niva_mal=nv["mal"])
+    assert len(sk) == antal
+    assert all(s["poang"][0] > 0 and s["poang"][1] == 0 and s["poang"][2] == 0
+               for s in sk), [s["poang"] for s in sk]
+    assert not [s for s in sk if s["formaga"] == "K"]
+    doc = exam_spec._skeleton_doc(sk)
+    assert exam_spec.validate_balance(doc, niva_mal=nv["mal"],
+                                      profil="arbetsblad") == []
+    assert exam_spec.validate_ordning(doc, kolla_klumpning=False) == []
+    # Prompten får inte lova sex förmågor när planen bär fem.
+    prompt = exam_gen.build_prompt("Ma2c", "NA23", [], profil="arbetsblad",
+                                   antal=antal, skeleton=sk)
+    assert "alla sex förmågor ska vägas lika" not in prompt
+
+
 def test_validate_exam_json_mater_mot_lararens_band():
     """Samma dokument, två domar: ett Bara E-prov ska fällas av NP-banden
     (det ÄR inte NP-format) men frias av sitt eget nivåval. Det är exakt
