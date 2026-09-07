@@ -348,14 +348,22 @@ window.Blad = (() => {
          eller A-poäng». Är kravet noll — ett prov utan C/A-poäng att kräva —
          står bara gränsen, för «varav minst 0» är ingen upplysning. */
       const varav = (n, text) => (n ? `, varav minst ${n} ${text}` : '');
-      /* Ett prov som bara bär E-uppgifter kan inte ge C eller A. Står gränserna
-         där ändå lovar pappret ett betyg uppgifterna inte kan bära. */
-      const harC = plock.some(u => !arE(u));
+      /* VILKA rader tabellen har är serverns svar, precis som talen i dem:
+         `granser.betyg` (exam_spec.betygsrader). Ett prov utan C- och
+         A-poäng kan inte ge C eller A, och ett prov med C-poäng men utan
+         A-poäng kan inte ge A — står gränsen där ändå lovar pappret ett betyg
+         uppgifterna inte kan bära. Skärmen räknade förut om frågan själv
+         («har någon uppgift annat än E?»), och den räkningen såg bara
+         uppgifternas högsta nivå: prov 50 hade två K-uppgifter med C-poäng
+         och fick därför BÅDE C- och A-raden, fast det inte fanns en enda
+         A-poäng att ta. Saknas fältet (ett papper stämplat före 2026-09-07
+         som servern inte hunnit räkna om) står alla tre som förut. */
+      const rader = (gr.betyg && gr.betyg.length ? gr.betyg : ['E', 'C', 'A']);
       if (kropp) kropp.innerHTML = `<tr><td>E</td><td>${gr.E.minst} poäng</td></tr>`
-        + (harC
-          ? `<tr><td>C</td><td>${gr.C.minst} poäng${varav(gr.C.varav_ca, 'C- eller A-poäng')}</td></tr>`
-            + `<tr><td>A</td><td>${gr.A.minst} poäng${varav(gr.A.varav_a, 'A-poäng')}</td></tr>`
-          : '');
+        + (rader.indexOf('C') >= 0
+          ? `<tr><td>C</td><td>${gr.C.minst} poäng${varav(gr.C.varav_ca, 'C- eller A-poäng')}</td></tr>` : '')
+        + (rader.indexOf('A') >= 0
+          ? `<tr><td>A</td><td>${gr.A.minst} poäng${varav(gr.A.varav_a, 'A-poäng')}</td></tr>` : '');
       /* Maxpoängen är provets, och den kommer ur samma räkning som gränserna —
          inte ur skärmens egen summa, som kan räkna på andra uppgifter. */
       if (fot) fot.textContent = `${gr.total != null ? gr.total : summa} poäng`;

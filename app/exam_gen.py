@@ -1064,6 +1064,36 @@ def build_bilder(beskrivningar: list[str]) -> str:
             'Alla andra uppgifter har "bild": null.')
 
 
+# ── BALANSRADEN, NÄR PLANEN BÄR FEM FÖRMÅGOR ───────────────────────────────
+# INSTRUCTION lovar att alla SEX förmågorna ska täckas. Det är sant för varje
+# papper utom ett: det rena E-papprets (arbetsbladets «E-nivå», provets
+# «Bara E»). Där hoppas Kommunikation över i skelettet, för nationella provet
+# delar aldrig ut kommunikationspoäng på E-nivå — och en prompt som ändå lovar
+# sex står emot den plan grammatiken låser modellen vid. Raden byts därför ut
+# mot planens egen sanning i stället för att stå kvar och säga emot.
+_BALANSRADEN = (
+    "Balans: alla SEX förmågorna ska täckas och väga ungefär lika — var och en "
+    "runt en sjättedel av poängen, ingen under en tiondel och ingen över en "
+    "fjärdedel. ")
+_BALANSRADEN_UTAN_K = (
+    "Balans: förmågorna i UPPGIFTSPLANEN ska täckas och väga ungefär lika. "
+    "Kommunikation saknas ur planen med flit: pappret ger bara E-poäng, och "
+    "nationella provet delar aldrig ut kommunikationspoäng på E-nivå — skriv "
+    "alltså ingen uppgift på den förmågan. ")
+
+
+def _instruktion(skeleton: list[dict] | None) -> str:
+    """INSTRUCTION, med balansraden bytt när uppgiftsplanen saknar K.
+
+    Bara här, och bara med ett skelett i handen: reparations- och
+    omskrivningsprompterna får INSTRUCTION rå, för de har ingen plan att läsa
+    och ett prov som TAPPAT sin K-uppgift ska få tillbaka den, inte höra att
+    förmågan är struken."""
+    if skeleton and not any(s.get("formaga") == "K" for s in skeleton):
+        return INSTRUCTION.replace(_BALANSRADEN, _BALANSRADEN_UTAN_K)
+    return INSTRUCTION
+
+
 def _skelett_plan(skeleton: list[dict], last: bool = True) -> str:
     """Läsbar uppgiftsplan ur det balanserade skelettet — talar om för modellen
     vilket innehåll varje rad ska ha.
@@ -1299,10 +1329,13 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
     # ska vara garanterad by construction och inte bero på att modellen råkar
     # sprida poängen rätt. Bara delarna skiljer — arbetsbladet och
     # gruppuppgiften är platta papper.
-    if skeleton is None and profil in ("arbetsblad", "gruppuppgift"):
-        skeleton = exam_spec.balanced_skeleton(antal, profil, delar=False,
-                                               kurs=kurs)
-    block = [INSTRUCTION]
+    # Provet räknas HÄR i stället för i sitt eget block längre ned, och skälet
+    # är balansraden: instruktionen överst måste veta om planen bär fem
+    # förmågor eller sex (_instruktion). Samma anrop, samma skelett.
+    if skeleton is None:
+        skeleton = exam_spec.balanced_skeleton(
+            antal, profil, delar=(profil == "prov" and delar), kurs=kurs)
+    block = [_instruktion(skeleton)]
     if punkter:
         # Med koder står punkterna som «KOD — text», och koden är det modellen
         # ska skriva i innehall. Utan koder (fritextpunkter från ett äldre
@@ -1521,9 +1554,6 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
         # Balanserat skelett: modellen klarar inte den flerdimensionella
         # balansen (förmåga × nivå) själv, så appen låser del/förmåga/typ/poäng
         # per uppgift (grammatik) och ger planen här så innehållet matchar.
-        if skeleton is None:
-            skeleton = exam_spec.balanced_skeleton(antal, profil,
-                                                   delar=delar, kurs=kurs)
         if skeleton is not None:
             block.append(_skelett_plan(skeleton))
         # Nivårubriken står omedelbart efter uppgiftsplanen (C3). Planen säger

@@ -674,10 +674,17 @@ def _forsatt_vy(doc: exam_spec.ExamDoc, delar: list[dict],
     # Betygstabellens spann. Förlagan har «F 0–9» och «E 9–18» — nio poäng kan
     # inte vara två betyg samtidigt, och det är det ENDA i förlagan som rättas
     # här: varje gräns börjar där den förra slutade plus ett.
-    granser = [("F", 0, max(int(g["E"]["minst"]) - 1, 0)),
-               ("E", int(g["E"]["minst"]), max(int(g["C"]["minst"]) - 1, 0)),
-               ("C", int(g["C"]["minst"]), max(int(g["A"]["minst"]) - 1, 0)),
-               ("A", int(g["A"]["minst"]), total)]
+    #
+    # VILKA rader tabellen har är gränsernas eget svar (exam_spec.betygsrader):
+    # ett prov utan C- och A-poäng har bara E-raden, för det kan inte ge C.
+    # Spannen räknas på de rader som faktiskt står — sista raden går till
+    # maxpoängen, oavsett vilket betyg den bär.
+    visade = [b for b in ("E", "C", "A") if b in (g.get("betyg") or ("E", "C", "A"))]
+    startar = [int(g[b]["minst"]) for b in visade]
+    granser = [("F", 0, max(startar[0] - 1, 0))]
+    for i, b in enumerate(visade):
+        hi = max(startar[i + 1] - 1, 0) if i + 1 < len(startar) else total
+        granser.append((b, startar[i], hi))
     betyg = [{"betyg": b, "spann": escape_latex(f"{lo}–{hi}")}
              for b, lo, hi in granser]
 

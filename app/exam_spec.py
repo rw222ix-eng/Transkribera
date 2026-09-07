@@ -1597,6 +1597,24 @@ def e_skarpning(config: dict | None = None) -> int:
         return 0
 
 
+def betygsrader(summor: dict) -> list[str]:
+    """Vilka betygsrader papprets tabell ska ha, ur poängsummorna.
+
+    Ett prov utan C- och A-poäng kan inte ge C eller A hur många poäng eleven
+    än samlar. Stod raderna kvar ändå lovade tabellen ett betyg uppgifterna
+    inte kan bära: «Bara E»-provet (prov 50) tryckte «C 15 poäng, varav minst
+    2 C- eller A-poäng» och «A 24 poäng» på ett papper där det inte fanns en
+    enda C- eller A-poäng att ta.
+
+    Räknas HÄR, där gränserna räknas, och åker med i `granser` — så läser
+    skärmen (blad.js prbetyg), försättsbladet (exam_latex) och
+    bedömningsanvisningen samma dom i stället för att var och en ställa frågan
+    på sitt sätt. E står alltid: F och E kan varje papper skilja på."""
+    c = int(summor.get("c") or 0)
+    a = int(summor.get("a") or 0)
+    return ["E"] + (["C"] if c or a else []) + (["A"] if a else [])
+
+
 def kravgranser_ur_summor(summor: dict, config: dict | None = None,
                           kurs: str = "") -> dict:
     """Kravgränserna ur färdiga poängsummor ({total, e, c, a}).
@@ -1621,8 +1639,11 @@ def kravgranser_ur_summor(summor: dict, config: dict | None = None,
     regelns_e = math.ceil(total * cfg["e_andel"])
     extra = min(e_skarpning(cfg), max(total - regelns_e, 0))
     e_minst = regelns_e + extra
+    rader = betygsrader(summor)
     granser = {
         "total": total,
+        # Vilka rader tabellen ska ha. Se betygsrader.
+        "betyg": rader,
         # `extra` står med bara när den är satt: en stämplad gräns ska kunna
         # säga VARFÖR den ligger över regelns tal, och ett papper utan
         # skärpning ska se ut precis som det gjorde före väljaren.
@@ -1631,16 +1652,20 @@ def kravgranser_ur_summor(summor: dict, config: dict | None = None,
               "varav_ca": math.ceil(ca * cfg["c_varav_ca"])},
         "A": {"minst": math.ceil(total * cfg["a_andel"]),
               "varav_a": math.ceil(a * cfg["a_varav_a"])},
+        # Regeln säger bara det tabellen visar: en mening om C-gränsen på ett
+        # papper utan C-poäng är en regel för ett betyg som inte finns.
         "regel": (
             f"NP-modellen för {etikett}. "
             f"E: minst {cfg['e_andel']:.0%} av totalpoängen"
             + (f", plus lärarens skärpning på {extra} p" if extra else "")
             + ". "
-            f"C: minst {cfg['c_andel']:.0%} av totalpoängen, varav minst "
-            f"{cfg['c_varav_ca']:.0%} av C- och A-poängen. "
-            f"A: minst {cfg['a_andel']:.0%} av totalpoängen, varav minst "
-            f"{cfg['a_varav_a']:.0%} av A-poängen."
-        ),
+            + (f"C: minst {cfg['c_andel']:.0%} av totalpoängen, varav minst "
+               f"{cfg['c_varav_ca']:.0%} av C- och A-poängen. "
+               if "C" in rader else "")
+            + (f"A: minst {cfg['a_andel']:.0%} av totalpoängen, varav minst "
+               f"{cfg['a_varav_a']:.0%} av A-poängen."
+               if "A" in rader else "")
+        ).strip(),
     }
     # Mellanbetygen bara när de begärts — se KRAV_DEFAULT. Utan flaggan är
     # dokumentet bokstavligen oförändrat, och betygstabellen på försättsbladet
@@ -1700,12 +1725,16 @@ def kravgranser(doc: ExamDoc, config: dict | None = None,
     alla anrop utom de som prövar en annan kurs mot samma papper."""
     summor = poangsummor(doc)
     total = int(summor.get("total") or 0)
+    # STÄMPLADE GRÄNSER SAKNAR `betyg` om de sattes före 2026-09-07. Raderna
+    # räknas då fram ur papprets egna summor — samma fråga, samma svar, och
+    # inget gammalt prov behöver stämplas om för att sluta lova ett C det inte
+    # kan ge. Bär stämpeln fältet vinner det, som alla andra stämplade tal.
     egna = getattr(doc, "granser", None)
     if giltiga_granser(egna, total):
-        return dict(egna)
+        return {"betyg": betygsrader(summor), **dict(egna)}
     ur_papper = (papper or {}).get("granser")
     if giltiga_granser(ur_papper, total):
-        return dict(ur_papper)
+        return {"betyg": betygsrader(summor), **dict(ur_papper)}
     if egna is not None or ur_papper is not None:
         _LOG.info("Kravgränserna på «%s» gällde en annan poängsumma än "
                   "papprets %d p — räknas om ur dagens regel.", doc.titel, total)
@@ -1741,23 +1770,30 @@ KARAKTARSMIX: dict[str, tuple[float, float, float]] = {
 # profilens KARAKTARSMIX ovan gäller precis som förut (kassettregeln).
 #
 # `mix` byter karaktärsfördelningen i skelettet; `mal` är nivåbanden som ersätter
-# profilens NIVA_MAL i sökning, validering och reparation. Banden är breda
-# (±15 % runt mixens förväntade poängutfall) med flit: K-uppgifter har ingen
-# E-nivå och lyfts till C i skelettet, så PROVETS «Bara E» bär alltid lite
-# C-poäng, och ett litet papper flyttar flera procentenheter per poäng.
+# profilens NIVA_MAL i sökning, validering och reparation. De BLANDADE lägena
+# (E-tyngd, C/A-tyngd, C-nivå, A-nivå) har breda band, ±15 % runt mixens
+# förväntade poängutfall, och det är med flit: K-uppgifter har ingen E-nivå och
+# lyfts till C i skelettet, så ett band som bara rymmer sin egen mix hade fällts
+# av en enda K-rad, och ett litet papper flyttar flera procentenheter per poäng.
 #
-# ARBETSBLADETS «E-nivå» är undantaget, och det är lärarens dom: ett blad hon
-# ger den som ska nå E ska ha ENBART E-poäng. Ett skarpt blad på 20 uppgifter
-# kom tillbaka med 28 E, 13 C och 1 A — bandet släppte igenom det, för det var
-# byggt för prov. Bandet är därför punkter (1,00 / 0 / 0) i stället för spann,
-# och K hoppas över i skelettets förmågerotation när mixen är ren E (se
-# balanced_skeleton). NP-faktumet «ingen EK-poäng» står kvar: bladet får ingen
-# K-uppgift alls i stället för en K-uppgift med E-poäng.
+# DE RENA E-LÄGENA är undantaget, och det är lärarens dom två gånger samma dag
+# (2026-09-07): arbetsbladets «E-nivå» och provets «Bara E» ska bära ENBART
+# E-poäng, [x, 0, 0] på varje uppgift OCH varje deluppgift. Banden är därför
+# punkter (1,00 / 0 / 0) i stället för spann. Båda hade släppts igenom förut:
+# ett skarpt blad på 20 uppgifter kom tillbaka med 28 E, 13 C och 1 A, och prov
+# 50 («Tal och uttryck», NA26F) med 25 E och 5 C — de fem C-poängen var två
+# K-uppgifter, alltså precis den lyftning bandet var byggt för att rymma.
+#
+# Priset är Kommunikation, och NP-faktumet «ingen EK-poäng» står kvar: pappret
+# får ingen K-uppgift ALLS i stället för en K-uppgift med E-poäng. Förmågan
+# hoppas över i skelettets rotation när bandet är rent och mixen ren (se
+# balanced_skeleton) — fem förmågor i stället för sex.
 NIVAVAL: dict[str, dict[str, dict]] = {
     "prov": {
+        # Ren E: varje uppgift och deluppgift bär [x, 0, 0] och inget annat.
         "Bara E": {"mix": (1.00, 0.00, 0.00),
-                   "mal": {"e": (0.70, 1.00), "c": (0.00, 0.30),
-                           "a": (0.00, 0.05)}},
+                   "mal": {"e": (1.00, 1.00), "c": (0.00, 0.00),
+                           "a": (0.00, 0.00)}},
         "E-tyngd": {"mix": (0.60, 0.30, 0.10),
                     "mal": {"e": (0.45, 0.80), "c": (0.15, 0.45),
                             "a": (0.00, 0.20)}},
@@ -2002,14 +2038,15 @@ def balanced_skeleton(antal: int, profil: str = "prov",
     mix = mix or KARAKTARSMIX.get(profil, KARAKTARSMIX["prov"])
     karaktarer = _karaktarsfoljd(antal, mix)
 
-    # REN E (lärarens «E-nivå» på arbetsbladet): mixen ger bara E-karaktärer OCH
-    # bandet stänger C och A helt, så det finns ingen plats för Kommunikation —
-    # NP delar aldrig ut EK-poäng. Förmågan hoppas därför över i rotationen och
-    # nästa förmåga i FORMAGE_ORDNING tar platsen, i stället för att K-raden
-    # lyfts till C. Fem förmågor i stället för sex är priset för ett papper som
-    # bara bär E-poäng, och det är precis vad läraren bad om.
-    # Provets «Bara E» faller INTE hit: dess mix är också ren, men dess band
-    # rymmer C-poäng, och där ska K fortsätta bära sina poäng på C.
+    # REN E (arbetsbladets «E-nivå» och provets «Bara E»): mixen ger bara
+    # E-karaktärer OCH bandet stänger C och A helt, så det finns ingen plats för
+    # Kommunikation — NP delar aldrig ut EK-poäng. Förmågan hoppas därför över i
+    # rotationen och nästa förmåga i FORMAGE_ORDNING tar platsen, i stället för
+    # att K-raden lyfts till C. Fem förmågor i stället för sex är priset för ett
+    # papper som bara bär E-poäng, och det är precis vad läraren bad om.
+    # Provet får sina delar och deluppgifter som vanligt: delningen är en
+    # omfördelning av radens trippel (_dela_i_deluppgifter), så en ren E-rad ger
+    # rena E-delar.
     ren_e = _ren_e_band(niva_mal) and mix[1] == 0 and mix[2] == 0
     ordning = (tuple(f for f in FORMAGE_ORDNING if f != "K")
                if ren_e else FORMAGE_ORDNING)

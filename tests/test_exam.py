@@ -683,6 +683,49 @@ def test_kravgranser_np_model():
     assert "D" not in g and "B" not in g
 
 
+def test_betygsraderna_foljer_papprets_poang():
+    """Ett prov utan C- och A-poäng kan inte ge C eller A, och tabellen ska
+    säga det. «Bara E»-provet tryckte «C 15 poäng, varav minst 2 C- eller
+    A-poäng» och «A 24 poäng» på ett papper utan en enda C-poäng."""
+    bara_e = exam_spec.kravgranser_ur_summor({"total": 30, "e": 30,
+                                              "c": 0, "a": 0})
+    assert bara_e["betyg"] == ["E"]
+    assert "C:" not in bara_e["regel"] and "A:" not in bara_e["regel"]
+    # C-poäng men inga A-poäng: E och C, inte A.
+    utan_a = exam_spec.kravgranser_ur_summor({"total": 30, "e": 25,
+                                              "c": 5, "a": 0})
+    assert utan_a["betyg"] == ["E", "C"]
+    assert "C:" in utan_a["regel"] and "A:" not in utan_a["regel"]
+    # Det vanliga pappret är orört.
+    assert exam_spec.kravgranser_ur_summor(
+        {"total": 55, "e": 23, "c": 19, "a": 13})["betyg"] == ["E", "C", "A"]
+
+
+def test_forsattsbladets_betygstabell_har_bara_de_rader_provet_kan_ge():
+    """Samma dom på PDF:en som på skärmen: raderna kommer ur `granser`, och
+    sista raden går till maxpoängen."""
+    rad = _exam()
+    for u, poang in zip(rad["uppgifter"],
+                        [[3, 0, 0], [2, 0, 0], [2, 0, 0], [3, 0, 0],
+                         [2, 0, 0], [2, 0, 0], [2, 0, 0]]):
+        u["poang"] = poang
+        u["bedomning"] = _trappa(poang)
+    rad["uppgifter"][6]["formaga"] = "R"
+    doc, fel = exam_spec.validate_exam_json(rad)
+    assert doc is not None, fel
+    vy = exam_latex._forsatt_vy(doc, [], None)
+    assert [r["betyg"] for r in vy["betyg"]] == ["F", "E"]
+    # F 0–7, E 8–16 (ceil(16 · 0,26) = 5 … men skärpningen är noll här).
+    assert vy["betyg"][-1]["spann"].endswith("16")
+    tex = exam_latex.render_prov(doc)
+    assert "\n  C &" not in tex and "\n  A &" not in tex
+
+    # Det vanliga provet har kvar alla fyra raderna.
+    doc2, _ = exam_spec.validate_exam_json(_exam())
+    assert [r["betyg"] for r in exam_latex._forsatt_vy(doc2, [], None)["betyg"]] \
+        == ["F", "E", "C", "A"]
+
+
 # ── Kalibreringen mot nationella provet ──────────────────────────────────────
 # NpMa2a vt2017 och vt2022, gränserna på provets sida 1. Båda 55 poäng. Testet
 # är hela skälet till att KRAV_DEFAULT har de tal den har: ändrar någon en
@@ -2754,13 +2797,21 @@ def test_arvande_deluppgifter_hojer_inte_kravet():
 # ───────────────────────── lärarens nivåval (NIVAVAL) ────────────────────
 
 def _bara_e_prov() -> dict:
-    """_exam() omlagd till «Bara E»: nästan alla poäng på E, K-uppgiften bär C
-    (ingen EK-poäng finns). 16 p (E 14 / C 2 / A 0) — träffar Bara E-banden
-    men INTE NP-banden, så samma dokument skiljer de två målvärldarna åt."""
+    """_exam() omlagd till «Bara E»: REN E, 16 p (E 16 / C 0 / A 0) — träffar
+    Bara E-banden men INTE NP-banden, så samma dokument skiljer de två
+    målvärldarna åt.
+
+    K-raden bytte förmåga och blev en resonemangsuppgift. Fixturen bar förut
+    två C-poäng på Kommunikation, för «Bara E» rymde dem: K har ingen E-nivå i
+    nationella provet och lyftes till C i skelettet. Sedan 2026-09-07 är valet
+    rent (exam_spec.NIVAVAL) — pappret får ingen K-uppgift alls i stället för
+    en K-uppgift med C-poäng — och fixturen ska vara det prov väljaren faktiskt
+    beställer."""
     data = _exam()
+    data["uppgifter"][6]["formaga"] = "R"
     for u, poang in zip(data["uppgifter"],
                         [[3, 0, 0], [2, 0, 0], [2, 0, 0], [3, 0, 0],
-                         [2, 0, 0], [2, 0, 0], [0, 2, 0]]):
+                         [2, 0, 0], [2, 0, 0], [2, 0, 0]]):
         u["poang"] = poang
         # Poängen flyttades, alltså flyttas trappan med: en rad per poäng, på
         # den nivå poängen faktiskt ligger (exam_gen.bedomningssignaler mäter
@@ -2807,16 +2858,39 @@ def test_nivaval_skelettet_traffar_lararens_band(profil, val, antal):
             f"{profil}/{val} antal={antal} delar={delar}"
 
 
-def test_nivaval_bara_e_ger_inga_a_poang_och_k_bar_c():
-    """«Bara E» är inte riktigt bara E — K-uppgifter har ingen E-nivå och
-    lyfts till C i skelettet. Men A-poäng ska det aldrig bli, och varje
-    K-rad ska bära sina poäng på C."""
+@pytest.mark.parametrize("antal", [6, 9, 12, 15, 20])
+def test_nivaval_prov_bara_e_ger_enbart_e_poang(antal):
+    """PROVETS «Bara E» är ren E, som arbetsbladets «E-nivå».
+
+    Valet bar förut lite C: K-uppgifter har ingen E-nivå i nationella provet
+    och lyftes till C i skelettet, och bandet rymde dem. Prov 50 («Tal och
+    uttryck», NA26F) kom därför tillbaka med 25 E och 5 C, och de fem C-poängen
+    var två K-uppgifter — på ett papper läraren beställt bara E till. Nu bär
+    varje uppgift OCH varje deluppgift [x, 0, 0], och Kommunikation hoppas över
+    i rotationen i stället för att lyftas.
+
+    Delarna är kvar: ett prov utan Del B och Del C är inget prov, och
+    delningen i deluppgifter är en omfördelning av radens egen trippel."""
     nv = exam_spec.NIVAVAL["prov"]["Bara E"]
-    sk = exam_spec.balanced_skeleton(12, "prov", delar=True,
+    sk = exam_spec.balanced_skeleton(antal, "prov", delar=True,
                                      mix=nv["mix"], niva_mal=nv["mal"])
-    assert all(s["poang"][2] == 0 for s in sk), "Bara E fick A-poäng"
-    k = [s for s in sk if s["formaga"] == "K"]
-    assert k and all(s["poang"][0] == 0 and s["poang"][1] > 0 for s in k)
+    assert len(sk) == antal
+    assert all(s["poang"][0] > 0 and s["poang"][1] == 0 and s["poang"][2] == 0
+               for s in sk), [s["poang"] for s in sk]
+    assert all(d[1] == 0 and d[2] == 0
+               for s in sk for d in (s.get("delar") or [])), \
+        [s.get("delar") for s in sk]
+    assert not [s for s in sk if s["formaga"] == "K"]
+    assert {s["del"] for s in sk} == {"B", "C"}
+    doc = exam_spec._skeleton_doc(sk)
+    assert exam_spec.validate_balance(doc, niva_mal=nv["mal"],
+                                      profil="prov") == []
+    assert exam_spec.validate_ordning(doc) == []
+    # Prompten får inte lova sex förmågor när planen bär fem.
+    prompt = exam_gen.build_prompt("Ma2c", "NA26F", [], profil="prov",
+                                   antal=antal, skeleton=sk)
+    assert "alla SEX förmågorna" not in prompt
+    assert "Kommunikation saknas ur planen" in prompt
 
 
 @pytest.mark.parametrize("antal", [6, 8, 12, 20])
