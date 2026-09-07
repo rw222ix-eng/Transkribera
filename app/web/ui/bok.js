@@ -139,9 +139,26 @@
     if (servern.length) window.Bok.namn = servern[0].namn;
     window.Bok.bocker = servern;
     /* Remsan, hyllan, dörren och uppgiftslistan ritas ur det här — de får veta
-       i samma andetag, annars står tre olika svar på samma sida. */
-    document.dispatchEvent(new CustomEvent('bok-redo', { detail: servern }));
+       i samma andetag, annars står tre olika svar på samma sida.
+       MEN INTE FÖRE DE LYSSNAR: SWR-cachen (api.js jsonSWR) ritar hyllan
+       synkront så fort /api/var-kors svarat, och det kan vara innan
+       uppslag.js och de andra skripten längre ner i app.html ens kört. Då gick
+       händelsen ut i tomma luften, och ett oförändrat svar från servern
+       skickar ingen andra gång — hyllan stod kvar på prototypens tre böcker
+       fast bok.js hade lärarens fyra (2026-09-07: «mina böcker har
+       försvunnit»). Laddar sidan fortfarande väntar utropet på
+       DOMContentLoaded, då sitter varje lyssnare på plats. */
+    if (document.readyState === 'loading') {
+      if (!vantarUtrop) {
+        vantarUtrop = true;
+        document.addEventListener('DOMContentLoaded', () => { vantarUtrop = false; utropa(); }, { once: true });
+      }
+    } else {
+      utropa();
+    }
   }
+  let vantarUtrop = false;
+  const utropa = () => document.dispatchEvent(new CustomEvent('bok-redo', { detail: servern }));
 
   window.Bok = {
     namn: 'Matematik 5000+ 3c', avsnitt: AVSNITT, register: REGISTER, bocker: null,
