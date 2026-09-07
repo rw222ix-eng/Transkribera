@@ -475,11 +475,19 @@ test("dag 8 — boken: slå upp ett uppslag och skriv tavlan ur det",
     expect(await page.evaluate(() => window.Uppslag.spann().bok))
       .toBe("Matematik 5000+ Kurs 2c");
     await page.getByRole("tab", { name: "Planering" }).click();
-    await page.evaluate(() => { window.PlanSteg.las(2, false); window.PlanSteg.gaTill(2); });
+    /* Dörrarna bor i steg 3 («Utgår från»), och stapeln viker ihop de steg man
+       inte står i (plansteg.js rita: display none). Öppnas steg 2 här går
+       klicket nedan mot en knapp som finns i DOM men inte syns, och testet
+       väntar ut sina 180 s — det var så dagen föll när mentorstiden råkade bli
+       den valda lektionen (se larardag.mjs valjKlass). */
+    await page.evaluate(() => { window.PlanSteg.las(3, false); window.PlanSteg.gaTill(3); });
     /* Bokdörren måste stå ÖPPEN — uppslaget följer med till servern bara när
        läraren valt boken som källa (plan.js bokval). Är den stängd skrivs
-       tavlan utan sidorna, och det syns inte på pappret. */
+       tavlan utan sidorna, och det syns inte på pappret. Klassprofilen öppnar
+       den själv för en boklektion (profil.js anvand); klicket är lärarens väg
+       om den inte gjorde det. */
     const dorr = page.locator('.kalla[data-dorr="bok"]');
+    await expect(dorr).toBeVisible();
     if (await dorr.getAttribute("aria-pressed") !== "true") await dorr.click();
     await page.evaluate(() => window.Uppslag.satt(15, 16));
     await expect.poll(() => page.locator("#uppgnivaer .uppgchip").count(),

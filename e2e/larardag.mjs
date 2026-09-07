@@ -180,7 +180,13 @@ export async function valjLektion(page, ...index) {
  *  gårdagens papper ligger kvar på korten. */
 export async function valjKlass(page, klass, nr = 0) {
   await page.getByRole("tab", { name: "Planering" }).click();
-  const kort = page.locator("#schemagrid .lekt[data-valjbar]").filter({ hasText: klass });
+  /* Schemats egen lektion, inte kalenderns extra timme. Sedan 45d6fe9 ritas en
+     kalenderpost med klass och tid som ett valbart lektkort (data-extra), och
+     NA25:s «Mentorstid» 08:25 står då FÖRE mattelektionen 09:05 på måndagen.
+     Dagarna är skrivna för mattelektionen (inspelningen heter 09.05), och
+     mentorstiden ger inga förval ur boken: kalendern säger att den timmen inte
+     är en boklektion (profil.js rutan), så bokdörren blev stående stängd. */
+  const kort = page.locator("#schemagrid .lekt[data-valjbar]:not([data-extra])").filter({ hasText: klass });
   await kort.nth(nr).locator(".lekttopp").click();
 }
 
