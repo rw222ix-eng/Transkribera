@@ -450,7 +450,11 @@ window.Blad = (() => {
   function arkhuvud(trav, v) {
     if (!v || v.typ !== 'Arbetsblad' || v.losningsblad) return;
     const i = v.inst || {};
-    const antal = arkval(v).length;
+    /* Pappret först, poolen sedan: ett skrivet blad bär sina uppgifter i
+       v.uppgifter, och det är dem raden ska räkna. arkval räknar bokens
+       uppgiftspool (tre för E-nivå), så ett blad med tjugo skrivna uppgifter
+       stod som «3 uppgifter» i huvudet. */
+    const antal = (v.uppgifter || []).length || arkval(v).length;
     const rad = [`${antal} ${antal === 1 ? 'uppgift' : 'uppgifter'}`, (i.niva || 'Blandat').toLowerCase(), 'enskilt arbete'].join(' · ');
     $$('.gu', trav).forEach(gu => {
       const huv = $('.guhuv', gu);
