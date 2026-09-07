@@ -3076,11 +3076,15 @@
          ett serverfel eller ett tryck på Avbryt — enda vägen tillbaka var att
          råka trigga planKoll. Bladkön nollställs av samma skäl som i
          slangUtkast: en död kö pekar på förra mottagaren. */
-      efterFel: () => {
+      efterFel: e => {
         $('#skriv').disabled = false;
         bladNu = null; bladko = [];
         planKoll();
         not.textContent = gammal;
+        /* Serverns nej ({"error": …}, t.ex. «välj en kurs») når också
+           hörnet: statusrutan kan ligga utanför synfältet när svaret kommer,
+           och en rad som tyst byter text är lätt att missa. */
+        if (e && e.message) window.toast && window.toast(e.message);
       },
       efterStopp: () => {
         $('#skriv').disabled = false;

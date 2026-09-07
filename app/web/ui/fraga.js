@@ -519,10 +519,23 @@
       lyssnare.slut();
       timers.forEach(clearTimeout);
       el.dataset.lage = 'stoppad';
-      smalUt();
+      const besked = (e && e.message) || 'Det gick inte att skriva dokumentet.';
+      /* I det smala läget är RADEN det läraren tittar på: «Läser centralt
+         innehåll (Gy25)», «Skriver provet …». Vek den in vid ett fel stod
+         beskedet i .ftext under den, litet och utan spår, och ett 400 från
+         servern lästes som att raden bara försvann och jobbet gick vidare
+         (2026-09-07). Nu byter raden text till serverns egen mening och står
+         kvar, med spåret släckt: felet syns på samma plats som förloppet. */
+      if (smalt && smalruta.isConnected) {
+        clearInterval(kryp);
+        smalruta.setAttribute('data-fel', '');
+        $('.fsmaltext', el).textContent = besked;
+        $('.fsmalbrukar', el).textContent = '';
+      } else {
+        malaText(besked, text);
+      }
       $('.fstopp', el).hidden = true;
       $$('.ffas[data-lage="kor"]', el).forEach(f => { f.dataset.lage = 'fel'; });
-      malaText((e && e.message) || 'Det gick inte att skriva dokumentet.', text);
       const a = $('.fatgard', el);
       a.hidden = false;
       a.innerHTML = '';

@@ -58,31 +58,49 @@
     /* Minnesraden och de punkter appen själv satte hör till den släppta planeringen. */
     window.Profil && window.Profil.slapp && window.Profil.slapp(true);
 
-    /* Lektionen: kön tömd, klass, kurs och dag glömda. */
-    if (window.PlanKo && window.PlanKo.avbryt) window.PlanKo.avbryt();
-    ['#p-klass', '#p-kurs', '#p-datum', '#p-tid'].forEach(s => {
-      const f = q(s);
-      if (f) { f.value = ''; f.dispatchEvent(new Event('change', { bubbles: true })); }
-    });
-    const pv = q('#planvald');
-    if (pv) { pv.hidden = true; pv.textContent = ''; }
-    const pi = q('#planingen');
-    if (pi) pi.hidden = false;
+    /* Lektionen STÅR KVAR. Knappen tömde förr också kön och de fyra
+       lektionsfälten, men remsan «Planerar Matematik, nivå 1c · NA26F …»
+       ritades om av veckan och stod kvar, så panelen såg ut att planera en
+       lektion medan #p-kurs var tom. Nästa Skriv gick i väg utan kurs och
+       servern svarade 400 «välj en kurs» (routes_exam generate, 2026-09-07).
+       Det som rensas är UTKASTET: typ, källor, moment, upplägg. Klass,
+       kurs, dag och tid är kortets och följer med in i nästa försök; vill
+       läraren byta lektion klickar hon i veckan. Utan lektion i kön töms
+       fälten som förut, så ett halvt ifyllt steg 1 inte stämplar nästa papper. */
+    const lektion = window.PlanKo && window.PlanKo.aktiv ? window.PlanKo.aktiv() : null;
+    if (!lektion) {
+      if (window.PlanKo && window.PlanKo.avbryt) window.PlanKo.avbryt();
+      ['#p-klass', '#p-kurs', '#p-datum', '#p-tid'].forEach(s => {
+        const f = q(s);
+        if (f) { f.value = ''; f.dispatchEvent(new Event('change', { bubbles: true })); }
+      });
+      const pv = q('#planvald');
+      if (pv) { pv.hidden = true; pv.textContent = ''; }
+      const pi = q('#planingen');
+      if (pi) pi.hidden = false;
+    }
 
     window.Utgang && window.Utgang.rita();
     window.PlanSteg && window.PlanSteg.omstart();
+    /* Fälten fylls om ur kön EFTER stegens omstart: change-händelserna är det
+       som bockar av steg 1 igen (plansteg kollLektion), och ett prov i
+       kalendern sätter typen Prov på nytt. */
+    if (lektion && window.PlanKo.fyllOm) window.PlanKo.fyllOm();
     spegla();
     /* Slängningen sägs bara när det fanns något att slänga — annars påstår
        toasten att ett papper försvann som aldrig låg framme. Ångra-knappen
        lägger tillbaka just pappret; det övriga (klass, källor, moment) är redan
        rensat och det var det knappen hette. Därför «Ångra utkastet» och inte
        «Ångra» — den ska inte lova mer än den gör. */
+    /* Sista ledet säger vad som hände med lektionen: står den kvar ska
+       toasten inte be läraren välja den igen. */
+    const kvar = lektion ? 'lektionen står kvar' : 'välj lektionen i veckan igen';
     if (slangt) {
       window.toast && window.toast(
-        'Allt rensat — utkastet är slängt, välj lektionen i veckan igen',
+        `Allt rensat — utkastet är slängt, ${kvar}`,
         'Ångra utkastet', slangt);
     } else {
-      window.toast && window.toast('Allt rensat — välj lektionen i veckan igen');
+      window.toast && window.toast(`Allt rensat — ${kvar}`);
     }
   }
 

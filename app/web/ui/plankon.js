@@ -306,5 +306,9 @@ window.PlanKo = (() => {
     return true;
   }
 
-  return { vaxla, har, arNu, arKlar, starta, klar, nasta, avbryt, enbart, vantar, harFler: () => i > -1 && i < ko.length - 1, aktiv: () => (i > -1 ? ko[i] : null), valda: () => valda.slice() };
+  /* «Börja om» (omstart.js) rensar utkastet men behåller lektionen, och
+     fyller då om fälten ur kön, så att change-händelserna går en gång till. */
+  const fyllOm = () => { if (i > -1 && ko[i]) fyll(ko[i]); };
+
+  return { vaxla, har, arNu, arKlar, starta, klar, nasta, avbryt, enbart, vantar, fyllOm, harFler: () => i > -1 && i < ko.length - 1, aktiv: () => (i > -1 ? ko[i] : null), valda: () => valda.slice() };
 })();

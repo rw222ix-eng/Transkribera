@@ -54,6 +54,9 @@
 .fsmalinre{overflow:hidden;min-height:0}
 .fsmalrad{display:flex;align-items:center;gap:10px;padding:2px 0 7px;font-size:.82rem;color:var(--ink-2)}
 .fsmaltext{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Felraden (fraga.js felade): serverns mening får radbrytas och står i fullt bläck, spåret släcks. */
+.fsmal[data-fel] .fsmaltext{white-space:normal;overflow:visible;color:var(--ink)}
+.fsmal[data-fel] .fsmalspar{opacity:.35}
 /* Spannet står bredvid klockan och tystare än raden: klockan säger hur länge
    det gått, den här säger vad det brukar landa på. Tom när spannet inte är mätt
    (fraga.js, o.brukar) och tar då ingen plats. */
