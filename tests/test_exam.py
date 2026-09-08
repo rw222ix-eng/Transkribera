@@ -2921,6 +2921,77 @@ def test_nivaval_arbetsblad_e_niva_ger_enbart_e_poang(antal):
     assert "alla sex förmågor ska vägas lika" not in prompt
 
 
+@pytest.mark.parametrize("antal", [6, 8, 12, 20])
+def test_nivaval_arbetsblad_a_niva_ger_enbart_a_poang(antal):
+    """ARBETSBLADETS «A-nivå» är ren A — spegelbilden av «E-nivå».
+
+    Läget var en blandning (mix 0,10/0,35/0,55) och släppte alltså igenom ett
+    papper där mer än hälften av poängen låg under den nivå läraren beställde.
+    Lärarens dom 2026-09-08: A-nivå betyder A på VARJE uppgift, [0, 0, x].
+
+    Två skillnader mot ren E, och båda är nationella provets: Kommunikation är
+    KVAR (AK-poäng finns, det är EK som aldrig gör det), och rutinuppgiften är
+    en A-rutin (NpMa2a vt17 uppgift 9 i delprov B är ett kortsvar på A-nivå)."""
+    nv = exam_spec.NIVAVAL["arbetsblad"]["A-nivå"]
+    sk = exam_spec.balanced_skeleton(antal, "arbetsblad", delar=False,
+                                     mix=nv["mix"], niva_mal=nv["mal"])
+    assert len(sk) == antal
+    assert all(s["poang"][2] > 0 and s["poang"][0] == 0 and s["poang"][1] == 0
+               for s in sk), [s["poang"] for s in sk]
+    # Alla SEX förmågorna, till skillnad från på det rena E-papprets fem.
+    assert {s["formaga"] for s in sk} == set(exam_spec.FORMAGA_NAMN)
+    # Rutinuppgiften finns kvar, fast utan en enda E-poäng att bygga den av.
+    assert any(s["typ"] == "rutin" for s in sk)
+    doc = exam_spec._skeleton_doc(sk)
+    assert exam_spec.validate_balance(doc, niva_mal=nv["mal"],
+                                      profil="arbetsblad") == []
+    # Prompten lovar sex förmågor, och planen bär sex — inget byte här.
+    prompt = exam_gen.build_prompt("Ma2c", "NA23", [], profil="arbetsblad",
+                                   antal=antal, skeleton=sk)
+    assert "Kommunikation saknas ur planen" not in prompt
+
+
+def test_nivaval_arbetsblad_a_niva_faller_varje_e_och_c_poang():
+    """En enda E- eller C-poäng ska fälla ett rent A-blad. Banden är punkter
+    (0, 0), så det är nivåbalansen som säger ifrån — inte en smaksak i
+    prompten."""
+    nv = exam_spec.NIVAVAL["arbetsblad"]["A-nivå"]
+    for smittad in ([1, 0, 2], [0, 1, 2]):
+        sk = exam_spec.balanced_skeleton(8, "arbetsblad", delar=False,
+                                         mix=nv["mix"], niva_mal=nv["mal"])
+        sk[3]["poang"] = list(smittad)
+        fel = exam_spec.validate_balance(
+            exam_spec._skeleton_doc(sk), niva_mal=nv["mal"],
+            profil="arbetsblad")
+        assert [e for e in fel if e["code"] == "nivabalans"], (smittad, fel)
+
+
+def test_ren_a_band_stryker_e_starten_och_bara_den():
+    """E-golvet på delens första uppgift (MIN_START_E) är omöjligt på ett rent
+    A-papper: bandet förbjuder poängen kravet ber om. Det stryks — men
+    svårighetstrappan mäts som förut, annars vore undantaget en bakdörr."""
+    nv = exam_spec.NIVAVAL["arbetsblad"]["A-nivå"]
+    assert exam_spec.ren_a_band(nv["mal"])
+    assert not exam_spec.ren_a_band(
+        exam_spec.NIVAVAL["arbetsblad"]["E-nivå"]["mal"])
+    assert not exam_spec.ren_e_band(nv["mal"])
+    # Trappan mäts på svårighetsindex per uppgift (E 0, C 1, A 2), så ett rent
+    # A-papper är platt och kan aldrig falla. Dokumentet här faller med flit:
+    # det är trappfelet som ska stå kvar när E-golvet stryks.
+    doc = exam_spec._skeleton_doc(
+        [{"del": None, "formaga": f, "typ": "problem", "poang": p}
+         for f, p in zip("B P PL M".split(),
+                         ([0, 0, 2], [0, 0, 2], [0, 1, 0], [0, 1, 0]))])
+    # Med kravet kvar fälls både E-starten och den fallande trappan …
+    fel = exam_spec.validate_ordning(doc, kolla_klumpning=False)
+    assert any("saknar E-poäng" in e["message"] for e in fel)
+    # … utan det står bara trappan kvar.
+    fel2 = exam_spec.validate_ordning(doc, kolla_klumpning=False,
+                                      kraver_e_start=False)
+    assert not any("saknar E-poäng" in e["message"] for e in fel2)
+    assert any("lättare mot slutet" in e["message"] for e in fel2)
+
+
 def test_validate_exam_json_mater_mot_lararens_band():
     """Samma dokument, två domar: ett Bara E-prov ska fällas av NP-banden
     (det ÄR inte NP-format) men frias av sitt eget nivåval. Det är exakt

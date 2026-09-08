@@ -1248,6 +1248,27 @@ def ren_e_band(niva_mal: dict | None) -> bool:
     return all(tuple(niva_mal.get(n) or ()) == (0, 0) for n in ("c", "a"))
 
 
+def ren_a_band(niva_mal: dict | None) -> bool:
+    """Sant när lärarens nivåband stänger BÅDE E och C helt — arbetsbladets
+    «A-nivå» (NIVAVAL). Spegelbilden av ren_e_band, och tre ställen måste veta
+    om den:
+
+    * skelettets poängtripplar. NP_TRIPPLAR["A"] rymmer (1, 0, 2) och (1, 2, 1)
+      — riktiga NP-uppgifter, men de bär E- och C-poäng «på vägen» och har
+      ingen plats på ett papper som bara ger A.
+    * ordningsregeln MIN_START_E: delens första uppgift ska bära E-poäng, och
+      på ett rent A-papper finns ingen sådan poäng att bära. Kravet är omöjligt
+      och stryks i stället för att fällas på (se validate_ordning).
+    * sökningens drag: ett drag som lägger till en E- eller C-poäng behåller
+      A-karaktären och hade alltså sluppit förbi karaktärsspärren i _drag.
+
+    Kommunikation är däremot KVAR, till skillnad från på ett rent E-papper:
+    nationella provet delar ut AK-poäng, det är bara EK som aldrig finns."""
+    if not niva_mal:
+        return False
+    return all(tuple(niva_mal.get(n) or ()) == (0, 0) for n in ("e", "c"))
+
+
 def validate_balance(doc: ExamDoc,
                      formaga_mal: dict | None = None,
                      niva_mal: dict | None = None,
@@ -1308,7 +1329,10 @@ def validate_balance(doc: ExamDoc,
                            "provet saknar uppgifter med fullständig lösning."))
     if kraver_klump or kraver_svar:
         errors.extend(validate_ordning(
-            doc, kolla_klumpning=kraver_klump, kolla_svarighet=kraver_svar))
+            doc, kolla_klumpning=kraver_klump, kolla_svarighet=kraver_svar,
+            # Ren A: E-starten är ett krav pappret inte kan uppfylla, för
+            # bandet förbjuder den poäng kravet ber om (se ren_a_band).
+            kraver_e_start=not ren_a_band(nm)))
     return errors
 
 
@@ -1324,10 +1348,15 @@ def _langsta_rad(varden: list) -> int:
 
 
 def validate_ordning(doc: ExamDoc, *, kolla_klumpning: bool = True,
-                     kolla_svarighet: bool = True) -> list[dict]:
+                     kolla_svarighet: bool = True,
+                     kraver_e_start: bool = True) -> list[dict]:
     """Stigande svårighet + antiklumpning, mätt per del på den sekvens
     eleven ser. Flaggorna väljer vilka regler som gäller (arbetsbladet
-    undantas från klumpning men behåller svårighetsordningen)."""
+    undantas från klumpning men behåller svårighetsordningen).
+
+    `kraver_e_start=False` stryker E-golvet på delens första uppgift och bara
+    det — trappan mäts som vanligt. Det rena A-papprets undantag: se
+    ren_a_band."""
     errors: list[dict] = []
     for kod, items in gruppera_per_del(doc.uppgifter):
         etikett = f"Del {kod}" if kod else "del-lösa uppgifter"
@@ -1360,7 +1389,7 @@ def validate_ordning(doc: ExamDoc, *, kolla_klumpning: bool = True,
                                    "uppgifter i rad med samma förmåga — varva dem."))
 
         if kolla_svarighet and len(items) >= MIN_DELPROV_FOR_ORDNING:
-            if uppg_poang(items[0])[0] < MIN_START_E:
+            if kraver_e_start and uppg_poang(items[0])[0] < MIN_START_E:
                 errors.append(_err(etikett, "svarighet",
                                    f"{etikett}:s första uppgift saknar E-poäng — "
                                    "börja med en åtkomlig uppgift."))
@@ -1792,6 +1821,16 @@ KARAKTARSMIX: dict[str, tuple[float, float, float]] = {
 # får ingen K-uppgift ALLS i stället för en K-uppgift med E-poäng. Förmågan
 # hoppas över i skelettets rotation när bandet är rent och mixen ren (se
 # balanced_skeleton) — fem förmågor i stället för sex.
+#
+# ARBETSBLADETS «A-NIVÅ» ÄR SPEGELBILDEN, och det är lärarens dom 2026-09-08:
+# väljer hon A-nivå ska varje uppgift bära [0, 0, x] och inget annat. Läget var
+# en BLANDNING (mix 0,10/0,35/0,55, band som rymde 30 % E och 55 % C), alltså
+# ett papper där mer än hälften av poängen låg under den nivå hon beställde.
+# Bandet är därför punkter, som de rena E-lägena. Skillnaderna mot ren E är två,
+# och båda är NP:s: Kommunikation är kvar (AK-poäng finns, det är bara EK som
+# saknas), och rutinuppgiften är en A-rutin — NpMa2a vt17 uppgift 9 i delprov B
+# är ett kortsvar värt (0/0/1)+(0/0/1). C-nivå är orörd: den är fortfarande ett
+# tyngdpunktsläge, för ett rent C-papper är ingen läraren bett om.
 NIVAVAL: dict[str, dict[str, dict]] = {
     "prov": {
         # Ren E: varje uppgift och deluppgift bär [x, 0, 0] och inget annat.
@@ -1817,9 +1856,10 @@ NIVAVAL: dict[str, dict[str, dict]] = {
         "C-nivå": {"mix": (0.15, 0.70, 0.15),
                    "mal": {"e": (0.00, 0.40), "c": (0.40, 0.85),
                            "a": (0.00, 0.30)}},
-        "A-nivå": {"mix": (0.10, 0.35, 0.55),
-                   "mal": {"e": (0.00, 0.30), "c": (0.10, 0.55),
-                           "a": (0.30, 0.80)}},
+        # Ren A: varje uppgift bär [0, 0, x] och inget annat.
+        "A-nivå": {"mix": (0.00, 0.00, 1.00),
+                   "mal": {"e": (0.00, 0.00), "c": (0.00, 0.00),
+                           "a": (1.00, 1.00)}},
     },
 }
 
@@ -2054,6 +2094,16 @@ def balanced_skeleton(antal: int, profil: str = "prov",
     ren_e = ren_e_band(niva_mal) and mix[1] == 0 and mix[2] == 0
     ordning = (tuple(f for f in FORMAGE_ORDNING if f != "K")
                if ren_e else FORMAGE_ORDNING)
+
+    # REN A (arbetsbladets «A-nivå»): mixen ger bara A-karaktärer OCH bandet
+    # stänger E och C helt. Alla sex förmågorna är kvar — AK-poäng finns i
+    # nationella provet — men NP_TRIPPLAR["A"] rymmer två tripplar som bär
+    # poäng på vägen upp, (1, 0, 2) och (1, 2, 1), och de är olagliga här.
+    # Rotationen får därför bara de rena A-tripplarna att välja bland, så
+    # skelettet är rent BY CONSTRUCTION i stället för att sökningen ska laga
+    # det efteråt (den kan fastna i ett lokalt minimum, och då hade läraren
+    # fått ett «A-blad» med E-poäng på).
+    ren_a = ren_a_band(niva_mal) and mix[0] == 0 and mix[1] == 0
     slots: list[dict] = []
     raknat = {"E": 0, "C": 0, "A": 0}
     for i, kar in enumerate(karaktarer):
@@ -2067,6 +2117,8 @@ def balanced_skeleton(antal: int, profil: str = "prov",
         if f == "K" and kar == "E":
             kar = "C"
         tripplar = niva_rubrik.NP_TRIPPLAR[kar]
+        if ren_a:
+            tripplar = [t for t in tripplar if not t[0] and not t[1]]
         poang = list(tripplar[raknat[kar] % len(tripplar)])
         raknat[kar] += 1
         if f == "K" and poang[0]:
@@ -2131,6 +2183,12 @@ def balanced_skeleton(antal: int, profil: str = "prov",
     # direkt). Med en C-tung mix kan det hända att ingen E-uppgift föll på
     # Begrepp eller Procedur, och då finns ingen rutinrad. Gör den lättaste
     # uppgiften till rutin i stället för att låta valideringen fälla skelettet.
+    # Det rena A-papprets rutinrad kommer alltid härifrån (_skelett_typ ger
+    # rutin bara åt E-uppgifter i Begrepp och Procedur), och den är laglig:
+    # nationella provets kortsvar är inte bara E-poäng — NpMa2a vt17 uppgift 9 i
+    # delprov B är (0/0/1)+(0/0/1). Kravet på en rutinuppgift står alltså kvar
+    # även utan E; det är E-STARTEN som stryks på ett rent A-papper, inte
+    # rutinuppgiften (se ren_a_band).
     if not any(s["typ"] == "rutin" for s in slots):
         lattast = min(slots, key=lambda s: (NIVAER_STORA.index(s["karaktar"]),
                                             FORMAGE_ORDNING.index(s["formaga"])))
@@ -2565,22 +2623,43 @@ def _straff(slots: list[dict], profil: str,
     # svårighetstrappa, vilket är hela dess form.
     if kraver_klump or kraver_svar:
         straff += 0.1 * len(validate_ordning(
-            doc, kolla_klumpning=kraver_klump, kolla_svarighet=kraver_svar))
+            doc, kolla_klumpning=kraver_klump, kolla_svarighet=kraver_svar,
+            # Samma undantag som valideringen: sökningen ska inte betala för ett
+            # ordningsfel den inte kan laga (se ren_a_band).
+            kraver_e_start=not ren_a_band(nm)))
     return straff
 
 
-def _drag(slots: list[dict]) -> list[tuple[int, int, int]]:
+def stangda_nivaer(niva_mal: dict | None) -> tuple[int, ...]:
+    """Nivåindex vars band är punkten noll — poäng som inte får finnas alls.
+
+    Rena band ger dem: «Bara E»/«E-nivå» stänger C och A, «A-nivå» stänger E
+    och C. Sökningen läser dem för att slippa lägga ut en poäng den sedan får
+    betala straff för."""
+    return tuple(i for i, n in enumerate(("e", "c", "a"))
+                 if niva_mal and tuple(niva_mal.get(n) or ()) == (0, 0))
+
+
+def _drag(slots: list[dict],
+          stangda: tuple[int, ...] = ()) -> list[tuple[int, int, int]]:
     """Tillåtna enpoängsdrag: (uppgift, nivå, ±1).
 
     Dragen får ALDRIG ändra en uppgifts karaktär (högsta nivå med poäng). Det
     är villkoret som håller resten av konstruktionen stilla: karaktären bestämde
     uppgiftens typ, dess plats i delen och dess ordning i svårighetstrappan, och
     ett drag som flyttar en E-uppgift till A-karaktär skulle rasera allt tre för
-    att laga en procentsats."""
+    att laga en procentsats.
+
+    `stangda` är nivåerna lärarens band förbjuder (stangda_nivaer). Karaktärs-
+    villkoret räcker inte där: på ett rent E-papper stoppar det en C-poäng av
+    sig självt (karaktären hade blivit C), men på ett rent A-papper är en
+    tillagd E-poäng fortfarande en A-uppgift och hade sluppit igenom."""
     ut = []
     for i, sl in enumerate(slots):
         p = sl["poang"]
         for idx in range(3):
+            if idx in stangda:
+                continue                  # bandet förbjuder nivån helt
             if sl["formaga"] == "K" and idx == 0:
                 continue                  # ingen EK-poäng finns
             for delta in (1, -1):
@@ -2615,11 +2694,12 @@ def _justera_skelett(slots: list[dict], profil: str = "prov",
     reparationsloopen i exam_gen får ta vid. Det är samma kontrakt som förut,
     fast utan pingpongen."""
     nuvarande = _straff(slots, profil, niva_mal, kurs)
+    stangda = stangda_nivaer(niva_mal)
     for _ in range(varv):
         if nuvarande <= 0:
             return True
         basta = None
-        for i, idx, delta in _drag(slots):
+        for i, idx, delta in _drag(slots, stangda):
             slots[i]["poang"][idx] += delta
             varde = _straff(slots, profil, niva_mal, kurs)
             slots[i]["poang"][idx] -= delta
