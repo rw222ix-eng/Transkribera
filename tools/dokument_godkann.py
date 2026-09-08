@@ -2,6 +2,11 @@
 approve-strömmen): PATCH status godkant, POST /api/exams/{id}/approve utan
 avritade blad (LaTeX-vägen bygger PDF:en), sedan pdf/tex tillbaka på dokumentet.
 
+BARA FÖR PROV. Arbetsbladets och gruppuppgiftens PDF är skärmens avritning
+(blad-bild.js), och utan `blad` får de LaTeX-pappret, som inte ser ut som
+canvasen. Sex blad gick ut till eleverna så 2026-09-08. Godkänn dem i stället
+med e2e/godkann-avritat.mjs, som trycker på appens egen knapp.
+
 Användning: python godkann.py <dokument_id>
 """
 import json, sqlite3, sys, urllib.request
