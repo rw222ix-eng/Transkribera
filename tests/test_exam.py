@@ -2966,6 +2966,72 @@ def test_nivaval_arbetsblad_a_niva_faller_varje_e_och_c_poang():
         assert [e for e in fel if e["code"] == "nivabalans"], (smittad, fel)
 
 
+@pytest.mark.parametrize("antal", [6, 8, 12, 20])
+def test_nivaval_arbetsblad_c_niva_ger_enbart_c_poang(antal):
+    """ARBETSBLADETS «C-nivå» är ren C — den tredje spegelbilden.
+
+    Läget var det sista tyngdpunktsläget kvar (mix 0,15/0,70/0,15, band som
+    rymde 40 % E och 30 % A), alltså ett «C-blad» där sju tiondelar av poängen
+    kunde ligga utanför C. Lärarens dom 2026-09-09: C betyder C på VARJE
+    uppgift, [0, x, 0].
+
+    Som ren A och till skillnad från ren E: alla sex förmågorna är kvar (CK-
+    poäng finns i nationella provet, det är EK som aldrig gör det), och
+    rutinuppgiften blir en C-rutin — bara svaret krävs, men något måste göras
+    före metoden."""
+    nv = exam_spec.NIVAVAL["arbetsblad"]["C-nivå"]
+    sk = exam_spec.balanced_skeleton(antal, "arbetsblad", delar=False,
+                                     mix=nv["mix"], niva_mal=nv["mal"])
+    assert len(sk) == antal
+    assert all(s["poang"][1] > 0 and s["poang"][0] == 0 and s["poang"][2] == 0
+               for s in sk), [s["poang"] for s in sk]
+    assert {s["formaga"] for s in sk} == set(exam_spec.FORMAGA_NAMN)
+    assert any(s["typ"] == "rutin" for s in sk)
+    doc = exam_spec._skeleton_doc(sk)
+    assert exam_spec.validate_balance(doc, niva_mal=nv["mal"],
+                                      profil="arbetsblad") == []
+    prompt = exam_gen.build_prompt("Ma2c", "NA23", [], profil="arbetsblad",
+                                   antal=antal, skeleton=sk)
+    assert "Kommunikation saknas ur planen" not in prompt
+
+
+def test_nivaval_arbetsblad_c_niva_faller_varje_e_och_a_poang():
+    """En enda E- eller A-poäng ska fälla ett rent C-blad, precis som på det
+    rena A-bladet. Banden är punkter (0, 0), så det är nivåbalansen som säger
+    ifrån."""
+    nv = exam_spec.NIVAVAL["arbetsblad"]["C-nivå"]
+    for smittad in ([1, 2, 0], [0, 2, 1]):
+        sk = exam_spec.balanced_skeleton(8, "arbetsblad", delar=False,
+                                         mix=nv["mix"], niva_mal=nv["mal"])
+        sk[3]["poang"] = list(smittad)
+        fel = exam_spec.validate_balance(
+            exam_spec._skeleton_doc(sk), niva_mal=nv["mal"],
+            profil="arbetsblad")
+        assert [e for e in fel if e["code"] == "nivabalans"], (smittad, fel)
+
+
+def test_ren_niva_ar_ett_namn_for_alla_tre_lagena():
+    """De tre rena lägena kom en i taget (E 2026-09-07, A 2026-09-08, C
+    2026-09-09) och är nu ETT begrepp. Blandade band ger None, och det är
+    skillnaden som avgör om E-starten stryks och om tripplarna filtreras."""
+    blad = exam_spec.NIVAVAL["arbetsblad"]
+    assert exam_spec.ren_niva(blad["E-nivå"]["mal"]) == "E"
+    assert exam_spec.ren_niva(blad["C-nivå"]["mal"]) == "C"
+    assert exam_spec.ren_niva(blad["A-nivå"]["mal"]) == "A"
+    assert exam_spec.ren_niva(exam_spec.NIVAVAL["prov"]["Bara E"]["mal"]) == "E"
+    assert exam_spec.ren_niva(exam_spec.NIVAVAL["prov"]["E-tyngd"]["mal"]) is None
+    assert exam_spec.ren_niva(None) is None
+    # De gamla namnen är kvar och säger samma sak.
+    assert exam_spec.ren_c_band(blad["C-nivå"]["mal"])
+    assert not exam_spec.ren_c_band(blad["A-nivå"]["mal"])
+    assert not exam_spec.ren_e_band(blad["C-nivå"]["mal"])
+    # E-golvet stryks på C och A, står kvar på E och på blandade papper.
+    assert not exam_spec.kraver_e_start(blad["C-nivå"]["mal"])
+    assert not exam_spec.kraver_e_start(blad["A-nivå"]["mal"])
+    assert exam_spec.kraver_e_start(blad["E-nivå"]["mal"])
+    assert exam_spec.kraver_e_start(None)
+
+
 def test_ren_a_band_stryker_e_starten_och_bara_den():
     """E-golvet på delens första uppgift (MIN_START_E) är omöjligt på ett rent
     A-papper: bandet förbjuder poängen kravet ber om. Det stryks — men
