@@ -768,12 +768,42 @@ def test_forebilden_star_i_gruppuppgiftens_grammatik_men_inte_i_provets():
     prov = json.dumps(exam_spec.to_response_format(6, skelett),
                       ensure_ascii=False)
     assert "forebild" not in prov
-    # Omskrivningen och latexfixen kommer utan antal och utan skelett — också
-    # de ska ha exakt det schema de hade innan fältet fanns.
+    # Omskrivningen och latexfixen kommer utan antal och utan skelett — för
+    # PROVET ska de ha exakt det schema de hade innan fältet fanns.
     assert "forebild" not in json.dumps(exam_spec.to_response_format(),
                                         ensure_ascii=False)
     assert len(json.dumps(exam_spec.to_response_format(6, skelett))) \
         < claude_code.SCHEMA_TAK_EXE
+
+
+def test_omskrivningen_av_en_gruppuppgift_far_skriva_tillbaka_forebilden():
+    """Fältet föll ur grammatiken i varje varv: omskrivningen skickar varken
+    antal eller skelett, och villkoret läste dem. Gruppuppgift 77 tappade sin
+    förebild 1269 på uppgift 2 (2026-09-09) utan att något fel syntes — de
+    orörda uppgifterna bar sina kvar, för dem tas ordagrant ur originalet
+    (sammanfoga_riktat), så förlusten gällde bara den uppgift läraren pekat på.
+
+    Villkoret är PROFILEN, inte antalet: gruppuppgiftens vägar får fältet,
+    provets och arbetsbladets grammatik är oförändrad."""
+    assert "forebild" not in json.dumps(exam_spec.to_response_format(),
+                                        ensure_ascii=False)
+    assert '"forebild"' in json.dumps(
+        exam_spec.to_response_format(forebild=True), ensure_ascii=False)
+
+    sedda: list[dict] = []
+
+    def llm(_model, _prompt, **kw):
+        sedda.append(kw.get("response_format") or {})
+        return json.dumps(_gruppdoc_med_forebild())
+
+    exam_gen.refine_exam(_gruppdoc_med_forebild(), "gör uppgift 2 kortare",
+                         model="", nummer=2, profil="gruppuppgift", llm=llm)
+    assert sedda and '"forebild"' in json.dumps(sedda[0], ensure_ascii=False)
+
+    sedda.clear()
+    exam_gen.refine_exam(_doc(), "gör uppgift 2 kortare", model="", nummer=2,
+                         profil="prov", llm=llm)
+    assert sedda and "forebild" not in json.dumps(sedda[0], ensure_ascii=False)
 
 
 def test_forebilden_valideras_som_ett_nummer_och_en_mening():

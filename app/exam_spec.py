@@ -644,7 +644,8 @@ MAX_CI_PER_UPPGIFT = 3
 
 def to_response_format(antal: int | None = None,
                        skeleton: list[dict] | None = None,
-                       koder: list[str] | None = None) -> dict:
+                       koder: list[str] | None = None,
+                       *, forebild: bool = False) -> dict:
     """json_schema-objekt för llama-servers grammatiktvång.
 
     `antal` sätter ett hårt antalstak (minItems=maxItems) — llama.cpp hedrar
@@ -698,7 +699,17 @@ def to_response_format(antal: int | None = None,
     # gruppuppgiftens uppdrag BER om förebilden (exam_gen.build_forebild), så
     # ett fält i provets grammatik hade varit ett fält modellen fyller i utan
     # att någon frågat — precis som klockslaget och plåtvalet ovan.
-    if skeleton is not None or antal is None:
+    #
+    # `forebild=True` är det tredje fallet, och det kom av en tyst förlust:
+    # OMSKRIVNINGEN skickar varken antal eller skelett, så fältet föll ur
+    # grammatiken där — och varje uppgift ett varv rörde kom tillbaka UTAN sin
+    # pekning på boken. Gruppuppgift 77 tappade sin förebild 1269 på uppgift 2
+    # (2026-09-09) utan att något fel syntes: de orörda uppgifterna bar sina
+    # kvar, för dem tas ordagrant ur originalet (exam_gen.sammanfoga_riktat).
+    # Anroparen säger alltså uttryckligen när fältet ska stå kvar, och det gör
+    # bara gruppuppgiftens vägar — provets och arbetsbladets grammatik är
+    # oförändrad, byte för byte.
+    if (skeleton is not None or antal is None) and not forebild:
         schema["$defs"]["ExamItem"]["properties"].pop("forebild", None)
     upp = schema["properties"]["uppgifter"]
     if skeleton is not None:

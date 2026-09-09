@@ -4141,6 +4141,7 @@ class _Uppgiftsraknare:
 def _llm_round(prompt: str, model: str, llm, antal: int | None = None,
                skeleton: list[dict] | None = None,
                koder: list[str] | None = None, *,
+               profil: str = "prov",
                log_cb: Callable[[str], None] | None = None,
                etikett: str = "Skriver") -> dict | None:
     raw = llm(
@@ -4150,7 +4151,13 @@ def _llm_round(prompt: str, model: str, llm, antal: int | None = None,
         # antal → grammatik-tak; skeleton → låst del/förmåga/typ/poäng per
         # uppgift (balans garanterad); koder → innehall låst till lärarens valda
         # CI-punkter. Gäller även reparationsrundorna.
-        response_format=exam_spec.to_response_format(antal, skeleton, koder),
+        # BOKFÖREBILDEN står i grammatiken bara för gruppuppgiften, och bara
+        # den BER om den (build_forebild). Villkoret är profilen och inte
+        # antalet: en omskrivning skickar inget antal, och utan raden föll
+        # fältet bort ur varje uppgift varvet rörde — pappret tappade sin
+        # pekning på boken tyst, och relevansdomaren fick döma utan den.
+        response_format=exam_spec.to_response_format(
+            antal, skeleton, koder, forebild=profil == "gruppuppgift"),
         max_tokens=EXAM_MAX_TOKENS,
         # Ingen lyssnare → ingen räkning. Stubbade llm i testerna tar emot
         # token_cb och struntar i det; kassetterna spelas upp genom
@@ -4318,7 +4325,7 @@ def _repair_until_valid(exam: dict | None, errors: list, *, model: str, llm,
             f"{len(errors)} problem …")
         candidate = _llm_round(build_repair_prompt(exam, errors, profil),
                                model, llm, antal, skeleton, koder,
-                               log_cb=log_cb,
+                               profil=profil, log_cb=log_cb,
                                etikett=f"Justerar provet (runda {rounds_used} "
                                        f"av {max_rounds}) —")
         if candidate is None:
@@ -4473,7 +4480,8 @@ def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
         return {"exam": exam, "errors": errors + fel, "rounds": rounds_used}
     log(f"Täckningen: {saknade} saknar uppgifter, justerar …")
     kandidat = _llm_round(build_repair_prompt(exam, fel + errors, profil),
-                          model, llm, antal, skeleton, koder, log_cb=log_cb,
+                          model, llm, antal, skeleton, koder, profil=profil,
+                          log_cb=log_cb,
                           etikett=f"Justerar provet (runda {rounds_used + 1} "
                                   f"av {max_rounds}) —")
     rounds_used += 1
@@ -4533,7 +4541,8 @@ def _rakneverk_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
         return {"exam": exam, "errors": errors + fel, "rounds": rounds_used}
     log(f"Räkneverket fällde {len(fel)} facit, justerar …")
     kandidat = _llm_round(build_repair_prompt(exam, fel + errors, profil),
-                          model, llm, antal, skeleton, koder, log_cb=log_cb,
+                          model, llm, antal, skeleton, koder, profil=profil,
+                          log_cb=log_cb,
                           etikett=f"Justerar provet (runda {rounds_used + 1} "
                                   f"av {max_rounds}) —")
     rounds_used += 1
@@ -4600,7 +4609,8 @@ def _domar_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                      "rounds": rounds_used}, True)
     log(f"Justerar {len(avv)} uppgift(er) …")
     kandidat = _llm_round(build_repair_prompt(exam, avv + signaler, profil),
-                          model, llm, antal, skeleton, koder, log_cb=log_cb,
+                          model, llm, antal, skeleton, koder, profil=profil,
+                          log_cb=log_cb,
                           etikett=f"Justerar provet (runda {rounds_used + 1} "
                                   f"av {max_rounds}) —")
     rounds_used += 1
@@ -4768,7 +4778,8 @@ def _niva_grind(res: dict, *, model: str, llm, profil: str, skala: str,
             f"(extrarunda {varv + 1} av {max_rounds}) …")
         nummer = sorted({_uppgiftsnr(f.get("nr")) for f in fynd} - {0})
         kandidat = _llm_round(build_repair_prompt(exam, fynd, profil),
-                              model, llm, antal, skeleton, koder, log_cb=log_cb,
+                              model, llm, antal, skeleton, koder, profil=profil,
+                              log_cb=log_cb,
                               etikett=f"Säkrar nivån (extrarunda {varv + 1} "
                                       f"av {max_rounds}) —")
         if kandidat is None:
@@ -4895,7 +4906,8 @@ def _bok_grind(res: dict, *, model: str, llm, profil: str,
         log(f"Rättar {len(nummer)} uppgift(er) mot boken "
             f"(extrarunda {varv + 1} av {max_rounds}) …")
         kandidat = _llm_round(build_repair_prompt(exam, fynd, profil),
-                              model, llm, antal, None, koder, log_cb=log_cb,
+                              model, llm, antal, None, koder, profil=profil,
+                              log_cb=log_cb,
                               etikett=f"Rättar mot boken (extrarunda "
                                       f"{varv + 1} av {max_rounds}) —")
         if kandidat is None:
@@ -5051,14 +5063,14 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                           illustration=illustration,
                           bokuppgifter=bokuppgifter)
     exam = _llm_round(prompt, model, llm, antal, grammatik, koder,
-                      log_cb=log_cb)
+                      profil=profil, log_cb=log_cb)
     rounds = 1
     while exam is None and rounds < max_rounds:
         rounds += 1
         log(f"Modellen svarade inte med giltig JSON — försöker igen "
             f"(runda {rounds} av {max_rounds}) …")
         exam = _llm_round(prompt, model, llm, antal, grammatik, koder,
-                          log_cb=log_cb)
+                          profil=profil, log_cb=log_cb)
     if exam is None:
         return {"exam": None,
                 "errors": [{"path": "svar", "code": "json",
@@ -5201,7 +5213,7 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
     candidate = _llm_round(
         build_refine_prompt(exam, instruction, nummer, mal, bok, historik,
                             malen),
-        model, llm, log_cb=log_cb, etikett="Uppdaterar")
+        model, llm, profil=profil, log_cb=log_cb, etikett="Uppdaterar")
     if candidate is None:
         return {"exam": exam,
                 "errors": [{"path": "svar", "code": "json",
@@ -5290,7 +5302,8 @@ def fix_latex(exam: dict, error_log: str, *, model: str,
                 "rounds": rounds_used}
     log("Rättar LaTeX-fel i provet …")
     candidate = _llm_round(build_latexfix_prompt(exam, error_log), model, llm,
-                           log_cb=log_cb, etikett="Rättar LaTeX i")
+                           profil=profil, log_cb=log_cb,
+                           etikett="Rättar LaTeX i")
     if candidate is None:
         return {"exam": exam, "errors": [{"path": "svar", "code": "json",
                                           "message": "modellen svarade inte med giltig JSON"}],
