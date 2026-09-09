@@ -95,6 +95,29 @@ höjd eller en intäkt beskrivs av en andragradsfunktion.
 
 LÄRARENS MOMENT för lektionen: 2.3 Andragradsekvationer och pq-formeln"""
 
+# Relevansdomarens bokunderlag: lärarens valda uppgifter på uppslaget, i den
+# form appen läser dem ur boken (bok.remsuppgifter — nummer, bokens egen nivå
+# och en kort text). Numren och texterna är KONSTRUERADE, som CI_MATERIAL
+# ovan: ett riktigt uppslag hade krävt att just den boken låg i basen när
+# bandet spelades in. Innehållet speglar däremot gruppuppgiftsbandets moment
+# (andragradsfunktioner, Ma2c) — ett bokunderlag om något ANNAT hade gjort
+# bandet till en dom där varje uppgift fälls, och den domen säger mer om
+# inspelningen än om appen.
+BOKUPPGIFTER = [
+    {"nr": 2401, "niva": 1,
+     "text": "Bestäm nollställena till $f(x) = x^2 - 4x$."},
+    {"nr": 2405, "niva": 1,
+     "text": "Ange symmetrilinjen och extrempunkten för $y = x^2 - 6x + 5$."},
+    {"nr": 2412, "niva": 2,
+     "text": "Rita grafen till $y = -x^2 + 4x$ och avläs när $y = 3$."},
+    {"nr": 2418, "niva": 2,
+     "text": "Höjden hos en boll ges av $h(t) = -5t^2 + 15t$. När är bollen "
+             "10 m över marken?"},
+    {"nr": 2422, "niva": 3,
+     "text": "En rektangel har omkretsen 40 m. Undersök vilken area den kan "
+             "få och motivera svaret."},
+]
+
 # Provets skelett räknas EN gång och delas av prompten och grammatiken. Två
 # anrop till balanced_skeleton ger visserligen samma svar (den är
 # deterministisk), men planen i prompten och const-låsningen i schemat MÅSTE
@@ -231,6 +254,29 @@ SCENARIER = {
             exam_gen.domarenheter(_bandets_dokument("prov"))),
         "system": lambda: exam_gen.RAKNE_SYSTEM,
         "schema": lambda: exam_gen.RAKNE_SCHEMA,
+    },
+    # Gruppuppgiftens två domare (2026-09-09, lärarens dom om relevansen och
+    # om uppgift 2). Båda döms mot GRUPPUPPGIFTSBANDET, av samma skäl som
+    # nivådomaren döms mot ett färdigt dokument: en dom utan papper är ingen
+    # dom. Bokunderlaget är lärarens egna sidor i exam 75 (Matematik 5000+ 1a,
+    # s. 34–36) — relevansdomaren utan bok vore en dom mot ingenting, och det
+    # läget kör appen aldrig (doma_relevans returnerar tomt).
+    "relevansdomare": {
+        "vad": ("exam_gen.doma_relevans — följer gruppuppgiftsbandets "
+                "uppgifter bokens sort?"),
+        "prompt": lambda: exam_gen.build_relevans_prompt(
+            exam_gen.uppgiftskort(_bandets_dokument("gruppuppgift")),
+            BOKUPPGIFTER, ["Andragradsfunktioner"]),
+        "system": lambda: exam_gen.RELEVANS_SYSTEM,
+        "schema": lambda: exam_gen.RELEVANS_SCHEMA,
+    },
+    "begriplighetsdomare": {
+        "vad": ("exam_gen.doma_begriplighet — förstår alla elever "
+                "gruppuppgiftsbandets uppgifter vid första läsningen?"),
+        "prompt": lambda: exam_gen.build_begriplighet_prompt(
+            exam_gen.uppgiftskort(_bandets_dokument("gruppuppgift"))),
+        "system": lambda: exam_gen.BEGRIP_SYSTEM,
+        "schema": lambda: exam_gen.BEGRIP_SCHEMA,
     },
     # Bedömningspasset (2026-08-23). Ett anrop är EN uppgift, så bandet spelas
     # in på provbandets uppgift 1 — samma dokument som resten av sviten

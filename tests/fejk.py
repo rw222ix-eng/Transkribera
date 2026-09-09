@@ -265,10 +265,26 @@ _MALLAPP = "MÅLRUTORNAS NYCKLAR"
 # ci_forslag.INSTRUKTION och ingen annanstans i appen.
 _CI = "innehållsdomare"
 
+# Gruppuppgiftens två domare (2026-09-09) prövas av EXAKT samma skäl som
+# räknedomaren och FÖRE nivådomaren: deras prompter bär hela pappret och
+# matchar därför både «GRUPPUPPGIFT» och nivådomarens nyckelfras. Orden står
+# bara i exam_gen.build_relevans_prompt respektive build_begriplighet_prompt.
+#
+# ETT band räcker för var och en, som för räknedomaren: banden är inspelade på
+# gruppuppgiftsbandet, och spelas de upp på ett annat papper svarar de om
+# uppgiftsnummer som inte finns där. Tystnad fäller aldrig i någon av dem, så
+# ett band som inte passar kostar ingenting.
+_RELEVANS = "relevansdomare"
+_BEGRIPLIGHET = "begriplighetsdomare"
+
 
 def _auto(prompt):
     if _CI in prompt:
         return os.path.join(BAND, "innehallsdomare.json")
+    if _RELEVANS in prompt:
+        return os.path.join(BAND, "relevansdomare.json")
+    if _BEGRIPLIGHET in prompt:
+        return os.path.join(BAND, "begriplighetsdomare.json")
     if _MALLAPP in prompt:
         return os.path.join(BAND, "tavellapp.json")
     if _TACKNING in prompt:

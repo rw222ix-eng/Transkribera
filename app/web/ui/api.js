@@ -501,5 +501,37 @@
     return `Nivån gick inte att säkra på uppgift ${nr.join(', ')}.`;
   };
 
+  /* ── GRUPPUPPGIFTEN MOT BOKEN OCH MOT ELEVERNA ────────
+     Svaret bär `relevansfel` och `begriplighetsfel` när bokgrindens två
+     domare fortfarande fäller uppgifter efter sina extrarundor
+     (exam_gen._bok_grind). Två listor och därför två meningar: «uppgiften hör
+     inte till bokens sidor» och «uppgiften går inte att förstå» är olika
+     saker att göra något åt, och en gemensam rad hade dolt vilket det var.
+     Numren är uppgiftens (servern räknar om deluppgifter till sin uppgift),
+     så «2a» och «2b» blir «uppgift 2» en gång. Tom sträng = ingenting fälls,
+     och då sägs ingenting alls. */
+  API.bokfelText = function (res) {
+    const lista = f => (Array.isArray(f) ? f : []);
+    const nummer = f => {
+      const set = new Set(lista(f).map(x => parseInt(String((x && x.nr) || ''), 10))
+        .filter(n => n > 0));
+      return Array.from(set).sort((a, b) => a - b);
+    };
+    const rader = [];
+    const rel = nummer(res && res.relevansfel);
+    const beg = nummer(res && res.begriplighetsfel);
+    /* Meningarna är serverns egna (exam_gen.RELEVANS_RAD, BEGRIP_RAD) och
+       formulerade så att de håller för både en uppgift och flera. */
+    if (rel.length) {
+      rader.push(`Uppgift ${rel.join(', ')} saknar förebild bland bokens `
+        + 'uppgifter på lärarens sidor.');
+    }
+    if (beg.length) {
+      rader.push(`Uppgift ${beg.join(', ')} kan behöva skrivas om för att `
+        + 'alla ska förstå den vid första läsningen.');
+    }
+    return rader.join(' ');
+  };
+
   window.API = API;
 })();

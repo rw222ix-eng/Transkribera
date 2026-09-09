@@ -524,6 +524,58 @@ def urvalets_sidor(uppgifter, urval: dict | None) -> set[int]:
             if u.get("nr") in nummer and u.get("sida")}
 
 
+# ── REMSANS UPPGIFTER, EN OCH EN ─────────────────────────────────────────
+# LÄRARENS DOM 2026-09-09 om gruppuppgiften: «Vissa uppgifter är inte relevanta
+# utifrån vad som står i boken, för man utgår ju från boken.»
+#
+# Uppslaget gick redan in i prompten som SIDTEXT (uppslag_text), och lärarens
+# remsa som en rad NUMMER (_lararens_urvalsrad). Det som saknades var det
+# däremellan: vilken uppgift varje nummer ÄR. Sidtexten bär dem visserligen
+# någonstans i sina sex sektioner, men blandad med avläsarens tvivel,
+# figurtexter och samma uttryck en gång till — och en modell som ska svara på
+# «vilken av bokens uppgifter är den här av samma sort som» måste kunna peka
+# på ett nummer, inte leta i ett uppslag.
+#
+# Listan är därför numren + en KORT text var, plockade med samma
+# `_uppgiftstext` som provets urval använder (den bygger på att bara två av
+# avläsningens sektioner får leverera — se dess docstring). Uppgifter som inte
+# står i lärarens remsa hoppas över: de är medvetet inte valda.
+#
+# Tom lista när remsan är tom eller sidorna är olästa, och då lämnas prompten
+# ordagrant som den var (exam_gen.build_forebild).
+REMS_UPPGIFT = 160         # tecken per uppgift; kortare än provets urval
+
+
+def remsuppgifter(sidor: list[dict], uppgifter: list[dict],
+                  urval: dict | None, tak: int = REMS_UPPGIFT) -> list[dict]:
+    """Lärarens valda uppgifter som {nr, niva, text} — förebildens underlag.
+
+    `sidor` är db.bok_sidor MED text (texten är där uppgiftstexterna står),
+    `uppgifter` db.bok_uppgifter för samma spann, och `urval` lärarens remsa
+    ({remsa, bortremsa}). Ordningen är bokens egen, alltså stigande nummer.
+
+    Exemplen följer med, till skillnad från provets urval: boken löser dem
+    själv, men de visar SORTEN lika tydligt som en uppgift gör, och sorten är
+    hela frågan här."""
+    nummer = remsnummer((urval or {}).get("remsa"))
+    if not nummer:
+        return []
+    bort = remsnummer((urval or {}).get("bortremsa"))
+    sek = {s["sida"]: sektioner(s.get("text") or "") for s in sidor or []}
+    ut: list[dict] = []
+    for u in sorted(uppgifter or [], key=lambda u: u.get("nr") or 0):
+        nr = u.get("nr")
+        if nr not in nummer or nr in bort:
+            continue
+        text = _uppgiftstext(sek.get(u.get("sida")) or {}, nr, tak)
+        # En uppgift utan läsbar text tas ändå med: numret och nivån är sant,
+        # och en påhittad text vore värre än ingen (samma regel som hela
+        # avläsningen bygger på). Domaren och modellen ser då ett nummer utan
+        # text, vilket är precis vad boken gav oss.
+        ut.append({"nr": nr, "niva": u.get("niva"), "text": text})
+    return ut
+
+
 def uppslag_text(conn, bok_id: int, fran: int, till: int,
                  max_tecken: int = 24000, viktiga=None) -> str:
     """Sidorna som text — det tavlan, provet och arbetsbladet skrivs ur.

@@ -2196,6 +2196,13 @@
            informationen finns ingen annanstans när provet väl är utskrivet. */
         ci: (u.innehall || []).slice(),
       };
+      /* BOKFÖREBILDEN (exam_spec.Forebild): vilken av bokens uppgifter på
+         lärarens sidor uppgiften är av samma SORT som. Den följer med till
+         arket som en liten notis vid uppgiften («Som bokens 1279») — den är
+         LÄRARENS, inte elevens, och rivs därför ur bilden och PDF:en
+         (blad-bild.js). Bara gruppuppgiften får fältet (exam_spec
+         to_response_format), så alla andra papper ser ut precis som förut. */
+      if (u.forebild && u.forebild.nr) ut.forebild = u.forebild;
       if (u.alternativ) { ut.alt = u.alternativ; ut.ratt = u.ratt_alternativ; }
       /* Figuren följer med till arket. Servern ritar den i PDF:en
          (exam_figures), och utan den här raden hänvisade skärmarket till «figuren
@@ -3048,6 +3055,11 @@
       svar: res => res
         ? `${Best(typ)} är skriven${(res.rounds || 1) > 1 ? ` — ${res.rounds} rundor innan den satt` : ''}. `
           + (window.API.nivafelText(res.nivafel) ? window.API.nivafelText(res.nivafel) + ' Läs igenom de uppgifterna med kunskapskraven bredvid. ' : '')
+          /* Bokgrindens fynd står direkt efter nivåns och före «något gick
+             inte att rätta»: läraren har sagt att det är BOKEN hon utgår
+             ifrån, och en uppgift utan förebild är det första hon vill se.
+             Tom sträng på allt utom gruppuppgiften. */
+          + (window.API.bokfelText(res) ? window.API.bokfelText(res) + ' ' : '')
           + `${(res.errors || []).length ? 'Något gick inte att rätta helt; läs igenom extra noga.' : 'Läs igenom och skriv vad som ska bli annorlunda.'}`
         : `Utkastet är skrivet. ${Best(typ)} täcker ${vald.size || 'inga'} valda moment — läs igenom och skriv vad som ska bli annorlunda.`,
       plan: [
@@ -3125,6 +3137,11 @@
              pappret in i Sparat: fyndet gäller uppgifterna och inte varvet, och
              en lärare som öppnar dokumentet i morgon ska se samma sak. */
           utkast.nivafel = res.nivafel || [];
+          /* Gruppuppgiftens två fynd följer med pappret av samma skäl som
+             nivåns: de gäller uppgifterna och inte varvet, och läraren som
+             öppnar dokumentet i morgon ska se samma sak. */
+          utkast.relevansfel = res.relevansfel || [];
+          utkast.begriplighetsfel = res.begriplighetsfel || [];
           if (res.exam.titel) utkast.titel = res.exam.titel;
           /* Mottagaren följer med pappret: namnet står på arket och `elevId`
              är det klassvyn skiljer två blad på samma lektion åt med
@@ -4014,6 +4031,12 @@
       /* Samma fält på iterationens varv — en omskrivning kan göra en E-uppgift
          till en C-uppgift, och då är det det här varvet som bär fyndet. */
       v.nivafel = res.nivafel || [];
+      /* Bokgrinden körs inte i en omskrivning (den hör till genereringen, se
+         exam_gen._bok_grind), så fälten är tomma här. De skrivs ändå: ett
+         gammalt fynd som står kvar på ett varv där uppgiften just skrevs om
+         pekar på en uppgift som inte finns längre. */
+      v.relevansfel = res.relevansfel || [];
+      v.begriplighetsfel = res.begriplighetsfel || [];
       v.nyckelfraga = res.exam.nyckelfraga || v.nyckelfraga || null;
       /* Samma reserv som nyckelfrågan: skrev modellen inget band i det här
          varvet står det förra kvar. Utan reserven hade en omskrivning som

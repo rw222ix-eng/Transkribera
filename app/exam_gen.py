@@ -688,6 +688,19 @@ FORLAGA_GRUPP = (
     "MÖNSTRET (lärarens egen gruppuppgift, den hon slipade i tjugotvå vändor "
     "tills hon var nöjd — följ dess form och dess mått, aldrig dess "
     "innehåll):\n"
+    # LÄRARENS DOM 2026-09-09 och lagningen av exam 75, sagd rakt ut och
+    # först. Mönstret nedan är FORMER — en tabellingång, en begreppsuppgift,
+    # en felsökning, en formeluppgift — och de formerna kopierades in på ett
+    # uppslag som inte hade dem: bokens sidor 34–36 handlade om prefix, och
+    # pappret fick ändå formeln $P = 3 + 2n$ och en algebrauppgift. Formen är
+    # alltså mönstrets, men SORTEN är bokens, och står det inte här läses
+    # mönstret som en innehållsförteckning.
+    "- FORMEN HÄRIFRÅN, SORTEN UR BOKEN. Mönstret säger hur en uppgift SER UT "
+    "— hur lång texten är, var talen står, hur svaret ska lämnas. Vad "
+    "uppgiften PRÖVAR kommer ur bokens uppgifter på lärarens sidor (se "
+    "förebilden ovan) och ingen annanstans ifrån. Formerna nedan får bara "
+    "användas när sidorna faktiskt HAR den sorten; annars vinner boken, och "
+    "formen får vika.\n"
     "- KORT UPPGIFTSTEXT. Två eller tre meningar, vardagliga ord, korta "
     "huvudsatser. Uppgiften ställer FRÅGAN och ingenting annat: hur gruppen "
     "ska arbeta med hela pappret står i instruktionsrutan, inte i uppgiften. "
@@ -715,7 +728,8 @@ FORLAGA_GRUPP = (
     "Läraren strök två uppgifter ur ett papper på sex med orden «ta bort "
     "uppgift E och F helt» — hellre fyra uppgifter som hinns med och pratas "
     "igenom än sex som gruppen rusar förbi.\n"
-    "- FORMERNA SOM BAR PAPPRET, en per förmåga i uppgiftsplanen:\n"
+    "- FORMERNA SOM BAR PAPPRET, en per förmåga i uppgiftsplanen — var och en "
+    "villkorad av att boken har den sorten:\n"
     "  * rutin-raden blir INGÅNGEN: två korta uttryck i en \"tabell\" med "
     "kolumnerna «Uppgift» och «Uttryck» och raderna a) och b), ett svarsfält "
     "per rad. Uttrycken står UNDER varandra, aldrig bredvid varandra på samma "
@@ -728,13 +742,23 @@ FORLAGA_GRUPP = (
     "\"stegtabell\" med en påhittad elevs lösning där gruppen ska hitta den "
     "FÖRSTA raden som är fel, skriva rätt värde och säga hur man ska tänka i "
     "stället. Be aldrig om den färdiga åtgärden («sätt in en parentes här») — "
-    "det är svaret, och gruppen ska hitta det själv.\n"
+    "det är svaret, och gruppen ska hitta det själv. FELET i elevens lösning "
+    "ska vara ett fel i BOKENS sort — går sidorna igenom prefix är det "
+    "omvandlingen som gått åt fel håll, inte en parentes. Och be om EN sak i "
+    "taget: läraren strök ett tillägg med orden «Elias fel är onödigt, vi har "
+    "redan första felaktiga raden».\n"
     "  * modellerings- och problemraderna (M, PL): en verklig kostnad eller "
     "ett verkligt samband med ett fast och ett rörligt led, som gruppen först "
     "tecknar som formel och sedan använder baklänges — $K = 500 + 200d$; hur "
-    "länge räcker $2500$ kr?\n"
+    "länge räcker $2500$ kr? DEN HÄR FORMEN SKRIVS BARA NÄR BOKENS SIDOR HAR "
+    "FORMLER. Har de inga — sidorna handlar om enheter, om överslag, om "
+    "storleksordning — då bär M- och PL-raden bokens egen sort i stället, "
+    "gjord svårare: fler led, ett omvänt frågesätt, ett svar som ska "
+    "bedömas. Läraren strök en formeluppgift på ett prefixuppslag med orden "
+    "«teckna ett uttryck har inget med överslagsberäkning att göra».\n"
     "  Minst en uppgift ska ändå BRYTA mönstret: ställer alla fyra samma sorts "
-    "fråga gissar gruppen sig till metoden utan att välja den.\n"
+    "fråga gissar gruppen sig till metoden utan att välja den. Bryt den med "
+    "en ANNAN sort ur boken, aldrig med ett moment sidorna inte tar upp.\n"
     "- NYCKELFRÅGAN: momentets ENA avgörande fråga, skriven i dokumentets fält "
     "\"nyckelfraga\". Lärarens egen var fyra ord — «Vad ska räknas först?» — "
     "och så kort ska den vara; följ den med vägarna den öppnar bara när "
@@ -1330,7 +1354,8 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
                  profil: str = "prov", koder: list[str] | None = None,
                  grupp: dict | None = None, riktat: str = "",
                  skeleton: list[dict] | None = None,
-                 illustration: bool = True) -> str:
+                 illustration: bool = True,
+                 bokuppgifter: list[dict] | None = None) -> str:
     """Genereringsprompt: instruktion + valda innehållspunkter +
     minneskontext + tidigare provs teman (undvik upprepning som default).
     `profil` växlar mellan prov och arbetsblad (Fas 5). `utfall` är ett rättat
@@ -1482,6 +1507,17 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             "men inte noll — klarar den sista. Är den sista så svår att ingen "
             "kommer i mål är den fel skriven, och är den lika lätt som den "
             "första finns ingen stegring.\n"
+            # Begripligheten står DIREKT EFTER stegringen ovan, och det är
+            # ingen slump: den säger var TVÅAN ligger i just den stegringen,
+            # och läses den någon annanstans blir den en allmän uppmaning att
+            # skriva enkelt. Lärarens dom 2026-09-09 gäller precis den platsen.
+            f"{BEGRIPLIGHET_GRUPP}\n"
+            # Förebilden står FÖRE mönstret, av samma skäl som nivåstegen står
+            # efter det: mönstret ger FORMEN, boken ger SORTEN, och den
+            # ordningen är hela lagningen av exam 75. Läses boken efteråt blir
+            # den en efterhandskontroll av ett papper som redan valt sina
+            # uppgifter ur förlagan.
+            f"{build_forebild(bokuppgifter)}\n"
             f"{FORLAGA_GRUPP}\n"
             # Nivån står EFTER mönstret och inte före: utdragen är ett
             # 1a-papper, och raden här är den som säger att måtten i dem gäller
@@ -2344,6 +2380,612 @@ def doma_rakning(exam: dict, *, model: str, llm=llm_client.generate,
         log(f"Räknekontrollen kunde inte köras ({e}) — provet levereras ändå.")
         return []
     return raknefel(enheter, _parse_rakning(raw))
+
+
+# ═══════════════════════ BOKEN SOM FÖREBILD, OCH DE TVÅ DOMARNA ═════════════
+#
+# LÄRARENS DOM 2026-09-09, om gruppuppgiften: «Uppgift 2 är oftast alldeles för
+# komplicerad och svår att förstå för alla elever. Vissa uppgifter är inte
+# relevanta utifrån vad som står i boken, för man utgår ju från boken. Uppgift 1
+# är den enda jag alltid är nöjd med. Stora förbättringsmöjligheter.»
+#
+# Hennes egna omskrivningar en vecka tidigare (dokument 37, 2026-09-02) säger
+# samma sak konkret: «fler frågor tillsammans, vi bestämmer oss för EN fråga»,
+# «ingen tydlig överslagsberäkning, du har ju sidorna i boken», «teckna ett
+# uttryck har inget med överslagsberäkning att göra», «texten mer konkret så att
+# eleverna fattar (lag → arbetslag)», «Elias fel är onödigt, vi har redan första
+# felaktiga raden».
+#
+# DIAGNOSEN, ställd på exam 75 («Prefix och enheter», Matematik nivå 1a, BA26B,
+# bokens s. 34–36, remsan 1268–1276 och 1278–1282). Bokens uppgifter på de
+# sidorna är prefixomvandlingar, storleksordning, «vilka alternativ är lika med
+# 200 µm», ett överslag av antal filmklipp, blodkroppar i rad och
+# grundpotensform. Pappret blev:
+#
+#   1  tabell kW→W och GB→MB          — bokens sort, lärarens enda nöjda
+#   2  tre omvandlingar i ett flerstegsproblem (2 mm + 1 500 µm, tredje plåten
+#      högst 4,2 mm, svar i µm) — inte mönstrets begreppsform, och tre steg
+#   3  formeln $P = 3 + 2n$ med utbyggnad — FORLAGA_GRUPP:s formeluppgift, på
+#      ett uppslag utan en enda formel
+#   4  «antal hela stolpar uttryckt i $a$» — algebra, inte prefix
+#
+# Mönstret är alltså inte att modellen struntade i boken. Den kopierade FORMEN
+# ur lärarens förlaga (tabellingång, felsökning, formel) och tappade SORTEN ur
+# boken — och uppgift 2 växte, därför att ingenting sa att den skulle vara
+# ingången.
+#
+# Tre saker byggdes mot det, och de hänger ihop:
+#   1. `forebild` per uppgift (exam_spec.Forebild): varje uppgift pekar ut den
+#      uppgift på lärarens sidor den är av samma SORT som.
+#   2. relevansdomaren: ett anrop per papper som prövar pekningen.
+#   3. begriplighetsdomaren + deterministiska vakter: uppgift 2 är
+#      begreppsingången, och alla grupper ska kunna börja på den.
+
+# Hur många av remsans uppgifter som går in i prompten. Ett uppslag är en
+# lektion, och lärarens remsor ligger på tio till tjugo nummer — taket finns
+# för det spann som råkar bli hundra, och det klipps då i bokens egen ordning
+# så att de första (de lägsta numren, alltså den lägsta nivån) alltid är med.
+BOKUPPG_TAK = 24
+
+# Utan bok i beställningen finns ingen förebild att peka på. Sorten hämtas då
+# ur innehållspunkten i stället, och fältet ska lämnas tomt — en modell som
+# hittar på ett boknummer när ingen bok finns har gjort pekningen värdelös.
+FOREBILD_UTAN_BOK = (
+    "INGEN BOK i den här beställningen: lämna fältet \"forebild\" utelämnat "
+    "på alla uppgifter — hitta aldrig på ett boknummer. Sorten hämtas då ur "
+    "den centrala innehållspunkten: uppgiften ska pröva just det som står i "
+    "punkten, inte en angränsande färdighet som råkar använda samma tal.")
+
+
+def build_forebild(bokuppgifter: list[dict] | None) -> str:
+    """Bokens uppgifter på lärarens sidor, som förebilder att peka på.
+
+    Raderna kommer ur bok.remsuppgifter — nummer, bokens nivå och en kort
+    text. Tom lista ger FOREBILD_UTAN_BOK och ingenting annat, så en
+    beställning utan bok får ordagrant den prompt den fick förut plus den
+    raden."""
+    rader = [r for r in (bokuppgifter or []) if r.get("nr")][:BOKUPPG_TAK]
+    if not rader:
+        return FOREBILD_UTAN_BOK
+    kort = [{"nr": r["nr"],
+             **({"niva": r["niva"]} if r.get("niva") is not None else {}),
+             "text": _kort(r.get("text") or "", 160)} for r in rader]
+    return (
+        "BOKENS UPPGIFTER PÅ LÄRARENS SIDOR — de hon valt ut åt klassen, i "
+        "bokens ordning (\"niva\" är bokens egen nivåmärkning):\n"
+        f"{json.dumps(kort, ensure_ascii=False)}\n"
+        "VARJE uppgift du skriver ska vara av SAMMA SORT som en av dem, och "
+        "säga vilken: fyll fältet \"forebild\" med {\"nr\": boknumret, "
+        "\"sort\": en mening om vad som är samma sort}. Sorten är vad eleven "
+        "GÖR — samma omvandling, samma sorts jämförelse, samma sorts "
+        "överslag — inte samma sammanhang och aldrig samma tal. "
+        "Originalitetskravet står kvar: förebilden är en pekning, inte en "
+        "förlaga, och en uppgift eleven känner igen ur boken är fel skriven.\n"
+        "Finns det ingen uppgift på sidorna av den sort du tänkt skriva är "
+        "det DIN uppgift som ska bytas, inte förebilden som ska tänjas. "
+        "Läraren: «Vissa uppgifter är inte relevanta utifrån vad som står i "
+        "boken, för man utgår ju från boken.»\n"
+        "Peka helst på olika uppgifter i olika uppgifter, och låt stegringen "
+        "följa bokens nivåer: de lägsta numren och nivå 1 är ingången, de "
+        "högsta nivåerna utmaningen.")
+
+
+# ── BEGRIPLIGHETEN, OCH SÄRSKILT UPPGIFT 2 ────────────────────────────────
+# Stegringen står kvar (lärarens dom 2026-08-20: alla klarar den första, några
+# få den sista). Det som ändras är var TVÅAN ligger: den ska ligga nära ettan,
+# inte halvvägs upp mot fyran. Uppgift 2 är BEGREPPSINGÅNGEN i mönstret — den
+# uppgift där uttrycket står färdigt och gruppen ska namnge dess delar — och
+# lärarens dom gäller precis den platsen.
+BEGRIPLIGHET_GRUPP = (
+    "UPPGIFT 2 ÄR BEGREPPSINGÅNGEN, och alla grupper ska kunna BÖRJA på den. "
+    "Läraren: «Uppgift 2 är oftast alldeles för komplicerad och svår att "
+    "förstå för alla elever.» Reglerna för den är hårda:\n"
+    "- EN FRÅGA. Ett frågetecken per deluppgift, och aldrig två frågor om "
+    "olika saker i samma text. Läraren skrev om en uppgift med orden «fler "
+    "frågor tillsammans, vi bestämmer oss för EN fråga».\n"
+    "- TALET ELLER UTTRYCKET STÅR FÄRDIGT i texten. Gruppen ska inte teckna "
+    "det själv här — «teckna ett uttryck har inget med överslagsberäkning att "
+    "göra», och tecknandet hör hemma i den sista uppgiften.\n"
+    "- ETT RÄKNESTEG. En omvandling eller en operation, inte tre i rad. "
+    "Lösningen ska rymmas på en rad; behöver den två likhetstecken efter "
+    "varandra för att komma i mål är uppgiften för stor för sin plats.\n"
+    "- KONKRETA ORD. Skriv «arbetslag», aldrig «lag». Skriv vad ett «paket» "
+    "består av, eller låt bli ordet. Aldrig «enhet» i betydelsen avdelning — "
+    "på ett papper om enheter betyder ordet meter och gram.\n"
+    "- TALEN UR BOKENS NIVÅ, och ur den lägsta delen av den: ingången ska "
+    "kännas igen från de första uppgifterna på sidorna.\n"
+    "Stegringen gäller fortfarande hela pappret — men uppgift 2 ska ligga "
+    "NÄRA uppgift 1, inte halvvägs mot den sista.\n"
+    "PÅ ALLA UPPGIFTER: korta meningar (en mening är en sak), och inför "
+    "aldrig fler storheter än gruppen behöver. En text som måste läsas två "
+    "gånger är fel skriven.")
+
+
+# ── DE DETERMINISTISKA VAKTERNA ───────────────────────────────────────────
+# Samma roll som talsignaler och rakneverk: det som går att MÄTA ska mätas,
+# inte frågas en modell om. Måtten nedan är kalibrerade mot lärarens EGEN
+# gruppuppgift (_UTDRAG_GRUPP, den hon slipade i tjugotvå vändor) — en vakt
+# som fäller hennes eget papper är fel vakt, och tests/test_exam_grupp.py
+# håller den kalibreringen.
+#
+# De fäller alltså inte på smak. De fäller på det som är räknebart: två
+# frågetecken i samma fråga, en mening på trettio ord, ett facit som behöver
+# fyra likhetstecken för en uppgift som ska ha ett steg.
+MENING_TAK = 24            # ord i en mening; lärarens längsta är 18
+STORHET_TAK = 5            # olika tal en uppgiftstext får införa; hennes är 4
+RAKNESTEG_TAK = 2          # likhetstecken i uppgift 2:s facit; hennes har 2
+FRAGETECKEN_TAK = 1        # frågetecken per poängbärande enhet
+
+# Orden läraren själv bytte ut. «lag» står som eget ord — «arbetslag» och
+# «laget» är precis vad hon skrev DIT, och ett förbud som fäller lösningen är
+# värre än inget förbud.
+BEGRIPLIGHETSORD = {
+    "lag": "skriv «arbetslag» eller vilka det är, inte «lag»",
+    "paket": "säg vad paketet består av, eller undvik ordet",
+    "paketet": "säg vad paketet består av, eller undvik ordet",
+}
+
+_MENING = re.compile(r"[.!?]\s+|\n")
+# Tal i uppgiftstexten: heltal och decimaltal, med LaTeX-tunnrymd och komma.
+_TAL = re.compile(r"\d+(?:[.,]\d+)?")
+# Likhetstecken som RÄKNESTEG: `=` som inte är en del av \neq, \leq, ==, <=.
+_LIKHET = re.compile(r"(?<![<>!=\\])=(?!=)")
+
+
+def _rentext(text: str) -> str:
+    """Uppgiftstext utan LaTeX-kommandon och matematikdollar — det som ska
+    LÄSAS. Utan städningen räknas `\\mu\\text{m}` som fyra ord och `\\,` som
+    ett tal."""
+    t = re.sub(r"\\[a-zA-Z]+", " ", str(text or ""))
+    return " ".join(t.replace("$", " ").replace("{", " ").replace("}", " ")
+                    .split())
+
+
+def _langsta_mening(text: str) -> int:
+    return max((len(m.split()) for m in _MENING.split(_rentext(text)) if m.strip()),
+               default=0)
+
+
+def _raknesteg(losning: str) -> int:
+    """Grovmåttet på hur många steg ett facit tar: antalet likhetstecken.
+
+    Grovt med flit. En omvandling skrivs «1 500 µm = 1,5 mm», en operation
+    «2 + 1,5 = 3,5», och båda kostar ett likhetstecken var — så måttet räknar
+    omvandlingar och räkneoperationer i samma valuta, vilket är precis vad
+    lärarens regel gör («högst EN omvandling eller ett räknesteg»)."""
+    return len(_LIKHET.findall(str(losning or "")))
+
+
+def _stegtabellsenheter(exam: dict) -> set[str]:
+    """Enheterna som bär en STEGTABELL, med domarenheternas numrering.
+
+    De undantas från räknestegsmåttet, och skälet är att måttet mäter fel sak
+    på dem: i en hitta-felet-uppgift CITERAR facit elevens rader, så «$= (x -
+    3)^2 + 9 + 5$» räknas som ett steg gruppen skulle ta. Gruppen tar inget av
+    dem — den läser en färdig lösning och pekar ut en rad, och det ÄR ett
+    steg. Stegtabellen på uppgiften gäller också dess deluppgifter: det är
+    stammen som bär tabellen."""
+    ut: set[str] = set()
+    for i, u in enumerate(exam.get("uppgifter") or [], 1):
+        if not isinstance(u, dict):
+            continue
+        delar = [d for d in (u.get("deluppgifter") or []) if isinstance(d, dict)]
+        if u.get("stegtabell"):
+            ut.add(str(i))
+            ut.update(f"{i}{chr(ord('a') + j)}" for j in range(len(delar)))
+        for j, d in enumerate(delar):
+            if d.get("stegtabell"):
+                ut.add(f"{i}{chr(ord('a') + j)}")
+    return ut
+
+
+def begriplighetssignaler(exam: dict, profil: str = "gruppuppgift") -> list[dict]:
+    """De mätbara begriplighetsfelen. Bara gruppuppgiften: måtten är hämtade
+    ur lärarens dom om DEN formen, och ett prov har längre uppgiftstexter av
+    goda skäl.
+
+    Uppgift 2 mäts hårdare än de andra — det är begreppsingången, och det är
+    den läraren fäller."""
+    if profil != "gruppuppgift":
+        return []
+    ut: list[dict] = []
+    steg_enheter = _stegtabellsenheter(exam)
+    for e in domarenheter(exam):
+        nr, kort = e["nr"], e["kort"]
+        text = f"{kort.get('stam', '')} {kort.get('text', '')}".strip()
+        ren = _rentext(text)
+        if ren.count("?") > FRAGETECKEN_TAK:
+            ut.append(_err(f"uppgift {nr}", "begriplighet",
+                           f"uppgift {nr} ställer {ren.count('?')} frågor i "
+                           "samma text — behåll EN fråga och stryk resten."))
+        langst = _langsta_mening(text)
+        if langst > MENING_TAK:
+            ut.append(_err(f"uppgift {nr}", "begriplighet",
+                           f"uppgift {nr} har en mening på {langst} ord — dela "
+                           f"den i korta meningar (högst {MENING_TAK} ord)."))
+        tal = {t.replace(",", ".") for t in _TAL.findall(ren)}
+        if len(tal) > STORHET_TAK:
+            ut.append(_err(f"uppgift {nr}", "begriplighet",
+                           f"uppgift {nr} inför {len(tal)} olika tal — ta bort "
+                           "dem gruppen inte behöver."))
+        for ord_, rad in BEGRIPLIGHETSORD.items():
+            if re.search(rf"(?i)(?<![\wåäö]){ord_}(?![\wåäö])", ren):
+                ut.append(_err(f"uppgift {nr}", "begriplighet",
+                               f"uppgift {nr} skriver «{ord_}»: {rad}."))
+        # ETT RÄKNESTEG, men bara på uppgift 2. På uppgift 4 ska facit få ta
+        # flera steg — det är där de starkaste grupperna ska ha något att
+        # bita i.
+        if _uppgiftsnr(nr) == 2 and nr not in steg_enheter:
+            steg = _raknesteg(kort.get("losning", ""))
+            if steg > RAKNESTEG_TAK:
+                ut.append(_err(
+                    f"uppgift {nr}", "begriplighet",
+                    f"uppgift {nr} kräver {steg} räknesteg — uppgift 2 är "
+                    "begreppsingången och ska klaras med ett steg. Låt "
+                    "uttrycket stå färdigt i texten och be om EN omvandling "
+                    "eller EN uträkning."))
+    return ut[:MAX_DOMAR_PROBLEM]
+
+
+# ── UPPGIFTSKORTEN, SOM DOMARNA SER DEM ───────────────────────────────────
+# DE SYNLIGA FORMERNA MÅSTE MED, och det är inte en detalj: den första
+# inspelningen av begriplighetsdomaren (2026-09-09) fällde tre av fyra
+# uppgifter med skälen «tabellen med ekvationerna syns inte i texten» och
+# «Heddas rader finns inte utskrivna». Uppgifterna var hela; det var KORTET
+# som saknade tabellen och stegtabellen. En domare som ska svara på om
+# gruppen förstår vid första läsningen måste se det gruppen ser.
+#
+# Facit hör INTE dit — `forsta_fel` säger vilken rad som är fel, och en
+# begriplighetsdom på en uppgift vars svar står i underlaget mäter något
+# annat.
+_FORMFALT = ("tabell", "stegtabell", "svarsrutor", "alternativ", "svarsfalt",
+             "enhet", "notis")
+
+
+def _synlig_form(u: dict) -> dict:
+    """Det eleven SER av en uppgift utöver texten — tabellen att räkna på,
+    elevlösningen att granska, rutorna att kryssa, raderna att fylla i."""
+    ut: dict = {}
+    for falt in _FORMFALT:
+        varde = u.get(falt)
+        if not varde:
+            continue
+        if falt == "stegtabell" and isinstance(varde, dict):
+            # Utan forsta_fel: det är facit, och det är just felet gruppen ska
+            # hitta.
+            ut[falt] = {"kolumner": varde.get("kolumner"),
+                        "steg": [s.get("celler")
+                                 for s in (varde.get("steg") or [])
+                                 if isinstance(s, dict)]}
+        elif falt == "tabell" and isinstance(varde, dict):
+            ut[falt] = {"rubriker": varde.get("rubriker"),
+                        "rader": varde.get("rader")}
+        elif falt == "svarsrutor" and isinstance(varde, dict):
+            ut[falt] = {"etikett": varde.get("etikett"), "val": varde.get("val")}
+        else:
+            ut[falt] = varde
+    return ut
+
+
+def uppgiftskort(exam: dict) -> list[dict]:
+    """En rad per UPPGIFT (inte per poängbärande enhet, som domarenheter).
+
+    Relevansen och begripligheten är egenskaper hos hela uppgiften: en
+    deluppgift som ensam vore obegriplig kan vara självklar under sin stam,
+    och förebilden pekas ut per uppgift. Numret är uppgiftsplanens, samma som
+    domarenheter och reparationsprompten använder."""
+    ut = []
+    for i, u in enumerate(exam.get("uppgifter") or [], 1):
+        if not isinstance(u, dict):
+            continue
+        delar = [d for d in (u.get("deluppgifter") or []) if isinstance(d, dict)]
+        rad = {"nr": str(i), "text": u.get("text") or "",
+               "typ": u.get("typ") or "", "formaga": u.get("formaga") or "",
+               **_synlig_form(u)}
+        if u.get("innehall"):
+            rad["innehall"] = list(u["innehall"])
+        if isinstance(u.get("forebild"), dict):
+            rad["forebild"] = {"nr": u["forebild"].get("nr"),
+                               "sort": u["forebild"].get("sort")}
+        if delar:
+            rad["deluppgifter"] = [{"text": d.get("text") or "",
+                                    **_synlig_form(d)} for d in delar]
+            rad["losning"] = " ".join(d.get("losning") or "" for d in delar)
+        else:
+            rad["losning"] = u.get("losning") or ""
+        ut.append(rad)
+    return ut
+
+
+# ── RELEVANSDOMAREN ───────────────────────────────────────────────────────
+# Samma kontrakt som nivådomaren och räknedomaren: eget anrop, temperature 0,
+# json_schema, fail-open, och «oklart» fäller aldrig. Skillnaden är vad den
+# ser: bokens uppgifter på lärarens sidor, och pappret med sina pekningar.
+RELEVANS_MAX_TOKENS = 6_000
+
+RELEVANS_SYSTEM = (
+    "Du är en svensk matematiklärare som jämför ett eget papper med "
+    "läromedlets uppgifter på de sidor klassen arbetar med. Du svarar ALLTID "
+    "med giltig JSON enligt schemat, ingenting annat."
+)
+
+RELEVANS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "domar": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "nr": {"type": "string"},
+                    # Domarens egen identifiering står FÖRE domen, av samma
+                    # skäl som räknedomarens `berakning`: en modell som får
+                    # skriva vad uppgiften kräver dömer på det, inte på
+                    # pekningen den läste.
+                    "kraver": {"type": "string"},
+                    "dom": {"type": "string",
+                            "enum": ["samma sort", "annan sort",
+                                     "annat moment", "oklart"]},
+                    "battre": {"type": "string"},
+                    "skal": {"type": "string"},
+                },
+                "required": ["nr", "kraver", "dom"],
+            },
+        },
+    },
+    "required": ["domar"],
+}
+
+
+def build_relevans_prompt(kort: list[dict], bokuppgifter: list[dict],
+                          punkter: list[str] | None = None) -> str:
+    """Relevansdomarens prompt.
+
+    Ordet «relevansdomare» står här och ingen annanstans i appen —
+    uppspelningen väljer band på det (tests/fejk.py `_auto`), av samma skäl
+    som räknedomaren: prompten bär ett helt papper och skulle annars matcha
+    den generator som skrev det."""
+    bok = [{"nr": r["nr"],
+            **({"niva": r["niva"]} if r.get("niva") is not None else {}),
+            "text": _kort(r.get("text") or "", 160)}
+           for r in (bokuppgifter or []) if r.get("nr")][:BOKUPPG_TAK]
+    rad = ("Momentets centrala innehåll: " + "; ".join(punkter) + "\n"
+           if punkter else "")
+    return (
+        "Du är relevansdomare för ett grupparbetspapper i matematik. Läraren "
+        "utgår från boken, och hennes dom över papper som inte gör det är "
+        "«vissa uppgifter är inte relevanta utifrån vad som står i boken, för "
+        "man utgår ju från boken».\n"
+        f"{rad}"
+        "BOKENS UPPGIFTER på de sidor klassen arbetar med:\n"
+        f"{json.dumps(bok, ensure_ascii=False)}\n\n"
+        "PAPPRETS UPPGIFTER. Fältet forebild är papprets egen pekning: vilken "
+        "av bokens uppgifter den säger sig vara av samma sort som.\n"
+        f"{json.dumps(kort, ensure_ascii=False)}\n\n"
+        "Skriv för varje uppgift först KORT vad den kräver av eleven i fältet "
+        "kraver — vilken färdighet, inte vilken situation. Döm sedan:\n"
+        "- dom \"samma sort\" när uppgiften kräver samma slags färdighet som "
+        "någon av bokens uppgifter på sidorna. Att sammanhanget och talen är "
+        "andra är RÄTT och aldrig ett skäl att fälla — uppgifterna ska vara "
+        "egna.\n"
+        "- dom \"annan sort\" när färdigheten hör till momentet men ingen av "
+        "bokens uppgifter är av den sorten (boken omvandlar enheter, pappret "
+        "tecknar en formel). Skriv då numret på den av bokens uppgifter som "
+        "pappret BORDE ha följt i fältet battre.\n"
+        "- dom \"annat moment\" när uppgiften prövar något annat än det "
+        "sidorna handlar om.\n"
+        "- dom \"oklart\" när du inte kan avgöra det. «oklart» är ett riktigt "
+        "svar och bättre än en gissning; det fäller ingenting.\n"
+        "Döm bara på SORTEN. Om uppgiften är för svår, för lång eller dåligt "
+        "skriven är någon annans sak. Svara med enbart JSON."
+    )
+
+
+_RELEVANS_DOM = {"samma sort", "annan sort", "annat moment", "oklart"}
+
+
+def _parse_relevans(raw: str) -> dict[str, dict]:
+    """Relevansdomens svar → {nr: {dom, battre, skal, kraver}}. Ett svar som
+    inte går att tolka ger en tom dom: en trasig kontroll ska aldrig kunna
+    underkänna ett papper som är rätt."""
+    data = _json_objekt(raw)
+    if not isinstance(data, dict):
+        return {}
+    ut: dict[str, dict] = {}
+    for d in data.get("domar") or []:
+        if not isinstance(d, dict):
+            continue
+        nr = str(d.get("nr") or "").strip()
+        if not nr:
+            continue
+        dom = str(d.get("dom") or "").strip().lower()
+        ut[nr] = {"dom": dom if dom in _RELEVANS_DOM else "oklart",
+                  "battre": str(d.get("battre") or "").strip(),
+                  "skal": str(d.get("skal") or "").strip(),
+                  "kraver": str(d.get("kraver") or "").strip()}
+    return ut
+
+
+def relevansfynd(kort: list[dict], domar: dict[str, dict]) -> list[dict]:
+    """Domen mot boken. Bara «annan sort» och «annat moment» fäller — tystnad
+    och «oklart» passerar, precis som i nivådomen och räknedomen."""
+    ut = []
+    for k in kort:
+        dom = domar.get(k["nr"])
+        if not dom or dom["dom"] not in ("annan sort", "annat moment"):
+            continue
+        vad = ("prövar ett annat moment än sidorna"
+               if dom["dom"] == "annat moment"
+               else "är inte av samma sort som någon uppgift på sidorna")
+        text = (f"uppgift {k['nr']} {vad}. Byt ut den mot en uppgift av samma "
+                "sort som en av bokens uppgifter på lärarens sidor, och sätt "
+                "forebild till den uppgiftens nummer.")
+        if dom["battre"]:
+            text += f" Bokens uppgift {_kort(dom['battre'], 40)} är förebilden."
+        if dom["skal"]:
+            text += f" Relevansdomarens skäl: {_kort(dom['skal'], 160)}"
+        ut.append(_err(f"uppgift {k['nr']}", "relevans", text))
+    return ut[:MAX_DOMAR_PROBLEM]
+
+
+def doma_relevans(exam: dict, bokuppgifter: list[dict] | None, *, model: str,
+                  punkter: list[str] | None = None,
+                  llm=llm_client.generate,
+                  log_cb: Callable[[str], None] | None = None) -> list[dict]:
+    """Ett relevansdomaranrop → fynd där uppgiften inte följer boken.
+
+    Utan bokuppgifter körs INGENTING: finns ingen bok i beställningen finns
+    ingen förebild att pröva, och en dom mot ett tomt underlag hade fällt
+    varje uppgift på ett papper som ingen bok gällde."""
+    log = log_cb or (lambda _m: None)
+    kort = uppgiftskort(exam)
+    if not kort or not bokuppgifter:
+        return []
+    log("Jämför uppgifterna med bokens …")
+    try:
+        raw = llm(
+            model, build_relevans_prompt(kort, bokuppgifter, punkter),
+            system=RELEVANS_SYSTEM,
+            options={"temperature": 0.0},
+            response_format={"type": "json_schema",
+                             "json_schema": {"name": "relevansdom",
+                                             "schema": RELEVANS_SCHEMA}},
+            max_tokens=RELEVANS_MAX_TOKENS,
+            token_cb=None,
+        )
+    except Exception as e:                          # noqa: BLE001
+        log(f"Bokjämförelsen kunde inte köras ({e}) — pappret levereras ändå.")
+        return []
+    return relevansfynd(kort, _parse_relevans(raw))
+
+
+# ── BEGRIPLIGHETSDOMAREN ──────────────────────────────────────────────────
+# Frågan är lärarens egen, ställd som hon ställer den: förstår ALLA elever
+# uppgiften vid första läsningen? Domaren ser pappret utan poäng och utan
+# nivåer — en uppgift som är svår att FÖRSTÅ är inte samma sak som en uppgift
+# som är svår att LÖSA, och den skillnaden går förlorad om domaren vet vilken
+# nivå uppgiften påstår sig ligga på.
+BEGRIP_MAX_TOKENS = 6_000
+
+BEGRIP_SYSTEM = (
+    "Du är en svensk gymnasielärare i matematik som läser en gruppuppgift med "
+    "klassens svagaste läsare i tankarna. Du svarar ALLTID med giltig JSON "
+    "enligt schemat, ingenting annat."
+)
+
+BEGRIP_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "domar": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "nr": {"type": "string"},
+                    "forstar": {"type": "string",
+                                "enum": ["ja", "nej", "oklart"]},
+                    "stor": {"type": "string"},
+                },
+                "required": ["nr", "forstar"],
+            },
+        },
+    },
+    "required": ["domar"],
+}
+
+
+def build_begriplighet_prompt(kort: list[dict]) -> str:
+    """Begriplighetsdomarens prompt. Ordet «begriplighetsdomare» står här och
+    ingen annanstans i appen — uppspelningen väljer band på det (tests/fejk.py
+    `_auto`), av samma skäl som de andra domarna."""
+    utan_facit = [{k: v for k, v in rad.items() if k != "losning"}
+                  for rad in kort]
+    return (
+        "Du är begriplighetsdomare för en gruppuppgift i matematik. Fyra "
+        "elever ska läsa uppgiften vid ett bord och komma i gång utan att "
+        "läraren står bredvid.\n"
+        f"{json.dumps(utan_facit, ensure_ascii=False)}\n\n"
+        "Svara för varje uppgift på EN fråga: förstår alla elever vid FÖRSTA "
+        "läsningen vad de ska göra?\n"
+        "- forstar \"ja\" när frågan är en, orden är vardagliga och det står "
+        "klart vad som ska besvaras.\n"
+        "- forstar \"nej\" när texten ställer flera frågor på en gång, när ett "
+        "ord är oklart eller används i en ovanlig betydelse, när det som ska "
+        "räknas ut inte står tydligt, eller när gruppen måste läsa om texten "
+        "för att veta var den ska börja. Skriv då KORT i fältet stor vad det "
+        "är som stör — ett ord, en mening, en sak.\n"
+        "- forstar \"oklart\" när du inte kan avgöra det; det fäller "
+        "ingenting.\n"
+        "UPPGIFT 2 är begreppsingången och döms hårdast: den ska ha EN fråga, "
+        "talet eller uttrycket ska stå färdigt i texten, och det ska räcka "
+        "med ett räknesteg. Läraren: «Uppgift 2 är oftast alldeles för "
+        "komplicerad och svår att förstå för alla elever.»\n"
+        "Döm på FÖRSTÅELSEN, inte på svårighetsgraden: den sista uppgiften "
+        "SKA vara svår att lösa, men den ska gå att förstå. Svara med enbart "
+        "JSON."
+    )
+
+
+def _parse_begriplighet(raw: str) -> dict[str, dict]:
+    data = _json_objekt(raw)
+    if not isinstance(data, dict):
+        return {}
+    ut: dict[str, dict] = {}
+    for d in data.get("domar") or []:
+        if not isinstance(d, dict):
+            continue
+        nr = str(d.get("nr") or "").strip()
+        if not nr:
+            continue
+        ut[nr] = {"forstar": _stammer(d.get("forstar")),
+                  "stor": str(d.get("stor") or "").strip()}
+    return ut
+
+
+def begriplighetsdom(kort: list[dict], domar: dict[str, dict]) -> list[dict]:
+    """Domen mot första läsningen. Bara ett uttryckligt «nej» fäller."""
+    ut = []
+    for k in kort:
+        dom = domar.get(k["nr"])
+        if not dom or dom["forstar"] != "nej":
+            continue
+        text = (f"uppgift {k['nr']} är inte begriplig vid första läsningen. "
+                "Skriv om den kortare och konkretare: en fråga, vardagliga "
+                "ord, och det som ska räknas ut utskrivet i texten.")
+        if dom["stor"]:
+            text += f" Det som stör: {_kort(dom['stor'], 160)}"
+        if _uppgiftsnr(k["nr"]) == 2:
+            text += (" Uppgift 2 är begreppsingången — den ska klaras med ett "
+                     "räknesteg och ligga nära uppgift 1.")
+        ut.append(_err(f"uppgift {k['nr']}", "begriplighet", text))
+    return ut[:MAX_DOMAR_PROBLEM]
+
+
+def doma_begriplighet(exam: dict, *, model: str, llm=llm_client.generate,
+                      log_cb: Callable[[str], None] | None = None) -> list[dict]:
+    """Ett begriplighetsdomaranrop → fynd där uppgiften inte går att förstå
+    vid första läsningen. Fail-open som de andra domarna."""
+    log = log_cb or (lambda _m: None)
+    kort = uppgiftskort(exam)
+    if not kort:
+        return []
+    log("Läser uppgifterna med elevernas ögon …")
+    try:
+        raw = llm(
+            model, build_begriplighet_prompt(kort),
+            system=BEGRIP_SYSTEM,
+            options={"temperature": 0.0},
+            response_format={"type": "json_schema",
+                             "json_schema": {"name": "begriplighetsdom",
+                                             "schema": BEGRIP_SCHEMA}},
+            max_tokens=BEGRIP_MAX_TOKENS,
+            token_cb=None,
+        )
+    except Exception as e:                          # noqa: BLE001
+        log(f"Begriplighetskontrollen kunde inte köras ({e}) — pappret "
+            "levereras ändå.")
+        return []
+    return begriplighetsdom(kort, _parse_begriplighet(raw))
 
 
 # ═══════════════════════════════ bedömningspasset ═══════════════════════════
@@ -4145,6 +4787,142 @@ def _niva_grind(res: dict, *, model: str, llm, profil: str, skala: str,
     return res
 
 
+# ── BOKGRINDEN: relevansen och begripligheten får sina egna rundor ────────
+# Samma mekanik som nivågrinden ovan, och av samma skäl: domarpassets fynd får
+# EN delad runda, och det räcker inte för det läraren uttryckligen klagat på.
+# Skillnaderna mot _niva_grind är tre, och alla tre är gruppuppgiftens form:
+#
+# 1. RUNDORNA DELAS av de två domarna. Ett grupparbetspapper är fyra uppgifter
+#    och båda domarna läser hela pappret i ett anrop var — då är en gemensam
+#    reparationsrunda på båda fyndlistorna billigare och sannare än två
+#    rundor som skriver om samma uppgift efter varandra.
+# 2. OMDOMEN MÄTER HELA PAPPRET. Nivågrinden dömer om en delmängd på ett
+#    blandat papper, därför att en omskrivning av uppgift 7 inte säger något
+#    om uppgift 8. Här är det tvärtom: uppgifterna delar bokens sidor, och
+#    byts uppgift 2 mot en annan sort kan uppgift 3 bli den som nu upprepar
+#    den. Fyra uppgifter ryms dessutom i samma anrop, så omdomen kostar inget
+#    extra.
+# 3. FYNDEN ÄR TVÅ LISTOR i svaret (`relevansfel`, `begriplighetsfel`), inte
+#    en. Läraren ska kunna se skillnad på «den här uppgiften hör inte till
+#    boken» och «den här uppgiften går inte att förstå» — det är två olika
+#    saker att göra åt dem.
+EXTRA_BOKRUNDOR = 2
+
+
+def _fyndnr(f: dict) -> int:
+    """Uppgiftsnumret ur ett fynd, oavsett vilken form det har. Domarna skriver
+    `nr` («2a»), reparationsloopens fel bär `path` («uppgift 2») — och
+    bokgrinden hanterar båda i samma lista, för de deterministiska vakterna
+    lämnar fel av den andra sorten."""
+    m = re.search(r"\d+", str(f.get("nr") or f.get("path") or ""))
+    return int(m.group()) if m else 0
+
+
+def bokfel_text(fynd: list[dict] | None, mall: str) -> str:
+    """Raden läraren läser. Samma form som nivafel_text, och klienten bygger
+    sin egen av samma fält (api.js bokfelText).
+
+    Numren är UPPGIFTERNAS, inte enheternas: en deluppgift som fälls är
+    uppgiften som ska skrivas om, och «uppgift 2a, 2b» hade sagt samma sak
+    två gånger.
+
+    `mall` bär «{nr}» och är formulerad så att den håller för både en uppgift
+    och flera — en mening med «uppgiften» i singular blir fel så fort två
+    uppgifter fälls, och det är just då läraren läser den."""
+    if not fynd:
+        return ""
+    nummer = sorted({_fyndnr(f) for f in fynd} - {0})
+    if not nummer:
+        return ""
+    return mall.format(nr=", ".join(str(n) for n in nummer))
+
+
+RELEVANS_RAD = ("Uppgift {nr} saknar förebild bland bokens uppgifter på "
+                "lärarens sidor.")
+BEGRIP_RAD = ("Uppgift {nr} kan behöva skrivas om för att alla ska förstå "
+              "den vid första läsningen.")
+
+
+def _bok_grind(res: dict, *, model: str, llm, profil: str,
+               bokuppgifter: list[dict] | None, punkter: list[str] | None,
+               antal: int | None, koder: list[str] | None,
+               niva_mal: dict | None,
+               max_rounds: int = EXTRA_BOKRUNDOR,
+               log_cb: Callable[[str], None] | None = None) -> dict:
+    """Relevans- och begriplighetsdomarna, med riktade extrarundor.
+
+    Svaret är samma dict med `relevansfel` och `begriplighetsfel` ifyllda: tom
+    lista när ingenting står kvar, annars en rad per uppgift med skälet.
+
+    Kallas BARA för gruppuppgiften (generate_exam) — måtten och prompterna är
+    hämtade ur lärarens dom om just den formen."""
+    log = log_cb or (lambda _m: None)
+    exam = res.get("exam")
+    if exam is None:
+        return {**res, "relevansfel": [], "begriplighetsfel": []}
+
+    def dom(e: dict) -> tuple[list[dict], list[dict]]:
+        rel = doma_relevans(e, bokuppgifter, model=model, punkter=punkter,
+                            llm=llm, log_cb=log_cb)
+        # De deterministiska vakterna först i listan: de är gratis, de är
+        # säkra, och står de sist kan de falla utanför MAX_DOMAR_PROBLEM i en
+        # reparationsprompt som redan är full av domarfynd.
+        beg = (begriplighetssignaler(e, profil)
+               + doma_begriplighet(e, model=model, llm=llm, log_cb=log_cb))
+        return rel, beg[:MAX_DOMAR_PROBLEM]
+
+    rel, beg = dom(exam)
+    for varv in range(max_rounds):
+        fynd = rel + beg
+        if not fynd:
+            break
+        nummer = sorted({_fyndnr(f) for f in fynd} - {0})
+        if not nummer:
+            break
+        log(f"Rättar {len(nummer)} uppgift(er) mot boken "
+            f"(extrarunda {varv + 1} av {max_rounds}) …")
+        kandidat = _llm_round(build_repair_prompt(exam, fynd, profil),
+                              model, llm, antal, None, koder, log_cb=log_cb,
+                              etikett=f"Rättar mot boken (extrarunda "
+                                      f"{varv + 1} av {max_rounds}) —")
+        if kandidat is None:
+            break
+        # Riktat, precis som nivågrinden: bara de uppgifter fynden pekar på
+        # får skrivas om. Utan låset kunde en runda om uppgift 2 byta ut hela
+        # pappret, och läraren hade fått en annan gruppuppgift än den hon nyss
+        # läste.
+        ihop, skal = sammanfoga_riktat(exam, kandidat,
+                                       {"uppgifter": nummer, "falt": ()})
+        if ihop is None:
+            log(f"Omskrivningen bar inte uppgiften ({skal}) — fynden står kvar.")
+            break
+        _doc, fel = _validate(ihop, profil, koder, niva_mal)
+        if fel:
+            # En omskrivning som lagar relevansen och river balansen är ingen
+            # lagning. Samma grind som domarpassets och nivågrindens.
+            log("Omskrivningen bröt balansen — pappret står kvar som det var.")
+            break
+        exam = ihop
+        res = {**res, "exam": exam, "rounds": (res.get("rounds") or 0) + 1}
+        rel, beg = dom(exam)
+    # `nr` är UPPGIFTENS nummer som en sträng, samma form som nivåfynden bär
+    # — klienten räknar upp dem i en mening (api.js bokfelText) och ska inte
+    # behöva veta att vakterna skriver «uppgift 2» och domarna «2».
+    def rad(f: dict) -> dict:
+        return {"nr": str(_fyndnr(f) or "?"), "skal": f.get("message")}
+
+    res = {**res, "exam": exam,
+           "relevansfel": [rad(f) for f in rel],
+           "begriplighetsfel": [rad(f) for f in beg]}
+    # Fynden ska också stå kvar i fellistan — den är klientens `provFel`, och
+    # ett fynd som bara syns i loggen försvinner när jobbet är över. Samma
+    # regel som nivågrinden följer.
+    kvar = [e for e in (res.get("errors") or [])
+            if e.get("code") not in ("relevans", "begriplighet")]
+    res["errors"] = kvar + rel + beg
+    return res
+
+
 def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                   antal: int = 10, tid_min: int = 120, delar: bool = True,
                   memory: str = "", teman: str = "", referens: str = "",
@@ -4158,6 +4936,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                   niva_mal: dict | None = None,
                   grupp: dict | None = None, doma: bool = True,
                   illustration: bool = True,
+                  bokuppgifter: list[dict] | None = None,
                   llm=llm_client.generate, max_rounds: int = MAX_ROUNDS,
                   log_cb: Callable[[str], None] | None = None,
                   steg_cb: Callable[[str], None] | None = None) -> dict:
@@ -4194,6 +4973,13 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     med talen utbytta mot # går in i prompten, och det som ändå blev en gammal
     uppgift med nya tal kommer tillbaka i svarets `likheter`. En TOM lista
     lämnar prompten ordagrant som den var. Se build_variation.
+
+    `bokuppgifter` är LÄRARENS VALDA UPPGIFTER ur boken, en och en
+    (bok.remsuppgifter): nummer, bokens nivå och en kort text. Bara
+    gruppuppgiften får dem, och de gör två saker som hör ihop — förebilden
+    begärs i prompten (build_forebild) och relevansen prövas på det som kom
+    tillbaka (doma_relevans). Tom lista lämnar prompten ordagrant som den var
+    och kör ingen relevansdom.
 
     `avsnitt` är KAPITELRAMEN (bok.avsnittslista eller avsnitt_ur_moment):
     kapitlets egna avsnitt med sina sidantal. Den gör två saker som hör ihop:
@@ -4249,7 +5035,8 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                           svart=svart, fokus=fokus,
                           profil=profil, koder=koder, grupp=grupp,
                           riktat=riktat, skeleton=skeleton,
-                          illustration=illustration)
+                          illustration=illustration,
+                          bokuppgifter=bokuppgifter)
     exam = _llm_round(prompt, model, llm, antal, grammatik, koder,
                       log_cb=log_cb)
     rounds = 1
@@ -4310,6 +5097,15 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
             log(f"Uppgift {f['nr']} liknar en tidigare uppgift i kursen: "
                 f"«{f['text']}»")
         r.setdefault("nivafel", [])
+        # Gruppuppgiftens två egna fynd (se _bok_grind). Alltid listor, aldrig
+        # None, av samma skäl som `likheter`: klienten ska inte behöva skilja
+        # «inga fynd» från «ingen domare kördes» på fältets typ.
+        r.setdefault("relevansfel", [])
+        r.setdefault("begriplighetsfel", [])
+        for fynd, vad in ((r["relevansfel"], RELEVANS_RAD),
+                          (r["begriplighetsfel"], BEGRIP_RAD)):
+            if fynd:
+                log(bokfel_text(fynd, vad))
         # SIST av allt som loggas: står nivån kvar osäkrad är det den raden
         # läraren ska se överst i jobbet när det är över, inte en bildtext om
         # en uppgift som liknar en gammal.
@@ -4335,6 +5131,17 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     res = _niva_grind(res, model=model, llm=llm, profil=profil, skala=skala,
                       antal=antal, skeleton=grammatik, koder=koder,
                       niva_mal=niva_mal, log_cb=log_cb)
+    # ── BOKGRINDEN, och bara på GRUPPUPPGIFTEN ───────────────────────
+    # Lärarens dom 2026-09-09 gäller gruppuppgiften: den ska följa bokens sort
+    # och gå att förstå vid första läsningen. Passet ligger EFTER nivågrinden
+    # med flit — nivån är det hon krävde garanti för, och en uppgift som
+    # skrivs om för bokens skull ska skrivas om från en färdig nivå, inte
+    # tvärtom.
+    if profil == "gruppuppgift" and res["exam"] is not None:
+        res = _bok_grind(res, model=model, llm=llm, profil=profil,
+                         bokuppgifter=bokuppgifter, punkter=punkter,
+                         antal=antal, koder=koder, niva_mal=niva_mal,
+                         log_cb=log_cb)
     # ── BEDÖMNINGSPASSET (2026-08-23) ────────────────────────────────
     # Sist av allt, och bara på PROVET: det är provets bedömningsanvisning
     # läraren rättar efter, och arbetsbladets och gruppuppgiftens facit heter

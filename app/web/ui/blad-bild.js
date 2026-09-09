@@ -180,8 +180,13 @@ window.BladBild = (() => {
     trav.className = 'bladtrav';
     trav.style.cssText = 'width:' + b + 'px;gap:0';
     /* Samma regel som tavla-bild.js: markeringarna stannar på skärmen. */
-    trav.appendChild(window.Prickar ? window.Prickar.riv(blad.cloneNode(true))
-                                    : blad.cloneNode(true));
+    const kopia = window.Prickar ? window.Prickar.riv(blad.cloneNode(true))
+                                 : blad.cloneNode(true);
+    /* Och av exakt samma skäl: bokförebilden («Som bokens 1279») är LÄRARENS
+       kvitto på att uppgiften hör till de uppslagna sidorna, inte en del av
+       elevens papper. Den ska inte ut ur skrivaren. */
+    Array.from(kopia.querySelectorAll('.guforebild')).forEach(n => n.remove());
+    trav.appendChild(kopia);
     return css().then(regelverk => {
       /* XML-säkra CSS:en: & och < får inte stå råa i XML. */
       const trygg = regelverk.replace(/&/g, '&amp;').replace(/</g, '&lt;');

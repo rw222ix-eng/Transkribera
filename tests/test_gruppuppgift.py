@@ -18,7 +18,7 @@ import json
 
 import pytest
 
-from app import exam_gen, exam_latex, exam_pdf, exam_spec
+from app import claude_code, exam_gen, exam_latex, exam_pdf, exam_spec
 
 
 def _events(resp):
@@ -688,3 +688,339 @@ def test_stegringen_ar_promptstyrd_inte_validerad():
     i kassetterna — inte för att den här raden såg tom ut."""
     *_, kraver_stigande = exam_spec.PROFILER["gruppuppgift"]
     assert kraver_stigande is False
+
+
+
+# ══════════════ BOKEN SOM FÖREBILD, OCH DE TVÅ NYA DOMARNA ══════════════════
+#
+# LÄRARENS DOM 2026-09-09: «Uppgift 2 är oftast alldeles för komplicerad och
+# svår att förstå för alla elever. Vissa uppgifter är inte relevanta utifrån
+# vad som står i boken, för man utgår ju från boken. Uppgift 1 är den enda jag
+# alltid är nöjd med.»
+#
+# Diagnosen står i exam_gen (BOKEN SOM FÖREBILD …): formen kopierades ur
+# förlagan medan sorten tappades ur boken, och uppgift 2 växte. Testerna nedan
+# håller de tre delarna av lagningen — pekningen, de två domarna och de
+# deterministiska vakterna — och kalibreringen som gör vakterna trovärdiga:
+# LÄRARENS EGET PAPPER MÅSTE GÅ IGENOM DEM.
+
+# Bokens uppgifter som appen faktiskt läser dem (bok.remsuppgifter). Talen är
+# ur Matematik 5000+ 1a s. 34–36, remsan i exam 75.
+_BOKUPPG = [
+    {"nr": 1268, "niva": 1, "text": "Skriv med prefix."},
+    {"nr": 1272, "niva": 1,
+     "text": "Ett vindkraftverk kan ge effekten 3 MW. Hur många kW motsvarar det?"},
+    {"nr": 1279, "niva": 2,
+     "text": "Vilket eller vilka av följande alternativ är detsamma som 200 μm?"},
+    {"nr": 1282, "niva": 2, "text": "Skriv utan prefix och i grundpotensform."},
+]
+
+
+def _grupprompt(**extra):
+    return exam_gen.build_prompt(
+        "Matematik, nivå 1a", "BA26B", ["Prefix och enheter"], antal=4,
+        profil="gruppuppgift",
+        grupp={"elever": 2, "langd_min": 20, "redovisning": "skriftligt"},
+        **extra)
+
+
+def test_bokens_uppgifter_gar_in_i_prompten_som_forebilder():
+    """Uppslaget gick redan in som sidtext och remsan som en rad nummer. Det
+    som saknades var vilken uppgift varje nummer ÄR — och utan det kan ingen
+    peka."""
+    p = _grupprompt(bokuppgifter=_BOKUPPG)
+    assert "BOKENS UPPGIFTER PÅ LÄRARENS SIDOR" in p
+    for u in _BOKUPPG:
+        assert str(u["nr"]) in p
+        assert u["text"][:30] in p
+    assert '"forebild"' in p
+    # Pekningen är en pekning, inte en förlaga: originalitetskravet ska stå
+    # kvar i samma andetag, annars blir förebilden en inbjudan att skriva av.
+    assert "inte en förlaga" in p
+
+
+def test_utan_bok_lamnas_forebilden_tom_och_sorten_kommer_ur_punkten():
+    p = _grupprompt()
+    assert exam_gen.FOREBILD_UTAN_BOK in p
+    assert "BOKENS UPPGIFTER PÅ LÄRARENS SIDOR" not in p
+    assert "hitta aldrig på ett boknummer" in p
+
+
+def test_monstret_ger_formen_och_boken_ger_sorten():
+    """Kärnan i lagningen av exam 75: formeluppgiften ($P = 3 + 2n$) kom ur
+    mönstret och skrevs på ett prefixuppslag utan en enda formel."""
+    p = _grupprompt(bokuppgifter=_BOKUPPG)
+    assert "FORMEN HÄRIFRÅN, SORTEN UR BOKEN" in p
+    assert "DEN HÄR FORMEN SKRIVS BARA NÄR BOKENS SIDOR HAR FORMLER" in p
+    assert "annars vinner boken" in p
+    # Och lärarens egen mening om just den bytesaffären.
+    assert "teckna ett uttryck har inget med överslagsberäkning att göra" in p
+
+
+def test_forebilden_star_i_gruppuppgiftens_grammatik_men_inte_i_provets():
+    """Fältet kostar en kopia per uppgift i ett schema som ligger nära sitt tak
+    (claude_code.SCHEMA_TAK_EXE) — och bara gruppuppgiftens uppdrag BER om
+    det. Provets och arbetsbladets grammatik ska vara byte för byte den de
+    var."""
+    grupp = json.dumps(exam_spec.to_response_format(4), ensure_ascii=False)
+    assert '"forebild"' in grupp
+    skelett = exam_spec.balanced_skeleton(6, "prov")
+    prov = json.dumps(exam_spec.to_response_format(6, skelett),
+                      ensure_ascii=False)
+    assert "forebild" not in prov
+    # Omskrivningen och latexfixen kommer utan antal och utan skelett — också
+    # de ska ha exakt det schema de hade innan fältet fanns.
+    assert "forebild" not in json.dumps(exam_spec.to_response_format(),
+                                        ensure_ascii=False)
+    assert len(json.dumps(exam_spec.to_response_format(6, skelett))) \
+        < claude_code.SCHEMA_TAK_EXE
+
+
+def test_forebilden_valideras_som_ett_nummer_och_en_mening():
+    d = _doc()
+    d["uppgifter"][0]["forebild"] = {"nr": 1279, "sort": "samma omvandling"}
+    doc, fel = exam_spec.validate_exam_json(d, "gruppuppgift")
+    assert doc is not None and [e for e in fel if e["code"] == "schema"] == []
+    assert doc.uppgifter[0].forebild.nr == 1279
+    # Ett påhittat «nummer» som inte är ett nummer ska falla, inte tyst bli 0.
+    d["uppgifter"][0]["forebild"] = {"nr": "boken", "sort": "samma sort"}
+    doc, fel = exam_spec.validate_exam_json(d, "gruppuppgift")
+    assert doc is None and fel
+
+
+# ── VAKTERNA, OCH KALIBRERINGEN SOM GÖR DEM TROVÄRDIGA ──────────────────────
+def test_lararens_eget_papper_gar_igenom_alla_vakterna():
+    """DEN VIKTIGASTE RADEN I SVITEN. Måtten i begriplighetssignaler är satta
+    mot lärarens egen gruppuppgift, den hon slipade i tjugotvå vändor — en
+    vakt som fäller hennes eget papper är fel vakt, och skulle kosta rundor på
+    varje generering."""
+    papper = {"uppgifter": [dict(u) for u in exam_gen._UTDRAG_GRUPP]}
+    assert exam_gen.begriplighetssignaler(papper) == []
+
+
+def test_uppgift_tva_far_ett_raknesteg():
+    """Exam 75:s uppgift 2: två plåtar, en tredje plåt, ett tak på 4,2 mm och
+    svaret i mikrometer — tre omvandlingar och två räkningar i huvudet."""
+    papper = {"uppgifter": [
+        {"text": "Ingången.", "poang": [2, 0, 0], "losning": "$57$"},
+        {"text": "På verkstaden mäts tjockleken på två plåtar.",
+         "poang": [0, 0, 0], "deluppgifter": [
+             {"poang": [0, 1, 0],
+              "text": "Bestäm hur tjock den tredje plåten högst får vara.",
+              "losning": "$1\\,500\\ \\mu$m $= 1{,}5$ mm ger $2 + 1{,}5 = "
+                         "3{,}5$ mm. Kvar: $4{,}2 - 3{,}5 = 0{,}7$ mm $= 700$."}]}]}
+    fynd = exam_gen.begriplighetssignaler(papper)
+    assert [f["path"] for f in fynd] == ["uppgift 2a"]
+    assert "räknesteg" in fynd[0]["message"]
+    # …och samma uppgift som uppgift 4 fälls INTE: den sista ska vara svår.
+    sista = {"uppgifter": papper["uppgifter"] * 2}
+    assert all(f["path"] != "uppgift 4a"
+               for f in exam_gen.begriplighetssignaler(sista))
+
+
+def test_tva_fragor_i_samma_text_falls():
+    papper = {"uppgifter": [{"text": "Hur många kW är det? Vad blir svaret i W?",
+                             "poang": [1, 0, 0], "losning": "$9$"}]}
+    fynd = exam_gen.begriplighetssignaler(papper)
+    assert any("frågor i samma text" in f["message"] for f in fynd)
+
+
+def test_lararens_egna_ordbyten_ar_vakter():
+    """«texten mer konkret så att eleverna fattar (lag → arbetslag)» och
+    «paket» utan förklaring — hennes egna omskrivningar, dokument 37."""
+    papper = {"uppgifter": [
+        {"text": "Ett lag lägger kabel. Hela paketet väger $4$ kg.",
+         "poang": [1, 0, 0], "losning": "$4$"}]}
+    meddelanden = " ".join(f["message"]
+                           for f in exam_gen.begriplighetssignaler(papper))
+    assert "«lag»" in meddelanden and "«paketet»" in meddelanden
+    # «arbetslag» är precis vad hon skrev dit — ordet får inte fälla lösningen.
+    lagat = {"uppgifter": [
+        {"text": "Ett arbetslag lägger kabel.", "poang": [1, 0, 0],
+         "losning": "$4$"}]}
+    assert exam_gen.begriplighetssignaler(lagat) == []
+
+
+def test_vakterna_galler_bara_gruppuppgiften():
+    """Måtten är hämtade ur lärarens dom om GRUPPUPPGIFTEN. Ett prov har
+    längre uppgiftstexter av goda skäl, och skulle fällas på formen."""
+    papper = {"uppgifter": [{"text": "Hur? Vad? Varför?", "poang": [1, 0, 0],
+                             "losning": "$1$"}]}
+    assert exam_gen.begriplighetssignaler(papper, "prov") == []
+    assert exam_gen.begriplighetssignaler(papper, "arbetsblad") == []
+
+
+# ── RELEVANSDOMAREN ────────────────────────────────────────────────────────
+def test_relevansdomen_faller_annan_sort_men_inte_oklart():
+    kort = [{"nr": "1"}, {"nr": "2"}, {"nr": "3"}, {"nr": "4"}]
+    domar = {"1": {"dom": "samma sort", "battre": "", "skal": "", "kraver": ""},
+             "2": {"dom": "annan sort", "battre": "1279",
+                   "skal": "boken omvandlar, pappret tecknar", "kraver": ""},
+             "3": {"dom": "oklart", "battre": "", "skal": "", "kraver": ""},
+             "4": {"dom": "annat moment", "battre": "", "skal": "", "kraver": ""}}
+    fynd = exam_gen.relevansfynd(kort, domar)
+    assert [f["path"] for f in fynd] == ["uppgift 2", "uppgift 4"]
+    assert all(f["code"] == "relevans" for f in fynd)
+    assert "1279" in fynd[0]["message"]
+    # Tystnad fäller aldrig — samma tolerans som nivå- och räknedomen.
+    assert exam_gen.relevansfynd(kort, {}) == []
+
+
+def test_relevansdomaren_kors_inte_utan_bok():
+    """Ingen bok i beställningen = ingen förebild att pröva. En dom mot ett
+    tomt underlag hade fällt varje uppgift på ett papper ingen bok gällde."""
+    anrop = []
+
+    def llm(*a, **k):
+        anrop.append(a)
+        return "{}"
+
+    assert exam_gen.doma_relevans(_doc(), [], model="", llm=llm) == []
+    assert anrop == []
+
+
+def test_relevansdomaren_ar_fail_open():
+    def llm(*a, **k):
+        raise RuntimeError("kvoten slut")
+
+    loggat = []
+    assert exam_gen.doma_relevans(_doc(), _BOKUPPG, model="", llm=llm,
+                                  log_cb=loggat.append) == []
+    assert any("levereras ändå" in r for r in loggat)
+
+
+def test_relevansprompten_bar_sitt_eget_nyckelord():
+    """Uppspelningen väljer band på ordet (tests/fejk.py _auto). Prompten bär
+    ett helt papper och skulle annars matcha den generator som skrev det."""
+    p = exam_gen.build_relevans_prompt(
+        exam_gen.uppgiftskort(_doc()), _BOKUPPG, ["Prefix"])
+    assert "relevansdomare" in p
+    assert p.count("GRUPPUPPGIFT") == 0
+    assert "1279" in p and "Prefix" in p
+
+
+# ── BEGRIPLIGHETSDOMAREN ───────────────────────────────────────────────────
+def test_begriplighetsdomen_faller_bara_nej():
+    kort = [{"nr": "1"}, {"nr": "2"}, {"nr": "3"}]
+    domar = {"1": {"forstar": "ja", "stor": ""},
+             "2": {"forstar": "nej", "stor": "två frågor på en gång"},
+             "3": {"forstar": "oklart", "stor": ""}}
+    fynd = exam_gen.begriplighetsdom(kort, domar)
+    assert [f["path"] for f in fynd] == ["uppgift 2"]
+    assert "två frågor på en gång" in fynd[0]["message"]
+    # Uppgift 2 får sin egen påminnelse: den är begreppsingången.
+    assert "begreppsingången" in fynd[0]["message"]
+
+
+def test_begriplighetsdomaren_ser_inget_facit():
+    """Domaren ska läsa som en elev läser: utan lösningen. Ser den facit
+    bedömer den svårigheten att LÖSA och inte att FÖRSTÅ."""
+    kort = exam_gen.uppgiftskort(_doc())
+    assert any(k.get("losning") for k in kort)
+    p = exam_gen.build_begriplighet_prompt(kort)
+    assert "begriplighetsdomare" in p
+    assert '"losning"' not in p
+
+
+# ── BOKGRINDEN ─────────────────────────────────────────────────────────────
+def _gruppdoc_med_forebild():
+    d = _doc()
+    for u in d["uppgifter"]:
+        u["forebild"] = {"nr": 1279, "sort": "samma omvandling"}
+    return d
+
+
+def test_bokgrinden_lagar_och_domer_om(monkeypatch):
+    """Mekaniken: fynd → riktad omskrivning → omdom. Går uppgiften igenom
+    andra domen står `relevansfel` tomt, och rundan är betald."""
+    lagat = _gruppdoc_med_forebild()
+    lagat["uppgifter"][0]["text"] = "Lagad uppgift om prefix."
+    varv = {"n": 0}
+
+    def falsk_relevans(exam, bokuppgifter, **kw):
+        varv["n"] += 1
+        return ([] if varv["n"] > 1
+                else [exam_gen._err("uppgift 1", "relevans", "annan sort")])
+
+    monkeypatch.setattr(exam_gen, "doma_relevans", falsk_relevans)
+    monkeypatch.setattr(exam_gen, "doma_begriplighet", lambda *a, **k: [])
+    monkeypatch.setattr(exam_gen, "_llm_round",
+                        lambda *a, **k: copy.deepcopy(lagat))
+    res = exam_gen._bok_grind({"exam": _gruppdoc_med_forebild(), "errors": [],
+                               "rounds": 1},
+                              model="", llm=None, profil="gruppuppgift",
+                              bokuppgifter=_BOKUPPG, punkter=None, antal=4,
+                              koder=None, niva_mal=None)
+    assert res["relevansfel"] == [] and res["begriplighetsfel"] == []
+    assert res["rounds"] == 2
+    assert res["exam"]["uppgifter"][0]["text"] == "Lagad uppgift om prefix."
+    assert [e for e in res["errors"] if e["code"] == "relevans"] == []
+
+
+def test_bokgrinden_ger_upp_arligt_och_sager_det(monkeypatch):
+    """Bandet svarar likadant varje gång — precis som en modell som inte
+    förstår vad som är fel. Då ska pappret levereras med fyndet SAGT, inte
+    tyst."""
+    monkeypatch.setattr(
+        exam_gen, "doma_relevans",
+        lambda exam, bok, **kw: [exam_gen._err("uppgift 3", "relevans",
+                                               "annat moment")])
+    monkeypatch.setattr(exam_gen, "doma_begriplighet", lambda *a, **k: [])
+    monkeypatch.setattr(exam_gen, "_llm_round", lambda *a, **k: None)
+    res = exam_gen._bok_grind({"exam": _gruppdoc_med_forebild(), "errors": [],
+                               "rounds": 1},
+                              model="", llm=None, profil="gruppuppgift",
+                              bokuppgifter=_BOKUPPG, punkter=None, antal=4,
+                              koder=None, niva_mal=None)
+    assert [f["nr"] for f in res["relevansfel"]] == ["3"]
+    # Fyndet ligger kvar i fellistan, som är klientens `provFel`.
+    assert [e["code"] for e in res["errors"]] == ["relevans"]
+    assert exam_gen.bokfel_text(res["relevansfel"], exam_gen.RELEVANS_RAD) == \
+        "Uppgift 3 saknar förebild bland bokens uppgifter på lärarens sidor."
+
+
+def test_bokgrinden_river_inte_balansen(monkeypatch):
+    """Samma grind som nivågrindens och domarpassets: en omskrivning som lagar
+    relevansen och bryter balansen är ingen lagning."""
+    trasigt = _gruppdoc_med_forebild()
+    # Uppgiften som skrivs tillbaka bär noll poäng — och just den uppgiften är
+    # den enda som får resa med genom mål-låset, så den faller på
+    # valideringen medan resten av pappret är orört.
+    trasigt["uppgifter"][0]["poang"] = [0, 0, 0]
+    trasigt["uppgifter"][0].pop("deluppgifter", None)
+    monkeypatch.setattr(
+        exam_gen, "doma_relevans",
+        lambda exam, bok, **kw: [exam_gen._err("uppgift 1", "relevans", "x")])
+    monkeypatch.setattr(exam_gen, "doma_begriplighet", lambda *a, **k: [])
+    monkeypatch.setattr(exam_gen, "_llm_round", lambda *a, **k: trasigt)
+    original = _gruppdoc_med_forebild()
+    res = exam_gen._bok_grind({"exam": original, "errors": [], "rounds": 1},
+                              model="", llm=None, profil="gruppuppgift",
+                              bokuppgifter=_BOKUPPG, punkter=None, antal=4,
+                              koder=None, niva_mal=None)
+    assert res["exam"] is original
+    assert [f["nr"] for f in res["relevansfel"]] == ["1"]
+
+
+def test_bokgrinden_kors_bara_pa_gruppuppgiften(monkeypatch):
+    """Provet och arbetsbladet har egna uppdrag, egna källor och egna
+    kassetter — och lärarens dom gällde gruppuppgiften."""
+    from tests.test_exam import _stub_llm
+
+    korda = []
+    monkeypatch.setattr(exam_gen, "_domar_pass",
+                        lambda exam, errors, **kw: {"exam": exam,
+                                                    "errors": errors,
+                                                    "rounds": 1})
+    monkeypatch.setattr(exam_gen, "_niva_grind",
+                        lambda res, **kw: {**res, "nivafel": []})
+    monkeypatch.setattr(
+        exam_gen, "_bok_grind",
+        lambda res, **kw: (korda.append(kw["profil"]), res)[1])
+    llm, _ = _stub_llm([json.dumps(_doc(), ensure_ascii=False)])
+    for profil in ("prov", "arbetsblad", "gruppuppgift"):
+        exam_gen.generate_exam("Matematik, nivå 1a", "BA26B", ["Prefix"],
+                               model="", antal=4, profil=profil, llm=llm,
+                               grupp={"elever": 2, "langd_min": 20,
+                                      "redovisning": "skriftligt"})
+    assert korda == ["gruppuppgift"]

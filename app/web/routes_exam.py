@@ -215,7 +215,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
 
     def _exam_result(view: dict, errors: list, rounds: int,
                      likheter: list | None = None,
-                     nivafel: list | None = None) -> dict:
+                     nivafel: list | None = None,
+                     relevansfel: list | None = None,
+                     begriplighetsfel: list | None = None) -> dict:
         doc, _ = exam_spec.validate_exam_json(view.get("exam") or {})
         summor = exam_spec.poangsummor(doc) if doc else None
         return {
@@ -231,6 +233,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
             # inte» får inte se ut som «nivån är rätt». Alltid en lista, av
             # samma skäl som `likheter` ovan.
             "nivafel": nivafel or [],
+            # GRUPPUPPGIFTENS TVÅ EGNA FYND (exam_gen._bok_grind), och de är
+            # två listor och inte en av samma skäl som de är två domare:
+            # «uppgiften följer inte bokens sort» och «uppgiften går inte att
+            # förstå» är olika saker att göra något åt. Alltid listor, tomma
+            # på alla andra dokumenttyper.
+            "relevansfel": relevansfel or [],
+            "begriplighetsfel": begriplighetsfel or [],
             "id": view["id"], "exam": view.get("exam"),
             # Vilken exam-version JSON:en ovan kom ur. Klienten fäster den på
             # sitt utkastvarv, så att ett ångrat varv kan säga vilken version
@@ -687,6 +696,22 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     avsnitt = (routes_planning.bok_avsnitt(db_file, body)
                                or exam_gen.avsnitt_ur_moment(
                                    body.get("moment") or ""))
+                # LÄRARENS VALDA UPPGIFTER, en och en — och bara för
+                # GRUPPUPPGIFTEN (lärarens dom 2026-09-09: «vissa uppgifter är
+                # inte relevanta utifrån vad som står i boken, för man utgår ju
+                # från boken»). Varje uppgift ska peka ut vilken av bokens den
+                # är av samma sort som (exam_spec.Forebild), och relevansen
+                # prövas på svaret. Ingen läsning kostar något här: sidorna är
+                # redan lästa av bok_las_text ovan.
+                #
+                # Provet och arbetsbladet får dem INTE, och det är ett val:
+                # provet läser bokens urval som översikt, arbetsbladet drillar
+                # ett moment, och båda deras prompter är oförändrade — alltså
+                # inga omspelningsmogna kassetter för en ändring som inte
+                # gäller dem.
+                bokuppgifter = (
+                    routes_planning.bok_remsuppgifter(db_file, body)
+                    if typ == "gruppuppgift" else [])
                 res = exam_gen.generate_exam(
                     kurs, klass or "klassen", punkter, model=_model_name(),
                     antal=antal, tid_min=tid_min, delar=delar,
@@ -694,7 +719,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     tidigare=tidigare_uppgifter,
                     bilder=bilder_block, utfall=utfall_block, bok=bok_block,
                     boknivaer=nivaer_block, forlaga=forlaga_block,
-                    avsnitt=avsnitt,
+                    avsnitt=avsnitt, bokuppgifter=bokuppgifter,
                     svart=svart_block, fokus=fokus_block, profil=typ,
                     koder=koder, skeleton=skelett, niva_mal=niva_mal,
                     riktat=riktat_block, grupp=grupp,
@@ -784,7 +809,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 finally:
                     conn.close()
                 return _exam_result(view, res["errors"], res["rounds"],
-                                    res.get("likheter"), res.get("nivafel"))
+                                    res.get("likheter"), res.get("nivafel"),
+                                    res.get("relevansfel"),
+                                    res.get("begriplighetsfel"))
             finally:
                 arbiter.release_llm(llm)
 

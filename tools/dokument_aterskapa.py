@@ -27,6 +27,9 @@ def fran_prov(exam):
              "f": u.get("losning") or "", "bed": u.get("bedomning") or "",
              "formaga": u.get("formaga") or "", "avd": u.get("del") or None,
              "peca": list(vek[:3]), "ci": list(u.get("innehall") or [])}
+        # Bokförebilden (exam_spec.Forebild) — samma villkor som plan.js
+        # franProv: bara när modellen faktiskt pekat ut ett boknummer.
+        if (u.get("forebild") or {}).get("nr"): r["forebild"] = u["forebild"]
         if u.get("alternativ"): r["alt"] = u["alternativ"]; r["ratt"] = u.get("ratt_alternativ")
         if u.get("figur"): r["fig"] = u["figur"]
         if u.get("bild"): r["bild"] = u["bild"]
@@ -54,6 +57,16 @@ def fran_prov(exam):
                 r["delrutor"] = [({"etikett": d["svarsrutor"].get("etikett"), "val": d["svarsrutor"].get("val")} if d.get("svarsrutor") else None) for d in delar]
             if any(d.get("alternativ") for d in delar): r["delalt"] = [d.get("alternativ") for d in delar]
             if any(d.get("notis") for d in delar): r["delnotis"] = [d.get("notis") for d in delar]
+            # De fyra sista fälten plan.js franProv sätter på en uppgift med
+            # deluppgifter. De saknades här, och ett återskapat gruppark stod
+            # därför utan ifyllnadsrader (delfalt), utan enhet efter svaret
+            # (delenhet) och utan facit alls (vag, beddel) — föräldern har
+            # ingen egen lösning när deluppgifterna bär den.
+            if any(d.get("svarsfalt") for d in delar): r["delfalt"] = [d.get("svarsfalt") for d in delar]
+            if any(d.get("enhet") for d in delar): r["delenhet"] = [d.get("enhet") for d in delar]
+            r["vag"] = [[f"{'abcdef'[k]}) {d.get('losning') or ''}", f"{summa(d.get('poang'))} p"]
+                        for k, d in enumerate(delar)]
+            r["beddel"] = [d.get("bedomning") or "" for d in delar]
         ut.append(r)
     return ut
 

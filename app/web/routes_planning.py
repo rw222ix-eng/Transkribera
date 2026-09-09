@@ -358,6 +358,33 @@ def bok_urval_text(db_file: Path, body: dict) -> str:
     return bok.build_urval_block(rad, fran, till, sidor, uppg, bok_urval(body))
 
 
+def bok_remsuppgifter(db_file: Path, body: dict) -> list[dict]:
+    """Lärarens VALDA uppgifter ur boken, en och en (bok.remsuppgifter).
+
+    Gruppuppgiftens förebildsunderlag: numret och en kort text per uppgift i
+    remsan, så att varje skriven uppgift kan peka ut vilken av bokens den är av
+    samma SORT som (exam_gen.build_forebild, doma_relevans).
+
+    Inget modellanrop och ingen läsning: sidorna är redan lästa när bokblocket
+    byggts (bok_las_text går före). Tom lista när bokdörren är stängd eller när
+    läraren inte valt några uppgifter — och då är prompten ordagrant den som
+    gick i väg innan förebilden fanns."""
+    val = bok_val(body)
+    urval = bok_urval(body)
+    if val is None or not urval:
+        return []
+    bid, fran, till = val
+    conn = db.connect(db_file)
+    try:
+        if db.get_bok(conn, bid) is None:
+            return []
+        sidor = db.bok_sidor(conn, bid, fran, till)
+        uppg = db.bok_uppgifter(conn, bid, fran, till)
+    finally:
+        conn.close()
+    return bok.remsuppgifter(sidor, uppg, urval)
+
+
 def bok_avsnitt(db_file: Path, body: dict) -> list[dict]:
     """Avsnitten i det valda bokspannet, provets RAM för spridningen.
 

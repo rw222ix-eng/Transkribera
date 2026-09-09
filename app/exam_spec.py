@@ -327,6 +327,36 @@ class Scen(_Model):
         return self
 
 
+# ── BOKFÖREBILDEN: VILKEN UPPGIFT I BOKEN UPPGIFTEN ÄR AV SAMMA SORT SOM ──
+# LÄRARENS DOM 2026-09-09 om gruppuppgiften: «Vissa uppgifter är inte relevanta
+# utifrån vad som står i boken, för man utgår ju från boken.» Det skarpa
+# exemplet (exam 75, «Prefix och enheter», bokens s. 34–36) visar hur det
+# händer: uppgift 1 är en prefixtabell precis som bokens 1268–1272, men uppgift
+# 3 blev en formeluppgift ($P = 3 + 2n$) och uppgift 4 en algebrauppgift —
+# två FORMER ur lärarens förlaga, på ett uppslag som inte har en enda formel.
+# Formen kopierades alltså ur mönstret medan SORTEN tappades.
+#
+# Fältet är motmedlet, och det är avsiktligt en PEKARE och inte en kopia:
+# uppgiften ska vara av samma sort som en NAMNGIVEN uppgift på de sidor läraren
+# slog upp — inte samma uppgift, inte en variant av den (originalitetskravet
+# står kvar, se bok._ORIGINALITET). Numret gör kopplingen kontrollerbar:
+# relevansdomaren (exam_gen.doma_relevans) läser den, och läraren ser den som
+# «Som bokens 1279» vid uppgiften i canvasen.
+#
+# VALFRITT, och det är fail-open-villkoret: utan bok i beställningen finns
+# ingen förebild att peka på, och varje papper i basen och varje kassett
+# skrevs innan fältet fanns.
+class Forebild(_Model):
+    """Bokens uppgift som uppgiften är av samma SORT som."""
+    # Boknumret, som det står i boken («1279»). Ingen övre gräns i sak —
+    # läromedlen numrerar upp i tiotusen — men negativa nummer finns inte.
+    nr: int = Field(ge=1)
+    # EN mening om vad som är samma sort. Kort med flit: den ska gå att läsa i
+    # en liten notis vid uppgiften, och en modell som får skriva ett stycke
+    # skriver en motivering i stället för en identifikation.
+    sort: str = Field(min_length=3, max_length=160)
+
+
 # Docstringen nedan blir fältets `description` i json-schemat. Ordet «bildruta»
 # står där «bildplats» vore naturligare av precis det skälet: testet som håller
 # plåtvalet ute ur grammatiken (test_platvalet_star_inte_i_grammatiken) söker
@@ -436,6 +466,12 @@ class ExamItem(_Uppgiftsbas):
     # basen skrevs innan fältet fanns, och täckningskontrollen tiger när ingen
     # uppgift bär det. max_length=12 rymmer «1.2» med god marginal.
     avsnitt: str | None = Field(default=None, max_length=12)
+    # BOKFÖREBILDEN (se Forebild ovan): den uppgift på lärarens uppslagna sidor
+    # som den här uppgiften är av samma SORT som. Sätts bara när beställningen
+    # bär en bok, och bara på gruppuppgiften — det är där lärarens dom föll.
+    # Grammatiken ser fältet BARA på ett papper utan skelett (gruppuppgiften):
+    # se to_response_format, som poppar det på de låsta profilerna.
+    forebild: Forebild | None = None
     bild: int | None = None              # 1-baserat index i provets bildunderlag
     losning: str = ""                    # tomt tillåtet när deluppgifter finns
     bedomning: str = ""                  # tomt tillåtet när deluppgifter finns
@@ -650,6 +686,20 @@ def to_response_format(antal: int | None = None,
         }
         item_def["required"] = sorted(set(item_def.get("required", []))
                                       | {"innehall"})
+    # BOKFÖREBILDEN STÅR BARA I GRUPPUPPGIFTENS GRAMMATIK, och villkoret nedan
+    # ÄR gruppuppgiften: antalet är satt men planen är inte grammatiklåst (se
+    # generate_exam, `grammatik = None if profil == "gruppuppgift"`). Provet och
+    # arbetsbladet kommer hit med sitt skelett, omskrivningen och latexfixen
+    # utan antal — och båda får då exakt det schema de hade innan fältet fanns.
+    #
+    # Det är två skäl, inte ett. Kostnaden: en kopia per uppgift i prefixItems
+    # på ett schema som redan ligger nära sitt tak (claude_code.SCHEMA_TAK_EXE,
+    # 28 190 av 30 000 på ett tolvuppgifts prov). Och riktigheten: bara
+    # gruppuppgiftens uppdrag BER om förebilden (exam_gen.build_forebild), så
+    # ett fält i provets grammatik hade varit ett fält modellen fyller i utan
+    # att någon frågat — precis som klockslaget och plåtvalet ovan.
+    if skeleton is not None or antal is None:
+        schema["$defs"]["ExamItem"]["properties"].pop("forebild", None)
     upp = schema["properties"]["uppgifter"]
     if skeleton is not None:
         item_def = schema["$defs"]["ExamItem"]

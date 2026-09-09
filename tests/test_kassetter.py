@@ -482,3 +482,97 @@ def test_auto_laget_lagger_i_bedomningsbandet(fejk_claude):
     svar = exam_gen._ett_bedomningssvar(underlag, model="", llm=llm_client.generate,
                                         skala="")
     assert svar and set(svar["bedomning"]) == {"a", "b"}
+
+
+# ── GRUPPUPPGIFTENS TVÅ DOMARE (2026-09-09) ───────────────────────────────
+# Lärarens dom: «Vissa uppgifter är inte relevanta utifrån vad som står i
+# boken, för man utgår ju från boken» och «uppgift 2 är oftast alldeles för
+# komplicerad». Båda banden är SKARPA och inspelade på gruppuppgiftsbandet,
+# och båda fäller uppgift 2 — den bär hitta-felet-formen och ligger på
+# begreppsingångens plats. Det är rätt dom, och den kan inte repareras bort:
+# uppspelningen svarar likadant varje gång.
+def _gruppbandet():
+    return exam_gen._parse_exam(json.loads(
+        fejk.las_kassett("gruppuppgift")["rader"][-1])["result"])
+
+
+BOKUPPG = [
+    {"nr": 2401, "niva": 1, "text": "Bestäm nollställena till $f(x) = x^2 - 4x$."},
+    {"nr": 2405, "niva": 1,
+     "text": "Ange symmetrilinjen och extrempunkten för $y = x^2 - 6x + 5$."},
+    {"nr": 2412, "niva": 2,
+     "text": "Rita grafen till $y = -x^2 + 4x$ och avläs när $y = 3$."},
+    {"nr": 2418, "niva": 2,
+     "text": "Höjden hos en boll ges av $h(t) = -5t^2 + 15t$. När är bollen "
+             "10 m över marken?"},
+    {"nr": 2422, "niva": 3,
+     "text": "En rektangel har omkretsen 40 m. Undersök vilken area den kan "
+             "få och motivera svaret."},
+]
+
+
+def test_relevansdomen_ur_kassetten_gar_hela_vagen(fejk_claude):
+    """CLI → ström → JSON → jämförelse mot bokens uppgifter. Domen: tre av
+    fyra «samma sort», och uppgift 2 «annan sort» med bokens 2405 utpekad som
+    den den borde ha följt — ingen av bokens uppgifter ber eleven granska
+    någon annans lösning."""
+    fejk_claude(kassett="relevansdomare")
+    exam = _gruppbandet()
+    kort = exam_gen.uppgiftskort(exam)
+    domar = exam_gen._parse_relevans(json.loads(
+        fejk.las_kassett("relevansdomare")["rader"][-1])["result"])
+    assert {k["nr"] for k in kort} <= set(domar), "domaren hoppade över uppgifter"
+    # Domaren identifierade färdigheten FÖRE domen — annars dömer den på
+    # pekningen den läste i stället för på uppgiften.
+    assert all(d["kraver"] for d in domar.values())
+    fynd = exam_gen.doma_relevans(exam, BOKUPPG, model="")
+    assert [f["path"] for f in fynd] == ["uppgift 2"]
+    assert "2405" in fynd[0]["message"]
+    assert fynd == exam_gen.relevansfynd(kort, domar)
+
+
+def test_begriplighetsdomen_ur_kassetten_gar_hela_vagen(fejk_claude):
+    """Domen: uppgift 2 «tre frågor på en gång» och uppgift 4 «provyta för
+    växtinventering». Det är lärarens egna två domar, sagda av domaren om ett
+    papper hon aldrig sett — «fler frågor tillsammans, vi bestämmer oss för EN
+    fråga» och «texten mer konkret så att eleverna fattar»."""
+    fejk_claude(kassett="begriplighetsdomare")
+    exam = _gruppbandet()
+    fynd = exam_gen.doma_begriplighet(exam, model="")
+    assert [f["path"] for f in fynd] == ["uppgift 2", "uppgift 4"]
+    assert "Tre frågor på en gång" in fynd[0]["message"]
+    # Uppgift 2 får sin egen påminnelse — den är begreppsingången.
+    assert "begreppsingången" in fynd[0]["message"]
+    # Och prompten bär de synliga formerna: den FÖRSTA inspelningen fällde tre
+    # av fyra med skälet «tabellen syns inte i texten», och felet satt i
+    # kortet, inte i pappret (exam_gen._synlig_form).
+    p = exam_gen.build_begriplighet_prompt(exam_gen.uppgiftskort(exam))
+    assert "Heddas lösning" in p and "$3x^2 - 27 = 0$" in p
+
+
+def test_gruppuppgiften_gar_genom_bokgrinden_och_ger_upp_arligt(fejk_claude):
+    """Hela bokgrinden i auto-läget: två domare, två riktade extrarundor, och
+    ett papper som levereras med fynden SAGDA. Bandet svarar likadant varje
+    gång — precis som en modell som inte förstår vad som är fel — så det som
+    prövas är att appen ger upp ärligt i stället för att tiga.
+
+    Utan bok körs ingen relevansdom (det är hela villkoret i doma_relevans),
+    så bokunderlaget måste följa med här."""
+    fejk_claude("auto")
+    loggat: list[str] = []
+    res = exam_gen.generate_exam(
+        "Matematik, nivå 2c", "NA25", ["Andragradsfunktioner"], model="",
+        antal=4, profil="gruppuppgift",
+        grupp={"elever": 3, "langd_min": 45, "redovisning": "muntligt"},
+        bokuppgifter=BOKUPPG, log_cb=loggat.append)
+    assert [f["nr"] for f in res["relevansfel"]] == ["2"]
+    assert [f["nr"] for f in res["begriplighetsfel"]] == ["2", "4"]
+    # Fynden ligger kvar i fellistan, som är klientens `provFel`.
+    assert {e["code"] for e in res["errors"]} == {"relevans", "begriplighet"}
+    # Två extrarundor, och de är RIKTADE: bara de fällda uppgifterna skrivs om.
+    assert sum(1 for r in loggat
+               if r.startswith("Rättar ") and "uppgift(er) mot boken" in r) == 2
+    assert loggat[-2:] == [
+        "Uppgift 2 saknar förebild bland bokens uppgifter på lärarens sidor.",
+        "Uppgift 2, 4 kan behöva skrivas om för att alla ska förstå den vid "
+        "första läsningen."]

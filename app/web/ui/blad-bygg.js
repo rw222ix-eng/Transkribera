@@ -353,6 +353,18 @@ window.BladBygg = (() => {
     /* Notisen står EFTER uppgiftens former och före svarsytan — samma plats som
        \notisruta har i mallarna (arbetsblad.tex.j2, gruppuppgift.tex.j2). */
     const notis = u.notis ? `<p class="gunotis">${brodtext(u.notis)}</p>` : '';
+    /* BOKFÖREBILDEN (exam_spec.Forebild): «Som bokens 1279», med domarens
+       mening som titel. Den står ÖVERST i kortet och inte vid texten, för den
+       är inte en del av uppgiften — den är lärarens kvitto på att uppgiften
+       hör till de sidor hon slog upp, och det är det första hon vill se när
+       hon granskar.
+
+       Den är LÄRARENS RUTA och står varken på elevens ark eller i PDF:en:
+       blad-bild.js river den ur sin kopia, precis som prickarna, och
+       LaTeX-mallarna har aldrig sett fältet. */
+    const forebild = (u.forebild && u.forebild.nr)
+      ? `<p class="guforebild" title="${attr(String(u.forebild.sort || ''))}">Som bokens ${Number(u.forebild.nr)}</p>`
+      : '';
     /* Figuren står BREDVID frågan, aldrig ovanför den — det är hela skillnaden
        mellan förlagans form 1 (radbunden) och form 2 (figurspalt), och eleven
        måste kunna läsa båda samtidigt. Förr lades figuren under uppgiften utan
@@ -376,7 +388,7 @@ window.BladBygg = (() => {
       : `<p class="gufraga">${brodtext(u.t)}</p>${alt}${former}${del}${fig}${notis}${svarsyta(u)}`;
     return `<div class="gukort" data-ut="${u.ut || 'rakna'}">
       <span class="gubricka">${bricka}</span>
-      ${kropp}
+      ${forebild}${kropp}
     </div>`;
   }
 

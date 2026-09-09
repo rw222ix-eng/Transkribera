@@ -646,7 +646,8 @@
      (api.js nivafelText), samma som panelen skriver efter en generering. */
   const nivaraden = res => {
     const text = window.API.nivafelText(res && res.nivafel);
-    return text ? ' ' + text : '';
+    const bok = window.API.bokfelText(res);
+    return (text ? ' ' + text : '') + (bok ? ' ' + bok : '');
   };
   /* Vad panelen SÄGER att som hände, byggt ur serverns diff. Se kommentaren
      vid `svar:` nedan — det här är hela poängen med den. */

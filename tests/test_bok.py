@@ -1677,3 +1677,30 @@ def test_bokdorren_foljer_pappret(client, monkeypatch):
                              "punkter": [], "antal": 4})
         vantat = "urval" if typ == "prov" else "hela"
         assert vag == [vantat], (typ, vag)
+
+
+# ── REMSANS UPPGIFTER, EN OCH EN ──────────────────────────────────────────
+# Gruppuppgiftens förebildsunderlag (lärarens dom 2026-09-09: «vissa uppgifter
+# är inte relevanta utifrån vad som står i boken, för man utgår ju från
+# boken»). Uppslaget gick in som SIDTEXT och remsan som en rad NUMMER — det
+# som saknades var vilken uppgift varje nummer ÄR.
+def test_remsuppgifterna_ar_lararens_val_med_text():
+    sidor, uppgifter = _kapitel(sidor=4)
+    rader = bok.remsuppgifter(sidor, uppgifter,
+                              {"remsa": "1101-1104, 1107", "bortremsa": "1103"})
+    assert [r["nr"] for r in rader] == [1101, 1102, 1104, 1107]
+    assert all(r["text"].startswith("Förenkla uttrycket nummer") for r in rader)
+    assert all(r["niva"] in (1, 2, 3) for r in rader)
+    # Samma sektionsregel som urvalet: avläsarens tvivel och uttrycken en gång
+    # till får inte vinna på längd (bok._uppgiftstext).
+    assert not any("bör kontrolleras" in r["text"] for r in rader)
+
+
+def test_utan_remsa_finns_inga_forebilder():
+    """Tom lista = tom prompt (exam_gen.build_forebild), alltså ordagrant den
+    prompt som gick i väg innan förebilden fanns."""
+    sidor, uppgifter = _kapitel(sidor=2)
+    assert bok.remsuppgifter(sidor, uppgifter, None) == []
+    assert bok.remsuppgifter(sidor, uppgifter, {"remsa": ""}) == []
+    # Och ett nummer som inte står på sidorna hittas inte på.
+    assert bok.remsuppgifter(sidor, uppgifter, {"remsa": "9999"}) == []
