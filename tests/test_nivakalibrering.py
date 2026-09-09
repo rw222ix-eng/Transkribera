@@ -599,19 +599,22 @@ def _ren_e_blad():
     ])
 
 
-def test_grinden_kor_tva_extrarundor_och_sager_ifran_nar_de_inte_racker():
+def test_grinden_kor_extrarundorna_och_sager_ifran_nar_de_inte_racker():
     """Hårda grinden: ett papper får inte levereras som klart med kvarstående
     nivåfynd. Här svarar stubben med SAMMA papper varje gång, så fyndet står
-    kvar — och då ska pappret bära `nivafel` i stället för att tiga."""
+    kvar — och då ska pappret bära `nivafel` i stället för att tiga.
+
+    Bladet är ett RENT E-blad och får därför EXTRA_NIVARUNDOR_RENT rundor:
+    varje uppgift påstår samma nivå, och domen måste hålla varje gång."""
     enig = json.dumps({"domar": [{"nr": "1", "niva": "E"},
                                  {"nr": "2", "niva": "E"}]})
     llm, anrop = _stub([json.dumps(_ren_e_blad())], dom=enig)
     res = exam_gen.generate_exam("Ma1a", "NA25", ["algebra"], model="m",
                                  antal=2, profil="arbetsblad", llm=llm,
                                  niva_mal=_REN_E)
-    # Två EXTRA riktade rundor utöver domarpassets egen (rundbudgeten är 3).
+    # De extra riktade rundorna utöver domarpassets egen.
     rundor = [p for p in anrop if "Problem att åtgärda" in p]
-    assert len(rundor) == 1 + exam_gen.EXTRA_NIVARUNDOR
+    assert len(rundor) == 1 + exam_gen.EXTRA_NIVARUNDOR_RENT
     # Extrarundorna bär BARA nivåfyndet — inte talsignaler, inte balansfel.
     assert "kvadreringsregeln eller konjugatregeln" in rundor[-1]
     assert [(f["nr"], f["pastadd"], f["domd"]) for f in res["nivafel"]] \
@@ -634,6 +637,81 @@ def test_grinden_ar_tyst_nar_omskrivningen_lagade_nivan():
     assert res["nivafel"] == [] and res["errors"] == []
     assert len([p for p in anrop if "Problem att åtgärda" in p]) == 1
     assert res["exam"]["uppgifter"][1]["text"] == lagat["uppgifter"][1]["text"]
+
+
+def _tre_e_uppgifter():
+    """Tre rena E-uppgifter utan en enda deterministisk signal — det som fäller
+    här ska vara domen och ingenting annat."""
+    return _exam([
+        _uppg(1, (2, 0, 0), formaga="B", typ="rutin",
+              text="Lös ekvationen $3x + 5 = 20$.", losning="$x = 5$."),
+        _uppg(2, (2, 0, 0), formaga="P", typ="rutin",
+              text="Beräkna $12 + 8$.", losning="$20$."),
+        _uppg(3, (2, 0, 0), formaga="M", typ="rutin",
+              text="Skriv $0{,}25$ i procentform.", losning="$25$ %."),
+    ])
+
+
+def _domarkort(prompt: str) -> set[str]:
+    """Uppgiftsnumren en domarprompt faktiskt frågar om."""
+    import re
+    return set(re.findall(r'"nr": "([^"]+)"', prompt))
+
+
+@pytest.mark.parametrize("niva_mal,vantade", [
+    (_REN_E, {"1", "2", "3"}),          # rent papper: hela pappret döms om
+    (None, {"2"}),                      # blandat: bara den rörda uppgiften
+])
+def test_omdomen_efter_en_omskrivning_mater_hela_det_rena_pappret(niva_mal,
+                                                                 vantade):
+    """Grindens andra hål: den dömde bara om de uppgifter den senast fällde, så
+    `nivafel` beskrev en delmängd och inte pappret läraren fick. På ett rent
+    nivåpapper påstår VARJE uppgift samma nivå — en dom utanför servern på ett
+    levererat A-blad (2026-09-08) fällde fem andra uppgifter än de grinden
+    tittat på — så där mäts hela pappret om. På ett blandat papper är
+    delmängden fortfarande rätt: en omskrivning av uppgift 2 säger ingenting om
+    uppgift 3."""
+    exam = _tre_e_uppgifter()
+    dom = json.dumps({"domar": [{"nr": "1", "niva": "E"},
+                                {"nr": "2", "niva": "C"},
+                                {"nr": "3", "niva": "E"}]})
+    llm, anrop = _stub([json.dumps(exam)], dom=dom)
+    fynd = exam_gen.avvikelser(exam_gen.domarenheter(exam),
+                               exam_gen._parse_domar(dom))
+    assert [f["nr"] for f in fynd] == ["2"]
+    # `nivamatt=False`: domarpasset skrev om pappret efter att fynden mättes,
+    # och det är precis då omdomen ska köras.
+    exam_gen._niva_grind({"exam": exam, "errors": [], "rounds": 1,
+                          "nivafynd": fynd, "nivakoll": True,
+                          "nivamatt": False},
+                         model="m", llm=llm, profil="arbetsblad", skala="",
+                         antal=3, skeleton=None, koder=None,
+                         niva_mal=niva_mal)
+    domar = [p for p in anrop if "vilken nivå den faktiskt ligger på" in p]
+    assert domar, "ingen omdom kördes"
+    assert _domarkort(domar[0]) == vantade
+
+
+def test_ett_rent_papper_doms_om_aven_utan_kvarstaende_fynd():
+    """Rundan kan ha kommit ur räknedomaren i stället: då är nivåfynden tomma
+    OCH pappret omskrivet, och «inga fynd» gällde ett dokument som inte längre
+    finns. Ett rent papper får aldrig levereras som säkrat på en dom om en
+    tidigare version — ett blandat får det, som förut."""
+    exam = _tre_e_uppgifter()
+    dom = json.dumps({"domar": [{"nr": "1", "niva": "E"},
+                                {"nr": "2", "niva": "E"},
+                                {"nr": "3", "niva": "E"}]})
+    for niva_mal, vantat in ((_REN_E, 2), (None, 0)):
+        llm, anrop = _stub([json.dumps(exam)], dom=dom)
+        res = exam_gen._niva_grind({"exam": exam, "errors": [], "rounds": 1,
+                                    "nivafynd": [], "nivakoll": True,
+                                    "nivamatt": False},
+                                   model="m", llm=llm, profil="arbetsblad",
+                                   skala="", antal=3, skeleton=None,
+                                   koder=None, niva_mal=niva_mal)
+        # Dubbeldomen är två anrop; det blandade pappret kör inget alls.
+        assert len(anrop) == vantat, niva_mal
+        assert res["nivafel"] == []
 
 
 def test_fail_open_markeras_i_nivafel():
@@ -1037,10 +1115,15 @@ def test_utan_bokdorr_far_bladet_np_rubriken(profil):
     assert "med stigande svårighet" not in p
 
 
-def test_med_bokdorr_vinner_bokens_skala():
+def test_med_bokdorr_star_boken_OCH_np_rubriken():
+    """Bokens skala VANN förut över NP-rubriken, och det var buggen: bladet och
+    dess domare fick «Nivå 1, 2, 3» med uppgiftsnummer och ingen enda mening om
+    vad E, C och A kräver — fast domarprompten ber om just E, C eller A «enligt
+    beskrivningarna ovan». Nu är boken ett lager TILL."""
     p = exam_gen.build_prompt("Ma1a", "NA25", [], antal=4, profil="arbetsblad",
                               boknivaer="BOKENS NIVÅSKALA — hittepå")
     assert "BOKENS NIVÅSKALA — hittepå" in p
+    assert "NIVÅKRAV" in p
     assert "Ingen lärobok är vald" not in p
 
 
@@ -1066,8 +1149,37 @@ def test_provet_domas_mot_samma_skala_som_det_skrevs_mot():
 
 
 def test_bokens_skala_ar_ocksa_domarens(monkeypatch):
-    skala = exam_gen._skala("arbetsblad", "BOKENS NIVÅSKALA — hittepå", None)
-    assert skala == "BOKENS NIVÅSKALA — hittepå"
+    """Domaren ska få samma text som pappret skrevs mot — och den texten bär
+    numera BÅDA lagren."""
+    sk = exam_spec.balanced_skeleton(4, "arbetsblad", delar=False)
+    skala = exam_gen._skala("arbetsblad", "BOKENS NIVÅSKALA — hittepå", sk,
+                            "Ma1a")
+    assert "BOKENS NIVÅSKALA — hittepå" in skala and "NIVÅKRAV" in skala
+    # Byte för byte samma text som prompten fick — kursen och uppgiftsplanen
+    # ingår i skalan, så domaren måste få båda med sig.
+    p = exam_gen.build_prompt("Ma1a", "NA25", [], antal=4, profil="arbetsblad",
+                              skeleton=sk,
+                              boknivaer="BOKENS NIVÅSKALA — hittepå")
+    assert skala in p
+
+
+def test_rent_nivapapper_far_en_skala_utan_stigning():
+    """«Låt de första uppgifterna ligga på E-nivå och de sista på C-nivå» är
+    fel order på ett papper där VARJE uppgift ska vara A — och den stod kvar i
+    varje skala fram till 2026-09-09, också på de rena A-blad läraren fick.
+    Skalan läser uppgiftsplanen och säger nivån rakt ut i stället."""
+    nv = exam_spec.NIVAVAL["arbetsblad"]["A-nivå"]
+    sk = exam_spec.balanced_skeleton(6, "arbetsblad", delar=False,
+                                     mix=nv["mix"], niva_mal=nv["mal"])
+    assert exam_gen._rent_skelett(sk) == "A"
+    skala = exam_gen._skala("arbetsblad", "", sk, "Ma1c")
+    assert "Varenda uppgift på det här bladet ska ligga på A-nivå" in skala
+    assert "stigande svårighet" not in skala
+    # Ett blandat blad behåller stigningen — undantaget får inte bli regeln.
+    blandat = exam_spec.balanced_skeleton(6, "arbetsblad", delar=False)
+    assert exam_gen._rent_skelett(blandat) is None
+    assert "stigande svårighet" in exam_gen._skala("arbetsblad", "", blandat,
+                                                   "Ma1c")
 
 
 def test_provet_utan_portratt_gar_till_reparation():

@@ -971,27 +971,69 @@ def build_niva_block(typer: list[str] | None = None,
     return "\n\n".join(delar)
 
 
-def build_skala_utan_bok(profil: str, kurs: str = "") -> str:
-    """Nivåskalan för arbetsblad och gruppuppgift NÄR bokdörren är stängd.
+def build_skala(profil: str, kurs: str = "", boknivaer: str = "",
+                rent: str | None = None) -> str:
+    """Nivåskalan för arbetsblad och gruppuppgift — texten dokumentet skrivs
+    mot OCH döms mot (exam_gen._skala måste ge samma sträng som prompten fick).
 
-    Blocket utelämnas aldrig tyst: väljer läraren ingen bok finns ingen
-    boknivåskala att förankra i, och då är NP-rubriken skalan i stället. Ett
-    arbetsblad utan någon skala alls är precis det läget planen skrevs för —
-    «stigande svårighet» utan att någonstans säga vad svårare betyder."""
+    NP-RUBRIKEN STÅR ALLTID MED, och det är rättelsen 2026-09-09. Bokens egen
+    nivåskala var förut ett ALTERNATIV till den: valde läraren ett uppslag fick
+    bladet «Nivå 1, 2, 3» med uppgiftsnummer som måttstock och ingenting annat.
+    Domarna fick samma text — och blev ombedda att svara «E, C eller A enligt
+    beskrivningarna ovan» när ovan inte nämnde E, C eller A med ett ord.
+    Kriteriedomarens checklista är dessutom citerad ur RUBRIK_GENERELL och
+    STEGET_UPP, alltså ur en rubrik den aldrig såg. Det är därför nivån på ett
+    bokförankrat arbetsblad var instabil: domen vilade på minnet, inte på
+    underlaget.
+
+    Bokens skala är alltså ett TILLÄGG. Den säger något rubriken inte kan säga
+    — hur svåra uppgifterna får vara i just den här klassens läromedel — men
+    den svarar inte på vilken nivå en uppgift ligger på, och det är den frågan
+    poängen ställer.
+
+    `rent` är «E», «C» eller «A» när varje rad i uppgiftsplanen bär sin poäng på
+    samma nivå (exam_spec.ren_niva, lärarens rena nivåval). Då är «stigande
+    svårighet» fel order: det finns ingen stigning att göra, och en uppgift
+    under nivån är lika fel som en över."""
     if profil == "gruppuppgift":
         # Spannet stod redan rätt här (E-ingång, A-fördjupning); det som var
         # fel var ORDNINGEN. «Gruppuppgiften är inte en trappa» sa emot lärarens
         # skarpa lektion, där stegringen var det som fungerade (Del F, dom 1).
-        ram = ("Ingen lärobok är vald, så nivåskalan är den nedan. "
-               "Gruppuppgiften ÄR en stegring: låt den FÖRSTA uppgiften vara "
+        ram = ("Gruppuppgiften ÄR en stegring: låt den FÖRSTA uppgiften vara "
                "lösbar på E-nivå så att varenda grupp kommer in, och den SISTA "
                "nå A-nivå så att samtalet har någonstans att ta vägen. Målet är "
                "att alla klarar den första och att några få — men inte noll — "
                "klarar den sista.")
+    elif rent:
+        # Rent nivåpapper. Ordern «lätta först, svårare sist» är inte bara
+        # onödig här utan direkt emot uppgiftsplanen, och den stod kvar i varje
+        # skala fram till 2026-09-09 — också på de rena A-bladen läraren fick.
+        ram = (f"Varenda uppgift på det här bladet ska ligga på {rent}-nivå, "
+               f"och uppgiftsplanen ger därför bara {rent}-poäng. Det finns "
+               "ingen stigning att göra: en uppgift som är LÄTTARE än "
+               f"{rent} är lika fel som en som är svårare, och en uppgift som "
+               f"bara delvis kräver {rent}-färdighet är också fel. Läraren ger "
+               "bladet till den som ska nå just den nivån.")
     else:
-        ram = ("Ingen lärobok är vald, så nivåskalan är den nedan. Låt de "
-               "första uppgifterna ligga på E-nivå och de sista på C-nivå — "
-               "det är vad «stigande svårighet» betyder på det här bladet, "
-               "och tyngdpunkten ska ändå ligga på E enligt balansmålen.")
-    return ram + "\n\n" + build_niva_block(per_niva=1, kurs=kurs,
-                                           kursrubrik=False)
+        ram = ("Låt de första uppgifterna ligga på E-nivå och de sista på "
+               "C-nivå — det är vad «stigande svårighet» betyder på det här "
+               "bladet, och tyngdpunkten ska ändå ligga på E enligt "
+               "balansmålen.")
+    if boknivaer:
+        inledning = ("Nivåskalan står i TVÅ lager: kunskapskravens E, C och A "
+                     "nedan, och lärobokens egen märkning av uppslaget sist. "
+                     "E, C och A avgör vad en uppgift är värd; bokens nivåer "
+                     "är en måttstock för hur svåra uppgifterna får vara i den "
+                     "här klassen.")
+    else:
+        # Blocket utelämnas aldrig tyst: väljer läraren ingen bok finns ingen
+        # boknivåskala att förankra i, och då är NP-rubriken skalan ensam. Ett
+        # arbetsblad utan någon skala alls är precis det läget planen skrevs
+        # för — «stigande svårighet» utan att någonstans säga vad svårare
+        # betyder.
+        inledning = "Ingen lärobok är vald, så nivåskalan är den nedan."
+    delar = [inledning + " " + ram,
+             build_niva_block(per_niva=1, kurs=kurs, kursrubrik=False)]
+    if boknivaer:
+        delar.append(boknivaer)
+    return "\n\n".join(delar)

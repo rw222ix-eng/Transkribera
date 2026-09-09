@@ -199,9 +199,15 @@ _VAL = [
 # är C i gruppuppgiften och E i provet, så provets dom fäller gruppuppgiften på
 # en skillnad som bara finns mellan kassetterna. Domarna skiljs åt på skalan de
 # fick med sig, vilket är det enda i prompten som säkert skiljer dem åt.
+#
+# NYCKLARNA ÄR SKALANS EGNA RADER, och gruppuppgiftens hade RUTTNAT: «Gruppupp-
+# giften är inte en trappa» ströks ur prompten när stegringen vann (Del F, dom
+# 1) och stod sedan bara kvar i en kommentar. Ingen domarprompt matchade den,
+# så gruppuppgiftens dom fick PROVETS band — precis det bandbytet raderna finns
+# för att hindra. Nyckeln är nu den mening skalan faktiskt bär.
 _DOMARE = "vilken nivå den faktiskt ligger på"
 _DOMAR_VAL = [
-    ("Gruppuppgiften är inte en trappa", "nivadomare-grupp"),
+    ("Gruppuppgiften ÄR en stegring", "nivadomare-grupp"),
     ("det här bladet", "nivadomare-blad"),
 ]
 
@@ -216,7 +222,7 @@ _DOMAR_VAL = [
 # på en fråga om ett helt prov. Raden nedan står bara i build_kriterie_prompt.
 _KRITERIE = "Du är kriteriedomare"
 _KRITERIE_VAL = [
-    ("Gruppuppgiften är inte en trappa", "kriteriedomare-grupp"),
+    ("Gruppuppgiften ÄR en stegring", "kriteriedomare-grupp"),
     ("det här bladet", "kriteriedomare-blad"),
 ]
 

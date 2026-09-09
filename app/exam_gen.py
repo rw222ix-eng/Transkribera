@@ -1297,6 +1297,29 @@ def build_spridning(avsnitt: list[dict], antal: int) -> str:
         "\"avsnitt\" avsnittets nummer, t.ex. \"1.2\".")
 
 
+def _rent_skelett(skeleton: list[dict] | None) -> str | None:
+    """«E», «C» eller «A» när VARJE rad i uppgiftsplanen bär sina poäng på
+    samma nivå — annars None. Lärarens rena nivåval (exam_spec.ren_niva) ger
+    ett sådant skelett, och nivåskalan måste veta om det: «låt de första
+    uppgifterna ligga på E-nivå och de sista på C-nivå» är fel order på ett
+    papper där alla tjugo uppgifterna ska vara A.
+
+    Läses ur POÄNGEN och inte ur `karaktar`, av två skäl: fältet finns inte i
+    varje skelett som passerar här, och det är poängen dokumentet faktiskt bär.
+
+    Prompten och domarna räknar fram den var för sig ur samma skelett
+    (build_prompt och _skala), och det är just därför den räknas fram i stället
+    för att skickas in: skalan måste bli byte för byte samma text på båda
+    ställena."""
+    if not skeleton:
+        return None
+    nivaer = {i for s in skeleton
+              for i, v in enumerate(s.get("poang") or ()) if v}
+    if len(nivaer) != 1:
+        return None
+    return exam_spec.NIVAER_STORA[nivaer.pop()]
+
+
 def build_prompt(kurs: str, klass: str, punkter: list[str], *,
                  antal: int = 10, tid_min: int = 120, delar: bool = True,
                  memory: str = "", teman: str = "", variation: str = "",
@@ -1506,9 +1529,10 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
         # balansvalideringen får fälla om modellen frångår den.
         if skeleton:
             block.append(_skelett_plan(skeleton, last=False))
-        # Nivåförankringen (C2): gruppuppgiften är inte en trappa, så bokens
-        # skala används som GOLV och TAK i stället för som stigning.
-        block.append(boknivaer or niva_rubrik.build_skala_utan_bok(profil, kurs))
+        # Nivåförankringen (C2): bokens skala används som GOLV och TAK i
+        # stället för som stigning, och NP-rubriken står alltid med (build_skala).
+        block.append(niva_rubrik.build_skala(profil, kurs, boknivaer,
+                                             rent=_rent_skelett(skeleton)))
     elif profil == "arbetsblad":
         if skeleton:
             block.append(_skelett_plan(skeleton))
@@ -1547,9 +1571,12 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
         # Lärarens illustrationskryss (se BILD_PA/BILD_AV).
         block.append(BILD_PA if illustration else BILD_AV)
         # «Stigande svårighet» stod här förut, och det är en instruktion utan
-        # skala: svårare ÄN VAD? Nu följer skalan med — bokens egen när läraren
-        # slagit upp ett uppslag, annars NP-rubriken.
-        block.append(boknivaer or niva_rubrik.build_skala_utan_bok(profil, kurs))
+        # skala: svårare ÄN VAD? Nu följer skalan med — NP-rubriken alltid, och
+        # bokens egen som ett lager till när läraren slagit upp ett uppslag.
+        # Att boken ERSATTE rubriken var buggen som gjorde nivån på ett
+        # bokförankrat blad instabil; se niva_rubrik.build_skala.
+        block.append(niva_rubrik.build_skala(profil, kurs, boknivaer,
+                                             rent=_rent_skelett(skeleton)))
     else:
         # Balanserat skelett: modellen klarar inte den flerdimensionella
         # balansen (förmåga × nivå) själv, så appen låser del/förmåga/typ/poäng
@@ -3667,7 +3694,8 @@ def _skala(profil: str, boknivaer: str, skeleton: list[dict] | None,
     uppmätta mix och kursens egna ankarexempel, och en domare som får kurs 2:s
     ankare till ett 1a-papper dömer efter fel exempel."""
     if profil in ("arbetsblad", "gruppuppgift"):
-        return boknivaer or niva_rubrik.build_skala_utan_bok(profil, kurs)
+        return niva_rubrik.build_skala(profil, kurs, boknivaer,
+                                       rent=_rent_skelett(skeleton))
     return niva_rubrik.build_niva_block(
         sorted({s["typ"] for s in skeleton}) if skeleton else None,
         sorted({s["formaga"] for s in skeleton}) if skeleton else None,
@@ -3951,7 +3979,60 @@ def _domar_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
 # Rundorna är riktade (sammanfoga_riktat): bara de uppgifter fynden pekar på
 # får skrivas om. Utan låset hade en runda om uppgift 7 kunnat skriva om hela
 # pappret, och läraren hade fått ett annat prov än det hon nyss läste.
+#
+# ── PROV MOT ARBETSBLAD: VAR NIVÅN BEHANDLAS OLIKA ───────────────────────
+# Kartlagt 2026-09-09, sedan tre A-blad levererats dagen innan med kvarstående
+# nivåfynd efter grindens två rundor OCH en dom utanför servern fällt fem
+# ANDRA uppgifter på samma papper. Hela kedjan generering → domarpass → grind →
+# klient gicks igenom; fyra ställen skilde sig, och de två första var felen.
+#
+# 1. SKALAN (_skala, niva_rubrik.build_skala). Provet fick NP-rubriken. Bladet
+#    fick bokens nivåskala i STÄLLET för den när läraren slagit upp ett uppslag
+#    — «Nivå 1, 2, 3» med uppgiftsnummer, inte en mening om vad E, C eller A
+#    kräver — och båda domarna dömde mot den texten. Den blinda domaren blev
+#    ombedd att svara «E, C eller A enligt beskrivningarna ovan» när ovan inte
+#    nämnde bokstäverna, och kriteriedomarens checklista är citerad ur en
+#    rubrik den aldrig såg. DÄR satt instabiliteten. Lagat: boken är ett lager
+#    TILL, aldrig ett i stället för.
+# 2. SKALANS ORDNINGSREGEL. «Låt de första uppgifterna ligga på E-nivå och de
+#    sista på C-nivå» stod i varje arbetsbladsskala — också på de rena A-blad
+#    läraren beställde, alltså en order rakt emot uppgiftsplanen. Lagat: skalan
+#    läser planen (_rent_skelett) och säger nivån rakt ut på ett rent papper.
+# 3. GRINDENS OMDOM mätte bara de uppgifter den senast fällde. Se kommentaren i
+#    _niva_grind: hela pappret döms om på ett rent nivåpapper, och rena papper
+#    får en runda till (EXTRA_NIVARUNDOR_RENT).
+#
+# Och det som skiljer sig MED FLIT, oförändrat:
+#
+# * domarpasset är sig likt för båda profilerna — dubbeldom, räknedom, samma
+#   grind. Det som bara körs på provet (forsattsignaler, bedomningspasset) rör
+#   inte nivån.
+# * E-signalerna (e_nivasignaler) gäller bara rena E-papper. Lärarens order, och
+#   de tre formerna är hemma på ett rent C- eller A-blad.
+# * refine kör inte dubbeldomen för NÅGON profil, bara E-signalerna. Priset är
+#   omätt och står dokumenterat i refine_exam — arbetsbladet är alltså inte
+#   sämre ställt än provet, båda är sämre ställda i canvasen än i genereringen.
+# * klienten behandlar `nivafel` lika för alla dokumenttyper: EN panelrad
+#   (plan.js `svar`, api.js nivafelText), samma mening i canvasens tråd
+#   (granska.js nivaraden), fältet sparas på utkastet och följer med till
+#   Sparat. Godkännandet stoppas inte av den — inte för provet heller. Läraren
+#   är sista domare (planens C5), och en spärr hade varit ett annat beslut än
+#   det hon fattat.
 EXTRA_NIVARUNDOR = 2
+# RENA NIVÅPAPPER FÅR EN RUNDA TILL, och skälet är att de är en svårare fråga:
+# på ett blandat papper påstår uppgifterna olika nivåer och en dom om uppgift 7
+# säger inget om uppgift 8, men på ett rent papper (exam_spec.ren_niva:
+# «E-nivå», «C-nivå», «A-nivå», «Bara E») påstår VARJE enhet samma nivå, och
+# domen måste hålla tjugo gånger i rad för att pappret ska vara det läraren
+# beställde. Tre A-blad levererades 2026-09-08 med kvarstående fynd efter två
+# rundor.
+#
+# KOSTNADEN, räknad i modellanrop: varje extrarunda är en omskrivning plus en
+# omdom, och omdomen är dubbel — 1 + 2 = tre anrop per runda. Två rundor kostar
+# alltså högst sex och tre högst nio, utöver domarpassets egna tre (blind,
+# kriterie, räkne) och genereringens en. Rundan går bara i gång när det FINNS
+# fynd kvar, så ett papper som sitter direkt kostar noll av dem.
+EXTRA_NIVARUNDOR_RENT = 3
 # Fail-open-märkningen. Föll domaranropet vet vi ingenting om nivån, och det är
 # inte samma sak som att den är rätt.
 NIVAKOLL_FOLL = [{"nr": "*", "pastadd": "", "domd": "",
@@ -3972,15 +4053,25 @@ def nivafel_text(nivafel: list[dict] | None) -> str:
 def _niva_grind(res: dict, *, model: str, llm, profil: str, skala: str,
                 antal: int | None, skeleton: list[dict] | None,
                 koder: list[str] | None, niva_mal: dict | None,
-                max_rounds: int = EXTRA_NIVARUNDOR,
+                max_rounds: int | None = None,
                 log_cb: Callable[[str], None] | None = None) -> dict:
-    """Upp till två extra riktade rundor på nivåfynden, sedan `nivafel`.
+    """Extra riktade rundor på nivåfynden, sedan `nivafel`.
 
     `res` är domarpassets svar (eller refines, som saknar `nivakoll` och då
     bara kör de deterministiska E-signalerna — se refine_exam). Svaret är samma
     dict med `nivafel` ifyllt: tom lista när nivån är säkrad, annars en rad per
-    uppgift med påstådd nivå, dömd nivå och skäl."""
+    uppgift med påstådd nivå, dömd nivå och skäl.
+
+    `max_rounds=None` betyder «så många rundor pappret har rätt till»:
+    EXTRA_NIVARUNDOR, eller EXTRA_NIVARUNDOR_RENT på ett rent nivåpapper.
+    Refine skickar 0 med flit och ska inte få fler av den här raden."""
     log = log_cb or (lambda _m: None)
+    # RENT NIVÅPAPPER (exam_spec.ren_niva): varje uppgift påstår samma nivå,
+    # och det är där läraren bett om garantin. Två saker följer av det, och
+    # båda står nedan — fler rundor, och en omdom som mäter HELA pappret.
+    rent = exam_spec.ren_niva(niva_mal)
+    if max_rounds is None:
+        max_rounds = EXTRA_NIVARUNDOR_RENT if rent else EXTRA_NIVARUNDOR
     exam = res.get("exam")
     if exam is None:
         return {**res, "nivafel": []}
@@ -3989,14 +4080,30 @@ def _niva_grind(res: dict, *, model: str, llm, profil: str, skala: str,
     fynd = list(res.get("nivafynd") or [])
     aktuella = res.get("nivamatt", True)
     for varv in range(max_rounds + 1):
-        if fynd and not aktuella:
-            # Pappret skrevs om efter att fynden mättes — döm om de RÖRDA
-            # uppgifterna innan vi betalar en runda till på ett fynd som
-            # kanske redan är lagat.
+        # `fynd or rent`: på ett blandat papper räcker det att döma om när det
+        # FINNS ett fynd att pröva. På ett rent papper räcker det inte — kom
+        # rundan ur räknedomaren eller det saknade porträttet skrevs pappret om
+        # efter nivådomen, och «inga fynd» hade då gällt ett dokument som inte
+        # längre finns. Ett rent papper får aldrig levereras som säkrat på en
+        # dom om en tidigare version.
+        if not aktuella and (fynd or rent):
+            # Pappret skrevs om efter att fynden mättes — döm om innan vi
+            # betalar en runda till på ett fynd som kanske redan är lagat.
+            #
+            # HELA PAPPRET på ett rent nivåpapper, bara de rörda uppgifterna
+            # annars. Delmängdsdomen var ett av två skäl till att grinden inte
+            # landade: den mäter det den senast fällde, så `nivafel` beskrev en
+            # delmängd och inte det papper läraren fick. En dom utanför servern
+            # på ett levererat A-blad (2026-09-08) fällde FEM ANDRA uppgifter än
+            # de grinden hade tittat på. På ett blandat papper är delmängden
+            # fortfarande rätt: där säger en omskrivning av uppgift 7 ingenting
+            # om uppgift 8, och en full omdom hade kostat rundor på uppgifter
+            # ingen rört.
             fynd, kordes = niva_fynd(exam, model=model, llm=llm, skala=skala,
                                      niva_mal=niva_mal, log_cb=log_cb,
-                                     bara=sorted({_uppgiftsnr(f.get("nr"))
-                                                  for f in fynd}))
+                                     bara=None if rent else
+                                     sorted({_uppgiftsnr(f.get("nr"))
+                                             for f in fynd}))
             aktuella = True
             if not kordes:
                 return {**res, "exam": exam, "nivafel": list(NIVAKOLL_FOLL)}

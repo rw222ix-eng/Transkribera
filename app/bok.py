@@ -1108,10 +1108,13 @@ def build_niva_block(bok: dict, fran: int, till: int, sidor: list[dict],
     står redan i uppslaget, som ligger tidigare i samma prompt, så numren räcker
     som pekare.
 
-    Tomt block när uppslaget saknar nivåmärkning: då finns ingen skala att
-    förankra i, och anroparen faller tillbaka på NP-rubriken
-    (app/niva_rubrik.build_skala_utan_bok). Ett halvt block hade varit värre —
-    en skala med en enda nivå säger inte vad svårare betyder.
+    Tomt block när uppslaget saknar nivåmärkning. Ett halvt block hade varit
+    värre — en skala med en enda nivå säger inte vad svårare betyder.
+
+    Blocket är ett TILLÄGG till NP-rubriken och aldrig ett i stället för den
+    (app/niva_rubrik.build_skala, rättat 2026-09-09): boken säger hur svåra
+    uppgifterna får vara i den här klassen, men inte vilken nivå en uppgift
+    ligger på, och det är den frågan poängen och nivådomarna ställer.
 
     `bland` är de nummer som FAKTISKT står i bokblocket ovan. Med hela
     uppslaget stod alla där och frågan fanns inte; med urvalet
