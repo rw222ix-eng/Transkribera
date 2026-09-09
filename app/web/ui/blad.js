@@ -1410,7 +1410,9 @@ window.Blad = (() => {
     if (begrepp.length) bit.push(`Begrepp: ${begrepp.join(', ')}`);
     return bit.join(' · ');
   }
-  function tavlaSpec(spec, v) {
+  /* `skriven` = tavlan språkmodellen skrivit (wb-json-v1). Den bär SIN EGEN
+     rubrik, och den ska stå kvar — se rubrikbytet nedan. */
+  function tavlaSpec(spec, v, skriven) {
     if (!spec || !v) return spec;
     const min = Number((v.inst || {}).langd) || null;
     const dag = v.datum ? new Date(v.datum + 'T12:00:00') : null;
@@ -1424,7 +1426,18 @@ window.Blad = (() => {
       gru ? `gruppuppgift ${Number((gru.inst || {}).langd) || 10} min` : null,
       (v.referenser || []).length ? v.referenser.map(r => r.namn).join(', ') : null
     ].filter(Boolean).join(' · ');
-    const gjort = { horn: !hornet, rubrik: !v.moment, fot: false };
+    /* RUBRIKEN BYTS BARA PÅ PROTOTYPENS TAVLA (2026-09-09). Raden nedan är
+       från den tid då tavlan var EN mall med utbytt rubrik: förlagans heading
+       skrevs över med lektionens moment. En SKRIVEN tavla har i stället en egen,
+       kort rubrik ur wb-JSON («Potensekvationer»), och den ska stå kvar.
+       Vad bytet kostade: sedan kalendersidorna blev förval bär `moment` HELA
+       lektionsrubriken («Potensekvationer och numerisk ekvationslösning ·
+       Tecken i matematiska utsagor och intervall», 90 tecken). Motorn radbröt
+       den över tre rader, vänsterspalten blev för hög och fit-passet krympte
+       ALLT på vänstertavlan till 12–13 px. Tavlan såg normal ut i
+       e2e/render-board.mjs — som ritar wb-JSON:en rå — och konstig i appen, och
+       skillnaden var precis den här raden. */
+    const gjort = { horn: !hornet, rubrik: skriven || !v.moment, fot: false };
     const foten = tavlafot(v);
     const ga = x => {
       if (Array.isArray(x)) {
@@ -1480,7 +1493,7 @@ window.Blad = (() => {
   function tavlanFor(v) {
     const lage = TEORI.test(ord(v.moment)) ? 'teori' : 'genomgang';
     const skriven = v.wb && (v.wb.boards || []).length ? v.wb : null;
-    return tavlaSpec(skriven || (T().spec ? T().spec(v.moment, lage) : null), v);
+    return tavlaSpec(skriven || (T().spec ? T().spec(v.moment, lage) : null), v, !!skriven);
   }
 
   /* Tavlan ritad i sin verkliga storlek någon annanstans än på pappret.

@@ -320,9 +320,11 @@ async function skrivOm(page, mening) {
   await expect(page.locator("#g-antal")).toHaveText("1 ändring", { timeout: 20_000 });
 }
 
-/* `tav2` och inte `tav0`: tavlans FÖRSTA ruta är lektionens egen titelrad, som
-   `tavlaSpec` injicerar ur planeringen — den ändras aldrig av en omskrivning.
-   Rubriken som modellen faktiskt skriver om är andra brädets, tav2. */
+/* `tav2` och inte `tav0`: tavlans FÖRSTA ruta är vänstertavlans rubrik, och
+   fixturen ger båda brädena samma. Rubriken som modellen skriver om i det här
+   testet är andra brädets, tav2. (Till 2026-09-09 bytte `tavlaSpec` ut den
+   första mot lektionens moment ur planeringen — bytet gäller nu bara
+   prototypens tavla, se blad.js.) */
 const RUTA = '#granskaskal .gdok [data-el="tav2"]';
 const prick = page => page.locator(RUTA + " .aprick").first();
 
