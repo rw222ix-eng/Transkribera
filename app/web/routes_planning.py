@@ -224,6 +224,57 @@ def bok_urval(body: dict) -> dict | None:
     return ut if ut["remsa"] else None
 
 
+def lektionens_delar(db_file: Path, body: dict) -> list[dict]:
+    """Kalenderns DELAR för den här lektionen — [] när den har färre än två.
+
+    Lärarens dom 2026-09-09: «på tavlan verkar det bara vara potensekvationer,
+    vi ska ta båda momenten samtidigt.» Lektionen den 10 september bär två
+    delar i kalendern — s. 50–52 potensekvationer, s. 53–57 tecken i utsagor
+    och intervall — men klienten skickar bara den hopslagna momentraden
+    «A · B», och prompten fick därför aldrig veta att det VAR två moment med
+    var sitt sidspann.
+
+    Raden slås upp här och inte i klienten, av två skäl: delarna ligger redan
+    i basen (lektionsinnehall, db v23), och en klient som skickar dem kan
+    skicka annat. INTEGRITETSGRÄNSEN gäller oförändrad — se
+    app/calendar_google.py vid _AVDELARE: bara rubrik, sidspann och
+    uppgiftslista finns i kolumnen, och bara de tre läses här.
+
+    Nyckeln är datum + klass + kurs + timme, samma som lektionskortet slår upp
+    på (app/web/ui/kalender.js innehallFor): kursnamnet på raden är synkens
+    och kan vara fel, så det filtrerar bara när det stämmer, och tiden avgör
+    när klassen har två lektioner samma dag."""
+    datum = (body.get("datum") or "").strip()
+    if not datum:
+        return []
+    klass = (body.get("klass") or "").strip()
+    kurs = (body.get("kurs") or "").strip()
+    start = (body.get("starttid") or "").strip().replace(".", ":")
+    try:
+        conn = db.connect(db_file)
+        try:
+            rader = db.list_lektionsinnehall(conn)
+        finally:
+            conn.close()
+    except Exception:
+        return []
+
+    def timme(t: str) -> str:
+        m = re.match(r"\s*(\d{1,2})[:.](\d{2})", str(t or ""))
+        return f"{int(m.group(1))}:{m.group(2)}" if m else ""
+
+    kandidater = [r for r in rader if r.get("datum") == datum
+                  and (not klass or not r.get("klass") or r["klass"] == klass)
+                  and (not kurs or not r.get("kurs") or r["kurs"] == kurs)]
+    if not kandidater:
+        return []
+    if len(kandidater) > 1 and start:
+        traff = [r for r in kandidater if timme(r.get("tid")) == timme(start)]
+        kandidater = traff or kandidater
+    delar = kandidater[0].get("delar") or []
+    return delar if isinstance(delar, list) and len(delar) > 1 else []
+
+
 def bok_las_text(base: Path, db_file: Path, body: dict, emit=None) -> str:
     """Samma block som `bok_text`, men läser först de sidor som saknar något.
 
@@ -804,6 +855,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # än vet. Viktningen har funnits i steg 3 hela tiden — planen skrev
         # «Väger källorna» — men aldrig nått hit.
         svart_txt, fokus_txt = lararens_ord(body)
+        # Lektionens delar ur kalendern. Villkorat som allt annat här: en
+        # lektion med ETT moment ger tom sträng, och då är prompten byte för
+        # byte den som gick i väg innan blocket fanns (kassettregeln).
+        delar_txt = lesson_board.build_delar_block(
+            lektionens_delar(db_file, body))
 
         llm = arbiter.try_acquire_llm()
         if not llm:
@@ -840,7 +896,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     course or "matematik", group or "klassen", moment,
                     model=_model_name(), memory=memory, underlag=underlag_txt,
                     utfall=utfall_txt, bok=bok_txt, forlaga=forlaga_txt,
-                    svart=svart_txt, fokus=fokus_txt,
+                    svart=svart_txt, fokus=fokus_txt, delar=delar_txt,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 # Lektionstiden uppe till vänster är lärarens, inte modellens:

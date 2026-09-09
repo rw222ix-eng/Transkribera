@@ -106,7 +106,8 @@ def _stub_generate(monkeypatch, result):
              **_kw):
         calls.append({"course": course, "group": group, "moment": moment,
                       "model": model, "memory": memory, "underlag": underlag,
-                      "utfall": utfall, "bok": bok})
+                      "utfall": utfall, "bok": bok,
+                      "delar": _kw.get("delar", "")})
         if log_cb:
             log_cb("Genererar lektionstavlan …")
         return result
@@ -223,6 +224,97 @@ def test_utan_bok_och_utan_ci_traff_ar_allt_som_forut(llm_ready, monkeypatch):
                          json={"moment": "repetition inför provet",
                                "kurs": "Historia 1b"}))
     assert calls[0]["bok"] == ""
+
+
+# ── LEKTIONENS DELAR ──────────────────────────────────────
+# «På tavlan verkar det bara vara potensekvationer, vi ska ta båda momenten
+# samtidigt.» (Lärarens dom 2026-09-09.) Klienten skickar den hopslagna
+# momentraden «A · B»; delarna med var sitt sidspann står i basen och slås
+# upp i rutten.
+
+_DELAR = [
+    {"fran": 50, "till": 52,
+     "rubrik": "Potensekvationer och numerisk ekvationslösning",
+     "uppg": "2144, 2146–2151"},
+    {"fran": 53, "till": 57,
+     "rubrik": "Tecken i matematiska utsagor och intervall",
+     "uppg": "2201–2205, 2301–2307"},
+]
+
+
+def _lektion(client, delar):
+    from app import db
+    conn = db.connect(client.base_dir / "transkribera.db")
+    try:
+        db.replace_lektionsinnehall(conn, [{
+            "datum": "2026-09-10", "tid": "11:50–13:30", "klass": "NA26F",
+            "kurs": "Matematik, nivå 1c", "fran": 50, "till": 57,
+            "delar": delar}])
+    finally:
+        conn.close()
+
+
+def _tavla(llm_ready):
+    return _done(llm_ready.post("/api/planning/generate", json={
+        "moment": "Potensekvationer och numerisk ekvationslösning · "
+                  "Tecken i matematiska utsagor och intervall",
+        "klass": "NA26F", "kurs": "Matematik, nivå 1c",
+        "datum": "2026-09-10", "starttid": "11:50"}))
+
+
+def test_lektionens_delar_nar_prompten(llm_ready, monkeypatch):
+    _lektion(llm_ready, _DELAR)
+    calls = _stub_generate(monkeypatch,
+                           {"board": _valid_board(), "errors": [], "rounds": 1})
+    _tavla(llm_ready)
+    block = calls[0]["delar"]
+    assert lesson_board.DELARMARKOR in block
+    assert "Potensekvationer och numerisk ekvationslösning" in block
+    assert "Tecken i matematiska utsagor och intervall" in block
+    assert "boken s. 50–52" in block and "boken s. 53–57" in block
+    assert "BÅDA momenten" in block
+
+
+def test_en_lektion_med_ett_moment_ger_ingen_delarrad(llm_ready, monkeypatch):
+    """Villkorat, som lararens egna rutor: en lektion med EN del ska ge
+    ordagrant den prompt som gick i vag innan blocket fanns."""
+    _lektion(llm_ready, _DELAR[:1])
+    calls = _stub_generate(monkeypatch,
+                           {"board": _valid_board(), "errors": [], "rounds": 1})
+    _tavla(llm_ready)
+    assert calls[0]["delar"] == ""
+
+
+def test_utan_lektionsrad_i_kalendern_ar_allt_som_forut(llm_ready, monkeypatch):
+    calls = _stub_generate(monkeypatch,
+                           {"board": _valid_board(), "errors": [], "rounds": 1})
+    _tavla(llm_ready)
+    assert calls[0]["delar"] == ""
+
+
+def test_delarna_valjs_pa_timmen_nar_klassen_har_tva_lektioner(llm_ready,
+                                                               monkeypatch):
+    """Samma klass, samma dag, två lektioner: timmen skiljer dem åt — samma
+    regel som lektionskortet slår upp på (kalender.js innehallFor)."""
+    from app import db
+    conn = db.connect(llm_ready.base_dir / "transkribera.db")
+    try:
+        db.replace_lektionsinnehall(conn, [
+            {"datum": "2026-09-10", "tid": "08:10–09:30", "klass": "NA26F",
+             "kurs": "Matematik, nivå 1c", "fran": 20, "till": 24,
+             "delar": [{"fran": 20, "till": 22, "rubrik": "Förmiddagen"},
+                       {"fran": 23, "till": 24, "rubrik": "Också förmiddagen"}]},
+            {"datum": "2026-09-10", "tid": "11:50–13:30", "klass": "NA26F",
+             "kurs": "Matematik, nivå 1c", "fran": 50, "till": 57,
+             "delar": _DELAR},
+        ])
+    finally:
+        conn.close()
+    calls = _stub_generate(monkeypatch,
+                           {"board": _valid_board(), "errors": [], "rounds": 1})
+    _tavla(llm_ready)
+    assert "Potensekvationer" in calls[0]["delar"]
+    assert "Förmiddagen" not in calls[0]["delar"]
 
 
 def test_generate_409_when_over_taket(llm_ready, monkeypatch):

@@ -1619,3 +1619,134 @@ def test_kompletteringens_lapp_faller_tillbaka_inom_domarens_budget():
     assert res["errors"] == [] and res["rounds"] == 2
     assert len(calls) == 3
     assert "Skriv om HELA tavlan som JSON" in calls[2]["prompt"]
+
+
+# ── BÅDA MOMENTEN OCH FORMVARIATIONEN (2026-09-09) ────────────────────
+# Lärarens tre domar över potensekvationstavlan: rubriken blev hela
+# lektionsrubriken, tavlan bar bara det första av två moment, och två av tre
+# exempel var samma ekvation med olika tal.
+
+DELAR = [
+    {"fran": 50, "till": 52,
+     "rubrik": "Potensekvationer och numerisk ekvationslösning",
+     "uppg": "2144, 2146–2151"},
+    {"fran": 53, "till": 57,
+     "rubrik": "Tecken i matematiska utsagor och intervall",
+     "uppg": "2201–2205, 2301–2307"},
+]
+
+
+def test_delarna_ger_prompten_bada_momenten():
+    """Kalendern vet att lektionen har två moment med var sitt sidspann;
+    klienten skickar bara den hopslagna momentraden «A · B»."""
+    block = lb.build_delar_block(DELAR)
+    assert lb.DELARMARKOR in block
+    assert "Potensekvationer och numerisk ekvationslösning" in block
+    assert "Tecken i matematiska utsagor och intervall" in block
+    assert "boken s. 50–52" in block and "boken s. 53–57" in block
+    assert "2144, 2146–2151" in block
+    assert "BÅDA momenten" in block and "MINST ETT exempel per moment" in block
+    p = lb.build_prompt("Ma1c", "NA26F", "Potensekvationer · Tecken",
+                        delar=block)
+    assert block in p
+
+
+def test_en_enda_del_ger_inget_block():
+    """Villkoret är kassettregeln: en lektion med ETT moment ska ge ordagrant
+    den prompt som gick i väg innan blocket fanns."""
+    assert lb.build_delar_block(DELAR[:1]) == ""
+    assert lb.build_delar_block([]) == ""
+    assert lb.build_delar_block(None) == ""
+    assert lb.DELARMARKOR not in lb.build_prompt("Ma1c", "NA26F", "moment")
+
+
+def test_domaren_matter_bada_momenten_ocksa_utan_bok():
+    """Täckningsdomaren fick delarna: rubrikerna är kontraktet när ingen bok
+    är uppslagen."""
+    t = lb.build_tackning_prompt({"boards": []}, "",
+                                 lb.build_delar_block(DELAR))
+    assert lb.DELARMARKOR in t
+    assert "varje del för sig" in t
+    assert "MINST ETT exempel" in t
+    # Utan delar är prompten ordagrant den gamla.
+    assert lb.build_tackning_prompt({"boards": []}, "bok") == \
+        lb.build_tackning_prompt({"boards": []}, "bok", "")
+
+
+def test_domaren_far_delarna_med_sig():
+    svar = json.dumps({"saknas": []})
+    llm, calls = _stub_llm([svar])
+    lb.doma_tackning({"boards": []}, model="", llm=llm, bok="",
+                     delar=lb.build_delar_block(DELAR))
+    assert lb.DELARMARKOR in calls[0]["prompt"]
+
+
+def _tvatavlor(*latex):
+    """En högertavla med ett exempel per latex-rad, var och en med rubrik."""
+    sektioner = []
+    for i, x in enumerate(latex, 1):
+        sektioner.append({"kind": "heading", "text": f"Exempel {i}"})
+        sektioner.append({"kind": "math", "latex": x})
+        sektioner.append({"kind": "math", "latex": "x = 3"})   # ett metodsteg
+    return {"boards": [{"sections": []},
+                       {"columns": [{"sections": sektioner}]}]}
+
+
+def test_formvakten_faller_samma_ekvation_med_nya_tal():
+    """«x⁴ = 625, sedan parentes, sedan x⁴ = 2000 — det känns upprepande.»"""
+    fynd = lb.formupprepning(
+        _tvatavlor("x^4 = 625", "3(x + 2)^3 = -81", "x^4 = 2000"))
+    assert [f["code"] for f in fynd] == ["upprepad_form"], fynd
+    assert "x^4 = 2000" in fynd[0]["message"] and "x^4 = 625" in fynd[0]["message"]
+    assert fynd[0]["path"] == "boards[1].columns[0].sections[7]"
+
+
+def test_formvakten_slapper_riktig_variation():
+    """Jämn mot udda exponent, negativt högerled, en omskrivning: olika
+    FORMER, och då finns inget fynd."""
+    assert lb.formupprepning(
+        _tvatavlor("x^4 = 81", "x^3 = -27", "2x^3 - 3 = 13")) == []
+    # Metodstegen får likna varandra hur mycket som helst — vakten läser bara
+    # uppgiftsraden (första math-raden efter rubriken).
+    assert lb.formupprepning(
+        _tvatavlor("x^4 = 81", "x^5 = -32")) == []
+    # Vänstertavlan döms inte: där står reglerna i bokstäver.
+    assert lb.formupprepning({"boards": [{"sections": [
+        {"kind": "heading", "text": "A"}, {"kind": "math", "latex": "x^a = b"},
+        {"kind": "heading", "text": "B"}, {"kind": "math", "latex": "x^c = d"},
+    ]}]}) == []
+    assert lb.formupprepning(None) == []
+
+
+def test_generate_board_far_formupprepningen_som_fel_att_ratta():
+    """Samma väg som bokkopiorna: fyndet rättas i reparationsrundan, inte som
+    en varning läraren får läsa efteråt."""
+    doc = _valid_doc()
+    kol = doc["boards"][1]["columns"][0]["sections"]
+    kol.append({"kind": "heading", "text": "Exempel 1"})
+    kol.append({"kind": "math", "latex": "x^4 = 625"})
+    kol.append({"kind": "heading", "text": "Exempel 2"})
+    kol.append({"kind": "math", "latex": "x^4 = 2000"})
+    llm, calls = _stub_llm([json.dumps(doc)])
+    res = lb.generate_board("Ma1c", "NA26F", "potensekvationer", model="",
+                            doma=False, llm=llm)
+    assert any(f.get("code") == "upprepad_form" for f in res["errors"]), \
+        res["errors"]
+    assert "samma form" in calls[1]["prompt"]
+
+
+def test_prompten_kraver_en_kort_egen_rubrik():
+    """Rubriken är tavlans egen. Skrivs lektionsrubrikens nittio tecken av
+    radbryter motorn den och fit-passet krymper hela tavlan."""
+    p = lb.build_prompt("Ma1c", "NA26F", "potensekvationer")
+    assert "aldrig mer än 30 tecken" in p
+    assert "Skriv ALDRIG av en lång lektionsrubrik" in p
+
+
+def test_prompten_styr_talen_efter_hjalpmedlen():
+    """«Bara två uppgifter på sidorna görs med räknare, resten utan — bättre
+    potensekvationer man löser i huvudet, med enklare tal.»"""
+    p = lb.build_prompt("Ma1c", "NA26F", "potensekvationer")
+    assert "HJÄLPMEDLEN STYR TALEN" in p
+    assert "räkna I HUVUDET" in p and "HÖGST ETT" in p
+    assert "ALDRIG SAMMA FORM TVÅ GÅNGER" in p

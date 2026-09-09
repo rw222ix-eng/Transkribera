@@ -121,7 +121,17 @@ INSTRUCTION = (
     "berättelse där varje del föder nästa; den är det läraren pekar på medan "
     "hen pratar, inte ett manus.\n"
     "Vänstertavlans ordning är obligatorisk:\n"
-    "1. Rubriken — centrerad (align: center).\n"
+    # RUBRIKEN ÄR TAVLANS EGEN, INTE LEKTIONSRUBRIKEN. Uppdragsraden bär
+    # numera hela kalenderns lektionsrubrik (kalendersidorna är förval), och
+    # den kan vara nittio tecken lång med två moment åtskilda av ·. Skrivs den
+    # av som rubrik radbryter motorn den över tre rader, vänsterspalten blir
+    # för hög och fit-passet krymper ALLT på tavlan till oläsliga 12 px.
+    "1. Rubriken — centrerad (align: center) och KORT: momentets kärna i "
+    "högst tre ord («Potensekvationer», «Tecken och intervall»), aldrig mer "
+    "än 30 tecken. Skriv ALDRIG av en lång lektionsrubrik — en rubrik som "
+    "radbryts krymper hela tavlan. Bär lektionen två moment nämns båda med "
+    "ett ord var, eller så sätts den gemensamma rubriken och momenten står i "
+    "agendan.\n"
     # TRE PUNKTER, OCH BOKEN EN GÅNG. Lärarens dom (2026-09-05): «agendan
     # säger bok och uppgifter två gånger». Fyra punkter varav två handlar om
     # boken är två skrivna enheter för samma sak.
@@ -428,6 +438,25 @@ INSTRUCTION = (
     "- Välj ändå talen så att uträkningen GÅR JÄMNT UT när läraren räknar den "
     "på plats — heltal eller enkla decimaltal. Eleven ska se metoden, inte "
     "fastna i aritmetiken.\n"
+    # RÄKNAREN. Lärarens dom 2026-09-09 över potensekvationstavlan: «bara två
+    # uppgifter på sidorna görs med räknare, resten utan — bättre
+    # potensekvationer man löser i huvudet, med enklare tal.» Tavlan hade
+    # x^4 = 625 och x^4 = 2000: båda med verktyg, ingen i huvudet.
+    "- HJÄLPMEDLEN STYR TALEN. Står det «utan hjälpmedel», «utan digitala "
+    "verktyg» eller «huvudräkning» på bokens sidor ska exemplens tal gå att "
+    "räkna I HUVUDET: multiplikationstabellen och de små potenserna (8, 16, "
+    "25, 27, 32, 64, 81, 100, 125). Ett NUMERISKT exempel — ett fult tal som "
+    "kräver räknare, CAS eller GeoGebra — skrivs bara när sidorna själva har "
+    "det momentet, och då HÖGST ETT.\n"
+    # VARIATIONEN. Samma dom: «x^4 = 625, sedan parentes, sedan x^4 = 2000 —
+    # det känns upprepande.» Exempel 1 och 3 hade samma vänsterled i samma
+    # form; bara talet skilde. Den deterministiska vakten (formupprepning
+    # nedan) fäller precis det, men regeln ska stå här också.
+    "- ALDRIG SAMMA FORM TVÅ GÅNGER. Två exempel vars uppgiftsrad har samma "
+    "form och bara andra tal (x^4 = 625 och x^4 = 2000) är ETT exempel skrivet "
+    "två gånger. Varje exempel ska ändra något i FORMEN: jämn mot udda "
+    "exponent, negativt högerled, en ekvation som först måste skrivas om, ett "
+    "olikhetstecken i stället för likhet. Talen räknas inte som variation.\n"
     # Första halvan («exemplen speglar urvalets typ och nivå») ströks
     # 2026-09-05 (kväll): urvalsregeln högre upp säger den redan.
     # ÅTERANVÄND INTE UPPGIFTER. Lärarens ord ordagrant (2026-09-05, kväll),
@@ -1281,9 +1310,64 @@ def _few_shot_block() -> str:
     return "\n".join(parts)
 
 
+# «— PÅ TAVLAN VERKAR DET BARA VARA POTENSEKVATIONER, VI SKA TA BÅDA
+# MOMENTEN SAMTIDIGT.» (Lärarens dom 2026-09-09.) Kalenderns lektion hade två
+# delar med var sin rubrik och var sitt sidspann — s. 50–52 potensekvationer,
+# s. 53–57 tecken i utsagor och intervall — men prompten fick bara den
+# hopslagna momentraden «A · B» och skrev en tavla om A.
+#
+# Blocket lägger DELARNA som de står i kalendern: rubrik, sidspann,
+# uppgifter. Inget annat ur händelsen — se app/calendar_google.py vid
+# _AVDELARE: beskrivningen är till största delen lärarens anteckningar om
+# enskilda elever, och rubrik + sidspann + uppgiftslista är hela det som
+# någonsin får läsas ur den.
+#
+# VILLKORAT, som fokus och svårigheten: blocket byggs bara när lektionen
+# FAKTISKT har två delar. En lektion med en enda del ger tom sträng, och då
+# är prompten byte för byte den som gick i väg innan blocket fanns —
+# kassetterna i tests/kassetter rörs inte.
+DELARMARKOR = "LEKTIONENS DELAR"
+
+
+def build_delar_block(delar) -> str:
+    """Kalenderns delar för lektionen som promptblock, eller "" för färre än
+    två. Varje del: rubrik, sidspann, uppgifter — inget annat."""
+    rader = []
+    for d in delar or []:
+        if not isinstance(d, dict):
+            continue
+        rubrik = " ".join(str(d.get("rubrik") or "").split())
+        fran, till = d.get("fran"), d.get("till")
+        uppg = " ".join(str(d.get("uppg") or "").split())
+        bit = []
+        if fran:
+            bit.append(f"boken s. {fran}–{till}" if till and till != fran
+                       else f"boken s. {fran}")
+        if uppg:
+            bit.append(f"uppg. {uppg}")
+        if not rubrik and not bit:
+            continue
+        rader.append(f"{len(rader) + 1}. {rubrik or 'utan rubrik'}"
+                     + (f" — {', '.join(bit)}" if bit else ""))
+    if len(rader) < 2:
+        return ""
+    return (
+        f"{DELARMARKOR} — lektionen har {len(rader)} moment, i den här "
+        "ordningen:\n" + "\n".join(rader) + "\n"
+        "Tavlan ska bära BÅDA momenten, i lektionens ordning, med MINST ETT "
+        "exempel per moment — en tavla som bara går igenom det första är fel "
+        "lektion. Formen är densamma: EN kort rubrik för hela tavlan, agendan "
+        "nämner momenten, och vänstertavlans begreppsrader räcker till båda "
+        "(taket tre rader gäller ändå — välj det som bär). Exemplen på "
+        "högertavlan delas mellan momenten, fortfarande högst tre totalt, och "
+        "det andra momentets exempel får gärna knyta an till det första "
+        "(«samma ekvation, nu med ett olikhetstecken»).")
+
+
 def build_prompt(course: str, group: str, moment: str, memory: str = "",
                  underlag: str = "", utfall: str = "", bok: str = "",
-                 forlaga: str = "", svart: str = "", fokus: str = "") -> str:
+                 forlaga: str = "", svart: str = "", fokus: str = "",
+                 delar: str = "") -> str:
     """Genereringsprompt: instruktion + few-shots + lärarens egna ord om vad som
     var svårt + minneskontext + ev. uppladdat underlag (bokssidor/uppgifter) +
     ev. rättat provs utfall (Etapp 0.7) + ev. lärobokens uppslag (Etapp 0.8) +
@@ -1314,8 +1398,12 @@ def build_prompt(course: str, group: str, moment: str, memory: str = "",
     # Viktningen står SIST bland källorna: den är en dom över allt ovanför —
     # «mest ur provet, lite ur boken» — och kan inte fällas innan de lästs.
     fok = f"\n{fokus}\n" if fokus else ""
+    # Delarna står SIST, närmast uppdragsraden, och det är med flit: de är
+    # inte en källa utan en precisering av själva uppdraget — momentraden
+    # «A · B» utskriven som två moment med var sitt sidspann.
+    dlr = f"\n{delar}\n" if delar else ""
     return (
-        f"{INSTRUCTION}\n{_few_shot_block()}\n{sva}{mem}{utf}{und}{bk}{forl}{fok}\n"
+        f"{INSTRUCTION}\n{_few_shot_block()}\n{sva}{mem}{utf}{und}{bk}{forl}{fok}{dlr}\n"
         f"Uppdrag: skriv lektionstavlan för {course}, klass {group} — {moment}.\n"
         "Svara med enbart JSON."
     )
@@ -2243,6 +2331,83 @@ def bokkopior(board: dict | None, bok: str) -> list[dict]:
     return ut
 
 
+# ── Formvakten ────────────────────────────────────────────────
+# «x⁴ = 625, sedan parentes, sedan x⁴ = 2000 — det känns upprepande.»
+# (Lärarens dom 2026-09-09 över potensekvationstavlan.) Exempel 1 och 3 hade
+# samma uppgiftsrad i samma form; bara talet var utbytt. Röda tråden kräver
+# att exempel 2 utgår från exempel 1, och den regeln kan lydas genom att byta
+# SIFFRA — vilket är precis vad som hände.
+#
+# Vakten är syskon till bokkopievakten ovan och byggd likadant: deterministisk,
+# gratis, ingen modell. Den jämför EXEMPLENS UPPGIFTSRADER — första
+# math-raden efter varje exempelrubrik på högertavlan — med talen utbytta mot
+# #. Två rader som blir samma skelett är ett exempel skrivet två gånger.
+#
+# BARA UPPGIFTSRADEN, aldrig metodstegen: ett steg SKA få likna ett tidigare
+# ('x = \sqrt[4]{81}' och 'x = \sqrt[3]{27}' är samma metod, och det är
+# meningen). Och bara när exemplen går att skilja åt på sina rubriker: utan
+# rubriker vet vakten inte var ett exempel slutar och nästa börjar, och då
+# tiger den hellre än fäller fel rad (fail-open, som alla vakter här).
+_FORM_TAL = re.compile(r"\d+([,.]\d+)?")
+# Kortare skelett än så säger ingenting: 'x=#' är varje ekvation som finns.
+_FORM_MINSTA = 4
+
+
+def _formnyckel(latex: str) -> str:
+    """Uttrycket med talen utbytta mot # — formen, utan siffrorna."""
+    return _FORM_TAL.sub("#", _kopienyckel(latex))
+
+
+def _exempelrader(sections: list, path: str, ut: list) -> None:
+    """(väg, latex) för FÖRSTA math-raden efter varje rubrik i en spalt."""
+    vantar = False
+    for si, sec in enumerate(sections or []):
+        if not isinstance(sec, dict):
+            continue
+        if sec.get("kind") == "heading":
+            vantar = True
+        elif sec.get("kind") == "math" and vantar:
+            ut.append((f"{path}[{si}]", str(sec.get("latex") or "")))
+            vantar = False
+
+
+def formupprepning(board: dict | None) -> list[dict]:
+    """Exempel på högertavlan vars uppgiftsrad har samma FORM som ett tidigare
+    exempels, med bara andra tal.
+
+    Går till reparationsrundan som en varning med koden `upprepad_form`,
+    precis som bokkopiorna."""
+    if not isinstance(board, dict):
+        return []
+    sedda: dict[str, str] = {}
+    ut: list[dict] = []
+    for bi, tavla in enumerate(board.get("boards") or []):
+        if bi == 0 or not isinstance(tavla, dict):
+            continue        # vänstern bär bokstäver; exemplen bor till höger
+        rader: list = []
+        for ci, kol in enumerate(tavla.get("columns") or []):
+            _exempelrader((kol or {}).get("sections"),
+                          f"boards[{bi}].columns[{ci}].sections", rader)
+        _exempelrader(tavla.get("sections"), f"boards[{bi}].sections", rader)
+        for vag, latex in rader:
+            nyckel = _formnyckel(latex)
+            if len(nyckel) < _FORM_MINSTA:
+                continue
+            forra = sedda.get(nyckel)
+            if forra is None:
+                sedda[nyckel] = latex
+                continue
+            ut.append({
+                "path": vag, "code": "upprepad_form",
+                "message": f"'{latex[:40]}' har samma form som '{forra[:40]}' "
+                           "— bara talen skiljer. Två exempel med samma form är "
+                           "ETT exempel skrivet två gånger. Byt uppgiften mot en "
+                           "annan FORM (annan exponent, negativt högerled, en "
+                           "omskrivning, ett olikhetstecken) eller stryk "
+                           "exemplet."})
+    return ut
+
+
 # ── Täckningsdomaren ────────────────────────────────────────────────────────
 # Lärarens beställning (2026-08-20): «målet är att eleverna efter genomgången
 # ska kunna klara av alla uppgifter på de sidor jag valt att utgå ifrån» —
@@ -2384,6 +2549,17 @@ TACKNING_INSTRUKTION = (
     "både som mening och som formel, en räknelag eleven kan slå upp i sin "
     "formelsamling, eller en kvadrat, rektangel eller annan kropp på ett "
     "moment som inte handlar om geometri eller grafer.\n"
+    # BÅDA MOMENTEN. Lärarens dom 2026-09-09: «på tavlan verkar det bara vara
+    # potensekvationer, vi ska ta båda momenten samtidigt.» Delarna står i
+    # kalendern och går numera till skrivningen (lesson_board.build_delar_block)
+    # — domaren mäter efter, och den mäter mot RUBRIKERNA även när ingen bok
+    # är uppslagen: en rubrik räcker för att se om momentet finns på tavlan.
+    "Står raden «LEKTIONENS DELAR» nedan bär lektionen FLERA moment. Pröva då "
+    "varje del för sig: syns delens moment på tavlan — i agendan, i en "
+    "begreppsrad eller i ett exempel — och har det MINST ETT exempel? Ett "
+    "moment som saknas helt är det tyngsta fyndet av alla, och forslag är "
+    "vad som ska in: begreppsraden och exemplet, konkret. Gäller också utan "
+    "bok: rubrikerna är kontraktet då.\n"
     "Svara med enbart JSON: {\"saknas\": [{\"uppgifter\": [nummer, …], "
     "\"vad\": \"det som saknas eller är felräknat, kort\", \"forslag\": "
     "\"vad som ska läggas till eller rättas på tavlan — en formel, en rad, "
@@ -2392,14 +2568,17 @@ TACKNING_INSTRUKTION = (
 )
 
 
-def build_tackning_prompt(board_json: dict, bok: str) -> str:
+def build_tackning_prompt(board_json: dict, bok: str, delar: str = "") -> str:
+    # Delarna sist före tavlan, av samma skäl som i skrivningen: de är
+    # uppdraget, inte en källa. Tom sträng ger ordagrant den gamla prompten.
+    dlr = f"\n\n{delar.strip()}" if delar.strip() else ""
     return (
-        f"{TACKNING_INSTRUKTION}\n\n{bok.strip()}\n\nTavlan:\n"
+        f"{TACKNING_INSTRUKTION}\n\n{bok.strip()}{dlr}\n\nTavlan:\n"
         f"{json.dumps(board_json, ensure_ascii=False)}\n"
     )
 
 
-def doma_tackning(board: dict, *, model: str, llm, bok: str,
+def doma_tackning(board: dict, *, model: str, llm, bok: str, delar: str = "",
                   log_cb: Callable[[str], None] | None = None) -> list[dict]:
     """Domens fynd som problemposter för build_repair_prompt — [] när tavlan
     täcker urvalet, och [] också när domen inte gick att läsa: en tavla ska
@@ -2412,7 +2591,7 @@ def doma_tackning(board: dict, *, model: str, llm, bok: str,
     # regel som för en otydlig dom: tavlan lämnas som den är, och skälet syns
     # i loggen i stället för att kosta genereringen.
     try:
-        raw = llm(model, build_tackning_prompt(board, bok),
+        raw = llm(model, build_tackning_prompt(board, bok, delar),
                   options={"temperature": 0.2})
     except Exception as e:
         log(f"Täckningsdomaren kunde inte nås ({e}) — tavlan lämnas som den är.")
@@ -2441,6 +2620,7 @@ def doma_tackning(board: dict, *, model: str, llm, bok: str,
 
 
 def _tackning_pass(board: dict, errors: list, *, model: str, llm, bok: str,
+                   delar: str = "",
                    budget: int = TACKNING_MAX_ROUNDS,
                    log_cb: Callable[[str], None] | None = None,
                    token_cb: Callable[[str], None] | None = None) -> dict:
@@ -2458,7 +2638,8 @@ def _tackning_pass(board: dict, errors: list, *, model: str, llm, bok: str,
     körs EFTER att tavlan är godkänd får inte tömma budgeten för det som
     kommer efter."""
     log = log_cb or (lambda _m: None)
-    fynd = doma_tackning(board, model=model, llm=llm, bok=bok, log_cb=log_cb)
+    fynd = doma_tackning(board, model=model, llm=llm, bok=bok, delar=delar,
+                         log_cb=log_cb)
     if not fynd:
         return {"board": board, "errors": errors, "rounds": 0}
     if budget < 1:
@@ -2509,7 +2690,7 @@ def _tackning_pass(board: dict, errors: list, *, model: str, llm, bok: str,
 def generate_board(course: str, group: str, moment: str, *, model: str,
                    memory: str = "", underlag: str = "", utfall: str = "",
                    bok: str = "", forlaga: str = "",
-                   svart: str = "", fokus: str = "",
+                   svart: str = "", fokus: str = "", delar: str = "",
                    doma: bool = True,
                    llm=llm_client.generate,
                    max_rounds: int = MAX_ROUNDS,
@@ -2550,7 +2731,7 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     log = lambda m: _log(_stamplad(m))
     log("Genererar lektionstavlan …")
     prompt = build_prompt(course, group, moment, memory, underlag, utfall, bok,
-                          forlaga, svart, fokus)
+                          forlaga, svart, fokus, delar)
     board = _llm_round(prompt, model, llm, token_cb=token_cb)
     rounds = 1
     # Ogiltig JSON (t.ex. trunkerat svar) → kör om från början inom budgeten
@@ -2570,7 +2751,7 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     # Bokkopievakten går in HÄR, före reparationsrundorna: en avskriven
     # uppgift ska rättas i samma varv som ett schemafel, inte redovisas som en
     # varning läraren får läsa själv. Kostar inget anrop.
-    errors = errors + bokkopior(board, bok)
+    errors = errors + bokkopior(board, bok) + formupprepning(board)
     res = _repair_until_valid(board, errors, model=model, llm=llm,
                               rounds_used=rounds, max_rounds=max_rounds,
                               log_cb=log, token_cb=token_cb)
@@ -2582,11 +2763,12 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
         sedda = {(f.get("path"), f.get("code")) for f in res["errors"]
                  if isinstance(f, dict)}
         res["errors"] = res["errors"] + [
-            f for f in bokkopior(res["board"], bok)
+            f for f in bokkopior(res["board"], bok) + formupprepning(res["board"])
             if (f["path"], f["code"]) not in sedda]
     if doma and res.get("board") is not None:
         dom = _tackning_pass(res["board"], res["errors"], model=model, llm=llm,
-                             bok=bok, log_cb=log, token_cb=token_cb)
+                             bok=bok, delar=delar, log_cb=log,
+                             token_cb=token_cb)
         # `rounds` är den budget generering och renderingsreparation delar:
         # domaren har sin egen och lämnar därför siffran orörd.
         res = {"board": dom["board"], "errors": dom["errors"],
