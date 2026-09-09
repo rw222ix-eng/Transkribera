@@ -1024,3 +1024,21 @@ def test_bokgrinden_kors_bara_pa_gruppuppgiften(monkeypatch):
                                grupp={"elever": 2, "langd_min": 20,
                                       "redovisning": "skriftligt"})
     assert korda == ["gruppuppgift"]
+
+
+def test_fynden_sager_att_poangen_ska_sta_kvar():
+    """Uppmätt på den skarpa körningen 2026-09-09 (exam 76): rundan skrev om
+    uppgift 2 med ANDRA poäng, mål-låset släppte bara igenom den uppgiften,
+    balansen sprack och omskrivningen kastades. Fyndet stod därför kvar efter
+    en enda runda av två. Fynden gäller texten, inte planen."""
+    papper = {"uppgifter": [
+        {"text": "Ett lag räknar. Hur? Vad?", "poang": [1, 0, 0], "losning": "$1$"}]}
+    for f in exam_gen.begriplighetssignaler(papper):
+        assert exam_gen.BEHALL_PLANEN in f["message"]
+    kort = [{"nr": "2"}]
+    dom = exam_gen.begriplighetsdom(
+        kort, {"2": {"forstar": "nej", "stor": "två frågor"}})
+    assert exam_gen.BEHALL_PLANEN in dom[0]["message"]
+    rel = exam_gen.relevansfynd(
+        kort, {"2": {"dom": "annan sort", "battre": "", "skal": "", "kraver": ""}})
+    assert exam_gen.BEHALL_PLANEN in rel[0]["message"]

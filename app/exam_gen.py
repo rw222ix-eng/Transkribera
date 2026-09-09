@@ -2511,6 +2511,15 @@ BEGRIPLIGHET_GRUPP = (
 # De fäller alltså inte på smak. De fäller på det som är räknebart: två
 # frågetecken i samma fråga, en mening på trettio ord, ett facit som behöver
 # fyra likhetstecken för en uppgift som ska ha ett steg.
+# SAGT I VARJE FYND, och det är uppmätt: den skarpa körningen 2026-09-09
+# (exam 76) fällde uppgift 2 på begripligheten, och reparationsrundan skrev om
+# den med ANDRA POÄNG. Mål-låset släpper bara igenom den uppgiften, så
+# balansen sprack, omskrivningen kastades och fyndet stod kvar efter en enda
+# runda av två. Fynden gäller TEXTEN — poängen och förmågan är skelettets och
+# ska inte röras för att en mening ska bli kortare.
+BEHALL_PLANEN = (" Behåll uppgiftens poäng, förmåga och plats i stegringen: "
+                 "det är TEXTEN som ska skrivas om.")
+
 MENING_TAK = 24            # ord i en mening; lärarens längsta är 18
 STORHET_TAK = 5            # olika tal en uppgiftstext får införa; hennes är 4
 RAKNESTEG_TAK = 2          # likhetstecken i uppgift 2:s facit; hennes har 2
@@ -2597,21 +2606,24 @@ def begriplighetssignaler(exam: dict, profil: str = "gruppuppgift") -> list[dict
         if ren.count("?") > FRAGETECKEN_TAK:
             ut.append(_err(f"uppgift {nr}", "begriplighet",
                            f"uppgift {nr} ställer {ren.count('?')} frågor i "
-                           "samma text — behåll EN fråga och stryk resten."))
+                           "samma text — behåll EN fråga och stryk resten."
+                           + BEHALL_PLANEN))
         langst = _langsta_mening(text)
         if langst > MENING_TAK:
             ut.append(_err(f"uppgift {nr}", "begriplighet",
                            f"uppgift {nr} har en mening på {langst} ord — dela "
-                           f"den i korta meningar (högst {MENING_TAK} ord)."))
+                           f"den i korta meningar (högst {MENING_TAK} ord)."
+                           + BEHALL_PLANEN))
         tal = {t.replace(",", ".") for t in _TAL.findall(ren)}
         if len(tal) > STORHET_TAK:
             ut.append(_err(f"uppgift {nr}", "begriplighet",
                            f"uppgift {nr} inför {len(tal)} olika tal — ta bort "
-                           "dem gruppen inte behöver."))
+                           "dem gruppen inte behöver." + BEHALL_PLANEN))
         for ord_, rad in BEGRIPLIGHETSORD.items():
             if re.search(rf"(?i)(?<![\wåäö]){ord_}(?![\wåäö])", ren):
                 ut.append(_err(f"uppgift {nr}", "begriplighet",
-                               f"uppgift {nr} skriver «{ord_}»: {rad}."))
+                               f"uppgift {nr} skriver «{ord_}»: {rad}."
+                               + BEHALL_PLANEN))
         # ETT RÄKNESTEG, men bara på uppgift 2. På uppgift 4 ska facit få ta
         # flera steg — det är där de starkaste grupperna ska ha något att
         # bita i.
@@ -2623,7 +2635,7 @@ def begriplighetssignaler(exam: dict, profil: str = "gruppuppgift") -> list[dict
                     f"uppgift {nr} kräver {steg} räknesteg — uppgift 2 är "
                     "begreppsingången och ska klaras med ett steg. Låt "
                     "uttrycket stå färdigt i texten och be om EN omvandling "
-                    "eller EN uträkning."))
+                    "eller EN uträkning." + BEHALL_PLANEN))
     return ut[:MAX_DOMAR_PROBLEM]
 
 
@@ -2824,7 +2836,7 @@ def relevansfynd(kort: list[dict], domar: dict[str, dict]) -> list[dict]:
             text += f" Bokens uppgift {_kort(dom['battre'], 40)} är förebilden."
         if dom["skal"]:
             text += f" Relevansdomarens skäl: {_kort(dom['skal'], 160)}"
-        ut.append(_err(f"uppgift {k['nr']}", "relevans", text))
+        ut.append(_err(f"uppgift {k['nr']}", "relevans", text + BEHALL_PLANEN))
     return ut[:MAX_DOMAR_PROBLEM]
 
 
@@ -2957,7 +2969,8 @@ def begriplighetsdom(kort: list[dict], domar: dict[str, dict]) -> list[dict]:
         if _uppgiftsnr(k["nr"]) == 2:
             text += (" Uppgift 2 är begreppsingången — den ska klaras med ett "
                      "räknesteg och ligga nära uppgift 1.")
-        ut.append(_err(f"uppgift {k['nr']}", "begriplighet", text))
+        ut.append(_err(f"uppgift {k['nr']}", "begriplighet",
+                       text + BEHALL_PLANEN))
     return ut[:MAX_DOMAR_PROBLEM]
 
 
