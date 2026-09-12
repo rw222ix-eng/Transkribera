@@ -236,6 +236,50 @@ def test_avbryt_stoppar_vid_nasta_livstecken(db_file):
     assert len(varv) < 2000
 
 
+def test_avbrottskroken_slapper_medan_anropet_hanger_kvar(db_file):
+    """KROKEN (söndagsanalysen 2026-09-06, fynd d).
+
+    Avbryt ska släppa det jobbet håller, dokumentets omskrivningslås, i samma
+    ögonblick läraren trycker, inte när modellanropet till slut returnerar.
+    Läraren som avbröt 18:39:35 och skickade sin rättade mening elva sekunder
+    senare fick «Pappret skrivs redan om»; anropet hängde kvar i minuter.
+
+    Och: ett jobb som frågar rakt ut (`stoppa_om_avbrutet`) får sitt nej även
+    om det inte har någon händelse att skicka just då."""
+    slappt = threading.Event()
+    startat, modellen_svarar = threading.Event(), threading.Event()
+    sparade = []
+
+    def job(emit):
+        emit({"type": "log", "msg": "Skriver …"})
+        startat.set()
+        assert modellen_svarar.wait(5)     # anropet som hänger i luften
+        sse.stoppa_om_avbrutet(emit)       # frågan FÖRE sparningen
+        sparade.append(True)               # ska ALDRIG hända
+        return {"id": 1}
+
+    ev = _las(sse.jobb_response(job, Forfragan(), typ="arbetsblad",
+                                db_file=db_file, dokument_id=38,
+                                vid_avbrott=slappt.set), tak=2)
+    jobb_id = ev[0]["id"]
+    assert startat.wait(5)
+    assert sse.begar_avbrott(jobb_id) is True
+    # Låset är släppt NU, medan jobbtråden fortfarande står och väntar.
+    assert slappt.is_set(), "kroken kördes inte när avbrottet registrerades"
+    assert not modellen_svarar.is_set()
+
+    modellen_svarar.set()                  # …och nu svarar modellen, för sent
+    conn = appdb.connect(db_file)
+    try:
+        assert _vanta(lambda: appdb.hamta_jobb(
+            conn, jobb_id)["status"] == "avbrutet")
+    finally:
+        conn.close()
+    assert not sparade, "det avbrutna varvet sparade sitt sena svar"
+    # Jobbet är över: det finns inget att haka på längre.
+    assert sse.vid_avbrott(jobb_id, lambda: None) is False
+
+
 def test_felet_blir_status_och_besked(db_file):
     def job(emit):
         raise OSError(28, "No space left on device")

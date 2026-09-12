@@ -561,6 +561,68 @@ def test_refine_bar_flera_markerade_avsnitt(client, monkeypatch):
                                          "", None, [malen[0]])
 
 
+def test_avbrutet_varv_loggar_inget_utfall(client, monkeypatch):
+    """Söndagsanalysen 2026-09-06, fynd d, anteckningarnas halva.
+
+    Ett varv som inte ändrade något hoppade över hela spar-grenen, och
+    livstecknet låg INUTI den grenen. Ett avbrutet varv som svarade «samma
+    text» loggade alltså sitt utfall ändå, långt efter att läraren gett upp
+    det. Frågan ställs numera rakt ut (app/web/sse.stoppa_om_avbrutet)."""
+    import threading
+
+    from app import db as appdb
+
+    _stubba(monkeypatch)
+    res = _done(client.post("/api/anteckningar/generate",
+                            json={"onskemal": "x", "kurs": "Matematik 3c"}))
+    inne, slapp = threading.Event(), threading.Event()
+
+    def fake_refine(notes, message, **kw):
+        inne.set()
+        assert slapp.wait(20)
+        return {"notes": notes, "errors": [], "rounds": 1}   # oförändrat
+    monkeypatch.setattr(routes_anteckningar.notes_gen, "refine_notes",
+                        fake_refine)
+
+    t = threading.Thread(target=lambda: client.post(
+        f"/api/anteckningar/{res['id']}/refine",
+        json={"message": "skriv kortare"}))
+    t.start()
+    try:
+        assert inne.wait(20), "varvet kom aldrig fram till modellen"
+        conn = appdb.connect(client.base_dir / "transkribera.db")
+        try:
+            jobb_id = conn.execute(
+                "SELECT id FROM jobb WHERE dokument_id = ? ORDER BY id DESC "
+                "LIMIT 1", (str(res["id"]),)).fetchone()["id"]
+        finally:
+            conn.close()
+        assert client.post(f"/api/jobb/{jobb_id}/avbryt").json()["ok"] is True
+    finally:
+        slapp.set()
+        t.join(20)
+
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    try:
+        utfall = conn.execute(
+            "SELECT COUNT(*) FROM spar WHERE art='utfall' AND dok_id = ?",
+            (str(res["id"]),)).fetchone()[0]
+    finally:
+        conn.close()
+    assert utfall == 0
+
+    # Och nästa varv går igenom direkt: pappret är ledigt.
+    nytt = _anteckningar()
+    nytt["sektioner"][0]["stycken"][0] = "Den rättade meningen."
+    monkeypatch.setattr(
+        routes_anteckningar.notes_gen, "refine_notes",
+        lambda notes, message, **kw: {"notes": nytt, "errors": [], "rounds": 1})
+    r = client.post(f"/api/anteckningar/{res['id']}/refine",
+                    json={"message": "skriv kortare utan em dash"})
+    assert r.status_code == 200
+    assert "rättade" in _done(r)["anteckningar"]["sektioner"][0]["stycken"][0]
+
+
 def test_refine_kraver_ett_onskemal(client, monkeypatch):
     _stubba(monkeypatch)
     res = _done(client.post("/api/anteckningar/generate",

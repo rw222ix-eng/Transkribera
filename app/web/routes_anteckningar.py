@@ -28,7 +28,7 @@ from fastapi.responses import JSONResponse
 from app import (db, dokumentdiff, exam_latex, exam_pdf, gpu_arbiter,
                  llm_client, notes_gen, postprocess, spar, tryck)
 from app.web import Id64, _kropp, routes_planning
-from app.web.sse import Stege, jobb_response
+from app.web.sse import Stege, jobb_response, stoppa_om_avbrutet
 
 # ── DOMÄNSTEGEN ──────────────────────────────────────────────────────────────
 # Samma tabellmönster som prov- och planeringsroutern. Mötesläsningen är ett
@@ -301,11 +301,15 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     malen=malen, bok=bok_block, historik=historik,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
+                # Se routes_exam: livstecknet FÖRE skrivningen frågar numera om
+                # läraren tryckt Avbryt, inte om fliken finns kvar. En stängd
+                # flik sparar varvet, det är hela poängen med att jobbet ligger
+                # i databasen (app/web/sse.py). Frågan ställs rakt ut och före
+                # grenen: annars slapp ett varv som inte ändrade något undan och
+                # loggade sitt utfall efter avbrottet (2026-09-06, fynd d).
+                # Anteckningarna har inget dokumentlås att släppa.
+                stoppa_om_avbrutet(emit)
                 if res["notes"] is not None and res["notes"] != view["exam"]:
-                    # Se routes_exam: livstecknet FÖRE skrivningen frågar numera
-                    # om läraren tryckt Avbryt, inte om fliken finns kvar. En
-                    # stängd flik sparar varvet — det är hela poängen med att
-                    # jobbet ligger i databasen (app/web/sse.py).
                     steg.na("sparar")
                     conn = db.connect(db_file)
                     try:

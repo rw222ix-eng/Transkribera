@@ -459,6 +459,73 @@ def test_refine_utan_andring_marker_ingen_ruta(llm_ready, monkeypatch):
     assert res["andrade"] == []
 
 
+def _jobb_id(client, dokument_id) -> int:
+    from app import db as appdb
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    try:
+        rad = conn.execute(
+            "SELECT id FROM jobb WHERE dokument_id = ? ORDER BY id DESC LIMIT 1",
+            (str(dokument_id),)).fetchone()
+    finally:
+        conn.close()
+    assert rad is not None, "jobbet hamnade aldrig i tabellen"
+    return int(rad["id"])
+
+
+def test_avbrutet_tavelvarv_skriver_inte_over_tavlan(llm_ready, monkeypatch):
+    """Söndagsanalysen 2026-09-06, fynd d, tavlans halva.
+
+    Tavlan har inget dokumentlås som provet, det finns alltså inget att SLÄPPA
+    här. Det som måste hålla är den andra halvan: det övergivna varvet får inte
+    skriva över tavlan (eller logga ett utfall) när modellen till slut svarar,
+    för då är läraren redan i gång med nästa varv."""
+    import threading
+
+    from app import db as appdb
+
+    pid = _make_planning(llm_ready, monkeypatch)
+    inne, slapp = threading.Event(), threading.Event()
+    sent = _valid_board()
+    sent["title"] = "Tavlan hon avbröt"
+
+    def fake_refine(board, instruction, **kw):
+        inne.set()
+        assert slapp.wait(20)
+        return {"board": sent, "errors": [], "rounds": 1}
+    monkeypatch.setattr(lesson_board, "refine_board", fake_refine)
+
+    t = threading.Thread(target=lambda: llm_ready.post(
+        f"/api/planning/{pid}/refine", json={"message": "gör den kortare"}))
+    t.start()
+    try:
+        assert inne.wait(20), "varvet kom aldrig fram till modellen"
+        assert llm_ready.post(
+            f"/api/jobb/{_jobb_id(llm_ready, pid)}/avbryt").json()["ok"] is True
+    finally:
+        slapp.set()
+        t.join(20)
+
+    # Nästa varv får den tavla som låg där FÖRE det avbrutna, inte dess svar.
+    sett = {}
+
+    def nasta(board, instruction, **kw):
+        sett["titel"] = board.get("title")
+        return {"board": board, "errors": [], "rounds": 1}
+    monkeypatch.setattr(lesson_board, "refine_board", nasta)
+    _done(llm_ready.post(f"/api/planning/{pid}/refine",
+                         json={"message": "nästa mening"}))
+    assert sett["titel"] != "Tavlan hon avbröt"
+
+    conn = appdb.connect(llm_ready.base_dir / "transkribera.db")
+    try:
+        utfall = conn.execute(
+            "SELECT COUNT(*) FROM spar WHERE art='utfall' AND dok_id = ?",
+            (pid,)).fetchone()[0]
+    finally:
+        conn.close()
+    assert utfall == 1, "det avbrutna varvet loggade ett utfall det inte hade"
+
+
 # ------------------------------------------------------------ klockslaget --
 
 def _tid(board: dict) -> str:

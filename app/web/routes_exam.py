@@ -16,6 +16,7 @@ webbläsaren); servern exponerar bara GET /tex.
 """
 from __future__ import annotations
 
+import itertools
 import json
 import logging
 import re
@@ -33,7 +34,7 @@ from app import (ci_profil, course_data, db, dokumentdiff, exam_gen,
 # create_router, och anropet blir ett rekursivt HTTP-lager djupt.
 from app import kalibrering as kalibrering_modul
 from app.web import Id64, _kropp, routes_planning
-from app.web.sse import Stege, jobb_response
+from app.web.sse import Stege, jobb_response, stoppa_om_avbrutet
 
 _LOG = logging.getLogger(__name__)
 
@@ -100,19 +101,32 @@ def create_router(base: Path, arbiter) -> APIRouter:
     # Registret är routerns eget och inte modulens: två appar i samma process
     # (testerna) har egna databaser, och prov-id 1 i den ena är inte prov-id 1 i
     # den andra.
-    pagaende: set[int] = set()
+    #
+    # VARJE VARV BÄR SITT MÄRKE, och den som släpper måste visa sitt. Låset
+    # släpps numera på TVÅ ställen: i jobbets `finally` som förut, och (nytt)
+    # när läraren trycker Avbryt (avbrottskroken i app/web/sse.py). Efter ett
+    # avbrott tar nästa varv låset direkt, och när det övergivna modellanropet
+    # minuter senare returnerar kör dess `finally`: utan märket hade den
+    # släppt NÄSTA varvs lås, och då står vi där föregående fix skrev hit.
+    pagaende: dict[int, int] = {}
     pagaende_las = threading.Lock()
+    pagaende_nr = itertools.count(1)
 
-    def _ta_varvet(exam_id: int) -> bool:
+    def _ta_varvet(exam_id: int) -> int | None:
+        """Märket, eller None om pappret redan skrivs om."""
         with pagaende_las:
             if exam_id in pagaende:
-                return False
-            pagaende.add(exam_id)
-            return True
+                return None
+            marke = next(pagaende_nr)
+            pagaende[exam_id] = marke
+            return marke
 
-    def _slapp_varvet(exam_id: int) -> None:
+    def _slapp_varvet(exam_id: int, marke: int) -> None:
+        """Släpp, men bara om låset fortfarande är vårt. Idempotent med flit:
+        avbrottskroken och jobbets `finally` kallar båda, i den ordningen."""
         with pagaende_las:
-            pagaende.discard(exam_id)
+            if pagaende.get(exam_id) == marke:
+                del pagaende[exam_id]
 
     def _kolumn(exam_id: int, namn: str):
         """En kolumn ur exams — status eller pekaren — utan att läsa hela
@@ -906,8 +920,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # Två varv på samma papper köar inte — det andra får ett ärligt nej med
         # en gång. En kö hade betytt att läraren står och väntar på en runda hon
         # redan glömt att hon startade, och att hennes andra mening skrivs mot
-        # ett papper hon inte sett.
-        if not _ta_varvet(exam_id):
+        # ett papper hon inte sett. Ett AVBRUTET varv håller däremot inte
+        # pappret: kroken nedan släpper låset när Avbryt registreras.
+        marke = _ta_varvet(exam_id)
+        if marke is None:
             return JSONResponse(
                 {"error": "Pappret skrivs redan om — vänta tills det varvet "
                           "landat innan du skickar nästa ändring."},
@@ -915,7 +931,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
 
         llm = arbiter.try_acquire_llm()
         if not llm:
-            _slapp_varvet(exam_id)
+            _slapp_varvet(exam_id, marke)
             return JSONResponse(_LLM_BUSY, status_code=409)
 
         # Nivåvalet reser med VARJE varv, ur kolumnen och inte ur begäran:
@@ -956,17 +972,24 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # inte i grammatiken. Matchningen körs därför om — den är ren
                 # ordmatchning och kostar ingenting.
                 platar.matcha_exam(res["exam"], base=base)
+                # ── SA HON ÅT OSS ATT SLUTA? ─────────────────────
+                # Raden fanns förr för att fråga om NÅGON LYSSNADE: mellan
+                # sista loggraden och skrivningen saknades ett livstecken, och
+                # en stängd flik fick varvet sparat ändå.
+                #
+                # Frågan är en annan nu. En stängd flik är inget avbrott:
+                # varvet är betalt och ska sparas (app/web/sse.py). Det som
+                # stoppar är lärarens Avbryt.
+                #
+                # Frågan ställs RAKT UT, före allt som lämnar spår, och inte
+                # längre bara genom `steg.na("sparar")`: ett steg som redan
+                # passerats tiger, och ett varv som inte ändrade något hoppade
+                # över hela grenen och hann logga sitt utfall ändå. Efter ett
+                # avbrott har läraren dessutom hunnit starta ETT NYTT varv,
+                # och det gamla svaret får varken bli en version, flytta pekaren
+                # eller loggas som utfall (söndagsanalysen 2026-09-06, fynd d).
+                stoppa_om_avbrutet(emit)
                 if res["exam"] is not None and res["exam"] != view["exam"]:
-                    # ── SA HON ÅT OSS ATT SLUTA? ─────────────────
-                    # Raden fanns förr för att fråga om NÅGON LYSSNADE: mellan
-                    # sista loggraden och skrivningen saknades ett livstecken,
-                    # och en stängd flik fick varvet sparat ändå.
-                    #
-                    # Frågan är en annan nu. En stängd flik är inget avbrott —
-                    # varvet är betalt och ska sparas (app/web/sse.py). Det som
-                    # stoppar är lärarens Avbryt, och `emit` kastar
-                    # `JobbAvbrutet` här om hon tryckt den. Samma rad, samma
-                    # plats, samma korta väg till stopp — men på hennes ord.
                     steg.na("sparar")
                     # Och: har någon annan hunnit skriva om samma papper medan
                     # vi väntade på modellen är vår text byggd på en version som
@@ -998,11 +1021,25 @@ def create_router(base: Path, arbiter) -> APIRouter:
                                    "fel": len(res["errors"] or [])})
                 return svar
             finally:
+                # Molnplatsen hör till ANROPET och släpps när anropet är över,
+                # även för ett avbrutet varv: platsen är upptagen så länge
+                # modellen faktiskt skriver (att döda själva processen vid
+                # avbrott är inte byggt, se app/claude_code.py).
                 arbiter.release_llm(llm)
-                _slapp_varvet(exam_id)
+                # Låset hör till PAPPRET och kan vara släppt sedan länge, av
+                # avbrottskroken nedan. Märket gör att vi då inte tar nästa
+                # varvs lås ifrån det.
+                _slapp_varvet(exam_id, marke)
 
+        # Avbryt ska betyda att pappret är LEDIGT, inte bara att tråden ska
+        # sluta: kroken körs när POST /api/jobb/{id}/avbryt registrerar
+        # avbrottet, alltså medan modellanropet fortfarande är i luften.
+        # Kroken gäller den här processen; kommer avbrytningen från en annan
+        # process finns ingen krok att köra, och då är det statusen i
+        # `jobb`-tabellen som bär beskedet (app/web/sse.py, KROKARNA).
         return jobb_response(job, req, typ=view.get("typ") or "prov",
-                             db_file=db_file, dokument_id=exam_id)
+                             db_file=db_file, dokument_id=exam_id,
+                             vid_avbrott=lambda: _slapp_varvet(exam_id, marke))
 
     # ------------------------------------------------------------- approve --
 

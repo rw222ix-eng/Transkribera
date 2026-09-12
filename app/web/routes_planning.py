@@ -25,7 +25,8 @@ from app import (bok, ci_forslag, course_data, db, dokumentdiff, forlaga,
                  gpu_arbiter, lararord, lesson_board, llm_client, pdfvakt,
                  rattning, spar)
 from app.web import Id64, _kropp
-from app.web.sse import Stege, jobb_response, sse_response
+from app.web.sse import (Stege, jobb_response, sse_response,
+                         stoppa_om_avbrutet)
 
 # ── DOMÄNSTEGEN ──────────────────────────────────────────────────────────────
 # Samma mönster som prov-routerns ladder (app/web/routes_exam.py): namnen är
@@ -1029,6 +1030,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # Modellen har skrivit om hela tavlan och kan ha tappat
                 # tidssektionen — injektionen är idempotent, så den läggs på
                 # igen i stället för att bevakas.
+                # Samma fråga som i refine nedan: ett avbrutet reparationsvarv
+                # får inte skriva över en tavla läraren hunnit skriva om sedan.
+                stoppa_om_avbrutet(emit)
                 st["board"] = lesson_board.satt_tid(res["board"] or st["board"],
                                                     st.get("starttid"),
                                                     st.get("sluttid"))
@@ -1103,7 +1107,16 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # livstecken att avbryta vid, och en stängd flik fick tavlan
                 # omskriven ändå. Nu är en stängd flik inget avbrott
                 # (app/web/sse.py): tavlan är betald och ska sparas. Det som
-                # stoppar här är lärarens Avbryt — `emit` kastar `JobbAvbrutet`.
+                # stoppar här är lärarens Avbryt.
+                #
+                # Frågan ställs rakt ut och inte bara genom `steg.na("sparar")`:
+                # ett passerat steg tiger, och efter ett avbrott kan läraren ha
+                # startat ett nytt varv på samma tavla, och det gamla svaret
+                # får varken skriva över `st["board"]` eller loggas som utfall
+                # (söndagsanalysen 2026-09-06, fynd d). Tavlan har inget
+                # dokumentlås som routes_exam, så här finns inget att SLÄPPA;
+                # det som behövs är att det övergivna varvet håller tyst.
+                stoppa_om_avbrutet(emit)
                 steg.na("sparar")
                 if res["board"] is not None:
                     st["board"] = lesson_board.satt_tid(res["board"],

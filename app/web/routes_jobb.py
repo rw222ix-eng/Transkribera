@@ -99,12 +99,18 @@ def create_router(base: Path) -> APIRouter:
     def avbryt(jobb_id: Id64):
         """Lärarens Avbryt.
 
-        Två saker händer, och båda behövs: flaggan stoppar tråden vid nästa
-        livstecken (sse.begar_avbrott), och statusen skrivs så att en annan
-        flik — som inte delar minne med den här förfrågan — ser att jobbet är
-        slut. Ett redan avslutat jobb svarar `ok: false` med sin status i
-        stället för ett fel: att trycka Avbryt på något som just blev klart är
-        ingen olycka, och beskedet ska vara att det blev klart."""
+        Tre saker händer, och alla tre behövs: flaggan stoppar tråden vid nästa
+        livstecken, KROKARNA släpper det jobbet håller (båda i
+        sse.begar_avbrott), och statusen skrivs så att en annan flik — som inte
+        delar minne med den här förfrågan — ser att jobbet är slut. Ett redan
+        avslutat jobb svarar `ok: false` med sin status i stället för ett fel:
+        att trycka Avbryt på något som just blev klart är ingen olycka, och
+        beskedet ska vara att det blev klart.
+
+        Krokarna är söndagsanalysens fynd d (2026-09-06): dokumentets
+        omskrivningslås satt kvar tills modellanropet returnerade, så den
+        rättade meningen elva sekunder efter Avbryt möttes av 409. Svaret här
+        ska betyda att pappret är ledigt, inte bara att tråden ska sluta."""
         conn = db.connect(db_file)
         try:
             rad = db.hamta_jobb(conn, jobb_id)

@@ -1561,7 +1561,8 @@ def _kor_utan_strom(monkeypatch, emit):
 
     from app.web import sse
 
-    def fejkad(job, req, *, typ=None, db_file=None, dokument_id=None):
+    def fejkad(job, req, *, typ=None, db_file=None, dokument_id=None,
+               vid_avbrott=None):
         try:
             job(emit)
             return _JSON({"slut": "klart"})
@@ -1631,6 +1632,133 @@ def test_avbrutet_varv_committas_inte(client, monkeypatch):
     monkeypatch.setattr(routes_exam, "jobb_response", sse.jobb_response)
     assert client.post(f"/api/exams/{result['id']}/refine",
                        json={"message": "en till"}).status_code == 200
+
+
+# ── AVBRYT SLÄPPER PAPPRET DIREKT ───────────────────────────────────────────
+# Söndagsanalysen 2026-09-06, fynd d. Arbetsblad 38 den 2/9: 18:39:32 skickar
+# läraren en feltranskriberad mening, 18:39:35 trycker hon Avbryt, och 18:39:46
+# skickar hon den rättade, som möttes av 409 «Pappret skrivs redan om». Låset
+# släpptes i jobbets `finally`, alltså först när modellanropet returnerade,
+# minuter senare. Nu släpps det när avbrottet REGISTRERAS (avbrottskroken i
+# app/web/sse.py), och det övergivna varvet får inte ta med sig något när det
+# till slut kommer tillbaka.
+
+def _senaste_jobbet(client, dokument_id) -> int:
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    try:
+        rad = conn.execute(
+            "SELECT id FROM jobb WHERE dokument_id = ? ORDER BY id DESC LIMIT 1",
+            (str(dokument_id),)).fetchone()
+    finally:
+        conn.close()
+    assert rad is not None, "jobbet hamnade aldrig i tabellen"
+    return int(rad["id"])
+
+
+def _utfall(client, dok_id) -> list[dict]:
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    try:
+        rader = conn.execute(
+            "SELECT detalj FROM spar WHERE art='utfall' AND dok_id = ? "
+            "ORDER BY id", (str(dok_id),)).fetchall()
+    finally:
+        conn.close()
+    return [json.loads(r[0] or "{}") for r in rader]
+
+
+def test_avbryt_slapper_pappret_direkt(client, monkeypatch):
+    """Den rättade meningen elva sekunder efter Avbryt ska gå igenom."""
+    import threading
+
+    result, _ = _make_exam(client, monkeypatch)
+    inne, slapp = threading.Event(), threading.Event()
+    sent = _exam_doc()
+    sent["uppgifter"][0]["text"] = "Varvet hon avbröt."
+    rattat = _exam_doc()
+    rattat["uppgifter"][0]["text"] = "Den rättade meningen."
+
+    def fake_refine(exam, message, *a, **k):
+        if "ändas" in message:                # feltranskriberingen ur spåret
+            inne.set()
+            assert slapp.wait(20)
+            return {"exam": sent, "errors": [], "rounds": 1}
+        return {"exam": rattat, "errors": [], "rounds": 1}
+    monkeypatch.setattr(exam_gen, "refine_exam", fake_refine)
+
+    t = threading.Thread(target=lambda: client.post(
+        f"/api/exams/{result['id']}/refine",
+        json={"message": "Skriv kortare utan ändas"}))
+    t.start()
+    try:
+        assert inne.wait(20), "första varvet kom aldrig fram till modellen"
+        jobb_id = _senaste_jobbet(client, result["id"])
+        assert client.post(f"/api/jobb/{jobb_id}/avbryt").json()["ok"] is True
+        # …och nu, medan det gamla anropet fortfarande hänger i luften:
+        r = client.post(f"/api/exams/{result['id']}/refine",
+                        json={"message": "Skriv kortare utan em dash"})
+        assert r.status_code == 200, r.text
+        assert _done(r)["exam"]["uppgifter"][0]["text"] == "Den rättade meningen."
+    finally:
+        slapp.set()
+        t.join(20)
+
+    # Det avbrutna varvets sena svar sparas inte: det skulle ha skrivit över
+    # ett varv läraren redan fått.
+    vy = client.get(f"/api/exams/{result['id']}").json()
+    assert vy["exam"]["uppgifter"][0]["text"] == "Den rättade meningen."
+    assert len(_versioner(client, result["id"])) == 2
+    # …och det loggas inte som utfall. Ett avbrutet varv «ändrade» ingenting,
+    # och en sådan rad hade ljugit i rapporten (tools/spar.py).
+    assert len(_utfall(client, result["id"])) == 1
+
+
+def test_gamla_varvets_slut_tar_inte_nya_varvets_las(client, monkeypatch):
+    """Låset bär ett märke, och den som släpper måste visa sitt.
+
+    Efter avbrottet tar nästa varv låset. När det ÖVERGIVNA anropet till slut
+    returnerar kör dess `finally`, och den får inte släppa det nya varvets
+    lås, för då står vi där vi började: två varv på samma papper."""
+    import threading
+
+    result, _ = _make_exam(client, monkeypatch)
+    inne = {"ett": threading.Event(), "tva": threading.Event()}
+    slapp = {"ett": threading.Event(), "tva": threading.Event()}
+
+    def fake_refine(exam, message, *a, **k):
+        if message in inne:
+            inne[message].set()
+            assert slapp[message].wait(20)
+        return {"exam": exam, "errors": [], "rounds": 1}
+    monkeypatch.setattr(exam_gen, "refine_exam", fake_refine)
+
+    def posta(message):
+        client.post(f"/api/exams/{result['id']}/refine",
+                    json={"message": message})
+
+    t1 = threading.Thread(target=posta, args=("ett",))
+    t1.start()
+    t2 = None
+    try:
+        assert inne["ett"].wait(20)
+        jobb_id = _senaste_jobbet(client, result["id"])
+        client.post(f"/api/jobb/{jobb_id}/avbryt")
+        t2 = threading.Thread(target=posta, args=("tva",))
+        t2.start()
+        assert inne["tva"].wait(20), "andra varvet fick inte låset efter Avbryt"
+        # Det gamla anropet returnerar nu, långt efter att hon gett upp det.
+        slapp["ett"].set()
+        t1.join(20)
+        assert not t1.is_alive()
+        # Andra varvet pågår fortfarande, ett tredje ska få sitt ärliga nej.
+        tredje = client.post(f"/api/exams/{result['id']}/refine",
+                             json={"message": "tre"})
+        assert tredje.status_code == 409
+    finally:
+        slapp["ett"].set()
+        slapp["tva"].set()
+        t1.join(20)
+        if t2 is not None:
+            t2.join(20)
 
 
 def test_refine_far_reparerad_json(client, monkeypatch):

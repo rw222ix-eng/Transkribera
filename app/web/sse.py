@@ -165,18 +165,95 @@ class JobbAvbrutet(Exception):
 # och att fråga databasen mellan varje token vore en diskrunda för att få veta
 # något som ändå bara kan vara sant i den här processen. Databasens `status`
 # är sanningen för ALLA ANDRA (nya flikar, listan); den här är trådens.
-_avbrott: dict[int, threading.Event] = {}
+#
+# ── KROKARNA ────────────────────────────────────────────────────────────────
+# Till flaggan hör det jobbet HÅLLER medan det går, och som ska släppas i samma
+# ögonblick läraren trycker Avbryt, inte när modellanropet till slut
+# returnerar. Söndagsanalysen 2026-09-06, fynd d: arbetsblad 38 den 2/9 fick en
+# feltranskriberad mening 18:39:32, Avbryt 18:39:35 och den rättade meningen
+# 18:39:46, som möttes av 409 «Pappret skrivs redan om». Dokumentets
+# omskrivningslås (routes_exam `pagaende`) satt kvar tills modellen svarat,
+# minuter senare, fast varvet redan var övergivet.
+#
+# Kroken körs på AVBRYTARENS tråd, inte jobbets, medan jobbtråden fortfarande
+# hänger i sitt anrop. Den som hakar på måste därför tåla det: släppandet ska
+# vara idempotent och veta vems låset är (jobbets egen `finally` kommer senare
+# och får inte släppa NÄSTA varvs lås, se `_slapp_varvet` i routes_exam).
+#
+# TVÅ FLIKAR: krokarna gäller bara den här processen. Kommer avbrottet från en
+# annan process finns varken flagga eller krok här, `begar_avbrott` svarar
+# falskt, och statusen i `jobb`-tabellen är det som gäller för alla andra.
+# Jobbtråden släpper då sitt lås i sin `finally` som förut.
+class _Korande:
+    """Ett jobb som går i den här processen: stoppflaggan och krokarna."""
+
+    __slots__ = ("stopp", "krokar")
+
+    def __init__(self, stopp: threading.Event) -> None:
+        self.stopp = stopp
+        self.krokar: list = []
+
+
+_avbrott: dict[int, _Korande] = {}
 _avbrott_las = threading.Lock()
+
+
+def _kor_krokar(krokar) -> None:
+    # En trasig krok får inte hindra avbrottet: flaggan är redan satt, och
+    # läraren ska få sitt «avbrutet» även om ett lås vägrar släppa.
+    for fn in krokar:
+        try:
+            fn()
+        except Exception:
+            debug_log.get_logger().exception("Avbrottskrok misslyckades")
 
 
 def begar_avbrott(jobb_id: int) -> bool:
     """Be jobbet sluta. Sant om det fanns en levande tråd att be."""
     with _avbrott_las:
-        flagga = _avbrott.get(int(jobb_id))
-    if flagga is None:
+        korande = _avbrott.get(int(jobb_id))
+        krokar = list(korande.krokar) if korande is not None else []
+    if korande is None:
         return False
-    flagga.set()
+    korande.stopp.set()
+    # Krokarna körs UTANFÖR `_avbrott_las`: de tar sina egna lås (routerns
+    # `pagaende_las`), och två lås som tas i olika ordning är en dödlägesfabrik.
+    _kor_krokar(krokar)
     return True
+
+
+def vid_avbrott(jobb_id: int, fn) -> bool:
+    """Haka på något som ska släppas när läraren trycker Avbryt.
+
+    Falskt om jobbet inte (längre) går i den här processen. Då finns inget att
+    haka på, och det som skulle släppts släpps av jobbets egen `finally`. Är
+    avbrottet redan begärt körs kroken med en gång, så att den som hakar på sent
+    inte missar det."""
+    with _avbrott_las:
+        korande = _avbrott.get(int(jobb_id))
+        if korande is None:
+            return False
+        if not korande.stopp.is_set():
+            korande.krokar.append(fn)
+            return True
+    _kor_krokar([fn])
+    return False
+
+
+def stoppa_om_avbrutet(emit) -> None:
+    """Kasta `JobbAvbrutet` om läraren tryckt Avbryt, utan att skicka något.
+
+    `emit` gör redan det här, men bara när det finns en händelse att skicka, och
+    `Stege.na` tiger om steget redan passerats. Ett jobb som står i begrepp att
+    SPARA ska fråga rakt ut i stället för att lita på att nästa livstecken råkar
+    bli av: det avbrutna varvets sena svar får varken bli en version, flytta
+    pekaren eller loggas som utfall (söndagsanalysen 2026-09-06, fynd d).
+
+    Tål ett `emit` utan flagga (`sse_response`, och testernas fejkade jobb).
+    Där finns inget avbrott att fråga om."""
+    stopp = getattr(emit, "stopp", None)
+    if stopp is not None and stopp.is_set():
+        raise JobbAvbrutet
 
 
 class Stege:
@@ -209,7 +286,8 @@ class Stege:
                     "text": text or self._texter.get(namn, namn)})
 
 
-def jobb_response(job, request, *, typ: str, db_file, dokument_id=None):
+def jobb_response(job, request, *, typ: str, db_file, dokument_id=None,
+                  vid_avbrott=None):
     """Som `sse_response`, men jobbet ligger i databasen och lever sitt eget liv.
 
     `job(emit)` körs på en tråd precis som förut. Skillnaderna:
@@ -222,7 +300,12 @@ def jobb_response(job, request, *, typ: str, db_file, dokument_id=None):
       `jobb_events`, och jobbet slutförs.
 
     `dokument_id` är valfritt och bara till för att hitta rätt jobb igen: det
-    är utkastets id när jobbet hör till ett papper som redan finns."""
+    är utkastets id när jobbet hör till ett papper som redan finns.
+
+    `vid_avbrott` är en krok som körs när avbrottet REGISTRERAS, inte när jobbet
+    till slut slutar: rutten som håller ett dokumentlås släpper det där (se
+    KROKARNA ovan). Den körs på avbrytarens tråd, en gång, och jobbets egen
+    `finally` kommer ändå efteråt."""
     # EN anslutning för hela jobbet. Att öppna en per event var frestande
     # (kortare kod, ingen livstid att hålla reda på) och fel: ett prov skickar
     # hundratals händelser, och varje `connect` är en filöppning plus fyra
@@ -236,8 +319,13 @@ def jobb_response(job, request, *, typ: str, db_file, dokument_id=None):
     end = object()
     borta = threading.Event()             # strömmen är död — jobbet är det inte
     stopp = threading.Event()             # läraren tryckte Avbryt
+    korande = _Korande(stopp)
+    if vid_avbrott is not None:
+        korande.krokar.append(vid_avbrott)
+    # Registret först av allt, och FÖRE tråden startar: ett Avbryt som kommer i
+    # samma ögonblick ska hitta både flaggan och kroken.
     with _avbrott_las:
-        _avbrott[jobb_id] = stopp
+        _avbrott[jobb_id] = korande
     raknare = {"seq": 0}
     las = threading.Lock()
 
@@ -269,6 +357,12 @@ def jobb_response(job, request, *, typ: str, db_file, dokument_id=None):
         # ingen hämtar — historiken i databasen är den som räknas.
         if not borta.is_set():
             q.put(ev)
+
+    # Flaggan hängd på funktionen, som `emit.borta` i `sse_response` ovan. Ett
+    # jobb som står i begrepp att spara frågar rakt ut via
+    # `stoppa_om_avbrutet(emit)` i stället för att lita på att nästa livstecken
+    # blir av. Jobbsignaturen är fortfarande job(emit).
+    emit.stopp = stopp
 
     def _slut(status: str, *, fel: str | None = None, resultat=None) -> None:
         ref = None
