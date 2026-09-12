@@ -36,6 +36,10 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+# Tankstrecksvakten, delad med provet, arbetsbladet, gruppuppgiften och
+# anteckningarna (spåret 2026-09-06). Beroendet går bara åt det här hållet.
+from app import textvakt
+
 Color = Literal["black", "blue", "red", "green", "orange", "purple"]
 
 
@@ -797,6 +801,34 @@ def _check_facit(sections: list, path: str, errors: list[dict],
             _check_facit(sec.children, f"{spath}.children", errors, vanstertavlan)
 
 
+# TANKSTRECKSVAKTEN (spåret 2026-09-06: «skriv kortare utan em dash», sex
+# gånger på fyra papper under en vecka). Regeln är delad — app/textvakt.py —
+# och gäller det som står som SPRÅK på tavlan: text-sektioner, rubriker och
+# listpunkter.
+#
+# Inte `latex`: där betyder strecken något annat (intervall, minus, notation),
+# och matematiken är inte den prosa läraren klagade på. Inte heller `bullet`:
+# listans punkttecken ÄR ett tankstreck i appens egna few-shot-exempel
+# («bullet: "–"»), och det är en punkt i marginalen och inte en mening.
+#
+# Sifferspannet är undantaget av samma skäl som i exam_spec, fast starkare:
+# prompten BER om det. lesson_board regel 2 skriver «Boken s. 27–30, uppg.
+# 1218–1227» och few-shot-tavlan har «Boken s. 88–90, uppg. 3110–3118» i
+# agendan. Utan undantaget hade vakten fällt det prompten beställde, varje varv.
+def _check_tankstreck(sections: list, path: str, errors: list[dict]) -> None:
+    for si, sec in enumerate(sections or []):
+        spath = f"{path}[{si}]"
+        if isinstance(sec, (TextSection, HeadingSection)):
+            errors += textvakt.granska([(f"{spath}.text", sec.text)],
+                                       tillat_spann=True)
+        elif isinstance(sec, ListSection):
+            errors += textvakt.granska(
+                [(f"{spath}.items[{ii}]", item)
+                 for ii, item in enumerate(sec.items)], tillat_spann=True)
+        elif isinstance(sec, (CalloutSection, RowSection, ColSection)):
+            _check_tankstreck(sec.children, f"{spath}.children", errors)
+
+
 def _text_volym(sections: list) -> int:
     """Summan av läsbar text i ett sektionsflöde — text och listpunkter, ned
     genom callout/row/col. Rubriker och matte räknas inte: se _MAX_BOARD_TEXT."""
@@ -894,6 +926,7 @@ def validate_rules(doc: BoardDoc) -> list[dict]:
         for sections, width, path in flows:
             _check_text_lengths(sections, path, errors)
             _check_rutor(sections, path, errors)
+            _check_tankstreck(sections, path, errors)
             volym += _text_volym(sections)
             # Facitvakten (2026-09-05, kväll). Vänstertavlan är boards[0] —
             # där fälls sifferexemplet; exempeltavlorna är resten, och där

@@ -27,7 +27,7 @@ def _exam() -> dict:
     representerade. Uppfyller golv, nivåbalans, stigande svårighet (del C)
     och antiklumpning — den kanoniska 'giltiga' fixturen."""
     return {
-        "titel": "Prov — Andragradsfunktioner",
+        "titel": "Prov: Andragradsfunktioner",
         "kurs": "Ma2b", "klass": "SA23", "datum": "2026-10-05",
         "tid_min": 120,
         "hjalpmedel": "Del B utan räknare. Del C med räknare och formelblad.",
@@ -89,7 +89,7 @@ def _exam() -> dict:
              "text": "Avgör om påståendet stämmer: en andragradsfunktion med "
                      "$a < 0$ saknar minsta värde. Motivera.",
              "innehall": ["andragradsfunktioner"],
-             "losning": "Sant — grafen är en nedåtriktad parabel.",
+             "losning": "Sant, grafen är en nedåtriktad parabel.",
              "bedomning": "+1 E ställningstagande\n+1 C motivering\n"
                           "+1 A stringent resonemang"},
             {"del": "C", "formaga": "K", "typ": "redovisning", "poang": [0, 3, 1],
@@ -2039,7 +2039,7 @@ def _skriv_om_allt(**topp) -> dict:
         u["text"] = f"På pizzerian säljs {i} pizzor. Beräkna intäkten."
         u["losning"] = f"Svaret är {i}."
         u["bedomning"] = "Rätt svar ger poängen."
-    d.update({"titel": "Prov — Pizzor", "instruktion": "Arbeta i par.",
+    d.update({"titel": "Prov: Pizzor", "instruktion": "Arbeta i par.",
               "hjalpmedel": "Inga hjälpmedel.", "tid_min": 60})
     d.update(topp)
     return d
@@ -2085,11 +2085,11 @@ def test_riktad_rubrik_byter_bara_titeln():
     """Sidhuvudet visar kurs, klass och datum också — men de är lärarens val,
     inte modellens, och ett önskemål om rubriken får inte döpa om klassen."""
     llm, _calls = _stub_llm([json.dumps(
-        _skriv_om_allt(titel="Prov — Pizzor", klass="XX99", datum="2026-01-01"))])
+        _skriv_om_allt(titel="Prov: Pizzor", klass="XX99", datum="2026-01-01"))])
     fore = _exam()
     res = exam_gen.refine_exam(fore, "kortare rubrik", model="m", llm=llm,
                                mal={"el": "rubrik", "namn": "Sidhuvudet"})
-    assert res["exam"]["titel"] == "Prov — Pizzor"
+    assert res["exam"]["titel"] == "Prov: Pizzor"
     assert res["exam"]["klass"] == fore["klass"]
     assert res["exam"]["datum"] == fore["datum"]
     assert res["exam"]["uppgifter"] == fore["uppgifter"]
@@ -2102,7 +2102,7 @@ def test_utan_mal_ar_hela_dokumentet_spelplanen():
     res = exam_gen.refine_exam(_exam(), "gör hela provet lättare",
                                model="m", llm=llm)
     assert res["exam"]["uppgifter"] == kandidat["uppgifter"]
-    assert res["exam"]["titel"] == "Prov — Pizzor"
+    assert res["exam"]["titel"] == "Prov: Pizzor"
 
 
 def test_omalat_element_ar_ocksa_hela_dokumentet():
@@ -2200,7 +2200,7 @@ def test_flera_mal_kan_blanda_uppgift_och_falt():
     """Rubriken och en uppgift på en gång: båda ändras, resten står kvar.
     Numret ensamt hade dolt rubriken (den vägen släpper ingen målrad igenom),
     och rubriken ensam hade dolt uppgiften."""
-    llm, _calls = _stub_llm([json.dumps(_skriv_om_allt(titel="Prov — Pizzor",
+    llm, _calls = _stub_llm([json.dumps(_skriv_om_allt(titel="Prov: Pizzor",
                                                        klass="XX99"))])
     fore = _exam()
     res = exam_gen.refine_exam(
@@ -2208,7 +2208,7 @@ def test_flera_mal_kan_blanda_uppgift_och_falt():
         malen=[{"el": "uppg4", "namn": "Uppgift 4"},
                {"el": "rubrik", "namn": "Sidhuvudet"}])
     efter = res["exam"]
-    assert efter["titel"] == "Prov — Pizzor"
+    assert efter["titel"] == "Prov: Pizzor"
     assert efter["klass"] == fore["klass"], "klassen är lärarens, inte modellens"
     assert efter["uppgifter"][3]["text"].startswith("På pizzerian")
     assert efter["uppgifter"][0] == fore["uppgifter"][0]
@@ -2337,7 +2337,7 @@ def _arbetsblad() -> dict:
     pq-formeln — det är formen, inte förmågefördelningen, som gör det till en
     övning."""
     return {
-        "titel": "Arbetsblad — pq-formeln", "kurs": "Ma2b",
+        "titel": "Arbetsblad: pq-formeln", "kurs": "Ma2b",
         "hjalpmedel": "Räknare",
         "uppgifter": [
             {"del": None, "formaga": "P", "typ": "rutin", "poang": [2, 0, 0],

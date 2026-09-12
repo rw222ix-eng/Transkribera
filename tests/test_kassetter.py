@@ -62,6 +62,29 @@ def _utan_budget(errors: list) -> list:
             if not (isinstance(e, dict) and e.get("code") == "textbudget")]
 
 
+# BANDET ÄR ÄLDRE ÄN TANKSTRECKSVAKTEN, och den här gången spelas det OM.
+# Vakten (app/textvakt, 2026-09-12) mäter lärarens sex önskemål under veckan
+# 1–6 sep — «skriv kortare utan em dash» — deterministiskt på alla fyra papper,
+# och tavla.json bär två tankstreck i prosan:
+#
+#     boards[1].columns[0].sections[7].text   «Förkorta först – sedan …»
+#     boards[1].columns[1].sections[6].items[1]  «Låt h gå mot noll – …»
+#
+# Till skillnad från textbudgeten ovan går det här INTE att mäta runt: det är
+# precis den sortens mening vakten finns för, och ett band som bär den skulle
+# lära oss att vakten inte biter. Testerna nedan är därför xfail(strict=True)
+# tills bandet spelas om med nycklar i main (tools/spela_in_kassett.py, band
+# «tavla»). Strikt med flit: omspelningen ska FÄLLA markeringen, så att den
+# som spelar in ser att den ska bort — ett band som passerar under ett xfail
+# är ett test som tyst slutat mäta.
+#
+# Prompten är oförändrad, alltså är omspelningen giltig enligt kassettregeln.
+KASSETT_TANKSTRECK = pytest.mark.xfail(
+    strict=True,
+    reason="kassetten spelades in före tankstrecksvakten, spela om")
+
+
+@KASSETT_TANKSTRECK
 def test_tavlan_ur_kassetten_ar_giltig_wb_json(fejk_claude):
     """Hela vägen: CLI → ström → JSON → whiteboard_spec → färdig tavla."""
     fejk_claude(kassett="tavla")
@@ -93,6 +116,7 @@ def test_det_sankta_taket_faller_bandets_hogertavla(fejk_claude):
     assert budget and budget[0]["path"] == "boards[1]", res["errors"]
 
 
+@KASSETT_TANKSTRECK
 def test_en_trasig_tavla_repareras_i_nasta_runda(fejk_claude):
     """Första bandet bryter mot schemat, andra är rätt. Reparationsrundan ska
     köra på riktigt — det är den som gör att läraren får en tavla i stället för
@@ -321,6 +345,7 @@ def test_ett_namn_som_anda_kommer_tillbaka_stoppas(fejk_claude):
     assert "A.L." in texter and "E.S." in texter
 
 
+@KASSETT_TANKSTRECK
 def test_mal_last_omskrivning_ror_bara_rutan_lararen_pekade_pa(fejk_claude):
     """Hela mål-låset genom den riktiga sömmen: tavlan ur bandet, läraren
     markerar EN formel i figur-och-formler-raden, och lappen som kommer
@@ -354,6 +379,7 @@ def test_mal_last_omskrivning_ror_bara_rutan_lararen_pekade_pa(fejk_claude):
     assert kopia == board
 
 
+@KASSETT_TANKSTRECK
 def test_auto_laget_lagger_i_bandet_prompten_ber_om(fejk_claude):
     """Auto-läget (Etapp 4) läser vad prompten BER om och väljer band därefter.
 
