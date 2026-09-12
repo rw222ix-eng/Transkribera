@@ -256,6 +256,30 @@
   const best = t => BEST[t] || String(t || '').toLowerCase();
   const Best = t => { const o = best(t); return o.charAt(0).toUpperCase() + o.slice(1); };
 
+  /* ── Hjälpmedlen per provdel ─────────────────────────
+     De fyra lägena, i stigande ordning: vad som är tillåtet när eleven skriver
+     delen. Etiketterna ÄR nycklarna hela vägen ut — de skickas i begäran
+     (hjalpmedel_a/hjalpmedel_b), översätts till papprets fraser i blad-bygg.js
+     (HJALPMEDELSFRAS) och till dokumentets regel i app/exam_gen.py
+     (HJALPMEDEL_KLAUSUL). Tre listor som måste säga samma sak; ändras en ska de
+     andra två ändras i samma commit. */
+  const HJALPMEDELSVAL = ['Inga digitala', 'Formelblad', 'Räknare', 'Räknare och formelblad'];
+  /* Förvalet är precis det papper appen skrev före valet fanns. Det är inte
+     smak utan kassettregeln: står valen här skickas inga fält, och prompten är
+     byte-identisk med den tests/kassetter spelades in med. */
+  const HJALPMEDEL_FORVAL = { hjalpmedelA: 'Inga digitala', hjalpmedelB: 'Räknare' };
+  const hjalpmedlet = (i, falt) => (HJALPMEDELSVAL.includes((i || {})[falt])
+    ? i[falt] : HJALPMEDEL_FORVAL[falt]);
+  /* Fälten i begäran — men BARA när läraren flyttat något. «En del» har en enda
+     del och skickar därför bara sin egen. */
+  function hjalpmedelsavvikelse(i) {
+    const enDel = (i || {}).delprov === 'En del';
+    const a = hjalpmedlet(i, 'hjalpmedelA'), b = hjalpmedlet(i, 'hjalpmedelB');
+    if (a === HJALPMEDEL_FORVAL.hjalpmedelA
+        && (enDel || b === HJALPMEDEL_FORVAL.hjalpmedelB)) return {};
+    return enDel ? { hjalpmedel_a: a } : { hjalpmedel_a: a, hjalpmedel_b: b };
+  }
+
   const TYPVAL = {
     Tavla: [
       /* Ligger genomgången på en lektion ur schemat är längden redan bestämd — men
@@ -320,6 +344,27 @@
          Skillnaden är hjälpmedlen — båda delarna bär korta svar och uppgifter
          som redovisas på lösblad. */
       { id: 'delprov', namn: 'Upplägg', typ: 'seg', val: ['En del', 'Del A + Del B'] },
+      /* ── HJÄLPMEDLEN ÄR ETT VAL, INTE EN REGEL I KODEN ──────────
+         Delningen ovan sa VAR gränsen går; vad som är tillåtet på var sida stod
+         hårdkodat i blad.js («Utan digitala hjälpmedel» / «Räknare och digitala
+         hjälpmedel tillåtna») och i prompten. Läraren bad tre gånger på två
+         prov om samma sak — «formelblad ska vara tillåtet på del A och B»
+         (spåret 2026-09-06, 13:17, 14:32, 15:31) — och första gången kostade
+         det ett bortkastat omskrivningsvarv, för det fanns ingen väg dit utom
+         att be modellen skriva om pappret.
+
+         Formelbladet står som eget val och inte bara som bilaga: bilagekrysset
+         nedan säger om bladet SKRIVS UT med provet, det här säger om det får
+         användas — och det var det andra hon bad om. Raderna hålls i takt av
+         en not: tillåts formelbladet utan att det skrivs ut säger raden det.
+
+         FÖRVALET ÄR DAGENS PAPPER: A utan digitala hjälpmedel, B med räknare.
+         Står valen där skickas ingenting i begäran (hjalpmedelsavvikelse) och
+         prompten är byte för byte den kassetterna spelades in med. */
+      { id: 'hjalpmedelA', typ: 'seg', val: HJALPMEDELSVAL,
+        namn: s => s.delprov === 'En del' ? 'Hjälpmedel' : 'Hjälpmedel på del A' },
+      { id: 'hjalpmedelB', namn: 'Hjälpmedel på del B', typ: 'seg',
+        val: HJALPMEDELSVAL, bara: s => s.delprov !== 'En del' },
       /* Bedömningsanvisningen och formelbladet är samma beslut — vad som skrivs
          ut UTÖVER provet — och stod som två switchar på var sin rad. En rad med
          två kryss säger det på halva höjden. Fälten under är oförändrade:
@@ -412,7 +457,8 @@
        kunna dra den mot NP:s 4,4 för ett tyngre prov eller mot sin gamla 2,4
        för ett tätare, och valet ska följa med dokumentet så att ett prov går
        att förstå ett halvår senare. */
-    Prov: { nar: 'På lektionen', narDatum: '', narTid: '08:15', provminuter: 90, provtid: '90 min', antal: 6, nivamix: 'Balanserat', eextra: 0, delprov: 'Del A + Del B', losningar: true, formelblad: true, takt: 3.5 },
+    Prov: { nar: 'På lektionen', narDatum: '', narTid: '08:15', provminuter: 90, provtid: '90 min', antal: 6, nivamix: 'Balanserat', eextra: 0, delprov: 'Del A + Del B', losningar: true, formelblad: true, takt: 3.5,
+            ...HJALPMEDEL_FORVAL },
     Arbetsblad: { antal: 3, niva: 'Blandat', facit: 'Facit i bladet', illustration: true,
                   klassblad: true, elever: [], syfte: 'Stötta' },
     Gruppuppgift: { antal: 4, grupp: 3, langd: 60, redovisning: 'Muntligt', illustration: true,
@@ -896,6 +942,10 @@
         planKoll();
         /* «Annan dag» fäller ut dag och tid direkt under raden. */
         if (k.id === 'nar') ritaTypval();
+        /* Upplägget avgör om del B har en egen hjälpmedelsrad alls, och vad
+           del A-raden heter. Hjälpmedelsvalet i sin tur avgör noten om
+           formelbladet. Båda är alltså rader som ändrar RADERNA. */
+        if (k.id === 'delprov' || k.id === 'hjalpmedelA' || k.id === 'hjalpmedelB') ritaTypval();
         /* Byter man nivå byter också antalet uppgifter som får en lösning — och
            det talet står i noten under raden. */
         if (k.id === 'boklosniva') ritaTypval();
@@ -923,6 +973,18 @@
          så att läraren vet vad hon ändrar när hon byter. Tyst när planeringen
          inte hade något att säga (se hjalpmedelsforval). */
       if (k.id === 'delprov' && provgrund) satNot(typnot(rad), '', provgrund);
+      /* Formelbladet är två beslut som kan glida isär: får det användas (den
+         här raden) och skrivs det ut (bilagekrysset). Tillåts det utan att
+         skrivas ut säger noten det — och erbjuder krysset, så läraren slipper
+         leta efter raden under. Tvärtom är inget fel: ett formelblad i högen
+         som inte får användas på DEN delen är lärarens sak, och delen intill
+         kan mycket väl tillåta det. */
+      if ((k.id === 'hjalpmedelA' || k.id === 'hjalpmedelB')
+          && /formelblad/i.test(String(s[k.id] || '')) && !s.formelblad) {
+        satNot(typnot(rad), 'krock',
+          'Formelbladet är tillåtet men skrivs inte ut med provet.',
+          [{ namn: 'Lägg till formelbladet', gor: () => { s.formelblad = true; ritaTypval(); planKoll(); } }]);
+      }
       if (k.id === 'boklosniva') {
         const not = typnot(rad);
         const U = window.Uppgifter;
@@ -2952,6 +3014,10 @@
            är satt. Noll ÄR defaultläget, och en orörd väljare ska ge exakt
            samma kropp som före fältet. */
         ...(Number(i0.eextra) ? { e_extra: Number(i0.eextra) } : {}),
+        /* Hjälpmedlen per del (spåret 2026-09-06) — samma regel igen: fälten
+           finns i kroppen bara när läraren flyttat något från dagens papper.
+           Arbetsbladet nedan har inga delar och skickar dem aldrig. */
+        ...hjalpmedelsavvikelse(i0),
         ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(), ...u,
       }, { signal, log })).then(kravDone).then(r => {
         if (!r.exam) throw new Error('Provet gick inte att skriva den här gången. Försök igen.');
@@ -3385,7 +3451,15 @@
       const nar = s.nar === 'Annan dag' && s.narDatum
         ? `${window.Kalender ? window.Kalender.ord(s.narDatum) : s.narDatum}${s.narTid ? ' ' + s.narTid : ''}`
         : 'på lektionen';
-      return `${s.antal} uppgifter · ${s.nivamix} · ${s.delprov} · ${s.provtid} · ${nar}${s.formelblad ? ' · formelblad' : ''}`;
+      /* Hjälpmedlen står i raden bara när de INTE är dagens standard — en
+         sammanfattning som säger «Inga digitala · Räknare» på varje prov säger
+         ingenting. Avviker de är det däremot det viktigaste i hela raden. */
+      const hj = hjalpmedelsavvikelse(s);
+      const hjText = !hj.hjalpmedel_a ? ''
+        : hj.hjalpmedel_b
+          ? ` · del A ${hj.hjalpmedel_a.toLowerCase()}, del B ${hj.hjalpmedel_b.toLowerCase()}`
+          : ` · ${hj.hjalpmedel_a.toLowerCase()}`;
+      return `${s.antal} uppgifter · ${s.nivamix} · ${s.delprov} · ${s.provtid} · ${nar}${s.formelblad ? ' · formelblad' : ''}${hjText}`;
     }
     if (typ === 'Arbetsblad') return `${s.antal} uppgifter · ${s.niva} · ${s.facit}`;
     if (typ === 'Gruppuppgift') return `${s.grupp} per grupp · ${s.langd} min · ${s.redovisning.toLowerCase()}`;

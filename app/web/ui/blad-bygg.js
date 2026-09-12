@@ -817,8 +817,41 @@ window.BladBygg = (() => {
       .replace(/\b([Dd]el)\s+C\b/g, '$1 B')
       .replace(/\b([Dd]el)\s+D\b/g, '$1 C');
   };
+  /* ── HJÄLPMEDLEN PER DEL, SOM PAPPRET SÄGER DEM ─────
+     Nycklarna är planeringens val (plan.js HJALPMEDELSVAL) och värdena är de
+     fraser pappret bar innan valet fanns — `Inga digitala` ger ordagrant den
+     gamla del A-frasen och `Räknare` den gamla del B-frasen. Det är med flit:
+     ett prov som aldrig rört raden ska se ut precis som förut.
+
+     Spegel av app/exam_gen.HJALPMEDEL_KLAUSUL, som skriver samma sak in i
+     dokumentets `hjalpmedel` och därmed på PDF:ens försättsblad. Säger de två
+     listorna olika saker säger skärmen och pappret olika saker om samma prov
+     — det är hela skälet till att regeln bara får stå EN gång (se nedan). */
+  const HJALPMEDELSFRAS = {
+    'Inga digitala': 'Utan digitala hjälpmedel.',
+    'Formelblad': 'Formelbladet är tillåtet, inga digitala hjälpmedel.',
+    'Räknare': 'Räknare och digitala hjälpmedel tillåtna.',
+    'Räknare och formelblad': 'Räknare, digitala hjälpmedel och formelblad tillåtna.'
+  };
+  /* Kortformen i delens sidhuvud («Del A · utan digitala hjälpmedel»). */
+  const HJALPMEDELSETIKETT = {
+    'Inga digitala': 'utan digitala hjälpmedel',
+    'Formelblad': 'formelblad, utan digitala hjälpmedel',
+    'Räknare': 'räknare och digitala hjälpmedel',
+    'Räknare och formelblad': 'räknare, digitala hjälpmedel och formelblad'
+  };
+  /* Del A är `hjalpmedelA`, del B `hjalpmedelB` — och «En del» är ett prov med
+     bara den första. Ett papper utan fälten (allt som skrevs före
+     2026-09-06) faller tillbaka på dagens standard. */
+  const HJALPMEDELSFORVAL = { B: 'Inga digitala', C: 'Räknare', '-': 'Inga digitala' };
+  function hjalpmedelsval(v, del) {
+    const i = (v || {}).inst || {};
+    const valt = del === 'C' ? i.hjalpmedelB : i.hjalpmedelA;
+    return HJALPMEDELSFRAS[valt] ? valt : HJALPMEDELSFORVAL[del] || 'Inga digitala';
+  }
+  const hjalpmedelsfras = (v, del) => HJALPMEDELSFRAS[hjalpmedelsval(v, del)];
+
   function provblad(v, uppgifter, del) {
-    const medHjalp = del === 'C';
     /* HJÄLPMEDELSREGELN ÄR DOKUMENTETS (exam_spec.ExamDoc.hjalpmedel). Bandet
        var en hårdkodad mall per del, och därför hände ingenting när läraren bad
        om att räknare skulle tillåtas på del A: regeln fanns inte i dokumentets
@@ -847,9 +880,12 @@ window.BladBygg = (() => {
 
        Delnamnet i sidhuvudet står kvar: det är vilket papper man håller i,
        inte en regel. */
+    /* Utan dokumentets regel står PLANERINGENS val i huvudet i stället för den
+       gamla hårdkodade frasen (spåret 2026-09-06: «formelblad tillåtet på del
+       A och B»). Rör läraren inte raden är texten ordagrant den förra. */
     const etikett = del === '-' ? ''
       : hjalp ? DELNAMN[del]
-        : `${DELNAMN[del]} · ${medHjalp ? 'räknare och digitala hjälpmedel' : 'utan digitala hjälpmedel'}`;
+        : `${DELNAMN[del]} · ${HJALPMEDELSETIKETT[hjalpmedelsval(v, del)]}`;
     return `<div class="ark" data-form="pr1${del.toLowerCase()}" data-brytbar="">
       ${huvud(v, etikett)}${uppgifter.map(provuppg).join('')}
     </div>`;
@@ -1077,5 +1113,6 @@ window.BladBygg = (() => {
   /* `kortref` delas med blad-boklos.js: bokens lösningsark ska korta på samma
      sätt som provets och arbetsbladets, annars är det två olika facit. */
   return { mat, kortref, ref, ark, arkfacit, anteckningar, provforsatt, provblad,
-           forsattsbild, losning, provtitel, BOKSTAV, delnamnVisning };
+           forsattsbild, losning, provtitel, BOKSTAV, delnamnVisning,
+           hjalpmedelsfras, hjalpmedelsval };
 })();

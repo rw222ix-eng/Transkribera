@@ -165,15 +165,74 @@ def _environment() -> Environment:
 # sak (blad-bygg.js DELNAMN), så bedömningsanvisningen och elevbladet säger
 # äntligen samma namn. Dokumentets egen hjälpmedelstext kan nämna de interna
 # namnen («Del B utan räknare …») — den översätts i _delnamn_visning nedan.
-_DEL_INSTRUKTION = {
-    "B": "Del A löses utan räknare. Endast svar krävs om inget annat anges.",
-    # NP:s egen formulering för delprovet med digitala verktyg (NpMa2a vt17 och
-    # vt22, sidan 1): fullständiga lösningar OCH att verktyget redovisas.
-    "C": "Del B löses med räknare. Fullständig redovisning krävs, och du ska "
-         "visa hur du använder ditt digitala verktyg.",
-    "D": "Del C löses med räknare. Fullständig redovisning krävs, och du ska "
-         "visa hur du använder ditt digitala verktyg.",
-}
+_DELNAMN_PAPPER = {"B": "Del A", "C": "Del B", "D": "Del C"}
+
+
+def _del_instruktion(del_kod: str, utan_raknare: bool) -> str:
+    """Delens egen rad: vilka hjälpmedel den löses med, och vad som krävs.
+
+    Var en tabell med tre färdiga meningar — «Del A löses utan räknare …»,
+    «Del B löses med räknare …» — och det var husets regel, inte lärarens.
+    Sedan 2026-09-06 väljer hon hjälpmedlen per del i planeringen (spåret: hon
+    bad tre gånger på två prov om formelblad på båda delarna), och då måste
+    raden följa valet. Står valet på förvalet skrivs ordagrant de gamla
+    meningarna — raderna nedan är tabellens, tecken för tecken.
+
+    Redovisningskravet följer PLATSEN och inte hjälpmedlen: första delen bär
+    kortsvaren, de följande fullständiga lösningar. Meningen om det digitala
+    verktyget är NP:s egen (NpMa2a vt17 och vt22, sidan 1) och står bara när
+    delen faktiskt har ett verktyg att redovisa."""
+    namn = _DELNAMN_PAPPER.get(del_kod or "", "")
+    if not namn:
+        return ""
+    if del_kod == "B":
+        krav = "Endast svar krävs om inget annat anges."
+    else:
+        krav = ("Fullständig redovisning krävs." if utan_raknare else
+                "Fullständig redovisning krävs, och du ska visa hur du "
+                "använder ditt digitala verktyg.")
+    return f"{namn} löses {'utan' if utan_raknare else 'med'} räknare. {krav}"
+
+
+# ── VAD DOKUMENTETS REGEL SÄGER OM EN VISS DEL ────────────────────────
+# `hjalpmedel` är EN mening för hela provet och nämner delarna vid namn: «Del B
+# utan digitala hjälpmedel, formelbladet är tillåtet. Del C med räknare …»
+# (exam_gen.hjalpmedelsregel skriver den ur lärarens val; modellen skriver den
+# annars själv). Delrubriken och delens instruktionsrad påstod förut något eget
+# om räknaren — «Del A – Digitala verktyg är inte tillåtna» — och kunde alltså
+# säga emot försättsbladets Hjälpmedel-rad på samma papper.
+#
+# Svaret är True (verktyg tillåtna), False (inte tillåtna) eller None: säger
+# regeln ingenting om just den delen står husets gamla antagande kvar, och ett
+# prov skrivet före valet ser ut precis som förut.
+_DEL_KLAUSUL_RE = re.compile(r"\b[Dd]el\s+([A-D])\b([^.;]*)")
+_UTAN_RE = re.compile(r"\butan\s+(digitala|räknare|miniräknare|räknar)",
+                      re.IGNORECASE)
+_MED_RE = re.compile(r"\b(räknare|miniräknare|digitala verktyg|"
+                     r"digitala hjälpmedel|geogebra)\b", re.IGNORECASE)
+
+
+def _digitala_i_delen(hjalpmedel: str | None, del_kod: str) -> bool | None:
+    namn = _DELNAMN_PAPPER.get(del_kod or "")
+    if not namn or not hjalpmedel:
+        return None
+    # Regeln kan bära de interna namnen ELLER papprets, och ETT «Del B» betyder
+    # olika delar i de två namnrymderna. Samma markör som översättningen själv
+    # använder avgör vilken: «Del A» finns inte internt (delarna heter B/C/D),
+    # så en text som nämner den är redan papprets. Utan den skillnaden läste
+    # del C sin granne del B:s klausul och trodde att räknaren var förbjuden.
+    text = str(hjalpmedel)
+    vill = namn.split()[-1] if _DELNAMN_REDAN_RE.search(text) else del_kod
+    for bokstav, klausul in _DEL_KLAUSUL_RE.findall(text):
+        if bokstav != vill:
+            continue
+        if _UTAN_RE.search(klausul):
+            return False
+        if _MED_RE.search(klausul):
+            return True
+        return None
+    return None
+
 
 _DELNAMN_RE = [(re.compile(r"\b([Dd]el)\s+B\b"), r"\1 A"),
                (re.compile(r"\b([Dd]el)\s+C\b"), r"\1 B"),
@@ -897,7 +956,9 @@ def _build_view(doc: exam_spec.ExamDoc,
         # Förlagans delrubrik är EN mening: «Del A – Digitala verktyg är inte
         # tillåtna». Räknaren är det enda som skiljer delarna åt på pappret, så
         # den står i rubriken och inte i en kursivrad under den.
-        utan_raknare = del_kod == "B"
+        # Lärarens val väger tyngre än husets delning (se _digitala_i_delen).
+        sagt = _digitala_i_delen(doc.hjalpmedel, del_kod or "")
+        utan_raknare = (del_kod == "B") if sagt is None else not sagt
         alla_kortsvar = all(_krav(i.typ) == _KRAV_TEXT["rutin"] for i in items)
         nagot_kortsvar = any(_krav(i.typ) == _KRAV_TEXT["rutin"] for i in items)
         delar.append({
@@ -925,7 +986,8 @@ def _build_view(doc: exam_spec.ExamDoc,
                 "Fullständiga lösningar krävs på samtliga uppgifter."
                 + ("" if utan_raknare else
                    " Visa också hur du använder ditt digitala verktyg."))),
-            "instruktion": escape_latex(_DEL_INSTRUKTION.get(del_kod or "", "")) or None,
+            "instruktion": escape_latex(
+                _del_instruktion(del_kod or "", utan_raknare)) or None,
             "uppgifter": vy_items,
             # exam-klassens räknare sätts till numret FÖRE delens första
             # uppgift, precis som förlagans «\setcounter{question}{6} %

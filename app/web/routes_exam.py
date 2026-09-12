@@ -504,6 +504,18 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # persisterat men ingenting trycker det. Skickas inte fältet alls
         # (äldre klient, API-anrop, pytest) är svaret noll, alltså NP orört.
         e_extra = exam_spec.e_skarpning(body if isinstance(body, dict) else None)
+        # ── HJÄLPMEDLEN PER DEL (spåret 2026-09-06) ─────────────────
+        # Lärarens val i planeringen, och fälten finns i kroppen BARA när hon
+        # flyttat något från dagens papper (plan.js hjalpmedelsavvikelse) —
+        # annars är prompten byte för byte den kassetterna spelades in med.
+        # Bara provet har delar: arbetsbladet och gruppuppgiften skickar dem
+        # aldrig, och skulle de göra det är regeln ändå ingenting värd på ett
+        # papper utan del A och del B.
+        hjalpmedelsregel = (
+            exam_gen.hjalpmedelsregel(body.get("hjalpmedel_a") or "",
+                                      body.get("hjalpmedel_b") or "",
+                                      delar=delar)
+            if typ == "prov" else "")
         # Gruppuppgiftens upplägg (Fas 0.6): namnraderna, tiden och
         # redovisningsformen ÄR pappersformen (se gruppark.css) — de kommer ur
         # planeringens väljare och ska in i både prompten och dokumentet.
@@ -720,6 +732,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     bilder=bilder_block, utfall=utfall_block, bok=bok_block,
                     boknivaer=nivaer_block, forlaga=forlaga_block,
                     avsnitt=avsnitt, bokuppgifter=bokuppgifter,
+                    hjalpmedel=exam_gen.build_hjalpmedel(hjalpmedelsregel),
                     svart=svart_block, fokus=fokus_block, profil=typ,
                     koder=koder, skeleton=skelett, niva_mal=niva_mal,
                     riktat=riktat_block, grupp=grupp,
@@ -771,9 +784,18 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # minuter, kl. …» — pappret och skärmen om samma prov.
                 if res["exam"] is not None:
                     res["exam"]["tid_min"] = tid_min
-                # Hjälpmedelsraden är MODELLENS: den skiljer delarna åt med
-                # lärarens egna ord, och skärmen har läst dokumentets regel
-                # sedan blad.js planvalProv.
+                # Hjälpmedelsraden är MODELLENS så länge läraren inte sagt
+                # något: den skiljer delarna åt med lärarens egna ord, och
+                # skärmen har läst dokumentets regel sedan blad.js planvalProv.
+                #
+                # HAR HON VALT VINNER VALET, av samma skäl som provtiden ovan:
+                # hon kryssade i planeringen att formelbladet är tillåtet på
+                # del A, och då får försättsbladet inte säga något annat för
+                # att modellen råkade skriva husets vanliga mening. Regeln
+                # sätts här och inte bara i prompten — då står samma mening på
+                # skärmen och i PDF:en utan att bero på att modellen lydde.
+                if res["exam"] is not None and hjalpmedelsregel:
+                    res["exam"]["hjalpmedel"] = hjalpmedelsregel
                 _satt_lararens_datum(res["exam"], datum, klockslag or "")
                 if res["exam"] is None:
                     return {"id": None, "exam": None,

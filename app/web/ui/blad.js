@@ -302,11 +302,25 @@ window.Blad = (() => {
       const hjalp = (B() && B().delnamnVisning
         ? B().delnamnVisning((v.hjalpmedel || '').trim())
         : (v.hjalpmedel || '').trim());
-      const delA = hjalp ? '' : ' Utan digitala hjälpmedel.';
-      const delB = hjalp ? '' : ' Räknare och digitala hjälpmedel tillåtna.';
+      /* TIGER DOKUMENTET FÅR PLANERINGEN SVARA. Fraserna stod hårdkodade här
+         — «Utan digitala hjälpmedel» på del A, «Räknare …» på del B — och det
+         var därför läraren fick be modellen skriva om hela provet för att få
+         formelbladet tillåtet på del A (spåret 2026-09-06, tre gånger på två
+         prov). Nu är de lärarens val, och förvalet ger ordagrant de gamla
+         fraserna (blad-bygg HJALPMEDELSFRAS). */
+      const fras = (del, gamla) => (B() && B().hjalpmedelsfras
+        ? B().hjalpmedelsfras(v, del) : gamla);
+      const delA = hjalp ? '' : ' ' + fras('B', 'Utan digitala hjälpmedel.');
+      const delB = hjalp ? '' : ' ' + fras('C', 'Räknare och digitala hjälpmedel tillåtna.');
+      /* «En del» har en enda regel, och den står på hjälpmedelsraden. Den
+         skrivs «Inga digitala hjälpmedel.» och inte som delarnas «Utan …» av
+         samma skäl som ovan: det är meningen pappret redan bar. */
+      const valtA = B() && B().hjalpmedelsval ? B().hjalpmedelsval(v, 'B') : 'Inga digitala';
+      const helaProvet = valtA === 'Inga digitala'
+        ? 'Inga digitala hjälpmedel.' : fras('B', 'Inga digitala hjälpmedel.');
       meta.innerHTML = rad('Provtid', provtidText(v))
         + rad('Hjälpmedel', hjalp ? esc(hjalp)
-          : `${i.formelblad ? 'Formelblad och linjal' : 'Linjal'}.${enDel ? ' Inga digitala hjälpmedel.' : ''}`)
+          : `${i.formelblad ? 'Formelblad och linjal' : 'Linjal'}.${enDel ? ' ' + esc(helaProvet) : ''}`)
         + (enDel
           ? rad('Uppgifter', `${versal(omrade(1, plock.length))}. ${redovisas}`)
           : rad('Del A', `${versal(omrade(1, antalB))}.${delA} ${redovisas}`)
