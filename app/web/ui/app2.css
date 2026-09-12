@@ -587,6 +587,15 @@
 /* Chipet säger det redan i målrutan: den här rutan går att peka på, men
    meningen om den blir ett svar och inte en omskrivning. */
 .gmalchip[data-harledd]{border:1px dashed var(--line);border-radius:var(--r-pill);padding:1px 4px 1px 9px;color:var(--ink-2)}
+/* GISSNINGEN (lärarens ord 2026-09-12). Appen läste «exempel 3» i meningen och
+   satte målet själv — och då måste chipet säga att det är appens läsning och
+   inte hennes markering. Prickad kant (härledda chips har streckad: två olika
+   slags «inte ett vanligt val») plus raden i klartext efter texten. */
+.gmalchip[data-gissat]{border:1px dotted var(--sky-deep);border-radius:var(--r-pill);padding:1px 4px 1px 9px}
+.gmalchip[data-gissat] .gmaltext::after{content:'appen gissade';margin-left:6px;font-size:.72em;font-weight:500;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-2);opacity:.8}
+/* Krysset måste synas på ett gissat chip också när det är det ENDA valet:
+   «går att ta bort innan man skickar» är hela poängen med markeringen. */
+.gmalchip[data-gissat] .gmalkryss{display:inline-flex}
 .gnotnr{width:19px;height:19px;flex:0 0 auto;border-radius:50%;background:var(--sky-deep);color:#fff;font-size:.72rem;font-weight:600;display:grid;place-items:center}
 .gvarvel{font-size:.74rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--sky-deep);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gfraga{margin:8px 0 0;font-size:.94rem;line-height:1.5;color:var(--ink)}

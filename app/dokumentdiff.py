@@ -244,6 +244,16 @@ def _tavelelement(doc: dict) -> list[tuple[str, Any]]:
     return [(i, s) for i, s, _ in _tavelnoder(doc) if "." not in i]
 
 
+def tavelrutor(doc: dict) -> list[tuple[str, Any, str]]:
+    """(element-id, sektion, JSON-väg) för varje ruta motorn ritar, i ordning.
+
+    Samma serie som `blad.js taggaTavla` sätter i `data-el`. Publik för att
+    diffvakten i lesson_board (fritext utan markering, lärarens dom
+    2026-09-12) måste kunna slå upp BÅDA riktningarna: vilken väg ett id har,
+    och vilka id:n som ligger på vilken tavla."""
+    return _tavelnoder(doc)
+
+
 def tavelvag(doc: dict, elid: str) -> str | None:
     """Elementets JSON-väg, eller None när id:t inte finns i dokumentet.
 

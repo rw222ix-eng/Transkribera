@@ -2254,7 +2254,11 @@ def _riktad_refine(board: dict, instruction: str, vagar, *, model: str, llm,
     """Omskrivningen NÄR läraren pekat: lapp först, helomskrivning som reserv,
     och tavlan orörd hellre än fel."""
     log = log_cb or (lambda _m: None)
-    namn = llm_client.uppradning([f"«{n}»" for n, _v in vagar]) or "rutan"
+    # Namnen DEDUPERAS, i ordning. Lärarens klick ger ett namn per ruta, men
+    # diffvaktens gissning ger SAMMA namn åt hela blocket («exempel 2» är sju
+    # vägar), och «Ändrar bara «exempel 2», «exempel 2» …» är inget besked.
+    namn = llm_client.uppradning(
+        list(dict.fromkeys(f"«{n}»" for n, _v in vagar))) or "rutan"
     log(f"Ändrar bara {namn} …")
     rundor = 0
     skarpare = ""
@@ -3092,6 +3096,279 @@ def repair_board(board: dict, warnings: list[str], *, model: str,
                                form=tavelform(vanligt_fel, niva))
 
 
+# ── DIFFVAKTEN: FRITEXT UTAN MARKERING ──────────────────────────────────────
+#
+# Läraren 2026-09-12: «När jag skriver generellt i chattfönstret, typ ändra
+# exempel 3, då tas saker bort från vänstra tavlan.»
+#
+# Spåret 2026-09-06 (avsnitt 2a) mätte precis det. Median för ett varv är ETT
+# ändrat element, men fyra varv på tavla c94275cfc2d2 ändrade 8–18: «Ändra
+# rubriken till något mer konkret» rörde 18 rutor, «A-nivå i boken» rörde 15,
+# och läraren skrev «Helvete. Alltså, vad fan händer?».
+#
+# Mål-låset ovan slår bara till när en ruta är MARKERAD. Skriver hon fritt gick
+# varvet som helomskrivning, och då är promptens «ändra så lite som möjligt i
+# övrigt» det enda som håller — alltså ingenting.
+#
+# Vakten är en EFTERKONTROLL och inte en promptändring, med flit: refine-
+# prompten utan mål måste stå byte för byte som i dag (kassetterna är
+# inspelade mot den). Först efter modellsvaret räknas de ändrade elementen med
+# samma diff som utfall-loggen (dokumentdiff.andrade_element). Känns målet igen
+# i meningen och varvet gick utanför det körs varvet OM som en riktad lapp.
+#
+# FAIL-OPEN, genomgående: känns ingenting igen i meningen, går målet inte att
+# slå upp i tavlans JSON, eller ändrades ingenting — då gäller dagens väg.
+# Vakten får kosta ett extra varv när den har rätt, aldrig ett papper när den
+# har fel.
+
+# Talord räknas med: «ändra exempel tre» är samma önskemål som «exempel 3».
+_TALORD = {"ett": 1, "en": 1, "två": 2, "tre": 3, "fyra": 4, "fem": 5,
+           "sex": 6, "sju": 7, "åtta": 8, "nio": 9, "tio": 10}
+# «till exempel» är inte ett mål — det är svenska. Utan undantaget hade «gör
+# den kortare, till exempel 3 rader» låst varvet till högertavlans exempel 3.
+_EXEMPEL_RE = re.compile(
+    r"(?<!till )\bex(?:empel|\.)\s*(?:nr\.?|nummer)?\s*"
+    r"(\d{1,2}|" + "|".join(_TALORD) + r")\b", re.IGNORECASE)
+
+# Ordlistan är DELAD med klienten (granska.js MALORD) och måste hållas i takt:
+# lager 1 sätter målet självt av samma ord, lager 2 avvisar varvet av samma
+# ord, och glider de isär gissar de två lagren olika om samma mening.
+# (sort, orden, sidan de hör till — "" = går inte att binda till en tavla)
+MALORD: tuple[tuple[str, tuple[str, ...], str], ...] = (
+    ("rubrik", ("rubriken", "rubriktexten", "titeln", "överskriften"), "vanster"),
+    ("agenda", ("agendan", "dagordningen"), "vanster"),
+    ("oppningsfraga", ("öppningsfrågan", "ingångsfrågan"), "vanster"),
+    ("vanster", ("vänstertavlan", "vänstra tavlan", "vänster tavla",
+                 "teoritavlan", "teorin"), "vanster"),
+    ("hoger", ("högertavlan", "högra tavlan", "höger tavla", "exempeltavlan",
+               "exemplen"), "hoger"),
+    # «Vanligt fel», figurer och formler står på BÅDA tavlorna — de pekar ut
+    # rutor men inte en sida, och då gäller bara antalsregeln.
+    ("vanligtfel", ("vanligt fel", "vanliga fel", "vanligt-fel"), ""),
+    ("figur", ("figuren", "grafen", "kurvan"), ""),
+    ("formel", ("formeln", "formlerna"), ""),
+)
+
+
+@dataclass(frozen=True)
+class Malgissning:
+    """Vad meningen pekar ut, läst ur orden. Tom = ingenting kändes igen."""
+    sorter: tuple[str, ...] = ()
+    exempel: tuple[int, ...] = ()
+    sidor: frozenset = frozenset()
+
+    def __bool__(self) -> bool:
+        return bool(self.sorter or self.exempel)
+
+
+def las_maltyper(text: str) -> Malgissning:
+    """Lärarens mening → de mål den nämner. Delad ordlista med granska.js."""
+    # Radbrytningar och dubbla mellanslag plattas först: undantaget för «till
+    # exempel» är ett lookbehind på EXAKT ett mellanslag, och en mening med två
+    # hade sluppit förbi det.
+    lag = " " + re.sub(r"\s+", " ", str(text or "").lower()) + " "
+    sorter: list[str] = []
+    sidor: set[str] = set()
+    for sort, orden, sida in MALORD:
+        if any(o in lag for o in orden):
+            sorter.append(sort)
+            if sida:
+                sidor.add(sida)
+    nummer: list[int] = []
+    for m in _EXEMPEL_RE.finditer(lag):
+        ra = m.group(1)
+        n = int(ra) if ra.isdigit() else _TALORD.get(ra, 0)
+        if n and n not in nummer:
+            nummer.append(n)
+    if nummer:
+        sidor.add("hoger")          # exemplen bor på högertavlan
+    return Malgissning(tuple(sorter), tuple(nummer), frozenset(sidor))
+
+
+def _brade_index(vag: str) -> int:
+    m = re.match(r"boards\[(\d+)\]", vag or "")
+    return int(m.group(1)) if m else 0
+
+
+def _sidan(vag: str) -> str:
+    """Vilken tavla vägen ligger på. Bräde 0 är teoritavlan (vänster), allt
+    därefter är exempeltavlan (höger) — dramaturgins två tavlor."""
+    return "vanster" if _brade_index(vag) == 0 else "hoger"
+
+
+def _flodet(vag: str) -> str:
+    """Sektionsflödet vägen ligger i, utan sitt index: två rutor i samma flöde
+    är grannar, två i olika flöden är det inte (kolumnerna på högertavlan)."""
+    return vag.rsplit("[", 1)[0] if "[" in vag else vag
+
+
+def _platsen(vag: str) -> int:
+    """Vägens sista index, som TAL. Strängjämförelse hade satt `[10]` före
+    `[9]`, och en tavla med tio rutor i ett flöde är ingen ovanlighet."""
+    m = re.search(r"\[(\d+)\]$", vag or "")
+    return int(m.group(1)) if m else -1
+
+
+def _rutext(sek) -> str:
+    if not isinstance(sek, dict):
+        return ""
+    return str(sek.get("text") or sek.get("title") or "").strip()
+
+
+def _ar_exempelrubrik(sek, n: int | None = None) -> bool:
+    """Är sektionen rubriken «Exempel n» (eller någon exempelrubrik alls)?
+    Modellen skriver «Exempel 2», förlagan «Ex. 2» — båda räknas."""
+    if not isinstance(sek, dict) or sek.get("kind") != "heading":
+        return False
+    svans = r"\d" if n is None else str(n) + r"\b"
+    return bool(re.match(rf"^\s*ex(?:empel|\.?)\s*{svans}", _rutext(sek), re.I))
+
+
+# Så många rutor får en textgissning som mest bära till prompten. Nyckelraden
+# och kandidatens sammanfogning klarar fler, men en målrad på tjugo vägar är
+# inte längre ett mål — det är en helomskrivning med extra steg.
+MAX_GISSADE = 12
+
+
+def gissade_malvagar(board: dict, gissning: Malgissning) -> list[tuple[str, str]]:
+    """(namn, JSON-väg) för de rutor meningen pekar ut — eller tom lista.
+
+    Tom lista betyder «vi vet inte vad hon menade», och då gäller fail-open.
+    Vägarna har elementkartans form, samma som `malvagar` ger, så lappvakten
+    och `sammanfoga_riktat_tavla` känner igen dem utan undantag."""
+    rutor = dokumentdiff.tavelrutor(board)
+    toppen = [(eid, sek, vag) for eid, sek, vag in rutor if "." not in eid]
+    ut: list[tuple[str, str]] = []
+
+    def lagg(namn: str, vag: str) -> None:
+        if vag and all(vag != v for _n, v in ut):
+            ut.append((namn, vag))
+
+    def block(start: int, namn: str) -> None:
+        """Rubriken plus rutorna under den i SAMMA flöde, till nästa
+        exempelrubrik. Ett exempel på högertavlan är en kolumn, och läraren
+        menar hela kolumnen när hon säger «exempel 3»."""
+        flode = _flodet(toppen[start][2])
+        for i in range(start, len(toppen)):
+            _eid, sek, vag = toppen[i]
+            if _flodet(vag) != flode:
+                break
+            if i > start and _ar_exempelrubrik(sek):
+                break
+            lagg(namn, vag)
+
+    for n in gissning.exempel:
+        for i, (_eid, sek, _vag) in enumerate(toppen):
+            if _ar_exempelrubrik(sek, n):
+                block(i, f"exempel {n}")
+                break
+    for sort in gissning.sorter:
+        if sort == "rubrik":
+            for _eid, sek, vag in toppen:
+                if _sidan(vag) == "vanster" and isinstance(sek, dict) \
+                        and sek.get("kind") == "heading":
+                    lagg("rubriken", vag)
+                    break
+        elif sort == "agenda":
+            for _eid, sek, vag in toppen:
+                if _sidan(vag) == "vanster" and isinstance(sek, dict) \
+                        and sek.get("kind") == "list":
+                    lagg("agendan", vag)
+                    break
+        elif sort == "oppningsfraga":
+            # Dramaturgins ordning på vänstertavlan: rubrik → agenda → divider
+            # → ÖPPNINGSFRÅGAN. Den är alltså tavlans andra heading.
+            rubriker = [v for _e, s, v in toppen
+                        if _sidan(v) == "vanster" and isinstance(s, dict)
+                        and s.get("kind") == "heading"]
+            if len(rubriker) > 1:
+                lagg("öppningsfrågan", rubriker[1])
+        elif sort in ("vanster", "hoger"):
+            for _eid, _sek, vag in toppen:
+                if _sidan(vag) == sort:
+                    lagg("vänstertavlan" if sort == "vanster"
+                         else "högertavlan", vag)
+        elif sort == "vanligtfel":
+            for _eid, sek, vag in rutor:
+                if not _rutext(sek).lower().startswith("vanligt fel"):
+                    continue
+                lagg("«Vanligt fel»", vag)
+                # Raden ÄR bara etiketten; understrykningen, formeln och
+                # förklaringen under den hör till samma fel (dramaturgin) och
+                # låses med — annars låser vakten två ord och släpper resten.
+                flode, plats = _flodet(vag), _platsen(vag)
+                syskon = sorted((r[2] for r in rutor
+                                 if _flodet(r[2]) == flode
+                                 and _platsen(r[2]) > plats), key=_platsen)
+                for v2 in syskon[:3]:
+                    lagg("«Vanligt fel»", v2)
+        elif sort == "figur":
+            for _eid, sek, vag in rutor:
+                if isinstance(sek, dict) and sek.get("kind") in (
+                        "graph", "shape", "circle"):
+                    lagg("figuren", vag)
+        elif sort == "formel":
+            for _eid, sek, vag in rutor:
+                if isinstance(sek, dict) and sek.get("kind") in ("math",
+                                                                 "stack"):
+                    lagg("formeln", vag)
+    return ut[:MAX_GISSADE]
+
+
+# Taket för ett varv utan markering. Spåret 2026-09-06: median ETT ändrat
+# element, och de trasiga varven ändrade 8–18. Fyra släpper igenom ett riktigt
+# flerdelat önskemål och fångar helomskrivningen.
+DIFFTAK = 4
+
+
+def _inom(vag: str, malvagarna: list[str]) -> bool:
+    return any(vag == m or vag.startswith(m + ".") for m in malvagarna)
+
+
+def diffvakt(board: dict, resultat: dict, instruction: str,
+             log=None) -> list[tuple[str, str]]:
+    """Vägarna varvet ska köras OM mot — eller tom lista (dagens väg gäller).
+
+    Ordningen är fail-open hela vägen: ingen igenkänning, inget uppslag, ingen
+    ändring och ingen överträdelse ⇒ tom lista."""
+    sag = log or (lambda _m: None)
+    gissning = las_maltyper(instruction)
+    if not gissning:
+        return []
+    andrade = dokumentdiff.andrade_element("tavla", board, resultat)
+    if not andrade:
+        return []
+    vagar = gissade_malvagar(board, gissning)
+    if not vagar:
+        sag("Önskemålet pekar på något jag inte hittar i tavlans JSON — "
+            "varvet får stå som det är.")
+        return []
+    # Vägarna slås upp i FÖRE-tavlan, de ändrade id:na i EFTER-tavlan: en ruta
+    # som lagts till mitt i flyttar indexen. Därför jämförs vägar mot vägar,
+    # och en ruta vi inte kan slå upp räknas som utanför målet.
+    malvagarna = [v for _n, v in vagar]
+    eftervag = {eid: (dokumentdiff.tavelvag(resultat, eid) or "")
+                for eid in andrade}
+    utanfor = [eid for eid in andrade if not _inom(eftervag[eid], malvagarna)]
+    if not utanfor:
+        return []
+    # FEL TAVLA. Säger meningen «exempel 3» och vänstertavlan ändrades är det
+    # precis lärarens ord 2026-09-12, och då räcker EN ruta som skäl.
+    felsida = [eid for eid in utanfor
+               if len(gissning.sidor) == 1
+               and _sidan(eftervag[eid]) not in gissning.sidor]
+    # FÖR MYCKET. Ett önskemål som nämner tolv rutor får ändra tolv rutor —
+    # taket följer alltså målets egen storlek när den är större än DIFFTAK.
+    for_manga = len(andrade) > max(DIFFTAK, len(vagar))
+    if not felsida and not for_manga:
+        return []
+    namn = llm_client.uppradning(
+        list(dict.fromkeys(f"«{n}»" for n, _v in vagar))) or "rutan"
+    sag(f"Varvet ändrade {len(andrade)} rutor, men önskemålet gäller {namn}. "
+        "Jag kastar svaret och gör om ändringen som en lapp.")
+    return vagar
+
+
 def refine_board(board: dict, instruction: str, *, model: str,
                  mal: dict | None = None, malen=None,
                  bok: str = "", historik=None,
@@ -3109,7 +3386,10 @@ def refine_board(board: dict, instruction: str, *, model: str,
     Bär målen ett element-id som går att hitta i tavlans JSON går varvet den
     RIKTADE vägen (se MÅL-LÅSET ovan): lapp först, helomskrivning som reserv,
     och det läraren inte pekade på står kvar därför att koden håller det kvar.
-    Utan mål, eller med ett mål vi inte kan slå upp, är det exakt som förut."""
+
+    Utan mål går PROMPTEN som förut, byte för byte — men svaret prövas av
+    DIFFVAKTEN (blocket ovan, lärarens ord 2026-09-12): nämner meningen ett
+    mål och varvet ändrade något annat körs det om som en lapp."""
     log = log_cb or (lambda _m: None)
     form = tavelform(vanligt_fel, niva)
     vagar = malvagar(board, mal, malen, log=log)
@@ -3129,6 +3409,22 @@ def refine_board(board: dict, instruction: str, *, model: str,
                             "message": "modellen svarade inte med giltig JSON"}],
                 "rounds": 1}
     _doc, errors = ws.validate_board_json(candidate)
-    return _repair_until_valid(candidate, errors, model=model, llm=llm,
-                               rounds_used=1, max_rounds=max_rounds,
-                               log_cb=log_cb, token_cb=token_cb, form=form)
+    res = _repair_until_valid(candidate, errors, model=model, llm=llm,
+                              rounds_used=1, max_rounds=max_rounds,
+                              log_cb=log_cb, token_cb=token_cb, form=form)
+    # DIFFVAKTEN (se blocket ovan). Varvet är kört och prompten stod orörd —
+    # det är SVARET som prövas. Nämnde meningen ett mål och varvet gick
+    # utanför det körs samma önskemål om som en riktad lapp mot just de
+    # rutorna, och allt annat på tavlan hålls kvar av koden i stället för av
+    # ett löfte i prompten.
+    vagar = diffvakt(board, res.get("board") or board, instruction, log)
+    if not vagar:
+        return res
+    riktad = _riktad_refine(board, instruction, vagar, model=model, llm=llm,
+                            mal=mal, malen=malen, bok=bok, historik=historik,
+                            max_rounds=max_rounds, log_cb=log_cb,
+                            token_cb=token_cb, form=form)
+    # Rundorna RÄKNAS IHOP: det kastade varvet kostade en runda, och budgeten
+    # är tavlans gemensamma (jobbremsan och reparationsloopen läser samma tal).
+    riktad["rounds"] = res.get("rounds", 1) + riktad.get("rounds", 0)
+    return riktad
