@@ -4126,7 +4126,14 @@
 
        Hellre ett nej som säger var raden ändras. Villkoret är ALLA mål och
        inte något: pekade hon på anvisningen OCH en uppgift är uppgiften ett
-       riktigt mål, och då ska önskemålet gå iväg. */
+       riktigt mål, och då ska önskemålet gå iväg.
+
+       SEDAN 2026-09-06 är det här en bakkant och inte första försvaret:
+       anvisningen är en av flera HÄRLEDDA rader (blad.js `data-harledd`), och
+       granskningen svarar om dem i chatten utan att ens bygga en kropp
+       (granska.js korOnskan). Raden står kvar för den som anropar
+       iterationsJobb från annat håll: ett nej som säger var raden ändras är
+       bättre än ett varv som inte kan göra något. */
     if (mal.length && mal.every(m => m.el === 'not')) {
       return Promise.reject(new Error(
         'Anvisningen skrivs av appen ur provets poäng och delar och går inte att'
