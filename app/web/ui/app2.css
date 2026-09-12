@@ -577,7 +577,16 @@
    BESKED — inte som en ändring, för ingen ändring skedde. */
 .gvarv[data-borta]{border-left-color:var(--line);cursor:default}
 .gvarv[data-borta]:hover{background:transparent}
-.gbortatext{margin:0;font-size:.9rem;line-height:1.55;color:var(--ink-2)}
+.gbortatext{margin:0 0 6px;font-size:.9rem;line-height:1.55;color:var(--ink-2)}
+.gbortatext:last-child{margin-bottom:0}
+/* ── EN RAD SOM SVARAR DIREKT ──────────────────
+   Målet var en rad appen räknar fram (metaraden, fortsättningsraden): inget varv
+   gick, och därför inget nummer och ingen blå känsla av ändring. Samma lugna
+   form som en borta-rad, för det är samma sorts besked. */
+.gvarv[data-harledd]{border-left-color:var(--line)}
+/* Chipet säger det redan i målrutan: den här rutan går att peka på, men
+   meningen om den blir ett svar och inte en omskrivning. */
+.gmalchip[data-harledd]{border:1px dashed var(--line);border-radius:var(--r-pill);padding:1px 4px 1px 9px;color:var(--ink-2)}
 .gnotnr{width:19px;height:19px;flex:0 0 auto;border-radius:50%;background:var(--sky-deep);color:#fff;font-size:.72rem;font-weight:600;display:grid;place-items:center}
 .gvarvel{font-size:.74rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--sky-deep);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gfraga{margin:8px 0 0;font-size:.94rem;line-height:1.5;color:var(--ink)}

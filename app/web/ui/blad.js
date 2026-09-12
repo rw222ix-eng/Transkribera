@@ -501,6 +501,13 @@ window.Blad = (() => {
       p.className = 'prslut';
       p.setAttribute(attr, '');
       p.textContent = text;
+      /* Samma sak som fortsättningsraden: sidfotens «Vänd» och «Slut på del A»
+         sätts här, efter markera(), och ett klick på dem hittade ingen ruta.
+         HÄRLEDD, för delningen är pagineringens och inte dokumentets. */
+      p.dataset.el = 'slutrad';
+      p.dataset.namn = attr === 'data-vand' ? 'Vändmärket' : 'Slutraden';
+      p.dataset.harledd = 'Vändmärket och slutraden sätts av pagineringen ur'
+        + ' provets delar, och går inte att skriva om här.';
       ark.appendChild(p);
     };
     /* VÄNDMÄRKET ÄR PDF:ENS, ORDAGRANT. Pappret sätter `\vandmarke` —
@@ -572,19 +579,57 @@ window.Blad = (() => {
      med elementets namn i `mal`, och serverns diff märker aldrig arket, så
      panelen säger av sig själv att ingenting på pappret ändrades. */
   const BOKARK = '.ark[data-form="lo-bok"], .ark[data-form="lo-bok3"], .ark[data-form="fe-bok"]';
+  /* Samma dom en gång till, nu som ett SVAR i stället för en tyst nolla: arket
+     skrivs av blad-boklos ur bokens egna uppgifter, och en omskrivning av
+     provet når det aldrig. Se härledda rader i markera() nedan. */
+  const BOKSKAL = 'Bokens lösningsark skrivs ur bokens egna uppgifter och går'
+    + ' inte att skriva om här. Byt uppgifter i planeringen, eller skriv om'
+    + ' pappret i stället.';
   const iBoken = el => !!el.closest(BOKARK);
   /* Rutan som ÄGER en inre nod: den närmaste förfadern som redan bär ett
      data-el. Tabeller och elevlösningar är delar av sin uppgift, inte egna
      element — se salten längre ner. */
   const agaren = el => (el.parentElement && el.parentElement.closest('[data-el]')) || null;
+  /* ── HÄRLEDDA RADER: PEKBARA, MEN INTE OMSKRIVBARA ──
+     Spåret 2026-09-06 har tre varv som gav `andrade=[]` utan ett enda fel.
+     Läraren pekade på rader som appen RÄKNAR FRAM och som därför inte finns i
+     dokumentets JSON: arbetsbladets metarad («Fixa så det blir rätt antal
+     uppgifter. Det är inte sex. Det är tolv», blad 42) och
+     fortsättningsbladens stämpelrader («fortsatt … tre av tre», gruppuppgift
+     37). Servern har ingenting att skriva om, så varvet kostade en väntan och
+     svarade ingenting. Andra försöket med gruppuppgiften var värre: modellen
+     hittade inte sidhuvudena och skrev om uppgift 2, 3 och 4 i stället.
+
+     Rutan ska ändå gå att peka på: hon pekar på den FÖR ATT den är fel, och
+     felet är verkligt. Därför ett fjärde argument här: skälet, i klartext.
+     Granskningen (granska.js) läser `data-harledd`, skickar inget varv när ett
+     härlett mål är det ENDA målet och svarar direkt i chatten i stället.
+
+     Beslutet tas PER RAD och inte per id: `rubrik` är provets kursrad (räknad
+     ur planeringen) på ett papper och gruppuppgiftens egen titel (dokumentets
+     `titel`) på ett annat, och den senare går utmärkt att skriva om. */
   function markera(rot, v) {
     const andrat = v.andrat || [];
-    const salt = (el, nyckel, namn) => {
+    const salt = (el, nyckel, namn, harledd) => {
       el.dataset.el = nyckel;
       el.dataset.namn = namn;
+      if (harledd) el.dataset.harledd = harledd;
       if (andrat.includes(nyckel)) el.classList.add('andrad');
     };
-    $$('.prhuvud, .guhuv, .lohuvud, .anhuv', rot).forEach(el => salt(el, 'rubrik', 'Sidhuvudet'));
+    /* Provets sidhuvud bär kursen, klassen och terminen ur planeringen plus
+       delbokstaven ur pagineringen (huvud() ovan, blad-bygg huvud). Inget av
+       det står i dokumentet. Facitbladets rubrik («Facit»,
+       «Bedömningsanvisning · kortsvar») är appens egen etikett av samma skäl.
+       Gruppuppgiftens och anteckningarnas huvuden bär dokumentets titel och är
+       alltså riktiga mål. */
+    const HUVUDSKAL = 'Sidhuvudet skrivs ur kursen, klassen och terminen i'
+      + ' planeringen och går inte att skriva om här. Ändra kursen eller klassen'
+      + ' i planeringen, så följer raden med.';
+    const FACITSKAL = 'Facitbladets rubrik är appens egen etikett och går inte'
+      + ' att skriva om här.';
+    $$('.prhuvud', rot).forEach(el => salt(el, 'rubrik', 'Sidhuvudet', HUVUDSKAL));
+    $$('.lohuvud', rot).forEach(el => salt(el, 'rubrik', 'Sidhuvudet', FACITSKAL));
+    $$('.guhuv, .anhuv', rot).forEach(el => salt(el, 'rubrik', 'Sidhuvudet'));
     /* Anteckningarnas sektioner är papprets uppgifter: det är dem läraren
        pekar på i canvas när hon vill ha en rad ändrad. Nålen får sitt namn ur
        rubriken, så listan i granskningen säger «Boken» och inte «Avsnitt 2». */
@@ -599,8 +644,13 @@ window.Blad = (() => {
        grupphuvud()/arkhuvud() ritat raden (se rita()), annars finns noden inte.
        Arbetsbladets metarad bär samma klass och får samma namn; den räknas
        fortfarande ur planeringen, så dokumentdiff märker den aldrig — men den
-       ska ändå gå att peka på med rätt namn. */
-    $$('.gumeta', rot).forEach(el => salt(el, 'meta', 'Metaraden'));
+       ska ändå gå att peka på med rätt namn.
+       Och just därför är den HÄRLEDD: «Det är inte sex. Det är tolv» (blad 42,
+       2026-09-06) gav ett tomt varv. Antalet räknas ur pappret, nivån står i
+       planeringen, och raden följer med när de ändras. */
+    $$('.gumeta', rot).forEach(el => salt(el, 'meta', 'Metaraden',
+      'Metaraden räknas fram i appen ur antalet uppgifter på pappret och nivån i'
+      + ' planeringen. Ändra antalet uppgifter, så följer raden med.'));
     $$('.probs, .guband', rot).forEach(el => salt(el, 'instr', 'Instruktionen'));
     $$('.gutopp', rot).forEach(el => salt(el, 'namn', 'Namnraderna'));
     /* Provtabellen och betygsgränserna hämtades förr ur EN lista och numrerades
@@ -608,13 +658,24 @@ window.Blad = (() => {
        när servern inte skickat några gränser (se planvalProv), och då hade
        provtabellen ärvt betygsgränsernas namn. Klassen avgör, inte ordningen. */
     $$('.prmeta', rot).forEach(el => salt(el, 'avtal0', 'Provtabellen'));
-    $$('.prbetyg', rot).forEach(el => salt(el, 'avtal1', 'Betygsgränserna'));
+    /* Betygsgränserna räknas av SERVERN ur kursens krav och provets poäng
+       (exam_spec.KRAV_PER_KURS) och följer med pappret som `granser`. En
+       omskrivning kan inte sätta dem: E-gränsen flyttas med egen rutt (PATCH
+       /api/exams/{id}/granser, raden under pappret i förhandsvisningen), C och
+       A följer poängen. Ett önskemål riktat hit hade blivit ett varv som skrev
+       om hela provet utan att röra ett enda tal i tabellen. */
+    $$('.prbetyg', rot).forEach(el => salt(el, 'avtal1', 'Betygsgränserna',
+      'Betygsgränserna räknas av servern ur kursens krav och provets poäng.'
+      + ' E-gränsen flyttas på raden under pappret i förhandsvisningen, C och A'
+      + ' följer uppgifternas poäng.'));
     $$('.prforsatt', rot).forEach(el => salt(el, 'forsatt', 'Bilden på försättsbladet'));
     /* Anvisningen på försättsbladet gick inte att markera alls («Välj element»
        hittade ingen ruta). Den är appens egen text, räknad ur poängen och
        delarna, och en omskrivning kan inte röra den — plan.js iterationsJobb
        säger det rakt ut när den är enda målet. Men den ska gå att peka på. */
-    $$('.prnot', rot).forEach(el => salt(el, 'not', 'Anvisningen'));
+    $$('.prnot', rot).forEach(el => salt(el, 'not', 'Anvisningen',
+      'Anvisningen skrivs av appen ur provets poäng och delar och går inte att'
+      + ' skriva om här. Ändra uppgifternas poäng eller provtabellen i stället.'));
     /* FACITETS POSTER RÄKNAS I BOKSTÄVER. Arbetsbladets och gruppuppgiftens
        facit numrerar med A, B, C (blad-bygg arkfacit) — provet med siffror.
        parseInt('A.2 p') är NaN, så facitposterna fick INGET data-el alls: de
@@ -631,7 +692,8 @@ window.Blad = (() => {
       const rad = ($('.prnr', el) || {}).textContent || '';
       const nr = parseInt(rad, 10);
       if (iBoken(el)) return salt(el, 'bokuppg' + (nr || 0),
-                                  nr ? 'Bokens uppgift ' + nr : 'Bokens uppgift');
+                                  nr ? 'Bokens uppgift ' + nr : 'Bokens uppgift',
+                                  BOKSKAL);
       if (nr) return salt(el, 'uppg' + nr, 'Uppgift ' + nr);
       const b = (rad.trim()[0] || '').toUpperCase();
       const k = BOKSTAV.indexOf(b);
@@ -667,7 +729,7 @@ window.Blad = (() => {
       const etikett = fore && fore.classList.contains('loelev')
         ? (($('b', fore) || {}).textContent || '').trim() : '';
       const namn = etikett || ('Elevlösning ' + (BOKSTAV[n] || n + 1));
-      if (iBoken(el)) return salt(el, 'bokelev' + (n + 1), namn);
+      if (iBoken(el)) return salt(el, 'bokelev' + (n + 1), namn, BOKSKAL);
       const a = agaren(el);
       salt(el, (a && a.dataset.el) || 'elev' + (n + 1), namn);
     });
@@ -1119,6 +1181,17 @@ window.Blad = (() => {
     const rad = document.createElement('div');
     rad.className = 'gufortsrad';
     rad.innerHTML = '<span class="gufortstitel"></span><span class="gufortsnr"></span>';
+    /* «På sida två och tre … fortsättning … tre av tre. Allt det ska bort»
+       (gruppuppgift 37, 2026-09-06). Raden gick inte att markera alls: den föds
+       i delaArk, alltså EFTER markera(), och klicket hittade ingen [data-el].
+       Önskemålet gick därför iväg mot hela arket, och modellen skrev om uppgift
+       2, 3 och 4 när den inte hittade några sidhuvuden. Nu bär raden sin egen
+       nål, och den är HÄRLEDD: pagineringen sätter den, inte dokumentet. */
+    rad.dataset.el = 'forts';
+    rad.dataset.namn = 'Fortsättningsraden';
+    rad.dataset.harledd = 'Fortsättningsraden sätts av pagineringen när pappret'
+      + ' inte ryms på ett blad, och går inte att skriva om här. Den försvinner'
+      + ' av sig själv när uppgifterna får plats på färre blad.';
     return rad;
   }
   function delaArk(trav) {

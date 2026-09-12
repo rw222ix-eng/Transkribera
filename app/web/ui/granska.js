@@ -184,9 +184,14 @@
      gånger — och det är DEN bilden läraren beskriver när hon skriver «det står
      ett dollartecken mitt i raden». Går med som `mal.renderat`. */
   const renderat = el => skarmtext(el).slice(0, 600);
-  /* Ett mål så som det ser ut i urvalet och i kroppen till servern. */
+  /* Ett mål så som det ser ut i urvalet och i kroppen till servern.
+     `harledd` är skälet till att rutan inte går att skriva om: appen räknar
+     fram den (blad.js markera, `data-harledd`). Den följer med i URVALET men
+     ALDRIG till servern: kroppen byggs fält för fält i kor() nedan, och
+     härledda mål silas bort innan dess. */
   const malAv = el => ({ el: el.dataset.el, namn: etikett(el), text: innehall(el),
-                         renderat: renderat(el) });
+                         renderat: renderat(el),
+                         harledd: el.dataset.harledd || '' });
   /* Målrutan: ett chip per vald ruta, med lärarens egen etikett och ett eget
      kryss. Med ETT val ser raden ut precis som förr — det är först vid två den
      blir en lista, och `data-flera` är det enda CSS behöver veta om saken. */
@@ -211,6 +216,10 @@
     } else malen.forEach(m => {
       const c = document.createElement('span');
       c.className = 'gmalchip';
+      /* En härledd ruta är vald på ett annat sätt än de andra: meningen om den
+         blir ett svar, inte ett varv. Chipet säger det före avsändningen
+         (streckad kant i app2.css) och bär skälet som hovringstext. */
+      if (m.harledd) { c.dataset.harledd = ''; c.title = m.harledd; }
       c.innerHTML = '<span class="gmaltext"></span><button class="gmalkryss" type="button">✕</button>';
       $('.gmaltext', c).textContent = m.namn;
       const x = $('.gmalkryss', c);
@@ -649,9 +658,18 @@
     const bok = window.API.bokfelText(res);
     return (text ? ' ' + text : '') + (bok ? ' ' + bok : '');
   };
+  /* Varvets svar, plus det som INTE gick med. Släpptes ett härlett mål ur
+     urvalet (se korOnskan) måste det stå i samma bubbla som resten: annars
+     tror läraren att hela meningen gick igenom, och metaraden står kvar utan
+     att någon sagt varför. */
+  function svarText(post, res) {
+    const text = varvetsSvar(post, res);
+    const slappt = (post.slappta || []).map(m => m.harledd).filter(Boolean);
+    return slappt.length ? `${text} Det som inte gick med: ${slappt.join(' ')}` : text;
+  }
   /* Vad panelen SÄGER att som hände, byggt ur serverns diff. Se kommentaren
      vid `svar:` nedan — det här är hela poängen med den. */
-  function svarText(post, res) {
+  function varvetsSvar(post, res) {
     const gjort = `Skrivet om. ${post.namn} följer nu ”${post.text}” — ändringen är markerad i pappret.${nivaraden(res)}`;
     /* `Array.isArray` och inte sanningsvärde: en TOM lista är ett svar
        («ingenting på pappret ändrades»), inte ett saknat fält. Samma regel som
@@ -878,7 +896,56 @@
        för var och en av rutorna, och att slänga hela önskemålet för att en av
        tre är borta är att kasta två uppfyllbara önskemål. */
     if (onskan.mal.length && !funna.length) return bortaRad(onskan, borta);
-    kor(onskan, funna);
+    /* ── HÄRLEDDA MÅL SKICKAS INTE ──────────────
+       Tre varv i spåret 2026-09-06 gav `andrade=[]` utan ett enda fel, för att
+       målet var en rad appen räknar fram: metaraden, fortsättningsbladens
+       stämpelrader. Servern hade ingenting att skriva om, läraren fick vänta
+       på ingenting, och en gång skrev modellen om tre uppgifter i stället för
+       att svara att den inte hittade sidhuvudena.
+       Ett härlett mål ENSAMT blir därför ett svar i chatten och inget anrop.
+       Är det ETT AV FLERA släpps det, resten går iväg, och skälet står i
+       varvets eget svar (svarText). Läraren bad om två saker, och den
+       uppfyllbara ska bli gjord. */
+    const harledda = funna.filter(m => m.harledd);
+    const riktiga = funna.filter(m => !m.harledd);
+    if (harledda.length && !riktiga.length) return harleddRad(onskan, harledda);
+    kor(onskan, riktiga, harledda);
+  }
+  /* Beskedet står där modellens svar hade stått: i tråden, i varvets egen
+     `.gsvar`. Raden räknas INTE som en ändring (`kommentarer` rörs inte), av
+     samma skäl som en borta-rad inte gör det: ingen ändring skedde. */
+  function harleddRad(onskan, harledda) {
+    const rad = onskan.rad || nyRad(onskan);
+    rad.removeAttribute('data-i-ko');
+    rad.setAttribute('data-harledd', '');
+    $('.gvarvhuvud', rad).innerHTML = '<span class="gkonot">Räknas fram</span><span class="gvarvel"></span>';
+    $('.gvarvel', rad).textContent = raknaUpp(harledda.map(m => m.namn));
+    const ut = $('.gsvar', rad);
+    ut.innerHTML = '';
+    harledda.forEach(m => {
+      const p = document.createElement('p');
+      p.className = 'gbortatext';
+      p.textContent = m.harledd;
+      ut.appendChild(p);
+    });
+    /* Meningen är inte förbrukad: inget varv tog den. Ett klick på raden
+       lägger tillbaka den i fältet, så att den går att rikta om mot en ruta
+       som GÅR att skriva om. Samma gest som en köad rad (se koa), och av
+       samma skäl. URVALET följer med flit inte med: det var just den härledda
+       rutan, och att markera den igen hade lett tillbaka till samma vägg.
+       Att lägga tillbaka texten med en gång går inte: formulärets egen
+       lyssnare tömmer fältet EFTER skicka(), alltså efter den här raden. */
+    rad.addEventListener('click', () => {
+      const f = $('#g-falt');
+      if (!f || f.value.trim()) return;
+      f.value = onskan.text;
+      f.style.height = 'auto';
+      f.style.height = Math.min(120, f.scrollHeight) + 'px';
+      f.focus({ preventScroll: true });
+      f.setSelectionRange(f.value.length, f.value.length);
+    });
+    (window.rullaLada || ((b, y) => { b.scrollTop = y; }))(lista, lista.scrollHeight);
+    naste(null, 0);
   }
   /* Alla rutorna borta — då finns önskemålet inte att uppfylla. Att skicka det
      ändå hade betytt att modellen skriver om något annat och att panelen kallar
@@ -920,7 +987,7 @@
     return Object.keys(efter).some(id => fore[id] !== undefined && fore[id] !== efter[id]);
   };
 
-  function kor(onskan, funna) {
+  function kor(onskan, funna, slappta) {
     const fore = ogonblick(), foreArk = arkIndex();
     nr++;
     const post = { id: nr,
@@ -937,7 +1004,10 @@
                    /* Vad rutorna FAKTISKT innehåller, läst nyss. Följer med
                       till servern så att omskrivningen gäller det läraren
                       pekade på. */
-                   malen: funna, text: onskan.text };
+                   malen: funna, text: onskan.text,
+                   /* De härledda mål som släpptes ur varvet. De går inte till
+                      servern, bara till svaret i tråden. */
+                   slappta: slappta || [] };
     kommentarer.push(post);
     const varv = onskan.rad || nyRad(onskan);
     varv.removeAttribute('data-i-ko');

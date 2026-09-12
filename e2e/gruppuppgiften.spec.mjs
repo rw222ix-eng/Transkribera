@@ -518,21 +518,32 @@ const BOKUPPG = {
                  svar: "$24$", vag: [["$6 + 2 = 8$", "parentesen först"]] }] },
 };
 
-test("bokens lösningsark skickar inget uppgiftsnummer till servern",
+test("bokens lösningsark skickar ingenting alls till servern",
   async ({ page }) => {
     /* Arket skrivs ur bokens lästa sidor och finns inte i provets JSON.
        Posterna bar ändå dokumentets serie: 3101 blev `uppg3101`, och
        nummerlåsningen skickade «uppgift 3101» till ett dokument med fyra
-       uppgifter. Modellen fick ett mål som inte finns. */
+       uppgifter. Modellen fick ett mål som inte finns.
+
+       Steg ett var en egen prefix, så att inget nummer låstes: varvet gick
+       oriktat, och serverns diff märkte aldrig arket. Det var ärligare, men
+       det var fortfarande en tyst nolla: läraren väntade ut en omskrivning
+       som per konstruktion inte kunde röra arket. Sedan 2026-09-06 är posten
+       en HÄRLEDD rad (blad.js `data-harledd`): skälet står i chatten med en
+       gång, och inget varv går. */
     const anrop = await fejkaRefine(page, { doc: exam(), andrade: [] });
     await iCanvas(page, papper({ inst: skriftligt, bokuppg: BOKUPPG }));
 
     await pekaPa(page, '#granskaskal .gdok [data-el="bokuppg3101"]');
     await expect(page.locator("#g-mal .gmaltext")).toHaveText("Bokens uppgift 3101");
-    await skickaOnskemal(page, "Skriv ut hela uträkningen.");
+    await page.locator("#g-falt").fill("Skriv ut hela uträkningen.");
+    await page.locator("#g-form").evaluate(f => f.requestSubmit());
 
-    expect(anrop[0].nummer).toBeUndefined();
-    expect(anrop[0].mal.namn).toBe("Bokens uppgift 3101");
+    const besked = page.locator("#g-lista .gvarv[data-harledd]");
+    await expect(besked).toHaveCount(1, { timeout: 10_000 });
+    await expect(besked).toContainText("Bokens lösningsark skrivs ur bokens egna uppgifter");
+    await expect(besked.locator(".gvarvel")).toHaveText("Bokens uppgift 3101");
+    expect(anrop).toEqual([]);
   });
 
 /* ── FACITPOSTEN ÄR SIN UPPGIFT ─────────────────────────────────
