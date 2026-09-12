@@ -243,7 +243,12 @@ window.Profil = (() => {
       minne[klass] = {
         kurs, kursN: kurs ? 1 : 0, bok: BOK_FOR(kurs) || arvdBok(kurs), bokN: 0,
         sidorPerLektion: 4, taktN: 0, senasteSida: 0, typer: {}, par: 0, n: 0,
-        svart: [], svartN: 0, grupp: '', gruppN: 0
+        svart: [], svartN: 0, grupp: '', gruppN: 0,
+        /* Inriktningen lärs INTE, den skrivs. Appen kan se vilken bok en klass
+           läser och hur fort den går, men inte vilket program eleverna går; det
+           står ingenstans i det appen får se. Därför fritext, tom tills läraren
+           fyller i den. Lärarens fynd 2026-09-12. */
+        inriktning: ''
       };
       spara();
     }
@@ -568,6 +573,21 @@ window.Profil = (() => {
     const lekt = lektionerPerVecka(klass);
     return [
       { id: 'kurs', namn: 'Kurs', varde: p.kurs || 'inte satt', stod: p.kursN ? `alla ${p.kursN} planeringar` : 'ur schemat' },
+      /* ── INRIKTNINGEN: klassens yrke ──────────────────────────
+         Lärarens fynd 2026-09-12, en byggklass och en tavla om division av
+         bråk: exempel 3 blev en abstrakt tallinje, och det hon ville ha var
+         färgburkar (3/4 liter per burk, 4½ liter vägg, sex burkar). «Superappen
+         är asdålig på att komma upp med egna förslag.» Prompten visste inte
+         vad klassen går, och det är det enda den behövde veta.
+
+         Raden är den ENDA i kortet som SKRIVS i stället för att läras: det
+         står ingenstans i det appen ser vilket program eleverna går. Fritext,
+         för «Bygg och anläggning», «Fordon» och «El» är lärarens ord om sin
+         egen klass och inte en lista appen ska äga. */
+      { id: 'inriktning', namn: 'Inriktning', varde: p.inriktning || '', falt: true,
+        platshallare: 't.ex. Bygg och anläggning',
+        stod: p.inriktning ? 'exempel och uppgifter hämtas ur det yrket'
+          : 'skriv klassens program, så blir exemplen yrkets' },
       { id: 'bok', namn: 'Bok', varde: p.bok || 'ingen bok', stod: p.bokN ? `alla ${p.bokN} planeringar` : 'förval för kursen' },
       { id: 'takt', namn: 'Takt', varde: `${p.sidorPerLektion} sidor per lektion`, stod: `${p.taktN ? `snitt av ${p.taktN} lektioner` : 'ingen mätning än'}${lekt ? ` · ${lekt} lektioner i veckan` : ''}` },
       { id: 'lage', namn: 'Står på', varde: p.senasteSida ? `s. ${p.senasteSida}${a ? ` · ${a.nr} ${a.titel}` : ''}` : 'okänt läge', stod: `nästa gång: s. ${ns.fran}–${ns.till}${ns.avsnitt ? ` · ${ns.avsnitt.nr} ${ns.avsnitt.titel}` : ''}` },
@@ -585,12 +605,23 @@ window.Profil = (() => {
     const p = forKlass(klass);
     ruta.hidden = false;
     ruta.innerHTML = `<div class="kprhuvud"><p class="kpretikett">Klassprofil · ${klass}</p><span class="kprn">${p.n ? `${p.n} planeringar i minnet` : 'inget i minnet än'}</span><button class="lank" type="button" data-noll>Nollställ</button></div>
-      <div class="kprnat">${rader(klass).map(r => `<div class="kprrad" data-id="${r.id}"><span class="kprnamn">${r.namn}</span><span class="kprvarde"></span><span class="kprstod"></span>${r.fast ? '' : '<button class="kprglom" type="button" data-glom aria-label="Glöm den här raden">Glöm</button>'}</div>`).join('')}</div>
+      <div class="kprnat">${rader(klass).map(r => `<div class="kprrad" data-id="${r.id}"><span class="kprnamn">${r.namn}</span>${r.falt ? `<input class="kprfalt" type="text" data-falt aria-label="${r.namn} för ${klass}">` : '<span class="kprvarde"></span>'}<span class="kprstod"></span>${r.fast || r.falt ? '' : '<button class="kprglom" type="button" data-glom aria-label="Glöm den här raden">Glöm</button>'}</div>`).join('')}</div>
       <p class="kprfot">Minnet byggs av det du väljer och av transkriptionerna från lektionerna du spelat in. Det ligger på din dator och används bara för att fylla i förvalen åt dig.</p>`;
     rader(klass).forEach(r => {
       const rad = $(`.kprrad[data-id="${r.id}"]`, ruta);
-      $('.kprvarde', rad).textContent = r.varde;
+      if ($('.kprvarde', rad)) $('.kprvarde', rad).textContent = r.varde;
       $('.kprstod', rad).textContent = r.stod;
+      /* Det skrivna fältet sparas när man lämnar det, inte vid varje tangent:
+         minnet går till servern i ett svep (PUT /api/klassprofil) och en
+         skrivning per bokstav hade varit trettio anrop för «Bygg och
+         anläggning». Enter gör samma sak, för det är vad man trycker. */
+      const f = $('[data-falt]', rad);
+      if (f) {
+        f.value = r.varde;
+        f.placeholder = r.platshallare || '';
+        f.addEventListener('change', () => skriv(klass, r.id, f.value));
+        f.addEventListener('keydown', e => { if (e.key === 'Enter') f.blur(); });
+      }
       const g = $('[data-glom]', rad);
       if (g) g.addEventListener('click', () => glom(klass, r.id, r.namn));
     });
@@ -603,10 +634,33 @@ window.Profil = (() => {
       window.toast && window.toast(`Minnet av ${klass} nollställt`, 'Ångra', () => { minne[klass] = fore; spara(); rita(); });
     });
   }
+  /* Ett fält läraren SKRIVER i profilkortet. Skiljer sig från `lar` på en
+     punkt som är hela poängen: här finns inget belägg att räkna upp, för det är
+     hon som vet, inte appen. Ritas om bara när värdet faktiskt ändrades, så
+     att markören inte hoppar ur rutan man just skrev i. */
+  function skriv(klass, id, varde) {
+    const p = forKlass(klass);
+    if (!p) return;
+    const v = String(varde || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+    if (p[id] === v) return;
+    p[id] = v;
+    spara();
+    rita();
+  }
+  /* Klassens yrke, för prompten. plan.js skickar det med skrivjobben precis
+     som kurs och klass reser (lesson_board.inriktningsrad, exam_gen.build_yrke).
+     Tomt fält betyder «ingen regel», och då är begäran den som gick i väg
+     innan fältet fanns. */
+  const inriktningFor = klass => {
+    const p = klass ? forKlass(klass) : null;
+    return (p && p.inriktning) || '';
+  };
+
   function glom(klass, id, namn) {
     const p = forKlass(klass);
     const fore = JSON.parse(JSON.stringify(p));
     if (id === 'kurs') { p.kurs = ''; p.kursN = 0; }
+    if (id === 'inriktning') p.inriktning = '';
     if (id === 'bok') { p.bok = ''; p.bokN = 0; }
     if (id === 'takt') { p.sidorPerLektion = 4; p.taktN = 0; }
     if (id === 'lage') p.senasteSida = 0;
@@ -657,5 +711,5 @@ window.Profil = (() => {
     spara();
   }
 
-  return { forKlass, anvand, lar, rita, slapp, slappMinnesrad, visaFor, gyFor, sattLage, lageFor, bekraftaLage, minne: () => minne };
+  return { forKlass, anvand, lar, rita, slapp, slappMinnesrad, visaFor, gyFor, sattLage, lageFor, bekraftaLage, inriktningFor, minne: () => minne };
 })();

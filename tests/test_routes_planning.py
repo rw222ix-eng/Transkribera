@@ -113,7 +113,10 @@ def _stub_generate(monkeypatch, result):
                       # själv har, så att ett anrop utan dem syns som
                       # «gjorde som förut».
                       "vanligt_fel": _kw.get("vanligt_fel", True),
-                      "niva": _kw.get("niva", "")})
+                      "niva": _kw.get("niva", ""),
+                      # Klassens yrke ur klassprofilen (lärarens fynd
+                      # 2026-09-12), läst på samma sätt och av samma skäl.
+                      "inriktning": _kw.get("inriktning", "")})
         if log_cb:
             log_cb("Genererar lektionstavlan …")
         return result
@@ -376,7 +379,7 @@ def test_render_report_triggers_repair(llm_ready, monkeypatch):
 
     def fake_repair(board, warnings, *, model, llm=None, rounds_used=1,
                     max_rounds=lesson_board.MAX_ROUNDS,
-                    vanligt_fel=True, niva="", log_cb=None,
+                    vanligt_fel=True, niva="", inriktning="", log_cb=None,
                     token_cb=None):
         captured["warnings"] = warnings
         captured["rounds_used"] = rounds_used
@@ -417,6 +420,7 @@ def test_refine_updates_board(llm_ready, monkeypatch):
 
     def fake_refine(board, instruction, *, model, mal=None, malen=None,
                     bok="", historik=None, vanligt_fel=True, niva="",
+                    inriktning="",
                     llm=None, max_rounds=lesson_board.MAX_ROUNDS, log_cb=None,
                     token_cb=None):
         captured["instruction"] = instruction
@@ -968,6 +972,7 @@ def test_refine_far_hela_meddelandet_inklusive_kallviktningen(llm_ready, monkeyp
 
     def fake_refine(board, message, *, model, mal=None, malen=None,
                     bok="", historik=None, vanligt_fel=True, niva="",
+                    inriktning="",
                     llm=None, max_rounds=lesson_board.MAX_ROUNDS, log_cb=None,
                     token_cb=None):
         sett["message"] = message
@@ -1037,6 +1042,7 @@ def test_tavlan_gar_att_andra_efter_en_omstart(llm_ready, monkeypatch):
 
     def fake_refine(board, instruction, *, model, mal=None, malen=None,
                     bok="", historik=None, vanligt_fel=True, niva="",
+                    inriktning="",
                     llm=None, max_rounds=lesson_board.MAX_ROUNDS, log_cb=None,
                     token_cb=None):
         sett["board"] = board
@@ -1417,3 +1423,101 @@ def test_begaran_vinner_over_det_sparade_laget(llm_ready, monkeypatch):
     _done(llm_ready.post(f"/api/planning/{pid}/refine",
                          json={"message": "och kortare"}))
     assert sett["vanligt_fel"] is False, "valet skrevs inte tillbaka i läget"
+
+
+# ── KLASSENS YRKE (lärarens fynd 2026-09-12) ──────────────
+# «Superappen är asdålig på att komma upp med egna förslag.» Exempel 3 på en
+# tavla för en byggklass blev en abstrakt tallinje; det hon ville ha var
+# färgburkar med riktiga mått. Inriktningen står i klassprofilen och ska resa
+# med skrivjobbet precis som kurs och klass gör.
+
+def test_inriktningen_nar_genereringen(llm_ready, monkeypatch):
+    calls = _stub_generate(monkeypatch,
+                           {"board": _valid_board(), "errors": [], "rounds": 1})
+    _done(llm_ready.post("/api/planning/generate",
+                         json={"moment": "Division av bråk",
+                               "inriktning": "Bygg och anläggning"}))
+    assert calls[0]["inriktning"] == "Bygg och anläggning"
+
+
+def test_utan_inriktning_ar_allt_som_forut(llm_ready, monkeypatch):
+    """Kassettregeln. En klass utan yrke i profilen skickar inget fält, och då
+    ska prompten vara den som banden spelades in mot."""
+    calls = _stub_generate(monkeypatch,
+                           {"board": _valid_board(), "errors": [], "rounds": 1})
+    _done(llm_ready.post("/api/planning/generate", json={"moment": "x"}))
+    assert calls[0]["inriktning"] == ""
+    # En tom eller blankslagen ruta betyder samma sak som ingen ruta.
+    _done(llm_ready.post("/api/planning/generate",
+                         json={"moment": "x", "inriktning": "   "}))
+    assert calls[1]["inriktning"] == ""
+
+
+def test_inriktningen_ar_en_rad_och_kapad(llm_ready, monkeypatch):
+    """Fritext ur klassprofilen är användarinmatning: en rad, kapad, som allt
+    annat som går in i en prompt."""
+    calls = _stub_generate(monkeypatch,
+                           {"board": _valid_board(), "errors": [], "rounds": 1})
+    _done(llm_ready.post(
+        "/api/planning/generate",
+        json={"moment": "x",
+              "inriktning": "  Bygg\noch\tanläggning " + "x" * 200}))
+    sett = calls[0]["inriktning"]
+    assert sett.startswith("Bygg och anläggning")
+    assert len(sett) == lesson_board.MAX_INRIKTNING
+    assert "\n" not in sett and "\t" not in sett
+
+
+def test_yrket_foljer_med_till_omskrivningen_och_reparationen(llm_ready,
+                                                              monkeypatch):
+    """Omskrivningen och renderingsreparationen skriver om HELA tavlan. Utan
+    yrket i deras prompt skriver runda två tillbaka färgburkarna till x."""
+    _stub_generate(monkeypatch,
+                   {"board": _valid_board(), "errors": [], "rounds": 1})
+    pid = _done(llm_ready.post("/api/planning/generate",
+                               json={"moment": "x",
+                                     "inriktning": "Fordon"}))["id"]
+    sett = {}
+
+    def fake_refine(board, instruction, **kw):
+        sett.update(kw)
+        return {"board": board, "errors": [], "rounds": 1}
+    monkeypatch.setattr(lesson_board, "refine_board", fake_refine)
+    _done(llm_ready.post(f"/api/planning/{pid}/refine",
+                         json={"message": "byt exempel 3"}))
+    assert sett["inriktning"] == "Fordon"
+
+    def fake_repair(board, warnings, **kw):
+        sett.update(kw)
+        return {"board": board, "errors": [], "rounds": 2}
+    monkeypatch.setattr(lesson_board, "repair_board", fake_repair)
+    _done(llm_ready.post(f"/api/planning/{pid}/render-report",
+                         json={"warnings": ["[WB] element-överlapp"]}))
+    assert sett["inriktning"] == "Fordon"
+
+
+def test_yrket_nar_en_tavla_som_skrevs_innan_faltet_fylldes_i(llm_ready,
+                                                             monkeypatch):
+    """Läraren fyller i klassprofilen EFTER att tavlan är skriven. Första
+    omskrivningen bär fältet, och varven därefter ärver det ur läget, utan att
+    krysset eller nivån tappas på vägen."""
+    _stub_generate(monkeypatch,
+                   {"board": _valid_board(), "errors": [], "rounds": 1})
+    pid = _done(llm_ready.post("/api/planning/generate",
+                               json={"moment": "x",
+                                     "vanligt_fel": False}))["id"]
+    sett = {}
+
+    def fake_refine(board, instruction, **kw):
+        sett.update(kw)
+        return {"board": board, "errors": [], "rounds": 1}
+    monkeypatch.setattr(lesson_board, "refine_board", fake_refine)
+    _done(llm_ready.post(f"/api/planning/{pid}/refine",
+                         json={"message": "gör exemplen yrkesnära",
+                               "inriktning": "El och energi"}))
+    assert sett["inriktning"] == "El och energi"
+    assert sett["vanligt_fel"] is False, "krysset tappades när yrket kom"
+    _done(llm_ready.post(f"/api/planning/{pid}/refine",
+                         json={"message": "och kortare"}))
+    assert sett["inriktning"] == "El och energi", "yrket skrevs inte tillbaka"
+    assert sett["vanligt_fel"] is False

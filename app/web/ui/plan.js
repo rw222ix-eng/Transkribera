@@ -3002,6 +3002,22 @@
     const sidor = log => (window.Sidor && window.Sidor.sakra
       ? window.Sidor.sakra({ log }) : Promise.resolve(null))
       .then(pid => (pid ? { underlag: pid } : {}));
+    /* ── KLASSENS YRKE ──────────────────────────────────────────
+       Lärarens fynd 2026-09-12: exempel 3 på en tavla för en byggklass blev en
+       abstrakt tallinje, och det hon ville ha var färgburkar med riktiga mått.
+       «Superappen är asdålig på att komma upp med egna förslag.» Inriktningen
+       står i klassprofilen (profil.js) och reser med varje skrivjobb precis som
+       kurs och klass gör; servern lägger EN regel i prompten av den
+       (lesson_board.inriktningsrad, exam_gen.build_yrke).
+
+       Skickas BARA när fältet är ifyllt, och det är samma sparsamhet som
+       egnaOrd och hjälpmedlen: en tom ruta ska ge exakt den begäran som gick i
+       väg innan fältet fanns, annars mäter kassetterna ingenting. */
+    const yrket = () => {
+      const i = window.Profil && window.Profil.inriktningFor
+        ? window.Profil.inriktningFor(utkast.klass) : '';
+      return i ? { inriktning: i } : {};
+    };
     const JOBB = {
       Tavla: ({ signal, log }) => sidor(log).then(u => window.API.strom('/api/planning/generate', {
         moment: moment.value.trim(),
@@ -3015,7 +3031,7 @@
            den kassetterna spelades in mot. */
         vanligt_fel: !!i0.vanligtFel,
         ...(i0.niva && i0.niva !== 'Blandat' ? { niva: i0.niva } : {}),
-        ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(), ...u,
+        ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(), ...yrket(), ...u,
       }, { signal, log })).then(kravDone),
       /* Provet och arbetsbladet delar rutt och skiljs åt av `typ`: samma
          skelett och samma balansvalidering, men arbetsbladet får sitt facit i
@@ -3045,7 +3061,7 @@
            finns i kroppen bara när läraren flyttat något från dagens papper.
            Arbetsbladet nedan har inga delar och skickar dem aldrig. */
         ...hjalpmedelsavvikelse(i0),
-        ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(), ...u,
+        ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(), ...yrket(), ...u,
       }, { signal, log })).then(kravDone).then(r => {
         if (!r.exam) throw new Error('Provet gick inte att skriva den här gången. Försök igen.');
         return r;
@@ -3073,7 +3089,7 @@
         elev_id: bladNu.id, elev: bladNu.namn,
         syfte: String(i0.syfte || 'Stötta').toLowerCase() === 'utmana' ? 'utmana' : 'stotta',
       } : {}),
-      ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(), ...u,
+      ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(), ...yrket(), ...u,
     }, { signal, log })).then(kravDone).then(r => {
       if (!r.exam) throw new Error('Arbetsbladet gick inte att skriva den här gången. Försök igen.');
       return r;
@@ -3107,7 +3123,7 @@
       typ: 'gruppuppgift',
       /* Samma kryss som arbetsbladets, se JOBB.Arbetsblad. */
       illustration: !!i0.illustration,
-      ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(), ...u,
+      ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(), ...yrket(), ...u,
       grupp: {
         elever: Number(i0.grupp) || 3,
         langd_min: Number(i0.langd) || 45,
@@ -4253,6 +4269,15 @@
        lärarens egna — modellens svar står redan i dokumentet. */
     const kropp = Object.assign({ message: text }, bokKalla(), malDel,
                                 historik && historik.length ? { historik } : {});
+    /* YRKET MÅSTE OCKSÅ MED, av samma skäl som boken och varvhistoriken:
+       omskrivningen SKRIVER OM uppgifter och exempel, och utan regeln skriver
+       den tillbaka färgburkarna till x (lärarens fynd 2026-09-12). Klassen
+       står på pappret, inriktningen i klassprofilen. Tomt fält ⇒ ingen nyckel
+       ⇒ samma kropp som före fältet, byte för byte. Anteckningarna får den
+       inte: de har inga uppgifter att sätta i ett sammanhang. */
+    const inr = window.Profil && window.Profil.inriktningFor
+      ? window.Profil.inriktningFor(v.klass) : '';
+    const yrke = inr ? { inriktning: inr } : {};
     if (v.wbId) {
       /* Tavlans form följer med varvet, ur DOKUMENTETS upplägg — inte ur
          panelen: det är den här tavlan som skrivs om, och den kan vara ett
@@ -4265,7 +4290,7 @@
         vi.vanligtFel === undefined ? {} : { vanligt_fel: !!vi.vanligtFel },
         vi.niva && vi.niva !== 'Blandat' ? { niva: vi.niva } : {});
       return window.API.strom(`/api/planning/${v.wbId}/refine`,
-                              Object.assign(form, kropp), krokar).then(krav);
+                              Object.assign(form, yrke, kropp), krokar).then(krav);
     }
     if (v.provId) {
       /* Provet har en riktad väg sedan tidigare: `nummer` låser omskrivningen
@@ -4275,7 +4300,8 @@
       const nummer = provNummer(mal);
       /* Varvet som SKRIVS OM är det läraren ser. Utan versionen byggde ett
          önskemål efter en ångring vidare på det varv hon nyss kastade. */
-      const bas = Object.assign(v.provVersion ? { version: v.provVersion } : {}, kropp);
+      const bas = Object.assign(v.provVersion ? { version: v.provVersion } : {},
+                                yrke, kropp);
       return window.API.strom(`/api/exams/${v.provId}/refine`,
                               nummer === null ? bas : Object.assign({ nummer }, bas),
                               krokar).then(krav).then(r => {
