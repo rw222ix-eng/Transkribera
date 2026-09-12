@@ -5,10 +5,13 @@ the local URL in a native window, and closing the window stops the server and ex
 """
 from __future__ import annotations
 import json
+import mimetypes
 import os
 import shutil
+import sys
 import threading
 import time
+from pathlib import Path
 from urllib.request import urlopen
 
 import uvicorn
@@ -69,6 +72,203 @@ class Api:
             return True
         except Exception:
             return False
+
+
+# ── Nedladdningar ───────────────────────────────────────────────────────────
+# Lärarens fynd 2026-09-12: «Ladda ner PDF» på en godkänd tavla gav en fil som
+# hette «Tavla — 1.3 Andelar och förhållanden bygg tisdag» — UTAN .pdf, med
+# generisk ikon, och den öppnades inte som en PDF. Samma sak för alla papper.
+#
+# Mätt samma dag med en egen DownloadStarting-hakning (scratchpad): WebView2 är
+# oskyldig. Den lämnar över
+#   ResultFilePath = C:\Users\...\Downloads\Tavla — 1.3 ... tisdag.pdf
+#   MimeType       = application/pdf
+# för ALLA namnvarianter — med och utan tankestreck, med och utan «1.3». Blobben
+# har rätt typ. Ändelsen faller bort ETT steg senare: i pywebviews egen
+# hanterare (webview/platforms/edgechromium.py, on_download_starting), som
+# öppnar en WinForms SaveFileDialog med Filter «Alla filer (*.*)» och utan
+# DefaultExt. Datorn har HideFileExt=1, så skalet VISAR namnet utan «.pdf» i
+# rutan och lämnar tillbaka just det man ser. .NET kan inte lägga tillbaka
+# ändelsen: AddExtension hoppar över namn som redan «har» en, och
+# Path.GetExtension("Tavla — 1.3 Andelar ... tisdag") svarar
+# «.3 Andelar och förhållanden bygg tisdag» — punkten i 1.3 räcker. Att bara
+# sätta DefaultExt="pdf" räddar alltså inte lärarens filnamn.
+#
+# Därför tar appen över nedladdningen helt: ingen dialog (läraren bad aldrig om
+# en, och appen säger redan «PDF:en ligger i Hämtat»), ändelsen säkras ur
+# MIME-typen, filen landar i Hämtat med ett ledigt namn och visas i
+# Utforskaren när den är färdigskriven.
+
+# MIME → ändelse för det appen faktiskt skickar. mimetypes.guess_extension är
+# reserven, men den svarar «.bat» på text/plain på vissa Windowsinstallationer
+# (registret styr den), så det appen självt producerar står här.
+_MIME_ANDELSE = {
+    "application/pdf": ".pdf",
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "text/plain": ".txt",
+    "text/csv": ".csv",
+    "application/json": ".json",
+    "application/zip": ".zip",
+    "text/vtt": ".vtt",
+    "application/x-subrip": ".srt",
+    "application/msword": ".doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+}
+
+# Tecken Windows förbjuder i filnamn. Klienten städar redan sina namn
+# (plan.js, laggIHamtat), men den här hanteraren får filnamn från vilken sida
+# som helst i appen och ska inte kunna byggas ett ogiltigt namn av.
+_FORBJUDNA = '\\/:*?"<>|'
+
+
+def _hamtat_mapp() -> Path:
+    """Var «Hämtat» ligger — samma mapp som webbläsaren skulle ha valt.
+
+    TRANSKRIBERA_HAMTAT finns för att kunna peka om mappen i en verifiering
+    (och för den som vill lägga hämtat någon annanstans). Annars frågar vi
+    Windows efter den riktiga nedladdningsmappen; registret är sanningen, för
+    mappen går att flytta och ~/Downloads är då fel."""
+    egen = os.environ.get("TRANSKRIBERA_HAMTAT")
+    if egen:
+        return Path(egen)
+    if sys.platform == "win32":
+        try:
+            import winreg
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders",
+            ) as nyckel:
+                # {374DE290-…} = Downloads. Samma GUID som pywebview slår upp.
+                return Path(winreg.QueryValueEx(
+                    nyckel, "{374DE290-123F-4565-9164-39C4925E467B}")[0])
+        except OSError:
+            pass
+    return Path.home() / "Downloads"
+
+
+def _ser_ut_som_andelse(bit: str) -> bool:
+    """Är det HÄR en filändelse, eller bara en punkt mitt i en mening?
+
+    «Tavla — 1.3 Andelar och förhållanden bygg tisdag» har en punkt men ingen
+    ändelse. Det var precis den skillnaden .NET missade.
+
+    En ändelse är kort, utan mellanslag, ASCII (inga ändelser heter «höst») och
+    har minst en bokstav — annars blir «Prov kap 2.3» ett namn som redan anses
+    ha en ändelse och läraren står med samma fil som 2026-09-12 igen."""
+    return (bool(bit) and len(bit) <= 8 and bit.isascii() and bit.isalnum()
+            and any(c.isalpha() for c in bit))
+
+
+def _andelse_ur_mime(mime: str) -> str:
+    """«application/pdf» → «.pdf». Tom sträng när typen inte säger något."""
+    ren = (mime or "").split(";")[0].strip().lower()
+    if not ren:
+        return ""
+    if ren in _MIME_ANDELSE:
+        return _MIME_ANDELSE[ren]
+    gissad = mimetypes.guess_extension(ren) or ""
+    return gissad if _ser_ut_som_andelse(gissad.lstrip(".")) else ""
+
+
+def _filnamn(namn: str, mime: str = "") -> str:
+    """Ett filnamn Windows tar emot, med en ändelse som stämmer med innehållet.
+
+    Namnet får BEHÅLLA sin egen ändelse när det har en riktig; MIME-typen
+    lägger bara till en som saknas. Annars skulle «bok.zip» med en trasig
+    typgissning bli «bok.zip.pdf»."""
+    rent = "".join(c for c in (namn or "") if c not in _FORBJUDNA and ord(c) >= 32)
+    # Windows tål varken avslutande punkt eller mellanslag — Utforskaren visar
+    # sådana filer, men skapandet svarar «Ogiltigt filnamn».
+    rent = rent.strip().rstrip(". ").strip()
+    if not rent:
+        rent = "Hamtad fil"
+    stam, punkt, bit = rent.rpartition(".")
+    if punkt and stam and _ser_ut_som_andelse(bit):
+        return rent
+    return rent + _andelse_ur_mime(mime)
+
+
+def _ledig_fil(mapp: Path, namn: str) -> Path:
+    """Nästa lediga namn i mappen: «Tavla.pdf», «Tavla (2).pdf», …
+
+    Samma räkning som webbläsaren gör. Att skriva över är fel: läraren laddar
+    ner samma tavla igen efter en ändring och vill kunna jämföra."""
+    mapp.mkdir(parents=True, exist_ok=True)
+    mal = mapp / namn
+    if not mal.exists():
+        return mal
+    stam, punkt, bit = namn.rpartition(".")
+    if not punkt or not stam:
+        stam, bit = namn, ""
+    svans = f".{bit}" if bit else ""
+    for n in range(2, 1000):
+        kandidat = mapp / f"{stam} ({n}){svans}"
+        if not kandidat.exists():
+            return kandidat
+    return mapp / f"{stam} ({os.getpid()}){svans}"
+
+
+# Delegaterna måste överleva anropet. Utan en referens här städar .NET bort
+# StateChanged-hakningen och «visa i Utforskaren» slutar hända — tyst.
+_pagaende: list = []
+
+
+def _pa_nedladdning(self, sender, args) -> None:
+    """Vår DownloadStarting — ersätter pywebviews dialogversion.
+
+    `self` finns för att den monkeypatchas in som metod på EdgeChrome."""
+    try:
+        op = args.DownloadOperation
+        mime = getattr(op, "MimeType", "") or ""
+        mal = _ledig_fil(_hamtat_mapp(),
+                         _filnamn(os.path.basename(args.ResultFilePath or ""), mime))
+        args.ResultFilePath = str(mal)
+        try:
+            # Ingen nedladdningsruta från Edge: appen har sin egen toast och
+            # visar filen i Utforskaren när den är klar.
+            args.Handled = True
+        except Exception:
+            pass
+
+        def klar(_s, _e):
+            # Bara den färdiga filen ska visas. En avbruten nedladdning har
+            # inget att markera, och ett fel ska inte öppna en tom mapp.
+            if str(getattr(op, "State", "")) == "InProgress":
+                return
+            if klar in _pagaende:
+                _pagaende.remove(klar)
+            if str(getattr(op, "State", "")) != "Completed":
+                return
+            try:
+                filhanterare.markera(op.ResultFilePath)
+            except Exception:
+                debug_log.get_logger().exception("kunde inte visa hämtad fil")
+
+        _pagaende.append(klar)
+        op.StateChanged += klar
+    except Exception:
+        # En krasch här skulle svälja nedladdningen helt (WebView2 avbryter
+        # den). Hellre filen i webbläsarens egen mapp än inget papper alls.
+        debug_log.get_logger().exception("nedladdningen kunde inte tas över")
+
+
+def _ta_over_nedladdningar() -> None:
+    """Byt ut pywebviews hanterare innan fönstret byggs.
+
+    Monkeypatch och inte subclass: pywebview instansierar EdgeChrome själv
+    inifrån create_window, så det finns inget objekt att byta ut efteråt.
+    Importen är lat — edgechromium drar in pythonnet och finns bara på
+    Windows."""
+    if sys.platform != "win32":
+        return
+    try:
+        from webview.platforms import edgechromium
+    except Exception:
+        debug_log.get_logger().warning(
+            "kunde inte ta över nedladdningarna — pywebviews dialog används")
+        return
+    edgechromium.EdgeChrome.on_download_starting = _pa_nedladdning
 
 
 # Porten bor i app/web/port.py sedan 2026-09-06, inte i den här raden: den
@@ -151,6 +351,11 @@ def main() -> None:
     # inget felmeddelande. Med flaggan på sparar WebView2 i Hämtat, som i en
     # vanlig webbläsare. Måste sättas före create_window.
     webview.settings["ALLOW_DOWNLOADS"] = True
+    # …och appen sparar dem själv. Utan den här raden kör pywebviews egen
+    # hanterare, och då tappar filen sin .pdf-ändelse (lärarens fynd
+    # 2026-09-12 — hela historien står vid _pa_nedladdning). Måste också ske
+    # före create_window: klassen byts ut, inte ett objekt.
+    _ta_over_nedladdningar()
 
     # The LLM is NOT started here — it starts lazily on the first correction/chat
     # (the GPU arbiter owns it; a transcription unloads it to free VRAM). This
