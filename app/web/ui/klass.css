@@ -284,6 +284,13 @@
 .kprnamn{font-size:.74rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
 .kprvarde{font-size:.9rem;font-weight:500;color:var(--ink);padding-right:44px}
 .kprstod{font-size:.75rem;color:var(--ink-3);opacity:.75}
+/* Inriktningen är kortets enda SKRIVNA rad (profil.js): den lärs inte, för det
+   står ingenstans i det appen ser vilket program klassen går. Fältet ska se ut
+   som värdet bredvid det och inte som en blankett: ram först när man rör det. */
+.kprfalt{width:100%;border:1px solid transparent;border-radius:6px;background:transparent;padding:1px 4px;margin:-1px -4px;font-family:inherit;font-size:.9rem;font-weight:500;color:var(--ink)}
+.kprfalt::placeholder{color:var(--ink-3);font-weight:400;opacity:.7}
+.kprrad:hover .kprfalt{border-color:var(--line)}
+.kprfalt:focus{outline:none;border-color:var(--ink-3);background:var(--surface)}
 .kprglom{position:absolute;top:9px;right:10px;border:none;background:transparent;color:var(--ink-3);font-family:inherit;font-size:.72rem;cursor:pointer;opacity:0;transition:opacity var(--dur-2) var(--ease),color var(--dur-2) var(--ease)}
 .kprrad:hover .kprglom{opacity:.7}
 .kprglom:hover{opacity:1;color:var(--berry);text-decoration:underline;text-underline-offset:3px}

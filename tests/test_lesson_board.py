@@ -1849,6 +1849,63 @@ def test_nivaraden_star_bara_nar_nivan_ar_vald():
             form=lb.tavelform(True, blandat))
 
 
+# ── KLASSENS YRKE (lärarens fynd 2026-09-12) ────────────────────────────────
+# «Superappen är asdålig på att komma upp med egna förslag.» Exempel 3 på en
+# tavla för en byggklass blev en abstrakt tallinje; det hon ville ha var
+# färgburkarna. Samma kassettregel som ovan gäller: en klass utan inriktning
+# i profilen ska ge prompten byte för byte som den var.
+
+def test_yrkesraden_star_bara_nar_inriktningen_ar_satt():
+    for tom in ("", "   ", None):
+        form = lb.tavelform(True, "", tom)
+        assert form.instruktion() == lb.INSTRUCTION
+        assert form.domarinstruktion() == lb.TACKNING_INSTRUKTION
+        assert "YRKET:" not in lb.build_prompt("Ma1a", "BA24", "bråk",
+                                               form=form)
+    p = lb.build_prompt("Ma1a", "BA24", "division av bråk",
+                        form=lb.tavelform(True, "", "Bygg och anläggning"))
+    assert "YRKET: klassen går Bygg och anläggning" in p
+    # Regeln gäller HÖGERTAVLAN: vänstern är begreppen, och de är matematikens.
+    assert "HÖGERTAVLAN" in p
+    # Lärarens eget exempel står i prompten: det är nivån hon vill ha.
+    assert "En burk färg rymmer 3/4 liter" in p
+    assert "KONTROLLERA PÅ PLATS" in p
+    # …och de regler yrket inte får äta upp står kvar, uttryckligen.
+    assert "aldrig bokens" in p and "går jämnt ut i huvudet" in p
+
+
+def test_yrket_kapas_och_blir_en_rad():
+    """Fritext ur klassprofilen. En hel uppsats i rutan får inte skriva om
+    instruktionen, och en radbrytning får inte dela promptens rad."""
+    rad = lb.inriktningsrad("  Bygg\noch\tanläggning " + "x" * 300)
+    # Namnet står som EN rad mellan «går» och punkten, oavsett vad som skrevs.
+    namnet = rad.split("YRKET: klassen går ")[1].split(".")[0]
+    assert namnet.startswith("Bygg och anläggning x")
+    assert len(namnet) == lb.MAX_INRIKTNING
+    assert "\n" not in namnet and "\t" not in namnet
+
+
+def test_yrket_foljer_med_till_varje_prompt_och_till_domaren():
+    """Reparationen, lappen och omskrivningen skriver om tavlan. Utan yrket
+    skriver runda två tillbaka färgburkarna till x. Och domaren måste veta
+    samma sak, annars fäller den sammanhanget läraren beställt."""
+    form = lb.tavelform(False, "A-nivå", "Bygg och anläggning")
+    doc = _valid_doc()
+    for p in (lb.build_prompt("Ma1a", "BA24", "bråk", form=form),
+              lb.build_repair_prompt(doc, ["fel"], form),
+              lb.build_lapp_prompt(doc, ["fel"], form),
+              lb.build_refine_prompt(doc, "kortare", form=form),
+              lb.build_mallapp_prompt(doc, "kortare",
+                                      [("Formel 1", "doc.boards[0]")],
+                                      form=form)):
+        assert "YRKET: klassen går Bygg och anläggning" in p
+        # Yrket äter inte upp de andra valen.
+        assert "VALT BORT" in p and "NIVÅN: läraren har valt A-NIVÅ" in p
+    domare = form.domarinstruktion()
+    assert "aldrig ett fynd i sig" in domare
+    assert "Den gemensamma tråden får vara yrket." in domare
+
+
 def test_nivan_och_krysset_foljer_med_till_varje_prompt():
     """Reparationen, lappen, omskrivningen och den riktade lappen skriver alla
     om tavlan — får de standardinstruktionen lägger runda två tillbaka raden

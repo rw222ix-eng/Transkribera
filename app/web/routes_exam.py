@@ -530,6 +530,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
                                       body.get("hjalpmedel_b") or "",
                                       delar=delar)
             if typ == "prov" else "")
+        # ── YRKET (lärarens fynd 2026-09-12) ────────────────────────
+        # Klassens inriktning ur klassprofilen, skickad av plan.js bara när
+        # läraren fyllt i fältet. Den lägger EN regel i prompten: uppgifternas
+        # sammanhang ska vara elevernas eget yrke (exam_gen.build_yrke). Tomt
+        # fält ger oförändrad prompt, byte för byte, precis som hjälpmedlen.
+        inriktning = routes_planning.inriktning_val(body)
         # Gruppuppgiftens upplägg (Fas 0.6): namnraderna, tiden och
         # redovisningsformen ÄR pappersformen (se gruppark.css) — de kommer ur
         # planeringens väljare och ska in i både prompten och dokumentet.
@@ -747,7 +753,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     boknivaer=nivaer_block, forlaga=forlaga_block,
                     avsnitt=avsnitt, bokuppgifter=bokuppgifter,
                     hjalpmedel=exam_gen.build_hjalpmedel(hjalpmedelsregel),
-                    svart=svart_block, fokus=fokus_block, profil=typ,
+                    svart=svart_block, fokus=fokus_block,
+                    inriktning=inriktning, profil=typ,
                     koder=koder, skeleton=skelett, niva_mal=niva_mal,
                     riktat=riktat_block, grupp=grupp,
                     illustration=illustration,
@@ -968,6 +975,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
         bok_block = (routes_planning.bok_urval_text(db_file, body)
                      if (view.get("typ") or "prov") == "prov"
                      else routes_planning.bok_text(db_file, body))
+        # Yrket reser med varvet av samma skäl som boken: varvet SKRIVER OM
+        # uppgifter, och utan regeln skriver det tillbaka färgburkarna till x
+        # (lärarens fynd 2026-09-12). Det kommer ur klassprofilen i klienten
+        # och inte ur en kolumn: profilen är sanningen om klassen just nu, och
+        # ett papper som skrevs innan fältet fylldes i ska få regeln i sitt
+        # nästa varv. Tomt fält ger byte-identisk prompt.
+        inriktning = routes_planning.inriktning_val(body)
 
         def job(emit):
             steg = Stege(emit, _STEG_OM)
@@ -979,6 +993,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     nummer=nummer[0] if nummer and len(nummer) == 1 else nummer,
                     mal=mal, malen=malen,
                     bok=bok_block, historik=historik,
+                    inriktning=inriktning,
                     profil=view.get("typ") or "prov",
                     niva_mal=nivaval["mal"] if nivaval else None,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),

@@ -1192,6 +1192,64 @@ def _skelett_plan(skeleton: list[dict], last: bool = True) -> str:
 # INTE i provets uppdrag: det läser bokens URVAL som översikt, och dess
 # uppdragstext är lärarens egen förlaga beskriven som krav. En rad
 # till där hade varit brus, och bokblockets krav gäller dem ändå.
+# ── YRKET, SAGT TILL MODELLEN (lärarens fynd 2026-09-12) ────────────────────
+#
+# «Superappen är asdålig på att komma upp med egna förslag.» Domen föll på en
+# tavla för en byggklass, men den gäller varje papper klassen får: uppgifterna
+# skrevs i matematikens värld därför att prompten inte visste vilken värld
+# eleverna är på väg ut i. Det hon skrev själv i stället var färgburkarna
+# (3/4 liter per burk, 4½ liter vägg, sex burkar), och det som gör exemplet
+# hennes är inte räkningen utan att situationen är elevernas egen och att
+# svaret går att kontrollera på plats.
+#
+# Fältet är fritext i klassprofilen (profil.js «Inriktning») och tomt för de
+# flesta klasser. Tom sträng ger tom sträng ger byte-identisk prompt, precis
+# som hjälpmedlen, variationen och kapitelramen: kassettregeln gäller här som
+# överallt annars.
+MAX_INRIKTNING = 80
+
+_YRKE_PROFILTEXT = {
+    "prov": "Varje uppgift som har ett SAMMANHANG",
+    "arbetsblad": "Varje uppgift som har ett SAMMANHANG",
+    "gruppuppgift": "Varje uppgift",
+}
+
+
+def build_yrke(inriktning: str, profil: str = "prov") -> str:
+    """Yrkesregeln som promptblock, eller TOM STRÄNG.
+
+    Regeln är EN sak: sammanhanget ska vara elevernas eget yrke. Den rör inte
+    vilken matematik som prövas, vilka tal som väljs (TALREGLER gäller orört)
+    eller att uppgifterna ska vara egna och aldrig bokens
+    (ORIGINALITET_UR_BOKEN gäller orört). Rena räkneuppgifter utan situation,
+    som provets kortsvar, ska fortsatt vara rena: ett yrke går inte att klistra
+    på «Lös ekvationen $3x + 5 = 20$», och ett påklistrat sammanhang är precis
+    den sortens kuliss läraren strök."""
+    inr = " ".join(str(inriktning or "").split())[:MAX_INRIKTNING]
+    if not inr:
+        return ""
+    vilka = _YRKE_PROFILTEXT.get(profil, _YRKE_PROFILTEXT["prov"])
+    return (
+        f"YRKET: klassen går {inr}. {vilka} ska utspela sig i det yrket: en "
+        "situation eleverna kan möta på riktigt, med riktiga mått, enheter, "
+        "material och verktyg, och med ett svar som går att KONTROLLERA PÅ "
+        "PLATS («sex burkar à 3/4 liter blir 4½ liter, det stämmer»).\n"
+        "Så här ser nivån ut. Lärarens eget exempel till en byggklass om "
+        "division av bråk: «En burk färg rymmer 3/4 liter. Väggen kräver 4½ "
+        "liter. Hur många burkar behövs?», med $9/2 \\div 3/4 = 9/2 \\cdot "
+        "4/3 = 6$ burkar och kontrollen $6 \\cdot 3/4 = 4{,}5$ liter. Jämför "
+        "med det hon strök: «En halv meter list, 5 lika bitar. Vad visar "
+        "märket?» Samma räkning, men ingen situation eleven känner igen och "
+        "inget att kontrollera svaret mot.\n"
+        "Räknemomentet är detsamma som det skulle ha varit; det är "
+        "SAMMANHANGET som är yrkets, inte matematiken. Allt annat står kvar "
+        "orört: talreglerna, nivåerna, förmågefördelningen, och att "
+        "uppgifterna är EGNA och aldrig bokens. En ren räkneuppgift utan "
+        "situation (ett kortsvar, «lös ekvationen») ska fortsatt vara ren, "
+        "för ett påklistrat yrke är en kuliss och inte ett sammanhang.\n"
+    )
+
+
 ORIGINALITET_UR_BOKEN = (
     "Utgår pappret från en bok är boken INSPIRATION, aldrig förlaga: härma "
     "uppgiftstypen, begreppen, notationen och nivån, men skriv originella "
@@ -1424,7 +1482,7 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
                  referens: str = "", bilder: str = "", utfall: str = "",
                  bok: str = "", boknivaer: str = "", forlaga: str = "",
                  spridning: str = "", hjalpmedel: str = "",
-                 svart: str = "", fokus: str = "",
+                 svart: str = "", fokus: str = "", inriktning: str = "",
                  profil: str = "prov", koder: list[str] | None = None,
                  grupp: dict | None = None, riktat: str = "",
                  skeleton: list[dict] | None = None,
@@ -1450,6 +1508,11 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
     `hjalpmedel` är hjälpmedelsvalet per del som färdigt block
     (build_hjalpmedel) och gäller bara provet: det är den enda profilen med
     delar. Tom sträng lämnar prompten ordagrant som den var.
+
+    `inriktning` är klassens yrkesprogram ur klassprofilen («Bygg och
+    anläggning») och lägger EN regel om att uppgifternas sammanhang ska vara
+    yrkets (build_yrke, lärarens fynd 2026-09-12). Tom sträng lämnar prompten
+    ordagrant som den var.
     """
     # Skelettet räknas för ALLA tre profilerna (Del D1b): jämn förmågetäckning
     # ska vara garanterad by construction och inte bero på att modellen råkar
@@ -1531,6 +1594,14 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
     # över dem alla och går inte att läsa innan de står där.
     if fokus:
         block.append(fokus)
+    # YRKET står SIST av allt före uppdraget, och det är med flit: det är ingen
+    # källa utan en order om hur uppgifterna ska se ut, och den ska läsas i
+    # samma andetag som uppdraget den gäller. Tom sträng när klassprofilen
+    # saknar inriktning, och prompten är då byte för byte den kassetterna
+    # spelades in med (se build_yrke).
+    yrke = build_yrke(inriktning, profil)
+    if yrke:
+        block.append(yrke)
     if profil == "gruppuppgift":
         g = grupp or {}
         REDOV = {
@@ -2832,14 +2903,41 @@ RELEVANS_SCHEMA = {
 }
 
 
+def _yrkesrad_domare(inriktning: str) -> str:
+    """Yrket sagt till en DOMARE, inte till skrivningen.
+
+    Båda domarna på gruppuppgiften kan fälla ett yrkesnära sammanhang av
+    misstag: relevansdomaren för att bokens uppgift ser annorlunda ut,
+    begriplighetsdomaren för att «list», «spackel» och «reglar» är ovanliga
+    ord i en matematikbok. De är inte ovanliga för de här eleverna, och
+    sammanhanget är beställt av läraren. Tom sträng utan inriktning, alltså
+    byte-identisk domarprompt (samma kassettregel som skrivningen lyder)."""
+    inr = " ".join(str(inriktning or "").split())[:MAX_INRIKTNING]
+    if not inr:
+        return ""
+    return (
+        f"KLASSEN GÅR {inr.upper()}, och läraren har BESTÄLLT att uppgifterna "
+        "ska utspela sig i det yrket med riktiga mått, material och verktyg. "
+        "Ett yrkesnära sammanhang är därför aldrig ett fynd i sig, och "
+        "yrkets egna ord (material, verktyg, mått) är vardagsord för de här "
+        "eleverna. Att pappret har en annan situation än boken är RÄTT.\n")
+
+
 def build_relevans_prompt(kort: list[dict], bokuppgifter: list[dict],
-                          punkter: list[str] | None = None) -> str:
+                          punkter: list[str] | None = None,
+                          inriktning: str = "") -> str:
     """Relevansdomarens prompt.
 
     Ordet «relevansdomare» står här och ingen annanstans i appen —
     uppspelningen väljer band på det (tests/fejk.py `_auto`), av samma skäl
     som räknedomaren: prompten bär ett helt papper och skulle annars matcha
-    den generator som skrev det."""
+    den generator som skrev det.
+
+    `inriktning` är klassens yrkesprogram, och raden står där av en enda
+    anledning: domaren jämför pappret med BOKEN, och bokens uppgifter är
+    skrivna för alla klasser. Ett papper vars uppgifter handlar om färgburkar
+    mot en bok som skriver $9/2 \\div 3/4$ ska dömas på FÄRDIGHETEN, aldrig på
+    att situationen skiljer sig. Tom sträng ger byte-identisk domarprompt."""
     bok = [{"nr": r["nr"],
             **({"niva": r["niva"]} if r.get("niva") is not None else {}),
             "text": _kort(r.get("text") or "", 160)}
@@ -2871,6 +2969,7 @@ def build_relevans_prompt(kort: list[dict], bokuppgifter: list[dict],
         "sidorna handlar om.\n"
         "- dom \"oklart\" när du inte kan avgöra det. «oklart» är ett riktigt "
         "svar och bättre än en gissning; det fäller ingenting.\n"
+        f"{_yrkesrad_domare(inriktning)}"
         "Döm bara på SORTEN. Om uppgiften är för svår, för lång eller dåligt "
         "skriven är någon annans sak. Svara med enbart JSON."
     )
@@ -2925,6 +3024,7 @@ def relevansfynd(kort: list[dict], domar: dict[str, dict]) -> list[dict]:
 
 def doma_relevans(exam: dict, bokuppgifter: list[dict] | None, *, model: str,
                   punkter: list[str] | None = None,
+                  inriktning: str = "",
                   llm=llm_client.generate,
                   log_cb: Callable[[str], None] | None = None) -> list[dict]:
     """Ett relevansdomaranrop → fynd där uppgiften inte följer boken.
@@ -2939,7 +3039,8 @@ def doma_relevans(exam: dict, bokuppgifter: list[dict] | None, *, model: str,
     log("Jämför uppgifterna med bokens …")
     try:
         raw = llm(
-            model, build_relevans_prompt(kort, bokuppgifter, punkter),
+            model, build_relevans_prompt(kort, bokuppgifter, punkter,
+                                         inriktning),
             system=RELEVANS_SYSTEM,
             options={"temperature": 0.0},
             response_format={"type": "json_schema",
@@ -2989,10 +3090,14 @@ BEGRIP_SCHEMA = {
 }
 
 
-def build_begriplighet_prompt(kort: list[dict]) -> str:
+def build_begriplighet_prompt(kort: list[dict], inriktning: str = "") -> str:
     """Begriplighetsdomarens prompt. Ordet «begriplighetsdomare» står här och
     ingen annanstans i appen — uppspelningen väljer band på det (tests/fejk.py
-    `_auto`), av samma skäl som de andra domarna."""
+    `_auto`), av samma skäl som de andra domarna.
+
+    `inriktning` gör en sak: yrkets egna ord är inte «ovanliga ord» för de här
+    eleverna. Utan raden hade en uppgift om reglar och centrumavstånd fällts
+    för just det som gör den begriplig för klassen."""
     utan_facit = [{k: v for k, v in rad.items() if k != "losning"}
                   for rad in kort]
     return (
@@ -3015,6 +3120,7 @@ def build_begriplighet_prompt(kort: list[dict]) -> str:
         "talet eller uttrycket ska stå färdigt i texten, och det ska räcka "
         "med ett räknesteg. Läraren: «Uppgift 2 är oftast alldeles för "
         "komplicerad och svår att förstå för alla elever.»\n"
+        f"{_yrkesrad_domare(inriktning)}"
         "Döm på FÖRSTÅELSEN, inte på svårighetsgraden: den sista uppgiften "
         "SKA vara svår att lösa, men den ska gå att förstå. Svara med enbart "
         "JSON."
@@ -3057,7 +3163,8 @@ def begriplighetsdom(kort: list[dict], domar: dict[str, dict]) -> list[dict]:
     return ut[:MAX_DOMAR_PROBLEM]
 
 
-def doma_begriplighet(exam: dict, *, model: str, llm=llm_client.generate,
+def doma_begriplighet(exam: dict, *, model: str, inriktning: str = "",
+                      llm=llm_client.generate,
                       log_cb: Callable[[str], None] | None = None) -> list[dict]:
     """Ett begriplighetsdomaranrop → fynd där uppgiften inte går att förstå
     vid första läsningen. Fail-open som de andra domarna."""
@@ -3068,7 +3175,7 @@ def doma_begriplighet(exam: dict, *, model: str, llm=llm_client.generate,
     log("Läser uppgifterna med elevernas ögon …")
     try:
         raw = llm(
-            model, build_begriplighet_prompt(kort),
+            model, build_begriplighet_prompt(kort, inriktning),
             system=BEGRIP_SYSTEM,
             options={"temperature": 0.0},
             response_format={"type": "json_schema",
@@ -3957,7 +4064,8 @@ def nummerlista(nummer) -> list[int]:
 def build_refine_prompt(exam: dict, instruction: str,
                         nummer=None,
                         mal: dict | None = None, bok: str = "",
-                        historik=None, malen=None) -> str:
+                        historik=None, malen=None,
+                        inriktning: str = "") -> str:
     """Riktad omgenerering: 'byt uppgift 4', 'gör 7 svårare' …
 
     `nummer` är uppgiften önskemålet gäller — en int, eller en LISTA av int när
@@ -3969,8 +4077,12 @@ def build_refine_prompt(exam: dict, instruction: str,
     kunde ett önskemål om bokens uppgifter bara besvaras allmänt. `historik` är
     lärarens tidigare önskemål för utkastet (llm_client.varvrad).
 
+    `inriktning` är klassens yrkesprogram, och den måste med av samma skäl som
+    boken: varvet skriver om uppgifter, och en uppgift som skrivs om utan
+    regeln tappar färgburkarna tillbaka till x (lärarens fynd 2026-09-12).
+
     ETT mål ger exakt samma prompt som förut, byte för byte: den nya texten
-    uppstår bara när flervalet faktiskt skickats."""
+    uppstår bara när flervalet eller inriktningen faktiskt skickats."""
     numren = nummerlista(nummer)
     flera = llm_client.flera_mal(malen)
     if flera or len(numren) > 1:
@@ -3990,9 +4102,15 @@ def build_refine_prompt(exam: dict, instruction: str,
                     if ett else f"Lärarens önskemål: {instruction}")
         pekat = "" if ett else llm_client.malrad(mal)
     kallor = f"{bok.strip()}\n\n" if bok and bok.strip() else ""
+    # Yrket står med källorna och inte i slutraden: det är en regel om hur
+    # uppgifterna ska se ut, och lärarens egen mening ska stå ensam sist.
+    # Profilen är «prov» här därför att refine delar prompt för alla papper;
+    # regeln är densamma för dem alla, bara ingången skiljer (build_yrke).
+    yrke = build_yrke(inriktning)
+    yrket = f"{yrke.strip()}\n\n" if yrke else ""
     return (
         f"{INSTRUCTION}\n"
-        f"{kallor}"
+        f"{yrket}{kallor}"
         "Här är det nuvarande provet:\n"
         f"{json.dumps(exam, ensure_ascii=False)}\n\n"
         f"{llm_client.varvrad(historik)}"
@@ -4966,7 +5084,7 @@ BEGRIP_RAD = ("Uppgift {nr} kan behöva skrivas om för att alla ska förstå "
 def _bok_grind(res: dict, *, model: str, llm, profil: str,
                bokuppgifter: list[dict] | None, punkter: list[str] | None,
                antal: int | None, koder: list[str] | None,
-               niva_mal: dict | None,
+               niva_mal: dict | None, inriktning: str = "",
                max_rounds: int = EXTRA_BOKRUNDOR,
                log_cb: Callable[[str], None] | None = None) -> dict:
     """Relevans- och begriplighetsdomarna, med riktade extrarundor.
@@ -4983,12 +5101,13 @@ def _bok_grind(res: dict, *, model: str, llm, profil: str,
 
     def dom(e: dict) -> tuple[list[dict], list[dict]]:
         rel = doma_relevans(e, bokuppgifter, model=model, punkter=punkter,
-                            llm=llm, log_cb=log_cb)
+                            inriktning=inriktning, llm=llm, log_cb=log_cb)
         # De deterministiska vakterna först i listan: de är gratis, de är
         # säkra, och står de sist kan de falla utanför MAX_DOMAR_PROBLEM i en
         # reparationsprompt som redan är full av domarfynd.
         beg = (begriplighetssignaler(e, profil)
-               + doma_begriplighet(e, model=model, llm=llm, log_cb=log_cb))
+               + doma_begriplighet(e, model=model, inriktning=inriktning,
+                                   llm=llm, log_cb=log_cb))
         return rel, beg[:MAX_DOMAR_PROBLEM]
 
     rel, beg = dom(exam)
@@ -5052,7 +5171,8 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                   boknivaer: str = "", forlaga: str = "",
                   hjalpmedel: str = "",
                   avsnitt: list[dict] | None = None,
-                  svart: str = "", fokus: str = "", profil: str = "prov",
+                  svart: str = "", fokus: str = "", inriktning: str = "",
+                  profil: str = "prov",
                   koder: list[str] | None = None, riktat: str = "",
                   skeleton: list[dict] | None = None,
                   niva_mal: dict | None = None,
@@ -5106,6 +5226,12 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     tillbaka (doma_relevans). Tom lista lämnar prompten ordagrant som den var
     och kör ingen relevansdom.
 
+    `inriktning` är klassens yrkesprogram ur klassprofilen. Den gör två saker
+    som hör ihop, precis som boken och kapitelramen: regeln går in i prompten
+    (build_yrke) och de två domarna på gruppuppgiften får veta samma sak, så
+    att ingen av dem fäller ett yrkesnära sammanhang som läraren beställt. Tom
+    sträng lämnar både prompten och domarprompterna ordagrant som de var.
+
     `avsnitt` är KAPITELRAMEN (bok.avsnittslista eller avsnitt_ur_moment):
     kapitlets egna avsnitt med sina sidantal. Den gör två saker som hör ihop:
     spridningsblocket går in i prompten (build_spridning) och täckningen
@@ -5157,7 +5283,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                           referens=referens, bilder=bilder, utfall=utfall,
                           bok=bok, boknivaer=boknivaer, forlaga=forlaga,
                           spridning=spridning, hjalpmedel=hjalpmedel,
-                          svart=svart, fokus=fokus,
+                          svart=svart, fokus=fokus, inriktning=inriktning,
                           profil=profil, koder=koder, grupp=grupp,
                           riktat=riktat, skeleton=skeleton,
                           illustration=illustration,
@@ -5266,7 +5392,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
         res = _bok_grind(res, model=model, llm=llm, profil=profil,
                          bokuppgifter=bokuppgifter, punkter=punkter,
                          antal=antal, koder=koder, niva_mal=niva_mal,
-                         log_cb=log_cb)
+                         inriktning=inriktning, log_cb=log_cb)
     # ── BEDÖMNINGSPASSET (2026-08-23) ────────────────────────────────
     # Sist av allt, och bara på PROVET: det är provets bedömningsanvisning
     # läraren rättar efter, och arbetsbladets och gruppuppgiftens facit heter
@@ -5290,7 +5416,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
 def refine_exam(exam: dict, instruction: str, *, model: str,
                 nummer=None, profil: str = "prov",
                 mal: dict | None = None, malen=None,
-                bok: str = "", historik=None,
+                bok: str = "", historik=None, inriktning: str = "",
                 niva_mal: dict | None = None,
                 llm=llm_client.generate,
                 max_rounds: int = MAX_ROUNDS,
@@ -5312,7 +5438,7 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
     log("Uppdaterar provet …")
     candidate = _llm_round(
         build_refine_prompt(exam, instruction, nummer, mal, bok, historik,
-                            malen),
+                            malen, inriktning),
         model, llm, profil=profil, log_cb=log_cb, etikett="Uppdaterar")
     if candidate is None:
         return {"exam": exam,

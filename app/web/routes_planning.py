@@ -174,31 +174,49 @@ def forlaga_text(db_file: Path, body: dict) -> str:
 #
 # Den är alltså användarinmatning och behöver samma sanering som allt annat som
 # går in i en prompt: bara strängar, kapade, och ett tak på antalet.
-def tavelform_val(body: dict) -> tuple[bool, str]:
-    """Lärarens två val om tavlans form ur begäran: bär den «Vanligt fel», och
-    vilken nivå exemplen ska ligga på.
+def inriktning_val(body: dict) -> str:
+    """Klassens yrkesprogram ur begäran («Bygg och anläggning»).
 
-    SAKNAS FÄLTEN gäller det gamla: raden med, nivån Blandat. Det är
-    kassettregeln — ett anrop utan fälten ska ge ordagrant den prompt som gick
-    i väg innan valen fanns (app/lesson_board.Tavelform). Planeringspanelens
+    Fältet kommer ur klassprofilen (profil.js) och skickas av plan.js bara när
+    läraren fyllt i det. Tomt betyder «som förut», alltså ingen regel alls i
+    prompten (app/lesson_board.inriktningsrad). Saneras här som all annan
+    fritext på väg mot en prompt: en rad, kapad."""
+    return " ".join(str(body.get("inriktning") or "").split())[
+        :lesson_board.MAX_INRIKTNING]
+
+
+def tavelform_val(body: dict) -> tuple[bool, str, str]:
+    """Lärarens val om tavlans form ur begäran: bär den «Vanligt fel», vilken
+    nivå exemplen ska ligga på, och vilket yrke klassen går.
+
+    SAKNAS FÄLTEN gäller det gamla: raden med, nivån Blandat, ingen inriktning.
+    Det är kassettregeln, ett anrop utan fälten ska ge ordagrant den prompt som
+    gick i väg innan valen fanns (app/lesson_board.Tavelform). Planeringspanelens
     förval för en NY tavla är ändå att krysset är AV, och det förvalet bor i
     plan.js: läraren strök raden 17 gånger under veckan 1–6 sep 2026
     (spardata/forslag/2026-09-06.md)."""
     vf = body.get("vanligt_fel")
     niva = str(body.get("niva") or "").strip()
     return (True if vf is None else bool(vf),
-            "" if niva == lesson_board.NIVA_BLANDAT else niva)
+            "" if niva == lesson_board.NIVA_BLANDAT else niva,
+            inriktning_val(body))
 
 
-def tavelform_ur_laget(st: dict, body: dict) -> tuple[bool, str]:
+def tavelform_ur_laget(st: dict, body: dict) -> tuple[bool, str, str]:
     """Samma val för en omskrivning eller en reparation. Begäran vinner när
     den bär fälten (läraren kan ha kryssat om i panelen och sparat om
     utkastet); annars gäller det läget tavlan SKREVS med. En planering från
-    före valen bär ingendera och beter sig som förut."""
+    före valen bär ingendera och beter sig som förut.
+
+    Inriktningen prövas för sig och inte tillsammans med de två andra: den
+    kommer ur KLASSPROFILEN och inte ur panelen, så en klient som skickar
+    yrket men inte krysset ska få behålla det kryss tavlan skrevs med."""
+    inr = inriktning_val(body) or str(st.get("inriktning") or "").strip()
     if body.get("vanligt_fel") is None and not str(body.get("niva") or "").strip():
         return (bool(st.get("vanligt_fel", True)),
-                str(st.get("niva") or "").strip())
-    return tavelform_val(body)
+                str(st.get("niva") or "").strip(), inr)
+    vf, niva, _ = tavelform_val(body)
+    return (vf, niva, inr)
 
 
 def varvhistorik(body: dict) -> list[str]:
@@ -897,7 +915,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # Saknas fälten helt (en gammal klient, tools/) gäller det gamla
         # beteendet: raden är med, nivån är Blandat. Förvalet AV bor i
         # planeringspanelen, inte här.
-        vanligt_fel, niva = tavelform_val(body)
+        vanligt_fel, niva, inriktning = tavelform_val(body)
 
         llm = arbiter.try_acquire_llm()
         if not llm:
@@ -935,7 +953,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     model=_model_name(), memory=memory, underlag=underlag_txt,
                     utfall=utfall_txt, bok=bok_txt, forlaga=forlaga_txt,
                     svart=svart_txt, fokus=fokus_txt, delar=delar_txt,
-                    vanligt_fel=vanligt_fel, niva=niva,
+                    vanligt_fel=vanligt_fel, niva=niva, inriktning=inriktning,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 # Lektionstiden uppe till vänster är lärarens, inte modellens:
@@ -950,6 +968,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     "group_id": group_id, "course_id": course_id,
                     "datum": datum, "starttid": starttid, "sluttid": sluttid,
                     "vanligt_fel": vanligt_fel, "niva": niva,
+                    "inriktning": inriktning,
                 })
                 return {"id": pid, "board": board,
                         "errors": res["errors"], "rounds": res["rounds"]}
@@ -1052,7 +1071,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
             return {"ok": True, "repaired": False, "exhausted": True}
         # Formen tavlan SKREVS med. Reparationen skriver om hela tavlan, och
         # utan den hade en trängselrättning lagt tillbaka «Vanligt fel».
-        vanligt_fel, niva = tavelform_ur_laget(st, body)
+        vanligt_fel, niva, inriktning = tavelform_ur_laget(st, body)
 
         llm = arbiter.try_acquire_llm()
         if not llm:
@@ -1067,7 +1086,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 res = lesson_board.repair_board(
                     st["board"], warnings, model=_model_name(),
                     rounds_used=st["rounds"],
-                    vanligt_fel=vanligt_fel, niva=niva,
+                    vanligt_fel=vanligt_fel, niva=niva, inriktning=inriktning,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 # Modellen har skrivit om hela tavlan och kan ha tappat
@@ -1123,7 +1142,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # Formen tavlan skrevs med följer med varvet: omskrivningen skriver om
         # HELA tavlan (eller lappar den), och ett önskemål om något helt annat
         # får inte smyga tillbaka «Vanligt fel» eller sänka nivån.
-        vanligt_fel, niva = tavelform_ur_laget(st, body)
+        vanligt_fel, niva, inriktning = tavelform_ur_laget(st, body)
 
         llm = arbiter.try_acquire_llm()
         if not llm:
@@ -1147,7 +1166,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 res = lesson_board.refine_board(
                     st["board"], message, model=_model_name(), mal=mal,
                     malen=malen, bok=bok_txt, historik=historik,
-                    vanligt_fel=vanligt_fel, niva=niva,
+                    vanligt_fel=vanligt_fel, niva=niva, inriktning=inriktning,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 # Sa hon åt oss att sluta? Raden frågade förr om NÅGON
@@ -1178,6 +1197,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # före valen får dem här för första gången, med det gamla
                 # beteendet som värde.
                 st["vanligt_fel"], st["niva"] = vanligt_fel, niva
+                # Yrket skrivs tillbaka av samma skäl, och det räcker att det
+                # följt med EN gång: fyller läraren i klassprofilen efter att
+                # tavlan är skriven bär första omskrivningen fältet, och alla
+                # varv efter det ärver det ur läget (tavelform_ur_laget).
+                st["inriktning"] = inriktning
                 spara_planering(pid, st)
                 andrade = dokumentdiff.andrade_element("tavla", fore,
                                                        st["board"])

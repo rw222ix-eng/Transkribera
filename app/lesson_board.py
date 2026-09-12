@@ -770,6 +770,74 @@ NIVA_RADER: dict[str, str] = {
 # väg innan väljaren fanns.
 NIVA_BLANDAT = "Blandat"
 
+# Fritext ur klassprofilen är användarinmatning och kapas som allt annat som
+# går in i en prompt. Ett yrkesnamn är några ord; taket är satt så att en hel
+# uppsats i rutan inte kan skriva om instruktionen.
+MAX_INRIKTNING = 80
+
+# YRKET. EN rad, och bara när klassprofilen bär en inriktning.
+#
+# Lärarens fynd 2026-09-12, en byggklass och en tavla om division av bråk:
+# exempel 3 blev en abstrakt tallinje («En halv meter list, 5 lika bitar. Vad
+# visar märket?»). Hennes dom: «Superappen är asdålig på att komma upp med egna
+# förslag.» Det hon skrev själv i stället var färgburkarna (3/4 liter per burk,
+# 4½ liter vägg, sex burkar), och skillnaden är inte matematiken. Den är att
+# situationen är elevernas egen och att svaret går att kontrollera på plats.
+# Prompten visste inte vad klassen går; nu gör den det.
+#
+# Raden gäller HÖGERTAVLANS exempel. Vänstern är begreppen, formlerna och
+# notationen i allmän form, och de är matematikens, inte yrkets. De rörs inte.
+# Lärarens eget exempel står ordagrant i raden: prompttext utan exempel följs
+# dåligt (samma skäl som few-shotarna finns för), och det är hennes nivå som
+# ska synas.
+def inriktningsrad(inriktning: str) -> str:
+    """Yrkesregeln som EN promptrad, eller tom sträng.
+
+    Tom inriktning ger tom sträng ger byte-identisk prompt. Det är
+    kassettregeln: en klass utan inriktning i profilen ska ge exakt den prompt
+    som gick i väg innan fältet fanns."""
+    inr = " ".join(str(inriktning or "").split())[:MAX_INRIKTNING]
+    if not inr:
+        return ""
+    return (
+        f"YRKET: klassen går {inr}. Varje exempel på HÖGERTAVLAN ska vara en "
+        "situation ur det yrket, en eleverna kan möta på riktigt, med riktiga "
+        "mått, enheter, material och verktyg, och med ett svar som går att "
+        "KONTROLLERA PÅ PLATS («sex burkar à 3/4 liter blir 4½ liter, det "
+        "stämmer»). Räknemomentet är detsamma som det skulle ha varit; det är "
+        "SAMMANHANGET som är yrkets, inte matematiken.\n"
+        "Så här ser nivån ut. Lärarens eget exempel till en byggklass om "
+        "division av bråk: «En burk färg rymmer 3/4 liter. Väggen kräver 4½ "
+        "liter. Hur många burkar behövs?», med $9/2 \\div 3/4 = 9/2 \\cdot "
+        "4/3 = 6$ burkar och kontrollen $6 \\cdot 3/4 = 4{,}5$. Jämför med det "
+        "hon strök: «En halv meter list, 5 lika bitar. Vad visar märket?» "
+        "Samma räkning, men ingen situation eleven känner igen och inget att "
+        "kontrollera svaret mot.\n"
+        "Allt annat står kvar: exemplen är fortfarande EGNA och aldrig bokens, "
+        "talen väljs fortfarande så att uträkningen går jämnt ut i huvudet, "
+        "svaret räknas inte ut på tavlan, och exempelkedjan håller ihop. "
+        "Yrket är den gemensamma världen, men vändningen är fortfarande ett "
+        "nytt verb eller en ny metodtyp, aldrig bara nya tal.\n"
+    )
+
+
+# Domaren måste veta samma sak som skrivningen. Täckningsdomaren dömer
+# exemplens METODTYP mot lärarens urval och fäller «lösa exempel utan gemensam
+# tråd». Ett yrkesnära exempel klarar båda, men bara om domaren vet att
+# sammanhanget är BESTÄLLT och inte modellens egen utvikning.
+def inriktning_domarrad(inriktning: str) -> str:
+    inr = " ".join(str(inriktning or "").split())[:MAX_INRIKTNING]
+    if not inr:
+        return ""
+    return (
+        f"\nLäraren har sagt att klassen går {inr}, och exemplen SKA därför "
+        "utspela sig i det yrket med riktiga mått, material och verktyg. Ett "
+        "yrkesnära sammanhang är alltså beställt och aldrig ett fynd i sig: "
+        "döm metodtypen, täckningen och räkningen precis som vanligt, och "
+        "fäll aldrig ett exempel för att det handlar om färgburkar i stället "
+        "för om x. Den gemensamma tråden får vara yrket.\n"
+    )
+
 
 def _byt(text: str, par: tuple[tuple[str, str], ...]) -> str:
     ut = text
@@ -780,44 +848,57 @@ def _byt(text: str, par: tuple[tuple[str, str], ...]) -> str:
 
 @dataclass(frozen=True)
 class Tavelform:
-    """Lärarens två val om tavlans form: bär «Vanligt fel» raden, och vilken
-    nivå exemplen ska ligga på.
+    """Lärarens val om tavlans form: bär den «Vanligt fel» raden, vilken nivå
+    exemplen ska ligga på, och vilket YRKE klassen går.
 
-    Standardformen (vanligt_fel=True, niva="") ger ordagrant den prompt som
-    gick i väg innan valen fanns — se kassettregeln ovan."""
+    Standardformen (vanligt_fel=True, niva="", inriktning="") ger ordagrant den
+    prompt som gick i väg innan valen fanns; se kassettregeln ovan."""
     vanligt_fel: bool = True
     niva: str = ""
+    # Klassprofilens «Inriktning» (profil.js). Fritext, tom för de flesta
+    # klasser: lärarens fynd 2026-09-12 gäller yrkesprogrammen.
+    inriktning: str = ""
 
     @property
     def nivarad(self) -> str:
         return NIVA_RADER.get((self.niva or "").strip(), "")
 
+    @property
+    def yrkesrad(self) -> str:
+        return inriktningsrad(self.inriktning)
+
     def instruktion(self) -> str:
-        if self.vanligt_fel and not self.nivarad:
+        if self.vanligt_fel and not self.nivarad and not self.yrkesrad:
             return INSTRUCTION
         text = INSTRUCTION if self.vanligt_fel \
             else _byt(INSTRUCTION, _VANLIGT_FEL_BORT)
-        return text + self.nivarad
+        # Yrket sist av de två raderna, alltså närmast few-shotarna och
+        # uppdraget: nivån säger hur SVÅRA exemplen ska vara, yrket VAR de ska
+        # utspela sig, och den senare är den läraren saknade mest.
+        return text + self.nivarad + self.yrkesrad
 
     def hints(self) -> str:
         return REPAIR_HINTS if self.vanligt_fel \
             else _byt(REPAIR_HINTS, _HINTS_VANLIGT_FEL_BORT)
 
     def domarinstruktion(self) -> str:
-        return TACKNING_INSTRUKTION if self.vanligt_fel \
+        text = TACKNING_INSTRUKTION if self.vanligt_fel \
             else _byt(TACKNING_INSTRUKTION, _DOMARE_VANLIGT_FEL_BORT)
+        return text + inriktning_domarrad(self.inriktning)
 
 
 STANDARDFORM = Tavelform()
 
 
-def tavelform(vanligt_fel=True, niva: str = "") -> Tavelform:
+def tavelform(vanligt_fel=True, niva: str = "",
+              inriktning: str = "") -> Tavelform:
     """Formen ur rutternas kroppar: tåligt mot None, tomma strängar och
     «Blandat» — de betyder alla «som förut»."""
     val = (niva or "").strip()
     return Tavelform(vanligt_fel=bool(vanligt_fel) if vanligt_fel is not None
                      else True,
-                     niva="" if val == NIVA_BLANDAT else val)
+                     niva="" if val == NIVA_BLANDAT else val,
+                     inriktning=" ".join(str(inriktning or "").split()))
 
 
 def _cirkel(cx: float, cy: float, r: float, n: int = 48) -> list[list[float]]:
@@ -2976,6 +3057,7 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
                    svart: str = "", fokus: str = "", delar: str = "",
                    doma: bool = True,
                    vanligt_fel: bool = True, niva: str = "",
+                   inriktning: str = "",
                    llm=llm_client.generate,
                    max_rounds: int = MAX_ROUNDS,
                    log_cb: Callable[[str], None] | None = None,
@@ -3003,7 +3085,10 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     Domarens rundor räknas inte in i `rounds` — se _tackning_pass — men
     redovisas som `domarrundor`.
 
-    `vanligt_fel` och `niva` är lärarens val i planeringen (se Tavelform).
+    `vanligt_fel`, `niva` och `inriktning` är lärarens val i planeringen (se
+    Tavelform). `inriktning` är klassens yrkesprogram ur klassprofilen och
+    lägger EN regel om att exemplen ska vara situationer ur det yrket
+    (inriktningsrad, lärarens fynd 2026-09-12).
     DEFAULTEN ÄR DEN GAMLA: ett anrop utan fälten — testerna som spelar upp
     tests/kassetter, tools/, en gammal planering utan dem i sitt läge — får
     ordagrant den prompt som gick i väg före valen. Frontendens förval för en
@@ -3021,7 +3106,7 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     _log = log_cb or (lambda _m: None)
     log = lambda m: _log(_stamplad(m))
     log("Genererar lektionstavlan …")
-    form = tavelform(vanligt_fel, niva)
+    form = tavelform(vanligt_fel, niva, inriktning)
     prompt = build_prompt(course, group, moment, memory, underlag, utfall, bok,
                           forlaga, svart, fokus, delar, form)
     board = _llm_round(prompt, model, llm, token_cb=token_cb)
@@ -3075,6 +3160,7 @@ def repair_board(board: dict, warnings: list[str], *, model: str,
                  llm=llm_client.generate, rounds_used: int = 1,
                  max_rounds: int = MAX_ROUNDS,
                  vanligt_fel: bool = True, niva: str = "",
+                 inriktning: str = "",
                  log_cb: Callable[[str], None] | None = None,
                  token_cb: Callable[[str], None] | None = None) -> dict:
     """Reparera utifrån klientens renderingsvarningar ([WB] …).
@@ -3084,18 +3170,19 @@ def repair_board(board: dict, warnings: list[str], *, model: str,
 
     Formen måste med också här: reparationen skriver om HELA tavlan, och en
     trängselrättning fick annars lägga tillbaka den «Vanligt fel» läraren
-    valde bort när tavlan skrevs."""
+    valde bort när tavlan skrevs, eller skriva om färgburkarna till x."""
     problems: list = list(warnings)
     return _repair_until_valid(board, problems, model=model, llm=llm,
                                rounds_used=rounds_used, max_rounds=max_rounds,
                                log_cb=log_cb, token_cb=token_cb,
-                               form=tavelform(vanligt_fel, niva))
+                               form=tavelform(vanligt_fel, niva, inriktning))
 
 
 def refine_board(board: dict, instruction: str, *, model: str,
                  mal: dict | None = None, malen=None,
                  bok: str = "", historik=None,
                  vanligt_fel: bool = True, niva: str = "",
+                 inriktning: str = "",
                  llm=llm_client.generate,
                  max_rounds: int = MAX_ROUNDS,
                  log_cb: Callable[[str], None] | None = None,
@@ -3111,7 +3198,7 @@ def refine_board(board: dict, instruction: str, *, model: str,
     och det läraren inte pekade på står kvar därför att koden håller det kvar.
     Utan mål, eller med ett mål vi inte kan slå upp, är det exakt som förut."""
     log = log_cb or (lambda _m: None)
-    form = tavelform(vanligt_fel, niva)
+    form = tavelform(vanligt_fel, niva, inriktning)
     vagar = malvagar(board, mal, malen, log=log)
     if vagar:
         return _riktad_refine(board, instruction, vagar, model=model, llm=llm,
