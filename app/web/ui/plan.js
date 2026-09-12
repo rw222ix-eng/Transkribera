@@ -262,7 +262,23 @@
          planerar man fritt måste både starten och längden gå att sätta. Samma
          vred som provets: rulla på klockslaget eller på minuterna. */
       { id: 'langd', namn: 'Klockslag och längd', typ: 'lektionstid' },
-      { id: 'exempel', namn: 'Exempel att skriva upp', typ: 'antal', min: 1, max: 4 }
+      { id: 'exempel', namn: 'Exempel att skriva upp', typ: 'antal', min: 1, max: 4 },
+      /* ── «Vanligt fel» är ett VAL, inte en regel ────────────
+         Veckospåret 1–6 sep 2026 (spardata/forslag/2026-09-06.md): 17 av 35
+         tavelönskemål var «ta bort Vanligt fel», och de kom på 5 av 5 tavlor.
+         Raden var tvingande i prompten (lesson_board regel 9) och läraren
+         strök den för hand varje gång — hon ritar den inte själv på tavlan.
+         Förvalet är därför AV, och det är just därför krysset SKICKAS varje
+         gång: servern har kvar det gamla beteendet som default (kassetterna),
+         och panelen säger emot den med flit. */
+      { id: 'vanligtFel', namn: 'Rita också', typ: 'kryss',
+        delar: [{ id: 'vanligtFel', namn: 'Vanligt fel' }] },
+      /* Samma fyra lägen och samma ord som arbetsbladets nivå (exam_spec
+         NIVAVAL) — «Blandat» är defaultläget och skickas därför inte alls.
+         Tavlan har inga poäng: nivån gäller EXEMPLENS svårighet. Fyra av
+         veckans önskemål gällde just den: «eleverna är väldigt duktiga, de
+         behöver inte så mycket grundläggande», «A-nivå i boken». */
+      { id: 'niva', namn: 'Nivå på exemplen', typ: 'seg', val: ['E-nivå', 'C-nivå', 'A-nivå', 'Blandat'] }
     ],
     Prov: [
       /* När provet skrivs och hur långt det är var tre rader, sedan två: ett
@@ -406,7 +422,11 @@
     ]
   };
   const inst = {
-    Tavla: { langd: 45, starttid: '', exempel: 2 },
+    /* `vanligtFel: false` är LÄRARENS VANA, inte husets smak: hon strök raden
+       ur 5 av 5 tavlor under veckan 1–6 sep (17 av 35 önskemål). Servern har
+       kvar det gamla beteendet som default — se lesson_board.Tavelform — så
+       förvalet måste stå HÄR och skickas med varje begäran. */
+    Tavla: { langd: 45, starttid: '', exempel: 2, vanligtFel: false, niva: 'Blandat' },
     /* `takt` = minuter per poäng, lärarens egen (se PROV_TAKT nedan). Den
        ligger i upplägget och inte i koden därför att den ÄR ett val: hon ska
        kunna dra den mot NP:s 4,4 för ett tyngre prov eller mot sin gamla 2,4
@@ -2926,6 +2946,13 @@
         klass: utkast.klass, kurs: utkast.kurs,
         datum: utkast.datum || utkast.lektionsdatum || '',
         starttid: String(utkast.tid || utkast.lektionstid || '').split('–')[0].trim(),
+        /* «Vanligt fel» skickas ALLTID, till skillnad från nivån: serverns
+           default är det gamla beteendet (raden med), och panelens förval är
+           det motsatta. Nivån följer provets och arbetsbladets regel — bara
+           när den inte står i defaultläget, annars är prompten inte längre
+           den kassetterna spelades in mot. */
+        vanligt_fel: !!i0.vanligtFel,
+        ...(i0.niva && i0.niva !== 'Blandat' ? { niva: i0.niva } : {}),
         ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(), ...u,
       }, { signal, log })).then(kravDone),
       /* Provet och arbetsbladet delar rutt och skiljs åt av `typ`: samma
@@ -4146,8 +4173,18 @@
     const kropp = Object.assign({ message: text }, bokKalla(), malDel,
                                 historik && historik.length ? { historik } : {});
     if (v.wbId) {
+      /* Tavlans form följer med varvet, ur DOKUMENTETS upplägg — inte ur
+         panelen: det är den här tavlan som skrivs om, och den kan vara ett
+         gammalt utkast som plockats upp. Servern minns formen i planeringens
+         läge, men utkastet är sanningen när läraren kryssat om och sparat.
+         Ett dokument utan fälten (skrivet före valen) skickar ingendera, och
+         då gäller serverns minne precis som förut. */
+      const vi = v.inst || {};
+      const form = Object.assign(
+        vi.vanligtFel === undefined ? {} : { vanligt_fel: !!vi.vanligtFel },
+        vi.niva && vi.niva !== 'Blandat' ? { niva: vi.niva } : {});
       return window.API.strom(`/api/planning/${v.wbId}/refine`,
-                              kropp, krokar).then(krav);
+                              Object.assign(form, kropp), krokar).then(krav);
     }
     if (v.provId) {
       /* Provet har en riktad väg sedan tidigare: `nummer` låser omskrivningen
@@ -5586,7 +5623,10 @@
       const i = v.inst || {};
       if (v.typ === 'Prov') return `${v.uppgifter.length} uppgifter, ${i.provtid || '90 min'}, ${i.delprov || 'Del A + Del B'}`;
       if (v.typ === 'Arbetsblad') return `${v.uppgifter.length} uppgifter, ${i.niva || 'Blandat'}, ${(i.facit || 'Facit i bladet').toLowerCase()}`;
-      return `${i.langd || 45} minuter, ${i.exempel || 2} exempel på tavlan`;
+      /* Nivån står bara när den är vald: en tavla utan nivåval är «Blandat»,
+         och den raden säger ingenting om just det pappret. */
+      return `${i.langd || 45} minuter, ${i.exempel || 2} exempel på tavlan`
+        + (i.niva && i.niva !== 'Blandat' ? `, ${i.niva}` : '');
     };
     /* Handlar frågan om tid — prov, nästa vecka, kapitlet — svarar klassvyn med
        schemat och boken invägda. Annars är det högen som söks igenom. */

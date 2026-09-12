@@ -67,9 +67,14 @@ def test_tavlan_ur_kassetten_ar_giltig_wb_json(fejk_claude):
     fejk_claude(kassett="tavla")
     # EN runda: bandet svarar likadant varje gång, så en reparationsrunda på
     # budgetfyndet hade bara spelat upp samma tavla igen.
+    #
+    # FORMEN ÄR BANDETS. «Vanligt fel» och nivån blev val i planeringen
+    # 2026-09-12 (spåret 2026-09-06), och bandet spelades in med raden MED och
+    # nivån Blandat. Värdena står här i klartext fast de också är funktionens
+    # default: den som byter default ska se att bandet säger emot.
     res = lesson_board.generate_board(
         "Matematik 3c", "NA25", "Derivatans definition", model="",
-        max_rounds=1)
+        vanligt_fel=True, niva="Blandat", max_rounds=1)
     assert _utan_budget(res["errors"]) == [], res["errors"]
     assert res["rounds"] == 1
     board = res["board"]

@@ -756,7 +756,14 @@ def _fritt_vanligt_fel(sections: list) -> object | None:
     """Det FELAKTIGA ledet under «Vanligt fel:» är beställt (regel 9) och är
     undantaget från båda vakterna — annars fällde de tavlans egen fallgrop.
     Undantaget gäller den FÖRSTA math-sektionen efter rubriken, inte resten:
-    det var just raden EFTER förklaringen som var sifferexemplet."""
+    det var just raden EFTER förklaringen som var sifferexemplet.
+
+    RADEN ÄR VALFRI sedan 2026-09-12 (spåret 2026-09-06: läraren strök den ur
+    5 av 5 tavlor). Reglerna här rör inte det valet åt någotdera hållet: ingen
+    KRÄVER raden — saknas rubriken finns inget undantag och siffervakten dömer
+    hela vänstern — och ingen FÖRBJUDER den. Det är prompten och
+    lesson_board.vanligtfel_kvar som bär krysset, för det är bara de som vet
+    vad läraren valde."""
     sett = False
     for sec in sections or []:
         if isinstance(sec, (TextSection, HeadingSection)):

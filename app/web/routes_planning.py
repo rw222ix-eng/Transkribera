@@ -173,6 +173,33 @@ def forlaga_text(db_file: Path, body: dict) -> str:
 #
 # Den är alltså användarinmatning och behöver samma sanering som allt annat som
 # går in i en prompt: bara strängar, kapade, och ett tak på antalet.
+def tavelform_val(body: dict) -> tuple[bool, str]:
+    """Lärarens två val om tavlans form ur begäran: bär den «Vanligt fel», och
+    vilken nivå exemplen ska ligga på.
+
+    SAKNAS FÄLTEN gäller det gamla: raden med, nivån Blandat. Det är
+    kassettregeln — ett anrop utan fälten ska ge ordagrant den prompt som gick
+    i väg innan valen fanns (app/lesson_board.Tavelform). Planeringspanelens
+    förval för en NY tavla är ändå att krysset är AV, och det förvalet bor i
+    plan.js: läraren strök raden 17 gånger under veckan 1–6 sep 2026
+    (spardata/forslag/2026-09-06.md)."""
+    vf = body.get("vanligt_fel")
+    niva = str(body.get("niva") or "").strip()
+    return (True if vf is None else bool(vf),
+            "" if niva == lesson_board.NIVA_BLANDAT else niva)
+
+
+def tavelform_ur_laget(st: dict, body: dict) -> tuple[bool, str]:
+    """Samma val för en omskrivning eller en reparation. Begäran vinner när
+    den bär fälten (läraren kan ha kryssat om i panelen och sparat om
+    utkastet); annars gäller det läget tavlan SKREVS med. En planering från
+    före valen bär ingendera och beter sig som förut."""
+    if body.get("vanligt_fel") is None and not str(body.get("niva") or "").strip():
+        return (bool(st.get("vanligt_fel", True)),
+                str(st.get("niva") or "").strip())
+    return tavelform_val(body)
+
+
 def varvhistorik(body: dict) -> list[str]:
     """Lärarens tidigare ändringsmeningar för utkastet, i ordning."""
     rader = body.get("historik")
@@ -860,6 +887,16 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # byte den som gick i väg innan blocket fanns (kassettregeln).
         delar_txt = lesson_board.build_delar_block(
             lektionens_delar(db_file, body))
+        # Lärarens två val om tavlans FORM (spåret 1–6 sep 2026: 17 av 35
+        # tavelönskemål var «ta bort Vanligt fel», och fyra gällde
+        # svårigheten). Båda läses här och SPARAS med planeringen: omskrivningen
+        # och renderingsreparationen skriver om hela tavlan, och de måste veta
+        # samma sak som skrivningen gjorde — annars lägger runda två tillbaka
+        # raden läraren just valde bort.
+        # Saknas fälten helt (en gammal klient, tools/) gäller det gamla
+        # beteendet: raden är med, nivån är Blandat. Förvalet AV bor i
+        # planeringspanelen, inte här.
+        vanligt_fel, niva = tavelform_val(body)
 
         llm = arbiter.try_acquire_llm()
         if not llm:
@@ -897,6 +934,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     model=_model_name(), memory=memory, underlag=underlag_txt,
                     utfall=utfall_txt, bok=bok_txt, forlaga=forlaga_txt,
                     svart=svart_txt, fokus=fokus_txt, delar=delar_txt,
+                    vanligt_fel=vanligt_fel, niva=niva,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 # Lektionstiden uppe till vänster är lärarens, inte modellens:
@@ -910,6 +948,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     "moment": moment, "group": group, "course": course,
                     "group_id": group_id, "course_id": course_id,
                     "datum": datum, "starttid": starttid, "sluttid": sluttid,
+                    "vanligt_fel": vanligt_fel, "niva": niva,
                 })
                 return {"id": pid, "board": board,
                         "errors": res["errors"], "rounds": res["rounds"]}
@@ -1010,6 +1049,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
         if st["rounds"] >= lesson_board.MAX_ROUNDS:
             # Budgeten slut — varningarna visas ärligt i UI:t i stället.
             return {"ok": True, "repaired": False, "exhausted": True}
+        # Formen tavlan SKREVS med. Reparationen skriver om hela tavlan, och
+        # utan den hade en trängselrättning lagt tillbaka «Vanligt fel».
+        vanligt_fel, niva = tavelform_ur_laget(st, body)
 
         llm = arbiter.try_acquire_llm()
         if not llm:
@@ -1024,6 +1066,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 res = lesson_board.repair_board(
                     st["board"], warnings, model=_model_name(),
                     rounds_used=st["rounds"],
+                    vanligt_fel=vanligt_fel, niva=niva,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 # Modellen har skrivit om hela tavlan och kan ha tappat
@@ -1073,6 +1116,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # Vad läraren redan bett om för det här utkastet. Utan den började varje
         # varv om från noll: «kortare än så» hade inget «så» att gå efter.
         historik = varvhistorik(body)
+        # Formen tavlan skrevs med följer med varvet: omskrivningen skriver om
+        # HELA tavlan (eller lappar den), och ett önskemål om något helt annat
+        # får inte smyga tillbaka «Vanligt fel» eller sänka nivån.
+        vanligt_fel, niva = tavelform_ur_laget(st, body)
 
         llm = arbiter.try_acquire_llm()
         if not llm:
@@ -1096,6 +1143,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 res = lesson_board.refine_board(
                     st["board"], message, model=_model_name(), mal=mal,
                     malen=malen, bok=bok_txt, historik=historik,
+                    vanligt_fel=vanligt_fel, niva=niva,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 # Sa hon åt oss att sluta? Raden frågade förr om NÅGON
@@ -1111,6 +1159,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
                                                         st.get("sluttid"))
                 # Varje användariteration får en färsk reparationsbudget.
                 st["rounds"] = res["rounds"]
+                # Formen skrivs tillbaka: bar begäran nya val (läraren kryssade
+                # om i panelen) ska nästa varv och rendringsreparationen gå på
+                # dem, inte på det tavlan en gång skrevs med. En planering från
+                # före valen får dem här för första gången, med det gamla
+                # beteendet som värde.
+                st["vanligt_fel"], st["niva"] = vanligt_fel, niva
                 spara_planering(pid, st)
                 andrade = dokumentdiff.andrade_element("tavla", fore,
                                                        st["board"])

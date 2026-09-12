@@ -23,6 +23,7 @@ import json
 import math
 import re
 import time
+from dataclasses import dataclass
 from typing import Callable
 
 from pydantic import BaseModel, ConfigDict
@@ -637,6 +638,170 @@ REPAIR_HINTS = (
     "stegen — och rita aldrig två figurer, grafer eller tabeller i samma "
     "kolumn.\n"
 )
+
+
+# ── TAVLANS FORM ÄR LÄRARENS VAL ────────────────────────────────────────────
+# Veckospåret 1–6 sep 2026 (spardata/forslag/2026-09-06.md): 17 av 35
+# tavelönskemål var «ta bort Vanligt fel», och de kom på 5 av 5 tavlor. Raden
+# var en TVINGANDE promptregel (9 och «Vänstertavlan SKA ha sin röda …») och
+# läraren strök den för hand varje gång — hon ritar den inte själv. Fyra
+# önskemål på samma tavla gällde svårigheten: «eleverna är väldigt duktiga, de
+# behöver inte så mycket grundläggande», «A-nivå i boken».
+#
+# Båda är nu VAL i planeringen, inte regler i koden: krysset «Vanligt fel» och
+# nivåväljaren (samma fyra lägen som arbetsbladets `niva`).
+#
+# KASSETTREGELN. Standardformen — vanligt_fel=True, ingen nivå — ger
+# INSTRUCTION, REPAIR_HINTS, few-shotarna och domarprompten ORDAGRANT som de
+# stod före det här valet, byte för byte. Det är därför varje avvikelse är en
+# textersättning och inte en omskrivning av prompten: ett gammalt anrop utan
+# fälten (och tests/kassetter) beter sig exakt som förr. Frontendens FÖRVAL
+# för nya tavlor är ändå AV — det är lärarens vana, inte kodens default.
+#
+# Paren nedan är hela kontraktet. Att varje «från» faktiskt finns kvar i
+# texten prövas av tests/test_lesson_board.py: skrivs en regel om utan att
+# paret följer med faller testet i stället för att raden tyst blir kvar.
+_VANLIGT_FEL_BORT: tuple[tuple[str, str], ...] = (
+    # Regel 6: spalten till höger om figuren bär bara formelkedjan.
+    ('och till höger om den en col med formelkedjan och "Vanligt fel:". ',
+     'och till höger om den en col med formelkedjan. '),
+    ('"children": [formlerna och vanligt fel]}]}.',
+     '"children": [formlerna]}]}.'),
+    # Färgregeln: rött finns kvar, men bara för fallgropen i exemplet.
+    ('(1) rött för det som varnar — "Vanligt fel:" och det felaktiga ledet, ',
+     '(1) rött för det felaktiga ledet i ett exempel, '),
+    # Regel 8d slutar med «Sist Vanligt fel.» — spalten slutar med formeln.
+    (" Sist Vanligt fel.\n", "\n"),
+    # Regel 9 var formen på raden. Nu är den förbudet mot den — men notisen om
+    # att motorn inte ritar en headings underline inne i en row/col gäller
+    # oavsett och står kvar.
+    ('9. Sist i den högra spalten: "Vanligt fel:" i rött (text med weight 700) '
+     "följt av en underline-sektion i rött, sedan det felaktiga ledet i en "
+     "math-sektion. Förklaringen under det är HÖGST FEM ORD, och skrivs inte "
+     "alls när det röda ledet säger felet självt. Inne i en row/col ritar "
+     "motorn INTE en headings underline",
+     '9. Läraren har VALT BORT "Vanligt fel" på den här tavlan: skriv ingen '
+     "sådan rubrik, ingen röd varningsrad och inget felaktigt led på "
+     "vänstertavlan. Spalten slutar med sin sista formel. Inne i en row/col "
+     "ritar motorn INTE en headings underline"),
+    # Textbudgetens uppräkning av de skrivna enheterna.
+    ("varje formel, och Vanligt fel med sin rubrik, sitt led och sin "
+     "förklaring. HÖGST TOLV.",
+     "varje formel. HÖGST TOLV."),
+    # Innehållskravet sist i INSTRUCTION faller i sin helhet: det är just det
+    # läraren strök 17 gånger.
+    ("Vanliga fel (innehåll, inte form):\n"
+     "- Tänk ut 2–3 fel som elever verkligen gör på just det här momentet — "
+     "teckenfel vid negativa tal, glömd eller fel enhet, en tappad rot, fel "
+     "prioriteringsordning, avrundning för tidigt, förväxlade begrepp. Ett "
+     "moment där eleven inte kan göra fel finns inte.\n"
+     '- Vänstertavlan SKA ha sin röda "Vanligt fel:" (formen står i 9) och '
+     "visa felet konkret — helst det felaktiga ledet i en math-sektion — med "
+     "en kort mening om varför. En förmaning räcker inte: eleven ska känna "
+     "igen sitt eget misstag.\n",
+     ""),
+)
+# FALLGROPEN I EXEMPLET STÅR KVAR. Den är en annan sak än rutan på vänstern:
+# «det felaktiga ledet i rött bredvid det rätta, i just den uppgift klassen
+# tittar på» är lärarens egen beställning om EXEMPLEN (2026-09-05) och hör
+# till högertavlan. Det hon strök var rubriken «Vanligt fel:» med sin röda
+# underline och sitt led — inget annat.
+
+_HINTS_VANLIGT_FEL_BORT: tuple[tuple[str, str], ...] = (
+    ("färre formler, mindre figur, kortare vanligt fel. ",
+     "färre formler, mindre figur, kortare begreppsrader. "),
+)
+
+_DOMARE_VANLIGT_FEL_BORT: tuple[tuple[str, str], ...] = (
+    # Utan raden finns inget beställt felaktigt led på vänstern att undanta —
+    # och då ska siffervakten fälla varje sifferrad där, utan bakdörr.
+    ("Undantagen är lektionstiden överst och det felaktiga ledet under "
+     "«Vanligt fel:», som är beställt. ",
+     "Undantaget är lektionstiden överst. "),
+)
+
+# NIVÅN — EN rad, och bara när den inte är Blandat. Lägena och orden är
+# arbetsbladets (app/exam_spec.NIVAVAL) och beskrivningarna är avlästa ur
+# samma nivårubriker som provet dömer mot (app/niva_rubrik.RUBRIK_GENERELL),
+# så att «C» betyder samma sak på en tavla som på ett papper. Tavlan har inga
+# poäng — nivån gäller därför EXEMPLENS svårighet, inget annat.
+NIVA_RADER: dict[str, str] = {
+    "E-nivå":
+        "NIVÅN: läraren har valt E-NIVÅ. Exemplen ligger på urvalets "
+        "grundläggande uppgifter — metoden är utpekad eller självklar av "
+        "sammanhanget, modellen är given, riktningen framlänges och svaret ett "
+        "tal. Välj urvalets lättaste typer och lämna de uppgifter som kräver "
+        "ett eget metodval därhän.\n",
+    "C-nivå":
+        "NIVÅN: läraren har valt C-NIVÅ. Exemplen ska kräva att eleven VÄLJER "
+        "metod: en omskrivning, en räknelag eller en tolkning FÖRE "
+        "standardmetoden, gärna baklänges (villkoret ges, konstanten söks) "
+        "eller med två villkor som ska hållas samtidigt. Ren rutin klarar "
+        "klassen redan — den behöver inget exempel.\n",
+    "A-nivå":
+        "NIVÅN: läraren har valt A-NIVÅ — «eleverna är väldigt duktiga, de "
+        "behöver inte så mycket grundläggande». Exemplen väljs bland urvalets "
+        "svåraste uppgifter (bokens A-uppgifter), och det avgörande steget är "
+        "en INSIKT, inte en procedur: ett uttryck sett som en enhet, en "
+        "beteckning eleven själv måste införa, ett svar som inte är ett tal "
+        "utan ett villkor eller ett intervall. Skriv inga grundläggande "
+        "exempel. Begreppsraderna på vänstern står kvar — det är exemplen och "
+        "resonemanget som höjs.\n",
+}
+# Blandat = defaultläget = ingen rad alls, precis som provets «Balanserat» och
+# arbetsbladets «Blandat»: en orörd väljare ska ge exakt den prompt som gick i
+# väg innan väljaren fanns.
+NIVA_BLANDAT = "Blandat"
+
+
+def _byt(text: str, par: tuple[tuple[str, str], ...]) -> str:
+    ut = text
+    for fran, till in par:
+        ut = ut.replace(fran, till)
+    return ut
+
+
+@dataclass(frozen=True)
+class Tavelform:
+    """Lärarens två val om tavlans form: bär «Vanligt fel» raden, och vilken
+    nivå exemplen ska ligga på.
+
+    Standardformen (vanligt_fel=True, niva="") ger ordagrant den prompt som
+    gick i väg innan valen fanns — se kassettregeln ovan."""
+    vanligt_fel: bool = True
+    niva: str = ""
+
+    @property
+    def nivarad(self) -> str:
+        return NIVA_RADER.get((self.niva or "").strip(), "")
+
+    def instruktion(self) -> str:
+        if self.vanligt_fel and not self.nivarad:
+            return INSTRUCTION
+        text = INSTRUCTION if self.vanligt_fel \
+            else _byt(INSTRUCTION, _VANLIGT_FEL_BORT)
+        return text + self.nivarad
+
+    def hints(self) -> str:
+        return REPAIR_HINTS if self.vanligt_fel \
+            else _byt(REPAIR_HINTS, _HINTS_VANLIGT_FEL_BORT)
+
+    def domarinstruktion(self) -> str:
+        return TACKNING_INSTRUKTION if self.vanligt_fel \
+            else _byt(TACKNING_INSTRUKTION, _DOMARE_VANLIGT_FEL_BORT)
+
+
+STANDARDFORM = Tavelform()
+
+
+def tavelform(vanligt_fel=True, niva: str = "") -> Tavelform:
+    """Formen ur rutternas kroppar: tåligt mot None, tomma strängar och
+    «Blandat» — de betyder alla «som förut»."""
+    val = (niva or "").strip()
+    return Tavelform(vanligt_fel=bool(vanligt_fel) if vanligt_fel is not None
+                     else True,
+                     niva="" if val == NIVA_BLANDAT else val)
+
 
 def _cirkel(cx: float, cy: float, r: float, n: int = 48) -> list[list[float]]:
     """Parametrisk cirkel till fallgalleriets figurer. Motorn ritar cirklar som
@@ -1301,9 +1466,47 @@ FEW_SHOTS: list[tuple[str, dict]] = [
 ]
 
 
-def _few_shot_block() -> str:
+# FEW-SHOTARNA MÅSTE FÖLJA MED KRYSSET. Alla fem shots bär en «Vanligt fel:»-
+# nod (fyra på vänstertavlan, en i shot 1:s exempel 2), och ett exempel väger
+# tyngre än en regel: står raden kvar i shotarna medan regel 9 förbjuder den
+# skriver modellen den ändå. Filtret tar rubriken och de RÖDA sektioner som
+# följer direkt på den — underlinen, det felaktiga ledet och förklaringen —
+# alltså exakt den form regel 9 beskriver, och ingenting annat.
+def _utan_vanligt_fel(sektioner: list) -> list:
+    ut, i_raden = [], False
+    for sec in sektioner or []:
+        if not isinstance(sec, dict):
+            ut.append(sec)
+            continue
+        text = str(sec.get("text") or "").strip().lower()
+        if sec.get("kind") in ("text", "heading") and text.startswith("vanligt fel"):
+            i_raden = True
+            continue
+        if i_raden and sec.get("color") == "red":
+            continue
+        i_raden = False
+        if isinstance(sec.get("children"), list):
+            sec = {**sec, "children": _utan_vanligt_fel(sec["children"])}
+        ut.append(sec)
+    return ut
+
+
+def _shot_utan_vanligt_fel(doc: dict) -> dict:
+    ny = copy.deepcopy(doc)
+    for tavla in ny.get("boards") or []:
+        if isinstance(tavla.get("sections"), list):
+            tavla["sections"] = _utan_vanligt_fel(tavla["sections"])
+        for kol in tavla.get("columns") or []:
+            if isinstance(kol.get("sections"), list):
+                kol["sections"] = _utan_vanligt_fel(kol["sections"])
+    return ny
+
+
+def _few_shot_block(form: Tavelform = STANDARDFORM) -> str:
     parts = []
     for i, (uppdrag, doc) in enumerate(FEW_SHOTS, 1):
+        if not form.vanligt_fel:
+            doc = _shot_utan_vanligt_fel(doc)
         parts.append(
             f"Exempel {i} — uppdrag: {uppdrag}\n"
             f"JSON:\n{json.dumps(doc, ensure_ascii=False)}\n")
@@ -1367,7 +1570,7 @@ def build_delar_block(delar) -> str:
 def build_prompt(course: str, group: str, moment: str, memory: str = "",
                  underlag: str = "", utfall: str = "", bok: str = "",
                  forlaga: str = "", svart: str = "", fokus: str = "",
-                 delar: str = "") -> str:
+                 delar: str = "", form: Tavelform = STANDARDFORM) -> str:
     """Genereringsprompt: instruktion + few-shots + lärarens egna ord om vad som
     var svårt + minneskontext + ev. uppladdat underlag (bokssidor/uppgifter) +
     ev. rättat provs utfall (Etapp 0.7) + ev. lärobokens uppslag (Etapp 0.8) +
@@ -1403,7 +1606,8 @@ def build_prompt(course: str, group: str, moment: str, memory: str = "",
     # «A · B» utskriven som två moment med var sitt sidspann.
     dlr = f"\n{delar}\n" if delar else ""
     return (
-        f"{INSTRUCTION}\n{_few_shot_block()}\n{sva}{mem}{utf}{und}{bk}{forl}{fok}{dlr}\n"
+        f"{form.instruktion()}\n{_few_shot_block(form)}\n"
+        f"{sva}{mem}{utf}{und}{bk}{forl}{fok}{dlr}\n"
         f"Uppdrag: skriv lektionstavlan för {course}, klass {group} — {moment}.\n"
         "Svara med enbart JSON."
     )
@@ -1419,15 +1623,20 @@ def _format_problems(problems: list) -> str:
     return "\n".join(lines)
 
 
-def build_repair_prompt(board_json: dict, problems: list) -> str:
-    """Korrigeringsprompt: förra JSON:en + maskinläsbara fel/varningar."""
+def build_repair_prompt(board_json: dict, problems: list,
+                        form: Tavelform = STANDARDFORM) -> str:
+    """Korrigeringsprompt: förra JSON:en + maskinläsbara fel/varningar.
+
+    `form` måste med: rättningsrundan skriver om HELA tavlan, och med
+    standardinstruktionen hade den lagt tillbaka den «Vanligt fel» läraren
+    valt bort."""
     return (
-        f"{INSTRUCTION}\n"
+        f"{form.instruktion()}\n"
         "Din förra lektionstavla har problem som måste rättas. Här är tavlan:\n"
         f"{json.dumps(board_json, ensure_ascii=False)}\n\n"
         "Problem att åtgärda:\n"
         f"{_format_problems(problems)}\n\n"
-        f"{REPAIR_HINTS}\n"
+        f"{form.hints()}\n"
         "Skriv om HELA tavlan som JSON med problemen åtgärdade. Ändra så lite "
         "som möjligt i övrigt. Svara med enbart JSON."
     )
@@ -1563,19 +1772,20 @@ LAPP_INSTRUKTION = (
 )
 
 
-def build_lapp_prompt(board_json: dict, problems: list) -> str:
+def build_lapp_prompt(board_json: dict, problems: list,
+                      form: Tavelform = STANDARDFORM) -> str:
     """Lappprompten: samma underlag som build_repair_prompt — instruktionen,
     tavlan, felen, åtgärdsråden — plus en elementkarta, och ett svarsformat
     som bara bär det som ändras."""
     return (
-        f"{INSTRUCTION}\n"
+        f"{form.instruktion()}\n"
         "Din förra lektionstavla har problem som måste rättas. Här är tavlan:\n"
         f"{json.dumps(board_json, ensure_ascii=False)}\n\n"
         "Elementkarta (nyckel → element):\n"
         f"{elementkarta(board_json)}\n\n"
         "Problem att åtgärda:\n"
         f"{_format_problems(problems)}\n\n"
-        f"{REPAIR_HINTS}\n"
+        f"{form.hints()}\n"
         f"{LAPP_INSTRUKTION}\n"
     )
 
@@ -1712,7 +1922,8 @@ def _inte_samre(bas: dict[str, int], ny: dict[str, int]) -> bool:
     return all(antal <= bas.get(kod, 0) for kod, antal in ny.items())
 
 
-def _lapp_runda(board: dict, problems: list, *, model: str, llm) -> tuple | None:
+def _lapp_runda(board: dict, problems: list, *, model: str, llm,
+                form: Tavelform = STANDARDFORM) -> tuple | None:
     """En lappruta mot modellen. Returnerar ("lapp", tavla), ("hel", tavla) om
     modellen valde att skriva om alltihop ändå — det är tillåtet, och det är
     också vad en modell som inte förstod lappformen gör — eller None när
@@ -1720,7 +1931,7 @@ def _lapp_runda(board: dict, problems: list, *, model: str, llm) -> tuple | None
 
     `token_cb` skickas INTE med: strömmen finns för tavelbygget i UI:t, och en
     halv lapp är ingen tavla."""
-    raw = llm(model, build_lapp_prompt(board, problems),
+    raw = llm(model, build_lapp_prompt(board, problems, form),
               system=SYSTEM,
               options={"temperature": 0.2},
               response_format=lapp_response_format(),
@@ -1737,7 +1948,8 @@ def _lapp_runda(board: dict, problems: list, *, model: str, llm) -> tuple | None
 
 def build_refine_prompt(board_json: dict, instruction: str,
                         mal: dict | None = None, bok: str = "",
-                        historik=None, malen=None) -> str:
+                        historik=None, malen=None,
+                        form: Tavelform = STANDARDFORM) -> str:
     """Chatt-iteration: lärarens ändringsönskemål ovanpå befintlig tavla.
 
     `malen` är flervalet: markerar läraren flera rutor i canvasen gäller
@@ -1761,7 +1973,7 @@ def build_refine_prompt(board_json: dict, instruction: str,
     Utan den hade tredje varvets «kortare än så» inget «så» att gå efter."""
     kallor = f"{bok.strip()}\n\n" if bok and bok.strip() else ""
     return (
-        f"{INSTRUCTION}\n"
+        f"{form.instruktion()}\n"
         f"{kallor}"
         "Här är den nuvarande lektionstavlan:\n"
         f"{json.dumps(board_json, ensure_ascii=False)}\n\n"
@@ -1899,7 +2111,8 @@ def _malrad_nycklar(vagar) -> str:
 
 def build_mallapp_prompt(board_json: dict, instruction: str, vagar,
                          mal: dict | None = None, malen=None, bok: str = "",
-                         historik=None, skarpare: str = "") -> str:
+                         historik=None, skarpare: str = "",
+                         form: Tavelform = STANDARDFORM) -> str:
     """Lärarens önskemål som en LAPP, låst till de rutor hon markerade.
 
     Samma underlag som helomskrivningen får (bokblocket, tavlan, varvhistoriken,
@@ -1908,7 +2121,7 @@ def build_mallapp_prompt(board_json: dict, instruction: str, vagar,
     vilken nyckel som gick utanför målet förra gången."""
     kallor = f"{bok.strip()}\n\n" if bok and bok.strip() else ""
     return (
-        f"{INSTRUCTION}\n"
+        f"{form.instruktion()}\n"
         f"{kallor}"
         "Här är den nuvarande lektionstavlan:\n"
         f"{json.dumps(board_json, ensure_ascii=False)}\n\n"
@@ -1984,14 +2197,15 @@ def lappvakten(board: dict, lappar, ta_bort, vagar) -> str:
 
 def _mallapp_runda(board: dict, instruction: str, vagar, *, model: str, llm,
                    mal=None, malen=None, bok="", historik=None,
-                   skarpare: str = "") -> tuple[str, object]:
+                   skarpare: str = "",
+                   form: Tavelform = STANDARDFORM) -> tuple[str, object]:
     """Ett lappvarv mot modellen. ("lapp", tavla) · ("hel", tavla) när modellen
     skrev om alltihop ändå (tillåtet enligt LAPP_INSTRUKTION, och då gäller
     reservens sammanfogning) · ("utanfor", nyckel) när vakten fällde ·
     ("nej", skäl) när svaret inte gick att använda alls."""
     raw = llm(model,
               build_mallapp_prompt(board, instruction, vagar, mal, malen, bok,
-                                   historik, skarpare),
+                                   historik, skarpare, form),
               system=SYSTEM,
               options={"temperature": 0.2},
               response_format=lapp_response_format(),
@@ -2019,7 +2233,7 @@ _SKARPARE = ("Ditt förra svar pekade på {nyckel}, som ligger utanför målet, 
 def _riktad_refine(board: dict, instruction: str, vagar, *, model: str, llm,
                    mal=None, malen=None, bok="", historik=None,
                    max_rounds: int = MAX_ROUNDS, log_cb=None,
-                   token_cb=None) -> dict:
+                   token_cb=None, form: Tavelform = STANDARDFORM) -> dict:
     """Omskrivningen NÄR läraren pekat: lapp först, helomskrivning som reserv,
     och tavlan orörd hellre än fel."""
     log = log_cb or (lambda _m: None)
@@ -2032,13 +2246,15 @@ def _riktad_refine(board: dict, instruction: str, vagar, *, model: str, llm,
         rundor += 1
         sort, vad = _mallapp_runda(board, instruction, vagar, model=model,
                                    llm=llm, mal=mal, malen=malen, bok=bok,
-                                   historik=historik, skarpare=skarpare)
+                                   historik=historik, skarpare=skarpare,
+                                   form=form)
         if sort == "lapp":
             _doc, errors = ws.validate_board_json(vad)
             return _repair_until_valid(vad, errors, model=model, llm=llm,
                                        rounds_used=rundor,
                                        max_rounds=max_rounds, log_cb=log_cb,
-                                       token_cb=token_cb, vagar=vagar)
+                                       token_cb=token_cb, vagar=vagar,
+                                       form=form)
         if sort == "hel":
             kandidat = vad          # modellen valde helomskrivningen själv
             break
@@ -2054,7 +2270,8 @@ def _riktad_refine(board: dict, instruction: str, vagar, *, model: str, llm,
         rundor += 1
         # Reserven är DAGENS prompt, byte för byte — bara tillämpningen är ny.
         kandidat = _llm_round(
-            build_refine_prompt(board, instruction, mal, bok, historik, malen),
+            build_refine_prompt(board, instruction, mal, bok, historik, malen,
+                                form),
             model, llm, token_cb=token_cb)
     if kandidat is None:
         return {"board": board, "rounds": rundor,
@@ -2068,7 +2285,8 @@ def _riktad_refine(board: dict, instruction: str, vagar, *, model: str, llm,
     _doc, errors = ws.validate_board_json(ihop)
     return _repair_until_valid(ihop, errors, model=model, llm=llm,
                                rounds_used=rundor, max_rounds=max_rounds,
-                               log_cb=log_cb, token_cb=token_cb, vagar=vagar)
+                               log_cb=log_cb, token_cb=token_cb, vagar=vagar,
+                               form=form)
 
 
 # ── Tiden ────────────────────────────────────────────────────────────────────
@@ -2189,7 +2407,8 @@ def _repair_until_valid(board: dict | None, errors: list, *, model: str, llm,
                         rounds_used: int, max_rounds: int,
                         log_cb: Callable[[str], None] | None = None,
                         token_cb: Callable[[str], None] | None = None,
-                        lapp: bool = True, vagar=None) -> dict:
+                        lapp: bool = True, vagar=None,
+                        form: Tavelform = STANDARDFORM) -> dict:
     """Kör korrigeringsrundor tills fellistan är tom eller rundorna är slut.
     Returnerar {"board", "errors", "rounds"} — kvarstående fel redovisas
     ärligt (UI:t visar dem i stället för att dölja dem).
@@ -2215,7 +2434,7 @@ def _repair_until_valid(board: dict | None, errors: list, *, model: str, llm,
         log(f"Rättar tavlan{' med lappar' if lapp else ''} (runda "
             f"{rounds_used} av {max_rounds}) — {len(errors)} problem …")
         if lapp:
-            svar = _lapp_runda(board, errors, model=model, llm=llm)
+            svar = _lapp_runda(board, errors, model=model, llm=llm, form=form)
             if svar is None:
                 lapp = False
                 log("Lappsvaret gick inte att använda — nästa runda skriver "
@@ -2240,8 +2459,8 @@ def _repair_until_valid(board: dict | None, errors: list, *, model: str, llm,
                     lapp = False
             board, errors = kandidat, nya_fel
             continue
-        candidate = _llm_round(build_repair_prompt(board, errors), model, llm,
-                               token_cb=token_cb)
+        candidate = _llm_round(build_repair_prompt(board, errors, form), model,
+                               llm, token_cb=token_cb)
         if candidate is None:
             errors = [{"path": "svar", "code": "json",
                        "message": "modellen svarade inte med giltig JSON"}]
@@ -2408,6 +2627,51 @@ def formupprepning(board: dict | None) -> list[dict]:
     return ut
 
 
+# ── Vakten för det bortvalda «Vanligt fel» ──────────────────────────────────
+# Krysset är AV i förvalet, och en promptregel DRIVER bara. Läraren bad om det
+# 17 gånger på en vecka (spardata/forslag/2026-09-06.md) — då ska en tavla som
+# skriver raden ändå kosta en reparationsrunda, inte ett varv för hand. Samma
+# form som rutvakten i whiteboard_spec: deterministisk, gratis, och den fäller
+# bara det läraren faktiskt strök — rubriken. Det felaktiga ledet i ett
+# EXEMPEL är en annan sak och står kvar (fallgropsregeln).
+def _vanligtfel_rader(sektioner: list, vag: str, ut: list[str]) -> None:
+    for i, sec in enumerate(sektioner or []):
+        if not isinstance(sec, dict):
+            continue
+        stig = f"{vag}[{i}]"
+        if sec.get("kind") in ("text", "heading") and str(
+                sec.get("text") or "").strip().lower().startswith("vanligt fel"):
+            ut.append(stig)
+        if isinstance(sec.get("children"), list):
+            _vanligtfel_rader(sec["children"], f"{stig}.children", ut)
+
+
+def vanligtfel_kvar(board: dict | None,
+                    form: Tavelform = STANDARDFORM) -> list[dict]:
+    """Fel för varje «Vanligt fel»-rubrik som står kvar fast läraren valt bort
+    den. Tom lista när krysset är på — då är raden beställd (regel 9)."""
+    if form.vanligt_fel or not isinstance(board, dict):
+        return []
+    ut: list[dict] = []
+    for bi, tavla in enumerate(board.get("boards") or []):
+        if not isinstance(tavla, dict):
+            continue
+        traffar: list[str] = []
+        _vanligtfel_rader(tavla.get("sections") or [],
+                          f"boards[{bi}].sections", traffar)
+        for ki, kol in enumerate(tavla.get("columns") or []):
+            if isinstance(kol, dict):
+                _vanligtfel_rader(kol.get("sections") or [],
+                                  f"boards[{bi}].columns[{ki}].sections",
+                                  traffar)
+        ut += [{"path": t, "code": "vanligt_fel_bortvalt",
+                "message": "läraren har valt bort «Vanligt fel» på den här "
+                           "tavlan — stryk rubriken, dess röda understrykning, "
+                           "det felaktiga ledet och förklaringen. Spalten "
+                           "slutar med sin sista formel."} for t in traffar]
+    return ut
+
+
 # ── Täckningsdomaren ────────────────────────────────────────────────────────
 # Lärarens beställning (2026-08-20): «målet är att eleverna efter genomgången
 # ska kunna klara av alla uppgifter på de sidor jag valt att utgå ifrån» —
@@ -2568,17 +2832,19 @@ TACKNING_INSTRUKTION = (
 )
 
 
-def build_tackning_prompt(board_json: dict, bok: str, delar: str = "") -> str:
+def build_tackning_prompt(board_json: dict, bok: str, delar: str = "",
+                          form: Tavelform = STANDARDFORM) -> str:
     # Delarna sist före tavlan, av samma skäl som i skrivningen: de är
     # uppdraget, inte en källa. Tom sträng ger ordagrant den gamla prompten.
     dlr = f"\n\n{delar.strip()}" if delar.strip() else ""
     return (
-        f"{TACKNING_INSTRUKTION}\n\n{bok.strip()}{dlr}\n\nTavlan:\n"
+        f"{form.domarinstruktion()}\n\n{bok.strip()}{dlr}\n\nTavlan:\n"
         f"{json.dumps(board_json, ensure_ascii=False)}\n"
     )
 
 
 def doma_tackning(board: dict, *, model: str, llm, bok: str, delar: str = "",
+                  form: Tavelform = STANDARDFORM,
                   log_cb: Callable[[str], None] | None = None) -> list[dict]:
     """Domens fynd som problemposter för build_repair_prompt — [] när tavlan
     täcker urvalet, och [] också när domen inte gick att läsa: en tavla ska
@@ -2591,7 +2857,7 @@ def doma_tackning(board: dict, *, model: str, llm, bok: str, delar: str = "",
     # regel som för en otydlig dom: tavlan lämnas som den är, och skälet syns
     # i loggen i stället för att kosta genereringen.
     try:
-        raw = llm(model, build_tackning_prompt(board, bok, delar),
+        raw = llm(model, build_tackning_prompt(board, bok, delar, form),
                   options={"temperature": 0.2})
     except Exception as e:
         log(f"Täckningsdomaren kunde inte nås ({e}) — tavlan lämnas som den är.")
@@ -2620,7 +2886,7 @@ def doma_tackning(board: dict, *, model: str, llm, bok: str, delar: str = "",
 
 
 def _tackning_pass(board: dict, errors: list, *, model: str, llm, bok: str,
-                   delar: str = "",
+                   delar: str = "", form: Tavelform = STANDARDFORM,
                    budget: int = TACKNING_MAX_ROUNDS,
                    log_cb: Callable[[str], None] | None = None,
                    token_cb: Callable[[str], None] | None = None) -> dict:
@@ -2639,7 +2905,7 @@ def _tackning_pass(board: dict, errors: list, *, model: str, llm, bok: str,
     kommer efter."""
     log = log_cb or (lambda _m: None)
     fynd = doma_tackning(board, model=model, llm=llm, bok=bok, delar=delar,
-                         log_cb=log_cb)
+                         form=form, log_cb=log_cb)
     if not fynd:
         return {"board": board, "errors": errors, "rounds": 0}
     if budget < 1:
@@ -2657,14 +2923,14 @@ def _tackning_pass(board: dict, errors: list, *, model: str, llm, bok: str,
     # egen budget: den misslyckade lappen har redan kostat runda 1.
     rundor = 1
     try:
-        svar = _lapp_runda(board, fynd, model=model, llm=llm)
+        svar = _lapp_runda(board, fynd, model=model, llm=llm, form=form)
         kandidat = svar[1] if svar is not None else None
         if kandidat is None and budget > rundor:
             rundor += 1
             log("Lappsvaret gick inte att använda — kompletteringen skrivs "
                 "som en hel tavla i stället …")
-            kandidat = _llm_round(build_repair_prompt(board, fynd), model, llm,
-                                  token_cb=token_cb)
+            kandidat = _llm_round(build_repair_prompt(board, fynd, form), model,
+                                  llm, token_cb=token_cb)
     except Exception as e:
         log(f"Kompletteringen kunde inte nås ({e}) — luckorna visas i stället.")
         kandidat = None
@@ -2674,7 +2940,7 @@ def _tackning_pass(board: dict, errors: list, *, model: str, llm, bok: str,
     try:
         res = _repair_until_valid(kandidat, fel, model=model, llm=llm,
                                   rounds_used=rundor, max_rounds=budget,
-                                  log_cb=log_cb, token_cb=token_cb)
+                                  log_cb=log_cb, token_cb=token_cb, form=form)
     except Exception as e:
         log(f"Rättningen av kompletteringen föll ({e}) — den gamla tavlan "
             "behålls.")
@@ -2692,6 +2958,7 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
                    bok: str = "", forlaga: str = "",
                    svart: str = "", fokus: str = "", delar: str = "",
                    doma: bool = True,
+                   vanligt_fel: bool = True, niva: str = "",
                    llm=llm_client.generate,
                    max_rounds: int = MAX_ROUNDS,
                    log_cb: Callable[[str], None] | None = None,
@@ -2717,7 +2984,14 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     reparationsrunda för uppgifter läraren aldrig valt.
 
     Domarens rundor räknas inte in i `rounds` — se _tackning_pass — men
-    redovisas som `domarrundor`."""
+    redovisas som `domarrundor`.
+
+    `vanligt_fel` och `niva` är lärarens val i planeringen (se Tavelform).
+    DEFAULTEN ÄR DEN GAMLA: ett anrop utan fälten — testerna som spelar upp
+    tests/kassetter, tools/, en gammal planering utan dem i sitt läge — får
+    ordagrant den prompt som gick i väg före valen. Frontendens förval för en
+    NY tavla är ändå att krysset är av: läraren strök raden 17 gånger på en
+    vecka (spardata/forslag/2026-09-06.md)."""
     # Var tiden tar vägen. En tavla är numera en KEDJA av anrop — skrivning,
     # eventuella reparationer, dom, eventuell komplettering — och när hela
     # kedjan tog femton minuter fanns bara en klocka för alltihop. Varje
@@ -2730,8 +3004,9 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     _log = log_cb or (lambda _m: None)
     log = lambda m: _log(_stamplad(m))
     log("Genererar lektionstavlan …")
+    form = tavelform(vanligt_fel, niva)
     prompt = build_prompt(course, group, moment, memory, underlag, utfall, bok,
-                          forlaga, svart, fokus, delar)
+                          forlaga, svart, fokus, delar, form)
     board = _llm_round(prompt, model, llm, token_cb=token_cb)
     rounds = 1
     # Ogiltig JSON (t.ex. trunkerat svar) → kör om från början inom budgeten
@@ -2751,10 +3026,11 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     # Bokkopievakten går in HÄR, före reparationsrundorna: en avskriven
     # uppgift ska rättas i samma varv som ett schemafel, inte redovisas som en
     # varning läraren får läsa själv. Kostar inget anrop.
-    errors = errors + bokkopior(board, bok) + formupprepning(board)
+    errors = (errors + bokkopior(board, bok) + formupprepning(board)
+              + vanligtfel_kvar(board, form))
     res = _repair_until_valid(board, errors, model=model, llm=llm,
                               rounds_used=rounds, max_rounds=max_rounds,
-                              log_cb=log, token_cb=token_cb)
+                              log_cb=log, token_cb=token_cb, form=form)
     # …och en gång till på resultatet. Rättningsrundan mäter bara mot schemat
     # (validate_board_json), så en avskrift som modellen lät stå kvar hade
     # försvunnit ur fellistan utan att försvinna ur tavlan. Kvarstående fynd
@@ -2763,11 +3039,13 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
         sedda = {(f.get("path"), f.get("code")) for f in res["errors"]
                  if isinstance(f, dict)}
         res["errors"] = res["errors"] + [
-            f for f in bokkopior(res["board"], bok) + formupprepning(res["board"])
+            f for f in bokkopior(res["board"], bok)
+            + formupprepning(res["board"])
+            + vanligtfel_kvar(res["board"], form)
             if (f["path"], f["code"]) not in sedda]
     if doma and res.get("board") is not None:
         dom = _tackning_pass(res["board"], res["errors"], model=model, llm=llm,
-                             bok=bok, delar=delar, log_cb=log,
+                             bok=bok, delar=delar, form=form, log_cb=log,
                              token_cb=token_cb)
         # `rounds` är den budget generering och renderingsreparation delar:
         # domaren har sin egen och lämnar därför siffran orörd.
@@ -2779,21 +3057,28 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
 def repair_board(board: dict, warnings: list[str], *, model: str,
                  llm=llm_client.generate, rounds_used: int = 1,
                  max_rounds: int = MAX_ROUNDS,
+                 vanligt_fel: bool = True, niva: str = "",
                  log_cb: Callable[[str], None] | None = None,
                  token_cb: Callable[[str], None] | None = None) -> dict:
     """Reparera utifrån klientens renderingsvarningar ([WB] …).
 
     `rounds_used` är antalet LLM-rundor som redan förbrukats för tavlan så
-    att generering + renderingsreparation delar samma budget (max 3)."""
+    att generering + renderingsreparation delar samma budget (max 3).
+
+    Formen måste med också här: reparationen skriver om HELA tavlan, och en
+    trängselrättning fick annars lägga tillbaka den «Vanligt fel» läraren
+    valde bort när tavlan skrevs."""
     problems: list = list(warnings)
     return _repair_until_valid(board, problems, model=model, llm=llm,
                                rounds_used=rounds_used, max_rounds=max_rounds,
-                               log_cb=log_cb, token_cb=token_cb)
+                               log_cb=log_cb, token_cb=token_cb,
+                               form=tavelform(vanligt_fel, niva))
 
 
 def refine_board(board: dict, instruction: str, *, model: str,
                  mal: dict | None = None, malen=None,
                  bok: str = "", historik=None,
+                 vanligt_fel: bool = True, niva: str = "",
                  llm=llm_client.generate,
                  max_rounds: int = MAX_ROUNDS,
                  log_cb: Callable[[str], None] | None = None,
@@ -2809,15 +3094,17 @@ def refine_board(board: dict, instruction: str, *, model: str,
     och det läraren inte pekade på står kvar därför att koden håller det kvar.
     Utan mål, eller med ett mål vi inte kan slå upp, är det exakt som förut."""
     log = log_cb or (lambda _m: None)
+    form = tavelform(vanligt_fel, niva)
     vagar = malvagar(board, mal, malen, log=log)
     if vagar:
         return _riktad_refine(board, instruction, vagar, model=model, llm=llm,
                               mal=mal, malen=malen, bok=bok, historik=historik,
                               max_rounds=max_rounds, log_cb=log_cb,
-                              token_cb=token_cb)
+                              token_cb=token_cb, form=form)
     log("Uppdaterar tavlan …")
     candidate = _llm_round(
-        build_refine_prompt(board, instruction, mal, bok, historik, malen),
+        build_refine_prompt(board, instruction, mal, bok, historik, malen,
+                            form),
         model, llm, token_cb=token_cb)
     if candidate is None:
         return {"board": board,
@@ -2827,4 +3114,4 @@ def refine_board(board: dict, instruction: str, *, model: str,
     _doc, errors = ws.validate_board_json(candidate)
     return _repair_until_valid(candidate, errors, model=model, llm=llm,
                                rounds_used=1, max_rounds=max_rounds,
-                               log_cb=log_cb, token_cb=token_cb)
+                               log_cb=log_cb, token_cb=token_cb, form=form)
