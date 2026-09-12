@@ -107,7 +107,13 @@ def _stub_generate(monkeypatch, result):
         calls.append({"course": course, "group": group, "moment": moment,
                       "model": model, "memory": memory, "underlag": underlag,
                       "utfall": utfall, "bok": bok,
-                      "delar": _kw.get("delar", "")})
+                      "delar": _kw.get("delar", ""),
+                      # Lärarens val om tavlans form (spåret 2026-09-06).
+                      # Hämtas ur **_kw med samma default som funktionen
+                      # själv har, så att ett anrop utan dem syns som
+                      # «gjorde som förut».
+                      "vanligt_fel": _kw.get("vanligt_fel", True),
+                      "niva": _kw.get("niva", "")})
         if log_cb:
             log_cb("Genererar lektionstavlan …")
         return result
@@ -369,7 +375,8 @@ def test_render_report_triggers_repair(llm_ready, monkeypatch):
     captured = {}
 
     def fake_repair(board, warnings, *, model, llm=None, rounds_used=1,
-                    max_rounds=lesson_board.MAX_ROUNDS, log_cb=None,
+                    max_rounds=lesson_board.MAX_ROUNDS,
+                    vanligt_fel=True, niva="", log_cb=None,
                     token_cb=None):
         captured["warnings"] = warnings
         captured["rounds_used"] = rounds_used
@@ -409,7 +416,7 @@ def test_refine_updates_board(llm_ready, monkeypatch):
     captured = {}
 
     def fake_refine(board, instruction, *, model, mal=None, malen=None,
-                    bok="", historik=None,
+                    bok="", historik=None, vanligt_fel=True, niva="",
                     llm=None, max_rounds=lesson_board.MAX_ROUNDS, log_cb=None,
                     token_cb=None):
         captured["instruction"] = instruction
@@ -960,7 +967,7 @@ def test_refine_far_hela_meddelandet_inklusive_kallviktningen(llm_ready, monkeyp
     sett = {}
 
     def fake_refine(board, message, *, model, mal=None, malen=None,
-                    bok="", historik=None,
+                    bok="", historik=None, vanligt_fel=True, niva="",
                     llm=None, max_rounds=lesson_board.MAX_ROUNDS, log_cb=None,
                     token_cb=None):
         sett["message"] = message
@@ -1029,7 +1036,7 @@ def test_tavlan_gar_att_andra_efter_en_omstart(llm_ready, monkeypatch):
     sett = {}
 
     def fake_refine(board, instruction, *, model, mal=None, malen=None,
-                    bok="", historik=None,
+                    bok="", historik=None, vanligt_fel=True, niva="",
                     llm=None, max_rounds=lesson_board.MAX_ROUNDS, log_cb=None,
                     token_cb=None):
         sett["board"] = board
@@ -1332,3 +1339,81 @@ def test_ci_forslag_slapper_sin_plats_aven_nar_det_smaller(llm_ready, monkeypatc
     arb = llm_ready.app.state.arbiter
     assert arb.acquire_forslag(arb.forslag_biljett(), timeout=0.5), \
         "förslagsplatsen hölls kvar efter kraschen"
+
+
+# ── TAVLANS FORM: «Vanligt fel» som kryss + nivån ─────────
+# Spåret 1–6 sep 2026 (spardata/forslag/2026-09-06.md): 17 av 35 tavelönskemål
+# var «ta bort Vanligt fel». Valet måste nå prompten — och sedan STANNA hos
+# tavlan, för omskrivningen och renderingsreparationen skriver om alltihop.
+
+def test_tavelformen_nar_genereringen(llm_ready, monkeypatch):
+    calls = _stub_generate(monkeypatch,
+                           {"board": _valid_board(), "errors": [], "rounds": 1})
+    _done(llm_ready.post("/api/planning/generate",
+                         json={"moment": "Andragradsuttryck",
+                               "vanligt_fel": False, "niva": "A-nivå"}))
+    assert calls[0]["vanligt_fel"] is False and calls[0]["niva"] == "A-nivå"
+
+
+def test_utan_falten_ar_allt_som_forut(llm_ready, monkeypatch):
+    """Kassettregeln: en begäran utan fälten (gammal klient, tools/) ska ge
+    exakt det gamla beteendet — raden med, nivån Blandat."""
+    calls = _stub_generate(monkeypatch,
+                           {"board": _valid_board(), "errors": [], "rounds": 1})
+    _done(llm_ready.post("/api/planning/generate", json={"moment": "x"}))
+    assert calls[0]["vanligt_fel"] is True and calls[0]["niva"] == ""
+    # «Blandat» är defaultläget och betyder samma sak som inget val.
+    _done(llm_ready.post("/api/planning/generate",
+                         json={"moment": "x", "niva": "Blandat"}))
+    assert calls[1]["niva"] == ""
+
+
+def test_formen_foljer_med_till_omskrivningen(llm_ready, monkeypatch):
+    """Läraren kryssar av EN gång, när tavlan skrivs. Varje varv därefter ska
+    gå på samma val utan att klienten skickar det igen — annars lägger runda
+    två tillbaka raden."""
+    _stub_generate(monkeypatch,
+                   {"board": _valid_board(), "errors": [], "rounds": 1})
+    pid = _done(llm_ready.post("/api/planning/generate",
+                               json={"moment": "x", "vanligt_fel": False,
+                                     "niva": "C-nivå"}))["id"]
+    sett = {}
+
+    def fake_refine(board, instruction, **kw):
+        sett.update(kw)
+        return {"board": board, "errors": [], "rounds": 1}
+    monkeypatch.setattr(lesson_board, "refine_board", fake_refine)
+    _done(llm_ready.post(f"/api/planning/{pid}/refine",
+                         json={"message": "gör den kortare"}))
+    assert sett["vanligt_fel"] is False and sett["niva"] == "C-nivå"
+
+    # …och till renderingsreparationen, som också skriver om hela tavlan.
+    def fake_repair(board, warnings, **kw):
+        sett.update(kw)
+        return {"board": board, "errors": [], "rounds": 2}
+    monkeypatch.setattr(lesson_board, "repair_board", fake_repair)
+    _done(llm_ready.post(f"/api/planning/{pid}/render-report",
+                         json={"warnings": ["[WB] element-överlapp"]}))
+    assert sett["vanligt_fel"] is False and sett["niva"] == "C-nivå"
+
+
+def test_begaran_vinner_over_det_sparade_laget(llm_ready, monkeypatch):
+    """Kryssar läraren om i panelen och skriver ett nytt önskemål gäller det
+    nya — och det skrivs tillbaka, så nästa varv följer med."""
+    _stub_generate(monkeypatch,
+                   {"board": _valid_board(), "errors": [], "rounds": 1})
+    pid = _done(llm_ready.post("/api/planning/generate",
+                               json={"moment": "x"}))["id"]
+    sett = {}
+
+    def fake_refine(board, instruction, **kw):
+        sett.update(kw)
+        return {"board": board, "errors": [], "rounds": 1}
+    monkeypatch.setattr(lesson_board, "refine_board", fake_refine)
+    _done(llm_ready.post(f"/api/planning/{pid}/refine",
+                         json={"message": "ta bort vanligt fel",
+                               "vanligt_fel": False}))
+    assert sett["vanligt_fel"] is False
+    _done(llm_ready.post(f"/api/planning/{pid}/refine",
+                         json={"message": "och kortare"}))
+    assert sett["vanligt_fel"] is False, "valet skrevs inte tillbaka i läget"

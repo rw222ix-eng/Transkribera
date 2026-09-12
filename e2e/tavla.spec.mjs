@@ -218,6 +218,53 @@ test("ett fel från servern blir ett besked, inte en tom ruta", async ({ page })
   expect(jsfel, jsfel.join(" | ")).toEqual([]);
 });
 
+/* ── «VANLIGT FEL» SOM KRYSS + NIVÅN (spåret 2026-09-06) ──
+ * 17 av 35 tavelönskemål under veckan 1–6 sep var «ta bort Vanligt fel», på 5
+ * av 5 tavlor. Förvalet är därför AV — och eftersom SERVERNS default är det
+ * gamla (raden med, för kassetternas skull) måste krysset skickas med varje
+ * begäran, inte bara när det är ikryssat. Nivån följer motsatt regel, provets:
+ * bara när den inte står i defaultläget «Blandat».
+ */
+test("förvalet är utan Vanligt fel, och valet följer med begäran", async ({ page }) => {
+  const anrop = await fejka(page);
+  await page.goto("/");
+  await hydrerad(page);
+  await skriv(page);
+  await expect(page.locator("#dokument")).toBeVisible({ timeout: 15_000 });
+
+  const gen = anrop.find(a => a.vag.endsWith("/generate"));
+  expect(gen.kropp.vanligt_fel).toBe(false);
+  expect(gen.kropp.niva).toBeUndefined();     // Blandat skickas inte alls
+});
+
+test("krysset och nivån går att sätta i upplägget", async ({ page }) => {
+  const anrop = await fejka(page);
+  await page.goto("/");
+  await hydrerad(page);
+  await page.getByRole("tab", { name: "Planering" }).click();
+  await page.evaluate(() => {
+    window.SattLage("Tavla");
+    const f = document.querySelector("#moment");
+    f.value = "Andragradsuttryck";
+    f.dispatchEvent(new Event("input", { bubbles: true }));
+    window.PlanSteg.las(4, false);
+    window.PlanSteg.gaTill(4);
+  });
+  // Raderna finns i upplägget, i tavlans egen lista.
+  await expect(page.locator('.typrad[data-id="vanligtFel"]')).toHaveCount(1);
+  await expect(page.locator('.typrad[data-id="niva"]')).toHaveCount(1);
+  const kryss = page.locator('.typrad[data-id="vanligtFel"] .kryssknapp');
+  await expect(kryss).toHaveAttribute("aria-pressed", "false");
+  await kryss.click();
+  await page.locator('[data-seg="tv-niva"] button', { hasText: "A-nivå" }).click();
+  await page.locator("#skriv").click();
+  await expect(page.locator("#dokument")).toBeVisible({ timeout: 15_000 });
+
+  const gen = anrop.find(a => a.vag.endsWith("/generate"));
+  expect(gen.kropp.vanligt_fel).toBe(true);
+  expect(gen.kropp.niva).toBe("A-nivå");
+});
+
 test("utan server körs prototypens takt som förut", async ({ page }) => {
   await page.route("**/api/var-kors", route => route.abort());
   const natanrop = [];

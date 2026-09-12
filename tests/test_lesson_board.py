@@ -1750,3 +1750,155 @@ def test_prompten_styr_talen_efter_hjalpmedlen():
     assert "HJÄLPMEDLEN STYR TALEN" in p
     assert "räkna I HUVUDET" in p and "HÖGST ETT" in p
     assert "ALDRIG SAMMA FORM TVÅ GÅNGER" in p
+
+
+# ── «Vanligt fel» som val + nivån (spåret 2026-09-06) ───────────────────────
+# 17 av 35 tavelönskemål under veckan 1–6 sep var «ta bort Vanligt fel», på 5
+# av 5 tavlor; fyra gällde svårigheten. Båda är nu val i planeringen.
+#
+# KASSETTREGELN är det första testet nedan och det viktigaste: standardformen
+# måste ge prompten BYTE FÖR BYTE som den var före valet, annars mäter
+# tests/kassetter ingenting.
+
+def test_standardformen_ger_ordagrant_den_gamla_prompten():
+    """vanligt_fel=True + Blandat = prompten som kassetterna spelades in mot.
+    Referensen byggs av delarna själva, i den ordning build_prompt sätter dem,
+    så att testet fäller en form som lägger till eller drar ifrån ett tecken."""
+    referens = (
+        f"{lb.INSTRUCTION}\n{lb._few_shot_block()}\n\n"
+        "Uppdrag: skriv lektionstavlan för Ma1b, klass 9A — Pythagoras sats.\n"
+        "Svara med enbart JSON."
+    )
+    assert lb.build_prompt("Ma1b", "9A", "Pythagoras sats") == referens
+    # Och samma sak via de vägar rutterna faktiskt tar.
+    for form in (lb.Tavelform(), lb.tavelform(True, ""),
+                 lb.tavelform(True, "Blandat"), lb.tavelform(None, None)):
+        assert lb.build_prompt("Ma1b", "9A", "Pythagoras sats",
+                               form=form) == referens
+        assert form.instruktion() == lb.INSTRUCTION
+        assert form.hints() == lb.REPAIR_HINTS
+        assert form.domarinstruktion() == lb.TACKNING_INSTRUKTION
+
+
+def test_varje_ersattningspar_finns_kvar_i_sin_text():
+    """Paren är textersättningar mot INSTRUCTION, REPAIR_HINTS och
+    domarprompten. Skrivs en av de reglerna om utan att paret följer med ska
+    testet falla — annars blir «Vanligt fel» tyst kvar fast krysset är av."""
+    for fran, _till in lb._VANLIGT_FEL_BORT:
+        assert fran in lb.INSTRUCTION, fran[:60]
+    for fran, _till in lb._HINTS_VANLIGT_FEL_BORT:
+        assert fran in lb.REPAIR_HINTS, fran[:60]
+    for fran, _till in lb._DOMARE_VANLIGT_FEL_BORT:
+        assert fran in lb.TACKNING_INSTRUKTION, fran[:60]
+
+
+def test_prompten_saknar_vanligt_fel_nar_krysset_ar_av():
+    """Hela vägen: regeln, färgregeln, textbudgetens uppräkning, innehålls-
+    kravet OCH few-shotarna. Ett exempel väger tyngre än en regel — står raden
+    kvar i shotarna skriver modellen den ändå."""
+    av = lb.tavelform(False, "")
+    p = lb.build_prompt("Ma1b", "9A", "Pythagoras sats", form=av)
+    # Raden nämns exakt EN gång, och då som förbudet mot den: modellen måste
+    # veta vad den inte ska rita. Allt annat — regel 9:s form, färgregeln,
+    # textbudgetens uppräkning, innehållskravet, few-shotarna — är borta.
+    assert p.lower().count("vanligt fel") == 1
+    assert '9. Läraren har VALT BORT "Vanligt fel" på den här tavlan' in p
+    # Formen som ska skrivas i stället står kvar, och fallgropen i EXEMPLET —
+    # det röda felaktiga ledet på högertavlan — är en annan sak och rörs inte.
+    assert "där markeras rubriker med text + underline-sektion" in p
+    assert "Fallgropen väljs ur urvalets SVÅRASTE typ" in p
+    # Reparationsråden och domaren följer med samma val.
+    assert "vanligt fel" not in av.hints().lower()
+    assert "Vanligt fel" not in av.domarinstruktion()
+    # …och med krysset på står allt kvar.
+    pa = lb.build_prompt("Ma1b", "9A", "Pythagoras sats")
+    assert '9. Sist i den högra spalten: "Vanligt fel:"' in pa
+    assert "Vanliga fel (innehåll, inte form)" in pa
+
+
+def test_few_shotarna_tappar_bara_vanligt_fel_raden():
+    """Filtret tar rubriken och de röda sektioner som följer direkt på den —
+    inte raden före, inte ett rött exempelled längre ned."""
+    for _uppdrag, doc in lb.FEW_SHOTS:
+        ren = lb._shot_utan_vanligt_fel(doc)
+        assert "Vanligt fel" not in json.dumps(ren, ensure_ascii=False)
+        # Originalet rörs inte — few-shotarna är modulens egna konstanter.
+        assert "Vanligt fel" in json.dumps(doc, ensure_ascii=False)
+    # Shot 1: vänstertavlans formel står kvar, bara varningen är borta.
+    ren = lb._shot_utan_vanligt_fel(lb.FEW_SHOTS[0][1])
+    assert "a^2 + b^2 = c^2" in json.dumps(ren, ensure_ascii=False)
+
+
+def test_nivaraden_star_bara_nar_nivan_ar_vald():
+    """«A-nivå i boken», «eleverna är väldigt duktiga». Nivån är EN rad, och
+    Blandat är defaultläget — då ska prompten vara den gamla."""
+    a = lb.build_prompt("Ma2c", "TE24", "andragradsuttryck",
+                        form=lb.tavelform(True, "A-nivå"))
+    assert "NIVÅN: läraren har valt A-NIVÅ" in a
+    assert "INSIKT, inte en procedur" in a
+    assert "C-NIVÅ" not in a and "E-NIVÅ" not in a
+    e = lb.build_prompt("Ma2c", "TE24", "andragradsuttryck",
+                        form=lb.tavelform(True, "E-nivå"))
+    assert "NIVÅN: läraren har valt E-NIVÅ" in e
+    c = lb.build_prompt("Ma2c", "TE24", "andragradsuttryck",
+                        form=lb.tavelform(True, "C-nivå"))
+    assert "VÄLJER" in c and "NIVÅN: läraren har valt C-NIVÅ" in c
+    for blandat in ("", "Blandat", None, "Struntnivå"):
+        assert "NIVÅN:" not in lb.build_prompt(
+            "Ma2c", "TE24", "andragradsuttryck",
+            form=lb.tavelform(True, blandat))
+
+
+def test_nivan_och_krysset_foljer_med_till_varje_prompt():
+    """Reparationen, lappen, omskrivningen och den riktade lappen skriver alla
+    om tavlan — får de standardinstruktionen lägger runda två tillbaka raden
+    läraren just valde bort."""
+    av = lb.tavelform(False, "A-nivå")
+    doc = _valid_doc()
+    for p in (lb.build_repair_prompt(doc, ["fel"], av),
+              lb.build_lapp_prompt(doc, ["fel"], av),
+              lb.build_refine_prompt(doc, "kortare", form=av),
+              lb.build_mallapp_prompt(doc, "kortare",
+                                      [("Formel 1", "doc.boards[0]")],
+                                      form=av)):
+        # Tavlans EGEN json bär shot 1:s «Vanligt fel» — det är instruktionen
+        # som prövas, inte tavlan som ska rättas.
+        instr = p.split("Här är")[0].split("Din förra")[0]
+        assert instr.lower().count("vanligt fel") == 1
+        assert "VALT BORT" in instr
+        assert "NIVÅN: läraren har valt A-NIVÅ" in instr
+
+
+def test_vanligtfel_kvar_faller_raden_nar_krysset_ar_av():
+    doc = _valid_doc()
+    av = lb.tavelform(False, "")
+    fynd = lb.vanligtfel_kvar(doc, av)
+    assert len(fynd) == 2, fynd            # vänstertavlan + exempel 2
+    assert {f["code"] for f in fynd} == {"vanligt_fel_bortvalt"}
+    assert all(f["path"].startswith("boards[") for f in fynd)
+    # Med krysset på är raden beställd, och vakten tiger.
+    assert lb.vanligtfel_kvar(doc) == []
+    assert lb.vanligtfel_kvar(None, av) == []
+
+
+def test_generate_board_far_bortvalt_vanligt_fel_som_fel_att_ratta():
+    """Samma väg som bokkopiorna och formvakten: fyndet rättas i
+    reparationsrundan, inte som en varning läraren får läsa efteråt."""
+    llm, calls = _stub_llm([json.dumps(_valid_doc())])
+    res = lb.generate_board("Ma1b", "9A", "Pythagoras sats", model="",
+                            doma=False, vanligt_fel=False, llm=llm)
+    assert any(f.get("code") == "vanligt_fel_bortvalt" for f in res["errors"]), \
+        res["errors"]
+    assert "valt bort" in calls[1]["prompt"]
+    # Och prompten som skrev tavlan bar aldrig regeln.
+    assert "Vanligt fel:" not in calls[0]["prompt"]
+
+
+def test_gamla_anrop_utan_falten_beter_sig_som_forr():
+    """Kassettregelns andra halva: tools/ och testerna som spelar upp banden
+    anropar utan fälten, och ska få exakt den gamla prompten."""
+    llm, calls = _stub_llm([json.dumps(_valid_doc())])
+    lb.generate_board("Ma1b", "9A", "Pythagoras sats", model="", doma=False,
+                      llm=llm)
+    assert calls[0]["prompt"] == lb.build_prompt("Ma1b", "9A",
+                                                 "Pythagoras sats")
