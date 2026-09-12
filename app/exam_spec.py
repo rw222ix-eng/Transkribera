@@ -29,6 +29,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 # ska gå att ifrågasätta, mätas om och bytas utan att motorreglerna rörs.
 # Beroendet går bara åt det här hållet — niva_rubrik importerar ingenting.
 from app import niva_rubrik
+# Tankstrecksvakten, delad med anteckningarna och tavlan (spåret 2026-09-06).
+# Samma sorts beroende som ovan: textvakt importerar ingenting ur appen.
+from app import textvakt
 
 _LOG = logging.getLogger(__name__)
 
@@ -2931,6 +2934,105 @@ def validate_stam(doc: ExamDoc) -> list[dict]:
     return errors
 
 
+# ── TANKSTRECKSVAKTEN ──────────────────────────────────────────────────
+# Lärarens ord, sex gånger på fyra papper under veckan 1–6 sep 2026 (spåret,
+# spardata/forslag/2026-09-06.md): «skriv kortare utan em dash», «Kort. Och
+# utan em dash.» Prompten ber redan om det på tre ställen i exam_gen — och en
+# prompt driver, precis som med rutorna på tavlan och de färdiga uträkningarna.
+# Varje gång kostade det läraren ett omskrivningsvarv.
+#
+# Regeln bor i app/textvakt.py och delas med anteckningarna (som har haft den
+# sedan augusti och därför inte bär ett enda tankstreck i sin skarpa
+# inspelning), tavlan och det här dokumentet. HÄR ligger bara kunskapen om VAR
+# texten står: vilka fält som är sådant en människa läser som språk.
+#
+# Fälten som INTE granskas, och varför:
+#   * `scen`/`forsattsbild.scene` — beställningar på engelska till lärarens
+#     eget bildverktyg, aldrig text på ett papper.
+#   * `klockslag` («12:45–14:15»), `granser`, `datum` — appens egna fält, satta
+#     av lärarens val i routen. Ett tankstreck där är kodens och inte modellens.
+#   * figurernas tal, `innehall`, `avsnitt` — koder och siffror, inte språk.
+def _fritexter(doc: ExamDoc):
+    """(sökväg, text) för varje fritextfält en människa läser på pappret.
+
+    Sökvägarna är dokumentets egna namn i uppgiftens numrering («uppgift 3b.
+    bedomning») — det är den vägen modellen ska hitta i JSON:en den får med
+    sig tillbaka i reparationsprompten."""
+    yield "titel", doc.titel
+    yield "hjalpmedel", doc.hjalpmedel
+    if doc.nyckelfraga:
+        yield "nyckelfraga", doc.nyckelfraga
+    if doc.instruktion:
+        yield "instruktion", doc.instruktion
+    if doc.forsattsbild is not None:
+        yield "forsattsbild.person", doc.forsattsbild.person
+        if doc.forsattsbild.bildtext:
+            yield "forsattsbild.bildtext", doc.forsattsbild.bildtext
+    for i, it in enumerate(doc.uppgifter, 1):
+        yield from _uppgiftstexter(it, f"uppgift {i}")
+        if it.forebild is not None:
+            yield f"uppgift {i}.forebild.sort", it.forebild.sort
+        yield from _losningstexter(it, f"uppgift {i}")
+        for e in it.elevlosningar or []:
+            stig = f"uppgift {i}.{e.etikett}"
+            yield f"{stig}.etikett", e.etikett
+            for pi, parti in enumerate(e.partier, 1):
+                for ri, rad in enumerate(parti.rader, 1):
+                    yield f"{stig}.parti {pi}.rad {ri}", rad
+                yield f"{stig}.parti {pi}.dom", parti.dom
+        for d, sub in enumerate(it.deluppgifter or []):
+            # a), b), c) … — samma bokstäver som står på pappret.
+            stig = f"uppgift {i}{chr(ord('a') + d)}"
+            yield from _uppgiftstexter(sub, stig)
+            yield from _losningstexter(sub, stig)
+
+
+def _uppgiftstexter(it, stig: str):
+    """Fälten uppgiften och deluppgiften delar (_Uppgiftsbas)."""
+    yield f"{stig}.text", it.text
+    if it.enhet:
+        yield f"{stig}.enhet", it.enhet
+    if it.notis:
+        yield f"{stig}.notis", it.notis
+    for j, s in enumerate(it.svarsfalt or [], 1):
+        yield f"{stig}.svarsfalt {j}", s
+    if it.svarsrutor is not None:
+        yield f"{stig}.svarsrutor.etikett", it.svarsrutor.etikett
+        for j, v in enumerate(it.svarsrutor.val, 1):
+            yield f"{stig}.svarsrutor.val {j}", v
+    for j, a in enumerate(it.alternativ or [], 1):
+        yield f"{stig}.alternativ {j}", a
+    if it.tabell is not None:
+        for j, r in enumerate(it.tabell.rubriker, 1):
+            yield f"{stig}.tabell.rubrik {j}", r
+        for ri, rad in enumerate(it.tabell.rader, 1):
+            for ci, cell in enumerate(rad, 1):
+                yield f"{stig}.tabell.rad {ri}.cell {ci}", cell
+    if it.stegtabell is not None:
+        for j, k in enumerate(it.stegtabell.kolumner, 1):
+            yield f"{stig}.stegtabell.kolumn {j}", k
+        for si, steg in enumerate(it.stegtabell.steg, 1):
+            for ci, cell in enumerate(steg.celler, 1):
+                yield f"{stig}.stegtabell.steg {si}.cell {ci}", cell
+
+
+def _losningstexter(it, stig: str):
+    """Facit och bedömningsanvisning — lärarens papper, men lärarens språk."""
+    if (it.losning or "").strip():
+        yield f"{stig}.losning", it.losning
+    if (it.bedomning or "").strip():
+        yield f"{stig}.bedomning", it.bedomning
+
+
+def validate_tankstreck(doc: ExamDoc) -> list[dict]:
+    """Tankstreck i dokumentets fritext → fel i reparationsloopen.
+
+    Sifferspannet är undantaget (se app/textvakt): «boken s. 34–36» och
+    «uppgift 1218–1227» är intervalltecken och inte lärarens em dash, och
+    uppgiftstexter hänvisar till boken."""
+    return textvakt.granska(_fritexter(doc), tillat_spann=True)
+
+
 def validate_exam_json(data, profil: str = "prov",
                        niva_mal: dict | None = None
                        ) -> tuple[ExamDoc | None, list[dict]]:
@@ -2947,6 +3049,7 @@ def validate_exam_json(data, profil: str = "prov",
         ]
     fel = validate_balance(doc, niva_mal=niva_mal, profil=profil)
     fel = fel + validate_stam(doc)
+    fel = fel + validate_tankstreck(doc)
     # Gruppuppgiften är inget papper utan sitt upplägg: namnraderna, tiden och
     # redovisningsformen ÄR formen (se gruppark.css). Saknas de blir arket ett
     # arbetsblad med fel instruktionsband.

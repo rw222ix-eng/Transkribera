@@ -3827,6 +3827,19 @@ def build_repair_prompt(exam: dict, problems: list, profil: str = "prov") -> str
         f"{json.dumps(exam, ensure_ascii=False)}\n\n"
         "Problem att åtgärda:\n"
         f"{_format_problems(problems)}\n\n"
+        # TANKSTRECKEN FÅR SIN EGEN RAD. Felkoden `tankstreck` (app/textvakt,
+        # spåret 2026-09-06) är den enda i listan där lagningen är en
+        # OMSKRIVNING och inte en rättelse, och en modell som bara ser «fältet
+        # innehåller en em dash» byter gärna tecknet mot ett annat tankstreck
+        # eller mot en tankstrecksliknande paus. Raden står i REPARATIONS-
+        # prompten och inte i genereringen med flit: genereringsprompterna är
+        # kassettbundna (tests/kassetter måste kunna spelas in med byte-
+        # identisk prompt), reparationsprompten är det inte.
+        "Står det tankstreck i listan (– eller —) ska meningen SKRIVAS OM, "
+        "inte lagas med ett annat streck: dela den i två meningar, eller "
+        "använd punkt eller kolon. Bindestreck i sammansättningar (kurs-PM), "
+        "minustecken och sidintervall (s. 34–36) är något annat och ska stå "
+        "kvar.\n"
         f"Skriv om HELA {det} som JSON med problemen åtgärdade — justera "
         "poäng eller byt enstaka uppgifter, ändra så lite som möjligt i "
         "övrigt. Svara med enbart JSON."

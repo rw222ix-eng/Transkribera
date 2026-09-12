@@ -629,6 +629,16 @@ REPAIR_HINTS = (
     "- 'uträknat sifferexempel på vänstertavlan': stryk raden, eller flytta "
     "den till det exempel på högertavlan den hör till. På vänstern står "
     "bokstäver.\n"
+    # TANKSTRECKSVAKTEN (2026-09-12) — se app/textvakt.py och spåret
+    # 2026-09-06: läraren bad om det sex gånger på fyra papper på en vecka.
+    # Raden står i ÅTGÄRDSRÅDEN och inte i INSTRUCTION med flit: genererings-
+    # prompten är kassettbunden (tests/kassetter/tavla.json), den här är det
+    # inte. En modell som bara får veta att tecknet är förbjudet byter det mot
+    # ett annat tankstreck, så rådet säger vad man gör i stället.
+    "- 'innehåller ett en dash/em dash': skriv om raden utan tankstreck — dela "
+    "den i två, eller sätt punkt eller kolon. Bindestreck i sammansättningar "
+    "(kurs-PM), minustecken och sidintervall (s. 27–30) är något annat och "
+    "står kvar; listans bullet rörs inte.\n"
     # NEDSKALNINGEN (2026-09-05, kväll) — motorns fit-pass, se tavla-wb.js.
     # Varningen finns bara när tavlan RITAS, alltså i appens render-report,
     # inte vid genereringen på servern: precis som överlappen.

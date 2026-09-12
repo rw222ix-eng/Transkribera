@@ -26,7 +26,7 @@ from typing import Callable
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from app import llm_client
+from app import llm_client, textvakt
 
 MAX_ROUNDS = 3          # generering + reparation (delad budget, som tavlan)
 NOTES_MAX_TOKENS = 4_000
@@ -78,8 +78,12 @@ KOM_IHAG_TAK = 90
 
 # Tankstrecken. Läraren var uttrycklig: inga tankstreck. Bindestrecket i en
 # sammansättning (kurs-PM) är ett annat tecken och rörs inte.
-_TANKSTRECK = {"–": "en dash (–)", "—": "em dash (—)"}
-_TANKSTRECK_RE = re.compile("[–—]")
+#
+# Regeln bor sedan 2026-09-12 i app/textvakt.py och delas med provet,
+# arbetsbladet, gruppuppgiften och tavlan (spåret 2026-09-06: läraren bad om
+# det sex gånger på fyra papper på en vecka). Anteckningarna kallar den UTAN
+# sifferspannsundantaget — pappret bär inga bokhänvisningar med sidintervall,
+# och den strängare regeln är den som mätts mot den skarpa inspelningen.
 
 
 class _Model(BaseModel):
@@ -235,14 +239,7 @@ def rader(doc: NoteDoc) -> float:
 
 
 def validate_notes(doc: NoteDoc) -> list[dict]:
-    fel: list[dict] = []
-    for path, text in _texter(doc):
-        for tkn in _TANKSTRECK_RE.findall(text or ""):
-            fel.append(_err(path, "tankstreck",
-                            f"{path} innehåller ett {_TANKSTRECK[tkn]}. "
-                            "Skriv om meningen utan tankstreck — dela den i "
-                            "två, eller använd punkt eller kolon."))
-            break              # ett fynd per sträng räcker som besked
+    fel: list[dict] = textvakt.granska(_texter(doc))
     if not MIN_SEKTIONER <= len(doc.sektioner) <= MAX_SEKTIONER:
         fel.append(_err("sektioner", "antal",
                         f"pappret har {len(doc.sektioner)} sektioner — det ska "

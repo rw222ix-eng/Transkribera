@@ -214,7 +214,7 @@ def test_riktad_omskrivning_slapper_bara_igenom_malet(client, monkeypatch):
     for i, u in enumerate(allt_omskrivet["uppgifter"], start=1):
         u["text"] = f"På pizzerian säljs {i} pizzor. Beräkna intäkten."
         u["losning"] = f"Svaret är {i}."
-    allt_omskrivet["titel"] = "Prov — Pizzor"
+    allt_omskrivet["titel"] = "Prov: Pizzor"
     monkeypatch.setattr(exam_gen, "_llm_round",
                         lambda *a, **k: copy.deepcopy(allt_omskrivet))
 
@@ -298,7 +298,7 @@ def test_flervalet_slapper_igenom_bada_uppgifterna_genom_rutten(client,
         u["losning"] = f"Svaret är {i}."
     allt_omskrivet["uppgifter"][5]["text"] = "Ett tåg kör i 80 km/h i 45 min."
     allt_omskrivet["uppgifter"][5]["losning"] = "60 km."
-    allt_omskrivet["titel"] = "Prov — Pizzor"
+    allt_omskrivet["titel"] = "Prov: Pizzor"
     monkeypatch.setattr(exam_gen, "_llm_round",
                         lambda *a, **k: copy.deepcopy(allt_omskrivet))
 
