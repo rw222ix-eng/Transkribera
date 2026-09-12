@@ -195,7 +195,10 @@
   /* Målrutan: ett chip per vald ruta, med lärarens egen etikett och ett eget
      kryss. Med ETT val ser raden ut precis som förr — det är först vid två den
      blir en lista, och `data-flera` är det enda CSS behöver veta om saken. */
-  function ritaMal() {
+  /* `tyst` är gissningens omritning (se gissaOm): den sker medan läraren
+     SKRIVER, och då får den varken stänga mini-chatten eller rycka åt sig
+     fokus mitt i en mening. Ett klick ritar som förut. */
+  function ritaMal(tyst) {
     satSnabb(!!malen.length);
     const ruta = $('#g-mal'), chips = $('#g-malchips');
     chips.innerHTML = '';
@@ -213,27 +216,38 @@
       tips.className = 'gmaltips';
       tips.textContent = 'markera en ruta för att ändra bara den';
       chips.append(t, tips);
-    } else malen.forEach(m => {
+    } else malgrupper().forEach(g => {
+      const m = g.malen[0];
       const c = document.createElement('span');
       c.className = 'gmalchip';
       /* En härledd ruta är vald på ett annat sätt än de andra: meningen om den
          blir ett svar, inte ett varv. Chipet säger det före avsändningen
          (streckad kant i app2.css) och bär skälet som hovringstext. */
       if (m.harledd) { c.dataset.harledd = ''; c.title = m.harledd; }
+      /* GISSNINGEN säger att den är en gissning — prickad kant och ett litet
+         «appen gissade». Läraren ska aldrig tro att hon markerat något hon
+         inte markerat: det var just den villfarelsen som gjorde att en mening
+         om en ruta skrevs som en mening om hela pappret. */
+      if (g.gissat) {
+        c.dataset.gissat = '';
+        c.title = `Appen läste «${g.gissat}» i meningen och ändrar bara den `
+          + 'delen. Ta bort chipet om det är fel.';
+      }
       c.innerHTML = '<span class="gmaltext"></span><button class="gmalkryss" type="button">✕</button>';
-      $('.gmaltext', c).textContent = m.namn;
+      $('.gmaltext', c).textContent = g.namn;
       const x = $('.gmalkryss', c);
-      x.setAttribute('aria-label', `Ta bort ${m.namn} ur urvalet`);
-      x.addEventListener('click', () => taBortMal(m.el));
+      x.setAttribute('aria-label', `Ta bort ${g.namn} ur urvalet`);
+      x.addEventListener('click', () => taBortGrupp(g));
       chips.appendChild(c);
     });
     ruta.toggleAttribute('data-satt', !!malen.length);
-    ruta.toggleAttribute('data-flera', malen.length > 1);
+    ruta.toggleAttribute('data-flera', malgrupper().length > 1);
     $('#g-malx').hidden = !malen.length;
     markeraMalen();
     /* Arkbytet går också här (nollaMal) — svepet hör till sitt ark och ska
        släckas när det andra ligger framme. */
     markeraArbete();
+    if (tyst) { ritaFalt(); return; }
     /* Ny ruta, ny mening: en halvskriven mini-chatt hörde till den förra. */
     stangMini(false);
     satMini();
@@ -242,6 +256,26 @@
        om urvalet. */
     ritaFalt();
     $('#g-falt').focus({ preventScroll: true });
+  }
+  /* ETT CHIP PER MÅL, inte per ruta. Ett klick ger en ruta och ett chip, som
+     förut — men gissningen «exempel 3» är hela kolumnen, sju rutor, och sju
+     likadana chips är ingen upplysning. Rutorna med samma gissningsetikett
+     samlas därför till ett chip som tas bort i ett stycke. */
+  function malgrupper() {
+    const ut = [];
+    malen.forEach(m => {
+      const tidigare = m.gissat && ut.find(g => g.gissat === m.gissat);
+      if (tidigare) return tidigare.malen.push(m);
+      const namn = m.gissat ? m.gissat.charAt(0).toUpperCase() + m.gissat.slice(1)
+                            : m.namn;
+      ut.push({ gissat: m.gissat || '', namn, malen: [m] });
+    });
+    return ut;
+  }
+  function taBortGrupp(g) {
+    const bort = g.malen.map(m => m.el);
+    malen = malen.filter(m => !bort.includes(m.el));
+    ritaMal();
   }
   /* `[data-mal]` på ALLA valda rutor — CSS:en är densamma som när det bara
      kunde vara en. */
@@ -320,10 +354,18 @@
     }));
   }
   const taBortMal = id => { malen = malen.filter(m => m.el !== id); ritaMal(); };
-  const nollaMal = () => { malen = []; ritaMal(); };
+  /* Nyckeln nollas med urvalet: skickas meningen, eller kryssas urvalet bort,
+     ska samma mening kunna gissas på nytt nästa gång den skrivs. */
+  const nollaMal = () => { malen = []; gissningsnyckel = ''; ritaMal(); };
   function vaxlaMal(el) {
     const id = el.dataset.el;
-    if (malen.some(m => m.el === id)) return taBortMal(id);
+    /* Ett klick är lärarens eget val och tar över gissningen HELT: hade appen
+       gissat fel är klicket rättelsen, och då ska gissningen inte ligga kvar
+       bredvid den som ett halvt mål. Städningen måste ske FÖRE taket nedan —
+       en gissning kan bära fler rutor än ett klick får lägga till, och då hade
+       första klicket mötts av «6 rutor är taket» för rutor hon inte valt. */
+    if (malen.some(m => m.gissat)) { malen = []; gissningsnyckel = ''; }
+    else if (malen.some(m => m.el === id)) return taBortMal(id);
     /* Taket sägs, det tigs inte bort: ett klick som inte gör något är ett fel
        läraren letar efter i sin egen hand. */
     if (malen.length >= MAXMAL) {
@@ -333,13 +375,190 @@
     malen.push(malAv(el));
     ritaMal();
   }
+
+  /* ── APPEN GISSAR MÅLET UR MENINGEN ────────────────
+     Läraren 2026-09-12: «När jag skriver generellt i chattfönstret, typ ändra
+     exempel 3, då tas saker bort från vänstra tavlan.» Spåret 2026-09-06 (2a)
+     mätte samma sak: en rubrikändring på tavla c94275cfc2d2 rörde 18 rutor,
+     «A-nivå i boken» 15, och sedan skrev hon «Helvete. Alltså, vad fan
+     händer?».
+
+     Mål-låset på servern (lesson_board._riktad_refine) slår bara till när ett
+     element är MARKERAT. Skriver hon fritt gick varvet som helomskrivning —
+     och det enda som höll resten av tavlan kvar var en mening i prompten.
+
+     Nämner meningen något som GÅR ATT PEKA UT på tavlan sätter appen målet
+     själv, som ett chip med markeringen «appen gissade». Det syns före
+     avsändningen och går att ta bort. Kroppen som går i väg är exakt den ett
+     klick hade gett — se `kor()` nedan: ett mål ⇒ `mal`, flera ⇒ `mal` +
+     `malen`, och kassetterna hänger på just den formen.
+
+     ORDLISTAN ÄR DELAD med servern (lesson_board.MALORD, som avvisar ett varv
+     av samma ord). Glider de isär gissar de två lagren olika om samma mening.
+
+     EN HEL TAVLA («vänstertavlan», «exemplen») har inget eget id i serien —
+     dokumentdiff.tavelvag känner bara element — så målet blir alla dess rutor.
+     Ryms de inte under taket nedan faller gissningen HELT och hellre det: ett
+     halvt lås hade tappat halva önskemålet. Då tar serverns diffvakt fallet i
+     stället; den har inget tak att hålla sig under. */
+  const MALORD = [
+    ['rubriken', ['rubriken', 'rubriktexten', 'titeln', 'överskriften']],
+    ['agendan', ['agendan', 'dagordningen']],
+    ['öppningsfrågan', ['öppningsfrågan', 'ingångsfrågan']],
+    ['vänstertavlan', ['vänstertavlan', 'vänstra tavlan', 'vänster tavla',
+                       'teoritavlan', 'teorin']],
+    ['högertavlan', ['högertavlan', 'högra tavlan', 'höger tavla',
+                     'exempeltavlan', 'exemplen']],
+    ['vanligt fel', ['vanligt fel', 'vanliga fel', 'vanligt-fel']],
+    ['figuren', ['figuren', 'grafen', 'kurvan']],
+    ['formlerna', ['formeln', 'formlerna']],
+  ];
+  const TALORD = { ett: 1, en: 1, två: 2, tre: 3, fyra: 4, fem: 5, sex: 6,
+                   sju: 7, åtta: 8, nio: 9, tio: 10 };
+  /* «till exempel» är svenska, inte ett mål — den fångas som grupp 1 och
+     kastas. Lookbehind hade varit kortare men finns inte i alla motorer. */
+  const EXEMPEL_RE = new RegExp(
+    '(till\\s+)?\\bex(?:empel|\\.)\\s*(?:nr\\.?|nummer)?\\s*(\\d{1,2}|'
+    + Object.keys(TALORD).join('|') + ')\\b', 'gi');
+  /* En gissning får bära fler rutor än ett klick: «exempel 3» är hela
+     kolumnen, och sju rutor är den vanliga formen på en exempeltavla. Taket är
+     ändå en promptbudget — bortom det är «målet» en helomskrivning med extra
+     steg, och då är det ärligare att inte låsa alls. */
+  const MAXGISSAT = 10;
+
+  const tavlorna = () => $$('.gdok .whiteboard', plan);
+  /* Toppnivåns rutor i EN tavla. `data-ritad` är motorns egna noder
+     (understrykningar — blad.js jsonrutor): servern kan inte slå upp dem, och
+     ett mål den inte hittar släcker hela låset. `data-harledd` är rader appen
+     räknar fram och som aldrig går till servern alls. */
+  const tavelrutor = brade => [...brade.children].filter(n =>
+    n.classList && n.classList.contains('wb-element') && n.dataset.el
+    && !n.hasAttribute('data-ritad') && !n.hasAttribute('data-harledd'));
+  const exempelrubrik = (el, n) => new RegExp(
+    '^\\s*ex(?:empel|\\.?)\\s*' + (n === null ? '\\d' : n + '\\b'), 'i')
+    .test(skarmtext(el));
+  /* Rubriken «Exempel 3» plus rutorna under den, till nästa exempelrubrik i
+     samma tavla. Kolumnerna har ingen egen behållare i DOM:en (motorn lägger
+     alla rutor absolut i samma `.whiteboard`), men varje exempel inleds med
+     sin rubrik — och det är den gränsen läraren menar. */
+  function exempelblock(n) {
+    for (const brade of tavlorna()) {
+      const rutor = tavelrutor(brade);
+      const i = rutor.findIndex(el => exempelrubrik(el, n));
+      if (i < 0) continue;
+      const ut = [rutor[i]];
+      for (let j = i + 1; j < rutor.length; j++) {
+        if (exempelrubrik(rutor[j], null)) break;
+        ut.push(rutor[j]);
+      }
+      return ut;
+    }
+    return [];
+  }
+  /* Vilken sorts ruta är det? Motorn sätter typklasser (tavla-wb.js):
+     `wb-text` på heading och text, `wb-math` på formler, `wb-svg` på streck
+     och figurer, `wb-table` på tabeller — och en LISTA får bara `wb-element`.
+     Det är den skillnaden agendan känns igen på. */
+  const arText = el => el.classList.contains('wb-text');
+  const arLista = el => !arText(el) && !el.classList.contains('wb-math')
+    && !el.classList.contains('wb-svg') && !el.classList.contains('wb-table')
+    && !!skarmtext(el);
+  function sortensRutor(sort) {
+    const tavlor = tavlorna();
+    const vanster = tavlor.length ? tavelrutor(tavlor[0]) : [];
+    const alla = [];
+    tavlor.forEach(b => $$('[data-el]', b).forEach(el => {
+      if (!el.hasAttribute('data-ritad') && !el.hasAttribute('data-harledd')) alla.push(el);
+    }));
+    if (sort === 'rubriken') {
+      /* Dramaturgins ordning på vänstertavlan: RUBRIK → agenda → divider →
+         öppningsfråga. Tavlans titel är alltså den första texten till
+         vänster. */
+      const f = vanster.find(arText);
+      return f ? [f] : [];
+    }
+    if (sort === 'agendan') {
+      const f = vanster.find(arLista);
+      return f ? [f] : [];
+    }
+    if (sort === 'öppningsfrågan') {
+      const texter = vanster.filter(arText);
+      return texter.length > 1 ? [texter[1]] : [];
+    }
+    /* Hela tavlan är alla dess rutor. Ryms de inte under MAXGISSAT släpper
+       gissaMal alltihop — se kommentaren vid MALORD. */
+    if (sort === 'vänstertavlan') return vanster;
+    if (sort === 'högertavlan') return tavlor.length > 1 ? tavelrutor(tavlor[1]) : [];
+    if (sort === 'vanligt fel') {
+      /* Etiketten «Vanligt fel:» plus de tre rutorna under den i samma tavla:
+         understrykningen, feluppställningen och förklaringen. Etiketten ensam
+         är två ord, och att låsa dem och släppa resten vore inget lås. */
+      const ut = [];
+      tavlor.forEach(b => {
+        const rutor = tavelrutor(b);
+        rutor.forEach((el, i) => {
+          if (!/^vanligt fel/i.test(skarmtext(el))) return;
+          rutor.slice(i, i + 4).forEach(x => { if (!ut.includes(x)) ut.push(x); });
+        });
+      });
+      return ut;
+    }
+    if (sort === 'figuren') {
+      return alla.filter(el => el.classList.contains('wb-svg')
+                               && el.dataset.namn !== 'Understrykningen');
+    }
+    if (sort === 'formlerna') return alla.filter(el => el.classList.contains('wb-math'));
+    return [];
+  }
+  /* Meningen → rutorna den pekar ut, eller [] (och då gäller dagens väg).
+     Gissningen gör INGENTING på andra papper än tavlan: provets och bladens
+     egna mål är numrerade uppgifter, och «uppgift 3» är en annan fråga. */
+  function gissaMal(text) {
+    if (!tavlorna().length) return [];
+    const lag = ' ' + String(text || '').toLowerCase() + ' ';
+    const ut = [];
+    const lagg = (el, etikett) => {
+      if (!el || !el.dataset.el || ut.some(m => m.el === el.dataset.el)) return;
+      ut.push(Object.assign(malAv(el), { gissat: etikett }));
+    };
+    const nummer = [];
+    let m;
+    EXEMPEL_RE.lastIndex = 0;
+    while ((m = EXEMPEL_RE.exec(lag))) {
+      if (m[1]) continue;                      // «till exempel …»
+      const n = /^\d+$/.test(m[2]) ? Number(m[2]) : TALORD[m[2]];
+      if (n && !nummer.includes(n)) nummer.push(n);
+    }
+    nummer.forEach(n => exempelblock(n).forEach(el => lagg(el, 'exempel ' + n)));
+    MALORD.forEach(([sort, orden]) => {
+      if (!orden.some(o => lag.includes(o))) return;
+      sortensRutor(sort).forEach(el => lagg(el, sort));
+    });
+    return ut.length && ut.length <= MAXGISSAT ? ut : [];
+  }
+  /* Gissningen körs medan hon skriver, men bara när HON inte valt något: ett
+     klick är alltid starkare. Nyckeln gör att den bara ritar om när svaret
+     faktiskt blev ett annat — annars hade varje tangenttryck byggt om chipsen
+     under fingrarna. */
+  let gissningsnyckel = '';
+  function gissaOm(text) {
+    if (malen.length && !malen.some(m => m.gissat)) return;   // lärarens eget val
+    const funna = gissaMal(text);
+    const nyckel = funna.map(m => m.el).join(',');
+    if (nyckel === gissningsnyckel) return;
+    gissningsnyckel = nyckel;
+    if (!funna.length && !malen.some(m => m.gissat)) return;
+    malen = funna;
+    ritaMal(true);
+  }
   /* Frågan i fältet, på ett ställe: målrutan sätter den när valet ändras, och
      skrivläget nedan sätter tillbaka den när kön är tom. Flera val räknas upp
      på svenska («Vad ska ändras i uppgift 3 och uppgift 5?») med samma
      uppräkning och samma bestämda former som svaren i tråden använder. */
   const faltPlaceholder = () =>
-    `Vad ska ändras i ${malen.length ? raknaUpp(malen.map(m => bestamd(m.namn)))
-                                     : bestamd(arkNamn())}?`;
+    `Vad ska ändras i ${malen.length
+      ? raknaUpp(malgrupper().map(g => bestamd(g.namn)))
+      : bestamd(arkNamn())}?`;
   /* ── KÖN, I STÄLLET FÖR ETT LÅS ────────────────────
      Här stod ett lås: fältet gick i disabled medan varvet gick, med
      motiveringen att lärarens nästa mening annars skrivs mot ett papper hon
@@ -788,7 +1007,12 @@
   /* Vad varvet HETER — i tråden, i jobbtexten och i svaren: rutornas egna
      etiketter, uppräknade på svenska. Utan valda rutor är det arket som gäller,
      och det slås upp på postens eget ark (se arkNamnFor). */
-  const malNamn = (mal, ark) => mal.length ? raknaUpp(mal.map(m => m.namn)) : arkNamnFor(ark);
+  /* Gissningens etikett vinner över rutornas egna namn: «exempel 3» är vad
+     läraren skrev, och «Exempel 3, Exempel 3 · blocket, Exempel 3 · formel 1
+     …» är samma sak sju gånger. Dubbletterna faller bort i ordning. */
+  const malNamn = (mal, ark) => mal.length
+    ? raknaUpp([...new Set(mal.map(m => m.gissat || m.namn))])
+    : arkNamnFor(ark);
 
   /* ── EN POST BLIR TILL ──────────────────────────────
      Vad posten bär med sig: meningen, målens id och etiketter, och arket de
@@ -864,8 +1088,11 @@
     /* Rutor som hunnit försvinna ur pappret återtas inte — de finns inte att
        peka på längre. Ligger ett ANNAT ark framme går urvalet tillbaka orört:
        arken bär samma id:n, och en kontroll här hade läst fel papper. */
-    malen = (onskan.ark || 0) !== arkIndex() ? onskan.mal.slice(0, MAXMAL)
-      : onskan.mal.filter(m => $(`.gdok [data-el="${m.el}"]`, plan)).slice(0, MAXMAL);
+    /* MAXGISSAT och inte MAXMAL: en gissad post bär hela «exempel 3», alltså
+       fler rutor än ett klick får lägga till — och att kapa dem här hade
+       lämnat halva låset kvar. */
+    malen = (onskan.ark || 0) !== arkIndex() ? onskan.mal.slice(0, MAXGISSAT)
+      : onskan.mal.filter(m => $(`.gdok [data-el="${m.el}"]`, plan)).slice(0, MAXGISSAT);
     ritaMal();
     f.style.height = 'auto';
     f.style.height = Math.min(120, f.scrollHeight) + 'px';
@@ -890,7 +1117,10 @@
       if (!sammaArk) return funna.push(m);
       const el = $(`.gdok [data-el="${m.el}"]`, plan);
       if (!el) return borta.push(m);
-      funna.push(malAv(el));
+      /* Gissningens etikett följer med omläsningen — den är inte rutans
+         innehåll utan vad LÄRAREN skrev, och tråden och jobbraden heter efter
+         den. Till servern går den aldrig (kroppen byggs fält för fält i kor). */
+      funna.push(Object.assign(malAv(el), m.gissat ? { gissat: m.gissat } : {}));
     });
     /* Ett mål som försvunnit droppas, men de andra går: läraren bad om något
        för var och en av rutorna, och att slänga hela önskemålet för att en av
@@ -1106,6 +1336,9 @@
     const f = $('#g-falt');
     f.style.height = 'auto';
     f.style.height = Math.min(120, f.scrollHeight) + 'px';
+    /* Målet gissas MEDAN hon skriver och inte vid avsändningen: chipet ska
+       hinna synas, och hon ska hinna ta bort det. Se APPEN GISSAR MÅLET. */
+    gissaOm(f.value);
   });
   $('#g-falt').addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#g-form').requestSubmit(); }
@@ -1236,7 +1469,8 @@
     if (window.Prickar) window.Prickar.pa(klon);
     $('#g-titel').textContent = o.titel || 'Utkast';
     $('#g-meta').textContent = o.meta || '';
-    kommentarer = []; nr = 0; malen = []; senaste = { varv: 0, ark: 0, par: {} };
+    kommentarer = []; nr = 0; malen = []; gissningsnyckel = '';
+    senaste = { varv: 0, ark: 0, par: {} };
     /* Nytt papper: svepet och den armerade blinken hörde till det förra. */
     arbetar = null; vantarBlink = null;
     satSnabb(false);          // nytt papper, inget element valt än

@@ -1076,6 +1076,136 @@ def test_refine_utan_mal_ar_exakt_dagens_prompt():
     assert lb.MALNYCKELMARKOR not in calls[0]["prompt"]
 
 
+# ---------------------------------------------------------- diffvakten -----
+# Lärarens ord 2026-09-12: «När jag skriver generellt i chattfönstret, typ ändra
+# exempel 3, då tas saker bort från vänstra tavlan.» Spåret 2026-09-06 (2a):
+# median ETT ändrat element, men fyra varv på tavla c94275cfc2d2 ändrade 8–18 —
+# «Ändra rubriken till något mer konkret» rörde 18 rutor.
+#
+# Mål-låset ovan kräver ett klick. Vakten är den andra halvan: samma prompt som
+# i dag, men SVARET prövas mot meningen.
+
+
+def _tre_exempel() -> dict:
+    """FEW_SHOTS[0] med ett tredje exempel på högertavlan — lärarens egen
+    mening handlade om exempel 3, och shoten har bara två."""
+    doc = _valid_doc()
+    tredje = copy.deepcopy(doc["boards"][1]["columns"][1])
+    tredje["sections"][0]["text"] = "Exempel 3"
+    doc["boards"][1]["columns"].append(tredje)
+    return doc
+
+
+def test_las_maltyper_kanner_igen_lararens_ord_men_inte_till_exempel():
+    assert lb.las_maltyper("ändra exempel 3").exempel == (3,)
+    assert lb.las_maltyper("exempel tre är för lätt").exempel == (3,)
+    assert lb.las_maltyper("skriv rubriken mer konkret").sorter == ("rubrik",)
+    assert lb.las_maltyper("A-nivå i boken").sorter == ()
+    # «till exempel» är svenska, inte ett mål. Utan undantaget hade «gör det
+    # kortare, till exempel 3 rader» låst varvet till högertavlans exempel 3.
+    assert not lb.las_maltyper("gör det kortare, till exempel 3 rader")
+
+
+def test_diffvakt_later_vanstertavlan_sta_nar_onskemalet_galler_ett_exempel():
+    """«ändra exempel 3» ⇒ vänstertavlan byte-identisk efter varvet."""
+    doc = _tre_exempel()
+    # Modellen gör precis det läraren klagade på: skriver om vänstertavlan på
+    # köpet — rubriken, agendan och definitionsmeningen.
+    slarv = copy.deepcopy(doc)
+    slarv["boards"][0]["sections"][0] = {"kind": "heading", "text": "Annat"}
+    slarv["boards"][0]["sections"][1] = {"kind": "list", "items": ["a", "b"]}
+    slarv["boards"][0]["sections"][4] = {"kind": "text", "text": "omskriven"}
+    slarv["boards"][1]["columns"][2]["sections"][1] = {"kind": "text",
+                                                       "text": "slarvigt"}
+    lapp = _lappsvar("boards[1].columns[2].sections[1]",
+                     {"kind": "text", "text": "LAPPAT"})
+    llm, calls = _stub_llm([json.dumps(slarv), lapp])
+    res = lb.refine_board(doc, "ändra exempel 3", model="m", llm=llm)
+
+    assert len(calls) == 2
+    # FÖRSTA prompten är dagens, byte för byte: vakten är en efterkontroll och
+    # rör inte prompten (kassetterna är inspelade mot den).
+    assert calls[0]["prompt"] == lb.build_refine_prompt(
+        doc, "ändra exempel 3", None, "", None, None)
+    # Andra varvet är lappen, låst till exempel 3:s egna nycklar.
+    assert lb.MALNYCKELMARKOR in calls[1]["prompt"]
+    assert "boards[1].columns[2]" in calls[1]["prompt"]
+    assert "boards[0].sections[0]" not in calls[1]["prompt"].split(
+        lb.MALNYCKELMARKOR)[1]
+
+    assert res["board"]["boards"][0] == doc["boards"][0]
+    assert res["board"]["boards"][1]["columns"][2]["sections"][1] \
+        == {"kind": "text", "text": "LAPPAT"}
+    assert res["board"]["boards"][1]["columns"][0] \
+        == doc["boards"][1]["columns"][0]
+
+
+def test_diffvakt_later_bara_rubriken_andras():
+    """«skriv rubriken mer konkret» ⇒ bara rubriken. Det var det här varvet som
+    rörde 18 rutor i spåret."""
+    doc = _valid_doc()
+    slarv = copy.deepcopy(doc)
+    slarv["boards"][0]["sections"][0] = {"kind": "heading", "text": "Nytt"}
+    for i in (1, 2, 4):
+        slarv["boards"][0]["sections"][i] = {"kind": "text", "text": f"x{i}"}
+    slarv["boards"][1]["columns"][0]["sections"][1] = {"kind": "text",
+                                                       "text": "och detta"}
+    lapp = _lappsvar("boards[0].sections[0]",
+                     {"kind": "heading", "text": "Pythagoras i verkstaden"})
+    llm, calls = _stub_llm([json.dumps(slarv), lapp])
+    res = lb.refine_board(doc, "skriv rubriken mer konkret", model="m", llm=llm)
+
+    assert len(calls) == 2
+    assert res["board"]["boards"][0]["sections"][0]["text"] \
+        == "Pythagoras i verkstaden"
+    # Allt annat på BÅDA tavlorna, byte för byte.
+    kopia = copy.deepcopy(res["board"])
+    kopia["boards"][0]["sections"][0] = doc["boards"][0]["sections"][0]
+    assert kopia == doc
+
+
+def test_diffvakt_star_stilla_nar_meningen_inte_pekar_pa_nagot():
+    """Ingen igenkänning ⇒ exakt som förr: ett varv, dagens prompt, modellens
+    svar rakt igenom. Fail-open är hela vaktens säkerhetsregel."""
+    doc = _valid_doc()
+    fritt = copy.deepcopy(doc)
+    fritt["boards"][0]["sections"][0] = {"kind": "heading", "text": "Nytt"}
+    fritt["boards"][0]["sections"][4] = {"kind": "text", "text": "annat"}
+    fritt["boards"][1]["columns"][0]["sections"][1] = {"kind": "text",
+                                                       "text": "tredje"}
+    llm, calls = _stub_llm([json.dumps(fritt)])
+    res = lb.refine_board(doc, "gör hela tavlan luftigare", model="m", llm=llm)
+    assert len(calls) == 1 and res["rounds"] == 1
+    assert res["board"] == fritt
+
+
+def test_diffvakt_slapper_igenom_ett_varv_som_holl_sig_innanfor():
+    """Ett litet, riktat varv kostar inget extra: ändrades bara det meningen
+    nämner går svaret hem som det är."""
+    doc = _tre_exempel()
+    prydlig = copy.deepcopy(doc)
+    prydlig["boards"][1]["columns"][2]["sections"][1] = {"kind": "text",
+                                                         "text": "nytt tal"}
+    llm, calls = _stub_llm([json.dumps(prydlig)])
+    res = lb.refine_board(doc, "ändra exempel 3", model="m", llm=llm)
+    assert len(calls) == 1
+    assert res["board"] == prydlig
+
+
+def test_gissade_malvagar_ar_vagar_mal_laset_kan_anvanda():
+    """Vägarna måste ha elementkartans form — annars fäller lappvakten dem och
+    sammanfogningen hittar inget att hämta."""
+    doc = _tre_exempel()
+    vagar = lb.gissade_malvagar(doc, lb.las_maltyper("ändra exempel 3"))
+    assert vagar and all(n == "exempel 3" for n, _v in vagar)
+    for _namn, vag in vagar:
+        assert vag.startswith("boards[1].columns[2].sections[")
+        assert lb._las_vag(doc, vag)[0]
+    # …och rubriken är tavlans första rubriksektion på vänstertavlan.
+    assert lb.gissade_malvagar(doc, lb.las_maltyper("byt titeln")) \
+        == [("rubriken", "boards[0].sections[0]")]
+
+
 # ------------------------------------------------------- täckningsdomaren --
 # Lärarens beställning 2026-08-20: prompten bar «klara SAMTLIGA uppgifter»
 # men ingen grind räknade efter — domaren gör jämförelsen uppgift för uppgift

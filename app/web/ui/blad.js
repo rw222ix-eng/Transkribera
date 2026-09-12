@@ -842,8 +842,45 @@ window.Blad = (() => {
      motorn ritar en lista och en tabell som ETT element (WB.list, WB.table),
      och det finns ingen nod per punkt eller per cell att fästa något på. En
      halv markering vore sämre än ingen. */
-  function taggaTavla(host, v) {
+  /* ── RUTOR MOTORN RITAR AV SIG SJÄLV ──
+     En sorts nod i DOM:en har ingen motsvarighet i tavlans JSON, och den är
+     vanlig: understrykningen under en `heading` med `underline` ritas som
+     en EGEN `.wb-element` (tavla-wb.js layoutFlow). Den får alltså ett
+     data-el i serien nedan — men `dokumentdiff.tavelvag` hittar ingen väg åt
+     den, och ett mål servern inte kan slå upp släcker HELA mål-låset
+     (lesson_board.malvagar: kan vi inte låsa alla rutor låser vi inga).
+     Så länge det bara var lärarens klick spelade det liten roll. Nu gissar
+     appen målet ur meningen (granska.js, lärarens ord 2026-09-12), och en
+     gissning som råkar svepa med en understrykning hade tyst blivit en
+     helomskrivning — precis det den finns för att stoppa.
+     Räkningen speglar dokumentdiff._tavelnoder byte för byte: kolumner före
+     sections, spacer räknas men ritas inte, en understruken heading tar TVÅ
+     platser. Saknas specen märks ingenting — hellre orört än fel. */
+  function jsonrutor(spec) {
+    const ut = new Set();
+    if (!spec || typeof spec !== 'object') return null;
+    const ritas = s => !!(s && typeof s === 'object' && s.kind && s.kind !== 'spacer');
+    let n = 0;
+    (spec.boards || [spec]).forEach(brade => {
+      if (!brade || typeof brade !== 'object') return;
+      const listor = (brade.columns && brade.columns.length)
+        ? brade.columns.map(k => ((k || {}).sections) || [])
+        : [brade.sections || []];
+      listor.forEach(sektioner => (sektioner || []).forEach(sek => {
+        if (!ritas(sek)) return;
+        ut.add(n++);
+        /* `!= null` och inte sanningsvärde: `"underline": {}` är ett TOMT
+           objekt — falskt i Python, sant i JS, och det är JS:et som ritar. */
+        if (sek.kind === 'heading' && sek.underline != null) n++;
+      }));
+      (brade.annotations || []).forEach(() => ut.add(n++));
+    });
+    return ut;
+  }
+
+  function taggaTavla(host, v, spec) {
     const andrat = (v && v.andrat) || [];
+    const jsonn = jsonrutor(spec);
     let rubrik = '';
     const raknare = {};
     const barnen = (far, id) => [...far.children].forEach((barn, i) => {
@@ -862,7 +899,13 @@ window.Blad = (() => {
       if (andrat.includes(id)) el.classList.add('andrad');
       barnen(el, id);
     }
-    $$('.wb-element', host).forEach((el, n) => dop(el, 'tav' + n, true));
+    $$('.wb-element', host).forEach((el, n) => {
+      dop(el, 'tav' + n, true);
+      /* `data-ritad` säger «den här rutan finns inte i JSON:en». Klicket får
+         den fortfarande — det beteendet är gammalt och oförändrat — men
+         gissningen i granska.js hoppar över den. */
+      if (jsonn && !jsonn.has(n)) el.dataset.ritad = '';
+    });
     /* EFTER slingan: `tavnamn` läser elementets textContent, och en prick som
        satts först hade kunnat hamna i namnet. Prickarna rör inte layouten —
        motorn har redan mätt, och de ligger absolut inne i en absolut ruta. */
@@ -928,7 +971,7 @@ window.Blad = (() => {
     if (varningar.length && window.Tavla && window.Tavla.varnade) window.Tavla.varnade(v, varningar);
     const tavla = host.firstElementChild;
     if (!tavla) return;
-    taggaTavla(host, v);
+    taggaTavla(host, v, spec);
     /* LAYOUTPIXLAR, inte skärmpixlar — samma regel som `ledigt` nedan, och den
        gäller dubbelt här. Granskningens duk står i en egen transform-skala som
        läraren byter med Bredd/100%/Hela, så getBoundingClientRect() gav tavlans
