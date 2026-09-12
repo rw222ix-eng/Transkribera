@@ -51,6 +51,13 @@ INSTRUCTION = (
     "\"columns\" för exempel).\n"
     "Regler:\n"
     "- Decimalkomma i all läsbar text och LaTeX (skriv 4{,}58 — aldrig 4.58).\n"
+    # Spåret 2026-09-06: läraren bad «utan em dash» sex gånger på fyra papper.
+    # Vakten (app/textvakt via whiteboard_spec) fäller strecken deterministiskt;
+    # raden här gör att modellen slipper reparationsrundan. Lades in när
+    # tavlakassetten ändå spelades om (2026-09-12), så bandet svarar på den.
+    "- Inga tankstreck (varken – eller —) i text-, heading- eller list-strängar: "
+    "dela meningen i två, eller använd komma. Sidspann som s. 88–90 är "
+    "undantaget.\n"
     "- Matematik skrivs ALLTID i math-sektioner (fältet latex) — aldrig inne "
     "i text-, list- eller tabellsträngar, och aldrig med $-tecken. Kom ihåg "
     "att backslash måste dubbleras i JSON: skriv \\\\frac{1}{2}, \\\\sqrt{2}, "

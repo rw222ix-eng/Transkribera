@@ -49,42 +49,29 @@ def test_ett_band_gar_genom_bryggan_ord_for_ord(fejk_claude):
     assert claude_code.SENASTE["kostnad"] > 0
 
 
-# BANDET ÄR ÄLDRE ÄN TAKET. tavla.json spelades in när textbudgeten var 400
-# tecken per tavla och 250 per kolumn. Läraren sänkte taken 2026-09-05 (kväll)
-# till 280 och 170 — «det är svårt att få med allt på tavlan när jag väl ska
-# skriva allt detta» — och bandets högertavla (224 + 274 tecken) ligger sedan
-# dess över. Det är REGELN som biter, inte kedjan som är trasig, och ett band
-# spelas aldrig om för en promptändring. Testerna nedan mäter därför allt UTOM
-# budgeten; att budgeten faktiskt fäller bandet prövas på ett enda ställe, av
-# test_det_sankta_taket_faller_bandets_hogertavla.
+# BUDGETEN RÄKNAS BORT. Bandet från 2026-09-05 spelades in när textbudgeten
+# var 400 tecken per tavla och 250 per kolumn; läraren sänkte taken samma
+# kväll till 280 och 170 — «det är svårt att få med allt på tavlan när jag väl
+# ska skriva allt detta» — och bandet låg sedan dess över. Det var REGELN som
+# bet, inte kedjan som var trasig, så testerna mäter allt UTOM budgeten. Det
+# omspelade bandet (2026-09-12) håller taket, men filtret står kvar: ett
+# framtida band som ligger över ska fälla test_bandet_haller_textbudgeten,
+# inte hela kedjan.
 def _utan_budget(errors: list) -> list:
     return [e for e in errors
             if not (isinstance(e, dict) and e.get("code") == "textbudget")]
 
 
-# BANDET ÄR ÄLDRE ÄN TANKSTRECKSVAKTEN, och den här gången spelas det OM.
-# Vakten (app/textvakt, 2026-09-12) mäter lärarens sex önskemål under veckan
-# 1–6 sep — «skriv kortare utan em dash» — deterministiskt på alla fyra papper,
-# och tavla.json bär två tankstreck i prosan:
-#
-#     boards[1].columns[0].sections[7].text   «Förkorta först – sedan …»
-#     boards[1].columns[1].sections[6].items[1]  «Låt h gå mot noll – …»
-#
-# Till skillnad från textbudgeten ovan går det här INTE att mäta runt: det är
-# precis den sortens mening vakten finns för, och ett band som bär den skulle
-# lära oss att vakten inte biter. Testerna nedan är därför xfail(strict=True)
-# tills bandet spelas om med nycklar i main (tools/spela_in_kassett.py, band
-# «tavla»). Strikt med flit: omspelningen ska FÄLLA markeringen, så att den
-# som spelar in ser att den ska bort — ett band som passerar under ett xfail
-# är ett test som tyst slutat mäta.
-#
-# Prompten är oförändrad, alltså är omspelningen giltig enligt kassettregeln.
-KASSETT_TANKSTRECK = pytest.mark.xfail(
-    strict=True,
-    reason="kassetten spelades in före tankstrecksvakten, spela om")
+# TAVLABANDET SPELADES OM 2026-09-12 när tankstrecksvakten (app/textvakt)
+# kom: det gamla bandet (2026-09-05) bar två tankstreck i prosan, precis den
+# sortens mening vakten finns för, och ett band som bär den hade lärt oss att
+# vakten inte biter. Samtidigt fick tavelprompten sin egen tankstrecksregel,
+# så det nya bandet svarar på den prompt appen skickar (kassettregeln). Det
+# nya bandet håller också textbudgeten, så budgetfynden som testerna nedan
+# räknar bort finns inte längre i det — `_utan_budget` står kvar för att ett
+# framtida band inte ska fälla hela kedjan på ett fynd som är en varning.
 
 
-@KASSETT_TANKSTRECK
 def test_tavlan_ur_kassetten_ar_giltig_wb_json(fejk_claude):
     """Hela vägen: CLI → ström → JSON → whiteboard_spec → färdig tavla."""
     fejk_claude(kassett="tavla")
@@ -108,20 +95,22 @@ def test_tavlan_ur_kassetten_ar_giltig_wb_json(fejk_claude):
     assert doc is not None and _utan_budget(fel) == []
 
 
-def test_det_sankta_taket_faller_bandets_hogertavla(fejk_claude):
-    """Och åt andra hållet: det sänkta taket biter på en riktig inspelning.
-    Bandets högertavla bär 498 tecken löpande text mot det nya taket 340 (två
-    kolumner à 170), och det är precis den sortens tavla läraren fällde:
-    «det känns lite mycket på vissa ställen»."""
+def test_bandet_haller_textbudgeten(fejk_claude):
+    """Bandet från 2026-09-05 bar 498 tecken löpande text på högertavlan mot
+    taket 340 (två kolumner à 170), och testet här mätte att det sänkta taket
+    bet på en riktig inspelning. Omspelningen 2026-09-12 gav en tavla INOM
+    budgeten — samma prompt, tystare svar — så det som går att mäta på bandet
+    nu är motsatsen: att en riktig inspelning kan hålla taket utan reparation.
+    Att taket biter på en pratig tavla mäts i test_whiteboard_spec
+    (test_textbudget_faller_en_pratig_tavla)."""
     fejk_claude(kassett="tavla")
     res = lesson_board.generate_board(
         "Matematik 3c", "NA25", "Derivatans definition", model="",
         max_rounds=1)
-    budget = [e for e in res["errors"] if e.get("code") == "textbudget"]
-    assert budget and budget[0]["path"] == "boards[1]", res["errors"]
+    assert res["errors"] == [], res["errors"]
+    assert res["rounds"] == 1
 
 
-@KASSETT_TANKSTRECK
 def test_en_trasig_tavla_repareras_i_nasta_runda(fejk_claude):
     """Första bandet bryter mot schemat, andra är rätt. Reparationsrundan ska
     köra på riktigt — det är den som gör att läraren får en tavla i stället för
@@ -350,7 +339,6 @@ def test_ett_namn_som_anda_kommer_tillbaka_stoppas(fejk_claude):
     assert "A.L." in texter and "E.S." in texter
 
 
-@KASSETT_TANKSTRECK
 def test_mal_last_omskrivning_ror_bara_rutan_lararen_pekade_pa(fejk_claude):
     """Hela mål-låset genom den riktiga sömmen: tavlan ur bandet, läraren
     markerar EN formel i figur-och-formler-raden, och lappen som kommer
@@ -365,26 +353,28 @@ def test_mal_last_omskrivning_ror_bara_rutan_lararen_pekade_pa(fejk_claude):
     board = lesson_board.generate_board(
         "Matematik 3c", "NA25", "Derivatans definition", model="",
         max_rounds=1)["board"]
-    rad = board["boards"][0]["sections"][6]
+    # Bandets form (omspelat 2026-09-12): raden är sektion 5 på vänstern och
+    # definitionen är formelspaltens fjärde barn. Lappbandet pekar på samma
+    # väg, så byter tavlabandet form måste tavellapp.json följa med.
+    rad = board["boards"][0]["sections"][5]
     assert rad["kind"] == "row"          # klumpen läraren inte kunde peka i
-    fore = copy.deepcopy(rad["children"][1]["children"][1])
+    fore = copy.deepcopy(rad["children"][1]["children"][3])
 
     ut = lesson_board.refine_board(board, "skriv definitionen med a i stället",
                                    model="", max_rounds=1,
-                                   mal={"el": "tav7.1.1",
+                                   mal={"el": "tav6.1.3",
                                         "namn": "Formel 2",
                                         "innehall": fore["latex"]})
     assert _utan_budget(ut["errors"]) == [], ut["errors"]
     assert ut["rounds"] == 1             # en lapp, inte en hel tavla
-    efter = ut["board"]["boards"][0]["sections"][6]["children"][1]["children"][1]
+    efter = ut["board"]["boards"][0]["sections"][5]["children"][1]["children"][3]
     assert "f'(a)" in efter["latex"] and "f'(a)" not in fore["latex"]
     # …och ALLT annat på båda tavlorna står kvar, byte för byte.
     kopia = copy.deepcopy(ut["board"])
-    kopia["boards"][0]["sections"][6]["children"][1]["children"][1] = fore
+    kopia["boards"][0]["sections"][5]["children"][1]["children"][3] = fore
     assert kopia == board
 
 
-@KASSETT_TANKSTRECK
 def test_auto_laget_lagger_i_bandet_prompten_ber_om(fejk_claude):
     """Auto-läget (Etapp 4) läser vad prompten BER om och väljer band därefter.
 
