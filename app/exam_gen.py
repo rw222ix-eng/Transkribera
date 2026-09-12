@@ -1321,6 +1321,80 @@ def build_spridning(avsnitt: list[dict], antal: int) -> str:
         "\"avsnitt\" avsnittets nummer, t.ex. \"1.2\".")
 
 
+# ───────────────────────────────── hjälpmedlen per del (2026-09-06) ──
+# Hjälpmedlen var husets regel: del A utan digitala verktyg, del B med räknare,
+# skrivet en gång i prompten och en gång i blad.js. Läraren bad tre gånger på
+# två prov om samma undantag — «formelblad ska vara tillåtet på del A och B»
+# (spåret 6/9 13:17, 14:32, 15:31) — och första gången kostade det ett
+# bortkastat omskrivningsvarv, eftersom enda vägen dit var att be modellen
+# skriva om hela pappret.
+#
+# Nycklarna är planeringens etiketter (app/web/ui/plan.js HJALPMEDELSVAL) och
+# klausulerna måste säga samma sak som skärmens fraser (blad-bygg.js
+# HJALPMEDELSFRAS). Ändras en lista ska den andra ändras i samma commit —
+# annars säger förhandsvisningen och PDF:en olika saker om samma prov.
+HJALPMEDEL_KLAUSUL = {
+    "Inga digitala": "utan digitala hjälpmedel",
+    "Formelblad": "utan digitala hjälpmedel, formelbladet är tillåtet",
+    "Räknare": "med räknare och digitala hjälpmedel",
+    "Räknare och formelblad": "med räknare, digitala hjälpmedel och formelblad",
+}
+# Dagens papper. Står valen här är det INGEN avvikelse: prompten ska då vara
+# byte för byte den som tests/kassetter spelades in med, och klienten skickar
+# därför inte ens fälten (plan.js hjalpmedelsavvikelse). Nycklarna är de INTERNA
+# delnamnen — lärarens Del A är dokumentets del B, hennes Del B dess del C
+# (exam_latex._delnamn_visning).
+HJALPMEDEL_FORVAL = {"B": "Inga digitala", "C": "Räknare"}
+
+
+def hjalpmedelsregel(hjalpmedel_a: str, hjalpmedel_b: str = "", *,
+                     delar: bool = True) -> str:
+    """Lärarens hjälpmedelsval som EN mening — dokumentets `hjalpmedel`.
+
+    Tom sträng betyder «inget val att skriva in»: okända etiketter, eller val
+    som står på förvalet. Då rörs varken prompten eller dokumentet, och pappret
+    ser ut precis som förut.
+
+    Meningen skrivs med de INTERNA delnamnen (Del B, Del C) därför att allt
+    annat i dokumentet gör det; skärmen och PDF:en räknar om dem till Del A och
+    Del B var för sig (blad-bygg.delnamnVisning, exam_latex._delnamn_visning).
+    """
+    a = str(hjalpmedel_a or "").strip()
+    b = str(hjalpmedel_b or "").strip()
+    if a not in HJALPMEDEL_KLAUSUL:
+        return ""
+    if not delar:
+        if a == HJALPMEDEL_FORVAL["B"]:
+            return ""
+        return f"Provet skrivs {HJALPMEDEL_KLAUSUL[a]}."
+    if b not in HJALPMEDEL_KLAUSUL:
+        return ""
+    if a == HJALPMEDEL_FORVAL["B"] and b == HJALPMEDEL_FORVAL["C"]:
+        return ""
+    return (f"Del B {HJALPMEDEL_KLAUSUL[a]}. "
+            f"Del C {HJALPMEDEL_KLAUSUL[b]}.")
+
+
+def build_hjalpmedel(regel: str) -> str:
+    """Hjälpmedelsvalet som promptblock, eller TOM STRÄNG.
+
+    Regeln skrivs ändå in i dokumentet av routes_exam — modellen behöver den
+    inte för att fältet ska bli rätt. Den står i prompten för UPPGIFTERNAS
+    skull: en del utan räknare får inga uppgifter som kräver ett digitalt
+    verktyg, och en del där formelbladet ligger framme ska inte pröva om eleven
+    minns formeln. Utan raden hade provet fått rätt regel på försättsbladet och
+    fel uppgifter under den."""
+    if not regel:
+        return ""
+    return (
+        "HJÄLPMEDLEN ÄR LÄRARENS VAL på det här provet, och de väger tyngre än "
+        f"husets vanliga delning ovan: {regel} Skriv exakt den meningen i "
+        "fältet \"hjalpmedel\". Uppgifterna ska följa den: en del utan "
+        "digitala hjälpmedel får ingen uppgift som kräver räknare eller graf"
+        "ritande program, och en del där formelbladet är tillåtet prövar inte "
+        "om eleven minns en formel utantill.")
+
+
 def _rent_skelett(skeleton: list[dict] | None) -> str | None:
     """«E», «C» eller «A» när VARJE rad i uppgiftsplanen bär sina poäng på
     samma nivå — annars None. Lärarens rena nivåval (exam_spec.ren_niva) ger
@@ -1349,7 +1423,7 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
                  memory: str = "", teman: str = "", variation: str = "",
                  referens: str = "", bilder: str = "", utfall: str = "",
                  bok: str = "", boknivaer: str = "", forlaga: str = "",
-                 spridning: str = "",
+                 spridning: str = "", hjalpmedel: str = "",
                  svart: str = "", fokus: str = "",
                  profil: str = "prov", koder: list[str] | None = None,
                  grupp: dict | None = None, riktat: str = "",
@@ -1372,6 +1446,10 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
     `illustration` är lärarens kryss «Plats för illustration» i planeringen och
     gäller BARA arbetsblad och gruppuppgift (plan.js TYPVAL). Provet har alltid
     sitt bildstöd — dess form är lärarens förlaga, inte ett val i panelen.
+
+    `hjalpmedel` är hjälpmedelsvalet per del som färdigt block
+    (build_hjalpmedel) och gäller bara provet: det är den enda profilen med
+    delar. Tom sträng lämnar prompten ordagrant som den var.
     """
     # Skelettet räknas för ALLA tre profilerna (Del D1b): jämn förmågetäckning
     # ska vara garanterad by construction och inte bero på att modellen råkar
@@ -1644,6 +1722,11 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             "eleven ska visa hur hon använt sitt digitala verktyg."
             if delar else
             "Provet har inga delar (del: null på alla uppgifter).")
+        # Lärarens hjälpmedelsval, och bara när hon flyttat något (se
+        # build_hjalpmedel). Tomt block = oförändrad prompt, byte för byte —
+        # kassetterna är inspelade med den.
+        if hjalpmedel:
+            delar_txt += " " + hjalpmedel
         # ── PAPPRETS FORM, SAGD TILL MODELLEN ────────────────────────────
         # Provet sätts efter lärarens egen Overleaf-förlaga (se
         # app/templates/prov.tex.j2). Formen är alltså given; det som avgör om
@@ -4967,6 +5050,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                   tidigare: list[str] | None = None,
                   bilder: str = "", utfall: str = "", bok: str = "",
                   boknivaer: str = "", forlaga: str = "",
+                  hjalpmedel: str = "",
                   avsnitt: list[dict] | None = None,
                   svart: str = "", fokus: str = "", profil: str = "prov",
                   koder: list[str] | None = None, riktat: str = "",
@@ -5005,6 +5089,9 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     `illustration` är lärarens kryss «Plats för illustration» och styr om
     arbetsbladets och gruppuppgiftens uppgifter ska bära en bildbeställning
     (`scen`) alls. Se BILD_PA/BILD_AV.
+
+    `hjalpmedel` är hjälpmedelsvalet per del som färdigt promptblock
+    (build_hjalpmedel). Tom sträng — förvalet — lämnar prompten orörd.
 
     `tidigare` är uppgiftstexterna kursen redan sett
     (db.tidigare_uppgiftstexter) och driver variationsvakten: en undvik-lista
@@ -5069,7 +5156,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                           variation=variation,
                           referens=referens, bilder=bilder, utfall=utfall,
                           bok=bok, boknivaer=boknivaer, forlaga=forlaga,
-                          spridning=spridning,
+                          spridning=spridning, hjalpmedel=hjalpmedel,
                           svart=svart, fokus=fokus,
                           profil=profil, koder=koder, grupp=grupp,
                           riktat=riktat, skeleton=skeleton,

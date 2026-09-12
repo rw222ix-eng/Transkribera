@@ -261,7 +261,9 @@ def test_takten_reser_med_dokumentet():
     """Valet är lärarens och ska gå att läsa av ett halvår senare — därför i
     upplägget (inst.Prov.takt), som klonas in i dokumentet (nyVersion)."""
     js = PLAN_JS.read_text(encoding="utf-8")
-    assert "formelblad: true, takt: 3.5 }" in js
+    # Utan radslutet: upplägget fick sällskap av hjälpmedlen per del
+    # (2026-09-06) och raden bryts nu efter takten.
+    assert "formelblad: true, takt: 3.5," in js
     assert 'class="taktfalt"' in js, "takten syns inte i panelen"
     assert "Takt <input" in js
 
