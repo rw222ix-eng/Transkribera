@@ -254,7 +254,13 @@ test("utan klick skickas inget mål — önskemålet gäller hela pappret", asyn
   await skrivTavla(page);
   await oppnaCanvas(page);
 
-  await page.locator("#g-falt").fill("Byt ut alla exemplen");
+  /* «Byt ut alla exemplen» stod här förut — men «exemplen» är sedan
+     2026-09-12 ett ord appen känner igen och gissar högertavlan på
+     (granska.js gissaMal, spåret 2026-09-06: fritext utan markering skrev om
+     hela tavlan). Meningen här ska INTE nämna något igenkännbart: det är
+     just fallet «ingenting pekat ut» som testet mäter. Gissningen mäts i
+     gissat-mal.spec.mjs. */
+  await page.locator("#g-falt").fill("Gör allt lite svårare");
   await page.locator("#g-form").evaluate(f => f.requestSubmit());
   await expect.poll(() => anrop.some(a => a.vag.endsWith("/refine")),
                     { timeout: 20_000 }).toBe(true);
