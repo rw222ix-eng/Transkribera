@@ -695,3 +695,135 @@ def test_lakningen_gor_aldrig_om_en_angring():
     visa = js[js.index("  function visa(i, ark) {"):]
     visa = visa[:visa.index("\n  }\n")]
     assert "speglaExamen" not in visa, "visa() läker — då upphävs varje ångring"
+
+
+# ── «Fortsätt ändra» och omgodkännandet ──────────────────────────────────
+# Lärarens fynd 2026-09-13: prov 44 «Kapitel 1» visades i Sparat utan sina fem
+# egna bilder (försättsblad + uppgift 3, 6, 8 och 11). Bilderna fanns kvar i
+# basen — dokument 86 hade åtta varv och varv 3–7 bar dem — men radens markör
+# stod på 0, och högen ritas ur det varv markören står på.
+#
+# Vägen dit: «Fortsätt ändra» skickade `PATCH {status:'utkast', markor:0}`.
+# Klientens egen array har ett enda varv efter den gesten, så nollan såg riktig
+# ut — men markören är RADENS, inte arrayens. Efter en omstart av appen plockade
+# aterstallUtkast upp raden med hela sin historik och ställde sig på varv 0:
+# första utkastet, det före bilderna. Läraren godkände det hon såg, och
+# lösningsbladet klonades ur samma varv.
+#
+# Ingen dubblett skapades: godkännandet PATCH:ade samma rad (86). Den andra
+# raden med provId 44 var lösningsbladet — en ny rad varje gång, som ersätter
+# sin föregångare — och det blev bildlöst av exakt samma skäl.
+
+
+def _med_bilder(n):
+    return papper(anteckning=f"v{n}", bilder={"forsatt": "data:image/png;base64,AAA",
+                                              "uppg3": "data:image/png;base64,BBB"})
+
+
+def _tre_varv(client):
+    """Ett godkänt papper vars bilder kom i varv tre — som prov 44."""
+    d = client.post("/api/dokument", json={"dokument": papper(anteckning="v0")}).json()
+    client.post(f"/api/dokument/{d['id']}/versioner",
+                json={"dokument": papper(anteckning="v1")})
+    client.post(f"/api/dokument/{d['id']}/versioner", json={"dokument": _med_bilder(2)})
+    client.patch(f"/api/dokument/{d['id']}", json={"status": "godkant",
+                                                   "dokument": _med_bilder(2),
+                                                   "stada": True})
+    return d["id"]
+
+
+def test_markor_noll_ritar_hogen_ur_varvet_fore_bilderna(client):
+    """Buggen, som den syntes: nollan räcker för att bilderna ska försvinna."""
+    i = _tre_varv(client)
+    client.patch(f"/api/dokument/{i}", json={"status": "utkast", "markor": 0})
+    client.patch(f"/api/dokument/{i}", json={"status": "godkant"})
+    assert client.get("/api/dokument").json()["sparade"][0]["dokument"]["bilder"] == {}
+
+
+def test_fortsatt_andra_lamnar_markoren_dar_den_star(client):
+    """Gesten byter bara status. `v` som klienten har i handen ÄR det varv
+    markören pekar på — att flytta den är att byta papper bakom ryggen."""
+    i = _tre_varv(client)
+    svar = client.patch(f"/api/dokument/{i}", json={"status": "utkast"}).json()
+    assert svar["markor"] == 2
+    assert svar["dokument"]["bilder"]                       # bilderna kvar
+    utkast = client.get("/api/dokument").json()["utkast"]
+    assert utkast["markor"] == 2 and len(utkast["versioner"]) == 3
+
+
+def test_omgodkannandet_byter_status_pa_samma_rad_igen(client):
+    """Ingen andra rad för samma papper — och bilderna kvar i högen."""
+    i = _tre_varv(client)
+    client.patch(f"/api/dokument/{i}", json={"status": "utkast"})
+    client.patch(f"/api/dokument/{i}", json={"status": "godkant",
+                                             "dokument": _med_bilder(2),
+                                             "foljd": None, "stada": True})
+    hog = client.get("/api/dokument").json()
+    assert hog["utkast"] is None
+    assert [r["id"] for r in hog["sparade"]] == [i]
+    assert set(hog["sparade"][0]["dokument"]["bilder"]) == {"forsatt", "uppg3"}
+
+
+def test_ett_andrat_varv_efter_fortsatt_andra_hamnar_sist(client):
+    """Läraren ändrar något och godkänner igen: det nya varvet läggs SIST, och
+    det är det högen ritar. Varvet före bilderna rörs inte."""
+    i = _tre_varv(client)
+    client.patch(f"/api/dokument/{i}", json={"status": "utkast"})
+    nytt = _med_bilder(3)
+    nytt["uppgifter"] = [{"nr": 1, "t": "Derivera f(x) = 5x³", "p": 3}]
+    client.post(f"/api/dokument/{i}/versioner", json={"dokument": nytt})
+    client.patch(f"/api/dokument/{i}", json={"status": "godkant", "dokument": nytt,
+                                             "foljd": None, "stada": True})
+    rad = client.get("/api/dokument").json()["sparade"][0]
+    assert rad["id"] == i and rad["versioner_antal"] == 4 and rad["markor"] == 3
+    assert rad["dokument"]["anteckning"] == "v3"
+    assert set(rad["dokument"]["bilder"]) == {"forsatt", "uppg3"}
+
+
+def test_angra_i_den_nya_rundan_gar_aldrig_forbi_varvet_hon_fortsatte_fran(client):
+    """Klientens array börjar om på ett varv; serverns markör står på varv 2.
+    Ångra ett steg från det nya varvet betyder serverns varv 2 — inte 0."""
+    i = _tre_varv(client)
+    bas = client.patch(f"/api/dokument/{i}", json={"status": "utkast"}).json()["markor"]
+    client.post(f"/api/dokument/{i}/versioner", json={"dokument": _med_bilder(3)})
+    client.patch(f"/api/dokument/{i}", json={"markor": bas + 0})   # utkastMarkor(0)
+    utkast = client.get("/api/dokument").json()["utkast"]
+    assert utkast["markor"] == 2
+    assert utkast["dokument"]["bilder"]
+
+
+def test_skrivningen_traffar_samma_varv_som_lasningen(conn):
+    """En markör utanför arrayen är inte ett fel, den ska klämmas — men
+    skrivningen klämde inte, så `UPDATE ... WHERE version = <hål>` matchade
+    noll rader och godkännandets papper försvann tyst."""
+    d = db.create_dokument(conn, dokument=papper(anteckning="v0"), status="godkant")
+    conn.execute("UPDATE dokument SET markor = 7 WHERE id = ?", (d["id"],))
+    conn.commit()
+    ut = db.update_dokument(conn, d["id"], dokument=papper(anteckning="godkänd"))
+    assert ut["dokument"]["anteckning"] == "godkänd"
+    assert db.get_dokument(conn, d["id"])["dokument"]["anteckning"] == "godkänd"
+
+
+def test_plan_js_skickar_ingen_markor_fran_fortsatt_andra():
+    """Kontraktet i klienten: gesten byter status, punkt. Kommer `markor` med
+    igen är prov 44:s bilder borta nästa gång ett godkänt papper plockas upp."""
+    js = PLAN_JS.read_text(encoding="utf-8")
+    kropp = js[js.index("  function fortsattAndra(i) {"):]
+    kropp = kropp[:kropp.index("\n  }\n")]
+    assert "'PATCH', { status: 'utkast' })" in kropp
+    # Kommentaren vid raden får nämna nollan — anropet får inte bära den.
+    anrop = [r for r in kropp.splitlines() if "'PATCH'" in r or "'/api/dokument/'" in r]
+    assert anrop and not any("markor" in r for r in anrop)
+
+
+def test_plan_js_raknar_om_markoren_mot_serverns_bas():
+    """Klientens index är index i arbetsrundans array, serverns i radens hela
+    historik. `utkastMarkor` måste skicka basen + index."""
+    js = PLAN_JS.read_text(encoding="utf-8")
+    assert "{ markor: utkastBas + i }" in js
+    assert "let utkastBas = 0;" in js
+    # Bara «Fortsätt ändra» sätter en bas skild från noll; allt annat nollar.
+    assert js.count("utkastBas = d.markor") == 1
+    for ingang in ("function utkastNytt(v) {", "function aterstallUtkast(u) {"):
+        kropp = js[js.index("  " + ingang):]
+        assert "nollstallBas();" in kropp[:kropp.index("\n  }\n")]

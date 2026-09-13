@@ -31,6 +31,20 @@
      den oförändrad — hade den haft en egen dokumentform hade det funnits två,
      och den som ritas hade inte varit den som sparas. */
   let utkastId = null;
+  /* ── VILKET SERVERVARV ÄR KLIENTENS versioner[0]? ────
+     Nästan alltid noll: raden skapas med sitt första varv och klientens array
+     växer i takt med serverns. «Fortsätt ändra» är undantaget — där plockas ett
+     GODKÄNT papper upp igen, serverraden bär hela sin gamla historik, men
+     klienten börjar om med ETT varv (det läraren tittade på). Då är local 0 =
+     server B, och `utkastMarkor` måste räkna om innan den flyttar markören.
+     Utan omräkningen sa ångra «gå till serverns varv 0» — det första varvet,
+     det före lärarens egna bilder. Det var precis så prov 44 tappade sina fem
+     bilder 2026-09-13: markören stod kvar på 0 och GET /api/dokument ritar det
+     varv markören står på. */
+  let utkastBas = 0;
+  /* Basen kommer med PATCH-svaret i «Fortsätt ändra». Markörflyttar som hinner
+     före får vänta på det — en markör skickad med fel bas är just buggen. */
+  let basKlar = Promise.resolve();
   /* Skrivningen av ett nytt papper är asynkron men allt annat är synkront.
      Löftet hålls VID SIDAN av dokumentet (WeakMap, inte ett fält) — ett fält
      hade följt med in i varje JSON.stringify-kopia och ut till servern. */
@@ -138,6 +152,7 @@
   function utkastNytt(v) {
     if (!serverPa()) return;
     utkastId = null;
+    nollstallBas();
     skicka('/api/dokument', 'POST', { dokument: v, status: 'utkast' })
       .then(d => { utkastId = d.id; })
       .catch(() => {});
@@ -152,9 +167,17 @@
          till ett hål, och pappret försvinna vid godkännandet. */
       .catch(e => { if (e && e.status === 404 && utkastId === id) utkastId = null; });
   }
+  /* En ny rad börjar på sitt eget varv noll — allt utom «Fortsätt ändra». */
+  function nollstallBas() { utkastBas = 0; basKlar = Promise.resolve(); }
   function utkastMarkor(i) {
     if (!serverPa() || !utkastId) return;
-    skicka('/api/dokument/' + utkastId, 'PATCH', { markor: i }).catch(() => {});
+    const id = utkastId;
+    /* `utkastBas + i`, aldrig `i`: klientens index är index i DEN HÄR
+       arbetsrundans array, serverns är index i radens hela historik. */
+    basKlar.then(() => {
+      if (utkastId !== id) return;
+      skicka('/api/dokument/' + id, 'PATCH', { markor: utkastBas + i }).catch(() => {});
+    });
   }
   function utkastGodkann(v) {
     const id = utkastId;
@@ -197,6 +220,7 @@
     return skicka('/api/dokument', 'POST', { dokument: vs[0], status: 'utkast' })
       .then(d => {
         utkastId = d.id;
+        nollstallBas();          // ny rad, hela arrayen skrivs om — bas noll
         return vs.slice(1).reduce(
           (p, v) => p.then(() => skicka('/api/dokument/' + d.id + '/versioner', 'POST', { dokument: v })),
           Promise.resolve())
@@ -5277,8 +5301,19 @@
     sparat.splice(i, 1);
     ritaSparat();
     window.Klass && window.Klass.rita && window.Klass.rita();
+    /* ── MARKÖREN SKICKAS INTE MED ────────────────────
+       Här stod `markor: 0`. Det såg oskyldigt ut — den lokala arrayen har ju
+       ett enda varv — men markören är RADENS, inte arrayens: den pekar ut det
+       varv `GET /api/dokument` ritar högen ur. `markor: 0` flyttade alltså
+       pappret tillbaka till sitt allra första varv, det före lärarens egna
+       bilder, och prov 44 stod plötsligt utan sina fem bilder i
+       förhandsvisningen (2026-09-13). Servern vet redan var markören står —
+       `v` ÄR det varv den pekar på (db.list_dokument) — så det enda rätta är
+       att inte röra den. Svaret säger vilket varv det var; det är basen
+       klientens index räknas från. */
+    let statusPaVag = null;
     if (serverPa() && id) {
-      skicka('/api/dokument/' + id, 'PATCH', { status: 'utkast', markor: 0 })
+      statusPaVag = skicka('/api/dokument/' + id, 'PATCH', { status: 'utkast' })
         .catch(() => null);
     }
     /* Provet är låst i basen efter godkännandet (exams.status) — utan den här
@@ -5290,6 +5325,13 @@
       skicka(`/api/exams/${examId}/oppna`, 'POST', {}).catch(() => null);
     }
     aterstallUtkast({ id, versioner: [v], markor: 0 });
+    /* EFTER aterstallUtkast: den nollställer basen (rätt för alla andra
+       ingångar), och först här vet vi att den ska räknas om. */
+    if (statusPaVag) {
+      basKlar = statusPaVag.then(d => {
+        if (d && typeof d.markor === 'number' && utkastId === id) utkastBas = d.markor;
+      });
+    }
     window.toast && window.toast(
       `${dokNamn(v)} ligger framme igen — ändra i canvas och godkänn på nytt.`);
   }
@@ -6043,6 +6085,11 @@
      hänger över en tom planering är sämre än inget papper alls. */
   function aterstallUtkast(u) {
     utkastId = u.id;
+    /* Basen sätts av den som VET att arrayen är en delmängd av radens historik
+       — «Fortsätt ändra», efter sitt PATCH-svar. Här är den alltid noll: högen
+       lämnar utkastet med hela sin historik, och slängningens ångra skriver om
+       raden från början. */
+    nollstallBas();
     versioner = u.versioner;
     const v = versioner[u.markor] || versioner[0];
     if (!v) return;
