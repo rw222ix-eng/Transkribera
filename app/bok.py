@@ -576,6 +576,82 @@ def remsuppgifter(sidor: list[dict], uppgifter: list[dict],
     return ut
 
 
+# ── PROVETS FÖREBILDER: kapitlets bokuppgifter ───────────────────────────────
+# Gruppuppgiften pekar på lärarens remsa (remsuppgifter ovan). Provet har ingen
+# remsa. Dess spann är ett helt kapitel, och Liber Ma 1c kapitel 1 har 187
+# uppgifter på s. 2–40. Alla får inte plats i en prompt, och alla är inte lika
+# mycket värda som förebild heller.
+#
+# URVALET ÄR DÄRFÖR TVÅDELAT, och delningen är bokens egen:
+#   1. REPETITIONSSIDORNA först, «Blandade uppgifter» (s. 36–38) och
+#      «Kapiteltest» (s. 39–40). De är läromedlets eget prov på kapitlet: rätt
+#      blandning, rätt spridning, rätt sorts frågor att skriva av formen på.
+#      Läraren höll dem som lektion 9/9 och 11/9, alltså precis inför provet.
+#   2. RESTEN GLEST över kapitlet, så att varje avsnitt har någon förebild.
+#      Tas de i följd blir alla tjugofyra ur avsnitt 1.1.
+#
+# Exemplen (bokens lösta typexempel) hoppas över här, till skillnad från
+# remsans: provet ska likna bokens UPPGIFTER, och ett exempel bär bokens egen
+# lösning i texten, alltså en förlaga att skriva av och inte en sort att
+# peka på.
+PROV_UPPGIFT = 160         # tecken per uppgift, som remsans
+PROV_FOREBILD = 24         # uppgifter i listan; samma tak som remsans prompt
+_REPETITIONSSIDA = re.compile(r"(?i)blandade uppgifter|kapiteltest|"
+                              r"blandade övningar")
+
+
+def _glest(rader: list, antal: int) -> list:
+    """`antal` poster JÄMNT UTLAGDA över listan, i listans egen ordning.
+
+    De första `antal` hade blivit kapitlets första sidor och ingenting annat.
+    Är listan kortare än taket lämnas den orörd."""
+    if antal <= 0:
+        return []
+    if len(rader) <= antal:
+        return list(rader)
+    steg = len(rader) / antal
+    return [rader[int(i * steg)] for i in range(antal)]
+
+
+def provuppgifter(sidor: list[dict], uppgifter: list[dict],
+                  antal: int = PROV_FOREBILD,
+                  tak: int = PROV_UPPGIFT) -> list[dict]:
+    """Kapitlets bokuppgifter som provets förebilder: {nr, sida, niva, text}.
+
+    `sidor` är db.bok_sidor MED text för hela spannet, `uppgifter`
+    db.bok_uppgifter för samma spann. Halva budgeten går till
+    repetitionssidorna och halva glest över resten av kapitlet.
+
+    SIDAN FÖLJER MED, och det är ingen prydnad: bokens blandade uppgifter och
+    kapiteltest numrerar om från 1, så «nr 12» finns två gånger i samma
+    kapitel. Utan sidan pekar förebilden på två olika uppgifter.
+
+    Tom lista när sidorna är olästa eller spannet saknar uppgifter, och då är
+    prompten ordagrant den som gick i väg innan förebilden fanns
+    (exam_gen.build_forebild_prov)."""
+    sek = {s["sida"]: sektioner(s.get("text") or "") for s in sidor or []}
+    rep = {s["sida"] for s in sidor or []
+           if _REPETITIONSSIDA.search(str(s.get("rubrik") or ""))}
+    alla = sorted((u for u in (uppgifter or [])
+                   if u.get("nr") and not u.get("exempel")),
+                  key=lambda u: (u.get("sida") or 0, u.get("nr") or 0))
+    prov = [u for u in alla if u.get("sida") in rep]
+    ovriga = [u for u in alla if u.get("sida") not in rep]
+    # Halva budgeten var, men ingen halva får stå outnyttjad: saknar boken
+    # repetitionssidor (ett kapitel som inte lästs klart) går hela budgeten
+    # till kapitlet, och tvärtom.
+    valda = _glest(prov, min(len(prov), antal - min(len(ovriga), antal // 2)))
+    valda += _glest(ovriga, antal - len(valda))
+    ut = []
+    for u in sorted(valda, key=lambda u: (u.get("sida") or 0, u["nr"])):
+        # En uppgift utan läsbar text tas ändå med, av samma skäl som i
+        # remsuppgifter: numret och sidan är sant, en påhittad text vore värre.
+        ut.append({"nr": u["nr"], "sida": u.get("sida"), "niva": u.get("niva"),
+                   "text": _uppgiftstext(sek.get(u.get("sida")) or {},
+                                         u["nr"], tak)})
+    return ut
+
+
 def uppslag_text(conn, bok_id: int, fran: int, till: int,
                  max_tecken: int = 24000, viktiga=None) -> str:
     """Sidorna som text — det tavlan, provet och arbetsbladet skrivs ur.

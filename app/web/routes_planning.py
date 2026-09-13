@@ -482,6 +482,77 @@ def bok_remsuppgifter(db_file: Path, body: dict) -> list[dict]:
     return bok.remsuppgifter(sidor, uppg, urval)
 
 
+def bok_provuppgifter(db_file: Path, body: dict) -> list[dict]:
+    """KAPITLETS bokuppgifter, provets förebildsunderlag (bok.provuppgifter).
+
+    Gruppuppgiftens förebilder är lärarens remsa; provet har ingen remsa och
+    får i stället ett urval ur hela spannet, med bokens repetitionssidor
+    först. Se bok.provuppgifter för varför just de.
+
+    Läser sidtexten för hela kapitlet, det är där uppgiftstexterna står, men
+    ingen modell och ingen avläsning: sidorna är redan lästa när bokblocket
+    byggts (bok_prov_text går före). Tom lista när bokdörren är stängd eller
+    boken saknar spannet, och då är prompten ordagrant den som gick i väg
+    innan förebilden fanns."""
+    val = bok_val(body)
+    if val is None:
+        return []
+    bid, fran, till = val
+    conn = db.connect(db_file)
+    try:
+        if db.get_bok(conn, bid) is None:
+            return []
+        sidor = db.bok_sidor(conn, bid, fran, till)
+        uppg = db.bok_uppgifter(conn, bid, fran, till)
+    finally:
+        conn.close()
+    return bok.provuppgifter(sidor, uppg)
+
+
+def forbjudna_metoder(db_file: Path, body: dict, *,
+                      group_id: int | None, course_id: int | None,
+                      undervisade: list[dict] | None = None) -> list[dict]:
+    """METODERNA KLASSEN ÄNNU INTE HAFT, med bokens egna rubriker.
+
+    Delmomentlistan (undervisade_delmoment ovan) säger vad provet SKA pröva.
+    Den här säger vad som inte får krävas för att lösa en uppgift, och den
+    behövdes: prov 81 genererades MED delmomenten aktiva och krävde ändå en
+    potensekvation (s. 50–52, lektionen 23/9, en vecka efter provet) och en
+    procentuell förändring (kapitel 3, i december).
+
+    Samma två källor och samma ordning som delmomenten: kalendern först
+    (lektioner efter provdagen på sidor efter spannet), bokens egna avsnitt
+    som reserv. Det klassen FAKTISKT haft dras bort: en rubrik kan inte både
+    krävas och vara förbjuden (exam_gen.rensa_forbjudna).
+
+    Tom lista när bokdörren är stängd eller källorna tiger: prompten ska då se
+    ut precis som den gjorde innan listan fanns."""
+    val = bok_val(body)
+    if val is None:
+        return []
+    bid, _fran, till = val
+    try:
+        gid, cid = int(group_id or 0), int(course_id or 0)
+    except (TypeError, ValueError):
+        gid = cid = 0
+    provdatum = (body.get("datum") or "").strip()
+    conn = db.connect(db_file)
+    try:
+        rader = (db.lektionsinnehall_for_kurs(conn, gid, cid)
+                 if gid and cid else [])
+        ut = exam_gen.forbjudna_ur_lektioner(rader, till=till,
+                                             provdatum=provdatum)
+        if not ut:
+            # Bokens register ur innehållsförteckningen (bok_avsnitt), som
+            # get_bok bär med sig. Rubrikerna är kapitlens egna och gäller
+            # hela boken, precis vad reserven ska vara.
+            ut = exam_gen.forbjudna_ur_avsnitt(
+                (db.get_bok(conn, bid) or {}).get("avsnitt") or [], till=till)
+    finally:
+        conn.close()
+    return exam_gen.rensa_forbjudna(ut, undervisade)
+
+
 def bok_avsnitt(db_file: Path, body: dict) -> list[dict]:
     """Avsnitten i det valda bokspannet, provets RAM för spridningen.
 

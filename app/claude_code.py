@@ -318,6 +318,16 @@ def _formatsammanfattning(schema: dict) -> str:
     return "\n\nOm fälten:\n" + "\n".join(rader)[:2000]
 
 
+def schemalangd(schema: dict) -> int:
+    """Hur många tecken ett schema tar på kommandoraden, minifierat.
+
+    Anropas av den som vill veta om ett fält till ryms under SCHEMA_TAK_EXE
+    (exam_spec._forebild_ryms). Måttet måste tas HÄR: det är minifieringen som
+    avgör, och den bor i den här filen."""
+    return len(json.dumps(_minifiera(schema), ensure_ascii=False,
+                          separators=(",", ":")))
+
+
 def _radlangd(argv: list[str]) -> int:
     """Ungefär det Windows sätter ihop: argumenten plus citattecken och mellanrum."""
     return sum(len(a) + 3 for a in argv)

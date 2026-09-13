@@ -380,3 +380,335 @@ def test_kalendern_vinner_over_boken(tmp_path):
         db_file, {"bok": {"id": bid, "fran": 2, "till": 40},
                   "datum": "2026-09-16"}, group_id=gid, course_id=cid)
     assert [(d["delmoment"], d["sidor"]) for d in ut] == VANTADE
+
+# ══════════════════════════════════════════════════════════════════════════
+# SPÅR 5 (2026-09-13): domarna släppte igenom uppgifter som inte hörde till
+# kapitlet och som var otydligt skrivna.
+#
+# Prov 81 genererades MED delmomenten aktiva (spår 4) och hade ändå kvar:
+#   uppgift 9   ren aritmetik i fyra steg, ingen variabel, inget uttryck, och
+#               två rimliga läsningar med olika svar. Godkänd som «Uttryck».
+#   uppgift 11  a) en potensekvation (kapitel 2, s. 50–52, lektionen 23/9,
+#               alltså efter provet), b) procentuell förändring (kap 3).
+# Läraren: «hur kan det ens hända att provet genererar uppgifter som inte är
+# ur kapitel ett alls? … otydligt skrivna, väldigt mycket information, man vet
+# inte riktigt vad man ska göra.»
+# ══════════════════════════════════════════════════════════════════════════
+
+def _forbjudna():
+    return exam_gen.rensa_forbjudna(
+        exam_gen.forbjudna_ur_lektioner(LEKTIONER, till=40,
+                                        provdatum="2026-09-16"),
+        _delmoment())
+
+
+# ── förbudslistan ur basen ───────────────────────────────────────────────
+
+def test_forbudet_ar_lektionerna_efter_provet_pa_senare_sidor():
+    """Precis det prov 81 krävde utan att ha gått igenom."""
+    assert [(f["metod"], f["sidor"]) for f in _forbjudna()] == [
+        ("Ekvationer och balansmetoden", "42–45"),
+        ("Ekvationer med parenteser och bråk", "46–49")]
+
+
+def test_en_lektion_klassen_hunnit_med_ar_inte_forbjuden():
+    """Två villkor, inte ett: sidorna efter spannet OCH datumet efter provet.
+    Hann klassen med kapitel 2 innan provet är metoden undervisad."""
+    tidigt = [dict(r, datum="2026-09-01") for r in LEKTIONER]
+    assert exam_gen.forbjudna_ur_lektioner(tidigt, till=40,
+                                           provdatum="2026-09-16") == []
+    # Och en repetition av kapitel 1 EFTER provdagen är ingen ny metod:
+    # sidorna ligger i spannet.
+    sent = [{"datum": "2026-09-20", "fran": 2, "till": 40,
+             "rubrik": "Kvadratrötter"}]
+    assert exam_gen.forbjudna_ur_lektioner(sent, till=40,
+                                           provdatum="2026-09-16") == []
+
+
+def test_samma_rubrik_kan_inte_bade_kravas_och_vara_forbjuden():
+    """«Grundpotensform» står både som lektion i kapitel 1 och längre fram i
+    boken. Stod den i båda listorna skulle prompten säga två saker om samma
+    sak, och modellen fick välja."""
+    krock = [{"metod": "Grundpotensform", "sidor": "80–82"},
+             {"metod": "Olikheter", "sidor": "58–63"}]
+    assert exam_gen.rensa_forbjudna(krock, _delmoment()) == \
+        [{"metod": "Olikheter", "sidor": "58–63"}]
+
+
+def test_forbudet_kapas_vid_taket_i_bokens_ordning():
+    """Resten av boken är fem kapitel. De närmaste är de som läcker in."""
+    manga = [{"datum": "2026-10-01", "fran": 40 + i, "till": 40 + i,
+              "rubrik": f"Metod {i}"} for i in range(1, 40)]
+    ut = exam_gen.forbjudna_ur_lektioner(manga, till=40,
+                                         provdatum="2026-09-16")
+    assert len(ut) == 39
+    kapat = exam_gen.rensa_forbjudna(ut)
+    assert len(kapat) == exam_gen.FORBJUDET_TAK
+    assert kapat[0]["metod"] == "Metod 1"
+
+
+def test_bokens_egna_avsnitt_ar_reserven():
+    """Utan synkad kalender vet boken ändå vad som kommer efter kapitlet."""
+    avsnitt = [{"nr": "1.3", "titel": "Uttryck", "fran": 22, "till": 41},
+               {"nr": "2.1", "titel": "Ekvationer", "fran": 42, "till": 52},
+               {"nr": "2.4", "titel": "Olikheter", "fran": 58, "till": 63}]
+    assert exam_gen.forbjudna_ur_avsnitt(avsnitt, till=41) == [
+        {"metod": "Ekvationer", "sidor": "42–52"},
+        {"metod": "Olikheter", "sidor": "58–63"}]
+    assert exam_gen.forbjudna_ur_avsnitt([], till=41) == []
+
+
+# ── förbudet i prompten och i domen ──────────────────────────────────────
+
+def test_forbudsblocket_fragar_efter_LOSNINGEN_inte_amnet():
+    """Uppgift 11 a) handlade om potenser, alltså rätt ämne, och gick ändå
+    bara att lösa med en potensekvation. Frågan måste vara «vad krävs för att
+    komma i mål», inte «vad handlar den om»."""
+    r = exam_gen.build_forbjudet(_forbjudna())
+    assert "Ekvationer och balansmetoden (s. 42–45)" in r
+    assert "HELT UTAN" in r and "ETT steg" in r
+
+
+def test_prompten_ar_byteidentisk_utan_forbud_och_utan_forebild():
+    """Kassettregeln, en gång till: tomma listor ska ge exakt den prompt som
+    gick i väg innan spår 5 fanns."""
+    assert exam_gen.build_forbjudet([]) == ""
+    assert exam_gen.build_forebild_prov([]) == ""
+    argument = dict(kurs="Ma1c", klass="TE26A", punkter=["potenser"], antal=12)
+    utan = exam_gen.build_prompt(**argument)
+    assert exam_gen.build_prompt(**argument, forbjudet="", forebild="") == utan
+    med = exam_gen.build_prompt(**argument,
+                                forbjudet=exam_gen.build_forbjudet(
+                                    _forbjudna()))
+    assert med != utan and "Ekvationer och balansmetoden" in med
+
+
+def test_domaren_far_samma_forbudslista_som_skrivningen():
+    """En domare som bara vet vad som ÄR undervisat måste gissa var gränsen
+    går åt andra hållet, och prov 81 visar vad gissningen kostar."""
+    svar = json.dumps({"saknas": [],
+                       "utanfor": [{"nr": "11", "metod": "potensekvation"}]})
+    llm, anrop = _stub_llm([svar])
+    fel = exam_gen.doma_delmoment(_prov(), _delmoment(), model="m",
+                                  forbjudna=_forbjudna(), llm=llm)
+    assert "Ekvationer och balansmetoden (s. 42–45)" in anrop[0]["prompt"]
+    assert "FÖRBJUDNA METODER" in anrop[0]["prompt"]
+    assert len(fel) == 1 and "potensekvation" in fel[0]["message"]
+    # Utan listan står prompten kvar som den var, byte för byte.
+    llm2, anrop2 = _stub_llm([svar])
+    exam_gen.doma_delmoment(_prov(), _delmoment(), model="m", llm=llm2)
+    assert "FÖRBJUDNA METODER" not in anrop2[0]["prompt"]
+
+
+# ── provets bokförebild ──────────────────────────────────────────────────
+
+def _bokuppgifter():
+    return [{"nr": 1112, "sida": 4, "niva": 2, "text": "Lotte påstår att …"},
+            {"nr": 34, "sida": 38, "niva": 2, "text": "Bestäm två heltal …"}]
+
+
+def test_provet_far_kapitlets_uppgifter_som_forebilder():
+    r = exam_gen.build_forebild_prov(_bokuppgifter())
+    assert "1112" in r and '"sida"' in r      # numren krockar utan sidan
+    assert "FÖREBILD" in r and "forebild" in r
+    # Provets block är inte gruppuppgiftens: ingen rad om lärarens remsa, och
+    # ingen FOREBILD_UTAN_BOK när listan är tom.
+    assert "remsa" not in r
+
+
+def test_forebildsfaltet_star_i_grammatiken_nar_prompten_ber_om_det():
+    """Regeln är promptens egen: fältet ska finnas exakt när det som skickas
+    nämner det. Antingen uppdraget som ber om en förebild, eller pappret som
+    redan bär
+    en (reparation, omskrivning, latexfix)."""
+    assert exam_gen._forebild_i_grammatiken(
+        exam_gen.build_forebild_prov(_bokuppgifter()), "prov")
+    assert not exam_gen._forebild_i_grammatiken("skriv ett prov", "prov")
+    assert exam_gen._forebild_i_grammatiken("skriv ett prov", "gruppuppgift")
+    # Reparationsprompten bäddar in dokumentet: bär det en förebild ska
+    # grammatiken behålla fältet, annars faller pekningen bort tyst.
+    doc = copy.deepcopy(_prov())
+    doc["uppgifter"][0]["forebild"] = {"nr": 1112, "sort": "samma sort"}
+    assert exam_gen._forebild_i_grammatiken(
+        exam_gen.build_repair_prompt(doc, [], "prov"), "prov")
+
+
+def test_taket_vinner_over_forebilden_pa_ett_stort_prov():
+    """Fältet kostar en kopia per uppgift. Spricker kommandoradens tak går
+    HELA schemat i prompten och grammatiktvånget tappas för varje uppgift.
+    En pekning på boken är inte värd den bytesaffären."""
+    from app import claude_code, course_data, exam_spec
+    koder = [p["kod"] for p in course_data._kursens_punkter("Matematik 1c")]
+    for antal, vantat in ((12, True), (20, False)):
+        sk = exam_spec.balanced_skeleton(antal, "prov", delar=True,
+                                         kurs="Matematik 1c")
+        schema = exam_spec.to_response_format(antal, sk, koder,
+                                              forebild=True)["json_schema"]["schema"]
+        assert ('"forebild"' in json.dumps(schema)) is vantat
+        assert claude_code.schemalangd(schema) <= claude_code.SCHEMA_TAK_EXE
+
+
+# ── provets text: begripligheten ─────────────────────────────────────────
+
+def _kafe():
+    """Uppgift 9 ur prov 81, ordagrant. Trettioåtta ord förutsättning innan
+    frågan kommer, och två rimliga läsningar: räknas inköpet det första året,
+    och är det en diskning per kopp?"""
+    return {"titel": "Prov", "uppgifter": [{
+        "del": "C", "poang": [0, 1, 0],
+        "text": ("Ett kafé serverar $185$ koppar kaffe per dag, $6$ dagar i "
+                 "veckan och $48$ veckor per år. En engångsmugg kostar "
+                 "$1{,}35$ kr. Flergångsmuggar kostar $4\\,800$ kr att köpa "
+                 "in och $0{,}22$ kr per diskning. Bestäm hur mycket kaféet "
+                 "sparar under ett år."),
+        "losning": "…"}]}
+
+
+def _stenhuggeri():
+    """Uppgift 11 a) ur prov 81, ordagrant. Fyrtiotvå ord förutsättning innan
+    frågan kommer, och det står inte vad eleven ska göra förrän i sista
+    raden."""
+    return {"titel": "Prov", "uppgifter": [{
+        "del": "C", "poang": [0, 0, 0],
+        "text": ("Ett stenhuggeri tillverkar kuber av granit. Massan $m$ gram "
+                 "ges av $m = 2{,}7s^{3}$ där $s$ cm är kubens sida."),
+        "deluppgifter": [{
+            "poang": [0, 1, 0],
+            "text": ("Två kuber väger tillsammans $3{,}0$ kg. Den ena kubens "
+                     "sida är dubbelt så lång som den andras. Bestäm den "
+                     "mindre kubens sida."),
+            "losning": "…"}]}]}
+
+
+def test_vakten_matter_hur_mycket_text_som_star_fore_fragan():
+    """Det mätbara i lärarens «väldigt mycket information». Taket är satt så
+    att uppgift 11 (42 ord) faller och uppgift 9 (38) klaras av domaren i
+    stället: en vakt som fäller halva provet blir en vakt hon slutar tro på."""
+    fel = exam_gen.begriplighetssignaler(_stenhuggeri(), "prov")
+    assert len(fel) == 1 and fel[0]["code"] == "begriplighet"
+    assert f"taket är {exam_gen.ORD_FORE_FRAGAN}" in fel[0]["message"]
+    assert exam_gen.begriplighetssignaler(_kafe(), "prov") == []
+    # En kort uppgift går fri, och gruppuppgiftens egna mått rörs inte.
+    assert exam_gen.begriplighetssignaler(_prov(), "prov") == []
+    assert exam_gen.begriplighetssignaler(_stenhuggeri(), "arbetsblad") == []
+
+
+def test_provets_begriplighetsdomare_har_lararens_fem_krav():
+    p = exam_gen.build_begriplighet_prompt([{"nr": "1", "text": "x"}], "",
+                                           "prov")
+    assert "begriplighetsdomare" in p           # bandvalet i tests/fejk.py
+    for krav in ("EN SITUATION", "EN FRÅGA", "ALLA TAL SOM BEHÖVS",
+                 "ENTYDIG TOLKNING", str(exam_gen.ORD_FORE_FRAGAN)):
+        assert krav in p
+    # Gruppuppgiftens prompt är orörd: fyra elever vid ett bord, uppgift 2
+    # hårdast. Byte för byte den som spelades in.
+    g = exam_gen.build_begriplighet_prompt([{"nr": "1", "text": "x"}])
+    assert "Fyra elever" in g and "UPPGIFT 2" in g and "EN SITUATION" not in g
+
+
+def test_provets_relevansdomare_domer_pa_losningen_inte_amnet():
+    p = exam_gen.build_relevans_prompt([{"nr": "1", "text": "x"}],
+                                       _bokuppgifter(), profil="prov")
+    assert "ett prov i matematik" in p
+    assert "Räkna igenom lösningen" in p
+    g = exam_gen.build_relevans_prompt([{"nr": "1", "text": "x"}],
+                                       _bokuppgifter())
+    assert "grupparbetspapper" in g and "Räkna igenom lösningen" not in g
+
+
+# ── allt i EN reparationsrunda ───────────────────────────────────────────
+
+def test_de_tre_domarna_gar_i_samma_reparationsprompt():
+    """Lärarens två klagomål är samma sorts fel: uppgiften ska bytas eller
+    skrivas om, inte provet. Tre domaranrop, EN reparation."""
+    delmomentdom = json.dumps({"saknas": [{"delmoment": "Kubikrötter",
+                                           "byt": "1"}]})
+    relevansdom = json.dumps({"domar": [{"nr": "1", "dom": "annan sort",
+                                         "battre": "1112",
+                                         "skal": "ingen sådan i kapitlet"}]})
+    begripdom = json.dumps({"domar": [{"nr": "1", "forstar": "nej",
+                                       "stor": "två läsningar"}]})
+    llm, anrop = _stub_llm([delmomentdom, relevansdom, begripdom,
+                            json.dumps(_stenhuggeri())])
+    res = exam_gen._tackning_pass(_stenhuggeri(), [], model="m", llm=llm,
+                                  profil="prov", antal=1, skeleton=None,
+                                  avsnitt=[], delmoment=_delmoment(),
+                                  forbjudna=_forbjudna(),
+                                  bokuppgifter=_bokuppgifter(),
+                                  rounds_used=1, max_rounds=4)
+    assert len(anrop) == 4, [a["prompt"][:40] for a in anrop]
+    reparationen = anrop[3]["prompt"]
+    assert "Kubikrötter" in reparationen              # delmomentsluckan
+    assert "annan sort" in reparationen or "förebild" in reparationen
+    assert "ord förutsättning" in reparationen        # den mätta vakten
+    assert "två läsningar" in reparationen            # begriplighetsdomen
+    assert res["rounds"] == 2
+
+
+def test_provet_utan_bokdorr_kostar_precis_de_anrop_det_kostade_forut():
+    """Kassettregeln. Utan kapitlets uppgifter finns ingen bokgrind, och
+    prompten och anropen ska vara exakt de som spelades in."""
+    llm, anrop = _stub_llm([json.dumps({"saknas": []})])
+    exam_gen._tackning_pass(_stenhuggeri(), [], model="m", llm=llm,
+                            profil="prov",
+                            antal=1, skeleton=None, avsnitt=[],
+                            delmoment=_delmoment(), rounds_used=1,
+                            max_rounds=4)
+    assert len(anrop) == 1 and "delmomentsdomare" in anrop[0]["prompt"]
+
+# ── vägen från basen ─────────────────────────────────────────────────────
+
+def test_rutten_ger_forbudet_ur_kalendern_och_boken(tmp_path):
+    db_file = tmp_path / "t.db"
+    conn = db.connect(db_file)
+    try:
+        bid = db.create_bok(conn, namn="Liber Ma 1c", kurs="Matematik 1c")["id"]
+        db.set_bok_register(conn, bid, [
+            {"nr": "1.3", "titel": "Uttryck", "fran": 22, "till": 41},
+            {"nr": "2.1", "titel": "Ekvationer", "fran": 42, "till": 52},
+            {"nr": "2.4", "titel": "Olikheter", "fran": 58, "till": 63}])
+        db.replace_lektionsinnehall(conn, [
+            dict(r, klass="TE26A", kurs="Matematik 1c") for r in LEKTIONER])
+        gid = db.get_or_create_group(conn, "TE26A")
+        cid = db.get_or_create_course(conn, "Matematik 1c")
+    finally:
+        conn.close()
+    kropp = {"bok": {"id": bid, "fran": 2, "till": 40}, "datum": "2026-09-16"}
+    # Kalendern först: lärarens egna rubriker för det som kommer efter provet.
+    assert [f["metod"] for f in routes_planning.forbjudna_metoder(
+        db_file, kropp, group_id=gid, course_id=cid,
+        undervisade=_delmoment())] == ["Ekvationer och balansmetoden",
+                                       "Ekvationer med parenteser och bråk"]
+    # Utan kalender: bokens egna avsnitt efter spannet.
+    assert [f["metod"] for f in routes_planning.forbjudna_metoder(
+        db_file, kropp, group_id=None, course_id=None)] == ["Ekvationer",
+                                                            "Olikheter"]
+    # Ingen bokdörr: tyst, och prompten är då den gamla.
+    assert routes_planning.forbjudna_metoder(
+        db_file, {"datum": "2026-09-16"}, group_id=gid, course_id=cid) == []
+
+
+def test_provets_forebilder_tar_bokens_repetitionssidor_forst(tmp_path):
+    """Blandade uppgifter och kapiteltestet är läromedlets eget prov på
+    kapitlet, och läraren höll dem som lektion veckan före provet."""
+    from app import bok
+    sidor = ([{"sida": n, "rubrik": "Uttryck",
+               "text": f"## EXEMPEL OCH UPPGIFTER\n13{n:02d} Förenkla."}
+              for n in range(22, 35)]
+             + [{"sida": 36, "rubrik": "Blandade uppgifter",
+                 "text": "## EXEMPEL OCH UPPGIFTER\n15 Förenkla uttrycket."},
+                {"sida": 39, "rubrik": "Kapiteltest",
+                 "text": "## EXEMPEL OCH UPPGIFTER\n3 Skriv som en potens."}])
+    uppg = ([{"nr": 1300 + n, "sida": n, "niva": 1, "exempel": 0}
+             for n in range(22, 35)]
+            + [{"nr": 15, "sida": 36, "niva": 1, "exempel": 0},
+               {"nr": 3, "sida": 39, "niva": 1, "exempel": 0},
+               {"nr": 9, "sida": 39, "niva": 1, "exempel": 1}])
+    ut = bok.provuppgifter(sidor, uppg, antal=6)
+    assert len(ut) == 6
+    # Bägge repetitionssidorna med, exemplet bort, och sidan följer med varje
+    # rad: numren krockar (nr 3 finns både i kapiteltestet och som 1303).
+    assert (36, 15) in [(r["sida"], r["nr"]) for r in ut]
+    assert (39, 3) in [(r["sida"], r["nr"]) for r in ut]
+    assert 9 not in [r["nr"] for r in ut]
+    assert bok.provuppgifter([], [], antal=6) == []

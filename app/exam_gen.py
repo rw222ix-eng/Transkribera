@@ -1423,12 +1423,17 @@ def _sidspann(fran: int, till: int) -> str:
     return f"{fran}–{till}" if till > fran else f"{fran}"
 
 
-def _delmomentlista(poster: list[tuple[int, int, str]]) -> list[dict]:
+def _delmomentlista(poster: list[tuple[int, int, str]],
+                    nyckel: str = "delmoment") -> list[dict]:
     """(fran, till, rubrik) → dedupad lista i BOKENS ordning.
 
     Samma rubrik två gånger (en lektion som fortsatte dagen efter) är ETT
     delmoment med det sammanslagna sidspannet, inte två — annars hade prompten
-    bett om två uppgifter på samma sak."""
+    bett om två uppgifter på samma sak.
+
+    `nyckel` är bara vad posten heter i svaret. Förbudslistan (nedan) är
+    samma sak sedd från andra hållet, bokens rubriker med sina sidspann, och
+    ska dedupas, slås ihop och ordnas på precis samma sätt."""
     ut: dict[str, dict] = {}
     for fran, till, rubrik in poster:
         namn = _delmomentnamn(rubrik)
@@ -1439,7 +1444,7 @@ def _delmomentlista(poster: list[tuple[int, int, str]]) -> list[dict]:
             ut[namn.casefold()] = {"namn": namn, "fran": fran, "till": till}
         else:
             p["fran"], p["till"] = min(p["fran"], fran), max(p["till"], till)
-    return [{"delmoment": p["namn"], "sidor": _sidspann(p["fran"], p["till"])}
+    return [{nyckel: p["namn"], "sidor": _sidspann(p["fran"], p["till"])}
             for p in sorted(ut.values(), key=lambda p: (p["fran"], p["till"]))]
 
 
@@ -1535,6 +1540,145 @@ def build_delmoment(delmoment: list[dict], antal: int) -> str:
         "Listan är beskuren med flit: lektioner om programmering, kalkylblad "
         "och repetition står inte där, eftersom de inte går att pröva på ett "
         "skriftligt prov. Det betyder INTE att de ska prövas ändå.")
+
+
+# ─────────────── DE FÖRBJUDNA METODERNA: det klassen ÄNNU INTE haft ──────────
+# Delmomentlistan ovan säger vad som SKA prövas, och blocket säger i en mening
+# att inget annat får krävas. Den meningen räckte inte. Prov 81 (TE26A,
+# Ma 1c, 2026-09-13, genererat MED delmomenten aktiva) hade ändå kvar:
+#
+#   uppgift 11 a)  $m = 2{,}7s^3$, två kuber väger 3,0 kg, den enas sida är
+#                  dubbelt så lång, bestäm den mindres. Det är en
+#                  POTENSEKVATION ($24{,}3s^3 = 3000$), och den lektionen
+#                  ligger 23/9, en vecka EFTER provet, på s. 50–52.
+#   uppgift 11 b)  sidan ökas med p procent → PROCENTUELL FÖRÄNDRING, kapitel
+#                  3, s. 100–107, i december.
+#
+# En förbudsmening utan namn är alltså inte ett förbud. «Inga olikheter, ingen
+# procenträkning» stod ordagrant i prompten, och modellen skrev en
+# potensekvation ändå, för den formuleringen är en uppräkning av exempel,
+# inte av kapitel. Nu räknas förbudet fram DETERMINISTISKT ur samma bas som
+# delmomenten, med BOKENS EGNA RUBRIKER och sidnummer: «Potensekvationer och
+# numerisk ekvationslösning (s. 50–52)» går inte att missförstå som ett
+# exempel på en sorts metod.
+#
+# Två källor, samma ordning och samma skäl som delmomenten:
+#   1. KALENDERN. Lektioner vars sidor ligger EFTER provets spann och vars
+#      datum ligger på eller efter provdagen. Båda villkoren, inte det ena:
+#      en sida efter spannet som klassen ändå hann med före provet ÄR
+#      undervisad, och en repetition av kapitel 1 efter provdagen är inte en
+#      ny metod.
+#   2. BOKENS EGNA AVSNITT (bok_avsnitt) efter spannet, för en klass utan
+#      synkad kalender.
+# Är båda tomma blir blocket en TOM STRÄNG och prompten byte för byte den som
+# gick i väg förut, samma kassetteregel som delmomenten och kapitelramen.
+
+# Hur många rubriker som får plats. Resten av boken är fem kapitel och
+# sextio lektioner; en uppräkning av dem alla hade dränkt de tio delmoment
+# provet faktiskt handlar om. Taket klipps i BOKENS ordning, alltså närmast
+# kapitlet först, och det är precis de metoder som läcker in: prov 81:s två
+# fynd ligger på s. 50–52 och s. 100–107, båda inom de tjugo första.
+FORBJUDET_TAK = 20
+
+
+def forbjudna_ur_lektioner(rader: list[dict], *, till: int,
+                           provdatum: str = "") -> list[dict]:
+    """Lektionsraderna → [{"metod": "Olikheter", "sidor": "58–63"}, …].
+
+    Ren funktion; samma radform som `delmoment_ur_lektioner` läser. En rad
+    räknas som FÖRBJUDEN bara när båda villkoren håller:
+
+    * SIDORNA ligger efter provets bokspann (`fran > till`). En sida inom
+      eller före spannet är kapitlet självt eller förkunskap, och förkunskap
+      är aldrig förbjuden: provet får förutsätta multiplikationstabellen.
+    * DATUMET ligger på eller efter provdagen. En lektion på senare sidor som
+      klassen ändå hann med före provet ÄR undervisad, och att förbjuda den
+      hade tagit bort något läraren just gått igenom.
+
+    Utan provdatum gäller bara sidvillkoret: då vet vi inte vad som hunnits
+    med, och bokens ordning är det enda vi har."""
+    poster: list[tuple[int, int, str]] = []
+    for r in rader or []:
+        if not isinstance(r, dict):
+            continue
+        if provdatum and str(r.get("datum") or "") < str(provdatum):
+            continue
+        rubrik = str(r.get("rubrik") or "")
+        delar = [d for d in (r.get("delar") or []) if isinstance(d, dict)] \
+            if isinstance(r.get("delar"), list) else []
+        for d in (delar or [{}]):
+            try:
+                f = int(d.get("fran") or r.get("fran") or 0)
+                t = int(d.get("till") or d.get("fran")
+                        or r.get("till") or f or 0)
+            except (TypeError, ValueError):
+                continue
+            if f <= int(till):
+                continue
+            poster.append((f, max(f, t), str(d.get("rubrik") or "") or rubrik))
+    return _delmomentlista(poster, "metod")
+
+
+def forbjudna_ur_avsnitt(avsnitt: list[dict], *, till: int) -> list[dict]:
+    """RESERVEN: bokens egna avsnitt (db.bok_avsnitt) efter spannet.
+
+    Raderna bär `titel`, `fran` och `till`, och titeln är bokens rubrik på
+    metoden: «Olikheter», «Procentuella förändringar». Kapitlets nummer
+    utelämnas: det är metodens NAMN som ska gå att känna igen i en uppgift,
+    inte var i boken den står."""
+    poster: list[tuple[int, int, str]] = []
+    for a in avsnitt or []:
+        if not isinstance(a, dict):
+            continue
+        try:
+            f = int(a.get("fran") or 0)
+            t = int(a.get("till") or f or 0)
+        except (TypeError, ValueError):
+            continue
+        if f <= 0 or f <= int(till):
+            continue
+        poster.append((f, max(f, t), str(a.get("titel") or "")))
+    return _delmomentlista(poster, "metod")
+
+
+def rensa_forbjudna(forbjudna: list[dict],
+                    delmoment: list[dict] | None = None) -> list[dict]:
+    """Förbudslistan minus det klassen FAKTISKT har haft, kapad vid taket.
+
+    Subtraktionen är inte kosmetik. «Grundpotensform» står både som lektion i
+    kapitel 1 och som rubrik längre fram i boken; hamnade den i båda listorna
+    skulle prompten säga «pröva det här» och «det här är förbjudet» om samma
+    sak, och modellen väljer då själv vilken av dem den lyder."""
+    haft = {_delmomentnamn(d.get("delmoment") or "").casefold()
+            for d in (delmoment or [])}
+    return [f for f in forbjudna
+            if _delmomentnamn(f["metod"]).casefold() not in haft
+            ][:FORBJUDET_TAK]
+
+
+def build_forbjudet(forbjudna: list[dict]) -> str:
+    """Förbudslistan som promptblock, eller TOM STRÄNG.
+
+    Sagt som ett LÖSNINGSKRAV och inte som en ämnesförteckning, för det är så
+    felet uppstår. Uppgift 11 a) i prov 81 handlade om massan hos en kub,
+    ett potensuttryck ur kapitel 1 och alltså rätt ämne, men gick bara att lösa
+    genom att lösa ut $s$ ur en potensekvation. Frågan modellen måste ställa
+    sig är «vad krävs för att komma i mål», inte «vad handlar den om»."""
+    if not forbjudna:
+        return ""
+    rader = "\n".join(f"- {f['metod']} (s. {f['sidor']})" for f in forbjudna)
+    return (
+        "METODER SOM INTE FÅR KRÄVAS. Det här står senare i boken än provets "
+        "kapitel, och klassen har ännu inte haft det när provet skrivs:\n"
+        + rader + "\n"
+        "Pröva varje uppgift du skriver mot listan med EN fråga: går den att "
+        "lösa HELT UTAN något av det ovan? Blir svaret nej ska uppgiften "
+        "bytas ut, hur väl den än passar kapitlets innehåll i övrigt. Det "
+        "räcker att ETT steg i lösningen kräver en förbjuden metod.\n"
+        "Fällan är uppgifter som ser rätt ut: ett uttryck ur kapitlet som "
+        "ställs som en ekvation att lösa ut en obekant ur, en storhet som ska "
+        "ökas med några procent, ett samband som ska gälla för ALLA värden. "
+        "Ämnet är då kapitlets, men metoden är nästa kapitels.")
 
 
 # ───────────────────────────────── hjälpmedlen per del (2026-09-06) ──
@@ -1640,6 +1784,7 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
                  referens: str = "", bilder: str = "", utfall: str = "",
                  bok: str = "", boknivaer: str = "", forlaga: str = "",
                  spridning: str = "", delmoment: str = "",
+                 forbjudet: str = "", forebild: str = "",
                  hjalpmedel: str = "",
                  svart: str = "", fokus: str = "", inriktning: str = "",
                  profil: str = "prov", koder: list[str] | None = None,
@@ -1734,6 +1879,19 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
     # innan listan fanns.
     if delmoment:
         block.append(delmoment)
+    # FÖRBUDET står direkt efter delmomenten, och det är samma trappa ett steg
+    # till: ramen säger var uppgifterna ska ligga, delmomenten vad som ska
+    # prövas, förbudet vad som inte får krävas för att lösa dem. Läses det
+    # före listan över det undervisade blir det en lista metoder utan
+    # motstycke. Tom sträng utan underlag (build_forbjudet).
+    if forbjudet:
+        block.append(forbjudet)
+    # BOKFÖREBILDEN för provet står sist av bokblocken: den pekar tillbaka på
+    # uppgifter i det spann boken, ramen och delmomenten just beskrivit.
+    # Gruppuppgiften har sin egen, inne i sin gren. Den är formulerad om
+    # lärarens remsa och ska inte röras (build_forebild).
+    if forebild:
+        block.append(forebild)
     # Förlagan (källdörr 4, pardokumentets andra hand) står närmast uppdraget:
     # «gör som det här pappret» är det starkaste önskemålet läraren kan ge, och
     # det ska inte tappas bakom minnet, boken eller undvik-listan.
@@ -2791,6 +2949,63 @@ def build_forebild(bokuppgifter: list[dict] | None) -> str:
         "högsta nivåerna utmaningen.")
 
 
+# ── PROVETS FÖREBILD ─────────────────────────────────────────────────────
+# Samma grind som gruppuppgiftens, med kapitlet i stället för remsan. Lärarens
+# dom över prov 81 (2026-09-13): «hur kan det ens hända att provet genererar
+# uppgifter som inte är ur kapitel ett alls?» Två av tolv uppgifter krävde
+# metoder ur kapitel 2 och 3, och en tredje (uppgift 9, kaféets muggar) var
+# ren aritmetik i fyra steg utan en enda variabel: rätt kapitel enligt
+# innehållstaggen, men ingen motsvarighet någonstans i boken.
+#
+# Förbudslistan (build_forbjudet) stänger den ena dörren: vad som INTE får
+# krävas. Förebilden stänger den andra: varje uppgift ska ha en syskonuppgift
+# i kapitlet. En uppgift utan förebild är inte nödvändigtvis fel, men den är
+# värd att fråga om, och relevansdomaren är den som frågar.
+#
+# Skrivet som en EGEN text och inte som build_forebild med ett annat ord i:
+# gruppuppgiftens block talar om lärarens utvalda remsa och om att peka på
+# olika nummer i olika uppgifter, och provets urval är av en annan sort (se
+# bok.provuppgifter). Att grena en text i två profiler hade gjort båda otydliga
+# och satt gruppuppgiftens kassetter på spel.
+
+
+def build_forebild_prov(bokuppgifter: list[dict] | None) -> str:
+    """Kapitlets bokuppgifter som förebilder, eller TOM STRÄNG.
+
+    Tomt utan bokuppgifter, alltså INTE den FOREBILD_UTAN_BOK
+    gruppuppgiften får.
+    Ett prov utan bokdörr ska ha ordagrant den prompt det hade innan
+    förebilden fanns (kassetteregeln), och gruppuppgiftens rad om att lämna
+    fältet tomt hör till en profil som alltid har blocket."""
+    rader = [r for r in (bokuppgifter or []) if r.get("nr")]
+    if not rader:
+        return ""
+    kort = [{"nr": r["nr"],
+             **({"sida": r["sida"]} if r.get("sida") is not None else {}),
+             **({"niva": r["niva"]} if r.get("niva") is not None else {}),
+             "text": _kort(r.get("text") or "", 160)} for r in rader]
+    return (
+        "KAPITLETS EGNA UPPGIFTER, ur boken klassen räknar i (\"niva\" är "
+        "bokens nivåmärkning, \"sida\" behövs eftersom de blandade "
+        "uppgifterna och kapiteltestet numrerar om från 1):\n"
+        f"{json.dumps(kort, ensure_ascii=False)}\n"
+        "VARJE uppgift du skriver ska ha en FÖREBILD bland dem: en uppgift "
+        "som prövar samma sak med samma metod. Fyll fältet \"forebild\" med "
+        "{\"nr\": boknumret, \"sort\": en mening om vad som är samma sort}. "
+        "Sorten är vad eleven GÖR: samma förenkling, samma sorts "
+        "omvandling, samma sorts resonemang. Inte samma sammanhang och "
+        "aldrig samma tal.\n"
+        "Hittar du ingen uppgift i kapitlet av den sort du tänkt skriva är "
+        "det DIN uppgift som ska bytas, inte förebilden som ska tänjas. "
+        "Läraren om provet som inte gick att känna igen: «hur kan det ens "
+        "hända att provet genererar uppgifter som inte är ur kapitel ett "
+        "alls?»\n"
+        "Originalitetskravet står kvar: förebilden är en pekning, inte en "
+        "förlaga. En uppgift eleven känner igen ur boken är fel skriven, och "
+        "en uppgift med bokens egna tal är avskrift."
+    )
+
+
 # ── BEGRIPLIGHETEN, OCH SÄRSKILT UPPGIFT 2 ────────────────────────────────
 # Stegringen står kvar (lärarens dom 2026-08-20: alla klarar den första, några
 # få den sista). Det som ändras är var TVÅAN ligger: den ska ligga nära ettan,
@@ -2909,13 +3124,48 @@ def _stegtabellsenheter(exam: dict) -> set[str]:
     return ut
 
 
-def begriplighetssignaler(exam: dict, profil: str = "gruppuppgift") -> list[dict]:
-    """De mätbara begriplighetsfelen. Bara gruppuppgiften: måtten är hämtade
-    ur lärarens dom om DEN formen, och ett prov har längre uppgiftstexter av
-    goda skäl.
+def _ord_fore_fragan(text: str) -> int:
+    """Hur många ord som står FÖRE den mening som ställer frågan.
 
-    Uppgift 2 mäts hårdare än de andra — det är begreppsingången, och det är
-    den läraren fäller."""
+    Sista meningen är frågan eller uppmaningen («Bestäm hur mycket kaféet
+    sparar under ett år»), och allt före den är förutsättningen eleven ska
+    hålla i huvudet medan hon läser. Det är den högen läraren mätte när hon
+    sa «väldigt mycket information». En uppgift som ÄR en enda mening får
+    därför noll, vilket är rätt: då står frågan först.
+
+    Ordräkning på den rena texten, alltså utan LaTeX-kommandon och utan
+    matteläge (se _rentext). «$m = 2{,}7s^{3}$» är ett uttryck, inte sex
+    ord."""
+    meningar = [m for m in _MENING.split(_rentext(text) or "") if m.strip()]
+    return len(" ".join(meningar[:-1]).split()) if len(meningar) > 1 else 0
+
+
+def begriplighetssignaler(exam: dict, profil: str = "gruppuppgift") -> list[dict]:
+    """De mätbara begriplighetsfelen.
+
+    GRUPPUPPGIFTEN mäts mot lärarens egen (måtten i MENING_TAK och neråt), och
+    uppgift 2 hårdare än de andra: det är begreppsingången, och det är den
+    läraren fäller.
+
+    PROVET mäts mot ETT mått och inte fem, och det är med flit. Ett prov får
+    ha längre uppgiftstexter än en gruppuppgift, fler tal och fler meningar.
+    Det som fällde prov 81 var inte längden i sig utan att förutsättningen
+    växte till ett stycke innan frågan kom. Resten av begripligheten är
+    domarens (se _begriplighet_prov); det som går att RÄKNA räknas här."""
+    if profil == "prov":
+        ut: list[dict] = []
+        for e in domarenheter(exam):
+            kort = e["kort"]
+            text = f"{kort.get('stam', '')} {kort.get('text', '')}".strip()
+            ord_ = _ord_fore_fragan(text)
+            if ord_ > ORD_FORE_FRAGAN:
+                ut.append(_err(
+                    f"uppgift {e['nr']}", "begriplighet",
+                    f"uppgift {e['nr']} har {ord_} ord förutsättning innan "
+                    f"frågan kommer (taket är {ORD_FORE_FRAGAN}). Korta ned "
+                    "till en situation och de tal som faktiskt behövs, och "
+                    "ställ frågan tidigare." + BEHALL_PLANEN))
+        return ut[:MAX_DOMAR_PROBLEM]
     if profil != "gruppuppgift":
         return []
     ut: list[dict] = []
@@ -3092,7 +3342,8 @@ def _yrkesrad_domare(inriktning: str) -> str:
 
 def build_relevans_prompt(kort: list[dict], bokuppgifter: list[dict],
                           punkter: list[str] | None = None,
-                          inriktning: str = "") -> str:
+                          inriktning: str = "",
+                          profil: str = "gruppuppgift") -> str:
     """Relevansdomarens prompt.
 
     Ordet «relevansdomare» står här och ingen annanstans i appen —
@@ -3111,13 +3362,21 @@ def build_relevans_prompt(kort: list[dict], bokuppgifter: list[dict],
            for r in (bokuppgifter or []) if r.get("nr")][:BOKUPPG_TAK]
     rad = ("Momentets centrala innehåll: " + "; ".join(punkter) + "\n"
            if punkter else "")
+    # PROFILEN byter tre fraser och lägger till en rad. Allt annat är
+    # ordagrant detsamma, och det är ett villkor: gruppuppgiftens prompt ska
+    # vara byte för byte den som spelades in (tests/kassetter), och en domare
+    # som formulerar sig olika om samma fråga dömer olika.
+    prov = profil == "prov"
+    papper = "ett prov" if prov else "ett grupparbetspapper"
+    var = ("i det kapitel provet gäller" if prov
+           else "på de sidor klassen arbetar med")
     return (
-        "Du är relevansdomare för ett grupparbetspapper i matematik. Läraren "
+        f"Du är relevansdomare för {papper} i matematik. Läraren "
         "utgår från boken, och hennes dom över papper som inte gör det är "
         "«vissa uppgifter är inte relevanta utifrån vad som står i boken, för "
         "man utgår ju från boken».\n"
         f"{rad}"
-        "BOKENS UPPGIFTER på de sidor klassen arbetar med:\n"
+        f"BOKENS UPPGIFTER {var}:\n"
         f"{json.dumps(bok, ensure_ascii=False)}\n\n"
         "PAPPRETS UPPGIFTER. Fältet forebild är papprets egen pekning: vilken "
         "av bokens uppgifter den säger sig vara av samma sort som.\n"
@@ -3133,11 +3392,22 @@ def build_relevans_prompt(kort: list[dict], bokuppgifter: list[dict],
         "tecknar en formel). Skriv då numret på den av bokens uppgifter som "
         "pappret BORDE ha följt i fältet battre.\n"
         "- dom \"annat moment\" när uppgiften prövar något annat än det "
-        "sidorna handlar om.\n"
+        f"{'kapitlet' if prov else 'sidorna'} handlar om.\n"
         "- dom \"oklart\" när du inte kan avgöra det. «oklart» är ett riktigt "
         "svar och bättre än en gissning; det fäller ingenting.\n"
         f"{_yrkesrad_domare(inriktning)}"
-        "Döm bara på SORTEN. Om uppgiften är för svår, för lång eller dåligt "
+        # PROVETS EGEN RAD. Uppgift 9 i prov 81 (kaféets muggar: 185 koppar,
+        # 6 dagar, 48 veckor, 1,35 kr styck mot 4 800 kr plus 0,22 kr per
+        # diskning) är ren aritmetik i fyra steg. Ämnet passerar varje
+        # innehållskontroll appen har, och ingen uppgift i kapitlet ser ut så.
+        # Utan raden nedan dömer relevansdomaren den som «samma sort» därför
+        # att den räknar med tal, precis som boken gör.
+        + ("Räkna igenom lösningen i huvudet innan du dömer. Kräver uppgiften "
+           "ett steg som ingen av bokens uppgifter i kapitlet kräver är den "
+           "\"annan sort\", hur väl ämnet än stämmer. En ren räkneuppgift i "
+           "flera steg utan någon motsvarighet i kapitlet är också \"annan "
+           "sort\".\n" if prov else "")
+        + "Döm bara på SORTEN. Om uppgiften är för svår, för lång eller dåligt "
         "skriven är någon annans sak. Svara med enbart JSON."
     )
 
@@ -3192,6 +3462,7 @@ def relevansfynd(kort: list[dict], domar: dict[str, dict]) -> list[dict]:
 def doma_relevans(exam: dict, bokuppgifter: list[dict] | None, *, model: str,
                   punkter: list[str] | None = None,
                   inriktning: str = "",
+                  profil: str = "gruppuppgift",
                   llm=llm_client.generate,
                   log_cb: Callable[[str], None] | None = None) -> list[dict]:
     """Ett relevansdomaranrop → fynd där uppgiften inte följer boken.
@@ -3207,7 +3478,7 @@ def doma_relevans(exam: dict, bokuppgifter: list[dict] | None, *, model: str,
     try:
         raw = llm(
             model, build_relevans_prompt(kort, bokuppgifter, punkter,
-                                         inriktning),
+                                         inriktning, profil),
             system=RELEVANS_SYSTEM,
             options={"temperature": 0.0},
             response_format={"type": "json_schema",
@@ -3257,7 +3528,8 @@ BEGRIP_SCHEMA = {
 }
 
 
-def build_begriplighet_prompt(kort: list[dict], inriktning: str = "") -> str:
+def build_begriplighet_prompt(kort: list[dict], inriktning: str = "",
+                              profil: str = "gruppuppgift") -> str:
     """Begriplighetsdomarens prompt. Ordet «begriplighetsdomare» står här och
     ingen annanstans i appen — uppspelningen väljer band på det (tests/fejk.py
     `_auto`), av samma skäl som de andra domarna.
@@ -3267,6 +3539,8 @@ def build_begriplighet_prompt(kort: list[dict], inriktning: str = "") -> str:
     för just det som gör den begriplig för klassen."""
     utan_facit = [{k: v for k, v in rad.items() if k != "losning"}
                   for rad in kort]
+    if profil == "prov":
+        return _begriplighet_prov(utan_facit, inriktning)
     return (
         "Du är begriplighetsdomare för en gruppuppgift i matematik. Fyra "
         "elever ska läsa uppgiften vid ett bord och komma i gång utan att "
@@ -3294,6 +3568,67 @@ def build_begriplighet_prompt(kort: list[dict], inriktning: str = "") -> str:
     )
 
 
+# LÄRARENS DOM ÖVER PROV 81 (2026-09-13), ordagrant: uppgifterna är «otydligt
+# skrivna, väldigt mycket information, man vet inte riktigt vad man ska göra».
+# Hon pekade på två av tolv:
+#
+#   uppgift 9   fyra tal (185 koppar, 6 dagar, 48 veckor, 1,35 kr) plus två
+#               till (4 800 kr, 0,22 kr) och sedan «bestäm hur mycket kaféet
+#               sparar». Räknas inköpet det första året? En diskning per kopp?
+#               Två rimliga läsningar, två olika svar.
+#   uppgift 11  en formel, två kuber, en sida som är dubbelt så lång, en massa
+#               i kilo mot en formel i gram, och därefter p procent. Det står
+#               inte vad eleven ska göra förrän i sista raden.
+#
+# Kraven nedan är hennes, översatta till något en domare kan svara ja eller
+# nej på. Det är samma domare och samma schema som gruppuppgiftens, med en
+# annan kravlista: ett prov skrivs ensamt och tyst, och där finns ingen
+# gruppkamrat att fråga vad uppgiften menar.
+# Taket är KALIBRERAT mot prov 81, inte gissat. Orden räknas på den rena
+# texten (utan LaTeX) i varje poängbärande enhet, och de tolv uppgifterna låg
+# på 0, 7, 10, 0, 17, 28, 12, 40, 17, 23, 38, 32, 42, 29, 6 och 6. Läraren
+# pekade ut uppgift 11 (42) och uppgift 9 (38). Taket 40 fäller den värsta och
+# lämnar uppgift 6b (40) och uppgift 10 (32) i fred: en vakt som fäller halva
+# provet blir en vakt läraren slutar tro på. Domaren (_begriplighet_prov) tar
+# de övriga fyra kraven, som inte går att räkna.
+ORD_FORE_FRAGAN = 40
+
+
+def _begriplighet_prov(utan_facit: list[dict], inriktning: str = "") -> str:
+    """Begriplighetsdomarens prompt för PROVET.
+
+    Ordet «begriplighetsdomare» står här av samma skäl som i gruppens prompt:
+    uppspelningen väljer band på det (tests/fejk.py `_auto`)."""
+    return (
+        "Du är begriplighetsdomare för ett prov i matematik. Eleven sitter "
+        "ensam, får inte fråga, och har några minuter på sig per uppgift.\n"
+        f"{json.dumps(utan_facit, ensure_ascii=False)}\n\n"
+        "Svara för varje uppgift på EN fråga: vet eleven efter en genomläsning "
+        "exakt vad hon ska göra? Kraven är fem, och det räcker att ETT "
+        "brister:\n"
+        "- EN SITUATION per uppgift. Ett kafé eller ett stenhuggeri, inte "
+        "båda, och inte en situation som byter skepnad mellan a) och b).\n"
+        "- EN FRÅGA per deluppgift. Det som ska besvaras står i EN mening.\n"
+        f"- HÖGST ETT PAR RADER TEXT före frågan, cirka {ORD_FORE_FRAGAN} ord. "
+        "Ett prov är inte en läsförståelseuppgift.\n"
+        "- ALLA TAL SOM BEHÖVS står i uppgiften, och inga som inte behövs. Ett "
+        "tal eleven inte använder får henne att leta efter felet hos sig "
+        "själv.\n"
+        "- ENTYDIG TOLKNING. Läs uppgiften två gånger med olika förutsättning "
+        "där du kan: räknas inköpet med, gäller kostnaden per styck eller "
+        "totalt, är enheten gram eller kilo? Ger två rimliga läsningar OLIKA "
+        "svar är uppgiften ett fynd.\n"
+        "Skriv forstar \"nej\" när något av dem brister, och KORT i fältet "
+        "stor vad det är: talet som saknas, de två läsningarna, meningen som "
+        "ställer två frågor. Skriv \"ja\" när uppgiften håller, och "
+        "\"oklart\" när du inte kan avgöra det; oklart fäller ingenting.\n"
+        f"{_yrkesrad_domare(inriktning)}"
+        "Döm på FÖRSTÅELSEN, inte på svårighetsgraden. Provets sista uppgifter "
+        "SKA vara svåra att lösa, och en kort och glasklar A-uppgift är rätt "
+        "skriven. Svara med enbart JSON."
+    )
+
+
 def _parse_begriplighet(raw: str) -> dict[str, dict]:
     data = _json_objekt(raw)
     if not isinstance(data, dict):
@@ -3310,7 +3645,8 @@ def _parse_begriplighet(raw: str) -> dict[str, dict]:
     return ut
 
 
-def begriplighetsdom(kort: list[dict], domar: dict[str, dict]) -> list[dict]:
+def begriplighetsdom(kort: list[dict], domar: dict[str, dict],
+                     profil: str = "gruppuppgift") -> list[dict]:
     """Domen mot första läsningen. Bara ett uttryckligt «nej» fäller."""
     ut = []
     for k in kort:
@@ -3322,7 +3658,10 @@ def begriplighetsdom(kort: list[dict], domar: dict[str, dict]) -> list[dict]:
                 "ord, och det som ska räknas ut utskrivet i texten.")
         if dom["stor"]:
             text += f" Det som stör: {_kort(dom['stor'], 160)}"
-        if _uppgiftsnr(k["nr"]) == 2:
+        # Uppgift 2 är GRUPPUPPGIFTENS begreppsingång och ingen annans. På ett
+        # prov är tvåan en kortsvarsuppgift bland de andra, och raden hade
+        # bett om en omskrivning mot en regel som inte gäller där.
+        if profil != "prov" and _uppgiftsnr(k["nr"]) == 2:
             text += (" Uppgift 2 är begreppsingången — den ska klaras med ett "
                      "räknesteg och ligga nära uppgift 1.")
         ut.append(_err(f"uppgift {k['nr']}", "begriplighet",
@@ -3331,10 +3670,15 @@ def begriplighetsdom(kort: list[dict], domar: dict[str, dict]) -> list[dict]:
 
 
 def doma_begriplighet(exam: dict, *, model: str, inriktning: str = "",
+                      profil: str = "gruppuppgift",
                       llm=llm_client.generate,
                       log_cb: Callable[[str], None] | None = None) -> list[dict]:
     """Ett begriplighetsdomaranrop → fynd där uppgiften inte går att förstå
-    vid första läsningen. Fail-open som de andra domarna."""
+    vid första läsningen. Fail-open som de andra domarna.
+
+    `profil` byter kravlista: gruppuppgiftens fyra elever vid ett bord mot
+    provets ensamma elev (se _begriplighet_prov). Förvalet är gruppens, och
+    dess prompt är byte för byte den som spelades in."""
     log = log_cb or (lambda _m: None)
     kort = uppgiftskort(exam)
     if not kort:
@@ -3342,7 +3686,7 @@ def doma_begriplighet(exam: dict, *, model: str, inriktning: str = "",
     log("Läser uppgifterna med elevernas ögon …")
     try:
         raw = llm(
-            model, build_begriplighet_prompt(kort, inriktning),
+            model, build_begriplighet_prompt(kort, inriktning, profil),
             system=BEGRIP_SYSTEM,
             options={"temperature": 0.0},
             response_format={"type": "json_schema",
@@ -3355,7 +3699,7 @@ def doma_begriplighet(exam: dict, *, model: str, inriktning: str = "",
         log(f"Begriplighetskontrollen kunde inte köras ({e}) — pappret "
             "levereras ändå.")
         return []
-    return begriplighetsdom(kort, _parse_begriplighet(raw))
+    return begriplighetsdom(kort, _parse_begriplighet(raw), profil)
 
 
 # ═══════════════════════════════ bedömningspasset ═══════════════════════════
@@ -4519,6 +4863,31 @@ class _Uppgiftsraknare:
         self._log(f"{self._etikett} uppgift {n}{av} …")
 
 
+def _forebild_i_grammatiken(prompt: str, profil: str) -> bool:
+    """Ska uppgiftsfältet `forebild` stå i grammatiken för det HÄR anropet?
+
+    Regeln är PROMPTENS EGEN, och det är inte en genväg utan det enda som
+    håller i alla lägen: fältet ska stå i grammatiken exakt när det som
+    skickas nämner det. Antingen därför att uppdraget BER om en förebild
+    (build_forebild för gruppuppgiften, build_forebild_prov för provet), eller
+    därför att pappret som ska repareras eller skrivas om REDAN bär en
+    (build_repair_prompt, build_refine_prompt och build_latexfix_prompt
+    bäddar alla in dokumentet som JSON).
+
+    Alternativet var att tråda en flagga genom generate_exam och de sju pass
+    som reparerar. Det gjordes inte första gången (2026-09-09) och kostade en
+    tyst förlust: gruppuppgift 77 tappade sin förebild i omskrivningen därför
+    att ETT anrop av åtta saknade flaggan, och ingenting syntes förrän
+    relevansdomaren dömde utan pekning. En regel som läser vad som faktiskt
+    skickas kan inte glömmas på ett anrop.
+
+    Gruppuppgiften står kvar som ett eget villkor: dess prompt utan bok
+    (FOREBILD_UTAN_BOK) ber om att fältet ska lämnas TOMT, och även det
+    behöver fältet i schemat för att modellen ska kunna låta bli att fylla i
+    det på ett giltigt sätt."""
+    return profil == "gruppuppgift" or '"forebild"' in prompt
+
+
 def _llm_round(prompt: str, model: str, llm, antal: int | None = None,
                skeleton: list[dict] | None = None,
                koder: list[str] | None = None, *,
@@ -4532,13 +4901,10 @@ def _llm_round(prompt: str, model: str, llm, antal: int | None = None,
         # antal → grammatik-tak; skeleton → låst del/förmåga/typ/poäng per
         # uppgift (balans garanterad); koder → innehall låst till lärarens valda
         # CI-punkter. Gäller även reparationsrundorna.
-        # BOKFÖREBILDEN står i grammatiken bara för gruppuppgiften, och bara
-        # den BER om den (build_forebild). Villkoret är profilen och inte
-        # antalet: en omskrivning skickar inget antal, och utan raden föll
-        # fältet bort ur varje uppgift varvet rörde — pappret tappade sin
-        # pekning på boken tyst, och relevansdomaren fick döma utan den.
+        # BOKFÖREBILDEN i grammatiken: se _forebild_i_grammatiken.
         response_format=exam_spec.to_response_format(
-            antal, skeleton, koder, forebild=profil == "gruppuppgift"),
+            antal, skeleton, koder,
+            forebild=_forebild_i_grammatiken(prompt, profil)),
         max_tokens=EXAM_MAX_TOKENS,
         # Ingen lyssnare → ingen räkning. Stubbade llm i testerna tar emot
         # token_cb och struntar i det; kassetterna spelas upp genom
@@ -4885,16 +5251,34 @@ DELMOMENT_SCHEMA = {
 }
 
 
-def build_delmoment_prompt(kort: list[dict], delmoment: list[dict]) -> str:
+def build_delmoment_prompt(kort: list[dict], delmoment: list[dict],
+                           forbjudna: list[dict] | None = None) -> str:
     """Delmomentsdomarens prompt. Ordet «delmomentsdomare» står här och ingen
     annanstans i appen — uppspelningen väljer band på det (tests/fejk.py
-    `_auto`), av samma skäl som de andra domarna."""
+    `_auto`), av samma skäl som de andra domarna.
+
+    `forbjudna` är samma lista som skrivningen fick (build_forbjudet), och den
+    står här av ett skäl: en domare som bara vet vad som ÄR undervisat måste
+    gissa var gränsen går åt andra hållet. Prov 81 visade vad gissningen
+    kostar. Potensekvationen i uppgift 11 a) heter inte «ekvation» i texten,
+    den heter «bestäm den mindre kubens sida», och utan bokens rubrik
+    «Potensekvationer … (s. 50–52)» framför sig läser domaren den som
+    potensräkning ur kapitel 1. TOM LISTA lämnar prompten byte för byte den
+    som spelades in utan blocket."""
     lista = "\n".join(f"- {d['delmoment']} (s. {d['sidor']})"
                       for d in delmoment)
+    forbud = ("FÖRBJUDNA METODER. Det här ligger senare i boken och klassen "
+              "har inte haft det när provet skrivs:\n"
+              + "\n".join(f"- {f['metod']} (s. {f['sidor']})"
+                          for f in forbjudna)
+              + "\nKräver en uppgift något av dem för att gå att lösa är den "
+                "ett fynd, och metoden ska då namnges med bokens rubrik "
+                "ovan.\n\n") if forbjudna else ""
     return (
         "Du är delmomentsdomare. Nedan står de delmoment klassen har "
         "undervisats i, och därefter provets uppgifter som JSON.\n\n"
         f"DELMOMENTEN:\n{lista}\n\n"
+        f"{forbud}"
         f"UPPGIFTERNA:\n{json.dumps(kort, ensure_ascii=False)}\n\n"
         "Svara på två frågor.\n"
         "1. TÄCKNINGEN: gå delmoment för delmoment och fråga «prövar någon "
@@ -4905,11 +5289,15 @@ def build_delmoment_prompt(kort: list[dict], delmoment: list[dict]) -> str:
         "mot en ny (den vars delmoment redan har flest uppgifter). Är du "
         "osäker på om ett delmoment prövas: räkna det som prövat. En falsk "
         "lucka kostar en bra uppgift.\n"
-        "2. METODER UTANFÖR: gå uppgift för uppgift och fråga «krävs en metod "
-        "som INTE står i listan för att lösa den?» — en olikhet, en ekvation, "
-        "procenträkning, geometri eller en funktion som inget delmoment rör. "
-        "Skriv då uppgiftens nummer och metoden i \"utanfor\". Att uppgiften "
-        "är svår är inget fynd; att den kräver ett annat kapitel är det.\n"
+        "2. METODER UTANFÖR: gå uppgift för uppgift, SKRIV LÖSNINGEN FÖR DIG "
+        "SJÄLV steg för steg, och fråga «kräver något steg en metod som INTE "
+        "står bland delmomenten?» Alltså en olikhet, en ekvation, procenträkning, "
+        "geometri eller en funktion som inget delmoment rör. Skriv då "
+        "uppgiftens nummer och metoden i \"utanfor\". Att uppgiften är svår "
+        "är inget fynd; att den kräver ett annat kapitel är det. Döm på "
+        "LÖSNINGEN och inte på ämnet: en uppgift om potenser som bara går att "
+        "lösa genom att lösa ut den obekanta ur en potensekvation kräver "
+        "ekvationslösning, hur mycket potenser den än handlar om.\n"
         "Tomma listor när provet täcker delmomenten och håller sig innanför "
         "dem. Svara med enbart JSON."
     )
@@ -4955,6 +5343,7 @@ def delmomentfynd(delmoment: list[dict], data) -> list[dict]:
 
 
 def doma_delmoment(exam: dict, delmoment: list[dict] | None, *, model: str,
+                   forbjudna: list[dict] | None = None,
                    llm=llm_client.generate,
                    log_cb: Callable[[str], None] | None = None) -> list[dict]:
     """Ett domaranrop → fynd där provet missar ett undervisat delmoment eller
@@ -4962,14 +5351,18 @@ def doma_delmoment(exam: dict, delmoment: list[dict] | None, *, model: str,
 
     Utan delmomentlista körs INGENTING, precis som relevansdomaren utan bok:
     finns ingen lista finns inget kontrakt, och en dom mot ett tomt underlag
-    hade fällt varje uppgift på ett papper som ingen kalender gällde."""
+    hade fällt varje uppgift på ett papper som ingen kalender gällde.
+
+    `forbjudna` är bokens rubriker för det klassen ännu inte haft
+    (forbjudna_ur_lektioner). Den styr bara HUR skarpt fråga 2 går att
+    besvara; utan den ställs frågan ändå, som förut."""
     log = log_cb or (lambda _m: None)
     kort = uppgiftskort(exam or {})
     if not kort or not delmoment:
         return []
     log("Delmomentsdomaren läser provet mot lektionerna …")
     try:
-        raw = llm(model, build_delmoment_prompt(kort, delmoment),
+        raw = llm(model, build_delmoment_prompt(kort, delmoment, forbjudna),
                   system=DELMOMENT_SYSTEM,
                   options={"temperature": 0.0},
                   response_format={"type": "json_schema",
@@ -4990,7 +5383,11 @@ def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                    avsnitt: list[dict], rounds_used: int, max_rounds: int,
                    koder: list[str] | None = None,
                    niva_mal: dict | None = None,
-                   delmoment: list[dict] | None = None, doma: bool = True,
+                   delmoment: list[dict] | None = None,
+                   forbjudna: list[dict] | None = None,
+                   bokuppgifter: list[dict] | None = None,
+                   punkter: list[str] | None = None, inriktning: str = "",
+                   doma: bool = True,
                    log_cb: Callable[[str], None] | None = None) -> dict:
     """Kapitelramens kontroll, med SAMMA kontrakt som _rakneverk_pass: högst EN
     reparationsrunda, samma budget, samma «rent före, trasigt efter»-grind, och
@@ -4999,7 +5396,21 @@ def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
     Ligger FÖRE räkneverket och efter balansreparationen: byter rundan ut en
     uppgift ska räkneverket räkna på DEN uppgiften, inte på den som byttes
     bort. Omvänd ordning hade betalat en sympy-runda för ett facit som sedan
-    skrevs om ändå."""
+    skrevs om ändå.
+
+    FYRA KONTROLLER, EN RUNDA (2026-09-13, lärarens dom över prov 81).
+    Avsnittstäckningen och delmomenten var här redan; relevansen mot bokens
+    kapitel och begripligheten kom till samma plats, och det är hela poängen.
+    Hennes två klagomål, «uppgifter som inte är ur kapitel ett alls» och
+    «otydligt skrivna», är samma sorts fel: uppgiften ska BYTAS eller SKRIVAS
+    OM, inte provet. Fyra rundor efter varandra hade bett modellen om fyra nya
+    prov; nu står alla fynden i EN reparationsprompt, och grinden nedan kastar
+    hela varvet om balansen spricker.
+
+    Relevansen och begripligheten är GRUPPUPPGIFTENS domare, körda med
+    provets kravlistor (doma_relevans/doma_begriplighet, `profil="prov"`).
+    Gruppuppgiften har dem kvar där den hade dem, i _bok_grind efter
+    nivågrinden, med sina egna riktade extrarundor."""
     log = log_cb or (lambda _m: None)
     fel = avsnittstackning(exam, avsnitt, antal or 0)
     # Loggraden namnger avsnitten, inte antalet fynd: «Täckningen: 1.1 saknar
@@ -5016,7 +5427,32 @@ def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
     # stänger av de andra domarna: flaggan betyder «inga extra modellanrop».
     if doma:
         fel = fel + doma_delmoment(exam, delmoment, model=model, llm=llm,
-                                   log_cb=log_cb)
+                                   forbjudna=forbjudna, log_cb=log_cb)
+    # ── PROVETS BOK- OCH TEXTGRIND ────────────────────────────────────
+    # EN grind med två domare, och den körs när provet har ett KAPITEL att
+    # mätas mot. Villkoret är bokuppgifterna, av två skäl som pekar åt samma
+    # håll. Kassetteregeln: ett prov utan bokdörr ska kosta exakt de anrop det
+    # kostade förut, och varje inspelat band förblir omspelningsmoget. Och
+    # sakskälet: relevansdomaren KAN inte döma utan kapitlets uppgifter, och de
+    # två domarna hör ihop i en och samma reparationsrunda. Läraren fällde
+    # samma uppgifter på båda grunderna («inte ur kapitel ett alls» och
+    # «otydligt skrivna»), och en halv grind hade lagat halva felet och sedan
+    # låst rundan.
+    #
+    # De deterministiska signalerna först i listan: de kostar ingenting och de
+    # är säkra, och står de sist kan de falla utanför taket i en
+    # reparationsprompt som redan är full av domarfynd. `doma` stänger bara av
+    # modellanropen. En uppgift med fyrtio ords förutsättning är mätt, inte
+    # tyckt.
+    if profil == "prov" and bokuppgifter:
+        fel = fel + begriplighetssignaler(exam, profil)
+        if doma:
+            fel = fel + doma_relevans(exam, bokuppgifter, model=model,
+                                      punkter=punkter, inriktning=inriktning,
+                                      profil=profil, llm=llm, log_cb=log_cb)
+            fel = fel + doma_begriplighet(exam, model=model,
+                                          inriktning=inriktning, profil=profil,
+                                          llm=llm, log_cb=log_cb)
     if not fel:
         return {"exam": exam, "errors": errors, "rounds": rounds_used}
     if rounds_used >= max_rounds:
@@ -5027,6 +5463,15 @@ def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
     if delfel:
         log(f"Delmomenten: {len(delfel)} fynd mot lektionerna, byter ut "
             "uppgifter …")
+    # Loggen namnger vad som fälldes, inte hur många fynd det blev: läraren
+    # ska kunna läsa efteråt VARFÖR en uppgift byttes ut.
+    for kod, rad in (("relevans", "Boken: {n} uppgift(er) utan förebild i "
+                                  "kapitlet, byter ut …"),
+                     ("begriplighet", "Texten: {n} uppgift(er) är otydligt "
+                                      "skrivna, skriver om …")):
+        n = len([f for f in fel if f["code"] == kod])
+        if n:
+            log(rad.format(n=n))
     kandidat = _llm_round(build_repair_prompt(exam, fel + errors, profil),
                           model, llm, antal, skeleton, koder, profil=profil,
                           log_cb=log_cb,
@@ -5506,6 +5951,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                   hjalpmedel: str = "",
                   avsnitt: list[dict] | None = None,
                   delmoment: list[dict] | None = None,
+                  forbjudna: list[dict] | None = None,
                   svart: str = "", fokus: str = "", inriktning: str = "",
                   profil: str = "prov",
                   koder: list[str] | None = None, riktat: str = "",
@@ -5581,7 +6027,23 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     tillbaka (doma_delmoment, i _tackning_pass) — och skillnaden mot ramen är
     att listan är smalare än avsnitten och att domaren är en LÄSARE, inte ett
     fält på uppgiften. Tom lista lämnar prompten ordagrant som den var och
-    kostar inget anrop."""
+    kostar inget anrop.
+
+    `forbjudna` är METODERNA KLASSEN ÄNNU INTE HAFT (routes_planning.
+    forbjudna_metoder): bokens egna rubriker för det som ligger senare i boken
+    än provets kapitel. Den gör samma två saker som delmomenten, fast åt andra
+    hållet: förbudet går in i prompten (build_forbjudet) och samma lista följer
+    med delmomentsdomaren, som fäller en uppgift så snart LÖSNINGEN kräver
+    något ur den. Tom lista lämnar prompten ordagrant som den var.
+
+    `bokuppgifter` gäller sedan 2026-09-13 också PROVET, med kapitlets
+    uppgifter i stället för lärarens remsa (bok.provuppgifter). Samma tre
+    saker händer som för gruppuppgiften: förebilden begärs i prompten
+    (build_forebild_prov), fältet står i grammatiken så länge det ryms
+    (_forebild_i_grammatiken) och relevansen prövas på svaret (doma_relevans
+    med profil="prov", i _tackning_pass). Provet får dessutom
+    begriplighetsdomaren i samma runda, och den behöver inget underlag alls.
+    """
     log = log_cb or (lambda _m: None)
     # `steg` NAMNGER var i arbetet vi är; `log` säger vad som händer just nu.
     # Skillnaden syns i gränssnittet: namnet flyttar mätaren ett helt steg,
@@ -5624,12 +6086,20 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # Delmomenten (2026-09-13). Samma villkor och samma skäl som ovan: tom
     # lista ger en TOM STRÄNG och en oförändrad prompt.
     delmomentblock = build_delmoment(delmoment or [], antal)
+    # Förbudet och provets bokförebild (2026-09-13). Samma villkor och samma
+    # skäl som ovan: tomma listor ger TOMMA STRÄNGAR och en oförändrad prompt.
+    # Förebilden är PROVETS. Gruppuppgiften bygger sin egen inne i
+    # build_prompt, ur lärarens remsa.
+    forbjudetblock = build_forbjudet(forbjudna or [])
+    forebildblock = (build_forebild_prov(bokuppgifter)
+                     if profil == "prov" else "")
     prompt = build_prompt(kurs, klass, punkter, antal=antal, tid_min=tid_min,
                           delar=delar, memory=memory, teman=teman,
                           variation=variation,
                           referens=referens, bilder=bilder, utfall=utfall,
                           bok=bok, boknivaer=boknivaer, forlaga=forlaga,
                           spridning=spridning, delmoment=delmomentblock,
+                          forbjudet=forbjudetblock, forebild=forebildblock,
                           hjalpmedel=hjalpmedel,
                           svart=svart, fokus=fokus, inriktning=inriktning,
                           profil=profil, koder=koder, grupp=grupp,
@@ -5670,11 +6140,16 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # reparationsrunda: en lucka i kapitlet och en lucka bland lektionerna är
     # samma sorts fel, och båda lagas genom att en uppgift byts ut. Passet körs
     # så snart NÅGON av de två listorna finns.
-    if res["exam"] is not None and (avsnitt or delmoment):
+    if res["exam"] is not None and (avsnitt or delmoment
+                                    or (profil == "prov" and bokuppgifter)):
         res = _tackning_pass(res["exam"], res["errors"], model=model, llm=llm,
                              profil=profil, antal=antal, skeleton=grammatik,
                              avsnitt=avsnitt or [], koder=koder,
                              niva_mal=niva_mal, delmoment=delmoment or [],
+                             forbjudna=forbjudna or [],
+                             bokuppgifter=bokuppgifter if profil == "prov"
+                             else None,
+                             punkter=punkter, inriktning=inriktning,
                              doma=doma,
                              rounds_used=res["rounds"], max_rounds=max_rounds,
                              log_cb=log_cb)

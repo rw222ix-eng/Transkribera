@@ -736,12 +736,24 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # gruppuppgiftens spann är EN lektion, och där är delmomentet
                 # redan hela uppdraget.
                 delmoment: list[dict] = []
+                # FÖRBUDSLISTAN (2026-09-13). Delmomenten säger vad provet ska
+                # pröva; den här säger vad som inte får krävas för att lösa en
+                # uppgift, med bokens egna rubriker och sidnummer. Den kom av
+                # att prov 81 genererades MED delmomenten aktiva och ändå
+                # krävde en potensekvation (s. 50–52, lektionen 23/9, alltså
+                # efter provet) och en procentuell förändring (kap 3, december).
+                # Läraren: «hur kan det ens hända att provet genererar
+                # uppgifter som inte är ur kapitel ett alls?»
+                forbjudna: list[dict] = []
                 if typ == "prov":
                     avsnitt = (routes_planning.bok_avsnitt(db_file, body)
                                or exam_gen.avsnitt_ur_moment(
                                    body.get("moment") or ""))
                     delmoment = routes_planning.undervisade_delmoment(
                         db_file, body, group_id=group_id, course_id=course_id)
+                    forbjudna = routes_planning.forbjudna_metoder(
+                        db_file, body, group_id=group_id, course_id=course_id,
+                        undervisade=delmoment)
                 # LÄRARENS VALDA UPPGIFTER, en och en — och bara för
                 # GRUPPUPPGIFTEN (lärarens dom 2026-09-09: «vissa uppgifter är
                 # inte relevanta utifrån vad som står i boken, för man utgår ju
@@ -755,9 +767,23 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # ett moment, och båda deras prompter är oförändrade — alltså
                 # inga omspelningsmogna kassetter för en ändring som inte
                 # gäller dem.
+                # PROVET FÅR OCKSÅ FÖREBILDER, men ur hela kapitlet och inte
+                # ur en remsa (2026-09-13). Raden ovan sa att provet läser
+                # boken «som översikt» och att dess prompt därför var
+                # oförändrad. Det höll inte: prov 81 fick tolv uppgifter varav
+                # en (uppgift 9, kaféets muggar) inte har någon motsvarighet
+                # någonstans i kapitlet: ren aritmetik i fyra steg, ingen
+                # variabel, inget uttryck. Nu ska varje uppgift kunna peka på
+                # en syskonuppgift i boken, och relevansdomaren prövar
+                # pekningen (bok.provuppgifter, exam_gen.build_forebild_prov).
+                #
+                # Arbetsbladet får dem fortfarande INTE: det drillar ett
+                # moment, och dess prompt är oförändrad.
                 bokuppgifter = (
                     routes_planning.bok_remsuppgifter(db_file, body)
-                    if typ == "gruppuppgift" else [])
+                    if typ == "gruppuppgift" else
+                    routes_planning.bok_provuppgifter(db_file, body)
+                    if typ == "prov" else [])
                 res = exam_gen.generate_exam(
                     kurs, klass or "klassen", punkter, model=_model_name(),
                     antal=antal, tid_min=tid_min, delar=delar,
@@ -766,7 +792,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     bilder=bilder_block, utfall=utfall_block, bok=bok_block,
                     boknivaer=nivaer_block, forlaga=forlaga_block,
                     avsnitt=avsnitt, delmoment=delmoment,
-                    bokuppgifter=bokuppgifter,
+                    forbjudna=forbjudna, bokuppgifter=bokuppgifter,
                     hjalpmedel=exam_gen.build_hjalpmedel(hjalpmedelsregel),
                     svart=svart_block, fokus=fokus_block,
                     inriktning=inriktning, profil=typ,

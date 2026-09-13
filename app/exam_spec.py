@@ -649,6 +649,35 @@ def to_response_format(antal: int | None = None,
                        skeleton: list[dict] | None = None,
                        koder: list[str] | None = None,
                        *, forebild: bool = False) -> dict:
+    """json_schema-objektet, med TAKET som sista ord.
+
+    Bygger schemat som `_bygg_response_format` beskriver det, och gör sedan en
+    sak till: ryms det inte på kommandoraden med förebildsfältet påslaget
+    byggs det om utan fältet.
+
+    VARFÖR MÄTA I EFTERHAND. Fältet kopieras en gång per uppgift i
+    prefixItems, och kostnaden beror på hur många uppgifter provet har, hur
+    många innehållspunkter läraren kryssat och hur deluppgifterna är
+    fördelade. Ett tjugouppgifts prov med alla Ma 1c:s punkter ligger på
+    29 022 av 30 000 tecken (claude_code.SCHEMA_TAK_EXE) UTAN fältet och
+    29 953 MED. Spricker taket går hela schemat i prompten i stället
+    (claude_code.generate) och grammatiktvånget för poäng, delar och förmågor
+    tappas på varje uppgift. En pekning på boken är inte värd den
+    bytesaffären, och en gissning på kostnaden är inte värd risken."""
+    rf = _bygg_response_format(antal, skeleton, koder, forebild=forebild)
+    if not forebild:
+        return rf
+    from app import claude_code                     # sent: bara för måttet
+    if (claude_code.schemalangd(rf["json_schema"]["schema"])
+            <= claude_code.SCHEMA_TAK_EXE - SCHEMA_MARGINAL):
+        return rf
+    return _bygg_response_format(antal, skeleton, koder, forebild=False)
+
+
+def _bygg_response_format(antal: int | None = None,
+                          skeleton: list[dict] | None = None,
+                          koder: list[str] | None = None,
+                          *, forebild: bool = False) -> dict:
     """json_schema-objekt för llama-servers grammatiktvång.
 
     `antal` sätter ett hårt antalstak (minItems=maxItems) — llama.cpp hedrar
@@ -786,6 +815,13 @@ def to_response_format(antal: int | None = None,
         "type": "json_schema",
         "json_schema": {"name": "matteprov", "schema": schema},
     }
+
+
+# Marginalen mellan schemat och kommandoradens tak. Resten av argv är exe,
+# flaggor, modellnamn och systemprompten (claude_code._argv, _radlangd), och
+# den är några hundra tecken. Tvåtusen är därför gott om utrymme och samtidigt
+# snålt nog att aldrig låta ett schema smita förbi.
+SCHEMA_MARGINAL = 2000
 
 
 def _tupel_const(poang) -> dict:
