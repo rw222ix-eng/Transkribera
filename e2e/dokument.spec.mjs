@@ -984,3 +984,135 @@ test("lösningarna skriver inte över en omskrivning som skedde under tiden", as
   expect(anrop.filter(a => a.metod === "PATCH" && a.kropp && a.kropp.dokument))
     .toEqual([]);
 });
+
+/* ── BILDERNA SOM FÖRSVANN UR ETT OMGODKÄNT PROV ──────────────────────────
+ *
+ * Lärarens fynd 2026-09-13: prov 44 «Kapitel 1» stod i Sparat utan sina fem
+ * egna bilder. De låg kvar i basen (dokument 86, varv 3–7 bar dem) men radens
+ * markör stod på 0, och högen ritas ur det varv markören står på.
+ *
+ * «Fortsätt ändra» skickade `PATCH {status:'utkast', markor:0}`. Klientens
+ * array har ETT varv efter gesten, så nollan såg riktig ut — men markören är
+ * radens, inte arrayens. Testet kör hela vägen mot en lagrande fejkserver med
+ * samma versionsregler som app/db.py, och laddar om sidan efteråt: det är
+ * omladdningen som visar vad servern faktiskt bär.
+ */
+
+/** Fejkserver med app/db.py:s versionsregler. `rader` muteras och överlever
+ *  en omladdning — annars går det inte att se vad som blev kvar. */
+async function fejkaLagrande(page, rader) {
+  const anrop = [];
+  const json = (route, kropp) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify(kropp) });
+  const klam = r => Math.max(0, Math.min(r.markor, r.versioner.length - 1));
+  const vy = r => ({ ...r, markor: klam(r), dokument: { ...r.versioner[klam(r)], id: r.id } });
+  const senasteUtkast = () => [...rader].reverse().find(x => x.status === "utkast");
+  await page.route("**/api/schema", route => json(route, SCHEMA));
+  await page.route("**/api/lessons", route => json(route, []));
+  await page.route("**/api/history", route => json(route, []));
+  await page.route("**/api/klassprofil", route => json(route, {}));
+  await page.route("**/api/exams/**", route => json(route, { id: 42, status: "utkast" }));
+  await page.route("**/api/dokument", route => {
+    const r = route.request();
+    if (r.method() === "POST") {
+      const kropp = r.postDataJSON();
+      anrop.push({ metod: "POST", vag: "/api/dokument", kropp });
+      const ny = { id: 200 + rader.length, status: kropp.status || "utkast",
+                   markor: 0, sort: 200 + rader.length, foljd: null,
+                   versioner: [kropp.dokument] };
+      // «Ett utkast i taget» (server.py): en ny utkastrad städar de gamla.
+      if (ny.status === "utkast") {
+        for (let i = rader.length - 1; i >= 0; i--) {
+          if (rader[i].status === "utkast") rader.splice(i, 1);
+        }
+      }
+      rader.push(ny);
+      return json(route, vy(ny));
+    }
+    return json(route, {
+      sparade: rader.filter(x => x.status === "godkant").map(x => {
+        const { versioner, ...rest } = vy(x);
+        return { ...rest, versioner_antal: versioner.length };
+      }),
+      utkast: senasteUtkast() ? vy(senasteUtkast()) : null,
+    });
+  });
+  await page.route("**/api/dokument/**", route => {
+    const r = route.request();
+    const vag = new URL(r.url()).pathname;
+    const kropp = r.method() === "DELETE" ? null : r.postDataJSON();
+    anrop.push({ metod: r.method(), vag, kropp });
+    if (vag.endsWith("/ordning")) return json(route, { ok: true });
+    const id = Number(vag.split("/")[3]);
+    const i = rader.findIndex(x => x.id === id);
+    if (i < 0) return route.fulfill({ status: 404, contentType: "application/json",
+                                      body: JSON.stringify({ error: "okänt dokument" }) });
+    const rad = rader[i];
+    if (r.method() === "DELETE") { rader.splice(i, 1); return json(route, { ok: true }); }
+    if (vag.endsWith("/versioner")) {
+      // add_dokument_version: ny version EFTER markören, det framåt kapas.
+      rad.versioner = rad.versioner.slice(0, klam(rad) + 1).concat([kropp.dokument]);
+      rad.markor = rad.versioner.length - 1;
+      return json(route, vy(rad));
+    }
+    // update_dokument: markörflytten kläms, dokumentet skrivs DÄR markören står.
+    if (typeof kropp.markor === "number") {
+      rad.markor = Math.max(0, Math.min(kropp.markor, rad.versioner.length - 1));
+    }
+    if (kropp.status) rad.status = kropp.status;
+    if (kropp.dokument) rad.versioner[klam(rad)] = kropp.dokument;
+    return json(route, vy(rad));
+  });
+  return anrop;
+}
+
+test("bilderna överlever «Fortsätt ändra» och ett nytt godkännande", async ({ page }) => {
+  const BILD = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  const prov = extra => papper({
+    typ: "Prov", provId: 42, moment: "kvadratrötter",
+    inst: { antal: 3, losningar: false, provtid: "90 min", delprov: "Del A + Del B" },
+    ...extra });
+  const rader = [{
+    id: 5, status: "godkant", markor: 2, sort: 5, foljd: null,
+    // Bilden kom i varv tre, precis som lärarens fem bilder på prov 44.
+    versioner: [prov({ anteckning: "Första utkastet" }),
+                prov({ anteckning: "Skarpare tal" }),
+                prov({ anteckning: "Bild inlagd", bilder: { forsatt: BILD } })],
+  }];
+  const anrop = await fejkaLagrande(page, rader);
+  await page.goto("/");
+  await hydrerad(page);
+  await oppnaForhandsvisning(page);
+  await expect(page.locator(`#fh-ark img[src="${BILD}"]`)).toHaveCount(1);
+
+  await page.locator("#fh-fortsatt").click();
+  await expect(page.locator("#forhandsskal")).toBeHidden();
+  await expect(page.locator("#dokument")).toBeVisible();
+  // Gesten byter status och RÖR INTE markören: `markor: 0` var hela buggen.
+  const patch = anrop.find(a => a.metod === "PATCH" && a.kropp && a.kropp.status === "utkast");
+  expect(patch.kropp).toEqual({ status: "utkast" });
+  await expect.poll(() => rader[0].markor).toBe(2);
+
+  /* OMSTARTEN ÄR PROVET. Med markören på plats gör den ingenting; med `markor:
+     0` var det HÄR bilderna försvann. Klienten glömmer sin ettvarvs-array och
+     plockar upp raden med hela sin historik (aterstallUtkast) — och ställer sig
+     på det varv markören pekar ut. Läraren stängde appen 18:04 och öppnade den
+     igen, såg första utkastet, och godkände det hon såg. */
+  await page.goto("/");
+  await hydrerad(page);
+  await page.getByRole("tab", { name: "Planering" }).click();
+  await expect(page.locator("#dokument")).toBeVisible();
+  await expect(page.locator(`#arkskal img[src="${BILD}"]`)).toHaveCount(1);
+
+  await page.locator("#godkann").click();
+  await expect.poll(() => page.evaluate(() => window.Dokument.sparade().length)).toBe(1);
+
+  // Och en gång till: högen ritas ur det servern bär, inte ur det klienten minns.
+  await page.goto("/");
+  await hydrerad(page);
+  await expect.poll(() => page.evaluate(() => window.Dokument.sparade().length)).toBe(1);
+  // EN rad för provet — godkännandet bytte status, det skrev ingen kopia.
+  expect(rader.filter(r => r.versioner.some(v => v.provId === 42))).toHaveLength(1);
+  await oppnaForhandsvisning(page);
+  await expect(page.locator(`#fh-ark img[src="${BILD}"]`)).toHaveCount(1);
+});

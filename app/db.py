@@ -2823,10 +2823,17 @@ def update_dokument(conn: sqlite3.Connection, dokument_id: int, *,
     if row is None:
         return None
     nu = _now()
+    antal = conn.execute("SELECT COUNT(*) AS n FROM dokument_versioner "
+                         "WHERE dokument_id = ?", (dokument_id,)).fetchone()["n"]
+    # Radens markör klämd på samma sätt som läsningen klämmer den
+    # (_dokument_view, _DOKUMENT_LATT, _dokument_blob). Skrivningen nedan MÅSTE
+    # träffa samma varv som läsningen returnerar: en markör utanför arrayen fick
+    # förr UPDATE ... WHERE version = <hål> att matcha noll rader, och
+    # godkännandets papper försvann tyst medan svaret såg ut som en lyckad
+    # skrivning.
+    star_pa = max(0, min(int(row["markor"] or 0), max(0, antal - 1)))
     satt: dict = {"updated_at": nu}
     if markor is not None:
-        antal = conn.execute("SELECT COUNT(*) AS n FROM dokument_versioner "
-                             "WHERE dokument_id = ?", (dokument_id,)).fetchone()["n"]
         satt["markor"] = max(0, min(int(markor), max(0, antal - 1)))
     if status is not None:
         satt["status"] = status
@@ -2842,7 +2849,7 @@ def update_dokument(conn: sqlite3.Connection, dokument_id: int, *,
                 "UPDATE dokument_versioner SET data = ?, anteckning = ? "
                 "WHERE dokument_id = ? AND version = ?",
                 (json.dumps(dokument, ensure_ascii=False), dokument.get("anteckning"),
-                 dokument_id, satt.get("markor", int(row["markor"] or 0))))
+                 dokument_id, satt.get("markor", star_pa)))
         conn.execute(f"UPDATE dokument SET {', '.join(k + ' = ?' for k in satt)} "
                      "WHERE id = ?", (*satt.values(), dokument_id))
     return get_dokument(conn, dokument_id)
