@@ -279,6 +279,27 @@ def test_raknedomen_ur_kassetten_gar_hela_vagen(fejk_claude):
         exam_gen.raknefel(enheter, domar) == []
 
 
+def test_delmomentsdomen_ur_kassetten_gar_hela_vagen(fejk_claude):
+    """Delmomentsdomaren (2026-09-13) genom hela kedjan: CLI → ström → JSON →
+    fynd. Bandet är SKARPT, inspelat på provbandet (Ma3c, derivata) mot en
+    lista av det kapitlets lektioner.
+
+    Domen: inget delmoment saknas, men TVÅ uppgifter kräver metoder utanför
+    lektionerna — uppgift 4 en parameterolikhet och uppgift 6 en
+    exponentialekvation. Det är precis felet läraren fann på prov 44, funnet
+    av domaren på ett annat papper: uppgiften prövar något annat än det den
+    påstår sig pröva."""
+    from tools.spela_in_kassett import DELMOMENT
+    fejk_claude(kassett="delmomentsdomare")
+    exam = exam_gen._parse_exam(json.loads(
+        fejk.las_kassett("prov")["rader"][-1])["result"])
+    fel = exam_gen.doma_delmoment(exam, DELMOMENT, model="")
+    assert [f["code"] for f in fel] == ["delmomenttackning"] * 2
+    assert [f["path"] for f in fel] == ["uppgift 4", "uppgift 6"]
+    # Ordern är BYT UT och inget annat: rundan ska inte skriva om provet.
+    assert all("Byt UT den" in f["message"] for f in fel)
+
+
 def test_provbandet_gar_genom_bada_domarna_och_talvakten(fejk_claude):
     """Auto-läget lägger i räknedomarens band när prompten ber om en räknedom.
     Två saker prövas, och båda är mätta på det SKARPA provbandet:

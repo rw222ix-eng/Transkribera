@@ -277,6 +277,20 @@ _CI = "innehållsdomare"
 _RELEVANS = "relevansdomare"
 _BEGRIPLIGHET = "begriplighetsdomare"
 
+# Delmomentsdomaren (2026-09-13) prövas av EXAKT samma skäl och FÖRE
+# nivådomaren: dess prompt bär hela provets uppgifter och matchar därför både
+# «matteprov» och nivådomarens nyckelfras. Ordet står bara i
+# exam_gen.build_delmoment_prompt och ingen annanstans i appen — provets EGET
+# delmomentsblock heter «DELMOMENTEN KLASSEN FAKTISKT HAR UNDERVISATS I», och
+# reparationsprompten talar om «delmomentet», så ingen av dem tar bandet.
+#
+# ETT band räcker, som för räknedomaren: bandet är inspelat mot provbandets
+# derivatakapitel, och spelas det upp mot ett annat papper handlar domen om
+# uppgiftsnummer som inte finns där. Domaren fäller bara delmoment som STÅR i
+# den lista appen skickade (exam_gen.delmomentfynd), så ett band som inte
+# passar kostar ingenting.
+_DELMOMENT = "delmomentsdomare"
+
 
 def _auto(prompt):
     if _CI in prompt:
@@ -285,6 +299,8 @@ def _auto(prompt):
         return os.path.join(BAND, "relevansdomare.json")
     if _BEGRIPLIGHET in prompt:
         return os.path.join(BAND, "begriplighetsdomare.json")
+    if _DELMOMENT in prompt:
+        return os.path.join(BAND, "delmomentsdomare.json")
     if _MALLAPP in prompt:
         return os.path.join(BAND, "tavellapp.json")
     if _TACKNING in prompt:

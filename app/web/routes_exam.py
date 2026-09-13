@@ -724,10 +724,24 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # Arbetsbladet och gruppuppgiften får ingen ram: deras spann är
                 # EN lektion, och där finns inget kapitel att sprida över.
                 avsnitt: list[dict] = []
+                # DELMOMENTEN klassen faktiskt undervisats i (2026-09-13).
+                # Kapitelramen ovan räckte inte: prov 44 fördelade sina tolv
+                # uppgifter snyggt över 1.1/1.2/1.3 och missade ändå
+                # faktorisering, prefix och kubikrötter, alltså tre av tolv
+                # hållna lektioner — och krävde dessutom olikheter (kap 2) och
+                # procent i potenssamband (kap 3), som klassen inte gått
+                # igenom. Listan slås upp HÄR, efter bokblocket, av samma skäl
+                # som avsnitten: reserven läser sidorna boken just läst in.
+                # Bara PROVET, av samma skäl som ramen — arbetsbladets och
+                # gruppuppgiftens spann är EN lektion, och där är delmomentet
+                # redan hela uppdraget.
+                delmoment: list[dict] = []
                 if typ == "prov":
                     avsnitt = (routes_planning.bok_avsnitt(db_file, body)
                                or exam_gen.avsnitt_ur_moment(
                                    body.get("moment") or ""))
+                    delmoment = routes_planning.undervisade_delmoment(
+                        db_file, body, group_id=group_id, course_id=course_id)
                 # LÄRARENS VALDA UPPGIFTER, en och en — och bara för
                 # GRUPPUPPGIFTEN (lärarens dom 2026-09-09: «vissa uppgifter är
                 # inte relevanta utifrån vad som står i boken, för man utgår ju
@@ -751,7 +765,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     tidigare=tidigare_uppgifter,
                     bilder=bilder_block, utfall=utfall_block, bok=bok_block,
                     boknivaer=nivaer_block, forlaga=forlaga_block,
-                    avsnitt=avsnitt, bokuppgifter=bokuppgifter,
+                    avsnitt=avsnitt, delmoment=delmoment,
+                    bokuppgifter=bokuppgifter,
                     hjalpmedel=exam_gen.build_hjalpmedel(hjalpmedelsregel),
                     svart=svart_block, fokus=fokus_block,
                     inriktning=inriktning, profil=typ,

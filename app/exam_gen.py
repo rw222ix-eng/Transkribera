@@ -1379,6 +1379,164 @@ def build_spridning(avsnitt: list[dict], antal: int) -> str:
         "\"avsnitt\" avsnittets nummer, t.ex. \"1.2\".")
 
 
+# ─────────────────── DELMOMENTEN klassen FAKTISKT undervisats i (2026-09-13) ──
+# Kapitelramen ovan sprider uppgifterna över AVSNITTEN, och det räckte inte.
+# Prov 44 (TE26A, Ma 1c, 2026-09-16) täckte 1.1/1.2/1.3 med 2/5/5 uppgifter —
+# avsnittstackning var nöjd — men missade faktorisering och förkortning,
+# prefix och enheter och kubikrötterna, alltså tre av de tolv lektioner klassen
+# faktiskt hade haft. Ett avsnitt är fem lektioner brett; det undervisade är
+# smalare än så, och det är DET läraren menar med «vi måste ha med alla de
+# delar vi har berört i kapitel ett».
+#
+# Källan är kalendersynkens egna rader (lektionsinnehall): rubriken är
+# lektionens moment, `delar` bär moment och sidspann när lektionen hade flera.
+# INTEGRITETSGRÄNSEN gäller oförändrad — se app/calendar_google.py vid
+# _AVDELARE: bara rubrik, sidspann och uppgiftslista finns i kolumnen, och
+# bara de två första läses här.
+#
+# Reserven är bokens egna underrubriker per sida (delmoment_ur_sidor), för en
+# klass vars kalender inte är synkad. Är båda tomma blir promptblocket en TOM
+# STRÄNG och prompten byte för byte den som gick i väg förut — samma
+# kassetteregel som variationen och kapitelramen.
+
+# Delmoment som inte går att pröva på ett papper. Deterministisk ordlista och
+# ingen modellfråga: «Programmering och kalkylblad i GeoGebra» ska aldrig bli
+# en provuppgift, och en repetitionslektion är inget eget innehåll utan de
+# tidigare lektionernas. Prompten säger att de är undantagna, så att modellen
+# inte tror att den beskurna listan är hela kapitlet.
+_EJ_PROVBART = ("programmering", "kalkylblad", "geogebra", "excel",
+                "repetition", "kapiteltest", "blandade uppgifter",
+                "aktivitet", "laboration", "provräkning", "utvärdering")
+
+
+def _delmomentnamn(text: str) -> str:
+    """Rubriken som delmomentnamn: ett mellanslag, ingen skiljeteckensvans."""
+    return " ".join((text or "").split()).strip(" .,;:·-–—")
+
+
+def _ej_provbart(namn: str) -> bool:
+    n = namn.casefold()
+    return any(ord_ in n for ord_ in _EJ_PROVBART)
+
+
+def _sidspann(fran: int, till: int) -> str:
+    return f"{fran}–{till}" if till > fran else f"{fran}"
+
+
+def _delmomentlista(poster: list[tuple[int, int, str]]) -> list[dict]:
+    """(fran, till, rubrik) → dedupad lista i BOKENS ordning.
+
+    Samma rubrik två gånger (en lektion som fortsatte dagen efter) är ETT
+    delmoment med det sammanslagna sidspannet, inte två — annars hade prompten
+    bett om två uppgifter på samma sak."""
+    ut: dict[str, dict] = {}
+    for fran, till, rubrik in poster:
+        namn = _delmomentnamn(rubrik)
+        if not namn or _ej_provbart(namn):
+            continue
+        p = ut.get(namn.casefold())
+        if p is None:
+            ut[namn.casefold()] = {"namn": namn, "fran": fran, "till": till}
+        else:
+            p["fran"], p["till"] = min(p["fran"], fran), max(p["till"], till)
+    return [{"delmoment": p["namn"], "sidor": _sidspann(p["fran"], p["till"])}
+            for p in sorted(ut.values(), key=lambda p: (p["fran"], p["till"]))]
+
+
+def delmoment_ur_lektioner(rader: list[dict], *, fran: int, till: int,
+                           provdatum: str = "") -> list[dict]:
+    """Lektionsraderna → [{"delmoment": "Kubikrötter", "sidor": "5–6"}, …].
+
+    Ren funktion; `rader` har db.lektionsinnehall_for_kurs form (datum, fran,
+    till, rubrik, delar). Tre grindar, och alla tre är villkor och inte
+    optimeringar:
+
+    * DATUM. Bara lektioner FÖRE provdagen — en lektion som ligger efter
+      provet är inte undervisad, och ett prov får aldrig kräva den.
+    * SIDORNA. Bara delar som överlappar provets bokspann. Kalendern bär hela
+      läsåret; kapitel 1 är s. 2–40, och kapitel 6 hör inte hemma där.
+    * PROVBARHETEN. `_EJ_PROVBART` faller bort (se ordlistan ovan).
+
+    Delarnas egna rubriker vinner över lektionens: lektionen 25/8 heter
+    «Kubikrötter. Potenser» i kalendern men bär två delar med var sin rubrik
+    och var sitt sidspann, och det är de två som är delmomenten."""
+    poster: list[tuple[int, int, str]] = []
+    for r in rader or []:
+        if not isinstance(r, dict):
+            continue
+        if provdatum and str(r.get("datum") or "") >= str(provdatum):
+            continue
+        rubrik = str(r.get("rubrik") or "")
+        delar = [d for d in (r.get("delar") or []) if isinstance(d, dict)] \
+            if isinstance(r.get("delar"), list) else []
+        for d in (delar or [{}]):
+            try:
+                f = int(d.get("fran") or r.get("fran") or 0)
+                t = int(d.get("till") or d.get("fran")
+                        or r.get("till") or f or 0)
+            except (TypeError, ValueError):
+                continue
+            if f <= 0 or f > int(till) or t < int(fran):
+                continue
+            poster.append((f, max(f, t), str(d.get("rubrik") or "") or rubrik))
+    return _delmomentlista(poster)
+
+
+def delmoment_ur_sidor(sidor: list[dict]) -> list[dict]:
+    """RESERVEN: bokens underrubrik per sida (db.bok_sidor) som delmoment.
+
+    En klass utan synkad kalender har inga lektionsrader, men boken vet ändå
+    vad kapitlet består av — och underrubriken är smalare än avsnittet, vilket
+    är hela poängen. Sidor utan rubrik hoppas över: en oläst sida vet
+    ingenting, och en rad om den hade blivit en inbjudan att fylla luckan."""
+    poster: list[tuple[int, int, str]] = []
+    for s in sidor or []:
+        if not isinstance(s, dict):
+            continue
+        try:
+            nr = int(s.get("sida") or 0)
+        except (TypeError, ValueError):
+            continue
+        if nr > 0 and str(s.get("rubrik") or "").strip():
+            poster.append((nr, nr, str(s["rubrik"])))
+    return _delmomentlista(poster)
+
+
+def build_delmoment(delmoment: list[dict], antal: int) -> str:
+    """Delmomenten som promptblock, eller TOM STRÄNG.
+
+    Tomt när listan är tom, och det är kassetteregeln och inte en optimering
+    (samma villkor som build_spridning och build_variation): saknas underlaget
+    ska prompten vara byte för byte den som gick i väg innan blocket fanns,
+    annars är varje inspelad kassett omspelningsmogen.
+
+    Blocket säger TVÅ saker, och de hör ihop: allt undervisat ska prövas, och
+    inget ANNAT får krävas. Prov 44 föll åt båda hållen — tre delmoment utan
+    en enda uppgift, och en uppgift som krävde olikheter (kapitel 2) och en
+    som krävde procentuell förändring (kapitel 3) för att gå att lösa."""
+    if not delmoment:
+        return ""
+    rader = "\n".join(f"- {d['delmoment']} (s. {d['sidor']})"
+                      for d in delmoment)
+    return (
+        "DELMOMENTEN KLASSEN FAKTISKT HAR UNDERVISATS I, lektion för lektion, "
+        "i den ordning de togs:\n" + rader + "\n"
+        f"Varje delmoment ovan ska bära MINST EN uppgift eller deluppgift av "
+        f"provets {antal}. Räcker uppgifterna inte till får EN uppgift täcka "
+        "TVÅ närliggande delmoment (samma uppgift kan förenkla ett uttryck OCH "
+        "faktorisera det), men inget delmoment får lämnas utan. Fördela dem "
+        "över del A och del B som vanligt — delmomentet säger VAD uppgiften "
+        "prövar, inte med vilka hjälpmedel.\n"
+        "INGEN uppgift får kräva en metod som ligger UTANFÖR listan för att gå "
+        "att lösa: inga olikheter, ingen ekvationslösning, ingen procenträkning "
+        "eller förändringsfaktor, ingen geometri och inga funktioner om de inte "
+        "står ovan. Klassen har inte gått igenom dem, och en uppgift som kräver "
+        "dem prövar något annat än det den påstår sig pröva.\n"
+        "Listan är beskuren med flit: lektioner om programmering, kalkylblad "
+        "och repetition står inte där, eftersom de inte går att pröva på ett "
+        "skriftligt prov. Det betyder INTE att de ska prövas ändå.")
+
+
 # ───────────────────────────────── hjälpmedlen per del (2026-09-06) ──
 # Hjälpmedlen var husets regel: del A utan digitala verktyg, del B med räknare,
 # skrivet en gång i prompten och en gång i blad.js. Läraren bad tre gånger på
@@ -1481,7 +1639,8 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
                  memory: str = "", teman: str = "", variation: str = "",
                  referens: str = "", bilder: str = "", utfall: str = "",
                  bok: str = "", boknivaer: str = "", forlaga: str = "",
-                 spridning: str = "", hjalpmedel: str = "",
+                 spridning: str = "", delmoment: str = "",
+                 hjalpmedel: str = "",
                  svart: str = "", fokus: str = "", inriktning: str = "",
                  profil: str = "prov", koder: list[str] | None = None,
                  grupp: dict | None = None, riktat: str = "",
@@ -1567,6 +1726,14 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
     # ordagrant den som gick i väg innan ramen fanns.
     if spridning:
         block.append(spridning)
+    # DELMOMENTEN står direkt efter kapitelramen, och de två läses som en
+    # trappa: ramen säger hur uppgifterna sprids över kapitlets avsnitt,
+    # delmomenten vad klassen faktiskt HANN med inom dem. Omvänd ordning hade
+    # läst det smala före det breda. Tom sträng när kalendern och boken är
+    # tysta (build_delmoment) — prompten är då ordagrant den som gick i väg
+    # innan listan fanns.
+    if delmoment:
+        block.append(delmoment)
     # Förlagan (källdörr 4, pardokumentets andra hand) står närmast uppdraget:
     # «gör som det här pappret» är det starkaste önskemålet läraren kan ge, och
     # det ska inte tappas bakom minnet, boken eller undvik-listan.
@@ -4668,11 +4835,162 @@ def avsnittstackning(exam: dict, avsnitt: list[dict], antal: int) -> list[dict]:
     return fel
 
 
+# ── DELMOMENTSDOMAREN (2026-09-13) ───────────────────────────────────────
+# Avsnittstackning ovan är deterministisk därför att avsnittet STÅR i
+# uppgiftens eget fält. Delmomentet gör det inte, och ska inte göra det:
+# uppgiftsschemat ligger på 29 844 av 30 000 tecken (claude_code.SCHEMA_TAK_EXE,
+# mätt i tests/test_platar.py), och ett fält till hade sprängt grammatiktvånget
+# för hela provet. Alltså en LÄSARE i stället för ett fält — ett anrop, samma
+# kontrakt som de andra domarna: temperature 0, json_schema och FAIL-OPEN.
+# Ett domarfel fäller aldrig ett papper som redan är skrivet.
+#
+# Domaren svarar på lärarens två frågor, och de hör ihop: fick varje undervisat
+# delmoment en uppgift, och kräver någon uppgift en metod klassen inte fått?
+DELMOMENT_MAX_TOKENS = 4_000
+
+# Fler fynd än så är ingen lucka utan ett annat prov, och då ska läraren se
+# domen och döma själv. Taket är också vad reparationen tål: rundan ska BYTA UT
+# uppgifter, inte skriva om pappret (se _tackning_pass).
+DELMOMENT_MAX_FYND = 5
+
+DELMOMENT_SYSTEM = (
+    "Du är en svensk gymnasielärare i matematik som läser ett prov mot de "
+    "lektioner klassen faktiskt har haft. Du svarar ALLTID med giltig JSON "
+    "enligt schemat, ingenting annat."
+)
+
+DELMOMENT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "saknas": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"delmoment": {"type": "string"},
+                               "byt": {"type": "string"}},
+                "required": ["delmoment"],
+            },
+        },
+        "utanfor": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"nr": {"type": "string"},
+                               "metod": {"type": "string"}},
+                "required": ["nr", "metod"],
+            },
+        },
+    },
+    "required": ["saknas"],
+}
+
+
+def build_delmoment_prompt(kort: list[dict], delmoment: list[dict]) -> str:
+    """Delmomentsdomarens prompt. Ordet «delmomentsdomare» står här och ingen
+    annanstans i appen — uppspelningen väljer band på det (tests/fejk.py
+    `_auto`), av samma skäl som de andra domarna."""
+    lista = "\n".join(f"- {d['delmoment']} (s. {d['sidor']})"
+                      for d in delmoment)
+    return (
+        "Du är delmomentsdomare. Nedan står de delmoment klassen har "
+        "undervisats i, och därefter provets uppgifter som JSON.\n\n"
+        f"DELMOMENTEN:\n{lista}\n\n"
+        f"UPPGIFTERNA:\n{json.dumps(kort, ensure_ascii=False)}\n\n"
+        "Svara på två frågor.\n"
+        "1. TÄCKNINGEN: gå delmoment för delmoment och fråga «prövar någon "
+        "uppgift eller deluppgift det här?». En uppgift kan täcka flera "
+        "delmoment, och en deluppgift räcker. Ett delmoment som INGEN uppgift "
+        "rör är ett fynd — skriv det i \"saknas\" med delmomentets namn "
+        "ordagrant, och i \"byt\" numret på den uppgift som bäst kan bytas ut "
+        "mot en ny (den vars delmoment redan har flest uppgifter). Är du "
+        "osäker på om ett delmoment prövas: räkna det som prövat. En falsk "
+        "lucka kostar en bra uppgift.\n"
+        "2. METODER UTANFÖR: gå uppgift för uppgift och fråga «krävs en metod "
+        "som INTE står i listan för att lösa den?» — en olikhet, en ekvation, "
+        "procenträkning, geometri eller en funktion som inget delmoment rör. "
+        "Skriv då uppgiftens nummer och metoden i \"utanfor\". Att uppgiften "
+        "är svår är inget fynd; att den kräver ett annat kapitel är det.\n"
+        "Tomma listor när provet täcker delmomenten och håller sig innanför "
+        "dem. Svara med enbart JSON."
+    )
+
+
+def delmomentfynd(delmoment: list[dict], data) -> list[dict]:
+    """Domens svar → problemposter i SAMMA form som avsnittstackning, så att
+    reparationsrundan läser dem med samma _format_problems.
+
+    Bara delmoment som FAKTISKT står i listan fälls: domaren hittar annars på
+    ett delmoment som ingen lektion hade, och reparationen jagar ett spöke."""
+    if not isinstance(data, dict):
+        return []
+    kanda = {_delmomentnamn(d["delmoment"]).casefold(): d for d in delmoment}
+    ut: list[dict] = []
+    for s in (data.get("saknas") or []):
+        if not isinstance(s, dict):
+            continue
+        d = kanda.get(_delmomentnamn(str(s.get("delmoment") or "")).casefold())
+        if d is None:
+            continue
+        byt = str(s.get("byt") or "").strip()
+        text = (f"Inget ur delmomentet {d['delmoment']} (s. {d['sidor']}), "
+                "som klassen har undervisats i. ")
+        text += (f"Byt UT uppgift {_kort(byt, 12)} mot en ny uppgift ur "
+                 if byt else "Byt UT en uppgift ur det delmoment som har "
+                             "flest mot en ny uppgift ur ")
+        ut.append(_err("uppgifter", "delmomenttackning",
+                       text + f"{d['delmoment']}, samma del, samma poäng och "
+                       "samma förmåga. Lägg INTE till en uppgift."))
+    for u in (data.get("utanfor") or []):
+        if not isinstance(u, dict):
+            continue
+        nr, metod = str(u.get("nr") or "").strip(), str(u.get("metod") or "").strip()
+        if not nr or not metod:
+            continue
+        ut.append(_err(f"uppgift {nr}", "delmomenttackning",
+                       f"Uppgift {_kort(nr, 12)} kräver {_kort(metod, 80)}, "
+                       "som klassen inte har undervisats i. Byt UT den mot en "
+                       "uppgift som går att lösa med delmomenten ovan, samma "
+                       "del, samma poäng och samma förmåga."))
+    return ut[:DELMOMENT_MAX_FYND]
+
+
+def doma_delmoment(exam: dict, delmoment: list[dict] | None, *, model: str,
+                   llm=llm_client.generate,
+                   log_cb: Callable[[str], None] | None = None) -> list[dict]:
+    """Ett domaranrop → fynd där provet missar ett undervisat delmoment eller
+    kräver en metod utanför dem.
+
+    Utan delmomentlista körs INGENTING, precis som relevansdomaren utan bok:
+    finns ingen lista finns inget kontrakt, och en dom mot ett tomt underlag
+    hade fällt varje uppgift på ett papper som ingen kalender gällde."""
+    log = log_cb or (lambda _m: None)
+    kort = uppgiftskort(exam or {})
+    if not kort or not delmoment:
+        return []
+    log("Delmomentsdomaren läser provet mot lektionerna …")
+    try:
+        raw = llm(model, build_delmoment_prompt(kort, delmoment),
+                  system=DELMOMENT_SYSTEM,
+                  options={"temperature": 0.0},
+                  response_format={"type": "json_schema",
+                                   "json_schema": {"name": "delmomentdom",
+                                                   "schema": DELMOMENT_SCHEMA}},
+                  max_tokens=DELMOMENT_MAX_TOKENS,
+                  token_cb=None)
+    except Exception as e:                          # noqa: BLE001
+        # FAIL-OPEN också mot nätet: domaren körs EFTER att pappret är skrivet,
+        # och ett nätfel i det extra anropet ska inte kosta genereringen.
+        log(f"Delmomentsdomaren kunde inte nås ({e}) — provet lämnas som det är.")
+        return []
+    return delmomentfynd(delmoment, _json_objekt(raw))
+
+
 def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                    antal: int | None, skeleton: list[dict] | None,
                    avsnitt: list[dict], rounds_used: int, max_rounds: int,
                    koder: list[str] | None = None,
                    niva_mal: dict | None = None,
+                   delmoment: list[dict] | None = None, doma: bool = True,
                    log_cb: Callable[[str], None] | None = None) -> dict:
     """Kapitelramens kontroll, med SAMMA kontrakt som _rakneverk_pass: högst EN
     reparationsrunda, samma budget, samma «rent före, trasigt efter»-grind, och
@@ -4684,15 +5002,31 @@ def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
     skrevs om ändå."""
     log = log_cb or (lambda _m: None)
     fel = avsnittstackning(exam, avsnitt, antal or 0)
-    if not fel:
-        return {"exam": exam, "errors": errors, "rounds": rounds_used}
     # Loggraden namnger avsnitten, inte antalet fynd: «Täckningen: 1.1 saknar
-    # uppgifter» säger vad som är fel, «1 problem» säger ingenting.
+    # uppgifter» säger vad som är fel, «1 problem» säger ingenting. Byggs FÖRE
+    # delmomentsfynden läggs till: de har en annan meningsform, och en split på
+    # «avsnitt » hade gett dem ett tomt namn.
     saknade = ", ".join(f["message"].split("avsnitt ", 1)[-1].split(" ", 1)[0]
                         for f in fel)
+    # DELMOMENTEN I SAMMA RUNDA, och det är hela poängen med att lägga dem här
+    # (lärarens beställning 2026-09-13). En egen runda för dem hade bett
+    # modellen om ett nytt prov ovanpå ett nyss lagat; nu står avsnittsluckan
+    # och delmomentsluckan i SAMMA reparationsprompt, och båda lagas genom att
+    # uppgifter BYTS UT. `doma=False` stänger av anropet av samma skäl som det
+    # stänger av de andra domarna: flaggan betyder «inga extra modellanrop».
+    if doma:
+        fel = fel + doma_delmoment(exam, delmoment, model=model, llm=llm,
+                                   log_cb=log_cb)
+    if not fel:
+        return {"exam": exam, "errors": errors, "rounds": rounds_used}
     if rounds_used >= max_rounds:
         return {"exam": exam, "errors": errors + fel, "rounds": rounds_used}
-    log(f"Täckningen: {saknade} saknar uppgifter, justerar …")
+    if saknade:
+        log(f"Täckningen: {saknade} saknar uppgifter, justerar …")
+    delfel = [f for f in fel if f["code"] == "delmomenttackning"]
+    if delfel:
+        log(f"Delmomenten: {len(delfel)} fynd mot lektionerna, byter ut "
+            "uppgifter …")
     kandidat = _llm_round(build_repair_prompt(exam, fel + errors, profil),
                           model, llm, antal, skeleton, koder, profil=profil,
                           log_cb=log_cb,
@@ -5171,6 +5505,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                   boknivaer: str = "", forlaga: str = "",
                   hjalpmedel: str = "",
                   avsnitt: list[dict] | None = None,
+                  delmoment: list[dict] | None = None,
                   svart: str = "", fokus: str = "", inriktning: str = "",
                   profil: str = "prov",
                   koder: list[str] | None = None, riktat: str = "",
@@ -5237,7 +5572,16 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     spridningsblocket går in i prompten (build_spridning) och täckningen
     kontrolleras på det som kom tillbaka (_tackning_pass). Utan den, eller med
     färre än två avsnitt, är prompten byte för byte den som gick i väg förut
-    och ingen kontroll körs."""
+    och ingen kontroll körs.
+
+    `delmoment` är DE UNDERVISADE DELMOMENTEN (routes_planning.
+    undervisade_delmoment): lektionsrubrikerna klassen faktiskt hunnit med
+    inom provets bokspann. Den gör samma två saker som kapitelramen — blocket
+    går in i prompten (build_delmoment) och täckningen prövas på det som kom
+    tillbaka (doma_delmoment, i _tackning_pass) — och skillnaden mot ramen är
+    att listan är smalare än avsnitten och att domaren är en LÄSARE, inte ett
+    fält på uppgiften. Tom lista lämnar prompten ordagrant som den var och
+    kostar inget anrop."""
     log = log_cb or (lambda _m: None)
     # `steg` NAMNGER var i arbetet vi är; `log` säger vad som händer just nu.
     # Skillnaden syns i gränssnittet: namnet flyttar mätaren ett helt steg,
@@ -5277,12 +5621,16 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # TOM STRÄNG och därmed en oförändrad prompt: samma kassetteregel som
     # variationen ovan.
     spridning = build_spridning(avsnitt or [], antal)
+    # Delmomenten (2026-09-13). Samma villkor och samma skäl som ovan: tom
+    # lista ger en TOM STRÄNG och en oförändrad prompt.
+    delmomentblock = build_delmoment(delmoment or [], antal)
     prompt = build_prompt(kurs, klass, punkter, antal=antal, tid_min=tid_min,
                           delar=delar, memory=memory, teman=teman,
                           variation=variation,
                           referens=referens, bilder=bilder, utfall=utfall,
                           bok=bok, boknivaer=boknivaer, forlaga=forlaga,
-                          spridning=spridning, hjalpmedel=hjalpmedel,
+                          spridning=spridning, delmoment=delmomentblock,
+                          hjalpmedel=hjalpmedel,
                           svart=svart, fokus=fokus, inriktning=inriktning,
                           profil=profil, koder=koder, grupp=grupp,
                           riktat=riktat, skeleton=skeleton,
@@ -5317,10 +5665,17 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # här ska sympy räkna på den nya, inte på den som försvann. Körs bara när
     # ramen faktiskt skickades in, och fäller aldrig ett papper vars uppgifter
     # saknar fältet (se avsnittstackning).
-    if res["exam"] is not None and avsnitt:
+    #
+    # DELMOMENTEN döms i samma pass (2026-09-13) och därför i samma
+    # reparationsrunda: en lucka i kapitlet och en lucka bland lektionerna är
+    # samma sorts fel, och båda lagas genom att en uppgift byts ut. Passet körs
+    # så snart NÅGON av de två listorna finns.
+    if res["exam"] is not None and (avsnitt or delmoment):
         res = _tackning_pass(res["exam"], res["errors"], model=model, llm=llm,
                              profil=profil, antal=antal, skeleton=grammatik,
-                             avsnitt=avsnitt, koder=koder, niva_mal=niva_mal,
+                             avsnitt=avsnitt or [], koder=koder,
+                             niva_mal=niva_mal, delmoment=delmoment or [],
+                             doma=doma,
                              rounds_used=res["rounds"], max_rounds=max_rounds,
                              log_cb=log_cb)
     # ── RÄKNEVERKET (Etapp 4) ────────────────────────────────────────

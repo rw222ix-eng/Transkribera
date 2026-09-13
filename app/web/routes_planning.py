@@ -21,9 +21,9 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse
 
-from app import (bok, ci_forslag, course_data, db, dokumentdiff, forlaga,
-                 gpu_arbiter, lararord, lesson_board, llm_client, pdfvakt,
-                 rattning, spar)
+from app import (bok, ci_forslag, course_data, db, dokumentdiff, exam_gen,
+                 forlaga, gpu_arbiter, lararord, lesson_board, llm_client,
+                 pdfvakt, rattning, spar)
 from app.web import Id64, _kropp
 from app.web.sse import (Stege, jobb_response, sse_response,
                          stoppa_om_avbrutet)
@@ -503,6 +503,51 @@ def bok_avsnitt(db_file: Path, body: dict) -> list[dict]:
     finally:
         conn.close()
     return bok.avsnittslista(sidor)
+
+
+def undervisade_delmoment(db_file: Path, body: dict, *,
+                          group_id: int | None,
+                          course_id: int | None) -> list[dict]:
+    """DELMOMENTEN klassen faktiskt gått igenom inom provets bokspann.
+
+    Lärarens beställning 2026-09-13: «när jag genererar provet ska det gå från
+    första början … vi måste ha med alla de delar vi har berört i kapitel
+    ett.» Kapitelramen (bok_avsnitt) sprider över AVSNITT, och prov 44 var nöjt
+    på den nivån samtidigt som tre undervisade lektioner saknades helt.
+
+    Två källor, i ordning, och båda kostar en SELECT och inget modellanrop:
+    1. KALENDERN (lektionsinnehall) — rubriken per lektion är momentet, och
+       den är lärarens egen. Datum före provet, sidor inom spannet.
+    2. BOKEN som reserv — underrubriken per sida, för en klass vars kalender
+       inte är synkad.
+
+    Tom lista när bokdörren är stängd, när klassen är okänd eller när ingen av
+    källorna vet något: prompten ska då se ut precis som den gjorde innan
+    listan fanns (exam_gen.build_delmoment), och ingen domare körs."""
+    val = bok_val(body)
+    if val is None:
+        return []
+    bid, fran, till = val
+    # Id:n, inte namn: anroparen har redan slagit upp klassen och kursen
+    # (routes_exam._ids), och kalenderrubrikernas kursnamn går inte att lita på
+    # (se minnet «Kursnamn ur rubriker»).
+    try:
+        gid, cid = int(group_id or 0), int(course_id or 0)
+    except (TypeError, ValueError):
+        return []
+    provdatum = (body.get("datum") or "").strip()
+    conn = db.connect(db_file)
+    try:
+        rader = (db.lektionsinnehall_for_kurs(conn, gid, cid)
+                 if gid and cid else [])
+        ut = exam_gen.delmoment_ur_lektioner(rader, fran=fran, till=till,
+                                             provdatum=provdatum)
+        if ut:
+            return ut
+        return exam_gen.delmoment_ur_sidor(
+            db.bok_sidor(conn, bid, fran, till, med_text=False))
+    finally:
+        conn.close()
 
 
 def bok_nivaer(db_file: Path, body: dict, *, profil: str,

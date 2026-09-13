@@ -2500,6 +2500,38 @@ def list_lektionsinnehall(conn: sqlite3.Connection) -> list[dict]:
     return ut
 
 
+def lektionsinnehall_for_kurs(conn: sqlite3.Connection, group_id: int,
+                              course_id: int) -> list[dict]:
+    """Lektionsraderna for EN klass och EN kurs, med id:n i stallet for namn.
+
+    list_lektionsinnehall ovan ar frontendens form: klass och kurs som NAMN,
+    hela laroaret i en hog. Provgenereringen har id:n och behover ett urval
+    (exam_gen.delmoment_ur_lektioner) — och namnvagen ar inte sakrare an
+    kalenderrubrikerna, som byter lydelse (se minnet «Kursnamn ur rubriker»).
+    Darfor en egen fraga i stallet for ett filter pa namn.
+
+    Bara de tre falt delmomenten behover: datum, sidspann och rubrik, plus
+    `delar` for lektionen som bar flera moment. Integritetsgransen gar vid
+    kolumnerna — se app/calendar_google.py vid _AVDELARE."""
+    rows = conn.execute(
+        "SELECT datum, tid, fran, till, rubrik, delar FROM lektionsinnehall "
+        "WHERE group_id = ? AND course_id = ? ORDER BY datum, tid, id",
+        (int(group_id), int(course_id))).fetchall()
+    ut = []
+    for r in rows:
+        p = {"datum": r["datum"], "tid": r["tid"] or "",
+             "fran": r["fran"], "till": r["till"], "rubrik": r["rubrik"] or ""}
+        if r["delar"]:
+            try:
+                delar = json.loads(r["delar"])
+            except (ValueError, TypeError):
+                delar = None                # trasig JSON: raden ar anda sann
+            if isinstance(delar, list) and delar:
+                p["delar"] = delar
+        ut.append(p)
+    return ut
+
+
 # Samma tak som synken kapar vid (calendar_google._RUBRIKTAK). Star har for att
 # basen inte ska lita pa att anroparen redan gjort det.
 _RUBRIKTAK = 60

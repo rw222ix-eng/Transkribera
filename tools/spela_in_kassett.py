@@ -103,6 +103,22 @@ LÄRARENS MOMENT för lektionen: 2.3 Andragradsekvationer och pq-formeln"""
 # (andragradsfunktioner, Ma2c) — ett bokunderlag om något ANNAT hade gjort
 # bandet till en dom där varje uppgift fälls, och den domen säger mer om
 # inspelningen än om appen.
+# Delmomentsdomarens kontrakt: de lektioner klassen haft, som
+# exam_gen.delmoment_ur_lektioner skriver dem. Provbandet är Ma3c (derivata),
+# så listan är det kapitlets egna lektioner — och «Gränsvärden» finns med med
+# flit fastän ingen uppgift i bandet prövar det: en dom mot ett papper som
+# täcker allt hade spelat in en tom lista, och då prövar uppspelningen aldrig
+# tolkningen av ett fynd.
+DELMOMENT = [
+    {"delmoment": "Ändringskvot och genomsnittlig förändringshastighet",
+     "sidor": "8–11"},
+    {"delmoment": "Gränsvärden", "sidor": "12–15"},
+    {"delmoment": "Derivatans definition", "sidor": "16–19"},
+    {"delmoment": "Deriveringsregler för polynom", "sidor": "20–24"},
+    {"delmoment": "Derivatan av exponentialfunktioner", "sidor": "25–28"},
+    {"delmoment": "Extrempunkter och teckenstudium", "sidor": "29–34"},
+]
+
 BOKUPPGIFTER = [
     {"nr": 2401, "niva": 1,
      "text": "Bestäm nollställena till $f(x) = x^2 - 4x$."},
@@ -269,6 +285,20 @@ SCENARIER = {
             BOKUPPGIFTER, ["Andragradsfunktioner"]),
         "system": lambda: exam_gen.RELEVANS_SYSTEM,
         "schema": lambda: exam_gen.RELEVANS_SCHEMA,
+    },
+    # Delmomentsdomaren (2026-09-13) döms mot PROVBANDET, av samma skäl som
+    # räknedomaren: en dom utan papper är ingen dom. Delmomenten är bandets
+    # egen kurs (Ma3c, derivata) skriven som kalendern skriver dem — en rad
+    # per lektion med sitt sidspann. Listan är KONSTRUERAD av samma skäl som
+    # CI_MATERIAL: ett riktigt kalenderspann hade krävt att just den klassens
+    # lektioner låg i basen när bandet spelades in.
+    "delmomentsdomare": {
+        "vad": ("exam_gen.doma_delmoment — täcker provbandet de delmoment "
+                "klassen undervisats i, och håller det sig innanför dem?"),
+        "prompt": lambda: exam_gen.build_delmoment_prompt(
+            exam_gen.uppgiftskort(_bandets_dokument("prov")), DELMOMENT),
+        "system": lambda: exam_gen.DELMOMENT_SYSTEM,
+        "schema": lambda: exam_gen.DELMOMENT_SCHEMA,
     },
     "begriplighetsdomare": {
         "vad": ("exam_gen.doma_begriplighet — förstår alla elever "
