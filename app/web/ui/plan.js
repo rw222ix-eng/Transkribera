@@ -5339,6 +5339,51 @@
   const fhskal = $('#forhandsskal');
   let fhIndex = -1;
   const fhTangent = e => { if (e.key === 'Escape') fhStang(); };
+  /* ── BILDERNA SOM LIGGER KVAR PÅ DISK ─────────────────
+     Lärarens egna bilder bor som data-URL:er i dokumentet (`v.bilder`, skrivna
+     av valjBild) och förhandsvisningen ritar bara den. Bär pappret dem inte,
+     för att markören står på ett varv från före bilderna eller en dubblett
+     hamnade i högen, visas tomma rutor fast bilderna FINNS: godkännandet
+     skrev dem till utkatalogen (egen-NN.png, egen-forsatt.png) och de ligger
+     kvar där.
+
+     Katalogen är därför reserven, via /api/exams/{id}/egna. Reglerna, och
+     varför:
+       * INGEN SERVER, INGET PROV-ID → ingen reserv. Prototypen och offline-
+         läget har ingenting att läsa ur, och `provBorta` betyder att raden är
+         raderad: id:t får inte användas, SQLite återanvänder radnummer.
+       * BARA NÄR DOKUMENTET SAKNAR BILDER HELT. Ett papper som bär sina egna
+         bilder är det normala och behöver ingen läsning alls. Felet är det
+         tomma pappret. Ett anrop per papper och sidladdning, som speglaExamen.
+       * INGEN SKRIVNING TILLBAKA. URL:erna läggs i en sidokarta, aldrig i
+         `v.bilder`: dokumentet ska inte få en ny version av att någon TITTAT
+         på det, och godkännandet skickar med `bilder` till servern (approve →
+         tryck.egna_bilder) där bara data-URL:er duger. En URL där hade tystat
+         bort bilden ur nästa tryck.
+     Ritas gör bara förhandsvisningen med kartan. Canvasen ritar AV sina blad
+     till PNG vid godkännandet, och en `<img>` mot en URL laddas inte alls
+     inuti den SVG:n (blad-bild.js fälla 1). */
+  const egnaPaDisk = new WeakMap();     /* papper → {nyckel: URL} */
+  const egnaLasta = new WeakSet();
+  function egnaFranDisk(v) {
+    if (!serverPa() || !v || v.provBorta || !v.provId) return Promise.resolve(false);
+    if (Object.keys(v.bilder || {}).length) return Promise.resolve(false);
+    if (egnaLasta.has(v)) return Promise.resolve(false);
+    egnaLasta.add(v);
+    return window.API.json(`/api/exams/${v.provId}/egna`).then(res => {
+      if (!res || typeof res !== 'object' || !Object.keys(res).length) return false;
+      egnaPaDisk.set(v, res);
+      return true;
+    }).catch(() => false);
+  }
+  /* Pappret så som det ska RITAS: dokumentets egna bilder vinner alltid, och
+     disken fyller bara de nycklar dokumentet inte har. En kopia, inte pappret
+     självt, se regeln om ingen skrivning tillbaka ovan. */
+  function medEgnaBilder(v) {
+    const karta = egnaPaDisk.get(v);
+    if (!karta) return v;
+    return Object.assign({}, v, { bilder: Object.assign({}, karta, v.bilder) });
+  }
   function forhandsvisa(i) {
     const v = sparat[i];
     if (!v || !fhskal) return;
@@ -5354,7 +5399,7 @@
     if ($('#fh-fortsatt')) $('#fh-fortsatt').hidden = !kanAndras;
     if ($('#fh-last')) $('#fh-last').hidden = !kanAndras;
     ritaEgrans(v);
-    ritaIn($('#fh-ark'), v);
+    ritaIn($('#fh-ark'), medEgnaBilder(v));
     fhskal.hidden = false;
     requestAnimationFrame(() => fhskal.setAttribute('data-pa', ''));
     document.addEventListener('keydown', fhTangent);
@@ -5368,7 +5413,13 @@
        `fhIndex`-vakten: hann läraren stänga rutan eller bläddra till ett annat
        papper ska svaret inte rita in sig i det hon tittar på nu. */
     speglaExamen(v).then(bytt => {
-      if (bytt && fhIndex === i && !fhskal.hidden) ritaIn($('#fh-ark'), v);
+      if (bytt && fhIndex === i && !fhskal.hidden) ritaIn($('#fh-ark'), medEgnaBilder(v));
+    });
+    /* Och bilderna ur utkatalogen när svaret landar, med samma vakt: hann läraren
+       stänga rutan eller bläddra vidare ska de inte rita in sig i ett annat
+       papper. Arket står färdigt under tiden; reserven fyller bara rutorna. */
+    egnaFranDisk(v).then(fanns => {
+      if (fanns && fhIndex === i && !fhskal.hidden) ritaIn($('#fh-ark'), medEgnaBilder(v));
     });
   }
   /* ── E-GRÄNSEN PÅ ETT GODKÄNT PROV ────────────────────
@@ -5426,8 +5477,9 @@
         v.granser = res.granser;
         ritaEgrans(v);
         /* Arket ritas om: betygstabellen på försättsbladet är det läraren
-           ser, och den ska ändras i samma gest som talet. */
-        ritaIn($('#fh-ark'), v);
+           ser, och den ska ändras i samma gest som talet. Med reserven kvar:
+           utan den hade bilderna slocknat när E-gränsen flyttades. */
+        ritaIn($('#fh-ark'), medEgnaBilder(v));
         window.toast && window.toast(res.varning
           ? `E-gränsen är ${res.e_minst} p. ${res.varning}`
           : `E-gränsen är ${res.e_minst} p. PDF:en är ombyggd.`);
