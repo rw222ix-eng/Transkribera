@@ -104,6 +104,42 @@ def test_ensamt_papper_ar_ingen_dubblett(conn):
     assert rep.samla(conn)["dubbletter"] == []
 
 
+# ── vakten: lösningsbladet ──────────────────────────────────────────────────
+
+def test_losningsblad_raderas_aldrig_som_dubblett(conn):
+    """Skarpt fall 2026-09-13: dokument 130 var prov 44:s lösningsblad och
+    uppfyllde ALLA fyra dubblettvillkoren — en version, tomma bilder, samma
+    provId, identiska uppgifter. `losningsblad` är den enda skillnaden."""
+    b = {"forsatt": "data:image/png;base64,AA"}
+    original = _dok(conn, [papper(), papper(bilder=b)])
+    blad = _dok(conn, [papper(losningsblad=True)])
+    fynd = rep.samla(conn)
+    assert fynd["dubbletter"] == []
+    assert [f["id"] for f in fynd["fredade"]] == [blad]
+    assert fynd["fredade"][0]["original"] == original
+    rep.reparera(conn, fynd)
+    assert db.get_dokument(conn, blad) is not None
+
+
+def test_dry_run_sager_varfor_losningsbladet_fredas(conn, tmp_path, capsys):
+    b = {"forsatt": "data:image/png;base64,AA"}
+    _dok(conn, [papper(), papper(bilder=b)])
+    blad = _dok(conn, [papper(losningsblad=True)])
+    conn.close()
+    rep.main(["--db", str(tmp_path / "t.db")])
+    ut = capsys.readouterr().out
+    assert f"FREDAT: dokument {blad}" in ut and "losningsblad: true" in ut
+
+
+def test_fredat_blad_raknas_inte_som_atgard(conn):
+    """En fredad rad är en förklaring, inte en ändring — annars säger verktyget
+    att det har jobb kvar att göra efter att allt är lagat."""
+    b = {"forsatt": "data:image/png;base64,AA"}
+    _dok(conn, [papper(), papper(bilder=b)])
+    _dok(conn, [papper(losningsblad=True)])
+    assert rep.antal_atgarder(rep.samla(conn)) == 0
+
+
 # ── exams-statusen ──────────────────────────────────────────────────────────
 
 def _exam(conn, pdf=None):
@@ -192,7 +228,7 @@ def test_verkstall_lagar_allt_och_lamnar_inget_kvar(conn, tmp_path):
         assert vy["markor"] == 1 and list(vy["dokument"]["bilder"]) == ["forsatt"]
         assert db.get_dokument(c2, kopia) is None
         assert db.get_exam(c2, exam_id)["status"] == rep.EXAM_GODKANT
-        assert all(v == [] for v in rep.samla(c2).values())
+        assert rep.antal_atgarder(rep.samla(c2)) == 0
     finally:
         c2.close()
     assert list((tmp_path / "Transkriberingar" / "backup").glob("*.db"))

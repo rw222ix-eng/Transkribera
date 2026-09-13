@@ -21,6 +21,8 @@ Verktyget lagar bara det som är trasigt, aldrig mer:
      med samma provId som ett annat godkänt dokument, EN enda version, `bilder`
      tomt, och `uppgifter` byte-identiska med originalets v0. Ett papper med
      egna bilder eller egna uppgifter är lärarens arbete och rörs aldrig.
+     Och framför allt: ett LÖSNINGSBLAD är aldrig en dubblett, hur likt provet
+     det än ser ut. Se `_ar_losningsblad`.
   3. EXAMS.STATUS stämplas om till 'godkänt' med samma db-funktion som
      approve använder (set_exam_artifacts(approve=True)) — bara när dokumentet
      är godkänt OCH pdf:en faktiskt ligger på disk. Ingen fil, ingen stämpel.
@@ -110,6 +112,26 @@ def _uppgifter(conn: sqlite3.Connection, dokument_id: int, version: int):
     return json.loads(rad["u"]) if rad and rad["u"] else None
 
 
+def _ar_losningsblad(conn: sqlite3.Connection, dokument_id: int) -> bool:
+    """Bär pappret `losningsblad: true`?
+
+    VAKTEN, skriven efter att den här körningen raderade prov 44:s lösningsblad
+    (dokument 130) som «dubblett» 2026-09-13. Bladet ÄR en klon av provet: det
+    kopieras ur samma version vid varje godkännande, ärver provId, titel, datum
+    och uppgifter rakt av, och ersätter sin föregångare i stället för att läggas
+    bredvid (db.stada_losningsblad, plan.js ~5612). Alla fyra dubblettvillkoren
+    håller därför för ett lösningsblad — en enda version, tomma `bilder`,
+    identiska `uppgifter`, samma provId — och det är precis vad som gör det
+    farligt: den enda nyckeln som skiljer det från provet är den här.
+
+    Att slå på facit i stället för att gissa ur formen är hela poängen. Ett
+    lösningsblad kan aldrig bli en dubblett, oavsett vad resten av raden säger."""
+    rad = conn.execute(
+        "SELECT json_extract(data, '$.losningsblad') AS lb FROM dokument_versioner "
+        "WHERE dokument_id = ? ORDER BY version LIMIT 1", (dokument_id,)).fetchone()
+    return bool(rad and rad["lb"])
+
+
 def hitta_dubbletter(conn: sqlite3.Connection) -> list[dict]:
     """Tomma kopior som ett omgodkännande lade bredvid originalet.
 
@@ -141,8 +163,13 @@ def hitta_dubbletter(conn: sqlite3.Connection) -> list[dict]:
                 continue
             if _uppgifter(conn, r["id"], 0) != _uppgifter(conn, original["id"], 0):
                 continue
-            ut.append({"id": r["id"], "provid": pid, "original": original["id"],
-                       "original_versioner": original["antal"]})
+            post = {"id": r["id"], "provid": pid, "original": original["id"],
+                    "original_versioner": original["antal"],
+                    # Vakten sist, efter att allt annat matchat: det är just de
+                    # rader som ser ut som dubbletter som ska granskas, och
+                    # dry-run ska kunna säga varför en av dem ändå fredas.
+                    "losningsblad": _ar_losningsblad(conn, r["id"])}
+            ut.append(post)
     return ut
 
 
@@ -216,10 +243,21 @@ def reparera(conn: sqlite3.Connection, fynd: dict) -> list[str]:
 
 # ── utskrift ────────────────────────────────────────────────────────────────
 
+# De tre nycklar som betyder «det här SKRIVS». `fredade` står utanför med
+# flit: den är en förklaring till läraren, inte en ändring att räkna.
+ATGARDER = ("markor", "dubbletter", "exams")
+
+
 def samla(conn: sqlite3.Connection) -> dict:
+    kandidater = hitta_dubbletter(conn)
     return {"markor": hitta_markorfel(conn),
-            "dubbletter": hitta_dubbletter(conn),
-            "exams": hitta_examstatus(conn)}
+            "dubbletter": [d for d in kandidater if not d["losningsblad"]],
+            "exams": hitta_examstatus(conn),
+            "fredade": [d for d in kandidater if d["losningsblad"]]}
+
+
+def antal_atgarder(fynd: dict) -> int:
+    return sum(len(fynd[k]) for k in ATGARDER)
 
 
 def skriv_ut(fynd: dict) -> None:
@@ -237,6 +275,10 @@ def skriv_ut(fynd: dict) -> None:
               f"({f['original_versioner']} versioner)")
     if not fynd["dubbletter"]:
         print("  (inget)")
+    for f in fynd.get("fredade") or []:
+        print(f"  FREDAT: dokument {f['id']} (prov {f['provid']}) ser ut som en "
+              f"dubblett av {f['original']} men bär losningsblad: true — ett "
+              f"lösningsblad är en klon av provet och raderas aldrig")
     print("EXAMS — dokumentet godkänt och pdf:en på disk, men provraden är utkast")
     for f in fynd["exams"] or []:
         print(f"  exams {f['provid']}: {f['status']} → {EXAM_GODKANT} "
@@ -256,7 +298,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         fynd = samla(conn)
         skriv_ut(fynd)
-        antal = sum(len(v) for v in fynd.values())
+        antal = antal_atgarder(fynd)
         if not a.verkstall:
             print(f"\nDRY-RUN — {antal} ändringar. Kör med --verkstall för att skriva.")
             return 0
@@ -267,8 +309,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\nSäkerhetskopia: {kopia}")
         for rad in reparera(conn, fynd):
             print("  ", rad)
-        kvar = samla(conn)
-        print(f"Kvar efter reparation: {sum(len(v) for v in kvar.values())}")
+        print(f"Kvar efter reparation: {antal_atgarder(samla(conn))}")
     finally:
         conn.close()
     return 0
