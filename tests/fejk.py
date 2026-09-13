@@ -286,9 +286,10 @@ _BEGRIPLIGHET = "begriplighetsdomare"
 #
 # ETT band räcker, som för räknedomaren: bandet är inspelat mot provbandets
 # derivatakapitel, och spelas det upp mot ett annat papper handlar domen om
-# uppgiftsnummer som inte finns där. Domaren fäller bara delmoment som STÅR i
-# den lista appen skickade (exam_gen.delmomentfynd), så ett band som inte
-# passar kostar ingenting.
+# uppgiftsnummer som inte finns där. Sedan kvällen 2026-09-13 läser appen bara
+# bandets «utanfor» (exam_gen.metodfynd) — täckningen räknas ur uppgifternas
+# egna fält (delmomenttackning) — så ett band som inte passar kostar
+# ingenting.
 _DELMOMENT = "delmomentsdomare"
 
 

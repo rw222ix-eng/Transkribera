@@ -105,10 +105,10 @@ LÄRARENS MOMENT för lektionen: 2.3 Andragradsekvationer och pq-formeln"""
 # inspelningen än om appen.
 # Delmomentsdomarens kontrakt: de lektioner klassen haft, som
 # exam_gen.delmoment_ur_lektioner skriver dem. Provbandet är Ma3c (derivata),
-# så listan är det kapitlets egna lektioner — och «Gränsvärden» finns med med
-# flit fastän ingen uppgift i bandet prövar det: en dom mot ett papper som
-# täcker allt hade spelat in en tom lista, och då prövar uppspelningen aldrig
-# tolkningen av ett fynd.
+# så listan är det kapitlets egna lektioner. «Gränsvärden» står kvar fastän
+# ingen uppgift i bandet prövar det — luckan var ett fynd när domaren också
+# dömde om täckningen, och sedan den räknas i stället (exam_gen.
+# delmomenttackning) är listan bara den ram domaren mäter METODERNA mot.
 DELMOMENT = [
     {"delmoment": "Ändringskvot och genomsnittlig förändringshastighet",
      "sidor": "8–11"},
@@ -293,8 +293,8 @@ SCENARIER = {
     # CI_MATERIAL: ett riktigt kalenderspann hade krävt att just den klassens
     # lektioner låg i basen när bandet spelades in.
     "delmomentsdomare": {
-        "vad": ("exam_gen.doma_delmoment — täcker provbandet de delmoment "
-                "klassen undervisats i, och håller det sig innanför dem?"),
+        "vad": ("exam_gen.doma_delmoment — kräver någon uppgift i provbandet "
+                "en metod utanför de delmoment klassen undervisats i?"),
         "prompt": lambda: exam_gen.build_delmoment_prompt(
             exam_gen.uppgiftskort(_bandets_dokument("prov")), DELMOMENT),
         "system": lambda: exam_gen.DELMOMENT_SYSTEM,

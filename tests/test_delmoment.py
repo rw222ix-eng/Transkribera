@@ -204,25 +204,29 @@ def _prov() -> dict:
 
 
 def test_domaren_ger_fynd_i_samma_form_som_avsnittstackningen():
-    svar = json.dumps({"saknas": [{"delmoment": "Kubikrötter", "byt": "2"},
-                                  {"delmoment": "Uttryck"}],
-                       "utanfor": [{"nr": "2", "metod": "olikheter"}]})
+    svar = json.dumps({"saknas": [], "utanfor": [{"nr": "2",
+                                                  "metod": "olikheter"}]})
     llm, anrop = _stub_llm([svar])
     fel = exam_gen.doma_delmoment(_prov(), _delmoment(), model="m", llm=llm)
     assert len(anrop) == 1 and "delmomentsdomare" in anrop[0]["prompt"]
-    assert [f["code"] for f in fel] == ["delmomenttackning"] * 3
-    # Sidspannet står i fyndet, och ordern är BYT UT — inte «lägg till».
-    assert "Kubikrötter (s. 5–6)" in fel[0]["message"]
-    assert "Byt UT uppgift 2" in fel[0]["message"]
-    assert "Lägg INTE till" in fel[0]["message"]
-    assert "flest" in fel[1]["message"]        # utan «byt» i domen
-    assert "olikheter" in fel[2]["message"] and fel[2]["path"] == "uppgift 2"
+    assert [f["code"] for f in fel] == ["delmomenttackning"]
+    assert "olikheter" in fel[0]["message"] and fel[0]["path"] == "uppgift 2"
+    # Ordern är BYT UT — inte «lägg till» och inte «skriv om provet».
+    assert "Byt UT den" in fel[0]["message"]
 
 
-def test_domaren_hittar_inte_pa_ett_delmoment_som_ingen_lektion_hade():
-    llm, _ = _stub_llm([json.dumps({"saknas": [{"delmoment": "Derivata"}]})])
+def test_domaren_domer_inte_langre_om_tackningen():
+    """Fynd 1, den skarpa körningen 2026-09-13: läsaren rapporterade noll
+    luckor på ett prov som saknade ett helt delmoment. Frågan är en RÄKNING
+    och har flyttat till delmomenttackning — svarar ett gammalt band ändå om
+    «saknas» ska det ignoreras, annars står samma lucka två gånger."""
+    svar = json.dumps({"saknas": [{"delmoment": "Kubikrötter", "byt": "2"},
+                                  {"delmoment": "Uttryck"}], "utanfor": []})
+    llm, anrop = _stub_llm([svar])
     assert exam_gen.doma_delmoment(_prov(), _delmoment(), model="m",
                                    llm=llm) == []
+    assert "TÄCKNINGEN" not in anrop[0]["prompt"]
+    assert "METODER UTANFÖR" in anrop[0]["prompt"]
 
 
 def test_domaren_ar_fail_open():
@@ -249,9 +253,109 @@ def test_domaren_kostar_inget_anrop_utan_lista_eller_utan_uppgifter():
 
 
 def test_taket_haller_reparationen_till_ett_byte():
-    dom = {"saknas": [{"delmoment": d["delmoment"]} for d in _delmoment()]}
-    fel = exam_gen.delmomentfynd(_delmoment(), dom)
-    assert len(fel) == exam_gen.DELMOMENT_MAX_FYND
+    dom = {"utanfor": [{"nr": str(n), "metod": "olikheter"}
+                       for n in range(1, 10)]}
+    assert len(exam_gen.metodfynd(dom)) == exam_gen.DELMOMENT_MAX_FYND
+
+
+# ── täckningen: RÄKNAD, inte läst ────────────────────────────────────────
+
+def _prov_som_tacker(utom: str = "") -> dict:
+    """Ett prov med en uppgift per undervisat delmoment — utom ett."""
+    return {"titel": "Prov: Kapitel 1", "uppgifter": [
+        {"del": "B", "poang": [1, 0, 0], "text": f"En uppgift om {n}.",
+         "losning": "…", "delmoment": n}
+        for n in (d["delmoment"] for d in _delmoment()) if n != utom]}
+
+
+def test_delmomentet_utan_en_enda_uppgift_falls():
+    """FYND 1 ur den skarpa körningen 2026-09-13 (exam 82): «Exponenter som
+    inte är heltal» (s. 16–18) prövades inte av någon uppgift, och LÄSAREN
+    rapporterade noll fynd. Räkningen ser det, varje gång och utan anrop."""
+    fel = exam_gen.delmomenttackning(
+        _prov_som_tacker("Exponenter som inte är heltal"), _delmoment())
+    assert len(fel) == 1 and fel[0]["code"] == "delmomenttackning"
+    m = fel[0]["message"]
+    assert "Exponenter som inte är heltal (s. 16–18)" in m
+    # Ordern är BYT UT ur det delmoment som har flest — inte «lägg till».
+    # Flest har «Grundpotensform», som räknas två gånger därför att rubriken
+    # står som delsträng i «Grundpotensform, prefix och enheter»: hellre en
+    # lucka för lite än en falsk, för en falsk lucka byter ut en bra uppgift.
+    assert "Grundpotensform har 2" in m and "Lägg INTE till" in m
+    # Fältnamnet står i klartext, så reparationsgrammatiken behåller fältet
+    # (exam_gen._delmoment_i_grammatiken läser prompten).
+    assert '"delmoment"' in m
+    # Ett prov som täcker allt fälls inte.
+    assert exam_gen.delmomenttackning(_prov_som_tacker(), _delmoment()) == []
+
+
+def test_en_uppgift_far_tacka_tva_delmoment():
+    """Blocket tillåter det när uppgifterna inte räcker till, och då ska båda
+    räknas: semikolon, eller modellens egna ord runt rubrikerna."""
+    exam = _prov_som_tacker("Kubikrötter")
+    exam["uppgifter"][0]["delmoment"] = "Kvadratrötter; Kubikrötter"
+    assert exam_gen.delmomenttackning(exam, _delmoment()) == []
+    exam["uppgifter"][0]["delmoment"] = "Kvadratrötter och Kubikrötter"
+    assert exam_gen.delmomenttackning(exam, _delmoment()) == []
+
+
+def test_tackningen_ar_fail_open_utan_lista_och_utan_falt():
+    """Kassetterna och varje papper i basen skrevs innan fältet fanns, och
+    taket kan knuffa ut det ur grammatiken. Att fälla då vore att fälla ett
+    papper för att appen blivit klokare."""
+    assert exam_gen.delmomenttackning(_prov_som_tacker(), []) == []
+    assert exam_gen.delmomenttackning(_prov(), _delmoment()) == []
+    assert exam_gen.delmomenttackning({}, _delmoment()) == []
+
+
+def test_taket_haller_ocksa_den_raknade_tackningen():
+    """Fler luckor än så är ingen lucka utan ett annat prov."""
+    exam = {"uppgifter": [{"delmoment": "Kvadratrötter"}]}
+    assert len(exam_gen.delmomenttackning(exam, _delmoment())) == \
+        exam_gen.DELMOMENT_MAX_FYND
+
+
+# ── fältet i grammatiken ─────────────────────────────────────────────────
+
+def test_faltet_star_i_grammatiken_nar_prompten_ber_om_det():
+    """Samma regel som förebildens: fältet finns exakt när det som skickas
+    nämner det — uppdraget som ber om det, eller pappret som redan bär det."""
+    assert exam_gen._delmoment_i_grammatiken(
+        exam_gen.build_delmoment(_delmoment(), 12))
+    assert not exam_gen._delmoment_i_grammatiken(
+        exam_gen.build_prompt(kurs="Ma1c", klass="TE26A",
+                              punkter=["potenser"], antal=12))
+    # Reparationsprompten bäddar in dokumentet: bär det fältet ska
+    # grammatiken behålla det, annars faller märkningen bort tyst.
+    assert exam_gen._delmoment_i_grammatiken(
+        exam_gen.build_repair_prompt(_prov_som_tacker(), [], "prov"))
+
+
+def test_faltet_ryms_pa_kommandoraden_och_offras_sist():
+    """Mätt, inte gissat. Tolv uppgifter med alla Ma 1c:s punkter: 23 350
+    tecken med förebilden, 23 866 med båda fälten. Vid tjugo uppgifter ligger
+    schemat på 29 022 UTAN dem, och då ska BÅDA falla bort — men förebilden
+    först, för delmomentet är det täckningen räknas på."""
+    from app import claude_code, course_data, exam_spec
+    koder = [p["kod"] for p in course_data._kursens_punkter("Matematik 1c")]
+    for antal, vantat in ((12, True), (20, False)):
+        sk = exam_spec.balanced_skeleton(antal, "prov", delar=True,
+                                         kurs="Matematik 1c")
+        schema = exam_spec.to_response_format(
+            antal, sk, koder, forebild=True,
+            delmoment=True)["json_schema"]["schema"]
+        assert ('"delmoment"' in json.dumps(schema)) is vantat
+        assert claude_code.schemalangd(schema) <= claude_code.SCHEMA_TAK_EXE
+    # Rangordningen: ryms bara ett av fälten är det delmomentet som stannar.
+    sk = exam_spec.balanced_skeleton(12, "prov", delar=True, kurs="Matematik 1c")
+    ensam = exam_spec.to_response_format(12, sk, koder, forebild=False,
+                                         delmoment=True)["json_schema"]["schema"]
+    assert '"delmoment"' in json.dumps(ensam)
+    # Arbetsbladet och gruppuppgiften ser aldrig fältet: ingen av dem får
+    # listan, och ett fält modellen ser är ett fält modellen fyller i.
+    for rf in (exam_spec.to_response_format(12, sk, koder),
+               exam_spec.to_response_format(6, None, None, forebild=True)):
+        assert '"delmoment"' not in json.dumps(rf["json_schema"]["schema"])
 
 
 # ── fixrundan: samma runda som avsnittstäckningen ────────────────────────
@@ -274,17 +378,61 @@ def test_delmomentsfynden_gar_i_samma_reparationsprompt_som_avsnitten():
     """Lärarens krav: modellen ska BYTA UT uppgifter, inte skriva om provet.
     Alltså ETT anrop till domaren, ETT till reparationen — och båda sorternas
     fynd i samma prompt."""
-    dom = json.dumps({"saknas": [{"delmoment": "Kubikrötter", "byt": "1"}]})
+    dom = json.dumps({"utanfor": []})
     lagat = copy.deepcopy(_prov_med_avsnitt(["1.1", "1.2"]))
+    trasigt = _prov_med_avsnitt(["1.1", "1.1"])
+    # Båda uppgifterna prövar samma delmoment: nio luckor, och den räknade
+    # täckningen ska lägga sina fynd i SAMMA prompt som avsnittsluckan.
+    for u in trasigt["uppgifter"]:
+        u["delmoment"] = "Kvadratrötter"
     llm, anrop = _stub_llm([dom, json.dumps(lagat)])
-    res = exam_gen._tackning_pass(_prov_med_avsnitt(["1.1", "1.1"]), [],
-                                  model="m", llm=llm, profil="prov", antal=2,
+    res = exam_gen._tackning_pass(trasigt, [], model="m", llm=llm,
+                                  profil="prov", antal=2,
                                   skeleton=None, avsnitt=_avsnitt(),
                                   delmoment=_delmoment(), rounds_used=1,
                                   max_rounds=4)
     assert len(anrop) == 2
     reparationen = anrop[1]["prompt"]
     assert "1.2 Uttryck" in reparationen and "Kubikrötter" in reparationen
+    assert res["rounds"] == 2
+
+
+def test_luckan_i_exam_82_falls_och_fixrundan_far_ratt_rad():
+    """Hela vägen för FYND 1: provet saknar «Exponenter som inte är heltal»,
+    domaren (som inte längre dömer om täckningen) hittar ingenting, och
+    reparationsrundan får ändå raden — med ordern att BYTA UT en uppgift ur
+    det delmoment som har flest. Räkningen sker oavsett vad läsaren svarar."""
+    trasigt = _prov_som_tacker("Exponenter som inte är heltal")
+    lagat = _prov_som_tacker()
+    llm, anrop = _stub_llm([json.dumps({"utanfor": []}), json.dumps(lagat)])
+    res = exam_gen._tackning_pass(trasigt, [], model="m", llm=llm,
+                                  profil="prov", antal=len(lagat["uppgifter"]),
+                                  skeleton=None, avsnitt=[],
+                                  delmoment=_delmoment(), rounds_used=1,
+                                  max_rounds=4)
+    assert len(anrop) == 2 and "delmomentsdomare" in anrop[0]["prompt"]
+    reparationen = anrop[1]["prompt"]
+    assert "Inget ur delmomentet Exponenter som inte är heltal (s. 16–18)" \
+        in reparationen
+    assert "Byt UT en uppgift" in reparationen and "Lägg INTE till" in \
+        reparationen
+    assert res["rounds"] == 2
+    # Och ett papper som täcker allt bär ingen kvarstående varning.
+    assert exam_gen.delmomenttackning(lagat, _delmoment()) == []
+
+
+def test_tackningen_raknas_aven_nar_domandet_ar_avstangt():
+    """`doma=False` betyder «inga extra modellanrop», och räkningen är noll
+    anrop. Luckan ska alltså synas ändå — det var precis den lucka som gick
+    igenom när kontrollen låg hos en läsare."""
+    trasigt = _prov_som_tacker("Exponenter som inte är heltal")
+    llm, anrop = _stub_llm([json.dumps(_prov_som_tacker())])
+    res = exam_gen._tackning_pass(trasigt, [], model="m", llm=llm,
+                                  profil="prov", antal=9, skeleton=None,
+                                  avsnitt=[], delmoment=_delmoment(),
+                                  doma=False, rounds_used=1, max_rounds=4)
+    assert len(anrop) == 1              # bara reparationen, ingen domare
+    assert "Exponenter som inte är heltal" in anrop[0]["prompt"]
     assert res["rounds"] == 2
 
 
@@ -469,6 +617,97 @@ def test_forbudsblocket_fragar_efter_LOSNINGEN_inte_amnet():
     assert "HELT UTAN" in r and "ETT steg" in r
 
 
+# ── den kryssade punkten som drar åt motsatt håll ────────────────────────
+
+# Skolverkets ordagranna text för de punkter läraren kryssade till prov 44,
+# skrivna som routes_exam skriver dem i prompten («KOD — område: text»).
+PUNKTER = [
+    "G25-M1C-ALG-1 — Aritmetik, algebra och funktioner: Hantering av formler "
+    "och algebraiska uttryck, däribland faktorisering och multiplicering av "
+    "uttryck.",
+    "G25-M1C-ALG-8 — Aritmetik, algebra och funktioner: Motivering och "
+    "hantering av räkneregler för potenser. Metoder för att lösa "
+    "potensekvationer.",
+]
+
+# Bokens rubriker för det som kommer EFTER provet, som förbudslistan bär dem.
+SENARE = [{"metod": "Potensekvationer och numerisk ekvationslösning",
+           "sidor": "50–52"},
+          {"metod": "Procentuella förändringar", "sidor": "100–107"}]
+
+
+def test_den_kryssade_punkten_markt_med_den_del_som_kommer_senare():
+    """FYND 2 ur den skarpa körningen 2026-09-13: punkten ALG-8 heter
+    «Potenser och potensekvationer» och är kryssad, medan potensekvationerna
+    (s. 50–52) står i förbudslistan. Prompten bad alltså om två motsatta
+    saker, och modellen skrev «Lös potensekvationerna»."""
+    r = exam_gen.build_ci_forbehall(PUNKTER, SENARE)
+    assert "Punkten «G25-M1C-ALG-8» är kryssad" in r
+    assert "«Metoder för att lösa potensekvationer»" in r
+    assert "Potensekvationer och numerisk ekvationslösning (s. 50–52)" in r
+    # Den undervisade halvan står kvar som det som FÅR prövas.
+    assert "Motivering och hantering av räkneregler för potenser." in r
+    assert "gäller förbudet" in r
+    # Punkten som inte krockar märks inte alls: faktoriseringen är undervisad.
+    assert "ALG-1" not in r
+
+
+def test_potenser_ar_inte_potensekvationer():
+    """Prefixmatchning, aldrig delsträng. «potenser» och «potensekvationer»
+    delar sju tecken, och hade delsträngen fått gälla vore räknereglerna —
+    hela kapitel 1 — märkta som något som kommer senare."""
+    bara_regler = ["G25-M1C-ALG-8 — Aritmetik: Motivering och hantering av "
+                   "räkneregler för potenser."]
+    assert exam_gen.build_ci_forbehall(bara_regler, SENARE) == ""
+    # Böjningen ska däremot matcha: «olikhet» och «olikheter» är samma sak.
+    olikhet = ["G25-M1C-ALG-6 — Aritmetik: Begreppen intervall och linjär "
+               "olikhet. Metoder för att lösa linjära olikheter."]
+    r = exam_gen.build_ci_forbehall(olikhet, [{"metod": "Linjära olikheter",
+                                               "sidor": "58–63"}])
+    assert "Ingen del av punkten är undervisad ännu" in r
+
+
+def test_bestamningarna_i_rubriken_marker_ingenting():
+    """Huvudordet matchar, inte bestämningen. «Linjära olikheter» ska märka
+    olikheterna och ingenting annat — «linjära» står i var tredje punkt, och
+    hade adjektivet fått gälla vore linjära funktioner och linjära ekvationer
+    märkta som något klassen inte haft."""
+    alla = [f"G25-M1C-ALG-{i} — Aritmetik: {t}" for i, t in (
+        (4, "Begreppet linjär funktion och egenskaper hos linjära "
+            "funktioner. Räta linjens ekvation."),
+        (5, "Metoder för att lösa linjära ekvationer."),
+        (6, "Begreppen intervall och linjär olikhet."))]
+    r = exam_gen.build_ci_forbehall(alla, [{"metod": "Linjära olikheter",
+                                            "sidor": "58–63"}])
+    assert "ALG-6" in r and "ALG-4" not in r and "ALG-5" not in r
+    # Och prefixet får bara skilja en böjning: «ekvation» är ett prefix av
+    # «ekvationslösning», men de är två olika saker.
+    assert exam_gen.build_ci_forbehall(
+        alla, [{"metod": "Numerisk ekvationslösning", "sidor": "50–52"}]) == ""
+
+
+def test_forbehallen_ar_tomma_utan_forbud_och_utan_krock():
+    """Kassettregeln en tredje gång, och samma villkor som blocken ovan."""
+    assert exam_gen.build_ci_forbehall(PUNKTER, []) == ""
+    assert exam_gen.build_ci_forbehall([], SENARE) == ""
+    assert exam_gen.build_ci_forbehall(["G25-M1C-STA-1 — Sannolikhet: "
+                                        "Begreppen oberoende och beroende "
+                                        "händelse."], SENARE) == ""
+    argument = dict(kurs="Ma1c", klass="TE26A", punkter=["potenser"], antal=12)
+    utan = exam_gen.build_prompt(**argument)
+    assert exam_gen.build_prompt(**argument, forbehall="") == utan
+
+
+def test_forbehallet_foljer_med_i_genereringens_prompt():
+    """Deterministiskt ur de två listor prompten redan bär — inga nya anrop."""
+    llm, anrop = _stub_llm([json.dumps(_prov())])
+    exam_gen.generate_exam("Ma1c", "TE26A", PUNKTER, model="m", llm=llm,
+                           antal=2, delar=False, doma=False,
+                           forbjudna=SENARE, max_rounds=2)
+    assert "KRYSSAT MEN ÄNNU INTE UNDERVISAT" in anrop[0]["prompt"]
+    assert "Punkten «G25-M1C-ALG-8» är kryssad" in anrop[0]["prompt"]
+
+
 def test_prompten_ar_byteidentisk_utan_forbud_och_utan_forebild():
     """Kassettregeln, en gång till: tomma listor ska ge exakt den prompt som
     gick i väg innan spår 5 fanns."""
@@ -621,8 +860,8 @@ def test_provets_relevansdomare_domer_pa_losningen_inte_amnet():
 def test_de_tre_domarna_gar_i_samma_reparationsprompt():
     """Lärarens två klagomål är samma sorts fel: uppgiften ska bytas eller
     skrivas om, inte provet. Tre domaranrop, EN reparation."""
-    delmomentdom = json.dumps({"saknas": [{"delmoment": "Kubikrötter",
-                                           "byt": "1"}]})
+    delmomentdom = json.dumps({"utanfor": [{"nr": "1",
+                                            "metod": "potensekvationer"}]})
     relevansdom = json.dumps({"domar": [{"nr": "1", "dom": "annan sort",
                                          "battre": "1112",
                                          "skal": "ingen sådan i kapitlet"}]})
@@ -638,7 +877,7 @@ def test_de_tre_domarna_gar_i_samma_reparationsprompt():
                                   rounds_used=1, max_rounds=4)
     assert len(anrop) == 4, [a["prompt"][:40] for a in anrop]
     reparationen = anrop[3]["prompt"]
-    assert "Kubikrötter" in reparationen              # delmomentsluckan
+    assert "potensekvationer" in reparationen         # metoden utanför
     assert "annan sort" in reparationen or "förebild" in reparationen
     assert "ord förutsättning" in reparationen        # den mätta vakten
     assert "två läsningar" in reparationen            # begriplighetsdomen

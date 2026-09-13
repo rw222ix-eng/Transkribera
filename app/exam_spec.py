@@ -469,6 +469,25 @@ class ExamItem(_Uppgiftsbas):
     # basen skrevs innan fältet fanns, och täckningskontrollen tiger när ingen
     # uppgift bär det. max_length=12 rymmer «1.2» med god marginal.
     avsnitt: str | None = Field(default=None, max_length=12)
+    # DELMOMENTET uppgiften prövar: lektionsrubriken ORDAGRANT ur den lista
+    # prompten fick (exam_gen.build_delmoment). Systerfält till `avsnitt` och
+    # av samma skäl — det som ska RÄKNAS måste stå på uppgiften.
+    #
+    # Fältet kom av att LLM-domaren inte kunde räkna. Den skarpa körningen
+    # 2026-09-13 (exam 82) rapporterade NOLL luckor på ett prov där
+    # «Exponenter som inte är heltal» (s. 16–18) inte prövades av en enda
+    # uppgift. En läsare som ska hålla tio rubriker mot tolv uppgifter och
+    # svara «vilken saknas» gissar; en räkning gör det inte. Se
+    # exam_gen.delmomenttackning.
+    #
+    # 80 tecken rymmer TVÅ rubriker med semikolon emellan, och det är med
+    # flit: blocket tillåter en uppgift att täcka två närliggande delmoment,
+    # och gör den det ska båda kunna räknas.
+    #
+    # VALFRITT, samma fail-open-villkor som `avsnitt`: kassetterna och varje
+    # papper i basen skrevs innan fältet fanns, och täckningen tiger när ingen
+    # uppgift bär det.
+    delmoment: str | None = Field(default=None, max_length=80)
     # BOKFÖREBILDEN (se Forebild ovan): den uppgift på lärarens uppslagna sidor
     # som den här uppgiften är av samma SORT som. Sätts bara när beställningen
     # bär en bok, och bara på gruppuppgiften — det är där lärarens dom föll.
@@ -648,36 +667,49 @@ MAX_CI_PER_UPPGIFT = 3
 def to_response_format(antal: int | None = None,
                        skeleton: list[dict] | None = None,
                        koder: list[str] | None = None,
-                       *, forebild: bool = False) -> dict:
+                       *, forebild: bool = False,
+                       delmoment: bool = False) -> dict:
     """json_schema-objektet, med TAKET som sista ord.
 
     Bygger schemat som `_bygg_response_format` beskriver det, och gör sedan en
-    sak till: ryms det inte på kommandoraden med förebildsfältet påslaget
-    byggs det om utan fältet.
+    sak till: ryms det inte på kommandoraden med de VALFRIA uppgiftsfälten
+    påslagna byggs det om utan dem, ett i taget.
 
-    VARFÖR MÄTA I EFTERHAND. Fältet kopieras en gång per uppgift i
+    VARFÖR MÄTA I EFTERHAND. Fälten kopieras en gång per uppgift i
     prefixItems, och kostnaden beror på hur många uppgifter provet har, hur
     många innehållspunkter läraren kryssat och hur deluppgifterna är
     fördelade. Ett tjugouppgifts prov med alla Ma 1c:s punkter ligger på
-    29 022 av 30 000 tecken (claude_code.SCHEMA_TAK_EXE) UTAN fältet och
-    29 953 MED. Spricker taket går hela schemat i prompten i stället
-    (claude_code.generate) och grammatiktvånget för poäng, delar och förmågor
-    tappas på varje uppgift. En pekning på boken är inte värd den
-    bytesaffären, och en gissning på kostnaden är inte värd risken."""
-    rf = _bygg_response_format(antal, skeleton, koder, forebild=forebild)
-    if not forebild:
-        return rf
+    29 022 av 30 000 tecken (claude_code.SCHEMA_TAK_EXE) UTAN dem, alltså över
+    marginalen redan där; ett tolvuppgifts ligger på 22 691 utan fälten,
+    23 350 med förebilden och 23 866 med båda (mätt 2026-09-13). Spricker
+    taket går hela schemat i prompten i stället (claude_code.generate) och
+    grammatiktvånget för poäng, delar och förmågor tappas på varje uppgift.
+    Ett extra fält är inte värt den bytesaffären, och en gissning på kostnaden
+    är inte värd risken.
+
+    ORDNINGEN NEDAN ÄR EN RANGORDNING, inte en slump. Förebilden offras först:
+    den är en PEKNING som relevansdomaren kan pröva ändå, medan delmomentet är
+    det täckningen RÄKNAS på (delmomenttackning) — faller det fältet bort blir
+    kontrollen tyst, och det var precis det tillstånd som lät ett helt
+    delmoment saknas utan att någon märkte det."""
+    varv = list(dict.fromkeys([(forebild, delmoment), (False, delmoment),
+                               (False, False)]))
     from app import claude_code                     # sent: bara för måttet
-    if (claude_code.schemalangd(rf["json_schema"]["schema"])
-            <= claude_code.SCHEMA_TAK_EXE - SCHEMA_MARGINAL):
-        return rf
-    return _bygg_response_format(antal, skeleton, koder, forebild=False)
+    for f, d in varv:
+        rf = _bygg_response_format(antal, skeleton, koder, forebild=f,
+                                   delmoment=d)
+        if (f, d) == (False, False) or (
+                claude_code.schemalangd(rf["json_schema"]["schema"])
+                <= claude_code.SCHEMA_TAK_EXE - SCHEMA_MARGINAL):
+            return rf
+    return rf
 
 
 def _bygg_response_format(antal: int | None = None,
                           skeleton: list[dict] | None = None,
                           koder: list[str] | None = None,
-                          *, forebild: bool = False) -> dict:
+                          *, forebild: bool = False,
+                          delmoment: bool = False) -> dict:
     """json_schema-objekt för llama-servers grammatiktvång.
 
     `antal` sätter ett hårt antalstak (minItems=maxItems) — llama.cpp hedrar
@@ -743,6 +775,14 @@ def _bygg_response_format(antal: int | None = None,
     # oförändrad, byte för byte.
     if (skeleton is not None or antal is None) and not forebild:
         schema["$defs"]["ExamItem"]["properties"].pop("forebild", None)
+    # DELMOMENTET har inget profilvillkor alls, bara anroparens: fältet står i
+    # grammatiken exakt när prompten ber om det (exam_gen.
+    # _delmoment_i_grammatiken), och ingen annan gång. Provet är den enda
+    # profil som får listan, och ett fält modellen ser är ett fält modellen
+    # fyller i — arbetsbladet hade skrivit dit en lektionsrubrik som ingen
+    # frågat efter, precis som klockslaget ovan.
+    if not delmoment:
+        schema["$defs"]["ExamItem"]["properties"].pop("delmoment", None)
     upp = schema["properties"]["uppgifter"]
     if skeleton is not None:
         item_def = schema["$defs"]["ExamItem"]
@@ -2987,7 +3027,8 @@ def validate_stam(doc: ExamDoc) -> list[dict]:
 #     eget bildverktyg, aldrig text på ett papper.
 #   * `klockslag` («12:45–14:15»), `granser`, `datum` — appens egna fält, satta
 #     av lärarens val i routen. Ett tankstreck där är kodens och inte modellens.
-#   * figurernas tal, `innehall`, `avsnitt` — koder och siffror, inte språk.
+#   * figurernas tal, `innehall`, `avsnitt`, `delmoment` — koder och rubriker
+#     ur appens egna listor, inte språk modellen har formulerat.
 def _fritexter(doc: ExamDoc):
     """(sökväg, text) för varje fritextfält en människa läser på pappret.
 
