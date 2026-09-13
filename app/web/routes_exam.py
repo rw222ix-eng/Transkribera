@@ -1869,6 +1869,94 @@ def create_router(base: Path, arbiter) -> APIRouter:
             "Facit finns inte som egen fil — pappret bär det på sista sidan. "
             "Godkänn det på nytt, då byggs facit separat också.")
 
+    # ------------------------------------------- lärarens bilder på disk --
+    # RESERVEN FÖR FÖRHANDSVISNINGEN (2026-09-13). Lärarens egna bilder bor som
+    # data-URL:er i dokumentets JSON (`v.bilder`), och förhandsvisningen ritar
+    # bara den. Står dokumentets markör på ett varv utan bilder, för att
+    # «Fortsätt ändra» flyttade den bakåt eller en dubblett hamnade i högen,
+    # visas tomma rutor trots att bilderna FINNS: godkännandet skrev dem till
+    # utkatalogen som egen-NN.png och egen-forsatt.png (tryck.spara_egna_bilder).
+    #
+    # Katalogen är därför reserven, precis som den redan är det för ett omtryck
+    # utan klient (_bilder_ur_utkatalogen). LÄSNING och inget annat: rutterna
+    # skriver aldrig tillbaka något i dokumentet, för en reserv som sparade sig
+    # själv hade gjort en visning till en ny version av pappret.
+    _EGEN_NUMMER = re.compile(r"^\d{1,4}$")
+
+    def _egen_fil(exam_id: int, nyckel: str) -> Path | None:
+        """Filen bakom en bildnyckel, eller None när något inte stämmer.
+
+        Nyckeln är `forsatt` eller ett heltal. INGEN sträng ur anropet blir en
+        sökväg (samma regel som /api/platar/{namn}). Filnamnet byggs här av
+        talet, och sökvägen prövas ändå mot basen efteråt: den andra spärren
+        kostar en rad och gör att en framtida ändring av _artifact_dir inte kan
+        öppna dörren i tysthet."""
+        conn = db.connect(db_file)
+        try:
+            view = db.get_exam(conn, exam_id)
+        finally:
+            conn.close()
+        if view is None:
+            return None
+        if nyckel == "forsatt":
+            namn = "egen-forsatt.png"
+        elif _EGEN_NUMMER.match(nyckel):
+            namn = f"egen-{int(nyckel):02d}.png"
+        else:
+            return None
+        ut_dir = _artifact_dir(view)
+        if ut_dir is None:
+            return None
+        try:
+            fil = (ut_dir / namn).resolve()
+        except OSError:
+            return None
+        if base.resolve() not in fil.parents:
+            return None
+        return fil
+
+    @router.get("/api/exams/{exam_id:int}/egna")
+    def egna_bilder(exam_id: Id64):
+        """Vilka egna bilder som ligger på disk, som nyckel → URL.
+
+        Nycklarna är SKÄRMENS (`forsatt`, `uppgN`), alltså precis de blad.js
+        ritar `v.bilder` på. Då kan klienten lägga svaret bredvid dokumentets
+        egna bilder utan att veta något om filnamn.
+
+        Saknas katalogen svaras `{}` och inte 404: «pappret har inga egna
+        bilder» är ett giltigt svar, och ett fel hade tvingat klienten att
+        skilja på tomt och trasigt för att kunna rita alls."""
+        conn = db.connect(db_file)
+        try:
+            view = db.get_exam(conn, exam_id)
+        finally:
+            conn.close()
+        if view is None:
+            return JSONResponse({"error": "okänt prov"}, status_code=404)
+        ut_dir = _artifact_dir(view)
+        if ut_dir is None or not ut_dir.is_dir():
+            return {}
+        ut: dict[str, str] = {}
+        if (ut_dir / "egen-forsatt.png").is_file():
+            ut["forsatt"] = f"/api/exams/{exam_id}/egen/forsatt"
+        for fil in sorted(ut_dir.glob("egen-*.png")):
+            try:
+                nr = int(fil.stem.removeprefix("egen-"))
+            except ValueError:
+                continue        # «egen-forsatt.png» gick sin egen väg ovan
+            ut[f"uppg{nr}"] = f"/api/exams/{exam_id}/egen/{nr}"
+        return ut
+
+    @router.get("/api/exams/{exam_id:int}/egen/{nyckel}")
+    def egen_bild(exam_id: Id64, nyckel: str):
+        """PNG:en bakom en nyckel. no-cache: ett nytt godkännande skriver över
+        samma filnamn, och en cachad kopia hade visat förra veckans bild."""
+        fil = _egen_fil(exam_id, nyckel)
+        if fil is None or not fil.is_file():
+            return JSONResponse({"error": "ingen sådan bild"}, status_code=404)
+        return FileResponse(str(fil), media_type="image/png",
+                            headers={"Cache-Control": "no-cache"})
+
     # -------------------------------------------------------------- radera --
 
     @router.delete("/api/exams/{exam_id:int}")

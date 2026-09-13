@@ -580,9 +580,12 @@ def test_lakningen_hanger_pa_bada_ingangarna():
     först när svaret landar — en förhandsvisning som står tom medan basen läses
     är en trasig förhandsvisning."""
     js = PLAN_JS.read_text(encoding="utf-8")
+    # `medEgnaBilder(v)` och inte `v`: pappret ritas med reserven ur
+    # utkatalogen påslagen (egnaFranDisk nedanför i plan.js). Vakten är
+    # densamma, det är bara vad som ritas som fått ett lager till.
     assert ("speglaExamen(v).then(bytt => {\n"
             "      if (bytt && fhIndex === i && !fhskal.hidden) "
-            "ritaIn($('#fh-ark'), v);\n    });") in js
+            "ritaIn($('#fh-ark'), medEgnaBilder(v));\n    });") in js
     assert "speglaExamen(v).then(bytt => { if (bytt && versioner[nu] === v) visa(nu); });" in js
     # Två anropsställen, inte fler: läkningen får inte smyga in i visa(), för
     # den körs också av ångra/gör om — se nästa test.

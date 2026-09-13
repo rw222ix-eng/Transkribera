@@ -2013,3 +2013,88 @@ def test_patch_granser_kravs_ingen_godkand_pdf(client, monkeypatch):
     assert svar["e_minst"] == 8 and svar["pdf"] is None and svar["varning"]
     granser, _vy = _stamplade(client, result["id"])
     assert granser["E"]["minst"] == 8
+
+
+# ── LÄRARENS EGNA BILDER SOM RESERV ──────────────────────────────────
+# Bilderna bor i webbläsarens dokument (v.bilder) och förhandsvisningen ritar
+# bara den. Står markören på ett varv utan dem visas tomma rutor fast filerna
+# ligger kvar i utkatalogen sedan godkännandet (tryck.spara_egna_bilder).
+# Rutterna nedan är den reserven: LÄSNING, inget annat.
+def _godkant_med_egna(client, monkeypatch, *, egna=("03", "forsatt")):
+    """Ett godkänt prov vars utkatalog bär lärarens egna bilder.
+
+    Godkännandet körs utan PDF-motor (snabbt, och .tex skrivs ändå) och
+    filerna läggs dit för hand: det som prövas är rutterna, inte avkodningen
+    av en data-URL."""
+    result, _ = _make_exam(client, monkeypatch, datum="2026-10-05")
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: False)
+    res = _done(client.post(f"/api/exams/{result['id']}/approve", json={}))
+    from pathlib import Path
+    ut = Path(res["tex"]).parent
+    for stam in egna:
+        (ut / f"egen-{stam}.png").write_bytes(b"PNG" + stam.encode())
+    # Underlagets sidor ligger i samma katalog och är INTE lärarens egna.
+    (ut / "bild-01.png").write_bytes(b"underlag")
+    return result["id"], ut
+
+
+def test_egna_listar_bara_lararens_bilder(client, monkeypatch):
+    exam_id, _ut = _godkant_med_egna(client, monkeypatch,
+                                     egna=("03", "11", "forsatt"))
+    svar = client.get(f"/api/exams/{exam_id}/egna")
+    assert svar.status_code == 200
+    assert svar.json() == {
+        "forsatt": f"/api/exams/{exam_id}/egen/forsatt",
+        "uppg3": f"/api/exams/{exam_id}/egen/3",
+        "uppg11": f"/api/exams/{exam_id}/egen/11",
+    }
+
+
+def test_egna_utan_katalog_ger_tomt_och_inte_404(client, monkeypatch):
+    """«Pappret har inga egna bilder» är ett giltigt svar. Ett fel hade tvingat
+    klienten att skilja på tomt och trasigt för att kunna rita alls."""
+    result, _ = _make_exam(client, monkeypatch, datum="2026-10-05")
+    svar = client.get(f"/api/exams/{result['id']}/egna")
+    assert svar.status_code == 200 and svar.json() == {}
+
+
+def test_egna_okant_prov_ger_404(client):
+    assert client.get("/api/exams/999999/egna").status_code == 404
+
+
+def test_egen_serverar_pngen(client, monkeypatch):
+    exam_id, _ut = _godkant_med_egna(client, monkeypatch)
+    for nyckel, innehall in (("forsatt", b"PNGforsatt"), ("3", b"PNG03")):
+        r = client.get(f"/api/exams/{exam_id}/egen/{nyckel}")
+        assert r.status_code == 200, nyckel
+        assert r.content == innehall
+        assert r.headers["content-type"] == "image/png"
+        # Ett nytt godkännande skriver över samma filnamn, och en cachad kopia
+        # hade visat förra veckans bild.
+        assert r.headers["cache-control"] == "no-cache"
+
+
+def test_egen_saknad_bild_ger_404(client, monkeypatch):
+    exam_id, _ut = _godkant_med_egna(client, monkeypatch)
+    assert client.get(f"/api/exams/{exam_id}/egen/9").status_code == 404
+
+
+def test_egen_ogiltig_nyckel_ger_404(client, monkeypatch):
+    """Nyckeln är `forsatt` eller ett heltal. Allt annat är ett 404 innan
+    någon sökväg byggs: filnamnet ska aldrig komma ur anropet."""
+    exam_id, ut = _godkant_med_egna(client, monkeypatch)
+    (ut / "egen-forsatt.png").write_bytes(b"PNGforsatt")
+    for nyckel in ("bild-01", "forsatt.png", "-3", "3.5", "07x", "12345"):
+        assert client.get(f"/api/exams/{exam_id}/egen/{nyckel}").status_code == 404, nyckel
+
+
+def test_egen_slapper_inte_ut_ur_basen(client, monkeypatch):
+    """En bild UTANFÖR basen får inte gå att be om, hur nyckeln än stavas."""
+    exam_id, _ut = _godkant_med_egna(client, monkeypatch)
+    utanfor = client.base_dir.parent / "egen-forsatt.png"
+    utanfor.write_bytes(b"HEMLIGT")
+    for nyckel in ("../../egen-forsatt", "..%2F..%2Fegen-forsatt",
+                   r"..\..\egen-forsatt", "%2e%2e%2fegen-forsatt"):
+        r = client.get(f"/api/exams/{exam_id}/egen/{nyckel}")
+        assert r.status_code == 404, nyckel
+        assert b"HEMLIGT" not in r.content
