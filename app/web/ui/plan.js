@@ -4768,7 +4768,11 @@
     const syskon = sparat.filter(x => x !== v && x.losningsblad && sammaOriginal(x, v));
     const bort = [{ i, v }].concat(syskon.map(s => ({ i: sparat.indexOf(s), v: s })));
     bort.sort((a, b) => b.i - a.i).forEach(b => sparat.splice(b.i, 1));
-    bort.forEach(b => dokTaBort(b.v));
+    /* Bilderna hem FÖRE raderingen: ångra skriver tillbaka pappret som en ny
+       rad, och en URL till en rad som inte finns längre går inte att lösa upp
+       (server.py _ater_bilder släpper den då). Raden är borta ur högen redan,
+       så väntan syns inte. */
+    bort.forEach(b => bilderHem(b.v).then(() => dokTaBort(b.v)));
     /* ── PROVRADEN FÖLJER MED PAPPRET ──────────────────
        Bara dokumentraden raderades. Provet låg kvar i basen med sina versioner,
        sina uppgifter och sin status — och det är DEN raden minnet läser:
@@ -5287,6 +5291,38 @@
      dokumentraden byter status, provraden låses upp, och versionen läraren
      tittade på blir utkastets första varv. Historiken från förra rundan följer
      inte med — det är ett nytt arbetspass på samma papper. */
+  /* ── BILDERNA HEM IGEN FÖRE ETT PAPPER SKA ARBETAS PÅ ─
+     Högen kommer utan bytes: lärarens egna bilder är URL:er till
+     /api/dokument/{id}/bild/{nyckel} (server.py, se mätningen där — svaret var
+     449 MB och Planering-vyn frös). Att RITA en URL går bra, men två saker
+     kräver bytesen på plats:
+       * avritningen till PNG vid godkännandet (blad-bild.js sätter bladet i en
+         SVG, och en `<img>` mot en URL laddas inte alls därinne), och
+       * godkännandets `bilder` (approve → tryck.egna_bilder tar bara
+         data-URL:er och släpper allt annat TYST).
+     Därför hämtas bytesen hem i det ögonblick ett sparat papper slutar vara
+     något man bara tittar på. Skrivningarna åt andra hållet är skyddade i
+     servern (_ater_bilder), men den vägen kan inte rädda en avritning som
+     redan gjorts utan bild. */
+  const BILDRUTT = /^\/api\/dokument\/\d+\/bild\//;
+  function bilderHem(v) {
+    const b = (v && v.bilder) || {};
+    const nycklar = Object.keys(b).filter(k => typeof b[k] === 'string' && BILDRUTT.test(b[k]));
+    if (!nycklar.length) return Promise.resolve(v);
+    return Promise.all(nycklar.map(k => fetch(b[k])
+      .then(r => (r.ok ? r.blob() : null))
+      .then(blob => blob && new Promise(klar => {
+        const las = new FileReader();
+        las.onload = () => klar(las.result);
+        las.onerror = () => klar(null);
+        las.readAsDataURL(blob);
+      }))
+      /* Uteblir en bild står pappret kvar med sin URL: den ritas fortfarande,
+         och ett papper utan en bildruta är bättre än inget papper alls. */
+      .then(dataurl => { if (dataurl) v.bilder[k] = dataurl; })
+      .catch(() => {}))).then(() => v);
+  }
+
   function fortsattAndra(i) {
     const v = sparat[i];
     if (!v) return;
@@ -5297,6 +5333,15 @@
         + 'eller släng det först, sedan går det här pappret att ändra.');
       return;
     }
+    /* Bilderna FÖRST, sedan pappret på bordet: hinner läraren godkänna innan
+       bytesen är hemma trycks provet utan sina foton (se bilderHem). Det är
+       ett anrop per bild över localhost och pappret ligger kvar i högen under
+       tiden. */
+    bilderHem(v).then(() => fortsattAndraNu(v));
+  }
+  function fortsattAndraNu(v) {
+    const i = sparat.indexOf(v);
+    if (i < 0 || versioner.length) return;
     const id = v.id;
     sparat.splice(i, 1);
     ritaSparat();
@@ -5355,6 +5400,9 @@
        * BARA NÄR DOKUMENTET SAKNAR BILDER HELT. Ett papper som bär sina egna
          bilder är det normala och behöver ingen läsning alls. Felet är det
          tomma pappret. Ett anrop per papper och sidladdning, som speglaExamen.
+         Villkoret håller även sedan högen slutade bära bytes: ett papper med
+         bilder bär numera en URL per nyckel (bilderHem ovan), alltså ett
+         icke-tomt `bilder`, och de två reserverna kan inte krocka.
        * INGEN SKRIVNING TILLBAKA. URL:erna läggs i en sidokarta, aldrig i
          `v.bilder`: dokumentet ska inte få en ny version av att någon TITTAT
          på det, och godkännandet skickar med `bilder` till servern (approve →

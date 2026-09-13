@@ -811,7 +811,9 @@ def test_plan_js_skickar_ingen_markor_fran_fortsatt_andra():
     """Kontraktet i klienten: gesten byter status, punkt. Kommer `markor` med
     igen är prov 44:s bilder borta nästa gång ett godkänt papper plockas upp."""
     js = PLAN_JS.read_text(encoding="utf-8")
-    kropp = js[js.index("  function fortsattAndra(i) {"):]
+    # Gesten är delad i två: `fortsattAndra` hämtar hem bildbytesen (högen bär
+    # bara URL:er sedan 2026-09-13) och `fortsattAndraNu` gör själva flytten.
+    kropp = js[js.index("  function fortsattAndraNu(v) {"):]
     kropp = kropp[:kropp.index("\n  }\n")]
     assert "'PATCH', { status: 'utkast' })" in kropp
     # Kommentaren vid raden får nämna nollan — anropet får inte bära den.
@@ -830,3 +832,150 @@ def test_plan_js_raknar_om_markoren_mot_serverns_bas():
     for ingang in ("function utkastNytt(v) {", "function aterstallUtkast(u) {"):
         kropp = js[js.index("  " + ingang):]
         assert "nollstallBas();" in kropp[:kropp.index("\n  }\n")]
+
+
+# ── Bilderna: URL i högen, bytes på en egen rutt ─────────────────────────────
+# MÄTT 2026-09-13 på lärarens bas: `GET /api/dokument` svarade med 449 MB, varav
+# 416 MB var hennes egna bilder som data-URL:er i 67 godkända papper. Svaret tog
+# fyra sekunder att skicka och en till att tolka, och Planering-vyn stod låst
+# under tiden — «appen fryser vid Planering». Högen bär numera bara text.
+
+PNG = ("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAA"
+       "C0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+
+
+def _papper_med_png(n="v0"):
+    return papper(anteckning=n, bilder={"forsatt": PNG, "uppg3": PNG})
+
+
+def test_hogen_bar_urler_och_inte_bytes(client):
+    """Nycklarna är kvar — de är skärmens bildrutor — men värdet är en adress."""
+    d = client.post("/api/dokument", json={"dokument": _papper_med_png(),
+                                           "status": "godkant"}).json()
+    bilder = client.get("/api/dokument").json()["sparade"][0]["dokument"]["bilder"]
+    assert set(bilder) == {"forsatt", "uppg3"}
+    assert bilder["forsatt"] == f"/api/dokument/{d['id']}/bild/forsatt?v=0"
+    assert "base64" not in str(bilder)
+
+
+def test_ett_papper_utan_bildruta_far_ingen(client):
+    """`bilder` ska inte uppfinnas på ett papper som inte har någon, och ett
+    tomt objekt ska förbli ett tomt objekt: pappret kommer tillbaka som det
+    skrevs."""
+    utan = papper()
+    del utan["bilder"]
+    client.post("/api/dokument", json={"dokument": utan, "status": "godkant"})
+    client.post("/api/dokument", json={"dokument": papper(), "status": "godkant"})
+    hog = client.get("/api/dokument").json()["sparade"]
+    assert "bilder" not in hog[0]["dokument"]
+    assert hog[1]["dokument"]["bilder"] == {}
+
+
+def test_bildrutten_serverar_bytesen(client):
+    d = client.post("/api/dokument", json={"dokument": _papper_med_png(),
+                                           "status": "godkant"}).json()
+    r = client.get(f"/api/dokument/{d['id']}/bild/forsatt")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("image/png")
+    assert r.content.startswith(b"\x89PNG")
+    assert "private" in r.headers["cache-control"]
+    # Andra hämtningen kostar ingenting: samma ETag → 304.
+    r2 = client.get(f"/api/dokument/{d['id']}/bild/forsatt",
+                    headers={"If-None-Match": r.headers["etag"]})
+    assert r2.status_code == 304
+
+
+def test_bildrutten_ger_ett_varv_i_taget(client):
+    """`?v=` pekar ut varvet i historiken; utan den gäller markörens."""
+    d = client.post("/api/dokument", json={"dokument": papper(anteckning="v0")}).json()
+    client.post(f"/api/dokument/{d['id']}/versioner",
+                json={"dokument": _papper_med_png("v1")})
+    assert client.get(f"/api/dokument/{d['id']}/bild/forsatt").status_code == 200
+    assert client.get(f"/api/dokument/{d['id']}/bild/forsatt?v=1").status_code == 200
+    assert client.get(f"/api/dokument/{d['id']}/bild/forsatt?v=0").status_code == 404
+
+
+def test_bildnyckeln_blir_aldrig_en_sokvag(client):
+    """Nyckeln är en JSON-nyckel, aldrig ett filnamn och aldrig en sökväg."""
+    d = client.post("/api/dokument", json={"dokument": _papper_med_png(),
+                                           "status": "godkant"}).json()
+    i = d["id"]
+    assert client.get(f"/api/dokument/{i}/bild/forsatt.png").status_code == 400
+    # «..» normaliseras bort av webbservern innan rutten ens nås — vilket av
+    # svaren som kommer spelar ingen roll, så länge det inte är en bild.
+    assert client.get(f"/api/dokument/{i}/bild/..").status_code in (400, 404)
+    assert client.get(f"/api/dokument/{i}/bild/%2E%2E%2Ftranskribera.db").status_code in (400, 404)
+    assert client.get(f"/api/dokument/{i}/bild/uppg9").status_code == 404
+    assert client.get(f"/api/dokument/{i + 999}/bild/forsatt").status_code == 404
+
+
+def test_utkastets_markorvarv_behaller_sina_bytes(client):
+    """Varvet under händerna ritas av till PNG vid godkännandet (blad-bild.js) —
+    där duger ingen URL. Historiken bakåt är bara att titta på."""
+    d = client.post("/api/dokument", json={"dokument": _papper_med_png("v0")}).json()
+    client.post(f"/api/dokument/{d['id']}/versioner",
+                json={"dokument": _papper_med_png("v1")})
+    utkast = client.get("/api/dokument").json()["utkast"]
+    assert utkast["markor"] == 1
+    assert utkast["versioner"][1]["bilder"]["forsatt"] == PNG
+    assert utkast["dokument"]["bilder"]["forsatt"] == PNG
+    assert utkast["versioner"][0]["bilder"]["forsatt"] \
+        == f"/api/dokument/{d['id']}/bild/forsatt?v=0"
+
+
+def test_en_url_som_skrivs_tillbaka_blir_bytesen_igen(client):
+    """Klienten skickar tillbaka hela pappret när den skriver på det (plan.js
+    dokUppdatera: rättningen, PDF-sökvägen, syskonmärkningen). Utan
+    återställningen hade den första rättningen skrivit över lärarens bilder med
+    deras egna adresser."""
+    d = client.post("/api/dokument", json={"dokument": _papper_med_png(),
+                                           "status": "godkant"}).json()
+    ur_hogen = client.get("/api/dokument").json()["sparade"][0]["dokument"]
+    ur_hogen["rattat"] = {"andel": 0.7}
+    client.patch(f"/api/dokument/{d['id']}", json={"dokument": ur_hogen})
+    assert client.get(f"/api/dokument/{d['id']}/bild/forsatt").status_code == 200
+    # Och en klon (lösningsbladet, bibliotekskopian) bär bytesen till sin nya rad.
+    klon = dict(ur_hogen, losningsblad=True)
+    klon.pop("id", None)
+    ny = client.post("/api/dokument", json={"dokument": klon, "status": "godkant"}).json()
+    assert client.get(f"/api/dokument/{ny['id']}/bild/uppg3").content.startswith(b"\x89PNG")
+
+
+def test_en_url_utan_papper_bakom_sig_tas_bort(client):
+    """Raden är raderad: adressen leder ingenstans och ska inte skrivas ner som
+    en bild. Då faller förhandsvisningen tillbaka på utkatalogen (spår 2)."""
+    doden = papper(bilder={"forsatt": "/api/dokument/9999/bild/forsatt?v=0"})
+    ny = client.post("/api/dokument", json={"dokument": doden,
+                                            "status": "godkant"}).json()
+    assert ny["dokument"]["bilder"] == {}
+
+
+def test_bilderna_lases_inte_ur_databasen_i_onodan(conn):
+    """Kärnan i mätningen: med `bilder_som` ska blobbens bilder aldrig nå
+    Python. Bevisas på storleken — pappret är litet, bilden stor."""
+    import json as _json
+    stor = "data:image/png;base64," + "A" * 200_000
+    db.create_dokument(conn, dokument=papper(bilder={"uppg3": stor}), status="godkant")
+
+    def url(i, k, v):
+        return f"/api/dokument/{i}/bild/{k}?v={v}"
+
+    latt = db.list_dokument(conn, versioner=False, bilder_som=url)
+    assert len(_json.dumps(latt)) < 5_000
+    tung = db.list_dokument(conn, versioner=False)
+    assert len(_json.dumps(tung)) > 200_000
+
+
+def test_plan_js_hamtar_hem_bytesen_innan_ett_papper_arbetas_pa():
+    """Kontraktet i klienten: en URL går att RITA, men inte att rita AV till
+    PNG (blad-bild.js) och inte att godkänna (tryck.egna_bilder tar bara
+    data-URL:er, tyst). Därför hämtas bytesen hem först."""
+    js = PLAN_JS.read_text(encoding="utf-8")
+    assert "function bilderHem(v) {" in js
+    assert "readAsDataURL" in js
+    kropp = js[js.index("  function fortsattAndra(i) {"):]
+    assert "bilderHem(v).then(() => fortsattAndraNu(v));" in kropp[:kropp.index("\n  }\n")]
+    # Och före en radering: ångra skriver tillbaka pappret som en NY rad, och
+    # då finns ingen gammal rad att lösa upp adressen mot.
+    radera = js[js.index("  function raderaDok(v) {"):]
+    assert "bilderHem(b.v).then(() => dokTaBort(b.v))" in radera[:radera.index("\n  }\n")]

@@ -1,8 +1,10 @@
 """FastAPI backend for the local web UI. Wraps the existing app/ logic; long jobs
 stream progress as Server-Sent Events (SSE). No PySide6 import here."""
 from __future__ import annotations
+import base64
 import json
 import os
+import re
 import queue
 import shutil
 import sqlite3
@@ -20,7 +22,7 @@ from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request
 from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse,
-                               PlainTextResponse, StreamingResponse)
+                               PlainTextResponse, Response, StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 from pydantic import Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -1345,6 +1347,89 @@ def create_app(base_dir: Path | None = None,
     # oförändrat. Hade backenden haft en egen dokumentform hade det funnits två,
     # och den som ritas hade inte varit den som sparas.
 
+    # ---- Lärarens egna bilder: URL i listan, bytes på en egen rutt ----------
+    #
+    # MÄTT 2026-09-13 på lärarens bas: `GET /api/dokument` svarade med 449 MB,
+    # varav 416 MB var bilder hon släppt på 67 godkända papper (data-URL:er i
+    # `dokument.bilder`, upp till 26 MB per arbetsblad). Svaret tog fyra
+    # sekunder att skicka och en till att tolka, och Planering-vyn stod låst
+    # under tiden: appen «frös vid Planering».
+    #
+    # Listan bär därför bara TEXT. Varje bildnyckel blir en URL hit, och
+    # webbläsaren hämtar bilden när pappret faktiskt ritas — parallellt, med
+    # cache, och bara de bilder som syns. Nyckeln är skärmens (`forsatt`,
+    # `uppgN`, `blockN`, samma som blad.js ritar på) och `v` säger vilket varv
+    # i historiken bilden satt på.
+    _BILDNYCKEL = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
+    _BILD_URL = re.compile(r"^/api/dokument/(\d+)/bild/([^/?#]+)(?:\?v=(\d+))?$")
+
+    def _bild_url(dokument_id: int, nyckel: str, varv: int) -> str:
+        return f"/api/dokument/{dokument_id}/bild/{nyckel}?v={varv}"
+
+    def _ater_bilder(conn, dok):
+        """URL:er tillbaka till data-URL:er FÖRE en skrivning.
+
+        Klienten skickar tillbaka hela pappret när den skriver på det
+        (rättningen, PDF-sökvägen, syskonmärkningen — plan.js dokUppdatera), och
+        ett papper hon läst ur listan bär numera URL:er där bilderna satt. Utan
+        den här raden hade den första rättningen skrivit över lärarens bilder
+        med sina egna adresser, och bytesen varit borta för gott. En URL som
+        inte går att lösa upp (raden är raderad) tas bort helt — då faller
+        förhandsvisningen tillbaka på bilderna i utkatalogen (spår 2) i stället
+        för att rita en trasig bildruta."""
+        if not isinstance(dok, dict) or not isinstance(dok.get("bilder"), dict):
+            return dok
+        bilder = {}
+        for nyckel, varde in dok["bilder"].items():
+            m = _BILD_URL.match(varde) if isinstance(varde, str) else None
+            if m is None:
+                bilder[nyckel] = varde
+                continue
+            funnen = db.dokument_bild(conn, int(m.group(1)), m.group(2),
+                                      int(m.group(3)) if m.group(3) else None)
+            if funnen:
+                bilder[nyckel] = funnen[0]
+        dok["bilder"] = bilder
+        return dok
+
+    @app.get("/api/dokument/{dokument_id}/bild/{nyckel}")
+    def api_dokument_bild(dokument_id: Id64, nyckel: str, req: Request,
+                          v: int | None = None):
+        """Bytesen bakom en bildnyckel, ur det varv `v` pekar ut (annars
+        markörens).
+
+        Nyckeln blir aldrig en sökväg: den måste vara bokstäver, siffror,
+        bindestreck eller understreck, och används sedan som JSON-nyckel — inte
+        som filnamn. Bilden ligger i databasen, inte på disk.
+
+        ETag:en är radens `updated_at` plus varv och nyckel: skrivs pappret om
+        byter den, annars svarar rutten 304 och webbläsaren ritar ur sin egen
+        cache. `private` — det är lärarens elevmaterial, ingen mellanhand ska
+        spara det."""
+        if not _BILDNYCKEL.match(nyckel):
+            return JSONResponse({"error": "ogiltig bildnyckel"}, status_code=400)
+        conn = _db()
+        try:
+            funnen = db.dokument_bild(conn, dokument_id, nyckel, v)
+        finally:
+            conn.close()
+        if funnen is None:
+            return JSONResponse({"error": "ingen sådan bild"}, status_code=404)
+        dataurl, varv, andrad = funnen
+        etag = f'"{dokument_id}-{varv}-{nyckel}-{andrad}"'
+        if req.headers.get("if-none-match") == etag:
+            return Response(status_code=304, headers={"ETag": etag})
+        huvud, _, kropp = dataurl.partition(",")
+        if not huvud.startswith("data:") or not kropp:
+            return JSONResponse({"error": "bilden är inte en data-URL"}, status_code=404)
+        typ = huvud[5:].split(";")[0] or "application/octet-stream"
+        try:
+            bild_bytes = base64.b64decode(kropp) if ";base64" in huvud else kropp.encode()
+        except (ValueError, TypeError):
+            return JSONResponse({"error": "bilden gick inte att avkoda"}, status_code=404)
+        return Response(bild_bytes, media_type=typ,
+                        headers={"ETag": etag, "Cache-Control": "private, max-age=300"})
+
     @app.get("/api/dokument")
     def api_dokument_lista():
         """Hela högen + det utkast som eventuellt låg framme. Ett anrop: båda
@@ -1353,10 +1438,14 @@ def create_app(base_dir: Path | None = None,
         Högen kommer UTAN ångra-historik: den ritas ur `dokument` (plan.js
         hydreraDokument), och att skicka varje sparat pappers alla versioner
         gjorde svaret 48 MB efter ett läsår. Utkastet är undantaget — det är
-        pappret som ligger under händerna, och dess historik ÄR ångra-knappen."""
+        pappret som ligger under händerna, och dess historik ÄR ångra-knappen.
+
+        Och utan bilder: de blir URL:er hit (se avsnittet ovan). Utkastets
+        markörvarv är undantaget — det ritas av till PNG vid godkännandet och
+        måste bära sina data-URL:er."""
         conn = _db()
         try:
-            alla = db.list_dokument(conn, versioner=False)
+            alla = db.list_dokument(conn, versioner=False, bilder_som=_bild_url)
             # DET SENASTE utkastet, inte det första. Högen sorteras på `sort`
             # och ett nytt papper får MAX(sort)+1 — den första träffen var alltså
             # det ÄLDSTA utkastet. Läraren som skrev en tavla i går, stängde
@@ -1364,7 +1453,7 @@ def create_app(base_dir: Path | None = None,
             # gammalt planerings-id, «okänd planering» när hon ville ändra något.
             utkast = next((d for d in reversed(alla) if d["status"] == "utkast"), None)
             if utkast:
-                utkast = db.get_dokument(conn, utkast["id"])
+                utkast = db.get_dokument(conn, utkast["id"], bilder_som=_bild_url)
         finally:
             conn.close()
         return {"sparade": [d for d in alla if d["status"] == "godkant"],
@@ -1382,7 +1471,8 @@ def create_app(base_dir: Path | None = None,
                                 status_code=400)
         conn = _db()
         try:
-            ny = db.create_dokument(conn, dokument=dok, status=status,
+            ny = db.create_dokument(conn, dokument=_ater_bilder(conn, dok),
+                                    status=status,
                                     sort=body.get("sort"), foljd=body.get("foljd"),
                                     anteckning=body.get("anteckning"))
             # ETT utkast i taget. Appen visar bara ett («det utkast som låg
@@ -1425,7 +1515,8 @@ def create_app(base_dir: Path | None = None,
         try:
             d = db.update_dokument(
                 conn, dokument_id,
-                dokument=body.get("dokument") if isinstance(body.get("dokument"), dict) else None,
+                dokument=_ater_bilder(conn, body.get("dokument"))
+                         if isinstance(body.get("dokument"), dict) else None,
                 markor=body.get("markor"), status=body.get("status"),
                 foljd=body.get("foljd", ...))
             # Godkännandet byter status på RADEN som låg framme — och först här
@@ -1448,7 +1539,8 @@ def create_app(base_dir: Path | None = None,
             return JSONResponse({"error": "dokument krävs"}, status_code=400)
         conn = _db()
         try:
-            d = db.add_dokument_version(conn, dokument_id, dokument=dok,
+            d = db.add_dokument_version(conn, dokument_id,
+                                        dokument=_ater_bilder(conn, dok),
                                         anteckning=body.get("anteckning"))
         finally:
             conn.close()

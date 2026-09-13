@@ -2705,16 +2705,109 @@ def _dokument_kolumner(dokument: dict) -> dict:
             "tid": dokument.get("tid") or None, "elev_id": elev}
 
 
-def _dokument_view(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
-    versioner = []
-    for v in conn.execute(
-            "SELECT data, anteckning FROM dokument_versioner "
-            "WHERE dokument_id = ? ORDER BY version", (row["id"],)).fetchall():
+# ── LÄRARENS EGNA BILDER: TEXT I LISTAN, BYTES PÅ EN EGEN RUTT ──────────────
+# Bilderna hon släpper på ett papper bor som data-URL:er i dokumentets `bilder`
+# (plan.js valjBild). MÄTT 2026-09-13 på lärarens bas: 67 godkända papper bar
+# 416 MB bilder, `GET /api/dokument` svarade med 449 MB och Planering-vyn frös
+# medan JSON:en tolkades. Bilderna behövs inte för att RITA högen — de behövs
+# när ett papper visas — så listan bär numera en URL per bildnyckel och
+# bytesen hämtas per bild.
+#
+# Bytet sker i SQL och inte i Python: `json_remove` gör att blobben aldrig når
+# processen, och det är hela vinsten (400 MB som inte allokeras, avkodas och
+# kastas). Nycklarna följer med som en egen liten kolumn — anroparen bygger
+# URL:en, för db-lagret ska inte veta hur rutterna heter.
+#
+# `bilder_som` är därför en funktion (dokument_id, nyckel, varv) -> URL. Utan
+# den beter sig allt exakt som förut: kassetter, tester och den skarpa
+# godkännandevägen ser samma dokument som de alltid gjort.
+_json1: bool | None = None
+
+
+def _har_json1(conn: sqlite3.Connection) -> bool:
+    """Har den här sqlite:n JSON1? Appen ska starta på den sqlite som följer med
+    lärarens Python, inte bara på den senaste — saknas funktionerna plockas
+    bilderna bort i Python i stället (samma svar, större minne)."""
+    global _json1
+    if _json1 is None:
         try:
-            versioner.append(json.loads(v["data"]))
-        except (TypeError, ValueError):
-            continue
-    markor = max(0, min(int(row["markor"] or 0), len(versioner) - 1)) if versioner else 0
+            conn.execute("SELECT json_remove('{\"a\":1}', '$.a')").fetchone()
+            _json1 = True
+        except sqlite3.Error:
+            _json1 = False
+    return _json1
+
+
+def _bilder_till_url(dokument: dict | None, nycklar, dokument_id: int, varv: int,
+                     bilder_som) -> dict | None:
+    """Sätt tillbaka `bilder` som nyckel → URL. `nycklar` är None när blobben
+    lästes hel (Python-vägen) — då tas nycklarna ur dokumentet självt."""
+    if dokument is None:
+        return None
+    if nycklar is None:
+        b = dokument.get("bilder")
+        if not isinstance(b, dict):
+            return dokument        # pappret har ingen bildruta alls
+        nycklar = list(b.keys())
+    dokument["bilder"] = {k: bilder_som(dokument_id, k, varv) for k in nycklar}
+    return dokument
+
+
+_VERSIONER_UTAN_BILDER = """
+SELECT version,
+       CASE WHEN json_valid(data) THEN json_remove(data, '$.bilder') ELSE data END AS data,
+       CASE WHEN json_valid(data)
+            THEN (SELECT json_group_array(je.key) FROM json_each(data, '$.bilder') je)
+            END AS bildnycklar,
+       CASE WHEN json_valid(data) THEN json_type(data, '$.bilder') END AS bildtyp
+FROM dokument_versioner WHERE dokument_id = ? ORDER BY version
+"""
+
+
+def _dokument_view(conn: sqlite3.Connection, row: sqlite3.Row,
+                   bilder_som=None) -> dict:
+    """Pappret med hela sin ångra-historik.
+
+    Med `bilder_som` byts bilderna mot URL:er i alla varv UTOM det markören
+    står på. Markörens varv bär sina data-URL:er hela vägen ut, för det är det
+    varvet som ritas av till PNG och skickas till godkännandet (blad-bild.js →
+    approve → tryck.spara_egna_bilder, som bara känner data-URL:er). Historiken
+    bakåt är bara att titta på, och där räcker en URL."""
+    if bilder_som is None or not _har_json1(conn):
+        versioner = []
+        for v in conn.execute(
+                "SELECT data, anteckning FROM dokument_versioner "
+                "WHERE dokument_id = ? ORDER BY version", (row["id"],)).fetchall():
+            try:
+                versioner.append(json.loads(v["data"]))
+            except (TypeError, ValueError):
+                continue
+        markor = max(0, min(int(row["markor"] or 0), len(versioner) - 1)) if versioner else 0
+        if bilder_som is not None:
+            for i, v in enumerate(versioner):
+                if i != markor:
+                    _bilder_till_url(v, None, row["id"], i, bilder_som)
+    else:
+        versioner, nycklar = [], []
+        for v in conn.execute(_VERSIONER_UTAN_BILDER, (row["id"],)).fetchall():
+            try:
+                versioner.append(json.loads(v["data"]))
+            except (TypeError, ValueError):
+                continue
+            # `bildtyp` skiljer «pappret har ingen bildruta» (None → nycklarna
+            # tas ur dokumentet, som inte har någon) från «bildrutan är tom»
+            # (ett tomt objekt som ska förbli ett tomt objekt).
+            nycklar.append(json.loads(v["bildnycklar"] or "[]")
+                           if v["bildtyp"] is not None else None)
+        markor = max(0, min(int(row["markor"] or 0), len(versioner) - 1)) if versioner else 0
+        for i, v in enumerate(versioner):
+            if i != markor:
+                _bilder_till_url(v, nycklar[i], row["id"], i, bilder_som)
+        if versioner:
+            # Markörens varv läses om HELT: det ska bära sina data-URL:er.
+            hel = _dokument_blob(conn, row["id"], markor)
+            if hel:
+                versioner[markor] = hel
     d = {"id": row["id"], "status": row["status"], "markor": markor,
          "sort": row["sort"], "foljd": row["foljd"], "versioner": versioner}
     # `dokument` är versionen markören står på — det som ritas. Klienten läser
@@ -2741,7 +2834,7 @@ def _dokument_view(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
 # i antalet versioner per papper — fyra rader, alltså sexton jämförelser, och
 # båda leden går på idx_dokver_dokument. Inga fönsterfunktioner: appen ska
 # starta på den sqlite som följer med lärarens Python, inte på den senaste.
-_DOKUMENT_LATT = """
+_DOKUMENT_LATT_KARNA = """
 SELECT x.*, (SELECT v.data FROM dokument_versioner v
              WHERE v.dokument_id = x.id
                AND (SELECT COUNT(*) FROM dokument_versioner w
@@ -2750,41 +2843,105 @@ SELECT x.*, (SELECT v.data FROM dokument_versioner v
 FROM (SELECT d.*, (SELECT COUNT(*) FROM dokument_versioner v
                    WHERE v.dokument_id = d.id) AS antal
       FROM dokument d{where}) x
-ORDER BY x.sort, x.id
+"""
+
+_DOKUMENT_LATT = _DOKUMENT_LATT_KARNA + "ORDER BY x.sort, x.id\n"
+
+# Samma fråga, men bilderna lämnas kvar i databasen (se avsnittet ovan om
+# `bilder_som`). Skalet ligger UTANPÅ kärnan så att markörens varv väljs på
+# exakt ett ställe: två frågor som ska peka på samma varv glider isär.
+_DOKUMENT_LATT_UTAN_BILDER = """
+SELECT y.id, y.status, y.markor, y.antal, y.sort, y.foljd,
+       CASE WHEN json_valid(y.data) THEN json_remove(y.data, '$.bilder') ELSE y.data END AS data,
+       CASE WHEN json_valid(y.data)
+            THEN (SELECT json_group_array(je.key) FROM json_each(y.data, '$.bilder') je)
+            END AS bildnycklar,
+       CASE WHEN json_valid(y.data) THEN json_type(y.data, '$.bilder') END AS bildtyp
+FROM (""" + _DOKUMENT_LATT_KARNA + """) y
+ORDER BY y.sort, y.id
 """
 
 
 def list_dokument(conn: sqlite3.Connection, *, status: str | None = None,
-                  versioner: bool = True) -> list[dict]:
+                  versioner: bool = True, bilder_som=None) -> list[dict]:
     """Högen. `versioner=False` ger varje papper som det RITAS (markörens
     version) plus `versioner_antal` — ångra-historiken hämtas då per papper via
-    get_dokument."""
+    get_dokument. `bilder_som` byter lärarens egna bilder mot URL:er, se
+    avsnittet om bilderna ovan."""
     params: list = []
     where = ""
     if status:
         where = " WHERE status = ?"
         params.append(status)
     if versioner:
-        return [_dokument_view(conn, r) for r in conn.execute(
+        return [_dokument_view(conn, r, bilder_som) for r in conn.execute(
             "SELECT * FROM dokument" + where + " ORDER BY sort, id", params).fetchall()]
+    latt = _DOKUMENT_LATT_UTAN_BILDER if bilder_som is not None and _har_json1(conn) \
+        else _DOKUMENT_LATT
     ut = []
-    for r in conn.execute(_DOKUMENT_LATT.format(where=where), params).fetchall():
+    for r in conn.execute(latt.format(where=where), params).fetchall():
         try:
             v = json.loads(r["data"]) if r["data"] else None
         except (TypeError, ValueError):
             v = None
+        markor = max(0, min(int(r["markor"] or 0), r["antal"] - 1)) if r["antal"] else 0
+        if bilder_som is not None:
+            nycklar = None
+            if latt is _DOKUMENT_LATT_UTAN_BILDER:
+                nycklar = (json.loads(r["bildnycklar"] or "[]")
+                           if r["bildtyp"] is not None else None)
+            v = _bilder_till_url(v, nycklar, r["id"], markor, bilder_som)
         ut.append({"id": r["id"], "status": r["status"],
-                   "markor": max(0, min(int(r["markor"] or 0), r["antal"] - 1))
-                             if r["antal"] else 0,
+                   "markor": markor,
                    "sort": r["sort"], "foljd": r["foljd"],
                    "versioner_antal": r["antal"],
                    "dokument": dict(v, id=r["id"]) if v else None})
     return ut
 
 
-def get_dokument(conn: sqlite3.Connection, dokument_id: int) -> dict | None:
+def get_dokument(conn: sqlite3.Connection, dokument_id: int,
+                 bilder_som=None) -> dict | None:
     row = conn.execute("SELECT * FROM dokument WHERE id = ?", (dokument_id,)).fetchone()
-    return _dokument_view(conn, row) if row else None
+    return _dokument_view(conn, row, bilder_som) if row else None
+
+
+def dokument_bild(conn: sqlite3.Connection, dokument_id: int, nyckel: str,
+                  varv: int | None = None) -> tuple[str, int, str] | None:
+    """(data-URL, varv, radens updated_at) för EN bildnyckel, eller None.
+
+    Bara det ena värdet läses ur blobben — `json_extract` gör att pappret runt
+    omkring (upp till 26 MB på lärarens största arbetsblad) aldrig når Python.
+    `varv` är index i versionslistan, samma räkning som klientens array; utan
+    det gäller markörens varv, klämt som överallt annars.
+
+    Nyckeln blir en JSON-SÖKVÄG och inget annat: den citeras in i `$.bilder."…"`
+    som ett bundet värde, så en nyckel med konstiga tecken ger tomt svar i
+    stället för en läsning någon annanstans."""
+    row = conn.execute("SELECT markor, updated_at FROM dokument WHERE id = ?",
+                       (dokument_id,)).fetchone()
+    if row is None:
+        return None
+    rader = conn.execute("SELECT version FROM dokument_versioner "
+                         "WHERE dokument_id = ? ORDER BY version",
+                         (dokument_id,)).fetchall()
+    if not rader:
+        return None
+    i = int(row["markor"] or 0) if varv is None else int(varv)
+    i = max(0, min(i, len(rader) - 1))
+    if not _har_json1(conn):
+        varde = (_dokument_blob(conn, dokument_id, i).get("bilder") or {}).get(nyckel)
+    else:
+        try:
+            rad = conn.execute(
+                "SELECT json_extract(data, '$.bilder.\"' || ? || '\"') AS b "
+                "FROM dokument_versioner WHERE dokument_id = ? AND version = ?",
+                (nyckel, dokument_id, rader[i]["version"])).fetchone()
+        except sqlite3.Error:
+            return None
+        varde = rad["b"] if rad else None
+    if not isinstance(varde, str) or not varde:
+        return None
+    return varde, i, row["updated_at"]
 
 
 def create_dokument(conn: sqlite3.Connection, *, dokument: dict,
