@@ -5594,6 +5594,268 @@ def doma_delmoment(exam: dict, delmoment: list[dict] | None, *, model: str,
     return metodfynd(_json_objekt(raw))
 
 
+# ── POÄNGVAKTEN: EN POÄNG PER PRESTATION (2026-09-13, spår 7) ────────────
+# Prov 81, uppgift 8: «Teckna ett uttryck för hur mycket kaféet sparar per år
+# med flergångsmuggar och beräkna besparingen då x = 50 000.» Ett poäng, och
+# bedömningsraden «+1 C rätt uttryck och besparingen 51 700 kr» — två
+# prestationer på en poäng. Läraren: «Hur kan den missa denna uppenbara sak?
+# Jag vill slippa detta nästa gång.»
+#
+# Ingen domare frågade om poängen svarade mot kraven, och ingen ska behöva:
+# hur många saker en uppgift BER OM går att räkna, precis som täckningen
+# räknas. Två mått, båda deterministiska och båda utan modellanrop:
+#
+#   1. UPPMANINGARNA i uppgiftens egen text. «Teckna … och beräkna …» är två
+#      saker att göra, och ett papper som ger en poäng för dem båda kan inte
+#      dela ut halva poängen till den som klarade hälften.
+#   2. BEDÖMNINGSRADERNA. En «+1»-rad ÄR en prestation (bedomningssignaler
+#      håller redan en rad per poäng); står det två prestationer på raden är
+#      poängen undervärderad, hur uppgiftstexten än är skriven.
+#
+# Vakten säger inte «fel poäng» utan VAD som ska göras: fler poäng inom samma
+# del, och en bedömningsrad per prestation. Den går i samma fixrunda som
+# täckningarna (_tackning_pass) av samma skäl som de: ett fynd som lagas
+# genom att en uppgift justeras hör hemma i samma reparationsprompt som de
+# andra sådana fynden, inte i en egen runda som ber om ett nytt prov.
+#
+# SUMMORNA räknas om av servern efteråt (exam_spec.poangsummor) och
+# kravgränserna med dem (exam_spec.kravgranser) — poängvakten flyttar aldrig
+# en gräns själv. Att höjningen inte får spräcka nivåmixen är balansvaktens
+# sak, och den prövas som förut på det reparationen skickade tillbaka
+# (_validate i _tackning_pass): blir pappret trasigt av lagningen kastas
+# varvet och fyndet står kvar som varning. Därför kan de två vakterna inte
+# dra pappret fram och tillbaka mellan sig — rundan är EN.
+
+# Verben läraren skriver när hon ber om något. Bara IMPERATIVformerna står
+# här: «beräknar», «bestämmer» och «du ska beräkna» är beskrivningar och
+# faller därför på formen, utan att någon regel behöver läsa satsen.
+UPPMANINGSVERB = ("teckna", "beräkna", "bestäm", "visa", "förklara", "avgör",
+                  "jämför", "undersök", "motivera", "ange", "lös", "skriv",
+                  "förenkla")
+
+# En uppmaning står FÖRST i sin sats. Satserna delas på skiljetecken och på
+# samordningen, och det är just samordningen som bär den andra prestationen i
+# «Teckna ett uttryck … och beräkna besparingen». Utan positionskravet hade
+# «Hur mycket sparar kaféet om vi beräknar med flergångsmuggar?» räknats som
+# en uppmaning, och en bisats är ingen uppmaning.
+_SATS = re.compile(r"[.!?;:\n]|\boch\b|\bsamt\b|\bsedan\b|\bdärefter\b",
+                   re.IGNORECASE)
+
+# REDOVISNINGSSVANSEN är ingen egen prestation: «… och svara i grundpotensform»
+# säger hur svaret ska skrivas, inte att något mer ska räknas ut. Utan
+# undantaget hade varje uppgift som ber om enhet eller decimaler fällts, och
+# en falsk fällning kostar en reparationsrunda på ett papper som var rätt.
+_REDOVISNINGSSVANS = re.compile(
+    r"^(?:skriv|ange|avrunda|svara)\s+(?:ditt\s+|hela\s+)?"
+    r"(?:svar|svaret|resultatet|talet)\b", re.IGNORECASE)
+
+# Och samma sak i nationella provets egen form: den nakna svansen «Motivera.»,
+# «Motivera ditt svar.», «Förklara varför.» Den ber inte om något MER att
+# räkna ut, den säger att resonemanget ska synas — och just därför bär en
+# NP-uppgift den utan en extra poäng («Avgör om han har rätt. Motivera.» är
+# EN C-poäng i bandet tests/kassetter/prov.json, uppgift 5b). Gränsen går vid
+# tre ord: «Förklara varför metoden fungerar» är en egen sak att göra.
+_REDOVISNINGSKRAV = re.compile(
+    r"^(?:motivera|förklara|visa|redovisa|svara|avrunda)\b", re.IGNORECASE)
+_SVANS_MAX_ORD = 3
+
+# Deluppgiftsmarkören framför satsen: «a) Beräkna …».
+_DELMARKOR = re.compile(r"^[a-h]\)\s*")
+
+
+def uppmaningar(text: str) -> list[str]:
+    """Uppmaningarna i en uppgiftstext, i tur och ordning.
+
+    Läses på den RENA texten (utan LaTeX-kommandon och matematikdollar, se
+    _rentext): en formel är ett uttryck och inte fyra ord, och ett kommando
+    ska inte kunna se ut som en satsstart.
+
+    Räknar bara det som står FÖRST i sin sats. Två prestationer i samma
+    mening skrivs med «och» emellan, och det är därför samordningen delar
+    satsen — inte för att «och» skulle vara ett skiljetecken."""
+    ut: list[str] = []
+    # RADEN FÖRST, sedan städningen. Modellens radbrytning är en satsgräns —
+    # exam_latex._stycken sätter varje rad som eget stycke, och en formelrad
+    # slutar aldrig med punkt («$f(x) = 2x^2 - 5x$\nBestäm $f'(x)$ …»). Städas
+    # texten först är radbrytningen redan borta och uppmaningen står mitt i en
+    # mening som ingen skrev.
+    rader = [r for r in str(text or "").replace("\r\n", "\n").split("\n")]
+    for sats in [s for r in rader for s in _SATS.split(_rentext(r))]:
+        sats = _DELMARKOR.sub("", sats.strip(" ,()[]"))
+        if not sats or _REDOVISNINGSSVANS.match(sats):
+            continue
+        if (_REDOVISNINGSKRAV.match(sats)
+                and len(sats.split()) <= _SVANS_MAX_ORD):
+            continue
+        forsta = re.match(r"[a-zåäöA-ZÅÄÖ]+", sats)
+        if forsta and forsta.group().casefold() in UPPMANINGSVERB:
+            ut.append(forsta.group().casefold())
+    return ut
+
+
+# Ord som inte bär en egen prestation. «+1 E lösning med godtagbart svar och
+# korrekt enhet» är EN prestation med två krav på hur den ska se ut;
+# «+1 C rätt uttryck och besparingen 51 700 kr» är två saker eleven ska ha
+# gjort. Skillnaden är om ledet efter «och» inför något NYTT att prestera.
+_INTE_PRESTATION = {
+    "rätt", "rätta", "korrekt", "korrekta", "godtagbar", "godtagbart",
+    "godtagbara", "tydlig", "tydligt", "tydliga", "rimlig", "rimligt",
+    "svar", "svaret", "enhet", "enheten", "enheter", "redovisning",
+    "redovisningen", "med", "utan", "den", "det", "ett", "en", "sitt", "sin",
+    "sina", "för", "till", "som", "vid", "hela", "helt", "alla", "eller",
+    "samt", "väl", "angivet", "angiven", "delvis", "endast", "samma",
+}
+
+
+# Adjektivens och participens ändelser. Ett led som bara bär SÅDANA ord har
+# inget eget huvudord: «korrekt uppställd och förenklad differenskvot» är en
+# differenskvot med två egenskaper, inte två saker eleven gjort — och den
+# raden står i ett inspelat band (tests/kassetter/prov.json, uppgift 3), så
+# den false positiven kostade en reparationsrunda på ett papper som var rätt.
+#
+# «-t» står INTE i listan, hur många particip som än slutar så: det är också
+# neutrums bestämda form, och «sambandet», «uttrycket» och «värdet» är precis
+# de objekt raden delar ut poäng för. Hellre en missad lumpning än en fälld
+# rad som var rätt.
+_ADJEKTIVSLUT = ("ade", "ande", "ende", "isk", "lig", "bar", "full", "sam",
+                 "ig", "ad", "at", "dd", "tt", "d")
+
+# Taket på hur lång en rad får vara för att lumpningen ska gå att SE. En kort
+# rad som radar upp två objekt är lumpad; nationella provets A-kriterier är
+# däremot prosa på trettio ord om EN prestation («en i huvudsak fullständig,
+# välstrukturerad redovisning med korrekta symboler …»), och att fälla dem
+# vore att gissa. Räkningen av uppmaningar i texten fångar de fallen ändå.
+_BEDRAD_MAX_ORD = 12
+
+
+def _prestationsled(krav: str) -> list[str]:
+    """Bedömningsradens led som BÄR en prestation.
+
+    Ett led räknas när det har ett eget HUVUDORD: ett ord på tre bokstäver
+    eller mer som varken är ett kvalitetsord (_INTE_PRESTATION), ett tal eller
+    ett adjektiv/particip (_ADJEKTIVSLUT). Talen räknas bort med flit — «och 2
+    decimaler» är ett krav på svarets form, «och besparingen» är en sak till
+    att räkna ut.
+
+    En lång rad har inga led alls: se _BEDRAD_MAX_ORD."""
+    ren = _rentext(krav)
+    if len(ren.split()) > _BEDRAD_MAX_ORD:
+        return []
+    led = [b.strip(" ,.;:") for b in re.split(r"\boch\b", ren,
+                                              flags=re.IGNORECASE)]
+    return [b for b in led
+            if any(o.isalpha() and len(o) > 2
+                   and o.casefold() not in _INTE_PRESTATION
+                   and not o.casefold().endswith(_ADJEKTIVSLUT)
+                   for o in re.findall(r"[^\W\d_]+|\d+", b))]
+
+
+# Fler fynd än så är ingen undervärderad uppgift utan ett papper som ska
+# skrivas om, och taket är också vad EN reparationsrunda tål. Samma tak och
+# samma skäl som DELMOMENT_MAX_FYND.
+POANG_MAX_FYND = 5
+# … och bedömningsradernas fynd får högst två av de platserna. Måttet är det
+# SVAGARE av de två: raden «+1 A använder $(2s)^3 = 2^3s^3$ och får faktorn 8»
+# är en metod och dess följd lika gärna som två prestationer, och den sortens
+# rader finns det gott om på ett A-tungt papper (prov 81 gav fem fynd, varav
+# ett var uppgift 8). En runda som ber om fem höjningar flyttar nivåmixen så
+# mycket att balansvakten kastar hela varvet — och då blir INGET lagat, inte
+# ens det fynd som var uppenbart. Räkningen av uppmaningar går därför först i
+# listan, och raderna får resten.
+POANGRAD_MAX_FYND = 2
+# Taket på vad räkningen får kräva. En uppgift som ber om fyra saker är för
+# stor för ett prov, men fyra poäng är inte lagningen: tre är nationella
+# provets tak för en enhet, och blir det fler ska läraren se uppgiften och
+# dela den själv.
+POANG_TAK = 3
+
+_RAKNEORD = {1: "en", 2: "två", 3: "tre"}
+
+
+def poangvakt(exam: dict, profil: str = "prov") -> list[dict]:
+    """Ger uppgiften en poäng per sak den ber om? Deterministiskt, ingen
+    modell, ingen kostnad, och samma felform som avsnittstackning.
+
+    BARA PROVET. Arbetsbladet drillar samma sak i flera led och gruppuppgiften
+    bygger ett enda resonemang över fyra deluppgifter; poängen betyder inte
+    samma sak där, och en vakt som mäter provets regel på dem hade fällt
+    lärarens egna papper.
+
+    Tre regler, två mått (se blocket ovan):
+
+    * «Fullständig lösning krävs» (allt utom typ=rutin) ⇒ poängsumman ska vara
+      minst antalet uppmaningar, tak tre. Eleven som tecknar uttrycket men
+      inte hinner räkna ut besparingen ska kunna få den poäng hon förtjänat.
+    * En 1-poängare får bära EN uppmaning, också när den är en rutinuppgift:
+      en enda poäng går inte att dela, hur uppgiften än är märkt.
+    * En «+1»-rad som delar ut sin poäng för två prestationer är
+      undervärderad. Det var den raden som fällde prov 81.
+
+    FAIL-OPEN på tomma fält, som de andra vakterna: en uppgift utan poäng
+    (föräldern till deluppgifter) och en uppgift utan text har inget kontrakt
+    att svika."""
+    if profil != "prov":
+        return []
+    ut: list[dict] = []
+    rader: list[dict] = []
+    for e in domarenheter(exam or {}):
+        nr = e["nr"]
+        summa = sum(e.get("poang") or (0, 0, 0))
+        if summa <= 0:
+            continue
+        # DELUPPGIFTENS EGEN TEXT, inte stammen. Stammen är gemensam för a)
+        # och b), och en uppmaning i den hade räknats en gång per deluppgift —
+        # alltså dubbelt, på ett papper där ingenting är fel.
+        verb = uppmaningar(e["kort"].get("text") or "")
+        krav = min(len(verb), POANG_TAK)
+        fullstandig = (e.get("typ") or "") != "rutin"
+        if krav > summa and (fullstandig or summa == 1):
+            ut.append({
+                **_err(f"uppgift {nr}", "poangvakt",
+                       f"uppgift {nr} kräver {_RAKNEORD.get(krav, krav)} "
+                       f"saker ({', '.join(verb[:POANG_TAK])}) men ger "
+                       f"{summa} p. Ge den {krav} p inom SAMMA del av provet: "
+                       "höj poängtrippeln på den nivå uppgiften redan ligger "
+                       "på ([0, 1, 0] blir [0, 2, 0]) och skriv EN "
+                       "bedömningsrad per prestation, «+1 <nivå> …». Byt inte "
+                       "ut uppgiften och flytta den inte till en annan del."),
+                "nr": nr})
+            continue
+        for r in exam_spec.bedomningsrader(e.get("bedomning")):
+            if r["not"] or r["poang"] != 1 or len(_prestationsled(r["krav"])) < 2:
+                continue
+            rader.append({
+                **_err(f"uppgift {nr}", "poangvakt",
+                       f"uppgift {nr} ger EN poäng för två prestationer: "
+                       f"«+1 {r['niva']} {_kort(r['krav'], 60)}». Dela raden i "
+                       "en rad per prestation och höj poängen så att varje "
+                       "prestation får sin egen poäng, inom SAMMA del av "
+                       "provet och på den nivå uppgiften redan ligger på."),
+                "nr": nr})
+            break
+    return (ut + rader[:POANGRAD_MAX_FYND])[:POANG_MAX_FYND]
+
+
+def _slapp_poanglaset(fel: list[dict]) -> list[dict]:
+    """Två fynd på samma uppgift får inte säga emot varandra.
+
+    Begriplighets- och relevansfynden bär BEHALL_PLANEN («Behåll uppgiftens
+    poäng, förmåga och plats i stegringen») — den raden finns för att en
+    textomskrivning inte ska spräcka balansen. Poängvakten ber om det
+    motsatta, och står båda i samma reparationsprompt lyder modellen den ena
+    och struntar i den andra, slumpvis.
+
+    Låset släpps därför på DE uppgifter poängvakten fällt, och står kvar på
+    alla andra. Det är hela «släpp just poängen»-regeln: poängen blir fri när
+    kraven blivit fler, inte i största allmänhet."""
+    trasiga = {f["path"] for f in fel if f["code"] == "poangvakt"}
+    if not trasiga:
+        return fel
+    return [f if f["code"] == "poangvakt" or f["path"] not in trasiga
+            else dict(f, message=f["message"].replace(BEHALL_PLANEN, ""))
+            for f in fel]
+
+
 def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                    antal: int | None, skeleton: list[dict] | None,
                    avsnitt: list[dict], rounds_used: int, max_rounds: int,
@@ -5640,6 +5902,11 @@ def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
     # FÖRE domaren nedan så att en lucka och en metod utanför hamnar i samma
     # reparationsprompt, precis som avsnitten och delmomenten gör.
     fel = fel + delmomenttackning(exam, delmoment or [])
+    # POÄNGEN MOT KRAVEN, och den räknas också oavsett `doma`: noll anrop, och
+    # den behöver ingen lista utifrån — uppgiften bär både kraven och poängen
+    # själv. Ligger med de andra räknade fynden så att en lucka, en främmande
+    # metod och en undervärderad uppgift lagas i SAMMA reparationsprompt.
+    fel = fel + poangvakt(exam, profil)
     # METODERNA UTANFÖR I SAMMA RUNDA, och det är hela poängen med att lägga
     # dem här (lärarens beställning 2026-09-13). En egen runda för dem hade
     # bett modellen om ett nytt prov ovanpå ett nyss lagat; nu står
@@ -5675,6 +5942,9 @@ def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
             fel = fel + doma_begriplighet(exam, model=model,
                                           inriktning=inriktning, profil=profil,
                                           llm=llm, log_cb=log_cb)
+    # SIST, när alla fynden är samlade: har poängvakten fällt en uppgift ska
+    # de andra fyndens «Behåll uppgiftens poäng» inte stå kvar på just den.
+    fel = _slapp_poanglaset(fel)
     if not fel:
         return {"exam": exam, "errors": errors, "rounds": rounds_used}
     if rounds_used >= max_rounds:
@@ -5685,6 +5955,13 @@ def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
     if delfel:
         log(f"Delmomenten: {len(delfel)} fynd mot lektionerna, byter ut "
             "uppgifter …")
+    poangfel = [f for f in fel if f["code"] == "poangvakt"]
+    if poangfel:
+        # Raden säger vad som är fel och inte hur många fynd det blev, som de
+        # andra: läraren ska kunna läsa efteråt varför en uppgift fick fler
+        # poäng än skelettet gav den.
+        log(f"Poängen: {len(poangfel)} uppgift(er) kräver mer än de ger, "
+            "justerar poängen …")
     # Loggen namnger vad som fälldes, inte hur många fynd det blev: läraren
     # ska kunna läsa efteråt VARFÖR en uppgift byttes ut.
     for kod, rad in (("relevans", "Boken: {n} uppgift(er) utan förebild i "
@@ -6373,8 +6650,14 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # reparationsrunda: en lucka i kapitlet och en lucka bland lektionerna är
     # samma sorts fel, och båda lagas genom att en uppgift byts ut. Passet körs
     # så snart NÅGON av de två listorna finns.
-    if res["exam"] is not None and (avsnitt or delmoment
-                                    or (profil == "prov" and bokuppgifter)):
+    #
+    # PROVET kommer hit ALLTID sedan poängvakten flyttade in (2026-09-13, spår
+    # 7): den behöver varken kapitelram, lektionslista eller bok, för uppgiften
+    # bär både kraven och poängen själv. Passet kostar ändå ingenting när
+    # listorna saknas — domaren körs inte utan delmoment och bokgrinden inte
+    # utan bokuppgifter — så ett prov utan dörrar går exakt de anrop det gick
+    # förut (kassetteregeln).
+    if res["exam"] is not None and (avsnitt or delmoment or profil == "prov"):
         res = _tackning_pass(res["exam"], res["errors"], model=model, llm=llm,
                              profil=profil, antal=antal, skeleton=grammatik,
                              avsnitt=avsnitt or [], koder=koder,
@@ -6476,6 +6759,55 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     return flagga(res)
 
 
+def _poangpass(fore: dict, res: dict, *, model: str, llm, profil: str,
+               riktning, niva_mal: dict | None, max_rounds: int,
+               log_cb: Callable[[str], None] | None = None) -> dict:
+    """Blev kraven fler än poängen i lärarens omskrivning? Då får poängen
+    ändras — och bara då.
+
+    VAR LÅSET SATT. Mål-låset släpper bara igenom den uppgift läraren pekade
+    på (sammanfoga_riktat), och pappret valideras därefter i sin helhet: en
+    poängändring flyttar totalen, och spricker balansen kastas HELA varvet och
+    läraren får originalet tillbaka (se refine_exam). Poängen var alltså inte
+    förbjuden i ord utan i praktiken, och den som skrev om «beräkna» till
+    «teckna och beräkna» fick en uppgift som bad om två saker för en poäng.
+    Fixrundornas eget förbud står i BEHALL_PLANEN, och det släpps på samma
+    villkor (_slapp_poanglaset).
+
+    HÖGST EN RUNDA, och bara när poängvakten faktiskt fällt något på en
+    uppgift varvet RÖRDE: ett gammalt fynd på uppgift 3 är inget besked om det
+    önskemål hon just skickade, precis som i nivågrinden nedan. Kandidaten tas
+    bara emot om den validerar — «rent före, trasigt efter» är en försämring,
+    och då står fyndet kvar som varning i stället. Därför kan poängvakten och
+    balansvakten inte dra pappret fram och tillbaka mellan sig."""
+    log = log_cb or (lambda _m: None)
+    exam = res.get("exam")
+    if profil != "prov" or exam is None or exam is fore:
+        return res
+    rorda = set(andrade_uppgifter(fore, exam))
+    fynd = [f for f in poangvakt(exam, profil)
+            if _uppgiftsnr(f.get("nr")) in rorda]
+    if not fynd:
+        return res
+    if res["rounds"] >= max_rounds:
+        return {**res, "errors": res["errors"] + fynd}
+    log("Kraven blev fler än poängen: justerar poängtrippeln …")
+    kandidat = _llm_round(build_repair_prompt(exam, fynd, profil), model, llm,
+                          profil=profil, log_cb=log_cb,
+                          etikett="Justerar poängen i")
+    rounds = res["rounds"] + 1
+    if kandidat is not None and riktning is not None:
+        # Samma grind som varvet självt: rättningen får röra målet och inget
+        # annat, annars smiter en omskrivning av uppgift 3 in i runda två.
+        kandidat, _skal = sammanfoga_riktat(exam, kandidat, riktning)
+    if kandidat is None:
+        return {**res, "rounds": rounds, "errors": res["errors"] + fynd}
+    _doc, nya = _validate(kandidat, profil, niva_mal=niva_mal)
+    if nya:
+        return {**res, "rounds": rounds, "errors": res["errors"] + fynd}
+    return {**res, "exam": kandidat, "rounds": rounds}
+
+
 def refine_exam(exam: dict, instruction: str, *, model: str,
                 nummer=None, profil: str = "prov",
                 mal: dict | None = None, malen=None,
@@ -6532,6 +6864,14 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
     # tom), det förra upptäcks framför klassen.
     if riktning is not None and res["errors"]:
         res["exam"] = exam
+    # ── POÄNGEN FÖLJER KRAVEN (spår 7) ───────────────────────────────
+    # FÖRE nivågrinden och bedömningspasset nedan, och det är ordningen som
+    # gör det värt något: nivåsignalerna ska läsa den poäng uppgiften slutar
+    # med, och elevexemplen skrivas mot den. Körs efter grinden ovan, så ett
+    # varv som ändå kastades får ingen poängrunda.
+    res = _poangpass(exam, res, model=model, llm=llm, profil=profil,
+                     riktning=riktning, niva_mal=niva_mal,
+                     max_rounds=max_rounds, log_cb=log_cb)
     # ── GRINDEN, men bara den DETERMINISTISKA halvan ─────────────────
     # E-signalerna körs: de kostar ingenting, och det är precis dem läraren kan
     # råka ut för här — «gör uppgift 7 svårare» på ett rent E-papper är en
