@@ -3297,6 +3297,13 @@ def _ord_fore_fragan(text: str) -> int:
     return len(" ".join(meningar[:-1]).split()) if len(meningar) > 1 else 0
 
 
+# ORDVAKTENS EGET MÄRKE i meddelandet. Koden «begriplighet» delas med
+# begriplighetsdomaren, och slutgrinden måste kunna skilja dem åt: den räknar
+# om ordvaktens fynd och ska INTE kasta domarens (se _raknas_om). Märket står
+# i en konstant och inte som en sträng på två ställen, för då glider de isär.
+ORDVAKTENS_MARKE = "ord förutsättning innan frågan kommer"
+
+
 def begriplighetssignaler(exam: dict, profil: str = "gruppuppgift") -> list[dict]:
     """De mätbara begriplighetsfelen.
 
@@ -3318,8 +3325,8 @@ def begriplighetssignaler(exam: dict, profil: str = "gruppuppgift") -> list[dict
             if ord_ > ORD_FORE_FRAGAN:
                 ut.append(_err(
                     f"uppgift {e['nr']}", "begriplighet",
-                    f"uppgift {e['nr']} har {ord_} ord förutsättning innan "
-                    f"frågan kommer (taket är {ORD_FORE_FRAGAN}). Korta ned "
+                    f"uppgift {e['nr']} har {ord_} {ORDVAKTENS_MARKE} "
+                    f"(taket är {ORD_FORE_FRAGAN}). Korta ned "
                     "till en situation och de tal som faktiskt behövs, och "
                     "ställ frågan tidigare." + BEHALL_PLANEN))
         return ut[:MAX_DOMAR_PROBLEM]
@@ -4677,7 +4684,14 @@ _DOKUMENTNAMN = {
 }
 
 
-def build_repair_prompt(exam: dict, problems: list, profil: str = "prov") -> str:
+def build_repair_prompt(exam: dict, problems: list, profil: str = "prov",
+                        las: str = "") -> str:
+    """`las` är delmomentslåset (delmomentlas): raderna som säger vilka
+    uppgifter som är ENDA bäraren av sitt delmoment och därför måste bära det
+    vidare om de skrivs om. TOM STRÄNG lämnar prompten byte för byte den som
+    gick i väg förut — samma villkor som varje annat block i appen, och här av
+    ett extra skäl: låset är nytt (2026-09-13, spår 9) och varje reparation
+    utan delmomentlista ska kosta precis det den kostade i går."""
     vems, det = _DOKUMENTNAMN.get(profil, ("ditt förra prov", "provet"))
     return (
         f"{INSTRUCTION}\n"
@@ -4698,6 +4712,7 @@ def build_repair_prompt(exam: dict, problems: list, profil: str = "prov") -> str
         "använd punkt eller kolon. Bindestreck i sammansättningar (kurs-PM), "
         "minustecken och sidintervall (s. 34–36) är något annat och ska stå "
         "kvar.\n"
+        f"{las}"
         f"Skriv om HELA {det} som JSON med problemen åtgärdade — justera "
         "poäng eller byt enstaka uppgifter, ändra så lite som möjligt i "
         "övrigt. Svara med enbart JSON."
@@ -5449,6 +5464,69 @@ def delmomenttackning(exam: dict, delmoment: list[dict]) -> list[dict]:
     return fel[:DELMOMENT_MAX_FYND]
 
 
+def _delmomentbarare(exam: dict, delmoment: list[dict] | None) -> dict[str, list[int]]:
+    """{delmoment: [uppgiftsnummer som bär det]}. Samma matchning som
+    delmomenttackning räknar med (namnet som delsträng, skiftlägesokänsligt),
+    och därför samma svar: en lucka i räkningen är exakt en tom lista här."""
+    uppgifter = (exam or {}).get("uppgifter") or []
+    ut: dict[str, list[int]] = {}
+    for d in (delmoment or []):
+        namn = _delmomentnamn(d.get("delmoment") or "").casefold()
+        if not namn:
+            continue
+        ut[d["delmoment"]] = [
+            i + 1 for i, u in enumerate(uppgifter)
+            if isinstance(u, dict)
+            and namn in str(u.get("delmoment") or "").casefold()]
+    return ut
+
+
+# ── DELMOMENTSLÅSET: DEN ENDA BÄRAREN FÅR INTE FÖRSVINNA (spår 9) ────────
+# Prov 82 (TE26A, 2026-09-13) visade hålet. Täckningen räknades tidigt, fann
+# «Delmomenten: 1 fynd mot lektionerna», och fixrundan lagade det. Sedan kom
+# facitjusteringen («Justerar 7 uppgift(er)») och nivåsäkringens två extra
+# rundor och skrev om pappret igen — och det levererade provet saknade
+# «Grundpotensform, prefix och enheter (s. 14–15)». Ingen räknade om.
+#
+# Två saker lagar det, och det här är den första: de senare rundorna ska VETA
+# vad de inte får tappa. Låset är deterministiskt ur samma lista som
+# räkningen, det kostar inget anrop, och det säger inte «rör inte uppgiften»
+# utan «byter du den måste den nya pröva samma sak» — en nivåsäkring som inte
+# får ändra något har inget att göra.
+#
+# Bara ENSAMMA bärare står i låset. Ett delmoment som två uppgifter prövar
+# tål att den ena byts, och en lista med tio rader där två spelar roll läses
+# som brus av både modellen och läraren.
+def delmomentlas(exam: dict, delmoment: list[dict] | None,
+                 nummer: list[int] | None = None) -> str:
+    """Promptblocket som håller täckningen genom en senare omskrivning.
+
+    `nummer` är de uppgifter rundan får ändra (nivåsäkringen skriver om en
+    delmängd); None betyder hela pappret, som facitjusteringen skriver om.
+    TOM STRÄNG när ingen uppgift är ensam bärare bland dem — och därmed en
+    prompt som är byte för byte den som gick i väg förut."""
+    ensamma: dict[int, list[str]] = {}
+    for namn, barare in _delmomentbarare(exam, delmoment).items():
+        if len(barare) != 1:
+            continue
+        n = barare[0]
+        if nummer is not None and n not in nummer:
+            continue
+        ensamma.setdefault(n, []).append(namn)
+    if not ensamma:
+        return ""
+    rader = "\n".join(f"- uppgift {n}: {'; '.join(namn)}"
+                      for n, namn in sorted(ensamma.items()))
+    return (
+        "BEHÅLL DELMOMENTEN. De här uppgifterna är de ENDA på pappret som "
+        "prövar sitt delmoment ur klassens lektioner:\n"
+        f"{rader}\n"
+        "Skriver du om en av dem ska den nya uppgiften pröva SAMMA delmoment, "
+        "och fältet \"delmoment\" ska följa med ordagrant oförändrat. "
+        "Provet får inte tappa delmomentet för att en uppgift byttes ut.\n"
+    )
+
+
 DELMOMENT_MAX_TOKENS = 4_000
 
 DELMOMENT_SYSTEM = (
@@ -5856,6 +5934,20 @@ def _slapp_poanglaset(fel: list[dict]) -> list[dict]:
             for f in fel]
 
 
+def _raknade_fynd(exam: dict, *, avsnitt: list[dict] | None, antal: int | None,
+                  delmoment: list[dict] | None, profil: str) -> list[dict]:
+    """De tre RÄKNADE vakterna i en och samma ordning, på ett ställe.
+
+    Ordningen är prompten läraren annars läser i loggen, och den ska vara
+    densamma var vakterna än körs — i fixrundan (_tackning_pass) och i
+    slutkontrollen (_slutgrind). Att de står här och inte inne i passet är
+    hela spår 9:s poäng: en vakt som bara körs på ett ställe räknar bara på
+    ett mellanläge, och pappret läraren får är ett senare."""
+    return (avsnittstackning(exam, avsnitt or [], antal or 0)
+            + delmomenttackning(exam, delmoment or [])
+            + poangvakt(exam, profil))
+
+
 def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                    antal: int | None, skeleton: list[dict] | None,
                    avsnitt: list[dict], rounds_used: int, max_rounds: int,
@@ -5890,23 +5982,21 @@ def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
     Gruppuppgiften har dem kvar där den hade dem, i _bok_grind efter
     nivågrinden, med sina egna riktade extrarundor."""
     log = log_cb or (lambda _m: None)
-    fel = avsnittstackning(exam, avsnitt, antal or 0)
+    # DE RÄKNADE VAKTERNA, alla tre, och alla oavsett `doma`: flaggan betyder
+    # «inga extra modellanrop», och det här är noll anrop. De ligger FÖRE
+    # domaren nedan så att en avsnittslucka, en delmomentslucka, en
+    # undervärderad uppgift och en metod utanför hamnar i SAMMA
+    # reparationsprompt — modellen ska byta ut uppgifter, inte skriva om
+    # provet en gång per vakt. Samma tre körs om efter sista rundan
+    # (_slutgrind), och därför står de i en egen funktion.
+    fel = _raknade_fynd(exam, avsnitt=avsnitt, antal=antal,
+                        delmoment=delmoment, profil=profil)
     # Loggraden namnger avsnitten, inte antalet fynd: «Täckningen: 1.1 saknar
-    # uppgifter» säger vad som är fel, «1 problem» säger ingenting. Byggs FÖRE
-    # delmomentsfynden läggs till: de har en annan meningsform, och en split på
-    # «avsnitt » hade gett dem ett tomt namn.
+    # uppgifter» säger vad som är fel, «1 problem» säger ingenting. Filtret på
+    # koden finns för att de andra vakternas meddelanden har en annan
+    # meningsform, och en split på «avsnitt » hade gett dem ett tomt namn.
     saknade = ", ".join(f["message"].split("avsnitt ", 1)[-1].split(" ", 1)[0]
-                        for f in fel)
-    # DELMOMENTSTÄCKNINGEN RÄKNAS, och den räknas oavsett `doma`: flaggan
-    # betyder «inga extra modellanrop», och det här är noll anrop. Den ligger
-    # FÖRE domaren nedan så att en lucka och en metod utanför hamnar i samma
-    # reparationsprompt, precis som avsnitten och delmomenten gör.
-    fel = fel + delmomenttackning(exam, delmoment or [])
-    # POÄNGEN MOT KRAVEN, och den räknas också oavsett `doma`: noll anrop, och
-    # den behöver ingen lista utifrån — uppgiften bär både kraven och poängen
-    # själv. Ligger med de andra räknade fynden så att en lucka, en främmande
-    # metod och en undervärderad uppgift lagas i SAMMA reparationsprompt.
-    fel = fel + poangvakt(exam, profil)
+                        for f in fel if f["code"] == "avsnittstackning")
     # METODERNA UTANFÖR I SAMMA RUNDA, och det är hela poängen med att lägga
     # dem här (lärarens beställning 2026-09-13). En egen runda för dem hade
     # bett modellen om ett nytt prov ovanpå ett nyss lagat; nu står
@@ -5990,6 +6080,7 @@ def _rakneverk_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                     rounds_used: int, max_rounds: int,
                     koder: list[str] | None = None,
                     niva_mal: dict | None = None,
+                    delmoment: list[dict] | None = None,
                     log_cb: Callable[[str], None] | None = None) -> dict:
     """Den DETERMINISTISKA räkningen, och den går FÖRE modelldomarna (Etapp 4).
 
@@ -6032,7 +6123,12 @@ def _rakneverk_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
         # läraren i stället för att tiga om dem.
         return {"exam": exam, "errors": errors + fel, "rounds": rounds_used}
     log(f"Räkneverket fällde {len(fel)} facit, justerar …")
-    kandidat = _llm_round(build_repair_prompt(exam, fel + errors, profil),
+    # DELMOMENTSLÅSET (spår 9). Rundan skriver om HELA pappret för att ett
+    # facit inte gick ihop, och prov 82 visade vad det kan kosta: en uppgift
+    # som var enda bäraren av ett delmoment byttes bort på vägen. Låset är
+    # tomt utan delmomentlista och prompten då byte för byte den förra.
+    kandidat = _llm_round(build_repair_prompt(exam, fel + errors, profil,
+                                              delmomentlas(exam, delmoment)),
                           model, llm, antal, skeleton, koder, profil=profil,
                           log_cb=log_cb,
                           etikett=f"Justerar provet (runda {rounds_used + 1} "
@@ -6053,6 +6149,7 @@ def _domar_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                 skala: str, antal: int | None, skeleton: list[dict] | None,
                 rounds_used: int, max_rounds: int, koder: list[str] | None = None,
                 niva_mal: dict | None = None,
+                delmoment: list[dict] | None = None,
                 log_cb: Callable[[str], None] | None = None) -> dict:
     """Domarrundan + högst EN reparationsrunda på dess fynd (C4).
 
@@ -6100,7 +6197,12 @@ def _domar_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
         return svar({"exam": exam, "errors": errors + avv + signaler,
                      "rounds": rounds_used}, True)
     log(f"Justerar {len(avv)} uppgift(er) …")
-    kandidat = _llm_round(build_repair_prompt(exam, avv + signaler, profil),
+    # DELMOMENTSLÅSET (spår 9). Det var den HÄR raden i jobbloggen — «Justerar
+    # 7 uppgift(er)» — som bytte bort prov 82:s enda prefixuppgift, efter att
+    # fixrundan nyss lagat samma lucka. Tomt lås utan delmomentlista, och
+    # prompten då byte för byte den förra.
+    kandidat = _llm_round(build_repair_prompt(exam, avv + signaler, profil,
+                                              delmomentlas(exam, delmoment)),
                           model, llm, antal, skeleton, koder, profil=profil,
                           log_cb=log_cb,
                           etikett=f"Justerar provet (runda {rounds_used + 1} "
@@ -6210,6 +6312,7 @@ def nivafel_text(nivafel: list[dict] | None) -> str:
 def _niva_grind(res: dict, *, model: str, llm, profil: str, skala: str,
                 antal: int | None, skeleton: list[dict] | None,
                 koder: list[str] | None, niva_mal: dict | None,
+                delmoment: list[dict] | None = None,
                 max_rounds: int | None = None,
                 log_cb: Callable[[str], None] | None = None) -> dict:
     """Extra riktade rundor på nivåfynden, sedan `nivafel`.
@@ -6269,7 +6372,14 @@ def _niva_grind(res: dict, *, model: str, llm, profil: str, skala: str,
         log(f"Säkrar nivån på {len(fynd)} uppgift(er) "
             f"(extrarunda {varv + 1} av {max_rounds}) …")
         nummer = sorted({_uppgiftsnr(f.get("nr")) for f in fynd} - {0})
-        kandidat = _llm_round(build_repair_prompt(exam, fynd, profil),
+        # DELMOMENTSLÅSET (spår 9), och här RIKTAT: bara de uppgifter rundan
+        # får skriva om står i låset. Nivåsäkringen på prov 82 skrev om tre
+        # uppgifter och sedan en till, och pappret tappade sitt enda
+        # prefixmoment på vägen. Låset säger inte «rör dem inte» — nivån ska
+        # säkras — utan «bär delmomentet vidare».
+        kandidat = _llm_round(build_repair_prompt(
+                                  exam, fynd, profil,
+                                  delmomentlas(exam, delmoment, nummer)),
                               model, llm, antal, skeleton, koder, profil=profil,
                               log_cb=log_cb,
                               etikett=f"Säkrar nivån (extrarunda {varv + 1} "
@@ -6439,6 +6549,119 @@ def _bok_grind(res: dict, *, model: str, llm, profil: str,
             if e.get("code") not in ("relevans", "begriplighet")]
     res["errors"] = kvar + rel + beg
     return res
+
+
+# ── SLUTGRINDEN: VAKTERNA RÄKNAR OM PÅ DET PAPPER LÄRAREN FÅR ───────────
+# HÅLET I FIXRUNDAN (prov 82, TE26A 2026-09-13, lärarens ord: «fixa hålet i
+# fixrundan»). Jobbloggen berättar hela historien: «Delmomenten: 1 fynd mot
+# lektionerna, byter ut uppgifter …» tidigt, sedan «Justerar 7 uppgift(er)»
+# och «Säkrar nivån på 3 uppgift(er)» och «… på 1 uppgift(er)» — och det
+# levererade pappret saknade «Grundpotensform, prefix och enheter (s. 14–15)».
+# `errors` var TOM. Vakten hade sagt sitt om ett mellanläge, en senare runda
+# bytte bort uppgiften igen, och ingen räknade om.
+#
+# En vakt som bara körs tidigt vaktar alltså inte pappret utan ett utkast.
+# Här körs de om, sist av allt utom exemplen, och de tre sakerna den gör är:
+#
+#   1. RÄKNAR OM. Noll modellanrop, samma svar varje gång. Hittar den
+#      ingenting kostar hela grinden ingenting, och ett prov som satt direkt
+#      går exakt de anrop det gick förut (kassetteregeln).
+#   2. EN efterrunda, med samma reparationsprompt som fixrundan: byt ut
+#      uppgiften, skriv inte om provet. En andra runda hade bett om ett nytt
+#      prov efter att nivån just säkrats, och nivån är det läraren krävde
+#      garanti för.
+#   3. RÄKNAR OM IGEN och lägger det som ändå står kvar i `errors`. Ett fynd
+#      som bara syns i loggen försvinner när jobbet är över; i `errors` följer
+#      det med pappret in i canvasen (plan.js provFel, api.js tackningsfelText).
+SLUTRUNDOR = 1
+
+# Vad slutgrinden RÄKNAR OM, och därför ska rensa bort gamla kopior av innan
+# den skriver sina egna. Koden räcker inte som nyckel för två av dem:
+#
+# * `delmomenttackning` bärs av både räkningen (path «uppgifter») och
+#   delmomentsdomarens metodfynd (path «uppgift 7»). Domaren körs inte här,
+#   och hans fynd ska stå kvar.
+# * `begriplighet` bärs av både ordvakten (deterministisk, mätt på orden före
+#   frågan) och begriplighetsdomaren. Samma sak: domarens fynd står kvar.
+def _raknas_om(fel: dict) -> bool:
+    kod, path = fel.get("code"), str(fel.get("path") or "")
+    if kod in ("avsnittstackning", "poangvakt"):
+        return True
+    if kod == "delmomenttackning":
+        return path == "uppgifter"
+    if kod == "begriplighet":
+        return ORDVAKTENS_MARKE in str(fel.get("message") or "")
+    return False
+
+
+def _slutfynd(exam: dict, *, avsnitt, antal, delmoment, profil,
+              bokuppgifter) -> list[dict]:
+    """Allt slutgrinden kan avgöra själv: de tre räknade vakterna plus
+    ordvakten.
+
+    ORDVAKTEN har samma villkor som i fixrundan (`profil == "prov"` och en
+    bokdörr), och villkoret är kassetteregeln: ett prov utan bok ska kosta och
+    väga exakt som förut. Domarna — delmoment, relevans, begriplighet — körs
+    INTE om. De kostar ett anrop var, och grinden är till för det som går att
+    räkna gratis."""
+    fel = _raknade_fynd(exam, avsnitt=avsnitt, antal=antal,
+                        delmoment=delmoment, profil=profil)
+    if profil == "prov" and bokuppgifter:
+        fel = fel + begriplighetssignaler(exam, profil)
+    return _slapp_poanglaset(fel)
+
+
+def _slutgrind(res: dict, *, model: str, llm, profil: str,
+               antal: int | None, skeleton: list[dict] | None,
+               koder: list[str] | None, niva_mal: dict | None,
+               avsnitt: list[dict] | None, delmoment: list[dict] | None,
+               bokuppgifter: list[dict] | None,
+               max_rounds: int = SLUTRUNDOR,
+               log_cb: Callable[[str], None] | None = None) -> dict:
+    """Sista ordet före exemplen. Se blocket ovan."""
+    log = log_cb or (lambda _m: None)
+    exam = res.get("exam")
+    if exam is None:
+        return res
+    matt = dict(avsnitt=avsnitt, antal=antal, delmoment=delmoment,
+                profil=profil, bokuppgifter=bokuppgifter)
+    fel = _slutfynd(exam, **matt)
+    if not fel:
+        # RENT PAPPER, NOLL ANROP. Gamla kopior av samma fynd rensas ändå:
+        # står ett fynd kvar i `errors` från en tidig runda och pappret sedan
+        # lagades, pekar varningen på en uppgift som inte finns längre.
+        kvar = [e for e in (res.get("errors") or []) if not _raknas_om(e)]
+        return {**res, "errors": kvar} if len(kvar) != len(
+            res.get("errors") or []) else res
+    log(f"Slutkontrollen: {len(fel)} fynd står kvar efter sista rundan, "
+        "byter ut uppgifter …")
+    # De fel som INTE räknas om här (schemafel, domarnas fynd) följer med
+    # pappret vidare; de räknade skrivs om längst ned ur den sista räkningen.
+    ovrigt = [e for e in (res.get("errors") or []) if not _raknas_om(e)]
+    if max_rounds > 0:
+        # SAMMA reparationsprompt som fixrundan, och delmomentslåset med:
+        # rundan lagar en lucka och får inte öppna en ny i samma andetag.
+        kandidat = _llm_round(
+            build_repair_prompt(exam, fel, profil,
+                                delmomentlas(exam, delmoment)),
+            model, llm, antal, skeleton, koder, profil=profil, log_cb=log_cb,
+            etikett="Lagar de sista fynden i")
+        res = {**res, "rounds": (res.get("rounds") or 0) + 1}
+        if kandidat is not None:
+            _doc, brutna = _validate(kandidat, profil, koder, niva_mal)
+            if brutna and not ovrigt:
+                # Samma grind som varje annan runda i filen: var pappret rent
+                # före och trasigt efter är omskrivningen en försämring.
+                log("Efterrundan bröt balansen — pappret står kvar som det var.")
+            else:
+                exam, ovrigt = kandidat, brutna
+    # SISTA RÄKNINGEN, på det som faktiskt levereras. Det som står kvar blir
+    # lärarens varning i stället för en tystnad.
+    kvar = _slutfynd(exam, **matt)
+    if kvar:
+        log(f"Slutkontrollen: {len(kvar)} fynd gick inte att laga — de står "
+            "som varningar på pappret.")
+    return {**res, "exam": exam, "errors": ovrigt + kvar}
 
 
 def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
@@ -6681,6 +6904,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
         res = _rakneverk_pass(res["exam"], res["errors"], model=model, llm=llm,
                               profil=profil, antal=antal, skeleton=grammatik,
                               koder=koder, niva_mal=niva_mal,
+                              delmoment=delmoment,
                               rounds_used=res["rounds"], max_rounds=max_rounds,
                               log_cb=log_cb)
 
@@ -6710,14 +6934,32 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
             log(nivafel_text(r["nivafel"]))
         return r
 
+    def slut(r: dict, rundor: int) -> dict:
+        """Slutgrinden på det papper som är på väg ut (spår 9).
+
+        Samma villkor som fixrundan har, av samma skäl: utan kapitelram, utan
+        lektionslista och utan prov finns ingenting att räkna, och då körs
+        ingenting alls."""
+        if r["exam"] is None or not (avsnitt or delmoment or profil == "prov"):
+            return r
+        return _slutgrind(r, model=model, llm=llm, profil=profil, antal=antal,
+                          skeleton=grammatik, koder=koder, niva_mal=niva_mal,
+                          avsnitt=avsnitt or [], delmoment=delmoment or [],
+                          bokuppgifter=bokuppgifter if profil == "prov"
+                          else None,
+                          max_rounds=rundor, log_cb=log_cb)
+
     if not doma or res["exam"] is None:
-        return flagga(res)
+        # `doma=False` betyder «inga extra modellanrop», och en efterrunda är
+        # ett sådant. RÄKNINGEN görs ändå — den kostar ingenting — så att en
+        # lucka räkneverkets facitrunda öppnade syns för läraren också här.
+        return flagga(slut(res, 0))
     skala = _skala(profil, boknivaer, skeleton, kurs)
     steg("domare")
     res = _domar_pass(res["exam"], res["errors"], model=model, llm=llm,
                       profil=profil, skala=skala,
                       antal=antal, skeleton=grammatik, koder=koder,
-                      niva_mal=niva_mal,
+                      niva_mal=niva_mal, delmoment=delmoment,
                       rounds_used=res["rounds"], max_rounds=max_rounds,
                       log_cb=log_cb)
     # ── GRINDEN ──────────────────────────────────────────────────────
@@ -6727,7 +6969,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # `nivafel` och läraren får veta det.
     res = _niva_grind(res, model=model, llm=llm, profil=profil, skala=skala,
                       antal=antal, skeleton=grammatik, koder=koder,
-                      niva_mal=niva_mal, log_cb=log_cb)
+                      niva_mal=niva_mal, delmoment=delmoment, log_cb=log_cb)
     # ── BOKGRINDEN, och bara på GRUPPUPPGIFTEN ───────────────────────
     # Lärarens dom 2026-09-09 gäller gruppuppgiften: den ska följa bokens sort
     # och gå att förstå vid första läsningen. Passet ligger EFTER nivågrinden
@@ -6739,6 +6981,12 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                          bokuppgifter=bokuppgifter, punkter=punkter,
                          antal=antal, koder=koder, niva_mal=niva_mal,
                          inriktning=inriktning, log_cb=log_cb)
+    # ── SLUTGRINDEN (2026-09-13, spår 9) ─────────────────────────────
+    # SIST av alla rundor och FÖRE exemplen: de räknade vakterna körs om på
+    # det papper läraren faktiskt får. Nivåsäkringen och facitjusteringen har
+    # skrivit om uppgifter sedan fixrundan sa sitt, och prov 82 levererades
+    # utan ett delmoment som fixrundan hade lagat. Se blocket vid _slutgrind.
+    res = slut(res, SLUTRUNDOR)
     # ── BEDÖMNINGSPASSET (2026-08-23) ────────────────────────────────
     # Sist av allt, och bara på PROVET: det är provets bedömningsanvisning
     # läraren rättar efter, och arbetsbladets och gruppuppgiftens facit heter

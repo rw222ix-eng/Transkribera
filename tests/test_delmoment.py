@@ -951,3 +951,227 @@ def test_provets_forebilder_tar_bokens_repetitionssidor_forst(tmp_path):
     assert (39, 3) in [(r["sida"], r["nr"]) for r in ut]
     assert 9 not in [r["nr"] for r in ut]
     assert bok.provuppgifter([], [], antal=6) == []
+
+
+# ── slutgrinden: hålet i fixrundan (spår 9, 2026-09-13) ──────────────────
+#
+# Prov 82 (TE26A, Ma 1c, «Bara E») genererades med spår 4–8 och levererades
+# ändå utan «Grundpotensform, prefix och enheter (s. 14–15)». Jobbloggen visar
+# varför: «Delmomenten: 1 fynd mot lektionerna, byter ut uppgifter …» tidigt,
+# sedan «Justerar 7 uppgift(er)» och två «Säkrar nivån …». Vakten dömde ett
+# mellanläge, en senare runda bytte bort uppgiften igen, och `errors` var TOM.
+#
+# Ett BALANSERAT papper behövs för de här testerna och inte bara en lista med
+# rubriker: efterrundan har samma «rent före, trasigt efter»-grind som varje
+# annan runda i filen, så ett papper som redan bryter balansen hade svarat på
+# en annan fråga än den som ställs.
+_FORMAGA = ["B", "P", "PL", "M", "R", "K", "B", "P", "PL", "M"]
+_TYP = ["rutin", "problem", "rutin", "resonemang", "redovisning",
+        "rutin", "problem", "rutin", "resonemang", "redovisning"]
+_POANG = [[2, 0, 0], [1, 1, 0], [1, 1, 0], [1, 1, 0], [1, 1, 0],
+          [2, 0, 0], [0, 2, 0], [0, 1, 1], [0, 0, 2], [0, 0, 2]]
+# Var uppgift sin egen mening. Variationsvakten byter talen mot # innan den
+# jämför, så «uppgift 6» och «uppgift 8» hade varit samma text för den — och
+# den bortbytta uppgiften nedan hade fällts för en likhet testet inte handlar
+# om.
+_STAM = ["Beräkna", "Förenkla", "Avgör", "Bestäm", "Visa",
+         "Jämför", "Undersök", "Skriv om", "Motivera", "Ange"]
+
+
+def _balanserat_prov(tappat: str = "") -> dict:
+    """Ett prov som validerar: en uppgift per undervisat delmoment, i balans
+    på nivå, förmåga, typ och stegring.
+
+    `tappat` är det delmoment en senare runda skrev bort — uppgiften finns
+    kvar och balansen är orörd, precis som efter en nivåsäkring, men uppgiften
+    prövar nu samma sak som en annan uppgift redan gör."""
+    namnen = [d["delmoment"] for d in _delmoment()]
+    uppgifter = []
+    for i, namn in enumerate(namnen):
+        prover = "Uttryck" if namn == tappat else namn
+        uppgifter.append({
+            "del": "B" if i < 5 else "C", "poang": _POANG[i],
+            "formaga": _FORMAGA[i], "typ": _TYP[i],
+            "text": f"{_STAM[i]} talet i {prover}.", "losning": "…",
+            "bedomning": "+1 E", "delmoment": prover})
+    return {"titel": "Prov: Kapitel 1", "kurs": "Ma1c",
+            "hjalpmedel": "Del A utan räknare", "uppgifter": uppgifter}
+
+
+def _slutgrind(exam, llm, *, errors=None, rundor=1):
+    return exam_gen._slutgrind(
+        {"exam": exam, "errors": list(errors or []), "rounds": 3},
+        model="m", llm=llm, profil="prov", antal=10, skeleton=None,
+        koder=None, niva_mal=None, avsnitt=[], delmoment=_delmoment(),
+        bokuppgifter=None, max_rounds=rundor)
+
+
+def test_papperet_haller_som_underlag_for_slutgrinden():
+    """Grinden mäter mot balansen; går pappret sönder av sig självt mäter
+    testerna nedan något annat än de påstår."""
+    assert exam_gen._validate(_balanserat_prov(), "prov", None, None)[1] == []
+    assert exam_gen._validate(
+        _balanserat_prov("Grundpotensform, prefix och enheter"),
+        "prov", None, None)[1] == []
+
+
+def test_delmomentet_som_nivarundan_bytte_bort_lagas_i_efterrundan():
+    """Hela spår 9 i ett test: pappret som lämnar nivåsäkringen saknar
+    prefixmomentet, slutgrinden räknar om, efterrundan får RÄTT rad, och det
+    lagade pappret är det som levereras."""
+    tappat = _balanserat_prov("Grundpotensform, prefix och enheter")
+    lagat = _balanserat_prov()
+    llm, anrop = _stub_llm([json.dumps(lagat)])
+    res = _slutgrind(tappat, llm)
+    assert len(anrop) == 1                      # EN efterrunda, inte fler
+    prompt = anrop[0]["prompt"]
+    assert "Inget ur delmomentet Grundpotensform, prefix och enheter " \
+        "(s. 14–15)" in prompt
+    assert "Byt UT en uppgift" in prompt and "Lägg INTE till" in prompt
+    # Och låset följer med: rundan får inte öppna en ny lucka när den lagar
+    # den här.
+    assert "BEHÅLL DELMOMENTEN" in prompt
+    assert res["exam"] == lagat and res["errors"] == [] and res["rounds"] == 4
+
+
+def test_fyndet_som_star_kvar_efter_efterrundan_blir_lararens_varning():
+    """Det som gjorde prov 82 farligt var inte luckan utan tystnaden:
+    `errors` var tom. Lagar inte efterrundan fyndet ska det stå kvar där, med
+    delmomentets namn."""
+    tappat = _balanserat_prov("Grundpotensform, prefix och enheter")
+    llm, anrop = _stub_llm([json.dumps(tappat)])
+    res = _slutgrind(tappat, llm)
+    assert len(anrop) == 1
+    kvar = [e for e in res["errors"] if e["code"] == "delmomenttackning"]
+    assert len(kvar) == 1 and kvar[0]["path"] == "uppgifter"
+    assert "Grundpotensform, prefix och enheter" in kvar[0]["message"]
+
+
+def test_slutgrinden_kostar_ingenting_pa_ett_papper_som_haller():
+    """KASSETTREGELN. Håller pappret ska grinden inte kosta ett enda anrop och
+    inte röra rundräknaren — ett prov som satt direkt ska gå exakt de anrop
+    det gick i går."""
+    llm, anrop = _stub_llm(["{}"])
+    res = _slutgrind(_balanserat_prov(), llm)
+    assert anrop == [] and res["rounds"] == 3 and res["errors"] == []
+
+
+def test_slutgrinden_rensar_bort_ett_fynd_som_lagats_pa_vagen():
+    """Fixrundans varning gällde ett mellanläge. Lagades luckan senare pekar
+    varningen på en uppgift som inte finns längre, och då ska den bort."""
+    gammalt = exam_gen.delmomenttackning(
+        _balanserat_prov("Kubikrötter"), _delmoment())
+    llm, anrop = _stub_llm(["{}"])
+    res = _slutgrind(_balanserat_prov(), llm, errors=gammalt)
+    assert gammalt and anrop == [] and res["errors"] == []
+
+
+def test_domarnas_fynd_overlever_slutgrinden():
+    """Grinden räknar om det den KAN räkna. Delmomentsdomarens metodfynd
+    (samma kod, men path «uppgift 7») kan den inte, och det ska stå kvar
+    oavsett vad räkningen säger."""
+    domarfynd = exam_gen.metodfynd({"utanfor": [{"nr": "7",
+                                                 "metod": "olikheter"}]})
+    llm, _ = _stub_llm(["{}"])
+    res = _slutgrind(_balanserat_prov(), llm, errors=domarfynd)
+    assert res["errors"] == domarfynd
+
+
+def test_generate_exam_raknar_om_sist_ocksa_utan_domare():
+    """`doma=False` betyder «inga extra modellanrop», och RÄKNINGEN är noll
+    anrop. Efterrundan uteblir, men luckan ska ändå stå i `errors` när
+    pappret lämnar generatorn."""
+    tappat = _balanserat_prov("Grundpotensform, prefix och enheter")
+    llm, anrop = _stub_llm([json.dumps(tappat)])
+    res = exam_gen.generate_exam("Ma1c", "TE26A", ["potenser"], model="m",
+                                 llm=llm, antal=10, doma=False,
+                                 skeleton=[dict(u) for u in tappat["uppgifter"]],
+                                 delmoment=_delmoment(), max_rounds=2)
+    kvar = [e for e in res["errors"] if e["code"] == "delmomenttackning"]
+    assert len(kvar) == 1 and "Grundpotensform, prefix och enheter" in \
+        kvar[0]["message"]
+    # Fixrundans egen reparation, och sedan INGET mer: slutgrinden räknar om
+    # utan att ringa.
+    assert len(anrop) == 2
+
+
+def test_generate_exam_kostar_samma_anrop_som_forut_utan_fynd():
+    """Kassettregeln hela vägen upp: ett prov där vakterna inte fäller något
+    ska gå exakt ett anrop, som före spår 9."""
+    helt = _balanserat_prov()
+    llm, anrop = _stub_llm([json.dumps(helt)])
+    res = exam_gen.generate_exam("Ma1c", "TE26A", ["potenser"], model="m",
+                                 llm=llm, antal=10, doma=False,
+                                 skeleton=[dict(u) for u in helt["uppgifter"]],
+                                 delmoment=_delmoment(), max_rounds=2)
+    assert len(anrop) == 1 and res["errors"] == []
+
+
+# ── delmomentslåset ──────────────────────────────────────────────────────
+
+def test_laset_namner_bara_den_som_ar_ensam_barare():
+    exam = _balanserat_prov("Grundpotensform, prefix och enheter")
+    las = exam_gen.delmomentlas(exam, _delmoment())
+    # Uppgift 1 är ensam om kvadratrötterna och står i låset.
+    assert "- uppgift 1: Kvadratrötter" in las
+    # «Uttryck» prövas nu av två uppgifter (den bortbytta och sin egen) och
+    # tål att den ena skrivs om — den ska inte stå i låset.
+    assert ": Uttryck" not in las
+    # Och fältets namn står i klartext, så att det följer med oförändrat.
+    assert '"delmoment"' in las and "SAMMA delmoment" in las
+
+
+def test_laset_galler_bara_de_uppgifter_rundan_far_andra():
+    """Nivåsäkringen skriver om en DELMÄNGD. En rad om uppgift 9 i en runda
+    som bara får röra uppgift 2 är brus, och brus läses inte."""
+    exam = _balanserat_prov()
+    las = exam_gen.delmomentlas(exam, _delmoment(), [2])
+    assert las.count("- uppgift") == 1 and "- uppgift 2: Kubikrötter" in las
+    assert exam_gen.delmomentlas(exam, _delmoment(), [999]) == ""
+
+
+def test_laset_ar_tomt_utan_lista_och_prompten_da_byteidentisk():
+    """Kassettregeln: utan delmomentlista ska reparationsprompten vara byte
+    för byte den som gick i väg förut."""
+    exam = _balanserat_prov()
+    fel = [exam_gen._err("uppgifter", "avsnittstackning", "Inget ur avsnitt")]
+    assert exam_gen.delmomentlas(exam, []) == ""
+    assert exam_gen.delmomentlas(exam, None) == ""
+    assert exam_gen.build_repair_prompt(exam, fel, "prov", "") == \
+        exam_gen.build_repair_prompt(exam, fel, "prov")
+    assert "BEHÅLL DELMOMENTEN" not in exam_gen.build_repair_prompt(
+        exam, fel, "prov")
+
+
+def test_nivasakringen_far_veta_vad_uppgiften_maste_behalla():
+    """Spår 9:s andra halva: nivåsäkringen bytte bort prov 82:s enda
+    prefixuppgift. Nu står det i hennes prompt vad uppgiften bär."""
+    exam = _balanserat_prov()
+    fynd = [{"nr": "6", "pastadd": "E", "domd": "C", "skal": "för svår",
+             "message": "uppgift 6 ligger på C men påstår E"}]
+    llm, anrop = _stub_llm([json.dumps(exam)])
+    exam_gen._niva_grind({"exam": exam, "errors": [], "rounds": 4,
+                          "nivafynd": fynd, "nivakoll": True,
+                          "nivamatt": True},
+                         model="m", llm=llm, profil="prov", skala="",
+                         antal=10, skeleton=None, koder=None, niva_mal=None,
+                         delmoment=_delmoment())
+    assert anrop and "BEHÅLL DELMOMENTEN" in anrop[0]["prompt"]
+    assert "- uppgift 6: Grundpotensform, prefix och enheter" in \
+        anrop[0]["prompt"]
+
+
+def test_facitjusteringen_far_samma_las():
+    """Samma sak för domarpassets runda — «Justerar 7 uppgift(er)» i prov 82:s
+    jobblogg. Den skriver om HELA pappret och ska veta vad det bär."""
+    exam = _balanserat_prov()
+    llm, anrop = _stub_llm([json.dumps({"domar": []}),
+                            json.dumps({"fel": [{"nr": "1",
+                                                 "skal": "facit fel"}]}),
+                            json.dumps(exam)])
+    exam_gen._domar_pass(exam, [], model="m", llm=llm, profil="prov",
+                         skala="", antal=10, skeleton=None, rounds_used=1,
+                         max_rounds=4, delmoment=_delmoment())
+    reparationer = [a["prompt"] for a in anrop
+                    if "Problem att åtgärda" in a["prompt"]]
+    assert reparationer and "BEHÅLL DELMOMENTEN" in reparationer[0]

@@ -875,7 +875,13 @@
   const nivaraden = res => {
     const text = window.API.nivafelText(res && res.nivafel);
     const bok = window.API.bokfelText(res);
-    return (text ? ' ' + text : '') + (bok ? ' ' + bok : '');
+    /* Och det slutkontrollen inte kunde laga (api.js tackningsfelText, ur
+       `errors`). En omskrivning kan byta bort den enda uppgiften som prövade
+       ett delmoment — det var precis så prov 82 tappade sitt prefixmoment —
+       och då ska det stå i tråden, inte bara i en fellista ingen läser. */
+    const tackning = window.API.tackningsfelText(res && res.errors);
+    return (text ? ' ' + text : '') + (bok ? ' ' + bok : '')
+      + (tackning ? ' ' + tackning : '');
   };
   /* Varvets svar, plus det som INTE gick med. Släpptes ett härlett mål ur
      urvalet (se korOnskan) måste det stå i samma bubbla som resten: annars

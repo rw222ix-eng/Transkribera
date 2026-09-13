@@ -3193,6 +3193,11 @@
              ifrån, och en uppgift utan förebild är det första hon vill se.
              Tom sträng på allt utom gruppuppgiften. */
           + (window.API.bokfelText(res) ? window.API.bokfelText(res) + ' ' : '')
+          /* Slutkontrollens kvarstående fynd (exam_gen._slutgrind) med
+             namn på det som saknas. «Något gick inte att rätta helt» nedan
+             säger inte VAD, och ett prov som tappat ett delmoment på vägen
+             ska inte behöva läsas fram ur en fellista. */
+          + (window.API.tackningsfelText(res.errors) ? window.API.tackningsfelText(res.errors) + ' ' : '')
           + `${(res.errors || []).length ? 'Något gick inte att rätta helt; läs igenom extra noga.' : 'Läs igenom och skriv vad som ska bli annorlunda.'}`
         : `Utkastet är skrivet. ${Best(typ)} täcker ${vald.size || 'inga'} valda moment — läs igenom och skriv vad som ska bli annorlunda.`,
       plan: [

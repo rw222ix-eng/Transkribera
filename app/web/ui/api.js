@@ -533,5 +533,44 @@
     return rader.join(' ');
   };
 
+  /* ── DET SLUTKONTROLLEN INTE KUNDE LAGA ───────────────────
+     Serverns `errors` bär de räknade vakternas fynd när de STÅR KVAR efter
+     slutgrindens efterrunda (exam_gen._slutgrind, spår 9). Prov 82 levererades
+     utan delmomentet «Grundpotensform, prefix och enheter» och `errors` var
+     tom — nu står fyndet där, och då ska det också gå att läsa. Serverns egna
+     meddelanden är skrivna TILL MODELLEN («Byt UT en uppgift ur det delmoment
+     som har flest …») och duger inte som lärarrad; här står lärarens.
+
+     Tom sträng när ingenting fälls, som nivåns och bokens rader: ett papper
+     utan fynd ska inte bära en lugnande mening. */
+  API.tackningsfelText = function (errors) {
+    const fel = (Array.isArray(errors) ? errors : []).filter(Boolean);
+    const rader = [];
+    /* DELMOMENTET först: det är lärarens egen fråga («vi måste ha med alla de
+       delar vi har berört»), och namnet är det enda hon behöver. Räkningens
+       fynd bär path «uppgifter»; delmomentsdomarens metodfynd bär «uppgift 7»
+       och är något annat — de säger att en uppgift kräver för mycket, inte att
+       ett moment saknas. */
+    const namn = fel
+      .filter(f => f.code === 'delmomenttackning' && f.path === 'uppgifter')
+      .map(f => (String(f.message || '').match(/Inget ur delmomentet (.+?) \(s\./) || [])[1])
+      .filter(Boolean);
+    namn.forEach(n => rader.push(`Delmomentet ${n} saknas. Provet prövar det inte.`));
+    const avsnitt = fel
+      .filter(f => f.code === 'avsnittstackning')
+      .map(f => (String(f.message || '').match(/Inget ur avsnitt (.+?) \(/) || [])[1])
+      .filter(Boolean);
+    if (avsnitt.length) {
+      rader.push(`Avsnitt ${avsnitt.join(', ')} fick inga uppgifter.`);
+    }
+    const poang = Array.from(new Set(fel.filter(f => f.code === 'poangvakt')
+      .map(f => parseInt(String(f.path || '').replace('uppgift ', ''), 10))
+      .filter(n => n > 0))).sort((a, b) => a - b);
+    if (poang.length) {
+      rader.push(`Uppgift ${poang.join(', ')} ber om fler saker än den ger poäng för.`);
+    }
+    return rader.join(' ');
+  };
+
   window.API = API;
 })();
