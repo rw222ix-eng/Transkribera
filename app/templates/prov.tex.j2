@@ -122,12 +122,16 @@ Provet kan ge totalt \textbf{((( forsatt.total ))) poäng}.
   \item Skriv lösningar på lösblad. Skriv ditt namn på alla blad du lämnar in.
 \end{itemize}
 
-\vspace{10mm}
+((# 10 → 7 mm och 6 → 4 mm (2026-09-14): läraren tyckte försättsbilden
+    blev för liten mot canvasen. Millimetrarna som sparas här går till
+    bilden, vars höjd numera räknas ut ur bildtextens längd
+    (exam_latex._forsatt_vy, `bild_hojd`). #))
+\vspace{7mm}
 
 \noindent
 \textbf{Namn:} \hrulefill
 
-\vspace{6mm}
+\vspace{4mm}
 
 \noindent
 \textbf{Klass:} \hrulefill
@@ -167,10 +171,14 @@ Provet kan ge totalt \textbf{((( forsatt.total ))) poäng}.
     (exam_spec.Forsattsbild.bildtext) och står bara när det är ifyllt
     \textendash{} gamla prov har det inte. #))
 ((* if forsatt.bild_fil *))
-\vspace{6mm}
+\vspace{5mm}
 
 \begin{center}
-  \includegraphics[width=0.7\textwidth,height=47mm,keepaspectratio]{((( forsatt.bild_fil )))}
+  ((# Höjden är RÄKNAD per prov (exam_latex._forsatt_vy): kort bildtext ⇒
+      hög bild, upp till 66 mm; 45 ord ⇒ 47 mm som förut. Bredden 0,8 i
+      stället för 0,7 så att en liggande bild får bli lika bred som
+      bildtextens parbox under den. #))
+  \includegraphics[width=0.8\textwidth,height=((( forsatt.bild_hojd or 47 )))mm,keepaspectratio]{((( forsatt.bild_fil )))}
 ((* if forsatt.bildtext *))
 
   ((# 3 mm extra luft mellan bild och bildtext: läraren såg texten ligga

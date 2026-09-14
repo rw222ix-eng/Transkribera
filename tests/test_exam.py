@@ -3467,9 +3467,11 @@ def test_forsattsbladets_egna_bild_trycks_med_sin_bildtext():
         "Det är samma räknelagar du använder på det här provet.")
     tex = exam_latex.render_prov(doc, forsatt_bild="egen-forsatt.png")
     forsatt = _forsattsbladet(tex)
-    # 50 mm och inte 58: höjden räknades om när bildtexten fick bli TRE rader
-    # i stället för två (se höjdbudgeten i prov.tex.j2).
-    assert (r"\includegraphics[width=0.7\textwidth,height=50mm,"
+    # Höjden RÄKNAS ur bildtextens längd sedan 2026-09-14 (exam_latex.
+    # _forsattsbild_hojd): 38 ord blir fyra rader, och då får bilden 51 mm.
+    # Bredden 0,8 så att en liggande bild blir lika bred som bildtextens
+    # parbox. Läraren såg bilden «för liten» mot canvasen.
+    assert (r"\includegraphics[width=0.8\textwidth,height=51mm,"
             r"keepaspectratio]{egen-forsatt.png}") in forsatt
     # Bildtexten står under bilden, i \small\itshape och i en \parbox som är
     # smalare än satsytan, och den är ESCAPAD: den är ren text och ett «&» i
@@ -3477,6 +3479,19 @@ def test_forsattsbladets_egna_bild_trycks_med_sin_bildtext():
     assert r"\parbox{0.8\textwidth}{\centering\small\itshape En man böjd " \
         r"över ett räknebord vid ljuset \& i lugn och ro." in forsatt
     assert "ljuset & i lugn" not in forsatt
+
+
+def test_forsattsbildens_hojd_foljer_bildtextens_langd():
+    """Kort bildtext ⇒ hög bild, lång ⇒ det gamla taket. Budgeten är
+    försättsbladets enda sida (prov.tex.j2), så höjden får aldrig växa förbi
+    66 mm eller krympa under 45 mm oavsett text."""
+    kort = _exam_med_forsattsbild("Descartes räknade med bokstäver. "
+                                  "Det gör du också här.")          # 9 ord
+    lang = _exam_med_forsattsbild(" ".join(["ord"] * 45))            # 45 ord
+    assert exam_latex._forsattsbild_hojd(kort) == 64
+    assert exam_latex._forsattsbild_hojd(lang) == 47
+    tex = exam_latex.render_prov(kort, forsatt_bild="egen-forsatt.png")
+    assert "height=64mm" in _forsattsbladet(tex)
 
 
 @pytest.mark.tectonic

@@ -789,7 +789,25 @@ def _forsatt_vy(doc: exam_spec.ExamDoc, delar: list[dict],
         "bildtext": (escape_latex(doc.forsattsbild.bildtext)
                      if doc.forsattsbild and doc.forsattsbild.bildtext
                      else None),
+        "bild_hojd": _forsattsbild_hojd(doc),
     }
+
+
+# FÖRSÄTTSBILDENS HÖJD I MM, räknad ur bildtextens längd. Läraren såg bilden
+# «för liten» i det tryckta provet mot canvasen (2026-09-14). Ett fast tak på
+# 47 mm var mätt för värsta fallet, 45 ord på fyra till fem rader, men de
+# flesta bildtexter är 25–30 ord, och då står 15 mm papper tomt. Budgeten är
+# prov.tex.j2:s egen: klassradens baslinje ~104 mm över underkanten (efter
+# att namnradernas luft kortats 2026-09-14), satsytan slutar vid 25 mm, luft
+# 5 mm före bilden och 3 mm efter, en \small-rad ≈ 4,3 mm och ~11 ord per rad
+# i en parbox på 0,8	extwidth. Golvet 45 mm är det gamla taket minus luften,
+# taket 66 mm är där en 16:9-bild slår i parboxens bredd.
+def _forsattsbild_hojd(doc: exam_spec.ExamDoc) -> int:
+    text = (doc.forsattsbild.bildtext if doc.forsattsbild else "") or ""
+    ord_ = len(text.split())
+    rader = max(1, -(-ord_ // 11)) if ord_ else 0
+    kvar = 80 - 5 - 3 - rader * 4.3 - 3
+    return int(max(45, min(66, kvar)))
 
 
 def _build_view(doc: exam_spec.ExamDoc,
