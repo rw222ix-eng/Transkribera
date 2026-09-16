@@ -313,7 +313,20 @@ INSTRUCTION = (
     "aldrig ett inuti ett annat. Skriv ut det som går att skriva ut: «$n-1$, "
     "$n$ och $n+1$» i stället för «tre på varandra följande heltal». "
     "Facktermen får stå kvar när den ÄR uppgiften (förenkla, faktorisera, "
-    "potens) — det är kedjorna av dem som fäller eleven.\n"
+    "potens) — det är kedjorna av dem som fäller eleven. AKTIVA VERB: «Lägg "
+    "till $k^{2}n$», «Multiplicera talet med 3», aldrig «ökas med», "
+    "«multipliceras med», «tecknas». En mening är HÖGST 24 ord. Och inga "
+    "kursplaneord: skriv «alla» (inte «samtliga»), «var och en» (inte "
+    "«vardera»), «vilket som helst» (inte «godtyckligt»), «blir» (inte "
+    "«erhålls»), och skriv ut vad som hör till vad i stället för "
+    "«respektive». UPPMANINGEN ÄR KORT — högst 16 ord, EN prestation per "
+    "mening — och ber uppgiften om två saker blir de a) och b) med var sin "
+    "poäng, aldrig «… och beräkna sedan …» eller «Jämför sedan …» i samma "
+    "enhet. Läraren fällde «Teckna ett uttryck för hur mycket kaféet sparar "
+    "per år med flergångsmuggar och beräkna besparingen då $x = 50\\,000$» "
+    "(17 ord, två prestationer) och «Förklara vad talen betyder. Jämför "
+    "sedan priset per kWh vid $20$ kWh med priset per kWh vid $60$ kWh» — "
+    "eleverna visste inte vad de skulle göra.\n"
     # Papprets krav-etikett skrivs av mallen (app/templates/prov.tex.j2,
     # \pfkrav) på varje uppgift, i kursiv, direkt efter numret — precis som i
     # lärarens förlaga. Står frasen dessutom i texten trycks den två gånger på
@@ -3330,37 +3343,127 @@ ORDVAKTENS_MARKE = "ord förutsättning innan frågan kommer"
 # Samma märkesregel som ordvakten: slutgrinden räknar om vaktens fynd och
 # behåller domarens (_raknas_om), och den skiljer dem på märket.
 SPRAKVAKTENS_MARKE = "svårt språk för eleven"
-# Ett räkneord, «av», och ett räkneord till inom fyrtio tecken — «summan av
-# de tre talens kvadrater», «produkten av summan och differensen».
-_STAPLADE_RE = re.compile(
-    r"\b(summan|produkten|kvoten|differensen|kvadraten)\s+av\b[^.?!\n]{0,40}?"
-    r"\b(summa|summan|produkt|produkten|kvot|kvoten|differens|differensen"
-    r"|kvadrat|kvadraten|kvadrater|kvadraterna)\b", re.I)
+# STRÄNGARE PÅ LÄRARENS BEGÄRAN (samma kväll): den första vakten fällde bara
+# «X av … Y»-kedjor. Nu fyra mått, alla mätta mot de femton proven i basen så
+# att de fäller ungefär EN enhet per prov och aldrig prov 82 (Jakobs E-prov,
+# som klassen inte klagade på):
+#
+# 1. TVÅ RÄKNEORD I SAMMA MENING. «Kvadrat» räknas bara i formerna «kvadraten
+#    av/på» och «kvadrater(na)» — «Kvadrat B har dubbelt så lång omkrets som
+#    kvadrat A» är två figurer, inte två räkningar, och föll annars.
+# 2. PASSIVA RÄKNEVERB. «Produkten av de tre talen ökas med $k^{2}n$» var
+#    prov 81:s andra svåra mening: eleven ska se vem som gör vad. «Lägg till
+#    $k^{2}n$» säger det.
+# 3. EN MENING PÅ MER ÄN MENING_TAK_PROV ORD. Räknat på bokstavsord (två eller
+#    fler bokstäver), så en formel inne i meningen inte räknas som fem ord.
+#    Prov 81 och 82 ligger under; de gamla provens «Undersök för vilka
+#    positiva heltal n som …, inför själv de beteckningar du behöver, namnge
+#    …» (29–32 ord) faller.
+# 4. ORD ELEVEN INTE HAR. Kursplanesvenskans småord, med vad som ska stå i
+#    stället.
+# 5. EN UPPMANINGSMENING PÅ MER ÄN UPPMANING_TAK ORD. Lärarens andra dom samma
+#    kväll: uppgift 8 och 11 var «svåra för eleverna att fatta vad de ska
+#    göra». Åttans uppmaning är «Teckna ett uttryck för hur mycket kaféet
+#    sparar per år med flergångsmuggar och beräkna besparingen då …» — 17
+#    bokstavsord med två prestationer i. Nationella provets uppmaningar är
+#    korta («Bestäm k och motivera ditt svar»). Taket 16 fäller åttan och 9 b
+#    i prov 81 och ingenting i prov 82; de gamla provens 20–32-ordsmeningar
+#    faller alla.
+# 6. EN UPPMANING PÅHÄNGD MED «SEDAN», «OCKSÅ», «DÄREFTER», «DESSUTOM»:
+#    «Förklara vad talen betyder. Jämför sedan priset …» (uppgift 11) är två
+#    uppgifter i en enhet utan a) och b). Elevens papper får då två svar
+#    utan plats för dem, och hon vet inte vilket som ger poängen.
+# Det som INTE mäts, fast det prövades: en upprepad fras i samma mening
+# («priset per kWh vid 20 kWh med priset per kWh vid 60 kWh»). Måttet fällde
+# parallellerna som HJÄLPER — «Ottilias uthyrning kostar … och Jonas
+# uthyrning kostar …» (prov 82) — och elvans täta jämförelse får domaren ta
+# (se _begriplighet_prov).
+_RAKNEORD_RE = re.compile(
+    r"\b(summan?|produkt(?:en)?|kvot(?:en)?|differens(?:en)?"
+    r"|kvadrater(?:na)?|kvadraten\s+(?:av|på))\b", re.I)
+_PASSIVT_RAKNEVERB_RE = re.compile(
+    r"\b(ökas|minskas|adderas|subtraheras|multipliceras|divideras|kvadreras"
+    r"|förenklas|tecknas)\b", re.I)
 _FOLJANDE_RE = re.compile(r"\bpå varandra följande\b", re.I)
+_BOKSTAVSORD_RE = re.compile(r"[A-Za-zÅÄÖåäö]{2,}")
+MENING_TAK_PROV = 24
+UPPMANING_TAK = 16
+# Uppmaningsverben är UPPMANINGSVERB längre ner i filen; regexen byggs vid
+# första anropet (_uppmaning_re) för att tupeln ska få stå kvar där den hör
+# hemma, hos poängvakten.
+_PAHANG_RE_MALL = (r"(?<![\wåäö])({verb})\s+(sedan|också|därefter|dessutom|även)"
+                   r"(?![\wåäö])")
+_UPPMANING_RE: dict[str, re.Pattern] = {}
+
+
+def _uppmaning_re(namn: str) -> re.Pattern:
+    if not _UPPMANING_RE:
+        verb = "|".join(UPPMANINGSVERB)
+        _UPPMANING_RE["verb"] = re.compile(
+            rf"(?<![\wåäö])({verb})(?![\wåäö])", re.I)
+        _UPPMANING_RE["pahang"] = re.compile(
+            _PAHANG_RE_MALL.format(verb=verb), re.I)
+    return _UPPMANING_RE[namn]
+SVARA_ORD_PROV = {
+    "respektive": "skriv ut vad som hör till vad",
+    "vardera": "skriv «var och en» eller «varje»",
+    "samtliga": "skriv «alla»",
+    "godtycklig": "skriv «vilket som helst»",
+    "godtyckligt": "skriv «vilket som helst»",
+    "erhålls": "skriv «blir» eller «får»",
+    "erhåller": "skriv «får»",
+    "medelst": "skriv «med»",
+    "påföljande": "skriv «nästa»",
+}
 
 
 def sprakvakt(exam: dict) -> list[dict]:
-    """Räkneord i varandra och «på varandra följande» — de två formuleringar
-    läraren pekade ut. Bara på PROVET (se begriplighetssignaler)."""
+    """Det räknebara i «språket var för svårt». Bara på PROVET (se
+    begriplighetssignaler)."""
     ut: list[dict] = []
     for e in domarenheter(exam):
-        kort = e["kort"]
+        nr, kort = e["nr"], e["kort"]
         ren = _rentext(f"{kort.get('stam', '')} {kort.get('text', '')}".strip())
-        m = _STAPLADE_RE.search(ren)
+
+        def fynd(text: str) -> None:
+            ut.append(_err(f"uppgift {nr}", "begriplighet",
+                           f"uppgift {nr} {text}" + BEHALL_PLANEN))
+
+        for mening in _MENING.split(ren):
+            rak = _RAKNEORD_RE.findall(mening)
+            if len(rak) >= 2:
+                fynd(f"staplar räkneord i samma mening («{mening.strip()[:80]}»): "
+                     f"{SPRAKVAKTENS_MARKE}. Skriv vad eleven ska GÖRA, som verb "
+                     "och i den ordning stegen tas — «Kvadrera varje tal. Lägg "
+                     "ihop kvadraterna.» — med högst ett räkneord per mening.")
+            ord_ = len(_BOKSTAVSORD_RE.findall(mening))
+            if ord_ > MENING_TAK_PROV:
+                fynd(f"har en mening på {ord_} ord: {SPRAKVAKTENS_MARKE}. Dela "
+                     f"den i korta meningar (högst {MENING_TAK_PROV} ord), en "
+                     "sak per mening.")
+            elif ord_ > UPPMANING_TAK and _uppmaning_re("verb").search(mening):
+                fynd(f"har en uppmaning på {ord_} ord («{mening.strip()[:80]}»): "
+                     f"{SPRAKVAKTENS_MARKE}. Eleven ska veta vad hon ska göra "
+                     "efter en läsning: EN prestation per mening, högst "
+                     f"{UPPMANING_TAK} ord, och två prestationer blir a) och b).")
+        m = _uppmaning_re("pahang").search(ren)
         if m:
-            ut.append(_err(
-                f"uppgift {e['nr']}", "begriplighet",
-                f"uppgift {e['nr']} staplar räkneord i varandra («{m.group(0)}»): "
-                f"{SPRAKVAKTENS_MARKE}. Skriv vad eleven ska GÖRA, som verb och "
-                "i den ordning stegen tas — «Kvadrera varje tal. Lägg ihop "
-                "kvadraterna.» — med högst ett räkneord per mening."
-                + BEHALL_PLANEN))
+            fynd(f"hänger på en andra uppgift med «{m.group(0)}»: "
+                 f"{SPRAKVAKTENS_MARKE}. Två prestationer i samma enhet blir "
+                 "a) och b), var och en med sin poäng — eller stryk den ena.")
+        m = _PASSIVT_RAKNEVERB_RE.search(ren)
+        if m:
+            fynd(f"skriver räkningen passivt («{m.group(0)}»): "
+                 f"{SPRAKVAKTENS_MARKE}. Skriv vad eleven gör, aktivt: «Lägg "
+                 "till $k^{2}n$», «Multiplicera talet med 3», inte «ökas med», "
+                 "«multipliceras med».")
         if _FOLJANDE_RE.search(ren):
-            ut.append(_err(
-                f"uppgift {e['nr']}", "begriplighet",
-                f"uppgift {e['nr']} skriver «på varandra följande»: "
-                f"{SPRAKVAKTENS_MARKE}. Skriv ut talen i stället — «$n-1$, $n$ "
-                "och $n+1$» — och stryk frasen." + BEHALL_PLANEN))
+            fynd(f"skriver «på varandra följande»: {SPRAKVAKTENS_MARKE}. Skriv "
+                 "ut talen i stället — «$n-1$, $n$ och $n+1$» — och stryk "
+                 "frasen.")
+        for ord_, rad in SVARA_ORD_PROV.items():
+            if re.search(rf"(?i)(?<![\wåäö]){ord_}(?![\wåäö])", ren):
+                fynd(f"skriver «{ord_}»: {SPRAKVAKTENS_MARKE}. {rad}.")
     return ut
 
 
@@ -3852,8 +3955,18 @@ def _begriplighet_prov(utan_facit: list[dict], inriktning: str = "") -> str:
         "(«Kvadrera varje tal. Lägg ihop kvadraterna.»), aldrig som räkneord "
         "inuti varandra («summan av de tre talens kvadrater», «produkten av "
         "talen ökas med»), och det som går att skriva ut skrivs ut («$n-1$, "
-        "$n$ och $n+1$», inte «tre på varandra följande heltal»). En fråga som "
-        "bara den förstår som redan kan matematiken är ett fynd.\n"
+        "$n$ och $n+1$», inte «tre på varandra följande heltal»). Verben är "
+        "aktiva («Lägg till», inte «ökas med»), meningarna korta (högst 24 "
+        "ord) och orden elevens («alla», inte «samtliga»; «var och en», inte "
+        "«vardera»; «vilket som helst», inte «godtyckligt»). Och eleven ska "
+        "efter en läsning veta VAD HON SKA RÄKNA UT FÖRST. Läraren fällde två "
+        "uppgifter till på det: «Teckna ett uttryck för hur mycket kaféet "
+        "sparar per år med flergångsmuggar och beräkna besparingen då …» "
+        "säger inte vilka två kostnader som ska ställas mot varandra, och "
+        "«Förklara vad talen $49$ och $2{,}75$ betyder. Jämför sedan priset "
+        "per kWh vid $20$ kWh med priset per kWh vid $60$ kWh.» ber om tre "
+        "saker i två meningar utan a), b), c). En fråga som bara den förstår "
+        "som redan kan matematiken är ett fynd.\n"
         "Skriv forstar \"nej\" när något av dem brister, och KORT i fältet "
         "stor vad det är: talet som saknas, de två läsningarna, meningen som "
         "ställer två frågor. Skriv \"ja\" när uppgiften håller, och "

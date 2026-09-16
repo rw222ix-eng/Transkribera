@@ -260,8 +260,8 @@ def test_facit_stannar_pa_lararens_papper():
             f"{namn} markerar det rätta krysset"
     assert "Första felet står i steg 2" in tex["bedomning"]
     # Elevlösningarna står som rader i bedömningstabellen: etiketten är
-    # poängsteget («0 p»), och kommentaren är skälet.
-    assert r"\bedrad{0 p}" in tex["bedomning"]
+    # poängsteget («Elevexempel · 0 p»), och kommentaren är skälet.
+    assert r"\bedrad{Elevexempel {\normalfont\textperiodcentered} 0 p}" in tex["bedomning"]
     assert "Derivatan är fel" in tex["bedomning"]
     assert "\\textbf{\\svarsruteval" in tex["bedomning"]
 

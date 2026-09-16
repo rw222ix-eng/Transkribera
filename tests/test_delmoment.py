@@ -868,14 +868,94 @@ def test_sprakvakten_faller_rakneord_i_varandra_och_pa_varandra_foljande():
     assert len(exam_gen.begriplighetssignaler(_stenhuggeri(), "prov")) == 1
 
 
+def _med_text(text: str) -> dict:
+    return {"titel": "Prov", "uppgifter": [{
+        "del": "B", "poang": [1, 0, 0], "text": text, "losning": "…"}]}
+
+
+def _sprakfynd(text: str) -> list[str]:
+    return [f["message"] for f in exam_gen.sprakvakt(_med_text(text))]
+
+
+def test_sprakvakten_ar_strangare_pa_lararens_begaran():
+    """«Jag vill att språkvakten ska vara lite strängare» (2026-09-16). Fyra
+    mått till, alla mätta mot de femton proven i basen så att de fäller
+    ungefär en enhet per prov och ingenting på prov 82."""
+    # 1. Två räkneord i samma mening — även utan «av» emellan.
+    fynd = _sprakfynd("Undersök för vilka värden på $d$ differensen mellan "
+                      "talens kvadrater alltid är udda.")
+    assert len(fynd) == 1 and "staplar räkneord" in fynd[0]
+    # …men två FIGURER som heter kvadrat är inte två räkningar (prov 20).
+    assert _sprakfynd("Kvadrat B har dubbelt så lång omkrets som kvadrat A. "
+                      "Bestäm omkretsen.") == []
+    # 2. Passiva räkneverb — prov 81:s andra svåra mening.
+    fynd = _sprakfynd("Produkten av de tre talen ökas med $k^{2}n$.")
+    assert len(fynd) == 1 and "passivt («ökas»)" in fynd[0]
+    assert _sprakfynd("Lägg till $k^{2}n$ till produkten.") == []
+    # 3. En mening på fler än MENING_TAK_PROV bokstavsord. Formeln räknas
+    #    inte som ord.
+    lang = ("Undersök för vilka positiva heltal $n$ som uttrycket är ett "
+            "heltal, inför själv de beteckningar du behöver, namnge de "
+            "storheter du använder och redovisa hur du tänker steg för steg.")
+    fynd = _sprakfynd(lang)
+    assert len(fynd) == 1 and "mening på" in fynd[0]
+    assert _sprakfynd("Beräkna $T = 2{,}01 \\sqrt{L}$ då $L = 4{,}0$ och "
+                      "$L = 9{,}0$ och $L = 16$ meter.") == []
+    # 4. Kursplaneorden, med vad som ska stå i stället.
+    fynd = _sprakfynd("Ange koordinaterna för samtliga hörn.")
+    assert len(fynd) == 1 and "«samtliga»" in fynd[0] and "«alla»" in fynd[0]
+    # Allt märkt så att slutgrinden räknar om det.
+    for text in (lang, "Talen ökas med 3.", "Ange samtliga lösningar."):
+        assert all(exam_gen._raknas_om(f)
+                   for f in exam_gen.sprakvakt(_med_text(text)))
+    # Stenhuggeriuppgiften (prov 81 uppgift 11, första versionen) går fri på
+    # de nya måtten: dess fel är ordvaktens (förutsättningen före frågan).
+    assert exam_gen.sprakvakt(_stenhuggeri()) == []
+
+
+def test_sprakvakten_faller_langa_och_pahangda_uppmaningar():
+    """Lärarens andra dom samma kväll: uppgift 8 och 11 i prov 81 var «svåra
+    för eleverna att fatta vad de ska göra». Åttans uppmaning är 17
+    bokstavsord med två prestationer i; elvan hänger på «Jämför sedan …»
+    efter «Förklara …» utan a) och b)."""
+    # Uppgift 8, ordagrant (kafét): uppmaningen är för lång.
+    fynd = _sprakfynd(
+        "Ett kafé serverar $x$ koppar kaffe per år. Engångsmuggar kostar "
+        "$1{,}35$ kr per kopp. Flergångsmuggar kostar $4\\,800$ kr i inköp och "
+        "sedan $0{,}22$ kr per diskning.\nTeckna ett uttryck för hur mycket "
+        "kaféet sparar per år med flergångsmuggar och beräkna besparingen då "
+        "$x = 50\\,000$.")
+    assert len(fynd) == 1 and "uppmaning på 17 ord" in fynd[0]
+    assert "a) och b)" in fynd[0]
+    # Uppgift 11, ordagrant: «Jämför sedan» är en påhängd andra uppgift.
+    fynd = _sprakfynd(
+        "Kostnaden i kronor för en laddning av Saras elbil ges av\n"
+        "$K = 49 + 2{,}75x$\ndär $x$ är antalet kWh. Förklara vad talen $49$ "
+        "och $2{,}75$ betyder. Jämför sedan priset per kWh vid $20$ kWh med "
+        "priset per kWh vid $60$ kWh.")
+    assert len(fynd) == 1 and "«Jämför sedan»" in fynd[0]
+    # Nationella provets korta uppmaning går fri — också med två verb.
+    assert _sprakfynd("Bestäm $k$ och motivera ditt svar.") == []
+    # En lång FÖRUTSÄTTNING utan uppmaningsverb mäts av ordvakten, inte här.
+    assert _sprakfynd("Ett hushåll använder el till belysning, matlagning, "
+                      "tvätt, disk, dator, teve, laddning av bilen och värme "
+                      "under hela året i huset.\nBeräkna kostnaden.") == []
+    # Kafé-uppgiftens FÖRSTA version («Bestäm hur mycket kaféet sparar under
+    # ett år», åtta ord) går fri; det var omskrivningen som gjorde uppmaningen
+    # sjutton ord lång.
+    assert exam_gen.sprakvakt(_kafe()) == []
+
+
 def test_provets_begriplighetsdomare_har_lararens_fem_krav():
     p = exam_gen.build_begriplighet_prompt([{"nr": "1", "text": "x"}], "",
                                            "prov")
     assert "begriplighetsdomare" in p           # bandvalet i tests/fejk.py
     for krav in ("EN SITUATION", "EN FRÅGA", "ALLA TAL SOM BEHÖVS",
                  "ENTYDIG TOLKNING", str(exam_gen.ORD_FORE_FRAGAN),
-                 # Det sjätte kravet, lärarens efter prov 81.
-                 "ORDEN ÄR ELEVENS", "på varandra följande"):
+                 # Det sjätte kravet, lärarens efter prov 81 — och dess
+                 # skärpning samma kväll.
+                 "ORDEN ÄR ELEVENS", "på varandra följande", "aktiva",
+                 "högst 24 ord", "«samtliga»", "Jämför sedan priset"):
         assert krav in p
     # Gruppuppgiftens prompt är orörd: fyra elever vid ett bord, uppgift 2
     # hårdast. Byte för byte den som spelades in.
