@@ -298,6 +298,22 @@ INSTRUCTION = (
     "för att lösa uppgiften: stämningsmålning, upprepade villkor och "
     "förklaringar av vad eleven ska göra sedan. En berättelseuppgift har ett "
     "till tre raders scenario och sedan EN tydlig fråga.\n"
+    # Lärarens dom efter prov 81 (2026-09-16): klassen upplevde provet som
+    # svårt «när det kom till den svenska texten» — uppgift 6 särskilt: «på
+    # varandra följande heltal», «kvadrera varje tal och summera», «produkten
+    # av talen». Regeln står i INSTRUCTION så att den följer med i
+    # omskrivningen; det räknebara i den mäts av sprakvakt.
+    "  RÄKNINGEN SKRIVS SOM VERB, INTE SOM RÄKNEORD INUTI VARANDRA. Läraren "
+    "efter prov 81: klassen förstod inte «Teckna ett uttryck för summan av de "
+    "tre talens kvadrater» eller «produkten av de tre talen ökas med "
+    "$k^{2}n$». Skriv vad eleven ska GÖRA, ett steg per mening och i den "
+    "ordning stegen tas: «Kvadrera vart och ett av talen. Lägg ihop de tre "
+    "kvadraterna. Skriv summan som ett uttryck i $n$ och förenkla.» Högst ETT "
+    "räkneord (summa, produkt, kvot, differens, kvadrat) per mening, och "
+    "aldrig ett inuti ett annat. Skriv ut det som går att skriva ut: «$n-1$, "
+    "$n$ och $n+1$» i stället för «tre på varandra följande heltal». "
+    "Facktermen får stå kvar när den ÄR uppgiften (förenkla, faktorisera, "
+    "potens) — det är kedjorna av dem som fäller eleven.\n"
     # Papprets krav-etikett skrivs av mallen (app/templates/prov.tex.j2,
     # \pfkrav) på varje uppgift, i kursiv, direkt efter numret — precis som i
     # lärarens förlaga. Står frasen dessutom i texten trycks den två gånger på
@@ -3303,6 +3319,50 @@ def _ord_fore_fragan(text: str) -> int:
 # i en konstant och inte som en sträng på två ställen, för då glider de isär.
 ORDVAKTENS_MARKE = "ord förutsättning innan frågan kommer"
 
+# SPRÅKVAKTEN: det i «svenskan var för svår» som går att räkna. Läraren efter
+# prov 81 (2026-09-16): klassen förstod inte uppgift 6 — «summan av de tre
+# talens kvadrater», «produkten av talen ökas med», «tre på varandra följande
+# heltal». Det är inte längden (6 b) låg under ordtaket) utan att räkneorden
+# står INUTI varandra: eleven måste packa upp «summan av kvadraterna av …»
+# baklänges innan hon vet vad hon ska göra. Verb i ordning («Kvadrera varje
+# tal. Lägg ihop kvadraterna.») är samma matematik utan uppackningen.
+#
+# Samma märkesregel som ordvakten: slutgrinden räknar om vaktens fynd och
+# behåller domarens (_raknas_om), och den skiljer dem på märket.
+SPRAKVAKTENS_MARKE = "svårt språk för eleven"
+# Ett räkneord, «av», och ett räkneord till inom fyrtio tecken — «summan av
+# de tre talens kvadrater», «produkten av summan och differensen».
+_STAPLADE_RE = re.compile(
+    r"\b(summan|produkten|kvoten|differensen|kvadraten)\s+av\b[^.?!\n]{0,40}?"
+    r"\b(summa|summan|produkt|produkten|kvot|kvoten|differens|differensen"
+    r"|kvadrat|kvadraten|kvadrater|kvadraterna)\b", re.I)
+_FOLJANDE_RE = re.compile(r"\bpå varandra följande\b", re.I)
+
+
+def sprakvakt(exam: dict) -> list[dict]:
+    """Räkneord i varandra och «på varandra följande» — de två formuleringar
+    läraren pekade ut. Bara på PROVET (se begriplighetssignaler)."""
+    ut: list[dict] = []
+    for e in domarenheter(exam):
+        kort = e["kort"]
+        ren = _rentext(f"{kort.get('stam', '')} {kort.get('text', '')}".strip())
+        m = _STAPLADE_RE.search(ren)
+        if m:
+            ut.append(_err(
+                f"uppgift {e['nr']}", "begriplighet",
+                f"uppgift {e['nr']} staplar räkneord i varandra («{m.group(0)}»): "
+                f"{SPRAKVAKTENS_MARKE}. Skriv vad eleven ska GÖRA, som verb och "
+                "i den ordning stegen tas — «Kvadrera varje tal. Lägg ihop "
+                "kvadraterna.» — med högst ett räkneord per mening."
+                + BEHALL_PLANEN))
+        if _FOLJANDE_RE.search(ren):
+            ut.append(_err(
+                f"uppgift {e['nr']}", "begriplighet",
+                f"uppgift {e['nr']} skriver «på varandra följande»: "
+                f"{SPRAKVAKTENS_MARKE}. Skriv ut talen i stället — «$n-1$, $n$ "
+                "och $n+1$» — och stryk frasen." + BEHALL_PLANEN))
+    return ut
+
 
 def begriplighetssignaler(exam: dict, profil: str = "gruppuppgift") -> list[dict]:
     """De mätbara begriplighetsfelen.
@@ -3311,13 +3371,15 @@ def begriplighetssignaler(exam: dict, profil: str = "gruppuppgift") -> list[dict
     uppgift 2 hårdare än de andra: det är begreppsingången, och det är den
     läraren fäller.
 
-    PROVET mäts mot ETT mått och inte fem, och det är med flit. Ett prov får
+    PROVET mäts mot TVÅ mått och inte fem, och det är med flit. Ett prov får
     ha längre uppgiftstexter än en gruppuppgift, fler tal och fler meningar.
     Det som fällde prov 81 var inte längden i sig utan att förutsättningen
-    växte till ett stycke innan frågan kom. Resten av begripligheten är
-    domarens (se _begriplighet_prov); det som går att RÄKNA räknas här."""
+    växte till ett stycke innan frågan kom — och, sa läraren efteråt, att
+    språket i uppgift 6 var för svårt (se sprakvakt). Resten av
+    begripligheten är domarens (se _begriplighet_prov); det som går att
+    RÄKNA räknas här."""
     if profil == "prov":
-        ut: list[dict] = []
+        ut: list[dict] = sprakvakt(exam)
         for e in domarenheter(exam):
             kort = e["kort"]
             text = f"{kort.get('stam', '')} {kort.get('text', '')}".strip()
@@ -3768,7 +3830,7 @@ def _begriplighet_prov(utan_facit: list[dict], inriktning: str = "") -> str:
         "ensam, får inte fråga, och har några minuter på sig per uppgift.\n"
         f"{json.dumps(utan_facit, ensure_ascii=False)}\n\n"
         "Svara för varje uppgift på EN fråga: vet eleven efter en genomläsning "
-        "exakt vad hon ska göra? Kraven är fem, och det räcker att ETT "
+        "exakt vad hon ska göra? Kraven är sex, och det räcker att ETT "
         "brister:\n"
         "- EN SITUATION per uppgift. Ett kafé eller ett stenhuggeri, inte "
         "båda, och inte en situation som byter skepnad mellan a) och b).\n"
@@ -3782,6 +3844,16 @@ def _begriplighet_prov(utan_facit: list[dict], inriktning: str = "") -> str:
         "där du kan: räknas inköpet med, gäller kostnaden per styck eller "
         "totalt, är enheten gram eller kilo? Ger två rimliga läsningar OLIKA "
         "svar är uppgiften ett fynd.\n"
+        # Lärarens dom efter prov 81 (2026-09-16): «språket var för svårt för
+        # dem — det här med på varandra följande heltal och kvadrera varje tal
+        # och summera och produkten av talen». Domaren får hennes exempel
+        # ordagrant; det räknebara i det tar sprakvakt.
+        "- ORDEN ÄR ELEVENS. Räkningen står som verb i den ordning stegen tas "
+        "(«Kvadrera varje tal. Lägg ihop kvadraterna.»), aldrig som räkneord "
+        "inuti varandra («summan av de tre talens kvadrater», «produkten av "
+        "talen ökas med»), och det som går att skriva ut skrivs ut («$n-1$, "
+        "$n$ och $n+1$», inte «tre på varandra följande heltal»). En fråga som "
+        "bara den förstår som redan kan matematiken är ett fynd.\n"
         "Skriv forstar \"nej\" när något av dem brister, och KORT i fältet "
         "stor vad det är: talet som saknas, de två läsningarna, meningen som "
         "ställer två frågor. Skriv \"ja\" när uppgiften håller, och "
@@ -4032,10 +4104,18 @@ def build_bedomning_prompt(underlag: dict, *, skala: str = "") -> str:
         "deluppgifter börjar raderna med «a)», «b)» …\n"
         "- `poang` är trippeln [E, C, A] lösningen får, och summan ska vara "
         "just det poängsteget.\n"
-        "- `kommentar` säger TVÅ saker på enkel svenska i EN ENDA mening på "
-        "HÖGST TOLV ORD: vilken rad i trappan lösningen fick, och varför den "
-        "inte fick nästa. Precis den längden: «+1 C för potensen i täljaren, "
-        "förenklar sedan inte.» Lösningen på noll poäng "
+        # Kommentaren sa förut TVÅ saker — vilken rad den fick och varför inte
+        # nästa — och på pappret blev det «+1 E» i högerspalten (trappan) och
+        # «+1 E för 27, men …» direkt under. Läraren räknade dem: två märken,
+        # men etiketten sa 1 p (prov 81, uppgift 12, 2026-09-16). Trappan bär
+        # poängen; kommentaren bär bara skälet. Renderaren klipper ändå bort
+        # ett poängled som smyger in (exam_latex._utan_stegen).
+        "- `kommentar` säger BARA varför lösningen inte fick nästa poäng, på "
+        "enkel svenska i EN ENDA mening på HÖGST TOLV ORD: «Förenklar sedan "
+        "inte täljaren.», «Prövar bara ett exempel i b.» Skriv INTE vilka "
+        "poäng den fick och aldrig «+1 E» i kommentaren — trappstegen står "
+        "redan i högerspalten bredvid, och stod de en gång till räknade "
+        "läraren dem dubbelt. Lösningen på noll poäng "
         "skriver BARA varför — pappret sätter rubriken «Inga poäng» självt, "
         "och kommentaren ska inte börja om med samma två ord.\n"
         "Svara med enbart JSON."
@@ -6590,7 +6670,8 @@ def _raknas_om(fel: dict) -> bool:
     if kod == "delmomenttackning":
         return path == "uppgifter"
     if kod == "begriplighet":
-        return ORDVAKTENS_MARKE in str(fel.get("message") or "")
+        msg = str(fel.get("message") or "")
+        return ORDVAKTENS_MARKE in msg or SPRAKVAKTENS_MARKE in msg
     return False
 
 

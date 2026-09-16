@@ -320,7 +320,7 @@ test("bedömningsanvisningen · facitraden överst och ett papper per poängsteg
     const tabell = page.locator("#formprov [data-form='lo-c'] .lobed").first();
     const steg = await tabell.locator(".lobedsteg").allTextContents();
     expect(steg).toEqual(["Facit a) · full pott", "Facit b) · full pott",
-                          "0 p", "1 p"]);
+                          "Elevexempel · 0 p", "Elevexempel · 1 p"]);
     // Facitraderna bär HELA trappan; elevraden bara de steg den fick.
     const rader = tabell.locator("tr");
     await expect(rader.nth(1).locator(".lotrappa li")).toHaveCount(3);

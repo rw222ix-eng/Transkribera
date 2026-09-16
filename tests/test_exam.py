@@ -3599,9 +3599,12 @@ def test_prompterna_ber_om_korta_rader_och_ingen_notrad():
     assert "Vanligt fel" not in prompt
     # Trappraderna: ett tak i ord, inte «kort och konkret».
     assert "ÅTTA ord" in prompt
-    # Kommentaren: EN mening, tolv ord, och exemplet håller den längden.
+    # Kommentaren: EN mening, tolv ord, och BARA skälet — poängmärket stod
+    # förut i exemplet, och läraren räknade det dubbelt (prov 81, uppgift 12).
     assert "HÖGST TOLV ORD" in prompt
-    assert "+1 C för potensen i täljaren, förenklar sedan inte." in prompt
+    assert "Prövar bara ett exempel i b." in prompt
+    assert "+1 C för potensen i täljaren" not in prompt
+    assert "aldrig «+1 E» i kommentaren" in prompt
     # Elevens papper kortas med en rad.
     assert "högst FEM rader" in prompt
 
@@ -3744,11 +3747,15 @@ def test_elevraderna_bar_steg_poang_och_skal_i_pdfen():
     ]
     doc, _fel = exam_spec.validate_exam_json(exam)
     tex = exam_latex.render_bedomning(doc)
-    assert r"\bedrad{0 p}" in tex and r"\bedrad{1 p}" in tex
+    # Etiketten säger vad raden ÄR — «1 p» ensamt lästes som ett
+    # lösningsförslag med avrundat svar (prov 82, uppgift 6).
+    assert r"\bedrad{Elevexempel {\normalfont\textperiodcentered} 0 p}" in tex
+    assert r"\bedrad{Elevexempel {\normalfont\textperiodcentered} 1 p}" in tex
     assert r"{\small\bfseries Inga poäng}" in tex
     # Nollradens kommentar versaliseras: den fortsatte förut efter «Inga
     # poäng.», och det ledet ströks (exam_latex._utan_rubriken).
-    assert "Ingen ansats" in tex and "tecknar men löser inte" in tex
+    # Den poängsatta radens kommentar versaliseras också (_utan_stegen).
+    assert "Ingen ansats" in tex and "Tecknar men löser inte" in tex
     # Ettpoängsraden fick uppgiftens FÖRSTA E-rad — det räknas ur trappan
     # (exam_latex._fickrader), aldrig av modellen en gång till. E-raden står
     # alltså två gånger på uppgiften: hel i facitraden, och en gång till i
@@ -4015,8 +4022,51 @@ def test_nollraden_upprepar_inte_rubriken_i_pdfen():
     tex = exam_latex.render_bedomning(doc)
     assert tex.count("Inga poäng") == 1
     assert "Svaret är rätt av fel skäl." in tex
-    # Bara nollraden strippas — en poängsatt rad rörs inte.
-    assert "Får +1 E, men stannar där." in tex
+    # En kommentar som inte BÖRJAR med ett poängmärke får bara märket
+    # struket — ledet står kvar som det skrevs.
+    assert "Får , men stannar där." not in tex
+    assert "Får, men stannar där." in tex
+
+
+def test_kommentaren_raknar_inte_poangen_en_gang_till():
+    """Prov 81, uppgift 12 (2026-09-16): högerspalten sa «+1 E a) rätt svar
+    27» och kommentaren under den «+1 E för 27, men i b testas bara ett
+    exempel.» Läraren räknade två märken mot etiketten 1 p. Trappan bär
+    poängen; kommentaren bär bara skälet, och ledet fram till kommat klipps
+    (exam_latex._utan_stegen)."""
+    fall = {
+        "+1 E för 27, men i b testas bara ett exempel.":
+            "I b testas bara ett exempel.",
+        "+1 E för insättningen, fel area och avrundad omkrets.":
+            "Fel area och avrundad omkrets.",
+        "+1 E insättning och +1 E rätt area, omkretsen inte exakt.":
+            "Omkretsen inte exakt.",
+        "+1 A för kvadreringen, men ingen slutsats om positiva $a$ och $b$.":
+            "Ingen slutsats om positiva $a$ och $b$.",
+        # Kommat i decimaltalet står i klammer och klipper inte.
+        "+1 E för $8{,}9$, men avrundar sedan.": "Avrundar sedan.",
+        # Utan komma finns inget led att klippa: bara märket stryks.
+        "+1 E för svaret men inget mer": "För svaret men inget mer",
+        # Ett ord som råkar börja på E är inget märke.
+        "+1 Ekvation": "+1 Ekvation",
+        "Båda C-poängen i a), men b) prövar bara enskilda $k$.":
+            "Båda C-poängen i a), men b) prövar bara enskilda $k$.",
+        "": "",
+    }
+    for dom, vantat in fall.items():
+        assert exam_latex._utan_stegen(dom) == vantat, dom
+    exam = _exam()
+    exam["uppgifter"][2]["elevlosningar"] = [
+        {"etikett": "1 p",
+         "partier": [{"rader": ["a) 27"], "poang": [1, 0, 0],
+                      "dom": "+1 E för 27, men i b testas bara ett exempel."}]},
+    ]
+    doc, _fel = exam_spec.validate_exam_json(exam)
+    tex = exam_latex.render_bedomning(doc)
+    assert "I b testas bara ett exempel." in tex
+    assert "+1 E för 27" not in tex
+    # Trappsteget står EN gång i elevraden (och en gång i facitraden).
+    assert tex.count(r"\bedsteg{ansats}{+1 E}") == 2
 
 
 def test_nollraden_utan_egen_kommentar_far_ingen_tom_rad():

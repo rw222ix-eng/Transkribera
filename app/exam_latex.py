@@ -492,6 +492,42 @@ def _fickrader(rader: list[dict], poang) -> list[dict]:
 _UTAN_POANG_RE = re.compile(r"^\s*inga\s+po[äa]ng\s*[.:;,—–-]*\s*", re.I)
 
 
+# KOMMENTAREN FÅR INTE RÄKNA POÄNG EN GÅNG TILL. Trappstegen lösningen fick
+# står redan i högerspalten (_fickrader), och modellen skrev kommentaren som
+# «+1 E för 27, men i b testas bara ett exempel.» — så «+1 E» stod två gånger
+# under varandra på lärarens papper (prov 81, uppgift 12, 2026-09-16), och hon
+# räknade dem: «till höger står det +1 E två gånger, men till vänster står det
+# bara 1 p». Raden om VAD som gav poängen är trappan; kommentaren ska bara
+# säga varför nästa steg inte kom.
+#
+# Ledet klipps bort fram till första kommat (eller semikolonet) när
+# kommentaren BÖRJAR med ett poängmärke; bindeordet efter kommat («men»,
+# «och», «sedan») stryks också, så att resten kan börja med stor bokstav.
+# Utan komma finns inget led att klippa, och då tas bara märkena bort.
+# Kommat inne i ett decimaltal ($8{,}9$) räknas inte — det står i klammer.
+#
+# Prompten ber numera om bara skälet (exam_gen.build_bedomning_prompt), men
+# prompten är ett önskemål och renderaren en regel, och alla papper i basen
+# skrevs innan önskemålet fanns. Skärmen gör samma sak (app/web/ui/
+# blad-bygg.js, utanStegen).
+_POANGMARKE_RE = re.compile(r"\+\s*\d+\s*[ECA]\b")
+_LEDET_RE = re.compile(
+    r"^\s*\+\s*\d+\s*[ECA]\b(?:\{,\}|[^,;])*[,;]\s*(?:men|och|sedan)?\s*", re.I)
+
+
+def _utan_stegen(dom: str) -> str:
+    """Kommentaren utan poängmärkena — trappan bär dem redan."""
+    text = dom or ""
+    klippt = _LEDET_RE.sub("", text, count=1)
+    if klippt == text:
+        klippt = _POANGMARKE_RE.sub("", text)
+    kvar = re.sub(r"\s+([,;.])", r"\1", re.sub(r"\s{2,}", " ", klippt))
+    kvar = kvar.strip().lstrip(",;").strip()
+    if not kvar:
+        return ""
+    return kvar[0].upper() + kvar[1:]
+
+
 def _utan_rubriken(dom: str) -> str:
     """Kommentaren utan den inledande «Inga poäng» — rubriken bär den redan."""
     kvar = _UTAN_POANG_RE.sub("", dom or "").strip()
@@ -515,14 +551,22 @@ def _elevrader(it, trappa: list[dict]) -> list[dict]:
             for i, x in enumerate(pa.poang[:3]):
                 poang[i] += int(x)
         total = sum(poang)
+        dom = " ".join(pa.dom for pa in e.partier if pa.dom)
         ut.append({
-            "etikett": f"{total} p",
+            # ETIKETTEN SÄGER VAD RADEN ÄR. «1 p» ensamt lästes som ett
+            # lösningsförslag: läraren såg «O ≈ 8,9 dm» på en elevrad under
+            # en uppgift som sa «Svara exakt» och trodde att facit var
+            # avrundat (prov 82, uppgift 6). Raden är ett påhittat elevpapper
+            # som INTE nådde ända fram, och det ska stå. Samma form som
+            # «Facit · full pott» ovanför; mittpunkten i \normalfont av samma
+            # skäl som där (TS1 saknar den i fetstil).
+            "etikett": (r"Elevexempel {\normalfont\textperiodcentered} "
+                        f"{total} p"),
             "utan": total == 0,
             "rader": [escape_mixed(r) for pa in e.partier for r in pa.rader],
             "trappa": _fickrader(trappa, poang) if total else [],
-            "kommentar": escape_mixed(_utan_rubriken(
-                " ".join(pa.dom for pa in e.partier if pa.dom)) if total == 0
-                else " ".join(pa.dom for pa in e.partier if pa.dom)),
+            "kommentar": escape_mixed(_utan_rubriken(dom) if total == 0
+                                      else _utan_stegen(dom)),
         })
     return ut
 

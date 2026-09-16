@@ -1024,6 +1024,23 @@ window.BladBygg = (() => {
   }
 
   const UTAN_POANG = /^\s*inga\s+po[äa]ng\s*[.:;,—–-]*\s*/i;
+  /* KOMMENTAREN FÅR INTE RÄKNA POÄNG EN GÅNG TILL. Trappstegen står redan i
+     högerspalten (fickrader), och modellen skrev «+1 E för 27, men i b testas
+     bara ett exempel.» — «+1 E» två gånger under varandra, och läraren räknade
+     dem (prov 81, uppgift 12). Ledet fram till första kommat klipps när
+     kommentaren börjar med ett poängmärke; utan komma stryks bara märkena.
+     Kommat i $8{,}9$ står i klammer och räknas inte. Spegel av
+     app/exam_latex._utan_stegen. */
+  const POANGMARKE = /\+\s*\d+\s*[ECA]\b/g;
+  const LEDET = /^\s*\+\s*\d+\s*[ECA]\b(?:\{,\}|[^,;])*[,;]\s*(?:men|och|sedan)?\s*/i;
+  function utanStegen(dom) {
+    const text = String(dom || '');
+    let kvar = text.replace(LEDET, '');
+    if (kvar === text) kvar = text.replace(POANGMARKE, '');
+    kvar = kvar.replace(/\s{2,}/g, ' ').replace(/\s+([,;.])/g, '$1')
+      .trim().replace(/^[,;]\s*/, '');
+    return kvar ? kvar[0].toUpperCase() + kvar.slice(1) : '';
+  }
 
   function bedrader(u) {
     const rader = [], vag = u.vag || [], beddel = u.beddel || [];
@@ -1056,9 +1073,16 @@ window.BladBygg = (() => {
       if (!total) {
         dom = dom.replace(UTAN_POANG, '').trim();
         if (dom) dom = dom[0].toUpperCase() + dom.slice(1);
+      } else {
+        dom = utanStegen(dom);
       }
+      /* ETIKETTEN SÄGER VAD RADEN ÄR. «1 p» ensamt lästes som ett
+         lösningsförslag: läraren såg «O ≈ 8,9 dm» på en elevrad under en
+         uppgift som sa «Svara exakt» och trodde att facit var avrundat
+         (prov 82, uppgift 6). Samma form som «Facit · full pott», och samma
+         etikett på pappret (app/exam_latex._elevrader). */
       rader.push({
-        utan: !total, etikett: `${total} p`,
+        utan: !total, etikett: `Elevexempel · ${total} p`,
         /* Elevens rader är det som fick scrollbaren: bedömningspasset skriver
            «$A(15) = 120 - 4 \cdot 15 = 120 - 60 = 60$» som EN formel. matBryt
            delar den vid likhetstecknen så att raden kan brytas i spalten. */

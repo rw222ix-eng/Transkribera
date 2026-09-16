@@ -832,12 +832,50 @@ def test_vakten_matter_hur_mycket_text_som_star_fore_fragan():
     assert exam_gen.begriplighetssignaler(_stenhuggeri(), "arbetsblad") == []
 
 
+def _kvadratsumman():
+    """Uppgift 6 ur prov 81, ordagrant — den klassen inte förstod språket i
+    (läraren 2026-09-16): räkneord inuti varandra och «på varandra
+    följande»."""
+    return {"titel": "Prov", "uppgifter": [{
+        "del": "B", "poang": [0, 0, 0],
+        "text": "Talen $n-1$, $n$ och $n+1$ är tre på varandra följande heltal.",
+        "deluppgifter": [{
+            "poang": [0, 2, 0],
+            "text": ("Teckna och förenkla ett uttryck för summan av de tre "
+                     "talens kvadrater."),
+            "losning": "…"}]}]}
+
+
+def test_sprakvakten_faller_rakneord_i_varandra_och_pa_varandra_foljande():
+    """Det räknebara i «språket var för svårt»: «summan av … kvadrater» och
+    «på varandra följande». Bara på provet, och märkt så att slutgrinden
+    räknar om fyndet i stället för att behålla det (_raknas_om)."""
+    fel = exam_gen.begriplighetssignaler(_kvadratsumman(), "prov")
+    assert [f["code"] for f in fel] == ["begriplighet", "begriplighet"]
+    assert "staplar räkneord" in fel[0]["message"]
+    assert "summan av de tre talens kvadrater" in fel[0]["message"]
+    assert "på varandra följande" in fel[1]["message"]
+    assert all(exam_gen._raknas_om(f) for f in fel)
+    assert all(exam_gen.SPRAKVAKTENS_MARKE in f["message"] for f in fel)
+    # Verbformen går fri, och gruppuppgiften mäts inte så.
+    fri = _kvadratsumman()
+    fri["uppgifter"][0]["text"] = "Talen är $n-1$, $n$ och $n+1$."
+    fri["uppgifter"][0]["deluppgifter"][0]["text"] = (
+        "Kvadrera varje tal. Lägg ihop de tre kvadraterna och förenkla.")
+    assert exam_gen.begriplighetssignaler(fri, "prov") == []
+    assert exam_gen.begriplighetssignaler(_kvadratsumman(), "gruppuppgift") == []
+    # Ordvaktens fynd (uppgift 11) står kvar som förut.
+    assert len(exam_gen.begriplighetssignaler(_stenhuggeri(), "prov")) == 1
+
+
 def test_provets_begriplighetsdomare_har_lararens_fem_krav():
     p = exam_gen.build_begriplighet_prompt([{"nr": "1", "text": "x"}], "",
                                            "prov")
     assert "begriplighetsdomare" in p           # bandvalet i tests/fejk.py
     for krav in ("EN SITUATION", "EN FRÅGA", "ALLA TAL SOM BEHÖVS",
-                 "ENTYDIG TOLKNING", str(exam_gen.ORD_FORE_FRAGAN)):
+                 "ENTYDIG TOLKNING", str(exam_gen.ORD_FORE_FRAGAN),
+                 # Det sjätte kravet, lärarens efter prov 81.
+                 "ORDEN ÄR ELEVENS", "på varandra följande"):
         assert krav in p
     # Gruppuppgiftens prompt är orörd: fyra elever vid ett bord, uppgift 2
     # hårdast. Byte för byte den som spelades in.

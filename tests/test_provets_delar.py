@@ -572,7 +572,9 @@ def test_nollpoangsraden_sager_inga_poang_och_varfor():
                                                 "poang": [0, 0, 0],
                                                 "dom": "ingen ansats"}]}])],
                    delB=0)
-    assert '<b class="lobedsteg">0 p</b>' in html
+    # Etiketten säger vad raden är (prov 82, uppgift 6: «1 p» ensamt lästes
+    # som ett avrundat lösningsförslag).
+    assert '<b class="lobedsteg">Elevexempel · 0 p</b>' in html
     assert '<p class="lobedinga">Inga poäng</p>' in html
     # Versalen: kommentaren fortsatte förut efter «Inga poäng.» och det
     # ledet ströks (blad-bygg.js UTAN_POANG).
@@ -592,10 +594,11 @@ def test_elevraden_far_de_trappsteg_den_faktiskt_fick():
                                                 "poang": [1, 0, 0],
                                                 "dom": "tecknar men stannar"}]}])],
                    delB=0)
-    facit, elev = html.split('<b class="lobedsteg">1 p</b>')
+    facit, elev = html.split('<b class="lobedsteg">Elevexempel · 1 p</b>')
     assert facit.count("+1 E</i>") == 1 and facit.count("+1 C</i>") == 2
     assert elev.count("+1 E</i>") == 1 and elev.count("+1 C</i>") == 0
-    assert '<p class="lobedvarfor">tecknar men stannar</p>' in elev
+    # Kommentaren versaliseras (blad-bygg.js utanStegen).
+    assert '<p class="lobedvarfor">Tecknar men stannar</p>' in elev
 
 
 def test_elevens_harledning_delas_vid_likhetstecknen():
