@@ -1903,6 +1903,93 @@ def create_router(base: Path, arbiter) -> APIRouter:
             "Lösningsförslaget är inte byggt — godkänn provet på nytt, "
             "då ritas det av.")
 
+    @router.get("/api/exams/{exam_id:int}/losningsforslag")
+    def get_losningsforslag(exam_id: Id64):
+        """Elevernas lösningsförslag — hela lösningen utskriven, utan
+        poängtrappa och elevexempel (lärarens beställning 2026-09-17). Byggs
+        av POST på samma adress."""
+        return _serve_bredvid(
+            exam_id, tryck.losningsforslag_bredvid,
+            "Elevernas lösningsförslag är inte skrivet — bygg det med POST "
+            "/api/exams/{id}/losningsforslag.")
+
+    @router.post("/api/exams/{exam_id:int}/losningsforslag")
+    async def bygg_losningsforslag(exam_id: Id64, req: Request):
+        """Skriv elevernas lösningsförslag till ett godkänt prov och sätt det
+        som PDF bredvid provet (``{stam} - losningsforslag.pdf``).
+
+        Läraren 2026-09-17: «vi får göra om lösningsförslagen så att de är
+        tydligare, så att eleverna verkligen kan läsa ut det. Vi skiter i ett
+        poäng och två poäng — vi laddar bara upp hela lösningen.» Passet
+        (exam_gen.losningspass) skriver `utforlig` på varje enhet, ett anrop
+        per uppgift; kroppen får bära `{"nummer": [6, 12]}` för att skriva om
+        bara vissa.
+
+        Skrivs in i den AKTUELLA versionens JSON, som kravgränserna
+        (db.stampla_exam_json) — ingen ny version: lösningen är en anteckning
+        på pappret som redan trycktes, och en ny version hade flyttat pekaren
+        från varvet med filerna (se _artefaktvag). Faller passet på en uppgift
+        står facit kvar där (losningsforslag.tex.j2 faller tillbaka på
+        `losning`); faller Tectonic sägs det rakt ut i `varning`."""
+        from starlette.concurrency import run_in_threadpool
+        body = await _kropp(req)
+        conn = db.connect(db_file)
+        try:
+            view = db.get_exam(conn, exam_id)
+        finally:
+            conn.close()
+        if view is None or view.get("exam") is None:
+            return JSONResponse({"error": "okänt prov"}, status_code=404)
+        if (view.get("typ") or "prov") != "prov":
+            return JSONResponse(
+                {"error": "elevernas lösningsförslag skrivs bara till provet"},
+                status_code=400)
+        view["exam"] = exam_gen._repair_ctrl_chars(view["exam"])
+        _satt_lararens_datum(view["exam"], view.get("datum"))
+        nummer = body.get("nummer")
+        if nummer is not None:
+            try:
+                nummer = [int(n) for n in nummer]
+            except (TypeError, ValueError):
+                return JSONResponse({"error": "nummer måste vara tal"},
+                                    status_code=400)
+        skrivna = await run_in_threadpool(
+            exam_gen.losningspass, view["exam"], model=_model_name(),
+            nummer=nummer)
+        doc, fel = exam_spec.validate_exam_json(view["exam"], "prov")
+        if doc is None:
+            return JSONResponse({"error": "provet går inte att läsa",
+                                 "errors": fel}, status_code=400)
+        if skrivna:
+            conn = db.connect(db_file)
+            try:
+                db.stampla_exam_json(conn, exam_id,
+                                     view.get("current_version"), view["exam"])
+            finally:
+                conn.close()
+        out_dir = _artifact_dir(view)
+        pdf, varning = None, "utkatalogen gick inte att räkna ut"
+        if out_dir is not None and out_dir.is_dir():
+            slug = _safe_component(doc.titel, "prov")
+            bilder, _egna, _forsatt = _bilder_ur_utkatalogen(view["exam"], out_dir)
+            tex = exam_latex.render_losningsforslag(doc, bilder=bilder)
+            (out_dir / f"{slug} - losningsforslag.tex").write_text(
+                tex, encoding="utf-8")
+            if not exam_pdf.engine_available():
+                varning = "PDF-motorn saknas. .tex är skriven, ingen PDF."
+            else:
+                try:
+                    pdf, log = exam_pdf.compile_pdf(
+                        tex, out_dir, f"{slug} - losningsforslag")
+                except Exception as exc:                # noqa: BLE001
+                    _LOG.exception("Lösningsförslaget för prov %s föll", exam_id)
+                    pdf, log = None, str(exc)
+                varning = "" if pdf else ("PDF:en gick inte att bygga:\n" + log)
+        elif out_dir is not None:
+            varning = "provet har inga sparade filer att lägga pappret bredvid"
+        return {"id": exam_id, "skrivna": skrivna,
+                "pdf": str(pdf) if pdf else None, "varning": varning}
+
     @router.get("/api/exams/{exam_id:int}/facit")
     def get_facit(exam_id: Id64):
         return _serve_bredvid(
@@ -2023,7 +2110,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
             # avritade lösningsförslag ligger bredvid med samma stam
             # (tryck._bredvid). Lämnas de kvar blir de föräldralösa filer i en
             # katalog läraren själv öppnar.
-            for andelse in ("bedomning", "facit", "losningar"):
+            for andelse in ("bedomning", "facit", "losningar", "losningsforslag"):
                 kandidater.add(p.with_name(f"{p.stem} - {andelse}{p.suffix}"))
         removed = 0
         for k in kandidater:

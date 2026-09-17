@@ -2098,3 +2098,48 @@ def test_egen_slapper_inte_ut_ur_basen(client, monkeypatch):
         r = client.get(f"/api/exams/{exam_id}/egen/{nyckel}")
         assert r.status_code == 404, nyckel
         assert b"HEMLIGT" not in r.content
+
+
+def test_elevernas_losningsforslag_byggs_pa_begaran(client, monkeypatch):
+    """Lärarens beställning 2026-09-17: hela lösningen utskriven till
+    Classroom, utan trappa och elevexempel. GET säger att det inte är byggt,
+    POST skriver passet in i den aktuella versionen (ingen ny version) och
+    lägger PDF:en bredvid provet, GET ger den sedan."""
+    result, _ = _make_exam(client, monkeypatch)
+    byggda = {}
+
+    def fake_compile(tex, out_dir, jobname, **kw):
+        byggda[jobname] = tex
+        out_dir.mkdir(parents=True, exist_ok=True)
+        p = out_dir / f"{jobname}.pdf"
+        p.write_bytes(b"%PDF-1.5 fejk")
+        return p, ""
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: True)
+    monkeypatch.setattr(exam_pdf, "compile_pdf", fake_compile)
+    _done(client.post(f"/api/exams/{result['id']}/approve", json={}))
+    r = client.get(f"/api/exams/{result['id']}/losningsforslag")
+    assert r.status_code == 404 and "inte skrivet" in r.json()["error"]
+
+    def fake_generate(model, prompt, **kw):
+        assert "lösningsskrivare" in prompt
+        return json.dumps({"losningar": [{"enhet": "", "rader": [
+            "Räkna ut steget: $2 + 2 = 4$", "Svar: $4$"]}]})
+    monkeypatch.setattr(exam_gen.llm_client, "generate", fake_generate)
+    versioner_fore = len(client.get(f"/api/exams/{result['id']}").json()["versions"])
+    r = client.post(f"/api/exams/{result['id']}/losningsforslag", json={})
+    assert r.status_code == 200, r.text
+    svar = r.json()
+    assert svar["skrivna"] >= 1 and svar["varning"] == ""
+    assert svar["pdf"].endswith(" - losningsforslag.pdf")
+    tex = next(t for n, t in byggda.items() if n.endswith("losningsforslag"))
+    assert "Lösningsförslag" in tex and "Svar:" in tex
+    assert "Elevexempel" not in tex
+    view = client.get(f"/api/exams/{result['id']}").json()
+    assert len(view["versions"]) == versioner_fore, "ingen ny version"
+    assert any(u.get("utforlig") for u in view["exam"]["uppgifter"])
+    r = client.get(f"/api/exams/{result['id']}/losningsforslag")
+    assert r.status_code == 200
+    # …och «Lösningar» i Sparat ger nu elevernas papper, inte avritningen.
+    r = client.get(f"/api/exams/{result['id']}/losningar")
+    assert r.status_code == 200
+    assert "losningsforslag.pdf" in r.headers["content-disposition"]

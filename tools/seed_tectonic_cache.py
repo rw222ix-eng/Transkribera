@@ -194,6 +194,24 @@ def _representative_doc() -> exam_spec.ExamDoc:
                         r"\sqrt{c}$ ger reella rötter.",
                 bedomning=r"+1 E om båda rötterna anges, annars 0 p "
                           r"(jämför $\alpha \neq \beta$).",
+                # ELEVERNAS UTFÖRLIGA LÖSNING (losningsforslag.tex.j2, lärarens
+                # beställning 2026-09-17). Lösningsskrivaren skriver som en
+                # elev skriver: \text{} inne i matten («$1\text{ GB}$»),
+                # \dfrac och \tfrac, ett bråk i en exponent, en kubikrot.
+                # amsmaths \text sätter upp ALLA tre graderna (text, script,
+                # scriptscript) i T1 — ec-lmr6 — och det var precis den
+                # metriken som saknades när prov 81:s lösningsförslag
+                # kompilerades första gången: «Font T1/lmr/m/n/6=ec-lmr6 at
+                # 6.0pt not loadable». Svarsraden sätts i fetstil av
+                # exam_latex._losningsstycken.
+                utforlig="Skriv om filstorleken: $1{,}5\\text{ GB} = 1{,}5 "
+                         "\\cdot 10^{9}\\text{ byte}$\n"
+                         "Dela på $10^{3}$: $\\dfrac{10^{9}}{10^{3}} = "
+                         "10^{6}$ och $\\tfrac{1}{2} \\cdot 2 = 1$\n"
+                         "Roten som potens: $\\sqrt[3]{27} = 27^{\\frac{1}{3}} "
+                         "= 3$ och $x^{\\tfrac{1}{2}}$\n"
+                         "$(x-1)(x-3) = 0$\n"
+                         "Svar: $x = 1$ eller $x = 3$",
             ),
             exam_spec.ExamItem(
                 # Flervalsuppgift: \kryssruta på arbetsblad/prov, och
@@ -477,6 +495,12 @@ def seed(out_dir: Path, *, compile_fn=exam_pdf.compile_pdf) -> tuple[bool, str]:
         # mallarna, och en mall cachen aldrig sett kraschar --only-cached TYST
         # första gången läraren godkänner ett papper av den sorten.
         ("anteckningar", exam_latex.render_anteckningar(_representativa_anteckningar())),
+        # Elevernas lösningsförslag (2026-09-17): samma preambel som
+        # bedömningen men lösningsskrivarens egen matte — \text{} i matten,
+        # \dfrac/\tfrac, bråk i exponenter (se `utforlig` i det
+        # representativa provet). Första skarpa kompileringen föll på
+        # ec-lmr6, som ingen annan mall drar in.
+        ("losningsforslag", exam_latex.render_losningsforslag(doc, bilder=bilder)),
         ("sond", PROBE_TEX),
     )
 

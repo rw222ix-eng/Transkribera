@@ -4431,6 +4431,186 @@ def andrade_uppgifter(fore: dict, efter: dict) -> list[int]:
 
 
 
+# ── LÖSNINGSFÖRSLAGET TILL ELEVERNA ───────────────────────────────────────
+# Lärarens beställning 2026-09-17, kvällen efter prov 81: «vi får göra om
+# lösningsförslagen så att de är tydligare, så att eleverna verkligen kan läsa
+# ut det. Vi skiter i ett poäng och två poäng — vi laddar bara upp hela
+# lösningen, full poäng, hur det ser ut. Väldigt tydligt.» Det är pappret hon
+# lägger på Classroom.
+#
+# Facit (`losning`) är med flit KORT — «svaret först, sedan högst ett par
+# räkneled» (INSTRUCTION) — för det läses av läraren bredvid uppgiften. Eleven
+# som läser hemma behöver det omvända: varje steg utskrivet, ett par ord om
+# VARFÖR steget tas, och svaret sist. Det är ett annat papper och får ett eget
+# fält (`utforlig`, exam_spec) i stället för att facit skrivs om: facit är
+# också bedömningsanvisningens vänsterspalt, och den ska förbli kort.
+#
+# Ett anrop per uppgift, parallellt, fail-open per uppgift — samma form som
+# bedomningspass, av samma skäl. Ordet «lösningsskrivare» står här och ingen
+# annanstans i appen: uppspelningen väljer band på det (tests/fejk.py `_auto`).
+LOSNING_SYSTEM = (
+    "Du är en svensk matematiklärare som skriver lösningsförslag till ett "
+    "prov, till eleverna som ska läsa dem hemma utan lärare bredvid. Du "
+    "skriver ENKELT, steg för steg, och du hittar aldrig på ett annat svar "
+    "än facit. Du svarar ALLTID med giltig JSON enligt schemat, ingenting "
+    "annat."
+)
+
+LOSNING_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "losningar": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "enhet": {"type": "string"},
+                    "rader": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["enhet", "rader"],
+            },
+        },
+    },
+    "required": ["losningar"],
+}
+LOSNING_MAX_TOKENS = 4_000
+# Tolv rader räcker för en treporängsuppgift med ord vid varje steg; fler är
+# ett tecken på att modellen resonerar i stället för att räkna.
+LOSNING_RADER_TAK = 12
+
+
+def build_losning_prompt(underlag: dict) -> str:
+    """Lösningsskrivarens prompt — EN uppgift, samma underlag som
+    bedömningsskrivaren (bedomningsunderlag)."""
+    kort = {"nr": underlag["nr"], "uppgift": underlag["text"],
+            "enheter": [{k: e[k] for k in
+                         ("nyckel", "text", "losning", "poang", "bedomning")}
+                        for e in underlag["enheter"]]}
+    return (
+        "Du är lösningsskrivare för EN uppgift på ett matematikprov. Nedan "
+        "står uppgiften med sitt facit (losning), sina poäng som (E, C, A) "
+        "och bedömningsanvisningen (bedomning), som säger vilka steg som ger "
+        "poäng. «nyckel» är deluppgiftens bokstav, eller tom sträng när "
+        "uppgiften inte har deluppgifter.\n"
+        f"{json.dumps(kort, ensure_ascii=False)}\n\n"
+        "Skriv för VARJE enhet den fullständiga lösningen så som ett papper "
+        "med FULL POTT ser ut — det eleven ska läsa hemma efter provet och "
+        "förstå utan lärare. Läraren: «väldigt tydligt, så att eleverna "
+        "verkligen kan läsa ut det».\n"
+        "- `rader` är lösningen rad för rad, i den ordning eleven räknar. "
+        "Varje rad är ETT steg: några ord på svenska som säger vad som görs "
+        "och varför, följt av steget inom $…$ («Sätt in $s = \\sqrt{5}$ i "
+        "formeln för arean: $A = (\\sqrt{5})^{2} = 5$»). Aldrig två steg på "
+        "samma rad, aldrig ett hopp eleven måste fylla i själv.\n"
+        "- Varje poängsteg i bedömningsanvisningen ska synas som ett eget "
+        "steg i lösningen.\n"
+        "- Svaret står SIST på en egen rad som börjar med «Svar:», exakt så "
+        "som facit ger det (samma exakta form, samma enhet). Flerval: «Svar: "
+        "B», föregånget av en rad som säger varför just det alternativet "
+        "stämmer.\n"
+        f"- Högst {LOSNING_RADER_TAK} rader per enhet. Enkel svenska, korta "
+        "meningar, inga kursplaneord. Samma tal och SAMMA SVAR som facit — "
+        "hitta aldrig på ett annat.\n"
+        "Svara med enbart JSON: {\"losningar\": [{\"enhet\": …, \"rader\": "
+        "[…]}, …]}, en post per enhet ovan med samma «nyckel» som `enhet`."
+    )
+
+
+def _parse_losning(raw: str) -> dict[str, list[str]] | None:
+    """Passets svar → {nyckel: rader}. Otolkbart ger None, och då lämnas
+    uppgiften som den var — samma regel som _parse_bedomning."""
+    data = _json_objekt(raw)
+    if not isinstance(data, dict):
+        return None
+    ut: dict[str, list[str]] = {}
+    for post in data.get("losningar") or []:
+        if not isinstance(post, dict):
+            continue
+        rader = [str(r).strip() for r in (post.get("rader") or [])
+                 if str(r).strip()]
+        if rader:
+            nyckel = str(post.get("enhet") or "").strip().strip(")").lower()
+            ut[nyckel] = rader[:LOSNING_RADER_TAK]
+    return ut or None
+
+
+def skriv_in_losning(uppgift: dict, losningar: dict[str, list[str]]) -> bool:
+    """Passets rader in i uppgiften som `utforlig`. Returnerar om något
+    skrevs. En enhet vars rader saknar en Svar-rad lämnas orörd: ett
+    lösningsförslag utan svar är värre än facit ensamt."""
+    if not isinstance(uppgift, dict) or not losningar:
+        return False
+    delar = [d for d in (uppgift.get("deluppgifter") or []) if isinstance(d, dict)]
+    enheter = ([("abcdefghijkl"[k], d) for k, d in enumerate(delar[:12])]
+               if delar else [("", uppgift)])
+    skrivet = False
+    for nyckel, mal in enheter:
+        rader = losningar.get(nyckel)
+        if rader and any(r.lower().startswith("svar") for r in rader):
+            mal["utforlig"] = "\n".join(rader)
+            skrivet = True
+    return skrivet
+
+
+def _ett_losningssvar(underlag: dict, *, model: str, llm):
+    try:
+        raw = llm(
+            model, build_losning_prompt(underlag),
+            system=LOSNING_SYSTEM,
+            options={"temperature": 0.0},
+            response_format={"type": "json_schema",
+                             "json_schema": {"name": "losning",
+                                             "schema": LOSNING_SCHEMA}},
+            max_tokens=LOSNING_MAX_TOKENS,
+            token_cb=None,
+        )
+        return _parse_losning(raw)
+    except Exception:                               # noqa: BLE001
+        return None
+
+
+def losningspass(exam: dict, *, model: str, llm=None,
+                 nummer: list[int] | None = None,
+                 log_cb: Callable[[str], None] | None = None) -> int:
+    """Skriv den utförliga lösningen (`utforlig`) på varje poängbärande
+    enhet — ETT anrop per uppgift, parallellt. Returnerar antalet uppgifter
+    som fick något skrivet. `nummer` begränsar passet, som i bedomningspass.
+    Avbrottet lever i loggraden efter varje färdigt anrop, av samma skäl.
+
+    `llm` slås upp vid ANROPET (inte som standardargument): rutten anropar
+    utan att skicka den, och testerna byter ut llm_client.generate."""
+    llm = llm or llm_client.generate
+    log = log_cb or (lambda _m: None)
+    valda = set(nummer or [])
+    underlag = [u for u in bedomningsunderlag(exam)
+                if u["summa"] > 0 and (not valda or u["nr"] in valda)]
+    if not underlag:
+        return 0
+    n = len(underlag)
+    uppgifter = exam.get("uppgifter") or []
+    log(f"Skriver lösningsförslag (uppgift 1 av {n}) …")
+    pool = ThreadPoolExecutor(max_workers=min(BEDOMNING_TRADAR, n))
+    skrivna = 0
+    try:
+        futures = {pool.submit(_ett_losningssvar, u, model=model, llm=llm): u
+                   for u in underlag}
+        klara = 0
+        for fut in as_completed(futures):
+            u = futures[fut]
+            klara += 1
+            try:
+                svar = fut.result()
+            except Exception:                       # noqa: BLE001
+                svar = None
+            if svar and 1 <= u["nr"] <= len(uppgifter):
+                if skriv_in_losning(uppgifter[u["nr"] - 1], svar):
+                    skrivna += 1
+            log(f"Skriver lösningsförslag (uppgift {min(klara + 1, n)} av {n}) …")
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+    return skrivna
+
+
 # ── Deterministiska nivåsignaler ──────────────────────────────────────────
 # Billiga, körs alltid, och de AVGÖR ALDRIG ensamma — de blir varningar läraren
 # ser, inte problem som skickas till reparationsloopen.

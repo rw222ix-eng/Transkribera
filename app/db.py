@@ -3872,6 +3872,25 @@ def stampla_exam_granser(conn: sqlite3.Connection, exam_id: int,
     return data
 
 
+def stampla_exam_json(conn: sqlite3.Connection, exam_id: int,
+                      version_id: int | None, exam: dict) -> bool:
+    """Skriv hela JSON:en tillbaka i en BEFINTLIG version — ingen ny version.
+
+    Samma regel som stampla_exam_granser och av samma skäl: elevernas
+    utförliga lösning (exam_spec `utforlig`, routes_exam
+    bygg_losningsforslag) är en anteckning på pappret som redan trycktes, och
+    en ny version hade flyttat pekaren från varvet med .tex/.pdf. Anroparen
+    har redan läst versionen via get_exam och ändrat i den; här skrivs den
+    som den blev. Returnerar om raden fanns."""
+    if version_id is None:
+        return False
+    cur = conn.execute(
+        "UPDATE exam_versions SET exam_json = ? WHERE id = ? AND exam_id = ?",
+        (json.dumps(exam, ensure_ascii=False), version_id, exam_id))
+    conn.commit()
+    return cur.rowcount > 0
+
+
 def set_current_exam_version(conn: sqlite3.Connection, exam_id: int,
                              version_id: int) -> dict | None:
     """Peka provet på en TIDIGARE version — det läraren ser är det som gäller.

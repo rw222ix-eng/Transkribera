@@ -1,0 +1,80 @@
+((# Lösningsförslag till ELEVERNA — lärarens beställning 2026-09-17, kvällen
+    efter prov 81: «vi får göra om lösningsförslagen så att de är tydligare, så
+    att eleverna verkligen kan läsa ut det. Vi skiter i ett poäng och två poäng
+    — vi laddar bara upp hela lösningen, full poäng, hur det ser ut.»
+
+    Det är alltså INTE bedömningsanvisningen (bedomning.tex.j2): ingen
+    poängtrappa, inga elevexempel, inga kravgränser. Uppgiften som den stod på
+    provet, och under den lösningen steg för steg (exam_spec `utforlig`,
+    skriven av exam_gen.losningspass). Saknar en enhet sin utförliga lösning
+    står facit (`losning`) där i stället — kort, men rätt.
+
+    Samma typografi som provet, av samma skäl som bedömningen: eleven läser
+    det här bredvid sitt eget rättade papper. #))
+((* set med_grafik = false *))
+((* set med_svarsrad = false *))
+((* set forlaga = true *))
+((* set sidhuvud = kurs ~ ' \\textemdash{} ' ~ titel ~ ' \\textperiodcentered{} Lösningsförslag' *))
+((* include '_preamble.tex.j2' *))
+((* import '_former.tex.j2' as former *))
+
+((# ══════════ LÖSNINGEN ══════════
+    Rubriken «Lösning» och sedan stegen som stycken. En rad i `utforlig` är ett
+    steg; en ensam formel sätts centrerad (former.stycken), och svarsraden är
+    fet (exam_latex._losningsstycken). #))
+((* macro losning(e) *))
+\par\vspace{1.5mm}{\small\bfseries\textcolor{ink700}{Lösning}}\par\vspace{1mm}
+((* if e.utforlig *))
+((( former.stycken(e.utforlig) )))
+((* elif e.losning *))
+((( e.losning )))\par
+((* endif *))
+((* endmacro *))
+
+\begin{document}
+
+\begin{center}
+  {\LARGE\bfseries Lösningsförslag}\\[2mm]
+  {\large ((( titel ))) \textemdash{} ((( kurs )))((* if datum *)) \enspace\textperiodcentered\enspace ((( datum )))((* endif *))}
+\end{center}
+
+\vspace{2mm}
+{\small Så här ser en fullständig lösning ut på varje uppgift. Poängen i
+högermarginalen är uppgiftens (E/C/A).}
+
+\vspace{4mm}
+((* for del in delar *))
+((* for u in del.uppgifter *))
+\begin{uppgift}{((( u.nummer )))}{((( u.poang_eca )))}\par
+{\itshape ((( former.stycken(u.stycken) )))}\par\vspace{2mm}
+((* if u.bild_fil *))
+\begin{center}
+  \includegraphics[width=0.6\textwidth]{((( u.bild_fil )))}
+\end{center}
+((* endif *))
+((* if u.figur_tex *))\par\vspace{2mm}\begin{center}((( u.figur_tex )))\end{center}((* endif *))
+((( former.kropp(u) )))
+((* if u.har_deluppgifter *))
+((* for d in u.deluppgifter *))
+\begin{deluppgift}{((( d.bokstav )))}{((( d.poang_eca )))}\par
+{\itshape ((( former.stycken(d.stycken) )))}\par\vspace{1mm}
+((* if d.bild_fil *))
+\begin{center}
+  \includegraphics[width=0.6\textwidth]{((( d.bild_fil )))}
+\end{center}
+((* endif *))
+((* if d.figur_tex *))\par\vspace{2mm}\begin{center}((( d.figur_tex )))\end{center}((* endif *))
+((( former.kropp(d) )))
+((* if d.flerval *)){\small\textbf{Rätt alternativ: ((( d.ratt_bokstav )))}}\par\vspace{1mm}((* endif *))
+((( losning(d) )))
+\end{deluppgift}
+((* endfor *))
+((* else *))
+((* if u.flerval *)){\small\textbf{Rätt alternativ: ((( u.ratt_bokstav )))}}\par\vspace{1mm}((* endif *))
+((( losning(u) )))
+((* endif *))
+\end{uppgift}
+((* endfor *))
+((* endfor *))
+
+\end{document}

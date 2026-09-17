@@ -4028,6 +4028,66 @@ def test_nollraden_upprepar_inte_rubriken_i_pdfen():
     assert "Får, men stannar där." in tex
 
 
+def test_losningspasset_skriver_elevernas_utforliga_losning():
+    """Lärarens beställning 2026-09-17: ett papper till Classroom med HELA
+    lösningen utskriven, utan poängtrappa och elevexempel. Passet skriver
+    `utforlig` per enhet (bara de uppgifter som begärs), facit står orört,
+    och lösningsförslagsmallen sätter stegen med svarsraden i fetstil."""
+    exam = _exam()
+    svar = json.dumps({"losningar": [{"enhet": "", "rader": [
+        "Kvadratkomplettera vänsterledet: $x^2 + 2x = (x+1)^2 - 1$",
+        "$(x+1)^2 = 16$",
+        "Svar: $x = 3$ eller $x = -5$"]}]}, ensure_ascii=False)
+    llm, calls = _stub_llm([svar])
+    assert exam_gen.losningspass(exam, model="m", llm=llm, nummer=[3]) == 1
+    assert len(calls) == 1
+    # Kassettregeln: markörordet står i prompten och ingen annanstans.
+    assert "lösningsskrivare" in calls[0]["prompt"]
+    assert "lösningsskrivare" not in exam_gen.INSTRUCTION
+    u = exam["uppgifter"][2]
+    assert u["utforlig"].startswith("Kvadratkomplettera")
+    assert u["utforlig"].endswith("Svar: $x = 3$ eller $x = -5$")
+    assert "utforlig" not in exam["uppgifter"][0]
+    # Facit rörs inte — det är bedömningsanvisningens vänsterspalt.
+    assert u["losning"] == _exam()["uppgifter"][2]["losning"]
+    # …och dokumentet validerar med fältet, som INTE står i grammatiken.
+    doc, fel = exam_spec.validate_exam_json(exam)
+    assert doc is not None, fel
+    schema = exam_spec.to_response_format()["json_schema"]["schema"]
+    for namn in ("ExamItem", "SubItem"):
+        assert "utforlig" not in schema["$defs"][namn]["properties"]
+    tex = exam_latex.render_losningsforslag(doc)
+    assert "Lösningsförslag" in tex
+    assert "Kvadratkomplettera vänsterledet" in tex
+    assert r"\textbf{Svar:} \(x = 3\)" in tex
+    # Inga trappsteg, inga elevexempel, inga kravgränser — det är elevens papper.
+    # (\bedsteg DEFINIERAS i den delade preamblen — det är anropen som ska
+    # saknas.)
+    assert r"\bedsteg{" not in tex and "Elevexempel" not in tex
+    assert "Kravgränser" not in tex
+    # En uppgift utan utförlig lösning faller tillbaka på facit.
+    assert exam_latex.escape_mixed(
+        _exam()["uppgifter"][0]["losning"].split("\n")[0]) in tex
+
+
+def test_losningspasset_kraver_en_svarsrad():
+    """En lösning utan «Svar:» skrivs inte in: ett lösningsförslag utan svar
+    är värre än facit ensamt, och mallen faller då tillbaka på facit."""
+    exam = _exam()
+    svar = json.dumps({"losningar": [{"enhet": "", "rader": ["$x = 3$"]}]})
+    llm, _calls = _stub_llm([svar])
+    assert exam_gen.losningspass(exam, model="m", llm=llm, nummer=[3]) == 0
+    assert "utforlig" not in exam["uppgifter"][2]
+    # Deluppgifter nycklas på bokstaven, som i bedömningspasset.
+    u = {"poang": [0, 0, 0], "text": "t", "deluppgifter": [
+        {"poang": [1, 0, 0], "text": "a", "losning": "1", "bedomning": "+1 E x"},
+        {"poang": [1, 0, 0], "text": "b", "losning": "2", "bedomning": "+1 E y"}]}
+    assert exam_gen.skriv_in_losning(
+        u, {"b": ["Räkna: $1+1=2$", "Svar: $2$"], "a": ["ingen svarsrad"]})
+    assert "utforlig" not in u["deluppgifter"][0]
+    assert u["deluppgifter"][1]["utforlig"] == "Räkna: $1+1=2$\nSvar: $2$"
+
+
 def test_kommentaren_raknar_inte_poangen_en_gang_till():
     """Prov 81, uppgift 12 (2026-09-16): högerspalten sa «+1 E a) rätt svar
     27» och kommentaren under den «+1 E för 27, men i b testas bara ett

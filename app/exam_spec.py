@@ -149,6 +149,17 @@ class _Uppgiftsbas(_Model):
     """Delade fält för uppgifter och deluppgifter."""
     poang: tuple[int, int, int]          # (E, C, A) — NP-notationen (2/1/0)
     text: str                            # uppgifts-/deluppgiftstext; matte inom $…$
+    # DEN UTFÖRLIGA LÖSNINGEN — elevernas papper, inte lärarens. `losning`
+    # är med flit kort (svaret först, ett par räkneled) därför att det läses
+    # bredvid uppgiften vid rättningen. Läraren bad 2026-09-17 om ett papper
+    # till Classroom där «eleverna verkligen kan läsa ut det»: varje steg
+    # utskrivet, ett par ord om varför, svaret sist. Det skrivs av
+    # exam_gen.losningspass EFTER godkännandet, på begäran, och sätts av
+    # losningsforslag.tex.j2. Appens fält, aldrig modellens: poppas ur
+    # grammatiken i to_response_format som `granser` — ett fält modellen ser
+    # är ett fält modellen fyller i, och det hade kostat tolv långa lösningar
+    # i varje prov ingen bett om. Rad för rad, radbrutet med \n.
+    utforlig: str | None = None
     # Enheten svaret ska anges i, eller ledet det ska skrivas efter: «kr»,
     # «laddpunkter/år», «f'(x) =». Står på svarsraden, före linjen om det är
     # ett led och efter den om det är en enhet (exam_latex, blad-bygg).
@@ -737,6 +748,13 @@ def _bygg_response_format(antal: int | None = None,
     # fältet skulle den skriva en betygstabell den hittat på — och den hade
     # stått på försättsbladet.
     schema["properties"].pop("granser", None)
+    # DEN UTFÖRLIGA LÖSNINGEN STÅR INTE HELLER I GRAMMATIKEN (se
+    # _Uppgiftsbas.utforlig): den skrivs av ett eget pass efter godkännandet.
+    # Poppas ur BÅDA uppgiftsdefinitionerna innan skelettet kopierar dem
+    # (prefixItems och _delref nedan ärver det som står kvar).
+    for namn in ("ExamItem", "SubItem"):
+        if namn in schema.get("$defs", {}):
+            schema["$defs"][namn]["properties"].pop("utforlig", None)
     # PLÅTVALET STÅR INTE HELLER I GRAMMATIKEN. `scen.plat` är appens egen
     # matchning mot lärarens plåtkatalog (app/platar) och sätts efter
     # genereringen, precis som klockslaget. Står fältet i schemat fyller

@@ -537,6 +537,21 @@ def _utan_rubriken(dom: str) -> str:
     return (kvar[0].upper() + kvar[1:]) if kvar else ""
 
 
+_SVARRAD_RE = re.compile(r"^(Svar\s*:)", re.I)
+
+
+def _losningsstycken(utforlig: str | None) -> list[dict]:
+    """Den utförliga lösningen (exam_spec `utforlig`) som stycken: samma
+    delning som uppgiftstexten (_stycken — en ensam formel blir en
+    displayformel), och svarsraden i fetstil så att eleven hittar den utan
+    att läsa allt en gång till."""
+    ut = _stycken(utforlig or "")
+    for s in ut:
+        if not s["formel"]:
+            s["text"] = _SVARRAD_RE.sub(r"\\textbf{\1}", s["text"], count=1)
+    return ut
+
+
 def _elevrader(it, trappa: list[dict]) -> list[dict]:
     """Elevlösningarna som rader i bedömningstabellen: etikett («0 p», «1 p»),
     elevens egna rader, de trappsteg lösningen fick, och kommentaren.
@@ -929,6 +944,7 @@ def _build_view(doc: exam_spec.ExamDoc,
                     # oescapad — samma regel som på uppgiften nedan.
                     ev["figur_tex"] = (exam_figures.render_figur(d.figur)
                                        if d.figur is not None else None)
+                    ev["utforlig"] = _losningsstycken(d.utforlig)
                     deluppg.append(ev)
                 item_vy = {
                     "har_deluppgifter": True,
@@ -989,6 +1005,10 @@ def _build_view(doc: exam_spec.ExamDoc,
             item_vy["elevrader"] = (_elevrader(it, _trapprader_uppgift(it))
                                     if facit else [])
             item_vy["nummer"] = nummer
+            # Elevernas utförliga lösning (losningsforslag.tex.j2); tom lista
+            # på ett papper som inte fått passet, och då faller mallen
+            # tillbaka på facit.
+            item_vy["utforlig"] = _losningsstycken(it.utforlig)
             # BÄR UPPGIFTEN NÅGON BILD — sin egen eller en deluppgifts? Provets
             # mall begär plats på sidan innan en sådan uppgift börjar
             # (\pfbehov, se prov.tex.j2), och frågan räknas här därför att den
@@ -1195,6 +1215,16 @@ def render_bedomning(doc: exam_spec.ExamDoc,
     return _environment().get_template("bedomning.tex.j2").render(
         # facit=True: bedömningen är lärarens papper, och bara där får det stå
         # vilket kryss som är rätt och vilket steg som brister.
+        **_build_view(doc, bilder, facit=True))
+
+
+def render_losningsforslag(doc: exam_spec.ExamDoc,
+                           bilder: dict[int, str] | None = None) -> str:
+    """Elevernas lösningsförslag (lärarens beställning 2026-09-17): uppgiften
+    och hela lösningen utskriven, ingen poängtrappa, inga elevexempel, inga
+    kravgränser. facit=True av samma skäl som bedömningen — pappret delas ut
+    EFTER provet, och rätt kryss och det brustna steget hör till lösningen."""
+    return _environment().get_template("losningsforslag.tex.j2").render(
         **_build_view(doc, bilder, facit=True))
 
 

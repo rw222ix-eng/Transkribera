@@ -414,4 +414,17 @@ def losningar_bredvid(pdf: Path) -> Path | None:
     pytest, en äldre klient) finns ingen ``- losningar.pdf`` att hämta, och
     då ska knappen ge det dokument som faktiskt bär lösningarna i stället för
     ett 404 på ett prov som byggts felfritt."""
-    return _bredvid(pdf, "losningar") or _bredvid(pdf, "bedomning")
+    # ELEVERNAS LÖSNINGSFÖRSLAG VINNER när det är byggt (losningsforslag_bredvid):
+    # läraren bad 2026-09-17 om ett papper med hela lösningen utskriven,
+    # utan poängtrappa och elevexempel, till Classroom — och «Lösningar» i
+    # Sparat ska ge det pappret, inte skärmens avritning av lärarens facit.
+    return (_bredvid(pdf, "losningsforslag") or _bredvid(pdf, "losningar")
+            or _bredvid(pdf, "bedomning"))
+
+
+def losningsforslag_bredvid(pdf: Path) -> Path | None:
+    """Elevernas lösningsförslag — full lösning per uppgift, utskriven steg
+    för steg (exam_gen.losningspass → losningsforslag.tex.j2), byggt på
+    begäran efter godkännandet (POST /api/exams/{id}/losningsforslag).
+    Ingen reserv här: rutten säger att det inte är byggt."""
+    return _bredvid(pdf, "losningsforslag")
