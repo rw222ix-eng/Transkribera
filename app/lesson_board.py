@@ -726,6 +726,16 @@ REPAIR_HINTS = (
     "oläslighet. Flytta ett exempel till den andra kolumnen eller korta "
     "stegen — och rita aldrig två figurer, grafer eller tabeller i samma "
     "kolumn.\n"
+    # SYMBOLVAKTEN (2026-09-17), se symbolvakt(): ekvationstavlan med en
+    # olikhet som vändning och utan ett enda bråkexempel.
+    "- 'som inte finns på bokens sidor': raden hör till en annan lektion. "
+    "Byt vändningen mot en typ som står i urvalet (samma exempel, annat "
+    "handgrepp), eller stryk raden. Lägg inte till något nytt utanför "
+    "sidorna.\n"
+    "- 'men inget exempel av den typen': skriv ETT exempel av den typen med "
+    "egna tal, gärna som en vändning i ett befintligt exempel («samma "
+    "ekvation, nu med bråk»). Är det redan tre exempel: byt ut det som ligger "
+    "längst från urvalet.\n"
 )
 
 
@@ -2917,6 +2927,133 @@ def hanvisningar(board: dict | None) -> list[dict]:
     return ut
 
 
+# ── Symbolvakten: exemplen mot sidorna, åt båda håll ─────────────────────────
+# Tavlan för Liber Ma1c 2.1 Ekvationer (s. 42–45, uppg. 2101–2111, skriven
+# 2026-09-17 för lärarens teknikklass) hade en olikhet som vändning i exempel
+# 2 — «5x − 4 < 3x + 6, vilket är största heltalet?» — fast olikheter kommer
+# senare i kapitlet, och saknade helt bråkekvationerna (2109 och 2111, åtta
+# deluppgifter med x/5 och 2y/3), den enda typen på sidorna utan exempel.
+# Domaren hade båda reglerna i prompten («aldrig en typ läraren valde bort»,
+# «varje metodtyp urvalet kräver ska beröras»), fann fem luckor, och tavlan
+# gick ändå ut så. Läraren fick skriva om den i två varv för hand.
+#
+# Vakten här läser SYMBOLKLASSER, inte matematik: ett olikhetstecken, ett
+# rotmärke, ett bråkstreck, en variabel i exponenten, sin/cos/tan, log/ln,
+# absolutbelopp. Det är klasser som PEKAR UT ETT MOMENT — en olikhet på en
+# ekvationslektion är en annan lektion — och de går att räkna utan att förstå
+# raden. Upphöjt till två och parenteser räknas inte: de finns överallt.
+#
+# Två riktningar, samma klasser:
+#   utanfor_sidorna  — en math-rad i ett exempel bär en klass som INGEN
+#                      math-rad i bokblocket bär (olikheten).
+#   typ_utan_exempel — en klass som står i minst _TYP_MINSTA av URVALETS
+#                      uppgiftsrader i bokblocket saknas i alla exempel
+#                      (bråken).
+# Bokblockets matematik står som $…$ på raderna «N. $…$ — i uppgift 2109 d»
+# (bok.py:s läsprompt); uppgiftsnumret i svansen är det som knyter raden till
+# urvalet. Utan bokblock, utan $-rader eller utan urvalsrad tiger vakten:
+# fail-open som de andra.
+_SYMBOLKLASSER: tuple[tuple[str, re.Pattern], ...] = (
+    ("olikhet", re.compile(r"<|>|≤|≥|\\(?:le|ge|leq|geq|lt|gt|neq)\b")),
+    ("rot", re.compile(r"\\sqrt")),
+    ("bråk", re.compile(r"\\[dt]?frac|[A-Za-z0-9)}]\s*/\s*[A-Za-z0-9({]")),
+    ("variabel i exponenten", re.compile(r"\^\s*\{?\s*-?\s*[A-Za-z]")),
+    ("trigonometri", re.compile(r"\\(?:sin|cos|tan)\b")),
+    ("logaritm", re.compile(r"\\(?:log|ln|lg)\b")),
+    ("absolutbelopp", re.compile(r"\|")),
+)
+_TYP_MINSTA = 3
+_BOKMATTE_RE = re.compile(r"^\s*\d+\.\s*\$(.+?)\$\s*(.*)$", re.MULTILINE)
+_DOLLAR_RE = re.compile(r"\$([^$\n]+)\$")
+_URVALSRAD_RE = re.compile(r"LÄRARENS URVAL: klassen ska räkna uppg\. (.+?) på ")
+_SPANN_RE = re.compile(r"(\d+)\s*(?:[-–—]\s*(\d+))?")
+_UPPGNR_RE = re.compile(r"\b(\d{3,5})\b")
+
+
+def _klasser(latex: str) -> set[str]:
+    return {namn for namn, rx in _SYMBOLKLASSER if rx.search(latex or "")}
+
+
+def _remsnummer(remsa: str) -> set[int]:
+    """Samma tolkning som bok.remsnummer, utan att dra in bokmodulen."""
+    ut: set[int] = set()
+    for a, b in _SPANN_RE.findall(remsa or ""):
+        start, slut = int(a), int(b) if b else int(a)
+        if slut < start:
+            start, slut = slut, start
+        if slut - start <= 500:
+            ut.update(range(start, slut + 1))
+    return ut
+
+
+def _bokens_matte(bok: str) -> tuple[list[str], list[tuple[str, set[int]]]]:
+    """(alla $-rader i blocket, [(latex, uppgiftsnummer i svansen)] för de
+    numrerade MATEMATIK-raderna)."""
+    alla = [m.group(1) for m in _DOLLAR_RE.finditer(bok or "")]
+    rader: list[tuple[str, set[int]]] = []
+    for m in _BOKMATTE_RE.finditer(bok or ""):
+        nr = {int(n) for n in _UPPGNR_RE.findall(m.group(2))}
+        rader.append((m.group(1), nr))
+    return alla, rader
+
+
+def _exemplens_matte(board: dict) -> list[tuple[str, str]]:
+    ut: list[tuple[str, str]] = []
+    for bi, tavla in enumerate(board.get("boards") or []):
+        if bi == 0 or not isinstance(tavla, dict):
+            continue
+        for ci, kol in enumerate(tavla.get("columns") or []):
+            _math_i_exemplen((kol or {}).get("sections"),
+                             f"boards[{bi}].columns[{ci}].sections", ut)
+        _math_i_exemplen(tavla.get("sections"), f"boards[{bi}].sections", ut)
+    return ut
+
+
+def symbolvakt(board: dict | None, bok: str) -> list[dict]:
+    """Exempel med en symbolklass sidorna inte har, och urvalstyper utan
+    exempel. Går till reparationsrundan som bokkopior och formupprepning."""
+    if not isinstance(board, dict) or not (bok or "").strip():
+        return []
+    alla, rader = _bokens_matte(bok)
+    if not alla:
+        return []
+    sidornas = set().union(*(_klasser(x) for x in alla))
+    ex = _exemplens_matte(board)
+    ut: list[dict] = []
+    for vag, latex in ex:
+        for klass in sorted(_klasser(latex) - sidornas):
+            ut.append({"path": vag, "code": "utanfor_sidorna",
+                       "message": f"'{latex[:50]}' bär {klass}, som inte "
+                                  "finns på bokens sidor: det är en annan "
+                                  "lektion. Byt vändningen mot en typ ur "
+                                  "urvalet, eller stryk raden."})
+    m = _URVALSRAD_RE.search(bok)
+    if m and rader:
+        urval = _remsnummer(m.group(1))
+        antal: dict[str, set[int]] = {}
+        for latex, nr in rader:
+            if not (nr & urval):
+                continue
+            for klass in _klasser(latex):
+                antal.setdefault(klass, set()).update(nr & urval)
+        exemplens = set().union(*(_klasser(x) for _v, x in ex)) if ex else set()
+        for klass, nummer in sorted(antal.items()):
+            if len(nummer) >= 1 and klass not in exemplens:
+                # Räkna RADER, inte nummer: 2109 a–d är fyra rader på ett nummer.
+                n = sum(1 for latex, nr in rader
+                        if nr & urval and klass in _klasser(latex))
+                if n >= _TYP_MINSTA:
+                    lista = ", ".join(str(x) for x in sorted(nummer)[:6])
+                    ut.append({"path": "boards[1]", "code": "typ_utan_exempel",
+                               "message": f"Urvalet har {n} uppgiftsrader med "
+                                          f"{klass} (uppg. {lista}) men inget "
+                                          "exempel av den typen. Lägg ett "
+                                          "exempel med den, eller byt ut det "
+                                          "exempel som ligger längst från "
+                                          "urvalet."})
+    return ut
+
+
 # ── Vakten för det bortvalda «Vanligt fel» ──────────────────────────────────
 # Krysset är AV i förvalet, och en promptregel DRIVER bara. Läraren bad om det
 # 17 gånger på en vecka (spardata/forslag/2026-09-06.md) — då ska en tavla som
@@ -3192,6 +3329,13 @@ def doma_tackning(board: dict, *, model: str, llm, bok: str, delar: str = "",
                      else vad})
     # Fler än så är inte en lucka utan en annan lektion — då ska läraren se
     # domen och döma själv, inte få tavlan omskriven i grunden.
+    #
+    # Fynden LOGGAS. Ekvationstavlan 2026-09-17 gick ut med en olikhet och
+    # utan bråkekvationer fast domaren rapporterat «5 luckor»; efteråt gick
+    # det inte att se VAD domaren sagt, bara hur många. Nu står raderna i
+    # jobbloggen (jobb_events) och går att läsa i efterhand.
+    for f in fynd[:5]:
+        log(f"Domaren: {f['message'][:200]}")
     return fynd[:5]
 
 
@@ -3342,7 +3486,7 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     # varning läraren får läsa själv. Kostar inget anrop.
     errors = (errors + bokkopior(board, bok) + formupprepning(board)
               + vanligtfel_kvar(board, form) + stodordsfragor(board)
-              + hanvisningar(board))
+              + hanvisningar(board) + symbolvakt(board, bok))
     res = _repair_until_valid(board, errors, model=model, llm=llm,
                               rounds_used=rounds, max_rounds=max_rounds,
                               log_cb=log, token_cb=token_cb, form=form)
@@ -3358,6 +3502,7 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
             + formupprepning(res["board"])
             + vanligtfel_kvar(res["board"], form)
             + stodordsfragor(res["board"]) + hanvisningar(res["board"])
+            + symbolvakt(res["board"], bok)
             if (f["path"], f["code"]) not in sedda]
     if doma and res.get("board") is not None:
         dom = _tackning_pass(res["board"], res["errors"], model=model, llm=llm,
