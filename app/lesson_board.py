@@ -33,6 +33,9 @@ from app import llm_client
 from app import whiteboard_spec as ws
 
 MAX_ROUNDS = 3          # totalt antal LLM-rundor inkl. första genereringen
+# Koder som en OMSKRIVNING redovisar i stället för att reparera bort — se
+# kommentaren vid _repair_until_valid (lärarens önskemål vinner över budgeten).
+REFINE_BEHALL: tuple[str, ...] = ("textbudget",)
 # Bench Fas 2: en tabelltung tavla trunkerades vid 6k tokens → ogiltig JSON.
 BOARD_MAX_TOKENS = 9_000
 
@@ -2413,7 +2416,8 @@ _SKARPARE = ("Ditt förra svar pekade på {nyckel}, som ligger utanför målet, 
 def _riktad_refine(board: dict, instruction: str, vagar, *, model: str, llm,
                    mal=None, malen=None, bok="", historik=None,
                    max_rounds: int = MAX_ROUNDS, log_cb=None,
-                   token_cb=None, form: Tavelform = STANDARDFORM) -> dict:
+                   token_cb=None, form: Tavelform = STANDARDFORM,
+                   behall: tuple[str, ...] = REFINE_BEHALL) -> dict:
     """Omskrivningen NÄR läraren pekat: lapp först, helomskrivning som reserv,
     och tavlan orörd hellre än fel."""
     log = log_cb or (lambda _m: None)
@@ -2438,7 +2442,7 @@ def _riktad_refine(board: dict, instruction: str, vagar, *, model: str, llm,
                                        rounds_used=rundor,
                                        max_rounds=max_rounds, log_cb=log_cb,
                                        token_cb=token_cb, vagar=vagar,
-                                       form=form)
+                                       form=form, behall=behall)
         if sort == "hel":
             kandidat = vad          # modellen valde helomskrivningen själv
             break
@@ -2470,7 +2474,7 @@ def _riktad_refine(board: dict, instruction: str, vagar, *, model: str, llm,
     return _repair_until_valid(ihop, errors, model=model, llm=llm,
                                rounds_used=rundor, max_rounds=max_rounds,
                                log_cb=log_cb, token_cb=token_cb, vagar=vagar,
-                               form=form)
+                               form=form, behall=behall)
 
 
 # ── Tiden ────────────────────────────────────────────────────────────────────
@@ -2587,12 +2591,40 @@ def _llm_round(prompt: str, model: str, llm, token_cb=None) -> dict | None:
     return ws.normalize_board(board) if board is not None else None
 
 
+# LÄRARENS ÖNSKEMÅL VINNER ÖVER BUDGETEN (2026-09-17). Ekvationstavlan för
+# TE26A: läraren bad två varv i rad om ett bråkexempel och ett kontrollsteg,
+# och båda varven kom tillbaka utan dem. Orsaken var inte modellen: ett svar
+# som gjorde det hon bad om bar 345 tecken mot högerns tak 340, reparations-
+# rundan fick «textbudget» som problem, och lappen strök det nyaste på tavlan,
+# alltså precis det hon nyss beställt. Loggen sa bara «1 problem».
+#
+# I en OMSKRIVNING hålls därför budgetfyndet tillbaka från reparationen och
+# redovisas som en varning i stället: det är hennes tavla, hon bad om raden,
+# och hon får se att den kostar. Genereringen reparerar budgeten som förut.
+# Konstanten REFINE_BEHALL står vid MAX_ROUNDS: _riktad_refine ovan läser den
+# som default redan när modulen laddas.
+
+
+def _dela(errors: list, behall) -> tuple[list, list]:
+    """(det som repareras, det som hålls tillbaka)."""
+    if not behall:
+        return list(errors), []
+    kvar = [e for e in errors if isinstance(e, dict) and e.get("code") in behall]
+    return [e for e in errors if e not in kvar], kvar
+
+
+def _koder(errors: list) -> str:
+    return ", ".join(sorted({str(e.get("code")) for e in errors
+                             if isinstance(e, dict) and e.get("code")}))
+
+
 def _repair_until_valid(board: dict | None, errors: list, *, model: str, llm,
                         rounds_used: int, max_rounds: int,
                         log_cb: Callable[[str], None] | None = None,
                         token_cb: Callable[[str], None] | None = None,
                         lapp: bool = True, vagar=None,
-                        form: Tavelform = STANDARDFORM) -> dict:
+                        form: Tavelform = STANDARDFORM,
+                        behall: tuple[str, ...] = ()) -> dict:
     """Kör korrigeringsrundor tills fellistan är tom eller rundorna är slut.
     Returnerar {"board", "errors", "rounds"} — kvarstående fel redovisas
     ärligt (UI:t visar dem i stället för att dölja dem).
@@ -2613,10 +2645,16 @@ def _repair_until_valid(board: dict | None, errors: list, *, model: str, llm,
     log = log_cb or (lambda _m: None)
     if vagar:
         lapp = False
+    # `behall` (se REFINE_BEHALL): de koderna repareras inte utan följer med
+    # ut som varningar, ur den SENASTE valideringen.
+    errors, kvar = _dela(errors, behall)
     while errors and rounds_used < max_rounds and board is not None:
         rounds_used += 1
+        # Koderna står i loggen: «1 problem» sa ingenting om att det var
+        # budgeten som strök lärarens beställning.
         log(f"Rättar tavlan{' med lappar' if lapp else ''} (runda "
-            f"{rounds_used} av {max_rounds}) — {len(errors)} problem …")
+            f"{rounds_used} av {max_rounds}) — {len(errors)} problem: "
+            f"{_koder(errors)} …")
         if lapp:
             svar = _lapp_runda(board, errors, model=model, llm=llm, form=form)
             if svar is None:
@@ -2626,6 +2664,7 @@ def _repair_until_valid(board: dict | None, errors: list, *, model: str, llm,
                 continue
             sort, kandidat = svar
             _doc, nya_fel = ws.validate_board_json(kandidat)
+            nya_fel, kvar = _dela(nya_fel, behall)
             if sort == "lapp":
                 # Aldrig sämre än den tavla lappen ersätter. Jämförelsen görs
                 # mot en FÄRSK validering av originalet: fellistan i loopen kan
@@ -2656,8 +2695,8 @@ def _repair_until_valid(board: dict | None, errors: list, *, model: str, llm,
                 continue
         doc, new_errors = ws.validate_board_json(candidate)
         board = candidate
-        errors = new_errors
-    return {"board": board, "errors": errors, "rounds": rounds_used}
+        errors, kvar = _dela(new_errors, behall)
+    return {"board": board, "errors": errors + kvar, "rounds": rounds_used}
 
 
 # ── Bokkopievakten ──────────────────────────────────────────────────────────
@@ -3853,7 +3892,8 @@ def refine_board(board: dict, instruction: str, *, model: str,
     _doc, errors = ws.validate_board_json(candidate)
     res = _repair_until_valid(candidate, errors, model=model, llm=llm,
                               rounds_used=1, max_rounds=max_rounds,
-                              log_cb=log_cb, token_cb=token_cb, form=form)
+                              log_cb=log_cb, token_cb=token_cb, form=form,
+                              behall=REFINE_BEHALL)
     # DIFFVAKTEN (se blocket ovan). Varvet är kört och prompten stod orörd —
     # det är SVARET som prövas. Nämnde meningen ett mål och varvet gick
     # utanför det körs samma önskemål om som en riktad lapp mot just de
