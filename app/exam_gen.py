@@ -4451,9 +4451,9 @@ def andrade_uppgifter(fore: dict, efter: dict) -> list[int]:
 LOSNING_SYSTEM = (
     "Du är en svensk matematiklärare som skriver lösningsförslag till ett "
     "prov, till eleverna som ska läsa dem hemma utan lärare bredvid. Du "
-    "skriver ENKELT, steg för steg, och du hittar aldrig på ett annat svar "
-    "än facit. Du svarar ALLTID med giltig JSON enligt schemat, ingenting "
-    "annat."
+    "skriver OTROLIGT ENKELT — korta meningar, vardagsord, ett steg per rad "
+    "— och du hittar aldrig på ett annat svar än facit. Du svarar ALLTID "
+    "med giltig JSON enligt schemat, ingenting annat."
 )
 
 LOSNING_SCHEMA = {
@@ -4498,19 +4498,46 @@ def build_losning_prompt(underlag: dict) -> str:
         "förstå utan lärare. Läraren: «väldigt tydligt, så att eleverna "
         "verkligen kan läsa ut det».\n"
         "- `rader` är lösningen rad för rad, i den ordning eleven räknar. "
-        "Varje rad är ETT steg: några ord på svenska som säger vad som görs "
-        "och varför, följt av steget inom $…$ («Sätt in $s = \\sqrt{5}$ i "
-        "formeln för arean: $A = (\\sqrt{5})^{2} = 5$»). Aldrig två steg på "
-        "samma rad, aldrig ett hopp eleven måste fylla i själv.\n"
+        "Varje rad är ETT steg: några ord på svenska som säger vad vi gör, "
+        "följt av steget inom $…$ («Vi sätter in $s = \\sqrt{5}$ i formeln "
+        "för arean: $A = (\\sqrt{5})^{2} = 5$»). Aldrig två steg på samma "
+        "rad, aldrig ett hopp eleven måste fylla i själv.\n"
+        # Lärarens dom på den första versionen (2026-09-17, samma kväll):
+        # «Vi behöver skriva lösningsförslaget så pass enkelt som möjligt med
+        # ett otroligt enkelt språk så att eleverna faktiskt förstår
+        # lösningarna.» Den första versionen skrev «subtraherar vi
+        # exponenterna», «Multiplicera in $n$ i parentesen», kontrollrader
+        # och en svarsrad som var hela facitmeningen.
+        "- OTROLIGT ENKELT SPRÅK. Skriv som du pratar med en elev som just "
+        "missat uppgiften: vardagsord — «räkna ut», «ta bort», «dela båda "
+        "sidor med 3», «gånger», «flytta över», «sätt in», «lägg ihop». "
+        "Aldrig «subtrahera», «addera», «multiplicera in», «dividera», "
+        "«ekvivalent», «termerna», «utveckla» — skriv «dra bort», «lägg "
+        "till», «gånger in», «dela», «samma sak», «delarna», «räkna ut "
+        "parentesen». En regel som används får sitt namn plus ett "
+        "vardagsord om vad den gör: «potensregeln: samma bas, dra bort "
+        "exponenterna».\n"
+        # Andra domen samma kväll: «Jag upplever att det är väldigt mycket
+        # text. Korta ner det mycket. De enklare uppgifterna behöver inte vara
+        # så utvecklade. Det ska fortfarande vara tydligt att se hela
+        # lösningen.» Matten ÄR lösningen; orden är där bara när ett steg
+        # inte förklarar sig självt.
+        "- LITE TEXT. Matten bär lösningen, orden är bara en etikett: högst "
+        "SEX ord före matten, och en rad som förklarar sig själv "
+        "($36 \\cdot 2 = 72$) får inga ord alls. En enkel uppgift (E-poäng, "
+        "ett eller två steg) är TVÅ till FYRA rader. En uppgift med flera "
+        "steg får en rad per räknesteg — inte en rad per tanke. Skriv ALDRIG "
+        "vad vi ska göra innan vi gör det, aldrig vad en rad betyder efter "
+        "att den står där, inga kontrollrader, inga «alltså»-rader.\n"
         "- Varje poängsteg i bedömningsanvisningen ska synas som ett eget "
-        "steg i lösningen.\n"
-        "- Svaret står SIST på en egen rad som börjar med «Svar:», exakt så "
-        "som facit ger det (samma exakta form, samma enhet). Flerval: «Svar: "
-        "B», föregånget av en rad som säger varför just det alternativet "
+        "steg i lösningen — men inte fler steg än så på en enkel uppgift.\n"
+        "- Svaret står SIST på en egen rad som börjar med «Svar:» och "
+        "innehåller BARA svaret, exakt så som facit ger det (samma exakta "
+        "form, samma enhet) — inte hela facitmeningen. Flerval: «Svar: B», "
+        "föregånget av en rad som säger varför just det alternativet "
         "stämmer.\n"
-        f"- Högst {LOSNING_RADER_TAK} rader per enhet. Enkel svenska, korta "
-        "meningar, inga kursplaneord. Samma tal och SAMMA SVAR som facit — "
-        "hitta aldrig på ett annat.\n"
+        f"- Högst {LOSNING_RADER_TAK} rader per enhet. Samma tal och SAMMA "
+        "SVAR som facit — hitta aldrig på ett annat.\n"
         "Svara med enbart JSON: {\"losningar\": [{\"enhet\": …, \"rader\": "
         "[…]}, …]}, en post per enhet ovan med samma «nyckel» som `enhet`."
     )
