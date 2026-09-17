@@ -66,3 +66,21 @@ def test_genereringen_reparerar_budgeten_som_forut():
                             doma=False, llm=llm)
     assert len(calls) == 2
     assert res["errors"] == []
+
+
+def test_omskrivningen_behaller_lararens_losningar():
+    """«Lösningarna behöver skrivas under varje exempel» (2026-09-17 kväll).
+    Facitvakten fäller uträkningar i genereringen; i en omskrivning där hon
+    bett om dem redovisas de som varning i stället för att strykas."""
+    fore = _valid_doc()
+    svar = _valid_doc()
+    svar["boards"][1]["columns"][0]["sections"].append(
+        {"kind": "math", "latex": "3 \\cdot 3^2 = 3 \\cdot 9 = 27"})
+    _p, fel = ws.validate_board_json(svar)
+    assert [f["code"] for f in fel] == ["facit"], fel
+    llm, calls = _stub_llm([json.dumps(svar)])
+    res = lb.refine_board(fore, "skriv lösningen under varje exempel",
+                          model="", llm=llm)
+    assert len(calls) == 1 and res["board"] == svar
+    assert [f["code"] for f in res["errors"]] == ["facit"]
+    assert lb.REFINE_BEHALL == ("textbudget", "facit")

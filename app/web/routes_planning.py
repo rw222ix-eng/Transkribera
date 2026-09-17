@@ -818,6 +818,14 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 kandidater = traff or kandidater
             except ValueError:
                 pass
+            # TERMINEN OCKSÅ. NA26F fredag 14:40 finns två gånger i schemat:
+            # höstens rad slutar 16:20, vårens 15:55. Utan datumgränsen vann
+            # den rad som råkade ligga först, och tavlan för den 18 september
+            # 2026 fick vårens sluttid (fyndet 2026-09-17).
+            traff = [k for k in kandidater
+                     if (not k[0].get("fran") or k[0]["fran"] <= datum)
+                     and (not k[0].get("till") or datum <= k[0]["till"])]
+            kandidater = traff or kandidater
         if group:
             traff = [k for k in kandidater if (k[0].get("klass") or "") == group]
             kandidater = traff or kandidater

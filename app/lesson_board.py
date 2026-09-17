@@ -35,7 +35,11 @@ from app import whiteboard_spec as ws
 MAX_ROUNDS = 3          # totalt antal LLM-rundor inkl. första genereringen
 # Koder som en OMSKRIVNING redovisar i stället för att reparera bort — se
 # kommentaren vid _repair_until_valid (lärarens önskemål vinner över budgeten).
-REFINE_BEHALL: tuple[str, ...] = ("textbudget",)
+# `facit` sedan 2026-09-17 kväll: läraren bad om «lösningarna under varje
+# exempel» på NA26F:s mönstertavla, och facitvakten hade strukit precis dem i
+# reparationsrundan. Genereringen fäller fortfarande uträkningar; en
+# omskrivning där hon uttryckligen ber om dem får behålla dem.
+REFINE_BEHALL: tuple[str, ...] = ("textbudget", "facit")
 # Bench Fas 2: en tabelltung tavla trunkerades vid 6k tokens → ogiltig JSON.
 BOARD_MAX_TOKENS = 9_000
 
