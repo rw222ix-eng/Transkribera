@@ -11,11 +11,10 @@ enhet, hela frågor). Reglerna står i lesson_board.INSTRUCTION (avsnittet
 «Formler ur verkligheten») och domarprompten («Pröva MODELLERNA»); stödorden
 och hänvisningen fälls dessutom deterministiskt (stodordsfragor, hanvisningar).
 
-OBS textbudgeten: lärarens godkända tavla bär 392 respektive 403 tecken
-löpande text mot taken 280/340 (whiteboard_spec._MAX_BOARD_TEXT) även i den
-täta form som står nedan. Budgeten är hennes egen dom (2026-09-05) och rörs
-inte här: generatorn skriver en tätare tavla, och testet nedan låser att
-INGET ANNAT än budgeten fäller hennes facit."""
+Textbudgeten: lärarens godkända tavla bär 392 respektive 403 tecken löpande
+text, över de vanliga taken 280/340. Hennes beslut samma dag: modelltavlor
+får mer (whiteboard_spec._MAX_BOARD_TEXT_MODELL 400/220 per kolumn), och en
+modelltavla känns igen på formeln med tal på vänstern (ar_modelltavla)."""
 import json
 
 from app import lesson_board as lb
@@ -214,13 +213,10 @@ def test_den_godkanda_tavlan_gar_genom_alla_vakter():
     med bokens tal på vänstern är inget sifferexempel."""
     doc = godkand_tavla()
     parsed, fel = ws.validate_board_json(doc)
-    assert parsed is not None
-    # DEN KÄNDA SPÄNNINGEN: en modellektion bär fler ord än en algebralektion,
-    # och lärarens godkända tavla (392 respektive 403 tecken) spränger hennes
-    # egen textbudget (280/340). Budgeten står kvar; generatorn skriver en
-    # tätare tavla, och avgör hon att modellektioner får mer text är det
-    # _MAX_BOARD_TEXT som ska höjas, inte reglerna här. Inget ANNAT får fällas.
-    assert [f["code"] for f in fel] == ["textbudget", "textbudget"], fel
+    assert parsed is not None and fel == [], fel
+    # Tavlan bär 392/403 tecken löpande text: över den vanliga budgeten
+    # (280/340), inom modelltavlans (400/440). Se ar_modelltavla.
+    assert ws.ar_modelltavla(parsed.boards[0])
     assert lb.stodordsfragor(doc) == []
     assert lb.hanvisningar(doc) == []
     assert lb.formupprepning(doc) == []
@@ -237,6 +233,34 @@ def test_brytpunkten_som_kedja_falls_men_som_egna_rader_slapps():
         {"kind": "math", "latex": "60x = 30x + 450"},
         {"kind": "math", "latex": "x = 15"}])]}
     assert ws.validate_board_json(rader)[1] == []
+
+
+def test_modelltavlan_kanns_igen_pa_formeln_med_tal():
+    """Kännetecknet är formeln med tal på vänstern: en bokstav till vänster
+    om = och minst två tal som inte är ensiffriga till höger. Geometrins
+    O = 2πr, bråkets ½bh och den förbjudna allmänna formen y = kx + m räknas
+    inte, och ingen few-shot gör det heller."""
+    for latex in ("K = 200 + 0{,}80x", "V = 400 - 50t", "h = 45 - 4{,}9t^2",
+                  "T = 21 - 21 \\cdot 2^{-t}", "V(t) = 400 - 50t"):
+        assert ws._ar_modellformel(latex), latex
+    for latex in ("O = 2\\pi r", "A = \\frac{1}{2}bh", "y = kx + m",
+                  "c = \\sqrt{a^2 + b^2}", "ax + b", "y = 25 - n",
+                  "(a + b)(c + d) = ac + ad", ""):
+        assert not ws._ar_modellformel(latex), latex
+    for _u, doc in lb.FEW_SHOTS:
+        assert not ws.ar_modelltavla(ws.validate_board_json(doc)[0].boards[0])
+
+
+def test_bara_modelltavlan_far_den_storre_budgeten():
+    """Samma 392 tecken på en vänstertavla UTAN modellformel fälls som förut:
+    höjningen gäller modellektioner, inte alla tavlor."""
+    doc = godkand_tavla()
+    for sec in doc["boards"][0]["sections"][5]["children"][0]["children"]:
+        if sec["kind"] == "math":
+            sec["latex"] = "K = a + bx"        # bokstäver: ingen modellformel
+    fel = ws.validate_board_json(doc)[1]
+    assert [f["code"] for f in fel] == ["textbudget", "textbudget"], fel
+    assert (ws._MAX_BOARD_TEXT_MODELL, ws._MAX_COLUMN_TEXT_MODELL) == (400, 220)
 
 
 # ---------------------------------------------------------------- prompten --

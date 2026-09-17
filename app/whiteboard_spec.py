@@ -601,6 +601,24 @@ _MAX_ITEM_CHARS = 50
 # föredrag. Läraren sänkte 400 själv i augusti; nu sänkte hon igen.
 _MAX_BOARD_TEXT = 280
 _MAX_COLUMN_TEXT = 170
+# MODELLTAVLOR FÅR MER (lärarens beslut 2026-09-17). Hennes godkända tavla
+# för Liber Ma1c s. 69–72 (formler ur verkligheten: ställa upp, jämföra,
+# rimlighet) bar 392 tecken på vänstern och 403 över två kolumner — varje
+# bokstav förklarad med enhet, hela frågor om giltighet, tolkningen i ord —
+# och föll på 280/340 fast varje rad var hennes egen. En modellektion är ord
+# på ett sätt en algebralektion inte är. Taken nedan är mätta mot den tavlan
+# (tests/test_modellregler.godkand_tavla) med samma luft som 280 lämnar
+# few-shotarna.
+#
+# Vad som ÄR en modelltavla avgörs ur tavlan själv, inte ur uppdraget, för
+# validate_board_json anropas från varje väg (skrivning, lapp, omskrivning,
+# render-report) och bara tavlan följer med överallt. Kännetecknet är just
+# det regel 8b annars förbjuder: en formel MED TAL på vänstertavlan, «K = 200
+# + 0,80x», «V = 400 − 50t» — en bokstav till vänster om = och minst två
+# tal (≥ 2 siffror eller decimaltal) till höger. Ett ensamt tal räcker inte
+# (O = 2πr är geometri) och \frac{1}{2}bh har bara ensiffriga tal.
+_MAX_BOARD_TEXT_MODELL = 400
+_MAX_COLUMN_TEXT_MODELL = 220
 _ASPECT_TOLERANCE = 0.15  # motorn varnar vid >15 % avvikelse
 _VERTEX_EPS = 1e-6
 
@@ -836,6 +854,37 @@ def _check_tankstreck(sections: list, path: str, errors: list[dict]) -> None:
             _check_tankstreck(sec.children, f"{spath}.children", errors)
 
 
+_MODELL_VL_RE = re.compile(r"^\s*[A-Za-z]\s*(\([a-z]\))?\s*=")
+_MODELL_TAL_RE = re.compile(r"\d{2,}|\d+(?:\{,\}|,)\d+")
+
+
+def _ar_modellformel(latex: str) -> bool:
+    """«K = 200 + 0{,}80x»: en bokstav (eller V(t)) till vänster om =, och
+    till höger minst två tal som inte är ensiffriga heltal."""
+    m = _MODELL_VL_RE.match(latex or "")
+    if not m:
+        return False
+    hoger = _talrensad(latex[m.end():])
+    return len(_MODELL_TAL_RE.findall(hoger)) >= 2
+
+
+def _math_i_flodet(sections: list, ut: list[str]) -> None:
+    for sec in sections or []:
+        if isinstance(sec, MathSection):
+            ut.append(sec.latex)
+        elif isinstance(sec, (CalloutSection, RowSection, ColSection)):
+            _math_i_flodet(sec.children, ut)
+
+
+def ar_modelltavla(board) -> bool:
+    """Bär vänstertavlan en formel ur verkligheten? Se _MAX_BOARD_TEXT_MODELL."""
+    rader: list[str] = []
+    _math_i_flodet(getattr(board, "sections", None), rader)
+    for col in getattr(board, "columns", None) or []:
+        _math_i_flodet(col.sections, rader)
+    return any(_ar_modellformel(r) for r in rader)
+
+
 def _text_volym(sections: list) -> int:
     """Summan av läsbar text i ett sektionsflöde — text och listpunkter, ned
     genom callout/row/col. Rubriker och matte räknas inte: se _MAX_BOARD_TEXT."""
@@ -911,6 +960,7 @@ def validate_rules(doc: BoardDoc) -> list[dict]:
     """Deterministiska regler som json-schemat inte kan uttrycka.
     Returnerar en maskinläsbar fellista (tom = allt ok)."""
     errors: list[dict] = []
+    modell = bool(doc.boards) and ar_modelltavla(doc.boards[0])
     for bi, board in enumerate(doc.boards):
         bpath = f"boards[{bi}]"
         pad = board.padding or Padding()
@@ -943,8 +993,9 @@ def validate_rules(doc: BoardDoc) -> list[dict]:
                 _validate_graph(g, col_w, gpath, errors)
         # Kolumntavlan bär flera exempelspalter — taket skalar per spalt
         # (se OMMÄTT-kommentaren vid _MAX_BOARD_TEXT).
-        tak = (_MAX_COLUMN_TEXT * len(board.columns) if board.columns
-               else _MAX_BOARD_TEXT)
+        per_kolumn, per_tavla = ((_MAX_COLUMN_TEXT_MODELL, _MAX_BOARD_TEXT_MODELL)
+                                 if modell else (_MAX_COLUMN_TEXT, _MAX_BOARD_TEXT))
+        tak = (per_kolumn * len(board.columns) if board.columns else per_tavla)
         if volym > tak:
             errors.append(_err(bpath, "textbudget",
                                f"tavlan bär {volym} tecken löpande text (taket "
