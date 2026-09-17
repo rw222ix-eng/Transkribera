@@ -291,6 +291,24 @@ function rotateJitter(seed, max = 0.5) {
 // ============================================================
 // Component: heading / text
 // ============================================================
+// Lärarens dom 2026-09-17 (tavlan om linjära samband): raden «x ≥ 0 och
+// kx + m ≥ 0» radbröts så att nollan stod ensam på nästa rad. Matematik ska
+// stå i math-sektioner (KaTeX bryter aldrig), men en textrad får bära ett
+// kort villkor («här x ≥ 0»), och då ska operatorn och dess grannar hålla
+// ihop. Mellanslagen kring = ≥ ≤ < > + − · × byts mot hårda mellanslag, och
+// ett ensamt kort slutord (≤ 2 tecken: «0», «kr», «x») limmas fast vid ordet
+// före. Ren text rörs inte: «450 kr i fast avgift» bryts som förut.
+WB.limmaSymboler = function(text) {
+  if (typeof text !== 'string' || !text) return text;
+  let ut = text;
+  const OP = /(\S) ([=≥≤<>+−–·×±]) (\S)/g;
+  // Två varv: «0 ≤ x ≤ a» delar x mellan två träffar, och ett varv tar bara
+  // den första (regex-motorn konsumerar grannen).
+  ut = ut.replace(OP, '$1 $2 $3').replace(OP, '$1 $2 $3');
+  ut = ut.replace(/ (\S{1,2})$/, ' $1');
+  return ut;
+};
+
 WB.text = function(spec) {
   const {
     text = '',
@@ -317,7 +335,7 @@ WB.text = function(spec) {
       textAlign: align,
       whiteSpace: nowrap ? 'nowrap' : undefined,
     },
-  }, text);
+  }, nowrap ? text : WB.limmaSymboler(text));
   node._spec = spec;
   return node;
 };

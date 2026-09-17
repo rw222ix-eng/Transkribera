@@ -71,14 +71,29 @@ INSTRUCTION = (
     "- Vinklar heter \\u03b1, \\u03b2, \\u03b3 eller v. Sidor får gemena namn (a, b, c), "
     "hörn versala (A, B, C). Hörnetiketter placeras med points[].outward, som "
     "är en PUNKT [x, y] inne i figuren (oftast dess mitt) — etiketten knuffas "
-    "bort från den och hamnar utanför figuren. Aldrig true/false: en skarp "
-    "körning skrev outward: true och kostade en hel reparationsrunda.\n"
+    "bort från den och hamnar utanför figuren. Aldrig true/false.\n"
+    # LEKTIONEN LINJÄRA SAMBAND I LIBER S. 69–72 (lärarens domar 2026-09-17,
+    # tre tavlor fotograferade och rättade i chatten). Tavla 1 skrev «Fråga
+    # formeln: negativt? heltal? tak?», tavla 1 v2 hänvisade till «båda
+    # formlerna» fast bara en stod på tavlan, och tavla 2 kallade två olika
+    # kort i samma simhall «kort» och «saldokort». De tre reglerna gäller
+    # alla tavlor; stödorden och hänvisningen fälls också deterministiskt
+    # (stodordsfragor, hanvisningar nedan).
+    "- Frågor på tavlan är HELA frågor («Måste x vara ett heltal?»), aldrig "
+    "stödord med frågetecken («negativt? heltal? tak?»).\n"
+    "- Allt tavlan hänvisar till STÅR på tavlan: «båda formlerna» kräver två "
+    "formler. Samma ord betyder EN sak per tavla (ett «kort» och ett "
+    "«saldokort» i samma simhall är två saker: döp om, «årskort»). Beskriv "
+    "situationen entydigt: «450 kr i fast avgift, sedan 30 kr per besök», "
+    "inte «450 kr och 30 kr per besök».\n"
+    "- Layout: en formel bryts aldrig så att en ensam symbol hamnar på ny "
+    "rad; lämna hellre luft i en spalt än att trycka ihop den.\n"
     # FÄRGERNA. «Massa blåa färger och röda färger — det känns lite
     # inkonsekvent. Vi tonar ner på det här. Drastiskt. Endast färger där det
     # absolut behövs, för att markera någonting viktigt. Eller i grafen, för
     # att skilja olika linjer åt — det funkar.»
     "- Färger anges ENDAST med namnen black, blue, red, green, orange, purple, "
-    "men tavlan skrivs i SVART. Färg är ett verktyg, inte dekoration, och "
+    "men tavlan skrivs i SVART. Färg "
     "används bara på två ställen: (1) rött för det som varnar — \"Vanligt "
     "fel:\" och det felaktiga ledet, (2) inuti grafer och figurer för att "
     "skilja kurvor, linjer och vinklar åt. Rubriker, formler, exempel, "
@@ -92,8 +107,7 @@ INSTRUCTION = (
     "- Vektorer ritas med arrows, aldrig som polygoner.\n"
     "- Geometriska cirklar (t.ex. enhetscirkeln) ritas ALLTID som polygon med "
     "minst 48 parametriska punkter — aldrig med plots — och grafen måste vara "
-    "kvadratisk: width = height och lika stora xRange/yRange, annars blir "
-    "cirkeln en ellips.\n"
+    "kvadratisk: width = height och lika stora xRange/yRange.\n"
     "- Håll alla punkter/texter inom grafens xRange/yRange.\n"
     "- Breddgränser (viktigt — annars ryms inte innehållet): grafer, figurer "
     "och tabeller högst 650 px breda på vänstertavlan och högst 800 px i en "
@@ -113,8 +127,7 @@ INSTRUCTION = (
     "(dela långa uträkningar på flera math-sektioner), tabeller högst "
     # Radlängderna stod här också, med gamla tal (80/70). Strukna 2026-09-05:
     # textbudgeten längre ned bär dem, och en siffra på två ställen glider.
-    "4 kolumner × 5 rader. Hellre färre, tydliga steg än trängsel, motorn "
-    "skalar innehållet automatiskt.\n"
+    "4 kolumner × 5 rader.\n"
     # DRAMATURGIN. Läraren pekade ut Professor Leonards genomgång av räta
     # linjen (Calculus 1, Lecture 0.1, 0:00–17:30) som förebild för hur ett
     # pass ska kännas: han öppnar med dagens resa, VÄCKER begreppet med en
@@ -289,8 +302,7 @@ INSTRUCTION = (
     "Exempel hör hemma här — aldrig på vänstertavlan.\n"
     "- Fallgalleri (när momentet är en sats med klassiska fall, t.ex. "
     "randvinkelsatsen): 3–4 färdiga figurer, var och en med fallets namn och "
-    "EN kort rad om vad det säger. Inga uträkningar — läraren pratar och "
-    "pekar.\n"
+    "EN kort rad om vad det säger.\n"
     # EXEMPLEN. Lärarens andra dom, samma dag: «de flesta eleverna, även de
     # duktiga, kräver tydliga genomgångar med ett enkelt exempel — eller flera
     # enkla, max tre — som speglar bokens uppgifter. Man väljer uppgifterna så
@@ -412,8 +424,7 @@ INSTRUCTION = (
     # framför klassen är värre än ett nytt tal.
     "- Återanvänds ett tal MÅSTE det stämma: räkna efter varje siffra som "
     "följer ur ett tidigare exempel (kvadraten med arean 36 delad av en "
-    "diagonal ger trianglar på 18 — aldrig något annat), och skriv ledet åt "
-    "det håll klassen räknar det (arean ur sidorna, halvan ur helheten). Är "
+    "diagonal ger trianglar på 18 — aldrig något annat). Är "
     "du osäker på härledningen: ta ett nytt rent tal i stället.\n"
     # Två fällningar till ur samma kväll (2026-08-20): «det räcker med 3 = √9,
     # vi behöver inte 2 = √4 och 5 = √25», och «bryt ut kvadratfaktorn — då
@@ -543,9 +554,62 @@ INSTRUCTION = (
     # arean tillbaka till sidan.»
     "- Bokens förklaring är UTGÅNGSPUNKTEN, inte taket: finns en enklare och "
     "mer pedagogisk väg in — en vardagsmening som bär idén («roten går "
-    "baklänges: från arean tillbaka till sidan»), en bättre bild, en "
-    "tydligare ordning — ta den, med bokens notation och begrepp. Finns "
-    "ingen bättre är bokens rätt. Aldrig metoder klassen inte mött.\n"
+    "baklänges: från arean tillbaka till sidan») — ta den, med bokens "
+    "notation och begrepp. Finns ingen bättre är bokens rätt. Aldrig metoder "
+    "klassen inte mött.\n"
+    # FORMLER UR VERKLIGHETEN. Lärarens domar 2026-09-17 över tre tavlor för
+    # Liber Ma1c s. 69–72 (2.5 Formler och mönster: ställa upp och jämföra
+    # modeller, rimlighet). Den första tavlan skrev y = kx + m med etiketterna
+    # «förändring, variabel, startvärde» — k och m införs först i 4.3 på
+    # s. 159, och avsnittet bär också 7200 − 6x² och 21 − 21·2^(−t), så «en
+    # formel är en rät linje» var fel i sak. Giltighetsområdet stod som
+    # «kx + m ≥ 0» (stämmer bara ibland; i 2525 kommer gränserna ur staketet,
+    # 40 < x ≤ 120) och «0 ≤ x ≤ a» med ett oförklarat a. Andra versionen
+    # märkte 0,80 «rörlig» fast det rörliga är 0,80x. Tavla 2 slutade
+    # jämförelsen vid «sätt formlerna lika» utan brytpunkt och tolkning, gav
+    # 0 ≤ x ≤ 7,5 besök, hoppade över 60x ≤ 450 och lät avläsningstabellen
+    # sakna raden 0 | 450. Den godkända tavlan står i tests/test_lesson_board.
+    #
+    # Vänsterns uppställning med bokens tal STRIDER inte mot 7 och 8b: där
+    # finns ingen bokstavsform att skriva, för boken har inte infört den.
+    # Bokens TEORIEXEMPEL (ur förklaringstexten) får stå på vänstern; högerns
+    # exempel är fortfarande egna (bokkopior fäller bara högern).
+    "Formler ur verkligheten — när momentet är att STÄLLA UPP, JÄMFÖRA eller "
+    "pröva RIMLIGHETEN i en modell (avgifter, tömning, temperatur):\n"
+    "- BARA BOKENS BETECKNINGAR: inga bokstäver, formler eller termer som "
+    "boken inte infört fram till de uppslagna sidorna. Står inte y = kx + m, "
+    "k, m eller «riktningskoefficient» på sidorna finns de inte för klassen: "
+    "skriv formeln med sina tal (K = 200 + 0{,}80x), aldrig i allmän form. "
+    "Tavlan får inte göra avsnittet smalare än sidorna: bär de också en "
+    "andragrads- eller exponentialformel är «en formel» aldrig «en rät "
+    "linje».\n"
+    "- Vänsterns uppställning är då BOKENS TEORIEXEMPEL (formeln ur "
+    "förklaringstexten, aldrig ur uppgifterna) med neutrala namn: "
+    "«Abonnemang A» och «B» i stället för bokens påhittade företag. Under "
+    "formeln förklaras VARJE bokstav och konstant med vad den är och sin "
+    "enhet, på en rad («K = kostnad i kr, 200 = fast avgift, 0,80 = kr per "
+    "minut, x = antal minuter»). «Variabel», «rörlig» eller «förändring» "
+    "räcker inte: y är också en variabel, och det rörliga är 0,80x, inte "
+    "0,80.\n"
+    "- Vänsterns rader står i BOKENS ordning: teckna (skriv sambandet som en "
+    "formel), jämföra (sätt in samma x i båda formlerna), giltighetsområde "
+    "(de x där formeln ger rimliga svar), sist frågorna om giltighet. "
+    "Jämförelsen kräver att BÅDA formlerna står på tavlan.\n"
+    "- Giltighetsområdet skrivs för just exemplets tal («här x ≥ 0», "
+    "staketet: 40 < x ≤ 120), aldrig som en regel som bara stämmer ibland "
+    "(kx + m ≥ 0) och aldrig med en oförklarad bokstav (0 ≤ x ≤ a). Räknar x "
+    "saker (besök, höns, godisbitar) är området HELTAL: lös olikheten (60x ≤ "
+    "450 ger x ≤ 7,5) och fråga sedan om 7,5 besök går; svaret är x = 0, 1, "
+    "…, 7.\n"
+    "- En JÄMFÖRELSE slutar i en TOLKNING som exemplets sista steg: "
+    "ekvationen (60x = 30x + 450), brytpunkten (x = 15, båda 900 kr) och vad "
+    "som gäller på var sida om den (färre besök: enstaka billigast; fler: "
+    "kortet). Mellansteget som leder till svaret står, inte bara svaret. Det "
+    "är den enda uträkning exemplet får bära, EN rad i taget: ekvationen, "
+    "sedan svaret, sedan tolkningen i ord.\n"
+    "- En tabell klassen ska LÄSA AV bär raden för x = 0 när formeln har ett "
+    "startvärde; ordningen är avläs (60 kr per besök), teckna (börjar på "
+    "450), formel.\n"
     # TEXTBUDGETEN. Läraren körde en lektion med två egengjorda tavlor och sa
     # efteråt att den ena var fylld med text hon aldrig skrev upp på plats: det
     # är för mycket att skriva. Tavlan ska bära det som FAKTISKT SKRIVS under
@@ -575,11 +639,9 @@ INSTRUCTION = (
     "steg som redan står i ett tidigare exempel skrivs inte om, läraren "
     "pekar bakåt. Ingen kontroll- eller jämförelserad: den sägs, inte "
     "skrivs.\n"
-    "- Har lektionen flera exempel eller fall som ska jämföras: samla dem i EN "
-    "table-sektion, en rad per fall, med de korta kolumnerna kontext, uttryck, "
-    "typ → metod och svar. Den tabellen är genomgångens samlingspunkt — den "
-    "fylls i tillsammans med klassen. Håll cellerna korta (~25 tecken) och sätt "
-    "INTE cellW: motorn ger varje kolumn bredden ur dess innehåll.\n"
+    "- Flera fall som ska jämföras samlas i EN table-sektion, en rad per "
+    "fall, korta celler (~25 tecken), fylls i med klassen; sätt INTE cellW, "
+    "motorn ger kolumnbredden ur innehållet.\n"
     # Innehållskravet, inte ett motorkrav. Det står sist och för sig: en tavla
     # kan vara felfri mot schemat och ändå tiga om det eleverna faktiskt gör
     # fel. Kravet är att felet SKRIVS UT, inte att det undviks.
@@ -629,7 +691,17 @@ REPAIR_HINTS = (
     # FACITVAKTEN (2026-09-05, kväll) — se whiteboard_spec._check_facit.
     "- 'är en färdig uträkning': skriv steget i ORD i stället, det som säger "
     "vad man GÖR («Avläs k: skillnaden mellan två rader»), eller stryk raden "
-    "helt. Räkna aldrig ut svaret — läraren gör det med klassen.\n"
+    "helt. Räkna aldrig ut svaret — läraren gör det med klassen. Undantaget "
+    "är jämförelsens brytpunkt: den skrivs som EGNA rader, ekvationen, sedan "
+    "svaret, sedan tolkningen i ord — aldrig som en kedja med ⇒.\n"
+    # STÖDORDEN OCH HÄNVISNINGEN (2026-09-17), se stodordsfragor() och
+    # hanvisningar(). Båda är lärarens fällningar på tavlan om linjära samband.
+    "- 'stödord med frågetecken': skriv varje fråga som en hel fråga i en "
+    "list-sektion, en punkt per fråga («Kan x vara negativt?», «Måste x vara "
+    "ett heltal?», «Finns det ett största x?»).\n"
+    "- 'hänvisar till något som inte står på tavlan': skriv dit det raden "
+    "pekar på (den andra formeln, tabellen, grafen) i en egen sektion, eller "
+    "skriv om raden så att den pekar på det som står.\n"
     # BOKKOPIEVAKTEN (2026-09-05, kväll), se bokkopior().
     "- 'står ordagrant i boken': skriv en EGEN uppgift i en annan situation. "
     "Att byta talen räcker inte: situationen och formen måste vara dina "
@@ -2729,6 +2801,122 @@ def formupprepning(board: dict | None) -> list[dict]:
     return ut
 
 
+# ── Stödorden och hänvisningen ───────────────────────────────────────────────
+# Lärarens fällningar 2026-09-17 på tavlan om linjära samband (Liber Ma1c
+# s. 69–72). Den första tavlan skrev «Fråga formeln: negativt? heltal? tak?»
+# — «för kort för att eleverna ska förstå frågorna». Den andra skrev
+# «Jämföra: samma x i båda formlerna» när bara EN formel stod på tavlan.
+# Båda står nu som regler i INSTRUCTION, och båda fälls här deterministiskt
+# av samma skäl som bokkopior och formupprepning: en regel driver, en vakt
+# kostar en reparationsrunda i stället för ett varv för hand. Fail-open som
+# de andra: vakterna tiger hellre än fäller fel rad.
+_STODORD_RE = re.compile(r"\b[\wåäöÅÄÖ]+\?\s+[\wåäöÅÄÖ]+\?")
+
+
+def _sprakrader(sektioner: list, vag: str, ut: list[tuple[str, str]]) -> None:
+    """Alla läsbara strängar i ett flöde: text, heading och listpunkter, ned
+    genom row/col/callout. Samma urval som tankstrecksvakten."""
+    for i, sec in enumerate(sektioner or []):
+        if not isinstance(sec, dict):
+            continue
+        p = f"{vag}[{i}]"
+        k = sec.get("kind")
+        if k in ("text", "heading") and isinstance(sec.get("text"), str):
+            ut.append((f"{p}.text", sec["text"]))
+        elif k == "list":
+            for j, item in enumerate(sec.get("items") or []):
+                if isinstance(item, str):
+                    ut.append((f"{p}.items[{j}]", item))
+        elif k in ("row", "col", "callout"):
+            _sprakrader(sec.get("children"), f"{p}.children", ut)
+
+
+def _tavlans_rader(tavla: dict, vag: str) -> list[tuple[str, str]]:
+    rader: list[tuple[str, str]] = []
+    _sprakrader(tavla.get("sections"), f"{vag}.sections", rader)
+    for ci, kol in enumerate(tavla.get("columns") or []):
+        _sprakrader((kol or {}).get("sections"),
+                    f"{vag}.columns[{ci}].sections", rader)
+    return rader
+
+
+def stodordsfragor(board: dict | None) -> list[dict]:
+    """Två ettordsfrågor i rad («negativt? heltal?») på samma rad är stödord,
+    inte frågor. Koden `stodord`, går till reparationsrundan."""
+    if not isinstance(board, dict):
+        return []
+    ut: list[dict] = []
+    for bi, tavla in enumerate(board.get("boards") or []):
+        if not isinstance(tavla, dict):
+            continue
+        for vag, text in _tavlans_rader(tavla, f"boards[{bi}]"):
+            if _STODORD_RE.search(text):
+                ut.append({"path": vag, "code": "stodord",
+                           "message": f"'{text[:60]}' är stödord med "
+                                      "frågetecken, inte frågor. Skriv varje "
+                                      "fråga som en hel fråga («Måste x vara "
+                                      "ett heltal?»), en per rad."})
+    return ut
+
+
+# Vad en hänvisning pekar på, och vilken sektionssort som måste finnas minst
+# två av på SAMMA tavla för att «båda» ska ha något att peka på.
+_HANVISNINGAR: tuple[tuple[str, str], ...] = (
+    ("formlerna", "math"), ("ekvationerna", "math"),
+    ("tabellerna", "table"), ("graferna", "graph"), ("figurerna", "shape"),
+)
+_BADA_RE = re.compile(r"\b(båda|bägge|de två)\s+(formlerna|ekvationerna|"
+                      r"tabellerna|graferna|figurerna)\b", re.IGNORECASE)
+
+
+def _antal_av(sektioner: list, sort: str) -> int:
+    n = 0
+    for sec in sektioner or []:
+        if not isinstance(sec, dict):
+            continue
+        if sec.get("kind") == sort:
+            n += 1
+        elif sec.get("kind") in ("row", "col", "callout"):
+            n += _antal_av(sec.get("children"), sort)
+    return n
+
+
+def hanvisningar(board: dict | None) -> list[dict]:
+    """«Båda formlerna» på en tavla med en formel. Koden `hanvisning`.
+
+    Räknar på TAVLAN (vänstern för sig, högern för sig): läraren pekar på det
+    som står framför klassen, inte på den andra tavlan."""
+    if not isinstance(board, dict):
+        return []
+    ut: list[dict] = []
+    for bi, tavla in enumerate(board.get("boards") or []):
+        if not isinstance(tavla, dict):
+            continue
+        rader = _tavlans_rader(tavla, f"boards[{bi}]")
+        if not rader:
+            continue
+        antal: dict[str, int] = {}
+        for _ord, sort in _HANVISNINGAR:
+            if sort in antal:
+                continue
+            antal[sort] = _antal_av(tavla.get("sections"), sort) + sum(
+                _antal_av((kol or {}).get("sections"), sort)
+                for kol in tavla.get("columns") or [])
+        for vag, text in rader:
+            m = _BADA_RE.search(text)
+            if not m:
+                continue
+            sort = dict(_HANVISNINGAR)[m.group(2).lower()]
+            if antal.get(sort, 0) < 2:
+                ut.append({"path": vag, "code": "hanvisning",
+                           "message": f"'{text[:60]}' hänvisar till något som "
+                                      f"inte står på tavlan: «{m.group(0)}» "
+                                      f"kräver två, tavlan har "
+                                      f"{antal.get(sort, 0)}. Skriv dit det "
+                                      "raden pekar på, eller skriv om raden."})
+    return ut
+
+
 # ── Vakten för det bortvalda «Vanligt fel» ──────────────────────────────────
 # Krysset är AV i förvalet, och en promptregel DRIVER bara. Läraren bad om det
 # 17 gånger på en vecka (spardata/forslag/2026-09-06.md) — då ska en tavla som
@@ -2897,6 +3085,26 @@ TACKNING_INSTRUKTION = (
     "urvalet, eller att lägga saknaden som ett steg eller en vändning i ett "
     "av de tre — aldrig att lägga till ett fjärde exempel. Ryms det som "
     "saknas inte alls: lämna det, läraren pratar också.\n"
+    # MODELLERNA. Lärarens domar 2026-09-17 över tre tavlor för Liber Ma1c
+    # s. 69–72 (ställa upp och jämföra modeller, rimlighet) — se INSTRUCTION,
+    # avsnittet «Formler ur verkligheten». Domaren har sidorna framför sig
+    # och är därför den som kan se att y = kx + m inte står på dem.
+    "Pröva MODELLERNA när sidorna handlar om formler ur verkligheten (ställa "
+    "upp, jämföra, rimlighet), och varje punkt är ett fynd: (1) en "
+    "beteckning eller term som INTE står på sidorna (y = kx + m, k, m, "
+    "riktningskoefficient) — forslag är formeln med sina tal; (2) en "
+    "bokstav eller konstant utan förklaring och enhet («variabel», «rörlig», "
+    "«förändring» räcker inte); (3) ett giltighetsområde med en oförklarad "
+    "bokstav (0 ≤ x ≤ a), en regel som bara stämmer ibland (kx + m ≥ 0), "
+    "eller ett decimalt tak där x räknar saker (7,5 besök) — heltalen ska "
+    "stå; (4) en jämförelse utan brytpunkt och tolkning på båda sidor om "
+    "den, eller utan mellansteget som leder till svaret — de raderna "
+    "(ekvationen, x = 15, tolkningen i ord) är beställda och INGEN färdig "
+    "uträkning; (5) en tabell som ska avläsas utan raden för x = 0 när "
+    "formeln har ett startvärde; (6) tavlan gör avsnittet smalare än "
+    "sidorna (säger «rät linje» när sidorna också har andragrads- eller "
+    "exponentialformler); (7) bokens påhittade företagsnamn i stället för A "
+    "och B.\n"
     # BEGREPPSKOPPLINGEN. Lärarens dom (2026-09-05) kom med ett villkor:
     # hon vill inte sitta och iterera varje tavla för hand. Slirar formen är
     # domaren rätt plats att fånga det på, inte fler promptrader.
@@ -3133,7 +3341,8 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     # uppgift ska rättas i samma varv som ett schemafel, inte redovisas som en
     # varning läraren får läsa själv. Kostar inget anrop.
     errors = (errors + bokkopior(board, bok) + formupprepning(board)
-              + vanligtfel_kvar(board, form))
+              + vanligtfel_kvar(board, form) + stodordsfragor(board)
+              + hanvisningar(board))
     res = _repair_until_valid(board, errors, model=model, llm=llm,
                               rounds_used=rounds, max_rounds=max_rounds,
                               log_cb=log, token_cb=token_cb, form=form)
@@ -3148,6 +3357,7 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
             f for f in bokkopior(res["board"], bok)
             + formupprepning(res["board"])
             + vanligtfel_kvar(res["board"], form)
+            + stodordsfragor(res["board"]) + hanvisningar(res["board"])
             if (f["path"], f["code"]) not in sedda]
     if doma and res.get("board") is not None:
         dom = _tackning_pass(res["board"], res["errors"], model=model, llm=llm,
