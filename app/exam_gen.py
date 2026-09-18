@@ -4306,6 +4306,22 @@ def _elevstegen(elever: list[dict], tak: int) -> list[dict]:
     return [per_steg[s] for s in sorted(per_steg)][:tak_i_schemat]
 
 
+def _utan_tankstreck(s: str) -> str:
+    """En elevrad utan – och —. Inne i $…$ blir strecket ett minus, utanför
+    blir « – » ett kommatecken och ett ensamt streck ett bindestreck."""
+    if not isinstance(s, str) or not any(t in s for t in "–—"):
+        return s
+    ut: list[str] = []
+    for k, bit in enumerate(s.split("$")):
+        if k % 2:                                   # inne i $…$
+            bit = bit.replace("–", "-").replace("—", "-")
+        else:
+            bit = re.sub(r"\s*[–—]\s+(?=\S)", ", ", bit)
+            bit = bit.replace("–", "-").replace("—", "-")
+        ut.append(bit)
+    return "$".join(ut)
+
+
 def skriv_in_bedomning(uppgift: dict, svar: dict) -> bool:
     """Passets svar in i uppgiften. Returnerar om något faktiskt skrevs.
 
@@ -4328,10 +4344,18 @@ def skriv_in_bedomning(uppgift: dict, svar: dict) -> bool:
         # ETT parti per elevlösning. Partierna finns för att kunna dela en
         # lösning i stycken med var sin dom (förlagans lo4), men pappret
         # läraren bad om är en RAD per poängsteg — och en rad är ett parti.
+        # TANKSTRECKEN TAS BORT HÄR, deterministiskt. Passet körs EFTER
+        # slutgrinden och dess rader validerades aldrig, så «b) –» i ett
+        # elevexempel gick ut på pappret och fällde sedan varje omskrivning
+        # (exam_spec.validate_tankstreck) tills läraren hittade raden själv
+        # (NA26F 2026-09-18). Inne i $…$ är strecket ett minus; utanför är
+        # det en paus som blir kommatecken, eller ett tomt svar som blir
+        # bindestreck.
         uppgift["elevlosningar"] = [
             {"etikett": f"{sum(e['poang'])} p",
-             "partier": [{"rader": e["rader"], "poang": list(e["poang"]),
-                          "dom": e["kommentar"]}]}
+             "partier": [{"rader": [_utan_tankstreck(r) for r in e["rader"]],
+                          "poang": list(e["poang"]),
+                          "dom": _utan_tankstreck(e["kommentar"])}]}
             for e in steg]
         skrivet = True
     return skrivet
@@ -5652,13 +5676,24 @@ def sammanfoga_riktat(original: dict, kandidat: dict,
     return ihop, ""
 
 
+def _felnyckel(f: dict) -> tuple:
+    """Vad som gör två valideringsfel till SAMMA fel: plats, kod och ord."""
+    return (str(f.get("path")), f.get("code"), str(f.get("message") or ""))
+
+
 def _repair_until_valid(exam: dict | None, errors: list, *, model: str, llm,
                         rounds_used: int, max_rounds: int, profil: str = "prov",
                         antal: int | None = None, skeleton: list[dict] | None = None,
                         koder: list[str] | None = None,
                         niva_mal: dict | None = None,
                         riktning=None,
-                        log_cb: Callable[[str], None] | None = None) -> dict:
+                        log_cb: Callable[[str], None] | None = None,
+                        ignorera: frozenset = frozenset()) -> dict:
+    """`ignorera` är felnycklar (_felnyckel) som inte ska räknas som fel i någon
+    runda: det som var trasigt redan FÖRE en riktad omskrivning (refine_exam).
+    Utan den hittade varje ny runda samma gamla fel igen och drev slingan
+    till taket — tre rundor över alla tolv uppgifter för ett tankstreck
+    mål-låset ändå inte lät den röra."""
     log = log_cb or (lambda _m: None)
     while errors and rounds_used < max_rounds and exam is not None:
         rounds_used += 1
@@ -5684,7 +5719,7 @@ def _repair_until_valid(exam: dict | None, errors: list, *, model: str, llm,
                 continue
         _doc, new_errors = _validate(candidate, profil, koder, niva_mal)
         exam = candidate
-        errors = new_errors
+        errors = [f for f in new_errors if _felnyckel(f) not in ignorera]
     return {"exam": exam, "errors": errors, "rounds": rounds_used}
 
 
@@ -7529,12 +7564,27 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
                     "errors": [{"path": "mal", "code": "mal", "message": skal}],
                     "rounds": 1}
     _doc, errors = _validate(candidate, profil, niva_mal=niva_mal)
+    # FEL SOM REDAN FANNS FÄLLER INTE ÖNSKEMÅLET. Grinden nedan lämnar
+    # originalet tillbaka så fort något fel står kvar — också ett fel
+    # önskemålet inte rört: ett tankstreck i uppgift 12:s elevexempel («b) –»)
+    # fällde två omskrivningar av försättsbilden på NA26F-provet, nio minuter
+    # vardera, och läraren fick tillbaka pappret orört utan att veta varför
+    # (2026-09-18). Reparationen kunde inte laga det heller: mål-låset
+    # släpper bara målet igenom. Det som var trasigt FÖRE varvet mäts därför
+    # bort ur grindens fråga, och följer med som varning i svaret — pappret
+    # är inte sämre än det var, och önskemålet gick igenom.
+    # Nyckeln bär MEDDELANDET också: en balans som blivit sämre får en annan
+    # rad än den som redan stod där, och ska fälla som förut.
+    fore = {_felnyckel(f) for f in _validate(exam, profil, niva_mal=niva_mal)[1]}
+    gamla = [f for f in errors if _felnyckel(f) in fore]
+    errors = [f for f in errors if _felnyckel(f) not in fore]
     if errors:
         steg("reparerar")
     res = _repair_until_valid(candidate, errors, model=model, llm=llm,
                               rounds_used=1, max_rounds=max_rounds,
                               profil=profil, niva_mal=niva_mal,
-                              riktning=riktning, log_cb=log_cb)
+                              riktning=riktning, log_cb=log_cb,
+                              ignorera=frozenset(fore))
     # Gick målets ändring inte igenom grinden ens efter reparation lämnas
     # ORIGINALET tillbaka, med felen kvar i svaret. Ett halvt genomfört
     # önskemål på ett papper läraren tror är helt är värre än ett önskemål som
@@ -7542,6 +7592,8 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
     # tom), det förra upptäcks framför klassen.
     if riktning is not None and res["errors"]:
         res["exam"] = exam
+    if gamla:
+        res["errors"] = res["errors"] + gamla
     # ── POÄNGEN FÖLJER KRAVEN (spår 7) ───────────────────────────────
     # FÖRE nivågrinden och bedömningspasset nedan, och det är ordningen som
     # gör det värt något: nivåsignalerna ska läsa den poäng uppgiften slutar

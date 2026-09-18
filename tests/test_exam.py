@@ -3105,7 +3105,11 @@ def test_refine_exam_mater_mot_dokumentets_nivaval():
     res2 = exam_gen.refine_exam(fore, "byt tal i uppgift 1", nummer=1,
                                 model="m", llm=llm2)
     assert any(e["code"] == "nivabalans" for e in res2["errors"])
-    assert res2["exam"] == fore, "riktad ändring utan mål-band ska backas"
+    # Sedan 2026-09-18 fäller ett fel som fanns FÖRE varvet inte önskemålet:
+    # balansen var lika skev före och efter, så den följer med som varning och
+    # ändringen går igenom (jfr tankstrecket i NA26F-provets uppgift 12, som
+    # kastade två omskrivningar av försättsbilden).
+    assert res2["exam"]["uppgifter"][0]["text"] == efter["uppgifter"][0]["text"]
 
 
 # ══════════════ DELUPPGIFTERNA I SKELETTET ══════════════
