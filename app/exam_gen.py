@@ -6308,7 +6308,17 @@ def poangvakt(exam: dict, profil: str = "prov") -> list[dict]:
                        f"«+1 {r['niva']} {_kort(r['krav'], 60)}». Dela raden i "
                        "en rad per prestation och höj poängen så att varje "
                        "prestation får sin egen poäng, inom SAMMA del av "
-                       "provet och på den nivå uppgiften redan ligger på."),
+                       "provet och på den nivå uppgiften redan ligger på. "
+                       # Utvägen som INTE rör poängen. Slutgrinden tar bara emot
+                       # en lagning som validerar, och en höjd poängtrippel
+                       # spräcker ofta balansen — då stod fyndet kvar som
+                       # varning på pappret (IndA 2026-09-18: «jämför med
+                       # mätvärdet och drar en korrekt slutsats» är EN
+                       # prestation med ett «och» i). Modellen får därför säga
+                       # det, genom att skriva raden utan «och».
+                       "Är det i själva verket EN prestation (jämförelsen ÄR "
+                       "slutsatsen) behåller du poängen och skriver om raden "
+                       "utan «och», så att den nämner bara den prestationen."),
                 "nr": nr})
             break
     return (ut + rader[:POANGRAD_MAX_FYND])[:POANG_MAX_FYND]
@@ -7399,6 +7409,21 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
         steg("bedomning")
         bedomningspass(res["exam"], model=model, llm=llm, skala=skala,
                        log_cb=log_cb)
+        # EN ANDRA CHANS på elevexemplen som hoppar över ett poängsteg. Passet
+        # var det enda i kedjan utan omtag: en 3-poängare med exempel på 0
+        # och 1 p gick ut som varning på pappret (IndA 2026-09-18, uppgift 1)
+        # fast prompten säger stegen ordagrant — ett nytt anrop på just den
+        # uppgiften räcker oftast. Bara de uppgifterna, bara en gång.
+        saknar = sorted({_uppgiftsnr(str(e.get("path") or "")
+                                     .removeprefix("uppgift").strip())
+                         for e in bedomningssignaler(res["exam"])
+                         if "elevlösningar på" in str(e.get("message") or "")}
+                        - {0})
+        if saknar:
+            log_cb and log_cb("Elevexemplen missar ett poängsteg i uppgift "
+                              f"{', '.join(map(str, saknar))}: skriver om …")
+            bedomningspass(res["exam"], model=model, llm=llm, skala=skala,
+                           nummer=saknar, log_cb=log_cb)
         # Trappan kan ha skrivits om — vakten räknar om på det som blev.
         # Utan den här raden hade en gammal varning stått kvar om en trappa
         # som inte finns längre.
