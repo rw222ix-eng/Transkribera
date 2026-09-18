@@ -68,7 +68,7 @@ def test_regeln_namner_bada_delarna_med_interna_namn():
 
 def test_en_del_far_en_enda_mening():
     regel = exam_gen.hjalpmedelsregel("Räknare och formelblad", delar=False)
-    assert regel == ("Provet skrivs med räknare, digitala hjälpmedel och "
+    assert regel == ("Provet skrivs med räknare och "
                      "formelblad.")
     assert "Del" not in regel
 
@@ -147,7 +147,7 @@ def test_delrubriken_i_pdf_foljer_lararens_val():
     assert r"Del A \textendash{} Digitala verktyg är tillåtna" in tex
     assert r"Del B \textendash{} Digitala verktyg är tillåtna" in tex
     # Och försättsbladet bär samma mening, med papprets delnamn.
-    assert (r"\textbf{Hjälpmedel:} Del A med räknare och digitala hjälpmedel."
+    assert (r"\textbf{Hjälpmedel:} Del A med räknare."
             in tex)
 
 

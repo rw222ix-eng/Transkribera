@@ -830,15 +830,17 @@ window.BladBygg = (() => {
   const HJALPMEDELSFRAS = {
     'Inga digitala': 'Utan digitala hjälpmedel.',
     'Formelblad': 'Formelbladet är tillåtet, inga digitala hjälpmedel.',
-    'Räknare': 'Räknare och digitala hjälpmedel tillåtna.',
-    'Räknare och formelblad': 'Räknare, digitala hjälpmedel och formelblad tillåtna.'
+    /* «Räknare» och inget mer — «digitala hjälpmedel» var för vagt (lärarens
+       dom 2026-09-18); datorn skriver hon själv när en uppgift kräver den. */
+    'Räknare': 'Räknare tillåten.',
+    'Räknare och formelblad': 'Räknare och formelblad tillåtna.'
   };
   /* Kortformen i delens sidhuvud («Del A · utan digitala hjälpmedel»). */
   const HJALPMEDELSETIKETT = {
     'Inga digitala': 'utan digitala hjälpmedel',
     'Formelblad': 'formelblad, utan digitala hjälpmedel',
-    'Räknare': 'räknare och digitala hjälpmedel',
-    'Räknare och formelblad': 'räknare, digitala hjälpmedel och formelblad'
+    'Räknare': 'räknare',
+    'Räknare och formelblad': 'räknare och formelblad'
   };
   /* Del A är `hjalpmedelA`, del B `hjalpmedelB` — och «En del» är ett prov med
      bara den första. Ett papper utan fälten (allt som skrevs före

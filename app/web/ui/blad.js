@@ -284,9 +284,29 @@ window.Blad = (() => {
     if (meta) {
       const rad = (n, t) => `<tr><th>${n}</th><td>${t}</td></tr>`;
       /* Hjälpmedlen är det som skiljer del A från del B — därför står de i
-         delraderna och inte som ett blankt förbud på hjälpmedelsraden. Svaret
-         skrivs i provet på båda delarna; redovisningen på lösblad på båda. */
-      const redovisas = 'Svaret skrivs i provet, redovisningen på lösblad.';
+         delraderna och inte som ett blankt förbud på hjälpmedelsraden.
+         REDOVISNINGEN FÖLJER UPPGIFTERNA, inte delen. Raden sa «Svaret skrivs
+         i provet, redovisningen på lösblad» på båda delarna oavsett vad de
+         bar, och läraren (2026-09-18) fick ingen ändring hur hon än bad:
+         raden är härledd och omskrivningen rör bara tid och hjälpmedel. Nu
+         säger den vilka uppgifter som är kortsvar (typ rutin, «Endast svar
+         krävs» på arket) och vilka som redovisas på lösblad — samma ord som
+         PDF:en (exam_latex delrader), annars säger skärm och papper olika. */
+      const nrlista = nrs => {
+        if (!nrs.length) return '';
+        const sammanhang = nrs.every((n, k) => !k || n === nrs[k - 1] + 1);
+        if (nrs.length === 1) return `uppgift ${nrs[0]}`;
+        if (sammanhang) return `uppgift ${nrs[0]}–${nrs[nrs.length - 1]}`;
+        return `uppgift ${nrs.slice(0, -1).join(', ')} och ${nrs[nrs.length - 1]}`;
+      };
+      const redovisning = items => {
+        const kort = items.filter(u => u.ut === 'kort').map(u => kvar.get(u.nr));
+        const langa = items.filter(u => u.ut !== 'kort').map(u => kvar.get(u.nr));
+        if (!langa.length) return 'Endast svar krävs, svaret skrivs i provet.';
+        if (!kort.length) return 'Fullständiga lösningar krävs, redovisas på lösblad.';
+        return `Endast svar på ${nrlista(kort)}, fullständig lösning på lösblad på ${nrlista(langa)}.`;
+      };
+      const [uppgB] = [plock.filter(u => !uppgA.includes(u))];
       /* DOKUMENTETS HJÄLPMEDELSREGEL VINNER — och då säger pappret den EN gång.
          `hjalpmedel` är ett obligatoriskt fält i ExamDoc och står på PDF:ens
          försättsblad; skärmen härledde i stället sin egen rad ur
@@ -311,7 +331,7 @@ window.Blad = (() => {
       const fras = (del, gamla) => (B() && B().hjalpmedelsfras
         ? B().hjalpmedelsfras(v, del) : gamla);
       const delA = hjalp ? '' : ' ' + fras('B', 'Utan digitala hjälpmedel.');
-      const delB = hjalp ? '' : ' ' + fras('C', 'Räknare och digitala hjälpmedel tillåtna.');
+      const delB = hjalp ? '' : ' ' + fras('C', 'Räknare tillåten.');
       /* «En del» har en enda regel, och den står på hjälpmedelsraden. Den
          skrivs «Inga digitala hjälpmedel.» och inte som delarnas «Utan …» av
          samma skäl som ovan: det är meningen pappret redan bar. */
@@ -322,9 +342,9 @@ window.Blad = (() => {
         + rad('Hjälpmedel', hjalp ? esc(hjalp)
           : `${i.formelblad ? 'Formelblad och linjal' : 'Linjal'}.${enDel ? ' ' + esc(helaProvet) : ''}`)
         + (enDel
-          ? rad('Uppgifter', `${versal(omrade(1, plock.length))}. ${redovisas}`)
-          : rad('Del A', `${versal(omrade(1, antalB))}.${delA} ${redovisas}`)
-            + rad('Del B', `${versal(omrade(antalB + 1, plock.length))}.${delB} ${redovisas}`));
+          ? rad('Uppgifter', `${versal(omrade(1, plock.length))}. ${redovisning(plock)}`)
+          : rad('Del A', `${versal(omrade(1, antalB))}.${delA} ${redovisning(uppgA)}`)
+            + rad('Del B', `${versal(omrade(antalB + 1, plock.length))}.${delB} ${redovisning(uppgB)}`));
     }
     const not = $('.prnot', trav);
     /* Inga tankstreck i anvisningen: läraren skriver aldrig med dem. */
@@ -1935,10 +1955,22 @@ window.Blad = (() => {
        formen. Samma höjdtak som underlagssidorna (mallens 90 mm ≈ 340 px) —
        utan det tryckte ett 1200 px-foto innehållet under A4-kanten. Och ett
        formge-svep när bilden avkodats: höjden fanns inte när arket mättes. */
+    /* FÖRSÄTTSBILDENS HÖJD ÄR PDF:ENS (exam_latex._forsattsbild_hojd): 45–66 mm
+       räknat ur bildtextens längd, här i px (3,78 px/mm). Med det fasta taket
+       340 px sköt bilden bildtexten under arkets nederkant — läraren såg
+       texten försvinna i samma stund hon släppte bilden (2026-09-18), fast den
+       stod kvar i dokumentet. Uppgifternas bilder behåller sitt tak. */
+    const forsattHojd = () => {
+      const ord = ((((v.forsattsbild || {}).bildtext) || '').trim().split(/\s+/).filter(Boolean)).length;
+      const rader = ord ? Math.ceil(ord / 11) : 0;
+      const mm = Math.max(45, Math.min(66, 80 - 5 - 3 - rader * 4.3 - 3));
+      return Math.round(mm * 3.78);
+    };
     Object.entries(v.bilder || {}).forEach(([nyckel, src]) => {
       const el = $(`[data-el="${nyckel}"] .prbild, [data-el="${nyckel}"] .gufigur`, trav);
       if (!el) return;
-      el.innerHTML = `<img src="${src}" alt="" style="display:block;margin:0 auto;max-width:100%;max-height:340px;width:auto;height:auto" />`;
+      const tak = nyckel === 'forsatt' ? forsattHojd() : 340;
+      el.innerHTML = `<img src="${src}" alt="" style="display:block;margin:0 auto;max-width:100%;max-height:${tak}px;width:auto;height:auto" />`;
       const img = $('img', el);
       if (img && !img.complete) img.addEventListener('load', () => formge(), { once: true });
     });

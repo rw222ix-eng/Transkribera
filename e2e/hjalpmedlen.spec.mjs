@@ -246,5 +246,5 @@ test("förvalet ritar precis de fraser pappret alltid burit", async ({ page }) =
 
   await expect(delcell(page, "Del A")).toContainText("Utan digitala hjälpmedel.");
   await expect(delcell(page, "Del B"))
-    .toContainText("Räknare och digitala hjälpmedel tillåtna.");
+    .toContainText("Räknare tillåten.");
 });

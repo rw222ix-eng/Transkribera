@@ -1875,8 +1875,12 @@ def build_ci_forbehall(punkter: list[str], forbjudna: list[dict]) -> str:
 HJALPMEDEL_KLAUSUL = {
     "Inga digitala": "utan digitala hjälpmedel",
     "Formelblad": "utan digitala hjälpmedel, formelbladet är tillåtet",
-    "Räknare": "med räknare och digitala hjälpmedel",
-    "Räknare och formelblad": "med räknare, digitala hjälpmedel och formelblad",
+    # «Räknare» och inget mer. Klausulen sa «räknare och digitala hjälpmedel»,
+    # och lärarens dom (2026-09-18): «digitala verktyg är för vagt, för
+    # generellt» — datorn hör bara hemma på en grafritande uppgift, och då
+    # skriver hon det själv. Spegel i blad-bygg HJALPMEDELSFRAS.
+    "Räknare": "med räknare",
+    "Räknare och formelblad": "med räknare och formelblad",
 }
 # Dagens papper. Står valen här är det INGEN avvikelse: prompten ska då vara
 # byte för byte den som tests/kassetter spelades in med, och klienten skickar

@@ -309,6 +309,18 @@ def _krav(typ: str | None) -> str:
     return _KRAV_TEXT.get(typ or "", _KRAV_ANNARS)
 
 
+def _nrlista(nrs: list[int]) -> str:
+    """«uppgift 1–2», «uppgift 3» eller «uppgift 1, 2 och 5» — spegel av
+    blad.js nrlista, tecken för tecken."""
+    if not nrs:
+        return ""
+    if len(nrs) == 1:
+        return f"uppgift {nrs[0]}"
+    if all(n == nrs[k - 1] + 1 for k, n in enumerate(nrs) if k):
+        return f"uppgift {nrs[0]}–{nrs[-1]}"
+    return f"uppgift {', '.join(str(n) for n in nrs[:-1])} och {nrs[-1]}"
+
+
 def _stycken(text: str) -> list[dict]:
     """Uppgiftstexten som stycken, och formelrader som displayformler.
 
@@ -759,12 +771,17 @@ def _forsatt_vy(doc: exam_spec.ExamDoc, delar: list[dict],
             continue
         f, s = d["_forsta_nr"], d["_sista_nr"]
         spann = f"Uppgift {f}." if f == s else f"Uppgift {f}–{s}."
+        # REDOVISNINGEN FÖLJER UPPGIFTERNA. «Kortsvar och fullständiga
+        # lösningar» sa inte VILKA, och eleven fick leta på arket. Nu står
+        # numren: samma ord som skärmens provtabell (blad.js planvalProv),
+        # annars säger papper och skärm olika om samma prov (2026-09-18).
         if d["_alla_kortsvar"]:
-            vad = "Endast svar krävs."
+            vad = "Endast svar krävs, svaret skrivs i provet."
         elif d["_nagot_kortsvar"]:
-            vad = "Kortsvar och fullständiga lösningar."
+            vad = (f"Endast svar på {_nrlista(d['_kort_nr'])}, fullständig "
+                   f"lösning på lösblad på {_nrlista(d['_langa_nr'])}.")
         else:
-            vad = "Fullständiga lösningar krävs."
+            vad = "Fullständiga lösningar krävs, redovisas på lösblad."
         delrader.append({"namn": escape_latex(d["rubrik"]),
                          "text": escape_latex(f"{spann} {vad}")})
 
@@ -1081,6 +1098,10 @@ def _build_view(doc: exam_spec.ExamDoc,
             "_sista_nr": vy_items[-1]["nummer"] if vy_items else None,
             "_alla_kortsvar": alla_kortsvar,
             "_nagot_kortsvar": nagot_kortsvar,
+            "_kort_nr": [vi["nummer"] for vi in vy_items
+                         if vi["krav"] == _KRAV_TEXT["rutin"]],
+            "_langa_nr": [vi["nummer"] for vi in vy_items
+                          if vi["krav"] != _KRAV_TEXT["rutin"]],
         })
     for i, d in enumerate(delar):
         if i and d["rubrik"]:
