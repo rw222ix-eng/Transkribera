@@ -433,7 +433,11 @@
 
 /* ══════════ GRANSKNINGSLÄGE — delad yta ══════════
    Pappret och samtalet är jämlika: ingenting ligger ovanpå något annat. */
-.granskaskal{position:fixed;inset:0;z-index:220;display:grid;grid-template-rows:auto 1fr;background:var(--sunken);opacity:0;transition:opacity var(--dur-3) var(--ease)}
+/* KOLUMNEN FÅR INTE VÄXA MED TITELN. Utan grid-template-columns är enda kolumnen `auto`,
+   och toppradens rubrik (.chatttitel, nowrap) drog då hela skalet till rubrikens bredd:
+   ett prov med fem moment i titeln blev 2 052 px brett i ett 1 232 px-fönster, och
+   chattkolumnen hamnade utanför skärmen — «jag kan inte se chattfönstret» (2026-09-18). */
+.granskaskal{position:fixed;inset:0;z-index:220;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto 1fr;background:var(--sunken);opacity:0;transition:opacity var(--dur-3) var(--ease)}
 .granskaskal[data-pa]{opacity:1}
 .gtopp{display:flex;align-items:flex-start;gap:18px;padding:16px 22px;background:rgba(255,255,255,.82);backdrop-filter:blur(10px);border-bottom:1px solid rgba(9,66,108,.12);z-index:3}
 .gtopptext{min-width:0}
