@@ -43,7 +43,7 @@
 ((# Inga poäng på gruppens ark: det är samtalet som prövas, och en siffra i
     marginalen gör uppgiften till en tävling. Poängen står i facit. #))
 \begin{uppgift}{((( u.bokstav )))}{}
-((( u.text )))
+((( former.stycken(u.stycken) )))
 ((* if u.bild_fil *))\par\vspace{2mm}\begin{center}\includegraphics[width=0.72\linewidth,height=90mm,keepaspectratio]{((( u.bild_fil )))}\end{center}((* endif *))
 ((* if u.figur_tex *))\par\vspace{2mm}\begin{center}((( u.figur_tex )))\end{center}((* endif *))
 ((( former.kropp(u) )))
@@ -51,7 +51,7 @@
 ((* if u.har_deluppgifter *))
 ((* for d in u.deluppgifter *))
 \begin{deluppgift}{((( d.bokstav )))}{}
-((( d.text )))
+((( former.stycken(d.stycken) )))
 ((( former.kropp(d) )))
 ((* if d.notis *))\notisruta{((( d.notis )))}((* endif *))
 ((# Ifyllnadsraderna ÄR svarsplatsen när de finns: den som skrivit «Ekvation:»

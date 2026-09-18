@@ -49,7 +49,7 @@ på sista sidan((* endif *))((* if visa_poang *)); poäng anges som totalpoäng(
 ((* else *))
 \begin{uppgift}{((( u.nummer )))}{}
 ((* endif *))
-((( u.text )))
+((( former.stycken(u.stycken) )))
 ((* if u.bild_fil *))\par\vspace{2mm}\begin{center}\includegraphics[width=0.72\linewidth,height=90mm,keepaspectratio]{((( u.bild_fil )))}\end{center}((* endif *))
 ((* if u.figur_tex *))\par\vspace{2mm}\begin{center}((( u.figur_tex )))\end{center}((* endif *))
 ((( former.kropp(u) )))
@@ -63,7 +63,7 @@ på sista sidan((* endif *))((* if visa_poang *)); poäng anges som totalpoäng(
 ((* else *))
 \begin{deluppgift}{((( d.bokstav )))}{}
 ((* endif *))
-((( d.text )))
+((( former.stycken(d.stycken) )))
 ((( former.kropp(d) )))
 ((* if d.notis *))\notisruta{((( d.notis )))}((* endif *))
 ((* if d.flerval *))((* for alt in d.flerval *))\par\kryssruta\ ((( alt.bokstav ))): ((( alt.text )))((* endfor *))\par\vspace{2mm}((* elif d.svarsfalt *))((( former.falt(d.svarsfalt) )))((* elif d.endast_svar *))((* if d.enhet *))\svarsradmed{}{((( d.enhet )))}((* else *))\svarsrad((* endif *))((* else *))\par\vspace{((( d.utrymme_mm )))mm}((* endif *))
