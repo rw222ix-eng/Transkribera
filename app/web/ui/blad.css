@@ -297,6 +297,10 @@
    lägger in en i canvas. */
 .prforsatt{margin-top:26px}
 .prforsatt .prbild{min-height:300px;display:grid;place-items:center}
+/* Med bilden på plats släpper rutan sin minsta höjd: bilden är sedan 2026-09-18 lägre
+   än 300 px (PDF:ens budget), och rutan lämnade då en tom remsa mellan bild och
+   bildtext — «texten är lite för långt bort från bilden» (läraren samma kväll). */
+.prforsatt .prbild:has(img){min-height:0}
 
 /* ══════════ ANTECKNINGAR — lärarens eget stödpapper ══════════
    Femte dokumenttypen, och den enda som inte delas ut. Kravet är ett annat än

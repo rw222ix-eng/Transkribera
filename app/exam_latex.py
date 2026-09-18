@@ -782,8 +782,12 @@ def _forsatt_vy(doc: exam_spec.ExamDoc, delar: list[dict],
                    f"lösning på lösblad på {_nrlista(d['_langa_nr'])}.")
         else:
             vad = "Fullständiga lösningar krävs, redovisas på lösblad."
+        # «3–7» får inte brytas vid strecket: sjuan hamnade ensam på nästa
+        # rad (läraren 2026-09-18). Spannen sätts i \mbox efter escapen.
         delrader.append({"namn": escape_latex(d["rubrik"]),
-                         "text": escape_latex(f"{spann} {vad}")})
+                         "text": re.sub(r"(\d+)(\\textendash\{\})(\d+)",
+                                        r"\\mbox{\1\2\3}",
+                                        escape_latex(f"{spann} {vad}"))})
 
     # INLÄMNINGSREGELN ÄR LÄRARENS PROVRUTIN, ordagrant (2026-08-22):
     # «eleverna får båda delarna samtidigt; när de känner sig klara lämnar de in

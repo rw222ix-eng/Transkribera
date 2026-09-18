@@ -282,7 +282,11 @@ window.Blad = (() => {
 
     const meta = $('.prmeta tbody', trav);
     if (meta) {
-      const rad = (n, t) => `<tr><th>${n}</th><td>${t}</td></tr>`;
+      /* Sidspann och klockslag («3–7», «11.50–13.30») bryts inte vid strecket:
+         sjuan stod ensam på nästa rad (läraren 2026-09-18). PDF:en gör samma sak
+         med \mbox (exam_latex delrader). */
+      const obruten = t => String(t).replace(/(\d+)([–.:]\d+)*–(\d+)([.:]\d+)*/g, m => `<span class="nrspann">${m}</span>`);
+      const rad = (n, t) => `<tr><th>${n}</th><td>${obruten(t)}</td></tr>`;
       /* Hjälpmedlen är det som skiljer del A från del B — därför står de i
          delraderna och inte som ett blankt förbud på hjälpmedelsraden.
          REDOVISNINGEN FÖLJER UPPGIFTERNA, inte delen. Raden sa «Svaret skrivs
