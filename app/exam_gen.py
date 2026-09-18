@@ -5854,7 +5854,29 @@ def avsnittstackning(exam: dict, avsnitt: list[dict], antal: int) -> list[dict]:
 DELMOMENT_MAX_FYND = 5
 
 
-def delmomenttackning(exam: dict, delmoment: list[dict]) -> list[dict]:
+def _sidspann_tal(sidor) -> tuple[int, int] | None:
+    """«31–34» → (31, 34), «52» → (52, 52); None när fältet inte är ett spann."""
+    tal = re.findall(r"\d+", str(sidor or ""))
+    if not tal:
+        return None
+    a = int(tal[0])
+    b = int(tal[1]) if len(tal) > 1 else a
+    return (min(a, b), max(a, b))
+
+
+def _forebildssida(u: dict, sida_for: dict[int, int]) -> int | None:
+    """Sidan uppgiftens bokförebild står på, eller None när den inte går att
+    slå upp (ingen förebild, okänt nummer, ingen bok)."""
+    fb = u.get("forebild") if isinstance(u, dict) else None
+    try:
+        nr = int((fb or {}).get("nr") or 0)
+    except (TypeError, ValueError):
+        return None
+    return sida_for.get(nr) if nr else None
+
+
+def delmomenttackning(exam: dict, delmoment: list[dict],
+                      bokuppgifter: list[dict] | None = None) -> list[dict]:
     """Fick varje undervisat delmoment sin uppgift? Deterministiskt, ingen
     modell, ingen kostnad — syskon till avsnittstackning och med samma
     fail-open-villkor:
@@ -5864,6 +5886,16 @@ def delmomenttackning(exam: dict, delmoment: list[dict]) -> list[dict]:
       (kassetterna, varje prov i basen), listan nådde aldrig prompten, eller
       taket knuffade ut fältet ur grammatiken (to_response_format). Att fälla
       då vore att fälla ett papper för att appen blivit klokare.
+
+    ETIKETTEN RÄCKER INTE ENSAM (2026-09-18, NA26F:s prov). Fältet är
+    modellens självrapport, och uppgift 4 — en intervalluppgift byggd på
+    bokuppgift 2320 (s. 56) — stod märkt «Faktorisering och förkortning
+    (s. 31–34)». Räkningen var nöjd, delmomentet prövades aldrig, och läraren
+    hittade luckan själv. Finns bokuppgifterna (`bokuppgifter`, nr → sida)
+    räknas en etikett bara när uppgiftens FÖREBILD står på delmomentets
+    sidor; en uppgift utan förebild, eller med ett nummer boken inte känner,
+    räknas som förut (fail-open). Fynden namnger felmärkningen så att
+    reparationen vet vad som ska bytas.
 
     MATCHNINGEN är rubriken ordagrant, men inte bokstavligen: prompten ber om
     två rubriker med semikolon emellan när en uppgift täcker två, och en
@@ -5879,21 +5911,70 @@ def delmomenttackning(exam: dict, delmoment: list[dict]) -> list[dict]:
     poängtrippel i grammatiken (exam_spec._delref)."""
     if not delmoment:
         return []
-    burna = [str(u.get("delmoment") or "").casefold()
-             for u in ((exam or {}).get("uppgifter") or [])
-             if isinstance(u, dict)]
+    uppgifter = [u for u in ((exam or {}).get("uppgifter") or [])
+                 if isinstance(u, dict)]
+    burna = [str(u.get("delmoment") or "").casefold() for u in uppgifter]
     if not any(burna):
         return []
+    sida_for: dict[int, int] = {}
+    for r in (bokuppgifter or []):
+        try:
+            if r.get("nr") and r.get("sida"):
+                sida_for[int(r["nr"])] = int(r["sida"])
+        except (TypeError, ValueError):
+            continue
+    sidor = [_forebildssida(u, sida_for) for u in uppgifter]
+    # Uppgiftens etiketter, och om förebilden hör till NÅGON av dem. En
+    # uppgift får bära två delmoment med en förebild (prompten ber om
+    # semikolonet, och 15 lektioner ryms inte i 12 uppgifter annars) — den
+    # felmärkta är den vars förebild inte hör till någon av etiketterna alls.
+    # Lektionernas sidspann är SMALARE än bokens avsnitt (kapitlets blandade
+    # uppgifter på s. 36–41 hör till inget delmoment alls), så en förebild
+    # utanför alla spann säger ingenting. Bara när boken lägger förebilden i
+    # ETT ANNAT undervisat delmoment än uppgiftens etiketter är märkningen
+    # fel — det var uppgift 4:s fall: intervall (s. 56) märkt faktorisering.
+    def inne(d, sida):
+        sp = _sidspann_tal(d.get("sidor"))
+        return bool(sp) and sp[0] <= sida <= sp[1]
+    etiketter = []
+    for k, b in enumerate(burna):
+        egna = [d for d in delmoment
+                if _delmomentnamn(d["delmoment"]).casefold()
+                and _delmomentnamn(d["delmoment"]).casefold() in b]
+        traff = None
+        if egna and sidor[k] is not None:
+            if any(inne(d, sidor[k]) for d in egna):
+                traff = True
+            elif any(inne(d, sidor[k]) for d in delmoment):
+                traff = False
+        etiketter.append((egna, traff))
     rakning: dict[str, int] = {}
+    felmarkta: list[str] = []
     for d in delmoment:
-        namn = _delmomentnamn(d["delmoment"]).casefold()
-        rakning[d["delmoment"]] = sum(1 for b in burna if namn and namn in b)
+        antal = 0
+        for k, (egna, traff) in enumerate(etiketter):
+            if d not in egna:
+                continue
+            if traff is False:
+                fb = uppgifter[k].get("forebild") or {}
+                felmarkta.append(
+                    f"uppgift {k + 1} är märkt «{d['delmoment']}» men bygger "
+                    f"på bokuppgift {fb.get('nr')} (s. {sidor[k]}), som inte "
+                    "hör dit, så märkningen räknas inte")
+                continue
+            antal += 1
+        rakning[d["delmoment"]] = antal
     # Det delmoment som fick flest uppgifter är det uppgiften ska tas IFRÅN:
     # reparationen ska BYTA UT en uppgift, inte lägga till en trettonde.
     storst = max(delmoment, key=lambda d: rakning[d["delmoment"]])
     fel = [_err("uppgifter", "delmomenttackning",
                 f"Inget ur delmomentet {d['delmoment']} (s. {d['sidor']}), "
-                "som klassen har undervisats i. Byt UT en uppgift ur det "
+                "som klassen har undervisats i"
+                + (" (" + "; ".join(m for m in felmarkta
+                                     if f"«{d['delmoment']}»" in m) + ")"
+                   if any(f"«{d['delmoment']}»" in m for m in felmarkta)
+                   else "")
+                + ". Byt UT en uppgift ur det "
                 f"delmoment som har flest ({storst['delmoment']} har "
                 f"{rakning[storst['delmoment']]}) mot en ny uppgift ur "
                 f"{d['delmoment']}, samma del, samma poäng och samma förmåga, "
@@ -6384,7 +6465,8 @@ def _slapp_poanglaset(fel: list[dict]) -> list[dict]:
 
 
 def _raknade_fynd(exam: dict, *, avsnitt: list[dict] | None, antal: int | None,
-                  delmoment: list[dict] | None, profil: str) -> list[dict]:
+                  delmoment: list[dict] | None, profil: str,
+                  bokuppgifter: list[dict] | None = None) -> list[dict]:
     """De tre RÄKNADE vakterna i en och samma ordning, på ett ställe.
 
     Ordningen är prompten läraren annars läser i loggen, och den ska vara
@@ -6393,7 +6475,7 @@ def _raknade_fynd(exam: dict, *, avsnitt: list[dict] | None, antal: int | None,
     hela spår 9:s poäng: en vakt som bara körs på ett ställe räknar bara på
     ett mellanläge, och pappret läraren får är ett senare."""
     return (avsnittstackning(exam, avsnitt or [], antal or 0)
-            + delmomenttackning(exam, delmoment or [])
+            + delmomenttackning(exam, delmoment or [], bokuppgifter)
             + poangvakt(exam, profil))
 
 
@@ -6439,7 +6521,8 @@ def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
     # provet en gång per vakt. Samma tre körs om efter sista rundan
     # (_slutgrind), och därför står de i en egen funktion.
     fel = _raknade_fynd(exam, avsnitt=avsnitt, antal=antal,
-                        delmoment=delmoment, profil=profil)
+                        delmoment=delmoment, profil=profil,
+                        bokuppgifter=bokuppgifter)
     # Loggraden namnger avsnitten, inte antalet fynd: «Täckningen: 1.1 saknar
     # uppgifter» säger vad som är fel, «1 problem» säger ingenting. Filtret på
     # koden finns för att de andra vakternas meddelanden har en annan
@@ -7055,7 +7138,8 @@ def _slutfynd(exam: dict, *, avsnitt, antal, delmoment, profil,
     INTE om. De kostar ett anrop var, och grinden är till för det som går att
     räkna gratis."""
     fel = _raknade_fynd(exam, avsnitt=avsnitt, antal=antal,
-                        delmoment=delmoment, profil=profil)
+                        delmoment=delmoment, profil=profil,
+                        bokuppgifter=bokuppgifter)
     if profil == "prov" and bokuppgifter:
         fel = fel + begriplighetssignaler(exam, profil)
     return _slapp_poanglaset(fel)
