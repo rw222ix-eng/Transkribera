@@ -691,8 +691,16 @@ window.Klass = (() => {
          Prov och NP har sina egna kort med sina egna knappar och rörs inte,
          och en post utan klass är inget klassen har (Kaggdag, ämneslagsmöte). */
       const extra = [];
+      /* Ett bokat prov på en timme utan schemaruta (Google lade provet i
+         lektionens ställe, 2026-10-20 IndA) ritades som postkort och det
+         skrivna pappret som en egen «lös» hög bredvid — kortet sa «inte
+         skrivet» fast provet låg där. Har läraren skrivit ett papper till just
+         den klassen och timmen blir timmen en lektion, så att pappret hamnar
+         PÅ provkortet. Utan papper går provet sin egen väg som förut. */
+      const skrivetTill = p => dok().some(v => v.datum === d.datum
+        && (v.klass || '') === (p.klass || '') && v.tid && start(v.tid) === start(p.tid));
       posterFor(d).forEach(p => {
-        if (!p.klass || !p.tid || arProv(p) || egetProv(p)) return;
+        if (!p.klass || !p.tid || egetProv(p) || (arProv(p) && !skrivetTill(p))) return;
         if (lekt.some(s => iRutan(p, s))) return;
         /* Två poster i samma timme är fortfarande en enda lektion. */
         if (extra.some(s => s.klass === p.klass && start(s.tid) === start(p.tid))) return;
