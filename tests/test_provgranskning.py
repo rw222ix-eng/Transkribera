@@ -248,9 +248,16 @@ def test_visa_att_pa_A_falls_bara_nar_provet_saknar_en_oppen_uppgift():
     assert exam_gen.a_nivavakt(_prov([visa, oppen])) == []
 
 
-def test_a_vakten_ror_inte_E_och_C():
+def test_tipset_falls_pa_alla_nivaer_men_sanningsvardet_bara_pa_A():
+    """Prov 88 (2026-09-19) bar «Tips: Sätt in x = 3 …» på en C-uppgift.
+    Nationella provet trycker aldrig tips, så tipset fälls på E och C också.
+    Det givna sanningsvärdet är däremot bara ett A-fynd."""
     u = _u(text="Visa att $2 + 2 = 4$. Tips: räkna.", poang=(1, 1, 0))
-    assert exam_gen.a_nivavakt(_prov([u])) == []
+    fel = exam_gen.a_nivavakt(_prov([u]))
+    assert [f["code"] for f in fel] == ["anivavakt"]
+    assert "tips" in fel[0]["message"].lower()
+    u2 = _u(text="Visa att $2 + 2 = 4$.", poang=(1, 1, 0))
+    assert exam_gen.a_nivavakt(_prov([u2])) == []
 
 
 # ── 3. METODER UR SENARE KAPITEL ────────────────────────────────────────

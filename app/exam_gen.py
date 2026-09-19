@@ -6762,11 +6762,13 @@ def a_nivavakt(exam: dict) -> list[dict]:
     oppet = any(_OPPEN_RE.search(text(e)) for e in enheter)
     fel: list[dict] = []
     for e in enheter:
-        if e["niva"] != "A":
-            continue
         nr, t = e["nr"], text(e)
         m = _TIPS_RE.search(t)
-        if m:
+        # Tipset fälls på ALLA nivåer sedan 2026-09-19: prov 88 hade «Tips:
+        # Sätt in x = 3 …» på en C-uppgift, och nationella provet trycker
+        # aldrig tips, på någon nivå. Meningen om A-nivån gäller A; på E
+        # och C är skälet enklare: metoden ÄR det som prövas.
+        if m and e["niva"] == "A":
             fel.append(_err(
                 f"uppgift {nr}", "anivavakt",
                 f"Uppgift {nr} ger A-poäng men bär ett tips («{m.group(0)}») "
@@ -6775,6 +6777,15 @@ def a_nivavakt(exam: dict) -> list[dict]:
                 "procedur. Stryk tipset. Blir uppgiften då för svår för sin "
                 "plats är det uppgiften som ska bytas, inte tipset som ska "
                 "stå kvar."))
+        elif m:
+            fel.append(_err(
+                f"uppgift {nr}", "anivavakt",
+                f"Uppgift {nr} bär ett tips («{m.group(0)}») som talar om "
+                "metoden. Nationella provet trycker aldrig tips: metoden är "
+                "det som prövas. Stryk tipset och låt uppgiften stå på egna "
+                "ben, med samma poäng."))
+        elif e["niva"] != "A":
+            continue
         elif not oppet and _GIVET_RE.search(t):
             fel.append(_err(
                 f"uppgift {nr}", "anivavakt",
