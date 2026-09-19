@@ -351,6 +351,32 @@ def test_efterkontrollen_faller_forebild_utanfor_avsnittets_sidspann():
     assert _kontroll(exam, bok=_BOK, sidor=_SIDOR) == []
 
 
+def test_efterkontrollen_godtar_forebild_i_den_andra_rubrikens_spann():
+    """Prov 86:s uppgift 8 (2026-09-19): märkt 2.4 (olikheter) med en andra
+    rubrik «Faktorisering och förkortning (s. 31–34)» och förebild 1338 på
+    s. 14 i testboken. Uppgiften prövar båda med flit, så förebilden får
+    ligga i vilket som helst av etikettens spann."""
+    exam = copy.deepcopy(_exam_doc())
+    exam["uppgifter"][0]["avsnitt"] = "2.5"
+    exam["uppgifter"][0]["forebild"] = {"nr": 1253, "sort": "samma sort: rötter"}
+    exam["uppgifter"][0]["delmoment"] = ("Formler (s. 64–68); "
+                                         "Rötter (s. 12–16)")
+    assert [f["kod"] for f in _kontroll(exam, bok=_BOK, sidor=_SIDOR)] == []
+
+
+def test_efterkontrollen_tiger_om_forebild_ur_blandade_uppgifter():
+    """Bokens blandade uppgifter och kapiteltest numreras 1, 2, 3 … per
+    kapitel. Prov 86:s uppgift 5 pekade på «34», som finns på flera sidor i
+    samma bok. Ett tal under 100 säger inget om avsnittet och ska inte
+    larma."""
+    exam = copy.deepcopy(_exam_doc())
+    exam["uppgifter"][0]["avsnitt"] = "2.5"
+    exam["uppgifter"][0]["forebild"] = {"nr": 34, "sort": "samma sort"}
+    sidor = dict(_SIDOR)
+    sidor[34] = 14
+    assert _kontroll(exam, bok=_BOK, sidor=sidor) == []
+
+
 def test_efterkontrollen_faller_delmomentsetikett_i_ett_annat_avsnitt():
     """Rubriken bär sina sidor («Intervall (s. 56–57)»). Ligger de i ett annat
     avsnitt än uppgiftens etikett är märkningen fel."""

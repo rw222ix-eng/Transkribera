@@ -213,13 +213,23 @@ def _bokfynd(doc, bok: dict | None, sidor: dict[int, int]) -> list[dict]:
         if sp:
             fb = it.forebild
             sida = sidor.get(int(fb.nr)) if fb else None
-            if fb and sida is not None and not sp[0] <= sida <= sp[1]:
+            etikett = _sidspann_i_etikett(it.delmoment or "")
+            # Två saker gör förebilden till en falsk larmklocka (prov 86,
+            # 2026-09-19): (1) uppgiften bär två delmomentsrubriker med flit,
+            # olikhet OCH förkortning, och förebilden hör till den andra, så
+            # sidan får ligga i VILKET SOM HELST av etikettens spann; (2)
+            # bokens blandade uppgifter och kapiteltest numreras 1, 2, 3 …
+            # per kapitel, så ett tal under 100 pekar på flera sidor i samma
+            # bok och säger ingenting om avsnittet. Sådana förebilder tiger.
+            i_etikett = any(a <= sida <= b for a, b in etikett) \
+                if sida is not None else False
+            if (fb and sida is not None and int(fb.nr) >= 100
+                    and not sp[0] <= sida <= sp[1] and not i_etikett):
                 ut.append(_fynd(
                     "forebild", f"Uppgift {nr} är märkt med avsnitt {avs} "
                     f"(s. {sp[0]}–{sp[1]}) men bygger på bokuppgift {fb.nr}, "
                     f"som står på s. {sida}. Antingen är avsnittet fel eller "
                     "förebilden.", nr))
-            etikett = _sidspann_i_etikett(it.delmoment or "")
             if etikett and not any(a <= sp[1] and b >= sp[0] for a, b in etikett):
                 rader = ", ".join(f"s. {a}–{b}" if a != b else f"s. {a}"
                                   for a, b in etikett)
