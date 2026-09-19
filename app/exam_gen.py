@@ -1026,6 +1026,26 @@ def _avtrycken(texter) -> list[str]:
     return ut
 
 
+def uppgiftstexter(exam: dict | None) -> list[str]:
+    """Ett pappers uppgiftstexter, deluppgifterna inräknade, i läsordning.
+
+    Finns för att variationsvakten ska kunna mätas mot ETT bestämt papper och
+    inte bara mot kursens bokföring (db.tidigare_uppgiftstexter). «Inför
+    provet» behöver just det: provets egna texter in i undvik-listan, så att
+    ett arbetsblad som råkar skriva av provet fälls gratis."""
+    ut: list[str] = []
+    for u in (exam or {}).get("uppgifter") or []:
+        if not isinstance(u, dict):
+            continue
+        for t in [u.get("text")] + [d.get("text")
+                                    for d in (u.get("deluppgifter") or [])
+                                    if isinstance(d, dict)]:
+            t = " ".join(str(t or "").split())
+            if t:
+                ut.append(t)
+    return ut
+
+
 def build_variation(texter) -> str:
     """Undvik-listan som FORM. Tom lista → tom sträng → orörd prompt."""
     avtryck = _avtrycken(texter)[:MAX_AVTRYCK]
@@ -2019,7 +2039,7 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
                  bok: str = "", boknivaer: str = "", forlaga: str = "",
                  spridning: str = "", delmoment: str = "",
                  forbjudet: str = "", forbehall: str = "", forebild: str = "",
-                 omprov: str = "",
+                 omprov: str = "", infor: str = "",
                  hjalpmedel: str = "",
                  svart: str = "", fokus: str = "", inriktning: str = "",
                  profil: str = "prov", koder: list[str] | None = None,
@@ -2141,6 +2161,15 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
     # förut.
     if omprov:
         block.append(omprov)
+    # «INFÖR PROVET» står bredvid omprovsplanen, och det är samma sorts block:
+    # en plan över pappret som ska skrivas, hämtad ur ett annat papper som
+    # ALDRIG får skrivas av. De två kan inte stå i samma prompt. Omprovet är
+    # ett prov, det här ett arbetsblad, så ordningen dem emellan avgör
+    # ingenting; den står här för att blocket ska läsas med uppdraget i sikte.
+    # Tom sträng för varje arbetsblad utan valt prov (build_infor_prov), då är
+    # prompten byte för byte den som gick i väg förut.
+    if infor:
+        block.append(infor)
     # Förlagan (källdörr 4, pardokumentets andra hand) står närmast uppdraget:
     # «gör som det här pappret» är det starkaste önskemålet läraren kan ge, och
     # det ska inte tappas bakom minnet, boken eller undvik-listan.
@@ -5562,6 +5591,20 @@ def _delmoment_i_grammatiken(prompt: str) -> bool:
     return '"delmoment"' in prompt
 
 
+def _drillar_i_grammatiken(prompt: str) -> bool:
+    """Ska uppgiftsfältet `drillar` stå i grammatiken för det HÄR anropet?
+
+    SAMMA REGEL som delmomentets, ord för ord, av samma skäl: fältet ska finnas
+    exakt när det som skickas nämner det. Antingen ber uppdraget om det
+    (build_infor_prov skriver \"drillar\" med citattecken), eller så bär bladet
+    som ska repareras eller skrivas om redan ifyllda fält och bäddas in som
+    JSON (build_repair_prompt, build_refine_prompt, build_latexfix_prompt).
+
+    Ingen profilgren: bara arbetsbladet får «Inför provet»-blocket, och därmed
+    bara arbetsbladets prompter ordet."""
+    return '"drillar"' in prompt
+
+
 def _llm_round(prompt: str, model: str, llm, antal: int | None = None,
                skeleton: list[dict] | None = None,
                koder: list[str] | None = None, *,
@@ -5575,13 +5618,15 @@ def _llm_round(prompt: str, model: str, llm, antal: int | None = None,
         # antal → grammatik-tak; skeleton → låst del/förmåga/typ/poäng per
         # uppgift (balans garanterad); koder → innehall låst till lärarens valda
         # CI-punkter. Gäller även reparationsrundorna.
-        # BOKFÖREBILDEN och DELMOMENTET i grammatiken: se
-        # _forebild_i_grammatiken och _delmoment_i_grammatiken. Båda läser
-        # prompten, och taket i to_response_format avgör om de får plats.
+        # BOKFÖREBILDEN, DELMOMENTET och DRILLNUMRET i grammatiken: se
+        # _forebild_i_grammatiken, _delmoment_i_grammatiken och
+        # _drillar_i_grammatiken. Alla tre läser prompten, och taket i
+        # to_response_format avgör om de får plats.
         response_format=exam_spec.to_response_format(
             antal, skeleton, koder,
             forebild=_forebild_i_grammatiken(prompt, profil),
-            delmoment=_delmoment_i_grammatiken(prompt)),
+            delmoment=_delmoment_i_grammatiken(prompt),
+            drillar=_drillar_i_grammatiken(prompt)),
         max_tokens=EXAM_MAX_TOKENS,
         # Ingen lyssnare → ingen räkning. Stubbade llm i testerna tar emot
         # token_cb och struntar i det; kassetterna spelas upp genom
@@ -5762,7 +5807,7 @@ def _repair_until_valid(exam: dict | None, errors: list, *, model: str, llm,
                                model, llm, antal, skeleton, koder,
                                profil=profil, log_cb=log_cb,
                                etikett=f"Justerar provet (runda {rounds_used} "
-                                       f"av {max_rounds}) —")
+                                       f"av {max_rounds}) …")
         if candidate is None:
             errors = [{"path": "svar", "code": "json",
                        "message": "modellen svarade inte med giltig JSON"}]
@@ -7088,6 +7133,135 @@ def build_omprov(referens: dict | None) -> str:
         "originalet, inte fler räknesteg och inte ett strängare krav.\n")
 
 
+# ── «INFÖR PROVET»: ARBETSBLADET SOM ÖVAR PROVETS SORTER ─────────────────
+#
+# Lärarens beställning 2026-09-19: proven blir klara minst en vecka före
+# provdagen, och veckan innan ska klassen träna på ETT ARBETSBLAD som bygger
+# på provets uppgiftstyper, aldrig på provets uppgifter. Hon väljer «en sak»
+# (ett par nummer ur provet) eller «blandat» (hela provets bredd).
+#
+# Blocket är byggt som omprovets och av samma skäl, men de två är varandras
+# motsatser i allt annat: omprovet ska vara LIKVÄRDIGT sitt original, det här
+# bladet ska vara LÄTTARE ATT KOMMA IN I än provet det förbereder.
+
+
+def drillnummer(slots: list[dict] | None,
+                nummer: list[int] | None) -> list[int]:
+    """Provets nummer som faktiskt går att drilla, i provets egen ordning.
+
+    Tom lista i `nummer` betyder «blandat», alltså hela provet. Ett nummer som
+    inte finns på pappret faller bort tyst: klienten kan bära ett gammalt urval
+    när provet skrivits om, och en lucka i urvalet är inget att stoppa ett blad
+    för. Samma lista styr BÅDA sidorna, vad prompten ber om och vad täckningen
+    räknar (drilltackning), så att de två aldrig kan mena olika saker."""
+    valda = set(nummer or [])
+    return [s["nr"] for s in (slots or [])
+            if not valda or s["nr"] in valda]
+
+
+def build_infor_prov(slots: list[dict] | None, nummer: list[int] | None,
+                     antal: int) -> str:
+    """«Inför provet»-blocket, eller TOM STRÄNG.
+
+    Tom när inget prov pekats ut, och det är kassetteregeln och inte en
+    optimering (samma villkor som build_omprov och build_variation): ett
+    vanligt arbetsblad ska få exakt den prompt det fick innan läget fanns.
+    Ordet ARBETSBLAD står kvar i uppdragsraden, så bandvalet är oförändrat.
+
+    UPPGIFTSTEXTERNA STÅR INTE HÄR, av samma skäl som i build_omprov och ett
+    till. Skälet därifrån: en modell som får se provets uppgift skriver samma
+    uppgift med nya tal. Skälet härifrån: det bladet hade DELAT UT PROVET en
+    vecka i förväg, till hela klassen, på papper.
+
+    Det som ÄR nytt mot omprovet är den sista regeln. Omprovet får aldrig
+    göras lättare; det här bladet får det, och ska det: ett förberedande steg
+    före den svåra frågan är precis vad en övning inför ett prov ska ha."""
+    valda_nr = set(drillnummer(slots, nummer))
+    valda = [s for s in (slots or []) if s["nr"] in valda_nr]
+    if not valda:
+        return ""
+    rader = []
+    for s in valda:
+        delar = (f", {s['deluppgifter']} deluppgifter"
+                 if s["deluppgifter"] else "")
+        vad = f", delmomentet {s['delmoment']}" if s["delmoment"] else ""
+        rader.append(
+            f"- provets uppgift {s['nr']}: {s['typ']}, förmåga "
+            f"{s['formaga']}, poäng (E/C/A) {tuple(s['poang'])}, nivå "
+            f"{s['niva'] or '–'}{vad}{delar}, facit på cirka {s['steg']} "
+            "räknesteg")
+    # BLANDAT ELLER EN SAK. Samma block, två olika order, och skillnaden är
+    # lärarens val i panelen: valde hon inga nummer ska bredden övas, valde hon
+    # några ska just de nötas. Att skriva båda orderna i samma stycke och låta
+    # modellen välja hade gjort valet till en gissning.
+    if len(valda) > 1:
+        uppdrag = (
+            f"FÖRDELA BLADETS {antal} uppgifter JÄMNT över sorterna ovan. "
+            f"Är sorterna fler än {antal} tar du de tyngsta först; är de färre "
+            "skriver du flera uppgifter av samma sort, och då ska de stiga i "
+            "svårighet.\n")
+    else:
+        uppdrag = (
+            f"ALLA bladets {antal} uppgifter ska öva sorten ovan, och de ska "
+            "STIGA I SVÅRIGHET: den första ska gå att börja på utan hjälp, den "
+            "sista ska kräva lika mycket som provets uppgift.\n")
+    return (
+        "DET HÄR ARBETSBLADET ÖVAR INFÖR ETT PROV. Provet är redan skrivet, "
+        "eleverna har inte sett det, och de ska inte se det här heller. Nedan "
+        "står de uppgifter bladet ska förbereda, som en plan över SORTER. "
+        "form för form, aldrig texten:\n" + "\n".join(rader) + "\n"
+        "SAMMA SORT, ALDRIG SAMMA UPPGIFT. En uppgift på bladet ska pröva "
+        "samma metod som sin sort ovan och kräva ungefär lika många räknesteg. "
+        "Allt annat ska vara NYTT: andra tal, ett annat sammanhang, en annan "
+        "infallsvinkel. Skriv inte av provet, och skriv inte provets uppgift "
+        "med utbytta siffror. Då har klassen fått provet en vecka i förväg.\n"
+        + uppdrag +
+        # DEN ENDA REGELN SOM SÄGER EMOT OMPROVET, och den är hela skillnaden
+        # mellan att pröva och att öva.
+        "DU FÅR GÖRA INGÅNGEN LÄTTARE. Ett förberedande steg före den svåra "
+        "frågan, «beräkna först …, använd sedan …», hör hemma på ett "
+        "övningsblad även när provets uppgift frågar rakt ut. Metoden som ska "
+        "övas får däremot aldrig bytas mot en enklare.\n"
+        # FÄLTET, och orden \"drillar\" i citattecken är det som tänder det i
+        # grammatiken (_drillar_i_grammatiken). Ändras stavningen här faller
+        # fältet ur schemat och täckningen blir tyst.
+        "MÄRK VARJE UPPGIFT med fältet \"drillar\": provets uppgiftsnummer ur "
+        "listan ovan, som ett heltal. Övar uppgiften två av sorterna skriver "
+        "du den tyngsta av dem.\n")
+
+
+def drilltackning(exam: dict, nummer: list[int] | None) -> list[dict]:
+    """Blev varje vald sort faktiskt övad? Deterministiskt, noll modellanrop.
+
+    Räknar uppgifternas egna `drillar` mot de nummer läraren valde. Ett fynd
+    per saknat nummer, och det lagas som varje annat fynd: en uppgift byts ut.
+
+    FAIL-OPEN i två lägen, och båda är fail-open av samma skäl som
+    avsnittstackning. Utan valda nummer finns ingen fråga. Och bär INGEN
+    uppgift fältet kördes kontrollen aldrig, fältet kan ha fallit ur
+    grammatiken för att schemat spruckit (to_response_format), och då är
+    tystnad rätt svar: «kontrollen kördes inte» får inte se ut som «allt
+    saknas» och kosta en reparationsrunda på ett blad som kan vara helt
+    riktigt."""
+    valda = [n for n in (nummer or [])]
+    if not valda:
+        return []
+    drillade = {u.get("drillar") for u in (exam or {}).get("uppgifter") or []
+                if isinstance(u, dict) and isinstance(u.get("drillar"), int)}
+    if not drillade:
+        return []
+    fel = []
+    for n in valda:
+        if n in drillade:
+            continue
+        fel.append(_err(
+            "uppgifter", "drilltackning",
+            f"Provets uppgift {n} valdes att drillas, men ingen uppgift på "
+            f"bladet är märkt med drillar={n}. Byt ut en uppgift mot en som "
+            f"övar den sorten och märk den."))
+    return fel
+
+
 def likvardighetsvakt(exam: dict, referens: dict | None) -> list[dict]:
     """Är omprovet likvärdigt sitt original, slot för slot?
 
@@ -7606,7 +7780,48 @@ def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                           model, llm, antal, skeleton, koder, profil=profil,
                           log_cb=log_cb,
                           etikett=f"Justerar provet (runda {rounds_used + 1} "
-                                  f"av {max_rounds}) —")
+                                  f"av {max_rounds}) …")
+    rounds_used += 1
+    if kandidat is None:
+        return {"exam": exam, "errors": errors + fel, "rounds": rounds_used}
+    _doc, nya = _validate(kandidat, profil, koder, niva_mal)
+    if nya and not errors:
+        return {"exam": exam, "errors": fel, "rounds": rounds_used}
+    return {"exam": kandidat, "errors": nya, "rounds": rounds_used}
+
+
+def _infor_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
+                antal: int | None, skeleton: list[dict] | None,
+                nummer: list[int] | None, rounds_used: int, max_rounds: int,
+                koder: list[str] | None = None,
+                niva_mal: dict | None = None,
+                log_cb: Callable[[str], None] | None = None) -> dict:
+    """Blev varje vald sort övad? Ett EGET litet pass, med samma kontrakt som
+    _tackning_pass: högst EN reparationsrunda, samma budget, samma «rent före,
+    trasigt efter»-grind, och fynd som inte lagades visas som varningar.
+
+    EGET PASS och inte en rad i _tackning_pass, med flit. Det passet kör
+    _raknade_fynd, tio vakter som alla är mätta på PROV, och att öppna dess
+    villkor för arbetsbladet hade dragit in dem allihop på ett papper de
+    aldrig prövats mot. Den enda vakt arbetsbladet beställde är den här, och
+    den kostar noll anrop när den är nöjd.
+
+    FAIL-OPEN hela vägen: utan valda nummer och utan ett enda ifyllt fält
+    räknas ingenting (drilltackning), och en runda som inte lyckades lämnar
+    bladet som det var med fyndet som varning."""
+    log = log_cb or (lambda _m: None)
+    fel = drilltackning(exam, nummer)
+    if not fel:
+        return {"exam": exam, "errors": errors, "rounds": rounds_used}
+    if rounds_used >= max_rounds:
+        return {"exam": exam, "errors": errors + fel, "rounds": rounds_used}
+    log(f"Inför provet: {len(fel)} av provets uppgifter saknar övning på "
+        "bladet, byter ut …")
+    kandidat = _llm_round(build_repair_prompt(exam, fel + errors, profil),
+                          model, llm, antal, skeleton, koder, profil=profil,
+                          log_cb=log_cb,
+                          etikett=f"Justerar bladet (runda {rounds_used + 1} "
+                                  f"av {max_rounds}) …")
     rounds_used += 1
     if kandidat is None:
         return {"exam": exam, "errors": errors + fel, "rounds": rounds_used}
@@ -7673,7 +7888,7 @@ def _rakneverk_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                           model, llm, antal, skeleton, koder, profil=profil,
                           log_cb=log_cb,
                           etikett=f"Justerar provet (runda {rounds_used + 1} "
-                                  f"av {max_rounds}) —")
+                                  f"av {max_rounds}) …")
     rounds_used += 1
     if kandidat is None:
         return {"exam": exam, "errors": errors + fel, "rounds": rounds_used}
@@ -7747,7 +7962,7 @@ def _domar_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                           model, llm, antal, skeleton, koder, profil=profil,
                           log_cb=log_cb,
                           etikett=f"Justerar provet (runda {rounds_used + 1} "
-                                  f"av {max_rounds}) —")
+                                  f"av {max_rounds}) …")
     rounds_used += 1
     if kandidat is None:
         return svar({"exam": exam, "errors": errors + avv + signaler,
@@ -7924,7 +8139,7 @@ def _niva_grind(res: dict, *, model: str, llm, profil: str, skala: str,
                               model, llm, antal, skeleton, koder, profil=profil,
                               log_cb=log_cb,
                               etikett=f"Säkrar nivån (extrarunda {varv + 1} "
-                                      f"av {max_rounds}) —")
+                                      f"av {max_rounds}) …")
         if kandidat is None:
             break
         ihop, skal = sammanfoga_riktat(exam, kandidat,
@@ -8237,6 +8452,8 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                   illustration: bool = True,
                   bokuppgifter: list[dict] | None = None,
                   referensprov: dict | None = None,
+                  inforprov: dict | None = None,
+                  infor_nummer: list[int] | None = None,
                   llm=llm_client.generate, max_rounds: int = MAX_ROUNDS,
                   log_cb: Callable[[str], None] | None = None,
                   steg_cb: Callable[[str], None] | None = None) -> dict:
@@ -8341,6 +8558,15 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     (_forebild_i_grammatiken) och relevansen prövas på svaret (doma_relevans
     med profil="prov", i _tackning_pass). Provet får dessutom
     begriplighetsdomaren i samma runda, och den behöver inget underlag alls.
+
+    `inforprov` är PROVET ARBETSBLADET ÖVAR INFÖR, som dokument och inte som
+    id, samma regel som `referensprov`: den här filen läser aldrig basen.
+    `infor_nummer` är de av provets uppgiftsnummer läraren valt att drilla,
+    tom lista betyder «blandat», alltså hela provet. De två gör två saker som
+    hör ihop: planen går in i prompten som SORTER (build_infor_prov, aldrig
+    provets texter) och täckningen räknas på svaret (drilltackning, högst en
+    reparationsrunda). None lämnar prompten, grammatiken och rundorna orörda,
+    byte för byte som de var.
     """
     log = log_cb or (lambda _m: None)
     # `steg` NAMNGER var i arbetet vi är; `log` säger vad som händer just nu.
@@ -8408,6 +8634,14 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # OMPROVET (2026-09-19). Samma villkor och samma skäl som blocken ovan:
     # utan referens en TOM STRÄNG och en oförändrad prompt.
     omprovblock = build_omprov(referensprov)
+    # «INFÖR PROVET» (2026-09-19). Samma villkor och samma skäl som blocken
+    # ovan: utan ett utpekat prov en TOM STRÄNG och en oförändrad prompt.
+    # `inforslots` är provets FORM (provslots) och inget annat. Texterna
+    # lämnar aldrig det här anropet. `drillade` styr täckningen nedan och
+    # räknas ur samma lista som blocket, så de två kan inte glida isär.
+    inforslots = provslots(inforprov) if inforprov else []
+    inforblock = build_infor_prov(inforslots, infor_nummer, antal)
+    drillade = drillnummer(inforslots, infor_nummer) if inforblock else []
     prompt = build_prompt(kurs, klass, punkter, antal=antal, tid_min=tid_min,
                           delar=delar, memory=memory, teman=teman,
                           variation=variation,
@@ -8416,6 +8650,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                           spridning=spridning, delmoment=delmomentblock,
                           forbjudet=forbjudetblock, forbehall=forbehallblock,
                           forebild=forebildblock, omprov=omprovblock,
+                          infor=inforblock,
                           hjalpmedel=hjalpmedel,
                           svart=svart, fokus=fokus, inriktning=inriktning,
                           profil=profil, koder=koder, grupp=grupp,
@@ -8476,6 +8711,17 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                              doma=doma,
                              rounds_used=res["rounds"], max_rounds=max_rounds,
                              log_cb=log_cb)
+    # ── «INFÖR PROVET»-TÄCKNINGEN (2026-09-19) ───────────────────────
+    # På samma plats i kedjan som kapiteltäckningen och av samma skäl: byts en
+    # uppgift ut här ska sympy räkna på den nya. Villkoret är drillistan, inte
+    # profilen, så ett arbetsblad utan valt prov går exakt de anrop det gick
+    # förut (kassetteregeln).
+    if res["exam"] is not None and drillade:
+        res = _infor_pass(res["exam"], res["errors"], model=model, llm=llm,
+                          profil=profil, antal=antal, skeleton=grammatik,
+                          nummer=drillade, koder=koder, niva_mal=niva_mal,
+                          rounds_used=res["rounds"], max_rounds=max_rounds,
+                          log_cb=log_cb)
     # ── RÄKNEVERKET (Etapp 4) ────────────────────────────────────────
     # Deterministiskt och FÖRE modelldomarna: det som går att räkna ut ska
     # räknas ut, inte gissas av ett andra modellanrop. Se _rakneverk_pass.

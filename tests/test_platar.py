@@ -262,6 +262,36 @@ def test_schemat_ryms_pa_kommandoraden_med_scenfaltet():
             f"{antal} uppgifter ger {len(minifierat)} tecken"
 
 
+def _schemalangd(profil, antal, **kw):
+    from app import claude_code, llm_client
+    sk = exam_spec.balanced_skeleton(antal, profil, delar=(profil == "prov"))
+    rå = llm_client._schema_ur(exam_spec.to_response_format(skeleton=sk, **kw))
+    return len(json.dumps(claude_code._minifiera(rå), separators=(",", ":"),
+                          ensure_ascii=False))
+
+
+def test_arbetsbladets_schema_ryms_med_drillfaltet():
+    """«Inför provet» (2026-09-19) la `drillar` på ExamItem, och regeln i
+    testet ovan gäller: nästa fält ska mätas HÄR före det skrivs.
+
+    Fältet kostar 655 tecken på tjugo uppgifter. Arbetsbladet har råd med det
+    (22 745 av 30 000 utan fältet, 23 400 med); PROVET har det inte, och
+    därför är fältet arbetsbladets ensamt. Talen nedan är mätta 2026-09-19.
+
+    Sista raden är den som betyder något: provets mått ska vara ORÖRT. Skulle
+    fältet någon gång glida in i provets grammatik faller grammatiktvånget för
+    poäng, delar och förmågor på varje uppgift vid tjugo uppgifter, och det
+    märks ingen annanstans än här."""
+    from app import claude_code
+    for antal in (6, 12, 20):
+        assert _schemalangd("arbetsblad", antal, drillar=True) \
+            < claude_code.SCHEMA_TAK_EXE - exam_spec.SCHEMA_MARGINAL, antal
+    # PROVET, med och utan: samma tal, för taket offrar fältet i stället för
+    # tvånget (exam_spec.to_response_format).
+    assert _schemalangd("prov", 20) == _schemalangd("prov", 20, drillar=True)
+    assert _schemalangd("prov", 20) == 29844, "provets mått har rört sig"
+
+
 def _ref_i_faltkarta(nod, karta=False):
     """Sökvägar där en fältkarta (properties, $defs …) själv är en $ref."""
     FALT = {"properties", "$defs", "patternProperties", "dependentSchemas"}

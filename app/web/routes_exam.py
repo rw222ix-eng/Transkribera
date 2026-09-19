@@ -1112,6 +1112,26 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # Saknas fältet, eller pekar det på ett prov som inte finns, går allt
         # som förut: None lämnar prompten byte för byte som den var.
         omprov_av = body.get("omprov_av")
+        # ── «INFÖR PROVET» (2026-09-19) ──────────────────────────
+        # Lärarens beställning: proven blir klara minst en vecka före
+        # provdagen, och veckan innan tränar klassen på ett ARBETSBLAD som
+        # bygger på provets uppgiftstyper. `infor_prov_id` pekar ut provet,
+        # `infor_nummer` vilka av dess uppgifter som ska drillas. Tom lista
+        # betyder «blandat», alltså hela provets bredd.
+        #
+        # BARA ARBETSBLADET. Ett prov som övar inför ett annat prov är inte en
+        # sak, och fälten tystas här i stället för att fällas: en klient som
+        # bär ett gammalt val när läraren byter typ ska få sitt papper, inte
+        # ett fel.
+        #
+        # Skickas fälten inte alls är prompten, grammatiken och rundorna byte
+        # för byte de som gick i väg förut (kassetteregeln).
+        infor_prov_id = body.get("infor_prov_id") if typ == "arbetsblad" else None
+        infor_nummer = (exam_gen.nummerlista(body.get("infor_nummer"))
+                        if typ == "arbetsblad" else [])
+        # Felmeningen från uppslagningen nedan, tom när allt stämmer. Den reses
+        # efter anslutningsblocket, se där.
+        infor_fel = ""
         # ── FÖRSLAGET, ALDRIG TYST ───────────────────────────────
         # Klienten kan låta bli att peka ut originalet, «Omprov» i högen
         # sätter `omprovAv` men äldre utkast bär inget prov-id. Servern letar
@@ -1239,8 +1259,45 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     conn, group_id=group_id, course_id=course_id,
                     moment=(body.get("moment") or "").strip(),
                     datum=datum)
+            # Provet arbetsbladet ska öva inför. Dokumentet, inte id:t: samma
+            # regel som omprovets original, exam_gen läser aldrig basen.
+            #
+            # TVÅ KRAV OCH EN VARNING, och skillnaden dem emellan är vems
+            # beslut det är. Att det ska vara ett PROV och att det ska vara
+            # GODKÄNT är appens krav: ett arbetsblad som övar inför ett utkast
+            # övar inför ett papper som kan se annorlunda ut i morgon, och det
+            # vet inte läraren om när hon kopierar upp bladet. Att provet hör
+            # till samma klass är däremot hennes sak, hon kan vilja låna
+            # parallellklassens prov, så det blir en rad i loggen.
+            inforprov = None
+            try:
+                if infor_prov_id:
+                    rad = db.get_exam(conn, int(infor_prov_id))
+                    if rad is None or not rad.get("exam"):
+                        infor_fel = "provet finns inte längre"
+                    elif (rad.get("typ") or "prov") != "prov":
+                        infor_fel = ("bladet kan bara förbereda inför ett "
+                                     "prov, inte inför ett annat papper")
+                    elif str(rad.get("status") or "") != "godkänt":
+                        infor_fel = ("provet är inte godkänt ännu. Godkänn "
+                                     "det först, annars övar bladet inför ett "
+                                     "papper som kan ändras")
+                    else:
+                        inforprov = rad["exam"]
+                        if group_id and rad.get("group_id") \
+                                and int(rad["group_id"]) != int(group_id):
+                            _LOG.info(
+                                "Inför provet: prov %s hör till en annan klass "
+                                "än bladet, skriver ändå", infor_prov_id)
+            except (TypeError, ValueError):
+                infor_fel = "provet finns inte längre"
         finally:
             conn.close()
+        # Felet reses EFTER `finally` och inte inne i blocket: en return mitt i
+        # ett öppet anslutningsblock är precis det som glömmer att stänga den.
+        if infor_fel:
+            return JSONResponse({"error": f"Inför provet: {infor_fel}."},
+                                status_code=400)
         # «Följ den här förlagan» och «undvik det du gjort förut» är motsatta
         # order. Referensläget löser det genom att släppa undvik-listan —
         # förlagan gör detsamma, av samma skäl: läraren har PEKAT på ett papper.
@@ -1251,6 +1308,21 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # liknar det du gjort förut» en motsägande order.
         if referens or forlaga_block:
             tidigare_uppgifter = []
+        # PROVETS EGNA UPPGIFTER IN I UNDVIK-LISTAN, och det är hela
+        # kopieringsskyddet. «Inför provet» säger åt modellen att skriva samma
+        # SORTER som provet, och det är precis den ordern som frestar den att
+        # skriva provets uppgift med nya tal. Variationsvakten kan redan fälla
+        # det (build_variation i prompten, variationsflaggor på svaret) och
+        # kostar ingenting extra, den behöver bara texterna.
+        #
+        # EFTER nollställningen ovan med flit: har läraren dessutom pekat ut en
+        # förlaga ska undvik-listan vara tom på allt annat, men inte på det
+        # papper bladet uttryckligen inte får vara. Vägen via `forlaga_block`
+        # var inte farbar av samma skäl: den nollar listan och stänger av
+        # vakten.
+        if inforprov:
+            tidigare_uppgifter = (list(tidigare_uppgifter)
+                                  + exam_gen.uppgiftstexter(inforprov))
 
         llm = arbiter.try_acquire_llm()
         if not llm:
@@ -1386,6 +1458,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     # exam_gen läser aldrig basen. None (det vanliga) lämnar
                     # skelettet, prompten och vakterna orörda.
                     referensprov=referensprov,
+                    # PROVET BLADET ÖVAR INFÖR, som dokument och inte som id,
+                    # av samma skäl som raden ovan. Bara FORMEN går in i
+                    # prompten (exam_gen.build_infor_prov); texterna som står
+                    # här går bara till variationsvakten.
+                    inforprov=inforprov, infor_nummer=infor_nummer,
                     # ── TVÅ SPÅR, INGEN PROCENT PÅ NÅGOT AV DEM ───────
                     # Det stod länge bara EN kanal här: loggraden. Generatorn
                     # skickar «Skriver uppgift 4 av 12 …» ur strömmen

@@ -500,6 +500,21 @@ class ExamItem(_Uppgiftsbas):
     # papper i basen skrevs innan fältet fanns, och täckningen tiger när ingen
     # uppgift bär det.
     delmoment: str | None = Field(default=None, max_length=80)
+    # PROVUPPGIFTEN den här drilluppgiften övar inför («Inför provet»). Numret
+    # är provets löpande uppgiftsnummer, som pappret visar det, och fältet är
+    # arbetsbladets motsvarighet till `delmoment`: det som ska RÄKNAS måste stå
+    # på uppgiften. Räkningen är drilltackning (exam_gen) och prövar det enda
+    # läraren bad om: att varje typ hon kryssade faktiskt blev övad.
+    #
+    # BARA I ARBETSBLADETS GRAMMATIK, och bara när blocket står i prompten
+    # (exam_gen._drillar_i_grammatiken, samma regel som delmomentets). Provets
+    # schema ligger på 29 844 av 30 000 tecken vid tjugo uppgifter och har inte
+    # råd med ett fält till; arbetsbladets ligger på 22 745 och har det.
+    #
+    # VALFRITT, samma fail-open-villkor som `avsnitt` och `delmoment`: varje
+    # papper i basen och varje inspelad kassett skrevs innan fältet fanns, och
+    # täckningen tiger när ingen uppgift bär det.
+    drillar: int | None = Field(default=None, ge=1)
     # BOKFÖREBILDEN (se Forebild ovan): den uppgift på lärarens uppslagna sidor
     # som den här uppgiften är av samma SORT som. Sätts bara när beställningen
     # bär en bok, och bara på gruppuppgiften — det är där lärarens dom föll.
@@ -692,7 +707,8 @@ def to_response_format(antal: int | None = None,
                        skeleton: list[dict] | None = None,
                        koder: list[str] | None = None,
                        *, forebild: bool = False,
-                       delmoment: bool = False) -> dict:
+                       delmoment: bool = False,
+                       drillar: bool = False) -> dict:
     """json_schema-objektet, med TAKET som sista ord.
 
     Bygger schemat som `_bygg_response_format` beskriver det, och gör sedan en
@@ -715,14 +731,23 @@ def to_response_format(antal: int | None = None,
     den är en PEKNING som relevansdomaren kan pröva ändå, medan delmomentet är
     det täckningen RÄKNAS på (delmomenttackning) — faller det fältet bort blir
     kontrollen tyst, och det var precis det tillstånd som lät ett helt
-    delmoment saknas utan att någon märkte det."""
-    varv = list(dict.fromkeys([(forebild, delmoment), (False, delmoment),
-                               (False, False)]))
+    delmoment saknas utan att någon märkte det.
+
+    `drillar` offras NÄST SIST, mellan förebilden och delmomentet. Det är
+    täckningen på ARBETSBLADET (exam_gen.drilltackning) och borde därför ha
+    samma skydd som delmomentet. Men de två kan aldrig stå i samma schema
+    (delmomentlistan går bara till provet, drillblocket bara till
+    arbetsbladet), så rangordningen dem emellan avgör ingenting i praktiken.
+    Den står här för att ordningen ska vara sagd i stället för slumpad."""
+    varv = list(dict.fromkeys([(forebild, delmoment, drillar),
+                               (False, delmoment, drillar),
+                               (False, delmoment, False),
+                               (False, False, False)]))
     from app import claude_code                     # sent: bara för måttet
-    for f, d in varv:
+    for f, d, dr in varv:
         rf = _bygg_response_format(antal, skeleton, koder, forebild=f,
-                                   delmoment=d)
-        if (f, d) == (False, False) or (
+                                   delmoment=d, drillar=dr)
+        if (f, d, dr) == (False, False, False) or (
                 claude_code.schemalangd(rf["json_schema"]["schema"])
                 <= claude_code.SCHEMA_TAK_EXE - SCHEMA_MARGINAL):
             return rf
@@ -733,7 +758,8 @@ def _bygg_response_format(antal: int | None = None,
                           skeleton: list[dict] | None = None,
                           koder: list[str] | None = None,
                           *, forebild: bool = False,
-                          delmoment: bool = False) -> dict:
+                          delmoment: bool = False,
+                          drillar: bool = False) -> dict:
     """json_schema-objekt för llama-servers grammatiktvång.
 
     `antal` sätter ett hårt antalstak (minItems=maxItems) — llama.cpp hedrar
@@ -821,6 +847,13 @@ def _bygg_response_format(antal: int | None = None,
     # frågat efter, precis som klockslaget ovan.
     if not delmoment:
         schema["$defs"]["ExamItem"]["properties"].pop("delmoment", None)
+    # DRILLNUMRET har inget profilvillkor heller, bara anroparens: fältet står
+    # i grammatiken exakt när prompten ber om det (exam_gen.
+    # _drillar_i_grammatiken), och ingen annan gång. Utan «Inför provet» är
+    # schemat byte för byte det som gick i väg innan fältet fanns: provets
+    # alltid, arbetsbladets när läraren inte valt något prov.
+    if not drillar:
+        schema["$defs"]["ExamItem"]["properties"].pop("drillar", None)
     upp = schema["properties"]["uppgifter"]
     if skeleton is not None:
         item_def = schema["$defs"]["ExamItem"]

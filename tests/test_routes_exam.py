@@ -49,7 +49,13 @@ def _stub_generate(monkeypatch, result=None):
                       # omprovets original (2026-09-19): rutten slår upp
                       # DOKUMENTET ur basen och skickar det hit, exam_gen
                       # läser aldrig själv.
-                      "referensprov": _kw.get("referensprov")})
+                      "referensprov": _kw.get("referensprov"),
+                      # «Inför provet» (2026-09-19): samma sak en gång till,
+                      # plus lärarens valda uppgiftsnummer och den undvik-lista
+                      # provets texter läggs till i.
+                      "inforprov": _kw.get("inforprov"),
+                      "infor_nummer": _kw.get("infor_nummer"),
+                      "tidigare": _kw.get("tidigare")})
         if log_cb:
             log_cb("Skriver provet …")
         return result or {"exam": _exam_doc(), "errors": [], "rounds": 1}
