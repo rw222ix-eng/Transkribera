@@ -71,8 +71,8 @@ const RADER = PROV.uppgifter.map((u, i) => ({
   text: u.text, p: u.poang[0] + u.poang[1], peca: u.poang,
   formaga: "Räkning i standardfall", ci: u.innehall,
 }));
-const GRANSER = { total: 6, E: { minst: 2 }, C: { minst: 3, varav_ca: 1 },
-                  A: { minst: 4, varav_a: 1 } };
+const GRANSER = { total: 6, E: { minst: 2 }, C: { minst: 3 },
+                  A: { minst: 4 } };
 const ELEVSVAR = {
   group_id: 1, klass: "9Z", rader: RADER, granser: GRANSER, elever: ELEVER,
   resultat: {}, summor: {}, betyg: {}, feedback: {},

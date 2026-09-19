@@ -374,8 +374,8 @@ test("provets försättsblad bär avtalet — och ingen OBS-ruta upprepar det",
            andra procentsatser, så pappret och förhandsvisningen lovade klassen
            olika betygsgränser. */
         granser: { total: 5, E: { minst: 2 },
-                   C: { minst: 3, varav_ca: 1 },
-                   A: { minst: 4, varav_a: 1 } },
+                   C: { minst: 3 },
+                   A: { minst: 4 } },
         summor: { total: 5, e: 2, c: 2, a: 1 } } }]) }));
     await L.oppna(page);
     await L.valjKlass(page, "NA25");
@@ -406,14 +406,16 @@ test("provets försättsblad bär avtalet — och ingen OBS-ruta upprepar det",
     const betyg = await forsatt.locator(".prbetyg tbody td:first-child")
       .allTextContents();
     expect(betyg).toEqual(["E", "C", "A"]);
-    /* SERVERNS tal, inte skärmens egna. Skärmen räknade 30/53/77 % av
-       totalen medan servern (och PDF:en) räknar 25/45/65 med varav-krav —
-       samma prov lovade alltså klassen två olika E-gränser. */
+    /* SERVERNS tal, inte skärmens egna. Skärmen räknade 30/53/77 % av totalen
+       medan servern (och PDF:en) räknade sitt, så samma prov lovade klassen
+       två olika E-gränser. Raden är bara gränsen och inget mer: sedan
+       2026-09-19 följer appen NP Ma1c HT24, där betyget sätts enbart på
+       totalpoängen och det inte finns några varav-krav att trycka. */
     const krav = await forsatt.locator(".prbetyg tbody td:last-child")
       .allTextContents();
     expect(krav[0]).toBe("2 poäng");
-    expect(krav[1]).toBe("3 poäng, varav minst 1 C- eller A-poäng");
-    expect(krav[2]).toBe("4 poäng, varav minst 1 A-poäng");
+    expect(krav[1]).toBe("3 poäng");
+    expect(krav[2]).toBe("4 poäng");
     await expect(forsatt.locator(".prbetyg tfoot td").last()).toHaveText("5 poäng");
     // Försättsbladet har inga uppgifter — det läses innan provtiden börjar.
     await expect(forsatt.locator(".pruppg")).toHaveCount(0);

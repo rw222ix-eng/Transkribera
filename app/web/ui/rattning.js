@@ -29,9 +29,11 @@
   const ren = t => String(t || '').replace(/<[^>]*>/g, '').trim();
   const BOK = 'abcdef';
 
-  /* Radens maxpoäng per NIVÅ — [E, C, A]. Klassrättningen bryr sig inte, men
-     elevens betyg går inte att räkna ur en klumpsumma: C kräver sin andel av
-     C- och A-poängen. Bär pappret tripeln (plan.js franProv) ÄR den radens
+  /* Radens maxpoäng per NIVÅ, [E, C, A]. Klassrättningen bryr sig inte, och
+     sedan 2026-09-19 gör inte betyget det heller (det sätts på totalpoängen).
+     Tripeln behövs ändå: rättaren sätter poäng per nivå, för det är så
+     bedömningsanvisningen är skriven och så eleven får sin feedback. Bär
+     pappret tripeln (plan.js franProv) ÄR den radens
      poäng; annars läggs hela poängen på uppgiftens nivå, som är det bästa som
      finns på ett handskrivet papper. Samma regel som app/rattning.py. */
   const tripel = v => {

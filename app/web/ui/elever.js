@@ -1,8 +1,7 @@
 /* ══════════ ELEV FÖR ELEV ══════════
    Klassrättningen (rattning.js) är en summa per uppgift. Den räcker för
-   planeringen och inte för eleven: ett betyg går inte att räkna ur en
-   klumpsumma — C kräver sin andel av C- och A-poängen — och en feedbacktext
-   går inte att skriva till en klass.
+   planeringen och inte för eleven: betyget är den enskilda elevens totalpoäng
+   mot provets gränser, och en feedbacktext går inte att skriva till en klass.
 
    Alltså den här vyn: en elev i taget, poängknappar per NIVÅ, betyget live mot
    provets kravgränser. Klassens siffror räknas fram ur elevernas på servern, så
@@ -31,18 +30,22 @@
      på skärmen medan läraren klickar, och prototypen har ingen server. Serverns
      tal vinner när de finns — den läste provets egen JSON.
 
-     TALEN ÄR SERVERNS (exam_spec.KRAV_DEFAULT), kalibrerade mot NpMa2a vt17 och
-     vt22. Står de två uppsättningarna isär lovar skärmen ett betyg pappret inte
-     ger — det var precis felet blad.js beskriver längre ned. Ändras KRAV_DEFAULT
-     ändras raden här i samma commit.
+     TALEN ÄR SERVERNS (exam_spec.KRAV_DEFAULT), och sedan 2026-09-19 är de
+     NP Matematik 1c HT24:s: det provet gav 70 poäng och krävde 18 för E, 37
+     för C och 57 för A. Andelarna skrivs som just de bråken, inte som
+     avrundade procent, för det är talen regeln kommer ur. Står de två
+     uppsättningarna isär lovar skärmen ett betyg pappret inte ger, det var
+     precis felet blad.js beskriver längre ned. Ändras KRAV_DEFAULT ändras
+     raden här i samma commit.
 
-     KURSENS EGNA TAL FINNS BARA PÅ SERVERN (exam_spec.KRAV_PER_KURS, mätt per
-     kurs 2026-09-06): Ma 1c ger lägre gränser än Ma 2a på samma poängsumma.
-     Raden nedan är 2a:s, alltså fallbacken, och den gäller när servern inte
-     svarat. Då finns ingen kurs att slå upp heller. Så fort svaret landar
-     vinner serverns tal, och de är kursens. Samma sak med lärarens skärpning
-     av E (`granser.E.extra`): den bor i provets stämpel och räknas aldrig här. */
-  const KRAV = { e: 0.26, c: 0.54, cCa: 0.34, a: 0.79, aA: 0.52 };
+     BETYGET SÄTTS BARA PÅ TOTALPOÄNGEN. Förut fanns också varav-krav (C kräver
+     sin andel av C- och A-poängen, A sin av A-poängen) och egna procentsatser
+     per kurs. Båda är borta: NP-modellen räknar en summa, samma regel för alla
+     kurser. Uppgifternas E/C/A-poäng står kvar och delar fortfarande
+     rättningens knappar per nivå, men kravet tittar inte på dem. Lärarens
+     skärpning av E (`granser.E.extra`) bor i provets stämpel och räknas aldrig
+     här. Serverns tal vinner så fort svaret landar. */
+  const KRAV = { e: 18/70, c: 37/70, a: 57/70 };
   function granserAv(rad) {
     let e = 0, c = 0, a = 0;
     rad.filter(r => !r.grupp).forEach(r => {
@@ -54,8 +57,8 @@
       total,
       tripel: (c + a) > 0,
       E: { minst: Math.ceil(total * KRAV.e) },
-      C: { minst: Math.ceil(total * KRAV.c), varav_ca: Math.ceil((c + a) * KRAV.cCa) },
-      A: { minst: Math.ceil(total * KRAV.a), varav_a: Math.ceil(a * KRAV.aA) }
+      C: { minst: Math.ceil(total * KRAV.c) },
+      A: { minst: Math.ceil(total * KRAV.a) }
     };
   }
 
@@ -80,12 +83,18 @@
     return { total: e + c + a, e, c, a, tak, kvar };
   }
 
-  /* Det HÖGSTA betyg vars båda villkor är uppfyllda — NP:s ordning. Under
-     E-gränsen är F, och F skrivs ut som alla andra betyg. */
+  /* Det högsta betyg vars gräns eleven når, uppifrån och ned. Under E-gränsen
+     är F, och F skrivs ut som alla andra betyg.
+
+     ETT villkor per rad, inte två. Fram till 2026-09-19 krävdes dessutom en
+     andel C- och A-poäng för C och A-poäng för A, och gamla stämplar kan
+     fortfarande bära `varav_ca`/`varav_a`. De fälten läses inte längre: ett
+     papper rättas mot den regel som gäller när det rättas, och regeln är
+     totalpoängen. */
   function betygAv(s, g) {
     if (!g) return 'F';
-    if (s.total >= g.A.minst && s.a >= (g.A.varav_a || 0)) return 'A';
-    if (s.total >= g.C.minst && (s.c + s.a) >= (g.C.varav_ca || 0)) return 'C';
+    if (s.total >= g.A.minst) return 'A';
+    if (s.total >= g.C.minst) return 'C';
     if (s.total >= g.E.minst) return 'E';
     return 'F';
   }
@@ -203,13 +212,15 @@
     index = Math.max(0, Math.min(elever.length - 1, index));
     const e = nuvarande();
     $('#elevnamn').textContent = e.namn + (e.aktiv === false ? ' · har slutat' : '');
-    /* Degenererade gränser ska SYNAS: utan tripel föll all poäng på E,
-       varav-kraven är noll och A kan nås på enbart E-poäng. Sant enligt
-       fallbacken (rattning._peca_fallback) — men inte något att dölja. */
+    /* Ett papper utan E/C/A-fördelning ska SYNAS: all poäng föll på E, och
+       knapparna per nivå blir en enda kolumn. Sant enligt fallbacken
+       (rattning._peca_fallback), men inte något att dölja. Raden sa förut
+       också att betyget räknas på totalpoängen. Det står inte kvar, för sedan
+       2026-09-19 gäller det varje prov och inte bara det här. */
     const g0 = granser || granserAv(rader);
     $('#elevmeta').textContent = `Elev ${index + 1} av ${elever.length} · ${provet}`
       + (g0 && g0.tripel === false
-        ? ' · utan E/C/A-fördelning — betyget räknas på totalpoängen' : '');
+        ? ' · utan E/C/A-fördelning på pappret' : '');
 
     const lista = $('#elevrader');
     lista.innerHTML = '';

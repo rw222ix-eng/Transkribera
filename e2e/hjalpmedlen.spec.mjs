@@ -48,8 +48,8 @@ async function fejkaGenerate(page) {
       body: strom([{ type: "done", result: {
         id: 7, exam: PROV, typ: "prov", status: "utkast", errors: [], rounds: 1,
         granser: { total: 4, E: { minst: 1 },
-                   C: { minst: 2, varav_ca: 1 },
-                   A: { minst: 3, varav_a: 1 } },
+                   C: { minst: 2 },
+                   A: { minst: 3 } },
         summor: { total: 4, e: 2, c: 2, a: 0 } } }]) });
   });
   return anrop;
@@ -231,7 +231,7 @@ test("skärmens provtabell bär planeringens hjälpmedel när dokumentet tiger",
     await expect(delcell(page, "Del A"))
       .toContainText("Formelbladet är tillåtet, inga digitala hjälpmedel.");
     await expect(delcell(page, "Del B"))
-      .toContainText("Räknare, digitala hjälpmedel och formelblad tillåtna.");
+      .toContainText("Räknare och formelblad tillåtna.");
   });
 
 test("förvalet ritar precis de fraser pappret alltid burit", async ({ page }) => {

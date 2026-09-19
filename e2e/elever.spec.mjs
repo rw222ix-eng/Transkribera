@@ -3,8 +3,8 @@ import { expect, test } from "@playwright/test";
 /* ELEV FÖR ELEV — poängen per nivå, betyget live, klassen på köpet
  *
  * Klassrättningen kan bara en summa per uppgift. Den räcker för planeringen och
- * inte för eleven: ett betyg går inte att räkna ur en klumpsumma, för C kräver
- * sin andel av C- och A-poängen. Fyra saker måste hålla:
+ * inte för eleven: betyget är elevens EGEN totalpoäng mot provets gränser, och
+ * en feedbacktext går inte att skriva till en klass. Fyra saker måste hålla:
  *
  *   1. Klasslistan frågas EN gång och sparas.
  *   2. Hela rättningen går på tangentbordet — siffertangent sätter poäng,
@@ -48,8 +48,8 @@ const RADER = [
 
 /* Kravgränserna ur exakt samma regel som försättsbladet trycker. */
 const GRANSER = {
-  total: 5, E: { minst: 2 }, C: { minst: 3, varav_ca: 1 },
-  A: { minst: 4, varav_a: 1 },
+  total: 5, E: { minst: 2 }, C: { minst: 3 },
+  A: { minst: 4 },
 };
 
 const ELEVER = [{ id: 11, namn: "Anna Andersson", sort: 0, aktiv: true },

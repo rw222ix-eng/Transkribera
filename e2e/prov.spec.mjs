@@ -293,8 +293,8 @@ test("delarna är dokumentets, numreringen löper och enheten är matematik",
   async ({ page }) => {
     await fejka(page, { generate: strom([{ type: "done", result: {
       id: 9, exam: EXAM_DELAR, typ: "prov", status: "utkast", errors: [],
-      rounds: 1, granser: { total: 8, E: { minst: 2 }, C: { minst: 4, varav_ca: 2 },
-                            A: { minst: 6, varav_a: 1 } },
+      rounds: 1, granser: { total: 8, E: { minst: 2 }, C: { minst: 4 },
+                            A: { minst: 6 } },
       summor: { total: 8, e: 4, c: 4, a: 3 } } }]) });
     await page.goto("/");
     await hydrerad(page);

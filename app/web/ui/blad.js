@@ -355,17 +355,18 @@ window.Blad = (() => {
     if (not) not.innerHTML = `Provet ger högst <b>${summa} poäng</b>${enDel ? '' : `, ${sumB} på del A och ${summa - sumB} på del B`}. Efter varje uppgift står hur många poäng den kan ge.${enDel ? '' : ' Uppgifter märkta «Fullständig lösning krävs» redovisas på separat lösblad. Visa hur du räknar och förklara varför.'} Skriv ditt namn på alla papper du lämnar in.${plock.some(u => !arE(u)) ? '' : ' Provet prövar E-nivån. Det finns inga uppgifter för C och A på det här provet.'}`;
 
     /* ── BETYGSGRÄNSERNA ÄR SERVERNS, INTE SKÄRMENS ──────
-       Här räknades gränserna med egna procentsatser — 30 % för E, 53 för C,
-       77 för A, plus 23 och 45 procent av del B som varav-krav. Serverns regel
-       (exam_spec.KRAV_DEFAULT) är en annan: 26, 54 och 79 procent av totalen,
-       varav 34 % av C- och A-poängen respektive 52 % av A-poängen — mätta på
-       NpMa2a vt17 och vt22, inte valda. Sedan 2026-09-06 är procentsatserna
-       dessutom KURSENS (exam_spec.KRAV_PER_KURS: 1a, 1b, 1c, 2a, 2c), och
+       Här räknades gränserna med egna procentsatser: 30 % för E, 53 för C,
+       77 för A, plus egna krav på del B. Serverns regel (exam_spec) är en
+       annan, och sedan 2026-09-19 är den dessutom EN enda räkning: betyget
+       sätts bara på TOTALPOÄNGEN, som i NP Matematik 1c HT24. Det provet gav
+       70 poäng och krävde 18 för E, 37 för C och 57 för A, och samma andelar
+       gäller alla kurser. Uppgifternas E/C/A-poäng står kvar på pappret, men
+       kravet tittar inte längre på dem: den som når totalen har betyget.
        E-gränsen kan bära lärarens skärpning på upp till tre poäng
        (`granser.E.extra`). Skärmen räknar ingenting av det, den läser
        `granser`, och det är hela poängen. Talen räknas
-       redan och följer med pappret som `granser` — de trycks på PDF:ens
-       försättsblad (prov.tex.j2) — men skärmen ritade sina egna.
+       redan och följer med pappret som `granser`, de trycks på PDF:ens
+       försättsblad (prov.tex.j2), men skärmen ritade sina egna.
 
        Ett prov lovade alltså klassen en E-gräns på skärmen och en annan på det
        utdelade pappret. Det är inte en avvikelse i sättningen; det är två olika
@@ -382,10 +383,10 @@ window.Blad = (() => {
     if (betyg && !giltig) betyg.remove();
     else if (betyg) {
       const kropp = $('tbody', betyg), fot = $('tfoot td:last-child', betyg);
-      /* Varav-kraven i förlagans form: «C: minst 24 poäng, varav minst 8 C-
-         eller A-poäng». Är kravet noll — ett prov utan C/A-poäng att kräva —
-         står bara gränsen, för «varav minst 0» är ingen upplysning. */
-      const varav = (n, text) => (n ? `, varav minst ${n} ${text}` : '');
+      /* En rad per betyg, och ingenting mer än gränsen: «C: 37 poäng». Här
+         stod förut förlagans varav-krav också («varav minst 8 C- eller
+         A-poäng»), men NP Ma1c HT24 har inga sådana krav och därför har
+         provet det inte heller. Servern slutade skicka fälten 2026-09-19. */
       /* VILKA rader tabellen har är serverns svar, precis som talen i dem:
          `granser.betyg` (exam_spec.betygsrader). Ett prov utan C- och
          A-poäng kan inte ge C eller A, och ett prov med C-poäng men utan
@@ -399,9 +400,9 @@ window.Blad = (() => {
       const rader = (gr.betyg && gr.betyg.length ? gr.betyg : ['E', 'C', 'A']);
       if (kropp) kropp.innerHTML = `<tr><td>E</td><td>${gr.E.minst} poäng</td></tr>`
         + (rader.indexOf('C') >= 0
-          ? `<tr><td>C</td><td>${gr.C.minst} poäng${varav(gr.C.varav_ca, 'C- eller A-poäng')}</td></tr>` : '')
+          ? `<tr><td>C</td><td>${gr.C.minst} poäng</td></tr>` : '')
         + (rader.indexOf('A') >= 0
-          ? `<tr><td>A</td><td>${gr.A.minst} poäng${varav(gr.A.varav_a, 'A-poäng')}</td></tr>` : '');
+          ? `<tr><td>A</td><td>${gr.A.minst} poäng</td></tr>` : '');
       /* Maxpoängen är provets, och den kommer ur samma räkning som gränserna —
          inte ur skärmens egen summa, som kan räkna på andra uppgifter. */
       if (fot) fot.textContent = `${gr.total != null ? gr.total : summa} poäng`;
@@ -696,16 +697,16 @@ window.Blad = (() => {
        när servern inte skickat några gränser (se planvalProv), och då hade
        provtabellen ärvt betygsgränsernas namn. Klassen avgör, inte ordningen. */
     $$('.prmeta', rot).forEach(el => salt(el, 'avtal0', 'Provtabellen'));
-    /* Betygsgränserna räknas av SERVERN ur kursens krav och provets poäng
-       (exam_spec.KRAV_PER_KURS) och följer med pappret som `granser`. En
-       omskrivning kan inte sätta dem: E-gränsen flyttas med egen rutt (PATCH
-       /api/exams/{id}/granser, raden under pappret i förhandsvisningen), C och
-       A följer poängen. Ett önskemål riktat hit hade blivit ett varv som skrev
-       om hela provet utan att röra ett enda tal i tabellen. */
+    /* Betygsgränserna räknas av SERVERN ur NP-modellen och provets totalpoäng,
+       och följer med pappret som `granser`. En omskrivning kan inte sätta dem:
+       E-gränsen flyttas med egen rutt (PATCH /api/exams/{id}/granser, raden
+       under pappret i förhandsvisningen), C och A följer totalen. Ett önskemål
+       riktat hit hade blivit ett varv som skrev om hela provet utan att röra
+       ett enda tal i tabellen. */
     $$('.prbetyg', rot).forEach(el => salt(el, 'avtal1', 'Betygsgränserna',
-      'Betygsgränserna räknas av servern ur kursens krav och provets poäng.'
-      + ' E-gränsen flyttas på raden under pappret i förhandsvisningen, C och A'
-      + ' följer uppgifternas poäng.'));
+      'Betygsgränserna räknas av servern ur NP-modellen och provets'
+      + ' totalpoäng. E-gränsen flyttas på raden under pappret i'
+      + ' förhandsvisningen, C och A följer totalen.'));
     $$('.prforsatt', rot).forEach(el => salt(el, 'forsatt', 'Bilden på försättsbladet'));
     /* Anvisningen på försättsbladet gick inte att markera alls («Välj element»
        hittade ingen ruta). Den är appens egen text, räknad ur poängen och
