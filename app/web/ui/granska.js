@@ -1585,6 +1585,16 @@
     if (!malen.length) ritaMal();
   }
 
+  /* Klonen paginerar sig själv (blad.js formaOm): originalet ligger i en gömd
+     vy medan canvasen är öppen och kan inte mäta om när uppgifternas bilder
+     landar. Nästa bildruta, så att klonen hunnit få sin layout. Utan version
+     (prototypen, ett papper utan v) står klonen som den kom. */
+  function formaKlon(klon) {
+    const v = host && host.v;
+    if (!v || !window.Blad || !window.Blad.formaOm) return;
+    requestAnimationFrame(() => { if (klon.isConnected) window.Blad.formaOm(klon, v); });
+  }
+
   function oppna(o) {
     host = o;
     satArkval(o.ark);
@@ -1592,6 +1602,7 @@
     const klon = o.nod.cloneNode(true);
     klon.classList.add('gdok');
     plan.appendChild(klon);
+    formaKlon(klon);
     /* Klonens prickar är döda knappar (cloneNode kopierar inga lyssnare) och
        dess timers blev kvar i originalet. pa() utan version läser resttiden ur
        elementens stämpel och byter prickarna mot levande (prickar.js). */
@@ -1688,6 +1699,7 @@
     const klon = nod.cloneNode(true);
     klon.classList.add('gdok');
     plan.appendChild(klon);
+    formaKlon(klon);
     /* Samma väckning som i oppna() — omritningen efter ett varv går här. */
     if (window.Prickar) window.Prickar.pa(klon);
     if (window.Blad && window.Blad.omritaTavlor) window.Blad.omritaTavlor(plan);

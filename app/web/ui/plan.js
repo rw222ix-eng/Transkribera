@@ -4812,6 +4812,9 @@
     const v = versioner[nu];
     window.Granska.oppna({
       nod,
+      /* Versionen följer med så att klonen kan formas om när dess bilder
+         landar (granska.js formaKlon, blad.js formaOm). */
+      v,
       titel: `${v.typ} — ${versal(v.moment)}`,
       meta: $('#dokmeta').textContent,
       ark: arkLage(v),

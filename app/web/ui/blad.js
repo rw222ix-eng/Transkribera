@@ -1982,6 +1982,29 @@ window.Blad = (() => {
     return trav;
   }
 
-  return { rita, form, uppgifter, skala, omritaTavlor, tavlaTill, tavlaDelar, bokTill,
-           underlag, figurer };
+  /* ── KLONEN I CANVASEN FORMAS SJÄLV ────────────────
+     Canvasen (granska.js) visar en KLON av traven, och originalet i #arkskal
+     ligger då i en gömd vy (#vy-planering hidden). Gömt mäts inte, så när
+     uppgifternas plåtar landar efter klonningen paginerar ingen om: originalet
+     väntar på att bli mätbart, och klonen är tagen från innan bilderna hade
+     höjd. Lärarens prov 88 (2026-09-19): uppgift 5, 6 och 7 låg under
+     papperskanten i canvasen, och uppgift 10:s bild var avklippt, fast PDF:en
+     var rätt. Samma sak som prov 40 (plan.js CANVASENS KLON FÅR INTE BLI
+     GAMMAL), fast den gången var originalet synligt och kunde säga till.
+     Därför formas klonen på egen hand: samma svep som formge, på den trav
+     canvasen visar, och om igen när en bild i klonen landar. Ett mätsvep på
+     en synlig klon är samma mätning som på originalet: samma CSS, samma
+     bredd (794 px), skalan ligger i en transform som inte rör offsetHeight. */
+  function formaOm(trav, v) {
+    if (!trav || !v || !travMatbar(trav)) return false;
+    const fore = formmarke(trav);
+    atervand(trav, v); atervandProv(trav); nollskala(trav);
+    delaArk(trav); passa(trav, v); paginera(trav); fyll(trav);
+    provfotter(trav, v);
+    matOmNarBilderna(trav, () => formaOm(trav, v));
+    return formmarke(trav) !== fore;
+  }
+
+  return { rita, form, formaOm, uppgifter, skala, omritaTavlor, tavlaTill,
+           tavlaDelar, bokTill, underlag, figurer };
 })();
