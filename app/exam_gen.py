@@ -7246,14 +7246,37 @@ def drilltackning(exam: dict, nummer: list[int] | None) -> list[dict]:
     valda = [n for n in (nummer or [])]
     if not valda:
         return []
-    drillade = {u.get("drillar") for u in (exam or {}).get("uppgifter") or []
-                if isinstance(u, dict) and isinstance(u.get("drillar"), int)}
-    if not drillade:
+    uppgifter = [u for u in (exam or {}).get("uppgifter") or []
+                 if isinstance(u, dict)]
+    markta = [u.get("drillar") for u in uppgifter
+              if isinstance(u.get("drillar"), int)]
+    if not markta:
         return []
+    drillade = set(markta)
+    saknas = [n for n in valda if n not in drillade]
+    # FLER SORTER ÄN UPPGIFTER. Ett blad med sex uppgifter kan inte öva tolv
+    # sorter, och prompten säger «tar du de tyngsta först». Då är luckorna
+    # väntade och inget fel: skarpt (prov 88, 2026-09-19) fällde kontrollen
+    # sex av tolv på ett blad som var precis som beställt, och kostade en
+    # reparationsrunda som inte kunde laga något. Det som ÄR fel med fler
+    # sorter än uppgifter är en sort som övas två gånger medan en annan står
+    # utan: då hade den andra uppgiften kunnat öva den. Kravet blir alltså
+    # «så många valda sorter som bladet har uppgifter», inte «alla».
+    plats = len(uppgifter)
+    ovade = drillade & set(valda)
+    if len(ovade) >= min(len(valda), plats):
+        return []
+    if len(valda) > plats:
+        dubbla = sorted({n for n in markta if markta.count(n) > 1 and n in valda})
+        return [_err(
+            "uppgifter", "drilltackning",
+            f"Bladet har {plats} uppgifter men övar bara {len(ovade)} av "
+            "provets valda sorter: "
+            f"uppgifter märkta drillar={dubbla} delar sort, medan provets "
+            f"uppgift {', '.join(map(str, saknas))} inte övas alls. Byt ut en "
+            "av de dubbla mot en uppgift av en sort som saknas och märk den.")]
     fel = []
-    for n in valda:
-        if n in drillade:
-            continue
+    for n in saknas:
         fel.append(_err(
             "uppgifter", "drilltackning",
             f"Provets uppgift {n} valdes att drillas, men ingen uppgift på "

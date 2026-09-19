@@ -156,6 +156,23 @@ def test_drilltackningen_faller_det_valda_numret_som_saknas():
                                   [1, 3]) == []
 
 
+def test_fler_sorter_an_uppgifter_ar_inget_fel():
+    """Sju uppgifter kan inte öva tolv sorter. Skarpt (prov 88, 2026-09-19)
+    fällde kontrollen sex av tolv på ett blad som var precis som beställt och
+    kostade en reparationsrunda. Kravet är «lika många sorter som bladet har
+    uppgifter»; ett fel först när en sort övas dubbelt medan en annan står
+    utan."""
+    valda = list(range(1, 13))
+    # Sju olika sorter på sju uppgifter: rent, fast fem valda saknas.
+    assert exam_gen.drilltackning(_blad_doc([1, 2, 3, 4, 5, 6, 7]), valda) == []
+    # En dubblett (1, 1) medan sorterna 8–12 står utan: ETT fynd som pekar
+    # ut dubbletten, inte fem fynd om varje lucka.
+    fel = exam_gen.drilltackning(_blad_doc([1, 1, 3, 4, 5, 6, 7]), valda)
+    assert [f["code"] for f in fel] == ["drilltackning"]
+    assert "drillar=[1]" in fel[0]["message"]
+    assert "uppgift 2, 8, 9, 10, 11, 12" in fel[0]["message"]
+
+
 def test_drilltackningen_ar_fail_open():
     """Två tystnader, båda med flit: utan valda nummer finns ingen fråga, och
     bär ingen uppgift fältet kördes kontrollen aldrig."""
