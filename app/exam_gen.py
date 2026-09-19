@@ -7208,7 +7208,7 @@ def build_infor_prov(slots: list[dict] | None, nummer: list[int] | None,
     return (
         "DET HÄR ARBETSBLADET ÖVAR INFÖR ETT PROV. Provet är redan skrivet, "
         "eleverna har inte sett det, och de ska inte se det här heller. Nedan "
-        "står de uppgifter bladet ska förbereda, som en plan över SORTER. "
+        "står de uppgifter bladet ska förbereda, som en plan över SORTER, "
         "form för form, aldrig texten:\n" + "\n".join(rader) + "\n"
         "SAMMA SORT, ALDRIG SAMMA UPPGIFT. En uppgift på bladet ska pröva "
         "samma metod som sin sort ovan och kräva ungefär lika många räknesteg. "
