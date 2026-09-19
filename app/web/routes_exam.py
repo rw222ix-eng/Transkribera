@@ -394,9 +394,51 @@ def _tipsfynd(exam: dict, typ: str) -> list[dict]:
     return ut
 
 
+def _kopiefynd(exam: dict, infor: dict | None) -> list[dict]:
+    """Skrev arbetsbladet av provet det ska förbereda inför?
+
+    Den allvarligaste saken som kan gå fel i «Inför provet»: bladet delas ut
+    till hela klassen en vecka före provdagen, och en uppgift som är provets
+    egen med nya tal har lämnat ut provet. Räkningen är variationsvaktens,
+    ord för ord (exam_gen.variationsflaggor): uppgiftens form med varje tal
+    utbytt mot #. Inget modellanrop, inget nytt mått att kalibrera.
+
+    ETT FYND PER UPPGIFT, som tipsvakten: 6a och 6b är samma kopia, och två
+    rader om samma uppgift säger inte mer än en.
+
+    FAIL-OPEN utan provet. Bladet ligger sparat i basen, kopplingen till
+    provet gör det inte, så ett senare GET på samma blad kommer utan id och
+    räknar ingenting. Det är rätt tystnad: «vi vet inte» får inte se ut som
+    «inga kopior»."""
+    if not infor:
+        return []
+    texter = exam_gen.uppgiftstexter(infor)
+    if not texter:
+        return []
+    try:
+        flaggor = exam_gen.variationsflaggor(exam or {}, texter)
+    except Exception:                       # pragma: no cover
+        return []
+    ut, sedda = [], set()
+    for f in flaggor:
+        m = re.match(r"(\d+)", str(f.get("nr") or ""))
+        if not m:
+            continue
+        nr = int(m.group(1))
+        if nr in sedda:
+            continue
+        sedda.add(nr)
+        ut.append(_fynd(
+            "kopia", f"Uppgift {nr} är provets egen uppgift med nya tal: "
+            f"«{f.get('text') or ''}». Bladet delas ut före provdagen, så "
+            "uppgiften får inte stå här.", nr))
+    return ut
+
+
 def efterkontroll(view: dict, doc, summor: dict | None, *,
                   bok: dict | None = None, sidor: dict[int, int] | None = None,
-                  base: Path | None = None) -> list[dict]:
+                  base: Path | None = None,
+                  infor: dict | None = None) -> list[dict]:
     """Alla deterministiska fynd på ETT papper, i läsordning.
 
     `doc` är den validerade ExamDoc, är den None gick pappret inte att
@@ -414,6 +456,9 @@ def efterkontroll(view: dict, doc, summor: dict | None, *,
     ut += _bildfynd(doc, base or Path("."))
     ut += _sprakfynd(view.get("exam") or {}, typ)
     ut += _tipsfynd(view.get("exam") or {}, typ)
+    # Kopieringsvakten sist bland fynden, och bara när anroparen pekat ut
+    # provet (se _kopiefynd). Den tiger på varje annat papper i appen.
+    ut += _kopiefynd(view.get("exam") or {}, infor)
     # Taket är läsarens, inte serverns: tjugofyra rader i en ruta är en vägg,
     # och pappret som ger fler än så har ett annat problem än det listan kan
     # beskriva.
@@ -459,6 +504,9 @@ _ATGARD = {
             "övrigt, samma tal, samma poäng.",
     "bild": "Skriv om uppgiftens scen så att den handlar om det bilden visar, "
             "eller ta bort scenen ur uppgiften.",
+    "kopia": "Byt ut uppgiften mot en ny som övar samma metod med ett annat "
+             "sammanhang och andra tal. Nya siffror i provets egen uppgift "
+             "räcker inte. Poängen, förmågan och platsen står kvar.",
     "delkrav": "Gör pappret samstämmigt: ändra hjälpmedelsregeln för delen, "
                "eller gör uppgifterna i den till uppgifter där endast svar "
                "krävs.",
@@ -715,16 +763,40 @@ def create_router(base: Path, arbiter) -> APIRouter:
         finally:
             conn.close()
 
+    def _inforunderlag(infor_prov_id) -> dict | None:
+        """Provet kopieringsvakten jämför mot, som dokument. None när inget id
+        skickades, när raden är borta eller när den inte är ett godkänt prov.
+
+        Läser BARA, och bara när anroparen pekat ut provet. Att leta upp
+        «troliga» prov här hade varit en gissning som ser ut som ett faktum
+        (samma dom som över omprovsförslaget)."""
+        if not infor_prov_id:
+            return None
+        conn = db.connect(db_file)
+        try:
+            rad = db.get_exam(conn, int(infor_prov_id))
+        except (TypeError, ValueError):     # pragma: no cover, skräp-id
+            return None
+        finally:
+            conn.close()
+        if not rad or not rad.get("exam"):
+            return None
+        if (rad.get("typ") or "prov") != "prov" \
+                or str(rad.get("status") or "") != "godkänt":
+            return None
+        return rad["exam"]
+
     def _exam_result(view: dict, errors: list, rounds: int,
                      likheter: list | None = None,
                      nivafel: list | None = None,
                      relevansfel: list | None = None,
-                     begriplighetsfel: list | None = None) -> dict:
+                     begriplighetsfel: list | None = None,
+                     infor_prov_id=None) -> dict:
         doc, _ = exam_spec.validate_exam_json(view.get("exam") or {})
         summor = exam_spec.poangsummor(doc) if doc else None
         bok, boksidor = _bokunderlag(view) if doc else (None, {})
         fynd = efterkontroll(view, doc, summor, bok=bok, sidor=boksidor,
-                             base=base)
+                             base=base, infor=_inforunderlag(infor_prov_id))
         return {
             # ── EFTERKONTROLLEN (2026-09-19) ─────────────────────
             # De deterministiska fynden på pappret SOM DET LIGGER NU, räknade
@@ -1664,7 +1736,15 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 svar = _exam_result(view, res["errors"], res["rounds"],
                                     res.get("likheter"), res.get("nivafel"),
                                     res.get("relevansfel"),
-                                    res.get("begriplighetsfel"))
+                                    res.get("begriplighetsfel"),
+                                    # Kopieringsvakten (se _kopiefynd) behöver
+                                    # provet att jämföra mot, och det vet bara
+                                    # det här anropet om. Ett senare GET på
+                                    # samma blad kommer utan id och ger inga
+                                    # kopiefynd, och det är fail-open med
+                                    # flit: bladet ligger sparat, kopplingen
+                                    # gör det inte.
+                                    infor_prov_id=infor_prov_id)
                 # FÖRSLAGET, aldrig tillämpat. Se _omprovskandidat: appen
                 # pekar ut det troliga originalet och låter läraren säga ja.
                 if omprov_forslag:
