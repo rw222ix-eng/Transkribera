@@ -1,4 +1,7 @@
-/* Godkänn om sparade papper EXAKT som läraren gör det i appen:
+/* Godkänn om sparade papper EXAKT som läraren gör det i appen.
+   Väntorna pollar med tid, inte requestAnimationFrame (förvalet): 2026-09-19
+   stod skriptet still i 60 s på en sida som var redo efter 5, för rAF
+   levererade inga bildrutor i den färska profilen.
    förhandsvisning → «Fortsätt ändra» → «Godkänn och sätt som PDF».
 
    Varför det här finns (2026-09-08): tools/dokument_godkann.py godkänner via
@@ -26,8 +29,8 @@ const vila = ms => new Promise(r => setTimeout(r, ms));
 for (const id of ids) {
   await page.goto(BAS + '/', { waitUntil: 'load' });
   await page.waitForFunction(() => window.Dokument && window.API && window.API.pa
-    && window.Kalender && window.Kalender.franServern(), null, { timeout: 60000 });
-  await page.waitForFunction(n => window.Dokument.sparade().some(v => v.id === n), id, { timeout: 60000 });
+    && window.Kalender && window.Kalender.franServern(), null, { timeout: 60000, polling: 500 });
+  await page.waitForFunction(n => window.Dokument.sparade().some(v => v.id === n), id, { timeout: 60000, polling: 500 });
   await page.evaluate(() => document.fonts.ready);
   const info = await page.evaluate(n => {
     const s = window.Dokument.sparade(); const i = s.findIndex(v => v.id === n);
