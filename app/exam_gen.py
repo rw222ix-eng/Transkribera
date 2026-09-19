@@ -18,7 +18,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
 
-from app import exam_spec, llm_client, niva_rubrik, rakneverk
+from app import course_data, exam_spec, llm_client, niva_rubrik, rakneverk
 
 MAX_ROUNDS = 3          # generering + balansreparation (delad budget)
 MAX_LATEX_ROUNDS = 2    # kompileringsfel → korrigering
@@ -1462,7 +1462,15 @@ def _delmomentlista(poster: list[tuple[int, int, str]],
 
     `nyckel` är bara vad posten heter i svaret. Förbudslistan (nedan) är
     samma sak sedd från andra hållet, bokens rubriker med sina sidspann, och
-    ska dedupas, slås ihop och ordnas på precis samma sätt."""
+    ska dedupas, slås ihop och ordnas på precis samma sätt.
+
+    `lektioner` är hur många poster som slogs ihop, och det fältet är
+    UNDERVISNINGSTIDEN (2026-09-19). Prov 86 gav 2.5 nio poäng på två
+    lektioner och hela kapitel 1 fem poäng på sex, täckningen var nöjd, för
+    den räknade uppgifter och inte tid. Vikten bor här och inte hos vakten,
+    därför att det bara är HÄR ihopslagningen vet hur många lektioner som
+    blev en rad. Ur bokens sidor (delmoment_ur_sidor) är posterna sidor, och
+    då är talet sidantalet, vilket är samma sorts mått på samma sak."""
     ut: dict[str, dict] = {}
     for fran, till, rubrik in poster:
         namn = _delmomentnamn(rubrik)
@@ -1470,10 +1478,18 @@ def _delmomentlista(poster: list[tuple[int, int, str]],
             continue
         p = ut.get(namn.casefold())
         if p is None:
-            ut[namn.casefold()] = {"namn": namn, "fran": fran, "till": till}
+            ut[namn.casefold()] = {"namn": namn, "fran": fran, "till": till,
+                                   "lektioner": 1}
         else:
             p["fran"], p["till"] = min(p["fran"], fran), max(p["till"], till)
-    return [{nyckel: p["namn"], "sidor": _sidspann(p["fran"], p["till"])}
+            p["lektioner"] += 1
+    # `lektioner` bara på DELMOMENTEN. Förbudslistan är bokens rubriker för
+    # det klassen inte haft, och där finns ingen undervisningstid att väga
+    # med, ett fält utan mening är ett fält någon förr eller senare läser
+    # som om det hade en.
+    tid = nyckel == "delmoment"
+    return [{nyckel: p["namn"], "sidor": _sidspann(p["fran"], p["till"]),
+             **({"lektioner": p["lektioner"]} if tid else {})}
             for p in sorted(ut.values(), key=lambda p: (p["fran"], p["till"]))]
 
 
@@ -1692,6 +1708,39 @@ def rensa_forbjudna(forbjudna: list[dict],
     return [f for f in forbjudna
             if _delmomentnamn(f["metod"]).casefold() not in haft
             ][:FORBJUDET_TAK]
+
+
+def forbjudna_metoder(lektioner: list[dict] | None,
+                      bokavsnitt: list[dict] | None, *, till: int,
+                      provdatum: str = "",
+                      delmoment: list[dict] | None = None) -> list[dict]:
+    """BÅDA källorna, inte den ena ELLER den andra (2026-09-19).
+
+    Förbudslistan byggdes förut ur kalendern, och bokens register lästes bara
+    när kalendern teg. Omprov 87 visade vad det kostar: uppgift 6 a) krävde en
+    ekvation med den obekanta i nämnaren, kapitel 2, på ett prov över
+    kapitel 1. Metoden stod i bokens register direkt efter provets sidspann,
+    men kalendern hade rader efter provdagen, så registret lästes aldrig.
+
+    Bokens register är dessutom den bredare källan av de två: det bär hela
+    boken, medan kalendern bara bär de lektioner som råkar vara inlagda. Att
+    ha kalendern FÖRST är ändå rätt, den är lärarens egna ord för samma
+    metoder, och _delmomentlista behåller den första stavningen av en rubrik
+    som förekommer i båda.
+
+    Subtraktionen och taket är `rensa_forbjudna`:s, oförändrade: en rubrik som
+    klassen faktiskt haft kan inte samtidigt vara förbjuden."""
+    ur_kalendern = forbjudna_ur_lektioner(lektioner or [], till=till,
+                                          provdatum=provdatum)
+    ur_boken = forbjudna_ur_avsnitt(bokavsnitt or [], till=till)
+    kanda = {_delmomentnamn(f["metod"]).casefold() for f in ur_kalendern}
+    samman = ur_kalendern + [f for f in ur_boken
+                             if _delmomentnamn(f["metod"]).casefold()
+                             not in kanda]
+    # Bokens ordning igen: sammanslagningen bröt den, och taket klipps i
+    # bokens ordning så att det som ligger NÄRMAST kapitlet överlever.
+    samman.sort(key=lambda f: (_sidspann_tal(f.get("sidor")) or (10**6, 0)))
+    return rensa_forbjudna(samman, delmoment)
 
 
 def build_forbjudet(forbjudna: list[dict]) -> str:
@@ -1968,6 +2017,7 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
                  bok: str = "", boknivaer: str = "", forlaga: str = "",
                  spridning: str = "", delmoment: str = "",
                  forbjudet: str = "", forbehall: str = "", forebild: str = "",
+                 omprov: str = "",
                  hjalpmedel: str = "",
                  svart: str = "", fokus: str = "", inriktning: str = "",
                  profil: str = "prov", koder: list[str] | None = None,
@@ -2082,6 +2132,13 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
     # lärarens remsa och ska inte röras (build_forebild).
     if forebild:
         block.append(forebild)
+    # OMPROVSPLANEN står efter bokblocken och före förlagan: den är en plan
+    # över pappret som ska skrivas, inte en källa att skriva ur, och den ska
+    # läsas med uppdraget i sikte. Tom sträng för varje prov som inte är ett
+    # omprov (build_omprov), då är prompten byte för byte den som gick i väg
+    # förut.
+    if omprov:
+        block.append(omprov)
     # Förlagan (källdörr 4, pardokumentets andra hand) står närmast uppdraget:
     # «gör som det här pappret» är det starkaste önskemålet läraren kan ge, och
     # det ska inte tappas bakom minnet, boken eller undvik-listan.
@@ -6192,6 +6249,883 @@ def doma_delmoment(exam: dict, delmoment: list[dict] | None, *, model: str,
     return metodfynd(_json_objekt(raw))
 
 
+# ── VIKTEN, NIVÅN OCH MÄRKNINGEN (2026-09-19, tre granskningar samma dag) ──
+# Läraren granskade prov 85 (IndA 2a, kap 1), 86 (NA26F 1c, kap 1–2) och 87
+# (omprov TE26A 1c, kap 1) och fann samma sorts fel i alla tre. Täckningen
+# fanns redan och sa «godkänt» om varenda ett av dem, för den räknade EN sak:
+# finns det en uppgift med rätt etikett?
+#
+#   * NIVÅN. 2.1 Ekvationer bar noll E-poäng i prov 86, och olikheterna bar en
+#     enda A-uppgift. Ett avsnitt vars enda uppgift är A är oprövat för den
+#     elev som läser för E, och det är hon provet mäter först.
+#   * VIKTEN. 2.5 bar 9 poäng på två lektioner medan hela kapitel 1 bar 5 på
+#     sex. En uppgift kan vara värd en poäng eller fem, så en räkning av
+#     UPPGIFTER säger ingenting om hur provet är fördelat.
+#   * MÄRKNINGEN. 1.3 förenkling prövades inte alls fast etiketten sa så,
+#     prov 86 bar ett avsnitt «2.6» som inte finns i boken, och prov 85 gav
+#     poäng för digitalt verktyg på en uppgift vars delmoment var pq-formeln,
+#     som ingen bedömningsrad nämner.
+#
+# Alltså tre mått till, alla deterministiska, alla utan modellanrop, och alla
+# i SAMMA reparationsrunda som de gamla (_raknade_fynd): fynden lagas genom
+# att uppgifter byts ut, precis som täckningens egna.
+
+# Hur mycket över sin andel ett moment får bära innan det är en snedfördelning
+# och inte en avrundning. Två gånger är trubbigt med flit: ett prov på tolv
+# uppgifter fördelar aldrig poängen exakt, och en vakt som fäller på tio
+# procents avvikelse hade bett om en ny fördelning varje gång.
+TACKNING_OVERVIKT = 2.0
+# … men aldrig på småtal. Ett moment som «borde» bära 1,5 poäng och bär 4 är
+# inte snedfördelat, det är ett prov med få poäng. Överskottet ska vara stort
+# nog att gå att flytta.
+TACKNING_MINSTA_OVERSKOTT = 3.0
+# Samma tak och samma skäl som DELMOMENT_MAX_FYND: reparationen ska BYTA UT
+# uppgifter, inte skriva om pappret.
+VIKT_MAX_FYND = 3
+# … och ingen fördelningsvakt alls på ett papper som inte HAR en fördelning.
+# Fyra uppgifter på tre avsnitt kan inte både spegla undervisningstiden och
+# bära en E-poäng per avsnitt, och ett krav som inte går att uppfylla är
+# ingen vakt utan en runda i onödan. Sex är minsta verkliga prov
+# (exam_spec.foreslag_antal ger sex vid en knapp timme); de tre granskade
+# proven hade tolv, tretton och elva uppgifter.
+TACKNING_MINSTA_PAPPER = 6
+
+
+def _trippel(varde) -> tuple[int, int, int]:
+    try:
+        e, c, a = (int(v) for v in (varde or (0, 0, 0)))
+    except (TypeError, ValueError):
+        return (0, 0, 0)
+    return (e, c, a)
+
+
+def _uppgiftspoang(u: dict) -> tuple[int, int, int]:
+    """Uppgiftens (E, C, A) med deluppgifterna inräknade.
+
+    Föräldern till deluppgifter bär (0, 0, 0) enligt schemat
+    (exam_spec.ExamItem), så summan är uppgiftens hela värde och aldrig en
+    dubbelräkning."""
+    e, c, a = _trippel(u.get("poang") if isinstance(u, dict) else None)
+    for d in ((u.get("deluppgifter") or []) if isinstance(u, dict) else []):
+        if isinstance(d, dict):
+            de, dc, da = _trippel(d.get("poang"))
+            e, c, a = e + de, c + dc, a + da
+    return (e, c, a)
+
+
+def _uppgiftsinnehall(u: dict) -> str:
+    """Allt en vakt kan mäta uppgiften på: stammen, deluppgifternas texter,
+    facit och bedömningsraderna.
+
+    FACIT OCH BEDÖMNING MÅSTE MED. Prov 85:s uppgift om andragradsekvationer
+    prövade aldrig pq-formeln, och det syntes inte i uppgiftstexten, det
+    syntes i bedömningsraden, som gav poäng för «löser ekvationen med
+    digitalt verktyg». Det är där en uppgift avslöjar vilken metod den
+    egentligen kräver."""
+    if not isinstance(u, dict):
+        return ""
+    bitar = [str(u.get(f) or "") for f in ("text", "losning", "bedomning")]
+    for d in (u.get("deluppgifter") or []):
+        if isinstance(d, dict):
+            bitar += [str(d.get(f) or "")
+                      for f in ("text", "losning", "bedomning")]
+    return " ".join(b for b in bitar if b)
+
+
+def _undervisningsvikt(d: dict) -> float:
+    """Undervisningstiden bakom ETT delmoment.
+
+    Lektionerna först (de är tiden), sidspannet som reserv för en lista som
+    saknar fältet, ett gammalt anrop, eller en lista som gått genom en
+    serialisering. Golvet är ett: ett delmoment som undervisats alls väger
+    något."""
+    lektioner = 0
+    try:
+        lektioner = int(d.get("lektioner") or 0)
+    except (TypeError, ValueError):
+        lektioner = 0
+    sp = _sidspann_tal(d.get("sidor"))
+    sidor = (sp[1] - sp[0] + 1) if sp else 0
+    return float(lektioner or sidor or 1)
+
+
+def _viktade_andelar(vikter: dict[str, float], total: float
+                     ) -> dict[str, float]:
+    summa = sum(vikter.values()) or 1.0
+    return {namn: total * v / summa for namn, v in vikter.items()}
+
+
+def _overvikt(har: float, vantat: float) -> bool:
+    return (har > TACKNING_OVERVIKT * vantat
+            and har - vantat >= TACKNING_MINSTA_OVERSKOTT)
+
+
+def delmomentvikt(exam: dict, delmoment: list[dict] | None) -> list[dict]:
+    """Bär varje undervisat delmoment POÄNG i proportion till sin tid?
+
+    Syskon till delmomenttackning, och den räknar det den inte räknar:
+    täckningen frågar om det finns en uppgift, den här frågar hur mycket den
+    är värd. Två delmoment kan båda ha «en uppgift» och ändå bära 1 poäng
+    respektive 9.
+
+    En uppgift som bär två delmoment delar sina poäng lika mellan dem: den
+    prövar båda, och att låta den räknas helt på båda hade gjort summan större
+    än provet.
+
+    FAIL-OPEN i tre lägen, samma tre som täckningen har: tom lista, ingen
+    uppgift som bär fältet, och ett papper utan poäng alls. Nollfyndet
+    upprepar dessutom ALDRIG täckningens: bär delmomentet ingen uppgift har
+    delmomenttackning redan sagt det, och två rader om samma lucka hade fått
+    reparationen att byta ut två uppgifter."""
+    if not delmoment:
+        return []
+    uppgifter = [u for u in ((exam or {}).get("uppgifter") or [])
+                 if isinstance(u, dict)]
+    if len(uppgifter) < TACKNING_MINSTA_PAPPER:
+        return []
+    barare = _delmomentbarare(exam, delmoment)
+    if not any(barare.values()):
+        return []
+    poang: dict[str, float] = {d["delmoment"]: 0.0 for d in delmoment}
+    for i, u in enumerate(uppgifter, 1):
+        egna = [namn for namn, nr in barare.items() if i in nr]
+        if not egna:
+            continue
+        e, c, a = _uppgiftspoang(u)
+        for namn in egna:
+            poang[namn] = poang.get(namn, 0.0) + (e + c + a) / len(egna)
+    total = sum(poang.values())
+    if total <= 0:
+        return []
+    vantat = _viktade_andelar(
+        {d["delmoment"]: _undervisningsvikt(d) for d in delmoment}, total)
+    # EN TOM RUTA OCH EN ÖVERFULL ÄR SAMMA FEL SETT FRÅN TVÅ HÅLL, och
+    # täckningen äger det: dess fynd säger redan «byt UT en uppgift ur det
+    # delmoment som har flest». Stod övervikten bredvid den raden skulle
+    # reparationen få två order om samma byte, och den som lyder båda flyttar
+    # poängen två gånger.
+    lucka = any(not barare.get(d["delmoment"]) for d in delmoment)
+    fel: list[dict] = []
+    for d in delmoment:
+        namn = d["delmoment"]
+        har, bor = poang.get(namn, 0.0), vantat.get(namn, 0.0)
+        if lucka and har > 0:
+            continue
+        if har <= 0 and barare.get(namn):
+            fel.append(_err(
+                "uppgifter", "delmomentvikt",
+                f"Delmomentet {namn} (s. {d['sidor']}) är märkt på en uppgift "
+                "men bär NOLL poäng, uppgiften ger sina poäng på något annat. "
+                "Ge den poäng som svarar mot det delmomentet, eller byt UT den "
+                "mot en uppgift som prövar delmomentet och har poäng."))
+        elif _overvikt(har, bor):
+            fel.append(_err(
+                "uppgifter", "delmomentvikt",
+                f"Delmomentet {namn} (s. {d['sidor']}) bär {har:.0f} av "
+                f"provets {total:.0f} poäng men undervisades på "
+                f"{_undervisningsvikt(d):.0f} lektion(er) av "
+                f"{sum(_undervisningsvikt(x) for x in delmoment):.0f}, det "
+                f"borde bära ungefär {bor:.0f} poäng. Flytta poäng härifrån "
+                "till ett delmoment som bär för lite: sänk poängen på en av "
+                "uppgifterna här och höj på en uppgift ur ett magert "
+                "delmoment, eller byt ut en av uppgifterna. Provet ska "
+                "spegla undervisningstiden."))
+    return fel[:VIKT_MAX_FYND]
+
+
+def _avsnittsvikt(a: dict) -> float:
+    """Kapitelramens vikt: bokens sidantal, jämnt när boken är stängd.
+
+    Fältet `sidor` betyder något annat här än i delmomentlistan, det är ett
+    ANTAL och inte ett spann (bok.avsnittslista), och avsnitt_ur_moment sätter
+    det till noll när momentraden är enda källan. Samma villkor som
+    mal_per_avsnitt redan vilar på."""
+    try:
+        return float(int(a.get("sidor") or 0)) or 1.0
+    except (TypeError, ValueError):
+        return 1.0
+
+
+def _avsnittsbarare(exam: dict, avsnitt: list[dict]) -> dict[str, list[int]]:
+    """{avsnitt: [uppgiftsnummer]}, exakt match på numret, som ramen skrivs.
+
+    Ingen delsträngsmatchning här, till skillnad från delmomenten: «1.1» är
+    ett nummer och inte en rubrik, och en delsträngsmatchning hade låtit
+    «2.1» räknas som «1.1»."""
+    koder = {str(a.get("avsnitt") or "").strip() for a in avsnitt}
+    ut: dict[str, list[int]] = {k: [] for k in koder if k}
+    for i, u in enumerate((exam or {}).get("uppgifter") or [], 1):
+        if not isinstance(u, dict):
+            continue
+        k = str(u.get("avsnitt") or "").strip()
+        if k in ut:
+            ut[k].append(i)
+    return ut
+
+
+def avsnittsniva(exam: dict, avsnitt: list[dict],
+                 bokuppgifter: list[dict] | None = None) -> list[dict]:
+    """Kapitelramen mätt på NIVÅ, VIKT och MÄRKNING i stället för på antal.
+
+    Tre fynd, alla ur prov 86:
+
+    1. AVSNITT UTAN E-POÄNG. Olikheterna bar en enda A-uppgift, och 2.1
+       Ekvationer noll E-poäng. Den elev som läser för E mötte då ett avsnitt
+       hon inte kunde visa någonting på. Kravet är en E-poäng per avsnitt som
+       alls är med, inte en E-uppgift: en (1, 1, 0) räcker.
+    2. AVSNITT SOM INTE FINNS. En uppgift stod märkt «2.6», och kapitlet
+       slutar på 2.5. En etikett utanför ramen är inget avsnitt utan ett
+       påhitt, och den räknas heller inte av avsnittstackning, luckan den
+       lämnar syns alltså på två ställen om den inte namnges.
+    3. FÖREBILDEN UTANFÖR SIDSPANNET. Samma mätning som delmomenttackning
+       gör, och av samma skäl: etiketten är modellens självrapport, boken vet
+       var uppgiften står. Bara när sidan ligger i ETT ANNAT avsnitt i samma
+       kapitel säger den något, kapitlets blandade uppgifter hör till inget
+       avsnitt alls.
+
+    FAIL-OPEN med samma två villkor som avsnittstackning: färre än två avsnitt
+    är ingen ram, och ingen uppgift som bär fältet betyder att pappret skrevs
+    innan fältet fanns."""
+    if len(avsnitt or []) < 2:
+        return []
+    uppgifter = [u for u in ((exam or {}).get("uppgifter") or [])
+                 if isinstance(u, dict)]
+    burna = [str(u.get("avsnitt") or "").strip() for u in uppgifter]
+    if not any(burna):
+        return []
+    fel: list[dict] = []
+    kanda = {str(a.get("avsnitt") or "").strip(): a for a in avsnitt}
+    namn = {k: (a.get("etikett") or k) for k, a in kanda.items()}
+    for i, k in enumerate(burna, 1):
+        if k and k not in kanda:
+            fel.append(_err(
+                f"uppgift {i}", "avsnittsmarkning",
+                f"Uppgift {i} är märkt avsnitt «{k}», som inte finns i "
+                f"kapitlet. Avsnitten är {', '.join(sorted(kanda))}. Skriv om "
+                "uppgiften så att den hör till ett av dem och rätta fältet "
+                "\"avsnitt\"."))
+    # FÖREBILDEN mot avsnittets egna sidor. Bara när boken är uppslagen och
+    # avsnittet har ett verkligt sidspann (avsnitt_ur_moment ger noll).
+    sida_for: dict[int, int] = {}
+    for r in (bokuppgifter or []):
+        try:
+            if r.get("nr") and r.get("sida"):
+                sida_for[int(r["nr"])] = int(r["sida"])
+        except (TypeError, ValueError):
+            continue
+
+    def inne(a: dict, sida: int) -> bool:
+        try:
+            fran, till = int(a.get("fran") or 0), int(a.get("till") or 0)
+        except (TypeError, ValueError):
+            return False
+        return fran > 0 and till >= fran and fran <= sida <= till
+
+    for i, (u, k) in enumerate(zip(uppgifter, burna), 1):
+        if k not in kanda:
+            continue
+        sida = _forebildssida(u, sida_for)
+        if sida is None or inne(kanda[k], sida):
+            continue
+        ratt = [x for x in avsnitt if inne(x, sida)]
+        if not ratt:
+            continue
+        fb = u.get("forebild") or {}
+        fel.append(_err(
+            f"uppgift {i}", "avsnittsmarkning",
+            f"Uppgift {i} är märkt avsnitt {namn.get(k, k)} men bygger på "
+            f"bokuppgift {fb.get('nr')} (s. {sida}), som står i "
+            f"{ratt[0].get('etikett') or ratt[0]['avsnitt']}. Antingen är "
+            "märkningen fel eller så prövar uppgiften fel avsnitt, rätta det "
+            "som är fel, och behåll uppgiftens del och poäng."))
+    # FÖRDELNINGEN prövas bara på ett papper som har en fördelning. Märkningen
+    # ovan gäller varje papper, en etikett som inte finns i boken är fel hur
+    # kort provet än är, men «en E-poäng per avsnitt» går inte att uppfylla
+    # på fyra uppgifter fördelade över fem avsnitt. Se TACKNING_MINSTA_PAPPER.
+    if len(uppgifter) < TACKNING_MINSTA_PAPPER:
+        return fel[:VIKT_MAX_FYND]
+    barare = _avsnittsbarare(exam, avsnitt)
+    poang: dict[str, float] = {}
+    epoang: dict[str, float] = {}
+    for k, nummer in barare.items():
+        e = c = a = 0
+        for n in nummer:
+            de, dc, da = _uppgiftspoang(uppgifter[n - 1])
+            e, c, a = e + de, c + dc, a + da
+        poang[k], epoang[k] = float(e + c + a), float(e)
+    total = sum(poang.values())
+    if total <= 0:
+        return fel[:VIKT_MAX_FYND]
+    vantat = _viktade_andelar({str(a.get("avsnitt") or "").strip():
+                               _avsnittsvikt(a) for a in avsnitt}, total)
+    # Samma regel som delmomentvikt: står ett avsnitt tomt är övervikten på
+    # ett annat bara samma sak sagd två gånger, och avsnittstackning har
+    # redan sagt den med anvisningen «byt ut en uppgift ur det avsnitt som
+    # har flest». E-poängen prövas ändå, den lagas inte av ett byte.
+    lucka = any(not barare.get(str(a.get("avsnitt") or "").strip())
+                for a in avsnitt)
+    for a in avsnitt:
+        k = str(a.get("avsnitt") or "").strip()
+        if not barare.get(k):
+            continue                     # täckningens fynd, inte vårt
+        if epoang.get(k, 0.0) <= 0:
+            fel.append(_err(
+                "uppgifter", "avsnittsniva",
+                f"Avsnitt {namn.get(k, k)} bär noll E-poäng, uppgifterna där "
+                "ger bara C- och A-poäng. Den elev som läser för E kan då inte "
+                "visa någonting på avsnittet. Sänk en av avsnittets uppgifter "
+                "till E-nivå, eller lägg en E-poäng i den: en (1, 1, 0) räcker, "
+                "det behöver inte bli en egen uppgift."))
+        elif not lucka and _overvikt(poang.get(k, 0.0), vantat.get(k, 0.0)):
+            fel.append(_err(
+                "uppgifter", "avsnittsvikt",
+                f"Avsnitt {namn.get(k, k)} bär {poang[k]:.0f} av provets "
+                f"{total:.0f} poäng men är {_avsnittsvikt(a):.0f} av kapitlets "
+                f"{sum(_avsnittsvikt(x) for x in avsnitt):.0f} sidor, det "
+                f"borde bära ungefär {vantat.get(k, 0.0):.0f} poäng. Flytta "
+                "poäng till ett avsnitt som bär för lite, eller byt ut en av "
+                "uppgifterna här mot en ur ett magrare avsnitt."))
+    return fel[:VIKT_MAX_FYND]
+
+
+def delmomentmarkning(exam: dict, delmoment: list[dict] | None) -> list[dict]:
+    """Nämner uppgiften den metod etiketten lovar?
+
+    Fortsättningen på ae9d859, som slutade lita blint på etiketten när boken
+    kunde säga emot. Boken kan inte alltid det, en uppgift utan förebild har
+    ingen sida att slås upp på, men uppgiften kan säga emot sig själv, och
+    det gjorde prov 85: delmomentet var pq-formeln och varken uppgiftstexten,
+    facit eller någon bedömningsrad nämnde en andragradsekvation. Poängen gavs
+    för «löser med digitalt verktyg».
+
+    MÄTNINGEN är rubrikens egna ord mot uppgiftens hela innehåll, med
+    stamregeln i course_data (så att «faktorisera» svarar mot «Faktorisering
+    och förkortning»). Kravet är att NÅGOT av rubrikens ord ska finnas
+    någonstans, det är ett lågt krav med flit, för en falsk fällning byter ut
+    en bra uppgift. Rubriker utan betydelsebärande ord prövas inte alls."""
+    if not delmoment:
+        return []
+    uppgifter = [u for u in ((exam or {}).get("uppgifter") or [])
+                 if isinstance(u, dict)]
+    barare = _delmomentbarare(exam, delmoment)
+    if not any(barare.values()):
+        return []
+    fel: list[dict] = []
+    for d in delmoment:
+        namn = d["delmoment"]
+        sokta = course_data.ordstammar(_delmomentnamn(namn))
+        if not sokta:
+            continue
+        for n in barare.get(namn, []):
+            if course_data.namner(_uppgiftsinnehall(uppgifter[n - 1]), sokta):
+                continue
+            fel.append(_err(
+                f"uppgift {n}", "delmomentmarkning",
+                f"Uppgift {n} är märkt delmomentet «{namn}» (s. {d['sidor']}) "
+                "men varken uppgiftstexten, facit eller bedömningsraderna "
+                "nämner metoden, den prövar alltså något annat, och "
+                "delmomentet står kvar oprövat. Skriv om uppgiften så att den "
+                "KRÄVER metoden, och låt bedömningsraden namnge den. Behåll "
+                "del, poäng och förmåga."))
+    return fel[:VIKT_MAX_FYND]
+
+
+# ── CENTRALT INNEHÅLL: det KRYSSADE ska prövas, och taggen ska hålla ──────
+# validate_ci (exam_spec) frågar åt ena hållet: bär varje uppgift en av de
+# valda koderna? Ingen frågade åt det andra: fick varje vald kod en uppgift?
+# Prov 85 saknade datorlektionens kalkylblad (DIG-1) helt, och prov 87 hade
+# två uppgifter om generella samband utan att någon av dem bar PRO-1.
+#
+# Den andra halvan är TAGGNINGENS sanning: uppgift 1 i prov 85 stod taggad
+# ALG-6 och var en parentesförenkling. Samma mätning som delmomentmärkningen
+# ovan, mot punktens egen text ur course_data.
+CI_MAX_FYND = 3
+# Digitala verktyg har en egen rad i fyndet. Läraren håller en datorlektion
+# per kapitel och den punkten är den som tystast faller bort: den prövas inte
+# av någon vanlig uppgift, den kräver att provet BER om verktyget.
+_CI_DIGITALT = "DIG"
+
+
+def ci_tackning(exam: dict, koder: list[str] | None) -> list[dict]:
+    """Fick varje KRYSSAD innehållspunkt minst en uppgift?
+
+    FAIL-OPEN utan koder (läraren kryssade inget, och då finns inget
+    kontrakt) och utan en enda taggad uppgift (pappret skrevs innan fältet
+    låstes, eller grammatiken körde utan enum)."""
+    valda = [k for k in (koder or []) if str(k or "").strip()]
+    if not valda:
+        return []
+    taggade: set[str] = set()
+    for u in ((exam or {}).get("uppgifter") or []):
+        if isinstance(u, dict):
+            taggade.update(str(k) for k in (u.get("innehall") or []))
+    if not taggade:
+        return []
+    etiketter = course_data.kodtexter()
+    fel: list[dict] = []
+    for k in valda:
+        if k in taggade:
+            continue
+        namn = etiketter.get(k) or k
+        extra = (" Punkten är kursens DIGITALA innehåll, och den prövas bara "
+                 "om en uppgift faktiskt ber eleven använda verktyget och "
+                 "redovisa hur." if f"-{_CI_DIGITALT}-" in k else "")
+        fel.append(_err(
+            "uppgifter", "citackning",
+            f"Innehållspunkten {k} ({_kort(namn, 90)}) är kryssad och "
+            "undervisad men ingen uppgift prövar den. Byt UT en uppgift ur "
+            "den punkt som har flest mot en som prövar den här, samma del och "
+            "samma poäng, och sätt koden i fältet \"innehall\"." + extra))
+    return fel[:CI_MAX_FYND]
+
+
+def ci_taggning(exam: dict, koder: list[str] | None) -> list[dict]:
+    """Prövar uppgiften den punkt den är taggad med?
+
+    Samma lågt satta krav som delmomentmärkningen: NÅGOT av punktens ord ska
+    finnas i uppgiftens text, facit eller bedömning. Koder kursfilerna inte
+    känner prövas inte, de är lärarens egna eller en äldre kursversion, och
+    en vakt ska inte fälla det den inte kan läsa."""
+    valda = {k for k in (koder or []) if str(k or "").strip()}
+    if not valda:
+        return []
+    etiketter = course_data.kodtexter()
+    fel: list[dict] = []
+    for i, u in enumerate((exam or {}).get("uppgifter") or [], 1):
+        if not isinstance(u, dict):
+            continue
+        egna = [k for k in (u.get("innehall") or []) if k in valda]
+        if not egna:
+            continue
+        # NÅGON av uppgiftens koder ska hålla. En uppgift som prövar två
+        # punkter och träffar den ena är rätt taggad.
+        innehall = _uppgiftsinnehall(u)
+        traffar = [k for k in egna
+                   if k not in etiketter
+                   or course_data.namner(innehall,
+                                         course_data.ordstammar(etiketter[k]))]
+        if traffar:
+            continue
+        namn = ", ".join(f"{k} ({_kort(etiketter.get(k) or k, 60)})"
+                         for k in egna)
+        fel.append(_err(
+            f"uppgift {i}", "citaggning",
+            f"Uppgift {i} är taggad {namn}, men ingenting i uppgiften, facit "
+            "eller bedömningen rör den punkten. Sätt den kod uppgiften "
+            "faktiskt prövar, eller skriv om uppgiften så att den prövar den "
+            "taggade punkten. Behåll del, poäng och förmåga."))
+    return fel[:CI_MAX_FYND]
+
+
+# ── A-POÄNGENS EGEN VAKT (2026-09-19, omprov 87) ─────────────────────────
+# Fem av sju A-poäng i omprovet bar ett TIPS som gav bort metoden («Förkorta
+# bort 800 och subtrahera exponenterna»), ingen uppgift var en «undersök om»,
+# och varenda visa-uppgift sa att påståendet stämmer. niva_rubrik säger rakt
+# ut vad A är: det avgörande steget är en insikt, och sanningsvärdet är inte
+# givet på förhand. Ett tryckt tips tar bort insikten; det som är kvar är en
+# procedur med fler steg.
+#
+# nivasignaler har redan «visa att» med A-poäng som VARNING. Varningen fäller
+# aldrig ensam, och det är rätt på ett prov som också har en öppen uppgift:
+# där är formen ett av flera sätt att ställa en A-fråga. Den här vakten fäller,
+# och villkoret är just det som saknades i 87: provet har INGEN uppgift alls
+# där sanningsvärdet är okänt.
+A_MAX_FYND = 4
+
+# Tipset som står som tips: «Tips:», «(Ledtråd: …)», «Ledning.» Formen och
+# inte innehållet, för innehållet går inte att läsa deterministiskt, och det
+# är formen läraren såg fem gånger.
+_TIPS_RE = re.compile(
+    r"(?<![\wåäö])(tips|ledtråd(?:ar)?|ledning|vägledning|hjälp)\s*[:.]",
+    re.IGNORECASE)
+
+
+def a_nivavakt(exam: dict) -> list[dict]:
+    """A-poäng som inte kräver en insikt.
+
+    TVÅ FYND, och det andra har ett provvillkor:
+
+    1. TIPSET. En A-uppgift med «Tips:» i texten har fått sin metod utdelad.
+       Fälls alltid, det finns ingen A-uppgift där ett tryckt tips är rätt.
+    2. DET GIVNA SANNINGSVÄRDET, men bara när provet saknar en enda uppgift
+       med okänt sanningsvärde. Ett prov med «Undersök om …» någonstans har
+       visat att det kan ställa frågan; ett prov där varenda visa-uppgift
+       säger att påståendet stämmer har inte det, och då är A-poängen
+       C-poäng med ett annat namn."""
+    enheter = domarenheter(exam)
+    if not enheter:
+        return []
+
+    def text(e: dict) -> str:
+        return f"{e['kort'].get('stam', '')} {e['kort'].get('text', '')}"
+
+    oppet = any(_OPPEN_RE.search(text(e)) for e in enheter)
+    fel: list[dict] = []
+    for e in enheter:
+        if e["niva"] != "A":
+            continue
+        nr, t = e["nr"], text(e)
+        m = _TIPS_RE.search(t)
+        if m:
+            fel.append(_err(
+                f"uppgift {nr}", "anivavakt",
+                f"Uppgift {nr} ger A-poäng men bär ett tips («{m.group(0)}») "
+                "som talar om metoden. A-nivån är att eleven SER vad som ska "
+                "göras, står steget i uppgiften är det som återstår en "
+                "procedur. Stryk tipset. Blir uppgiften då för svår för sin "
+                "plats är det uppgiften som ska bytas, inte tipset som ska "
+                "stå kvar."))
+        elif not oppet and _GIVET_RE.search(t):
+            fel.append(_err(
+                f"uppgift {nr}", "anivavakt",
+                f"Uppgift {nr} ger A-poäng men ber eleven visa ett påstående "
+                "som redan sägs vara sant, och provet har inte EN enda uppgift "
+                "där sanningsvärdet är okänt. Vänd minst en av dem: "
+                "«Undersök om …», «Avgör om … gäller för alla …», «Utred "
+                "vilka värden …». Behåll uppgiftens del, poäng och förmåga."))
+    return fel[:A_MAX_FYND]
+
+
+# ── SPRÅKET: KURSENS RUBRIKORD OCH DELENS KRAVRAD (2026-09-19, prov 85) ──
+# Två fynd, båda räknebara, båda ur samma granskning:
+#
+#   * Prov 85 var ett 2a-prov och saknade ordet «Motivera» helt. RUBRIK_PER_KURS
+#     säger att «Motivera ditt svar» förekommer upp till sju gånger i ett
+#     2a-prov och högst en gång i ett 1a-prov. Det är en mätning, och en
+#     mätning går att hålla.
+#   * Uppgifter som krävde en redovisning låg i en del vars kravrad säger
+#     «Endast svar krävs». Kravraden följer uppgiftens TYP (exam_latex._krav):
+#     typen «rutin» trycker «Endast svar krävs», allt annat «Fullständig
+#     lösning krävs». En rutinuppgift vars text ber om en motivering säger
+#     alltså emot sin egen kravrad på pappret.
+SPRAK_MAX_FYND = 4
+
+# Uppmaningen som KRÄVER att något syns: «Motivera», «Förklara varför»,
+# «Redovisa», «Visa hur du …». Inte «Visa att …», det är ett påstående som
+# ska bevisas, inte ett krav på redovisningsform.
+_REDOVISNINGSUPPMANING_RE = re.compile(
+    r"(?<![\wåäö])(motivera|förklara|redovisa|visa hur|beskriv hur"
+    r"|visa dina beräkningar|visa ditt tillvägagångssätt)(?![\wåäö])",
+    re.IGNORECASE)
+
+
+def kravradsvakt(exam: dict) -> list[dict]:
+    """Säger uppgiftens typ samma sak som uppgiftens text?
+
+    Typen «rutin» trycker «Endast svar krävs.» på pappret, och delens egen rad
+    säger «Endast svar krävs, svaret skrivs i provet» när alla uppgifter i
+    delen är kortsvar. En rutinuppgift som ber eleven motivera ger då två
+    motstridiga besked på samma papper, och eleven vet inte vilket som gäller
+    när hon rättas.
+
+    Åt andra hållet fälls ingenting. En redovisningsuppgift som inte säger
+    «motivera» är helt i sin ordning, kravraden på pappret säger redan
+    «Fullständig lösning krävs», och nationella provet skriver «Bestäm … med
+    hjälp av derivatans definition» utan ett ord om redovisning."""
+    fel: list[dict] = []
+    for e in domarenheter(exam):
+        if (e.get("typ") or "") != "rutin":
+            continue
+        text = f"{e['kort'].get('stam', '')} {e['kort'].get('text', '')}"
+        m = _REDOVISNINGSUPPMANING_RE.search(_rentext(text))
+        if not m:
+            continue
+        fel.append(_err(
+            f"uppgift {e['nr']}", "kravrad",
+            f"Uppgift {e['nr']} har typen «rutin», och då trycker pappret "
+            "«Endast svar krävs» på den, men texten ber om «"
+            f"{m.group(0)}». Välj ett: stryk kravet på redovisning ur texten, "
+            "eller sätt typen till \"redovisning\" (eller \"resonemang\") så "
+            "att kravraden och uppgiften säger samma sak. Behåll del, poäng "
+            "och förmåga."))
+    return fel[:SPRAK_MAX_FYND]
+
+
+def rubrikordsvakt(exam: dict, kurs: str = "") -> list[dict]:
+    """Bär provet kursens egna frågeformer?
+
+    Talen står i niva_rubrik.KRAVORD_PER_KURS och är avlästa ur samma prov som
+    rubriken själv. Fälls gör bara det MÄTTA: en kurs där formen förekommer på
+    riktigt ska ha den minst en gång, och en kurs där den förekommer högst en
+    gång ska inte ha den fem. Kurser utan mätning prövas inte."""
+    regel = niva_rubrik.kravord(kurs)
+    if not regel:
+        return []
+    texter = " ".join(
+        f"{e['kort'].get('stam', '')} {e['kort'].get('text', '')}"
+        for e in domarenheter(exam))
+    if not texter.strip():
+        return []
+    ren = _rentext(texter)
+    antal = len(regel["monster"].findall(ren))
+    if antal < int(regel.get("minst") or 0):
+        return [_err(
+            "uppgifter", "rubrikord",
+            f"Provet är {regel['kurs']} och använder inte kursens egen "
+            f"frågeform en enda gång: {regel['vad']}. Skriv om minst "
+            f"{regel['minst']} uppgift(er) så att de ber om den, utan att "
+            "ändra del, poäng eller förmåga.")]
+    tak = regel.get("hogst")
+    if tak is not None and antal > int(tak):
+        return [_err(
+            "uppgifter", "rubrikord",
+            f"Provet är {regel['kurs']} och använder {regel['vad']} {antal} "
+            f"gånger; i kursens nationella prov står den högst {tak} gång(er). "
+            "Ersätt de överflödiga med kursens egna former (en fråga som ska "
+            "besvaras, ett alternativ som ska väljas) och behåll poängen.")]
+    return []
+
+
+# ── BILDBESTÄLLNINGEN: SCENEN OCH BEGREPPET SKA HANDLA OM SAMMA SAK ──────
+# Plåtvalet självt (scen.plat) görs av platar.matcha med ett poängtak, och det
+# är den matchningens sak att välja rätt bild. Det som INTE prövades någonstans
+# är beställningen själv: står begreppet, den nyckel matchningen slår upp på, 
+# över huvud taget i scenen den beskriver, och rör scenen uppgiften?
+#
+# Deterministiskt så långt det går, och inte längre: att en åker «passar» en
+# uppgift om exponentiell tillväxt är en bedömning, och den lämnas åt läraren
+# och åt bilddomaren.
+SCEN_MAX_FYND = 3
+
+
+def scenvakt(exam: dict) -> list[dict]:
+    """Handlar bildbeställningen om den uppgift den står vid?
+
+    `begrepp` är matchningens ingång, platar.matcha slår upp plåten på den, 
+    och hör begreppet inte ihop med uppgiften hamnar en bild om något annat
+    bredvid uppgiften på pappret.
+
+    BARA BEGREPPET MOT UPPGIFTEN, och det är inte en halvmesyr utan språkets
+    egen gräns: SCENE-stycket skrivs på ENGELSKA (det ska klistras in i
+    lärarens bildverktyg, se app/platar), och att mäta ett svenskt begrepp mot
+    en engelsk text hade fällt varenda scen på varje prov. Den jämförelsen
+    finns alltså inte, och den ska inte finnas.
+
+    Plåten kontrolleras inte heller här: den sätts av appen efter en
+    poängsatt matchning (platar.poang), och en andra, sämre kopia av samma
+    mätning hade bara kunnat säga emot den riktiga."""
+    fel: list[dict] = []
+    for i, u in enumerate((exam or {}).get("uppgifter") or [], 1):
+        if not isinstance(u, dict):
+            continue
+        scen = u.get("scen")
+        if not isinstance(scen, dict):
+            continue
+        begrepp = str(scen.get("begrepp") or "").strip()
+        sokta = course_data.ordstammar(begrepp)
+        if not sokta or course_data.namner(_uppgiftsinnehall(u), sokta):
+            continue
+        fel.append(_err(
+            f"uppgift {i}", "scenvakt",
+            f"Uppgift {i}:s bildbeställning heter «{begrepp}», men varken "
+            "uppgiften, facit eller bedömningen rör det. Bilden hör då till en "
+            "annan uppgift än den står vid. Beställ en bild till DEN HÄR "
+            "uppgiftens situation."))
+    return fel[:SCEN_MAX_FYND]
+
+
+# ─────────────────── OMPROVET: LIKVÄRDIGT, INTE LÄTTARE (2026-09-19) ────────
+# Omprov 87 (TE26A, Ma 1c, kapitel 1) skulle vara samma prov med andra tal.
+# Det blev ett annat prov: √64 där originalet hade √72, en symbolisk uppgift
+# där originalet hade en numerisk, och sedan fem av sju A-poäng med tryckta
+# tips. Alltså lättare på E och C och strängare på A, precis det en elev som
+# skriver om ska slippa, åt båda hållen.
+#
+# Ingenting i kedjan visste att pappret VAR ett omprov. Generatorn fick samma
+# beställning som originalet fick, plus variationsvakten, som säger «skriv inte
+# samma uppgift igen», och den enklaste vägen bort från en gammal uppgift är
+# en lättare.
+#
+# Två saker lagar det, och de hör ihop:
+#   1. REFERENSPROVET GÅR IN I PROMPTEN som en slotplan: samma plats, samma
+#      nivå, samma metod, samma antal steg, nya tal och nytt sammanhang.
+#      Ingen uppgiftstext går in, bara formen: en modell som ser originalets
+#      text skriver om den med nya siffror, och det är just kopian som är
+#      förbjuden.
+#   2. LIKVÄRDIGHETEN RÄKNAS på svaret, slot för slot (likvardighetsvakt).
+#      Deterministiskt, för allt som skulle dömas går att räkna: poängen,
+#      nivån, typen, förmågan och antalet räknesteg i facit.
+
+# Hur mycket färre eller fler steg en ny uppgift får ta innan den är en annan
+# uppgift. Ett steg är ingen skillnad, ett facit kan skriva samma räkning på
+# två rader i stället för tre. Två är det.
+OMPROV_STEGTOLERANS = 2
+OMPROV_MAX_FYND = 5
+
+
+def _slotrad(u: dict, nr: int) -> dict:
+    """EN uppgift som slot: det som ska vara likadant i omprovet."""
+    e, c, a = _uppgiftspoang(u)
+    return {"nr": nr, "del": u.get("del") or "", "typ": u.get("typ") or "",
+            "formaga": u.get("formaga") or "", "poang": [e, c, a],
+            "niva": _niva_ur_poang((e, c, a)) or "",
+            "delmoment": str(u.get("delmoment") or ""),
+            "avsnitt": str(u.get("avsnitt") or ""),
+            "deluppgifter": len([d for d in (u.get("deluppgifter") or [])
+                                 if isinstance(d, dict)]),
+            "steg": _raknesteg(_losningstext(u))}
+
+
+def _losningstext(u: dict) -> str:
+    """Facit för hela uppgiften, deluppgifterna inräknade, måttstocken för
+    hur många räknesteg uppgiften tar (_raknesteg)."""
+    if not isinstance(u, dict):
+        return ""
+    bitar = [str(u.get("losning") or "")]
+    bitar += [str(d.get("losning") or "")
+              for d in (u.get("deluppgifter") or []) if isinstance(d, dict)]
+    return " ".join(b for b in bitar if b)
+
+
+def provslots(exam: dict | None) -> list[dict]:
+    """Provets slotplan. Tom lista när dokumentet inte är ett prov med
+    uppgifter, och då finns ingen mall och ingen likvärdighet att mäta."""
+    return [_slotrad(u, i)
+            for i, u in enumerate((exam or {}).get("uppgifter") or [], 1)
+            if isinstance(u, dict)]
+
+
+def skelett_ur_prov(referens: dict | None) -> list[dict] | None:
+    """Referensprovets form som SKELETT, i exam_spec.balanced_skeleton form.
+
+    Omprovet ska ha samma slots som sitt original, och skelettet är det som
+    faktiskt låser dem (grammatiken byggs på det). Att i stället bygga ett
+    nytt balanserat skelett hade gett ett prov med samma totalpoäng men andra
+    uppgifter på andra platser, och då är slotjämförelsen nedan en jämförelse
+    mellan två olika prov.
+
+    Deluppgifternas tripplar följer med när originalet hade dem: det är de som
+    gör (1, 1, 0) till «a) en E-poäng, b) en C-poäng» i stället för till en
+    uppgift som ger båda på en gång.
+
+    None när referensen inte bär en enda uppgift med poäng, ett tomt skelett
+    hade tagit bort balansen utan att ge något i stället."""
+    slots: list[dict] = []
+    for u in (referens or {}).get("uppgifter") or []:
+        if not isinstance(u, dict):
+            continue
+        e, c, a = _uppgiftspoang(u)
+        rad: dict = {"del": u.get("del") or "B",
+                     "formaga": u.get("formaga") or "B",
+                     "typ": u.get("typ") or "rutin",
+                     "poang": [e, c, a]}
+        delar = [list(_trippel(d.get("poang")))
+                 for d in (u.get("deluppgifter") or []) if isinstance(d, dict)]
+        if delar:
+            rad["delar"] = delar
+        slots.append(rad)
+    if not slots or not any(sum(s["poang"]) for s in slots):
+        return None
+    return slots
+
+
+def build_omprov(referens: dict | None) -> str:
+    """Omprovsblocket, eller TOM STRÄNG.
+
+    Tom när ingen referens skickades in, och det är kassetteregeln och inte en
+    optimering (samma villkor som build_variation och build_spridning): ett
+    vanligt prov ska få exakt den prompt det fick innan omprovsläget fanns.
+
+    UPPGIFTSTEXTERNA STÅR INTE HÄR. Bara formen: plats, del, typ, förmåga,
+    nivå, poäng, delmoment och hur många steg facit tog. En modell som får se
+    originaluppgiften skriver samma uppgift med nya tal, och det är exakt vad
+    ett omprov inte får vara, eleven som skrev originalet har sett den."""
+    slots = provslots(referens)
+    if not slots:
+        return ""
+    rader = []
+    for s in slots:
+        delar = (f", {s['deluppgifter']} deluppgifter"
+                 if s["deluppgifter"] else "")
+        vad = f", delmomentet {s['delmoment']}" if s["delmoment"] else ""
+        rader.append(
+            f"- uppgift {s['nr']}: del {s['del']}, {s['typ']}, förmåga "
+            f"{s['formaga']}, poäng (E/C/A) {tuple(s['poang'])}, nivå "
+            f"{s['niva'] or '–'}{vad}{delar}, facit på cirka {s['steg']} "
+            "räknesteg")
+    return (
+        "DET HÄR ÄR ETT OMPROV. Eleven skriver om ett prov hon redan har "
+        "gjort, och omprovet ska vara LIKVÄRDIGT det, varken lättare eller "
+        "svårare. Nedan står originalets uppgifter som en plan, plats för "
+        "plats:\n" + "\n".join(rader) + "\n"
+        "SAMMA SLOT, NY UPPGIFT. Uppgift n i ditt prov ska ha samma del, samma "
+        "typ, samma förmåga, samma poäng och samma delmoment som uppgift n "
+        "ovan, och kräva lika många räknesteg. Det som ska vara NYTT är talen "
+        "och sammanhanget: andra siffror, en annan situation, en annan "
+        "infallsvinkel på samma metod.\n"
+        "GÖR DEM INTE ENKLARE. Byt inte $\\sqrt{72}$ mot $\\sqrt{64}$, inte en "
+        "numerisk uppgift mot en symbolisk, och lägg inte till ett tips som "
+        "talar om metoden. Regeln om att inte upprepa tidigare uppgifter "
+        "gäller TALEN OCH SAMMANHANGET, aldrig svårighetsgraden: en uppgift "
+        "som är lättare än originalets är inte en ny uppgift, den är ett annat "
+        "prov.\n"
+        "GÖR DEM INTE SVÅRARE HELLER. En A-poäng ska kräva en insikt, som i "
+        "originalet, inte fler räknesteg och inte ett strängare krav.\n")
+
+
+def likvardighetsvakt(exam: dict, referens: dict | None) -> list[dict]:
+    """Är omprovet likvärdigt sitt original, slot för slot?
+
+    Deterministiskt, noll modellanrop: allt som skulle dömas går att räkna.
+    Fyra mått per plats, och alla fyra är det läraren läste av när hon jämförde
+    87 med sitt original:
+
+    * POÄNGEN OCH NIVÅN. En (0, 1, 0) där originalet hade (1, 1, 0) är en
+      annan uppgift för den elev som läser för E.
+    * TYPEN OCH FÖRMÅGAN. En rutinuppgift där originalet hade en redovisning
+      prövar något annat, hur rätt poängen än är.
+    * STEGEN. Facit på två steg där originalet tog fem är en lättare uppgift
+      med samma etikett.
+    * ANTALET. Ett omprov med färre uppgifter än originalet kan inte vara
+      likvärdigt, och fyndet ska säga det rakt ut i stället för att jämföra
+      fel platser med varandra.
+
+    FAIL-OPEN utan referens: varje prov som inte är ett omprov passerar utan
+    att någonting räknas."""
+    mall = provslots(referens)
+    if not mall:
+        return []
+    egna = provslots(exam)
+    if not egna:
+        return []
+    fel: list[dict] = []
+    if len(egna) != len(mall):
+        fel.append(_err(
+            "uppgifter", "likvardighet",
+            f"Omprovet har {len(egna)} uppgifter och originalet {len(mall)}. "
+            "Ett omprov ska ha samma antal uppgifter på samma platser, "
+            "lägg till eller ta bort så att planen stämmer."))
+    for ny, gammal in zip(egna, mall):
+        nr = ny["nr"]
+        avvik: list[str] = []
+        if ny["poang"] != gammal["poang"]:
+            avvik.append(f"poängen är {tuple(ny['poang'])} men ska vara "
+                         f"{tuple(gammal['poang'])}")
+        elif ny["niva"] != gammal["niva"]:
+            avvik.append(f"nivån är {ny['niva'] or '–'} men ska vara "
+                         f"{gammal['niva'] or '–'}")
+        if ny["typ"] != gammal["typ"] and gammal["typ"]:
+            avvik.append(f"typen är «{ny['typ']}» men ska vara "
+                         f"«{gammal['typ']}»")
+        if ny["formaga"] != gammal["formaga"] and gammal["formaga"]:
+            avvik.append(f"förmågan är {ny['formaga']} men ska vara "
+                         f"{gammal['formaga']}")
+        if abs(ny["steg"] - gammal["steg"]) > OMPROV_STEGTOLERANS:
+            riktning = "färre" if ny["steg"] < gammal["steg"] else "fler"
+            avvik.append(f"facit tar {ny['steg']} räknesteg mot originalets "
+                         f"{gammal['steg']}, alltså {riktning} steg, "
+                         "uppgiften är inte lika stor")
+        if not avvik:
+            continue
+        fel.append(_err(
+            f"uppgift {nr}", "likvardighet",
+            f"Uppgift {nr} är inte likvärdig originalets uppgift {nr}: "
+            + "; ".join(avvik) + ". Skriv om uppgiften så att den hamnar på "
+            "originalets plats i provet, samma nivå och samma arbete, andra "
+            "tal och ett annat sammanhang."))
+    return fel[:OMPROV_MAX_FYND]
+
+
 # ── POÄNGVAKTEN: EN POÄNG PER PRESTATION (2026-09-13, spår 7) ────────────
 # Prov 81, uppgift 8: «Teckna ett uttryck för hur mycket kaféet sparar per år
 # med flergångsmuggar och beräkna besparingen då x = 50 000.» Ett poäng, och
@@ -6466,17 +7400,38 @@ def _slapp_poanglaset(fel: list[dict]) -> list[dict]:
 
 def _raknade_fynd(exam: dict, *, avsnitt: list[dict] | None, antal: int | None,
                   delmoment: list[dict] | None, profil: str,
-                  bokuppgifter: list[dict] | None = None) -> list[dict]:
-    """De tre RÄKNADE vakterna i en och samma ordning, på ett ställe.
+                  bokuppgifter: list[dict] | None = None,
+                  koder: list[str] | None = None, kurs: str = "",
+                  referensprov: dict | None = None) -> list[dict]:
+    """ALLA de RÄKNADE vakterna i en och samma ordning, på ett ställe.
 
     Ordningen är prompten läraren annars läser i loggen, och den ska vara
     densamma var vakterna än körs — i fixrundan (_tackning_pass) och i
     slutkontrollen (_slutgrind). Att de står här och inte inne i passet är
     hela spår 9:s poäng: en vakt som bara körs på ett ställe räknar bara på
-    ett mellanläge, och pappret läraren får är ett senare."""
-    return (avsnittstackning(exam, avsnitt or [], antal or 0)
-            + delmomenttackning(exam, delmoment or [], bokuppgifter)
-            + poangvakt(exam, profil))
+    ett mellanläge, och pappret läraren får är ett senare.
+
+    Tre var de 2026-09-13. Efter lärarens tre granskningar 2026-09-19 är de
+    tio, och varenda en är fortfarande gratis: ingen av dem ringer modellen.
+    De nya står EFTER de gamla med flit, täckningens luckor lagas genom att
+    uppgifter byts ut, och de nya fynden justerar uppgifter som finns. Den
+    reparationsrunda som byter ut en uppgift ska läsa bytet först.
+
+    PROVETS EGNA vakter (A-nivån, kravraden, kursens frågeform,
+    likvärdigheten) körs bara på profilen «prov». Ett arbetsblad har ingen
+    A-poäng att skydda och ingen kravrad att motsäga."""
+    fel = (avsnittstackning(exam, avsnitt or [], antal or 0)
+           + delmomenttackning(exam, delmoment or [], bokuppgifter)
+           + poangvakt(exam, profil)
+           + avsnittsniva(exam, avsnitt or [], bokuppgifter)
+           + delmomentvikt(exam, delmoment or [])
+           + delmomentmarkning(exam, delmoment or [])
+           + ci_tackning(exam, koder) + ci_taggning(exam, koder))
+    if profil == "prov":
+        fel += (a_nivavakt(exam) + kravradsvakt(exam)
+                + rubrikordsvakt(exam, kurs)
+                + likvardighetsvakt(exam, referensprov))
+    return fel + scenvakt(exam)
 
 
 def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
@@ -6488,6 +7443,7 @@ def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                    forbjudna: list[dict] | None = None,
                    bokuppgifter: list[dict] | None = None,
                    punkter: list[str] | None = None, inriktning: str = "",
+                   kurs: str = "", referensprov: dict | None = None,
                    doma: bool = True,
                    log_cb: Callable[[str], None] | None = None) -> dict:
     """Kapitelramens kontroll, med SAMMA kontrakt som _rakneverk_pass: högst EN
@@ -6522,7 +7478,8 @@ def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
     # (_slutgrind), och därför står de i en egen funktion.
     fel = _raknade_fynd(exam, avsnitt=avsnitt, antal=antal,
                         delmoment=delmoment, profil=profil,
-                        bokuppgifter=bokuppgifter)
+                        bokuppgifter=bokuppgifter, koder=koder, kurs=kurs,
+                        referensprov=referensprov)
     # Loggraden namnger avsnitten, inte antalet fynd: «Täckningen: 1.1 saknar
     # uppgifter» säger vad som är fel, «1 problem» säger ingenting. Filtret på
     # koden finns för att de andra vakternas meddelanden har en annan
@@ -6589,7 +7546,34 @@ def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
     for kod, rad in (("relevans", "Boken: {n} uppgift(er) utan förebild i "
                                   "kapitlet, byter ut …"),
                      ("begriplighet", "Texten: {n} uppgift(er) är otydligt "
-                                      "skrivna, skriver om …")):
+                                      "skrivna, skriver om …"),
+                     # De fem nya (2026-09-19). Samma regel som raderna ovan:
+                     # loggen namnger VAD som fälldes, inte hur många fynd det
+                     # blev, så att läraren kan läsa efteråt varför en uppgift
+                     # ändrades.
+                     ("avsnittsniva", "Nivån: {n} avsnitt bär ingen E-poäng, "
+                                      "justerar …"),
+                     ("avsnittsvikt", "Fördelningen: {n} avsnitt bär poäng "
+                                      "som inte svarar mot sidantalet …"),
+                     ("delmomentvikt", "Fördelningen: {n} delmoment bär poäng "
+                                       "som inte svarar mot lektionstiden …"),
+                     ("delmomentmarkning", "Märkningen: {n} uppgift(er) prövar "
+                                           "inte det delmoment de är märkta "
+                                           "med, skriver om …"),
+                     ("citackning", "Innehållet: {n} kryssad(e) punkt(er) "
+                                    "saknar uppgift, byter ut …"),
+                     ("citaggning", "Innehållet: {n} uppgift(er) är taggade "
+                                    "med en punkt de inte prövar …"),
+                     ("anivavakt", "A-nivån: {n} A-poäng kräver ingen insikt, "
+                                   "skriver om …"),
+                     ("kravrad", "Kravraden: {n} uppgift(er) säger emot sin "
+                                 "egen typ …"),
+                     ("rubrikord", "Språket: provet använder inte kursens egen "
+                                   "frågeform ({n} fynd) …"),
+                     ("likvardighet", "Omprovet: {n} uppgift(er) är inte "
+                                      "likvärdiga originalets …"),
+                     ("scenvakt", "Bilden: {n} bildbeställning(ar) hör till en "
+                                  "annan uppgift …")):
         n = len([f for f in fel if f["code"] == kod])
         if n:
             log(rad.format(n=n))
@@ -7117,7 +8101,13 @@ SLUTRUNDOR = 1
 #   frågan) och begriplighetsdomaren. Samma sak: domarens fynd står kvar.
 def _raknas_om(fel: dict) -> bool:
     kod, path = fel.get("code"), str(fel.get("path") or "")
-    if kod in ("avsnittstackning", "poangvakt"):
+    # De räknade vakternas egna koder. Alla utom delmomenttackning och
+    # begriplighet är ENBART räknade, ingen domare skriver dem, och då är
+    # koden hela nyckeln.
+    if kod in ("avsnittstackning", "poangvakt", "avsnittsniva", "avsnittsvikt",
+               "avsnittsmarkning", "delmomentvikt", "delmomentmarkning",
+               "citackning", "citaggning", "anivavakt", "kravrad",
+               "rubrikord", "likvardighet", "scenvakt"):
         return True
     if kod == "delmomenttackning":
         return path == "uppgifter"
@@ -7128,8 +8118,9 @@ def _raknas_om(fel: dict) -> bool:
 
 
 def _slutfynd(exam: dict, *, avsnitt, antal, delmoment, profil,
-              bokuppgifter) -> list[dict]:
-    """Allt slutgrinden kan avgöra själv: de tre räknade vakterna plus
+              bokuppgifter, koder=None, kurs="", referensprov=None
+              ) -> list[dict]:
+    """Allt slutgrinden kan avgöra själv: de räknade vakterna plus
     ordvakten.
 
     ORDVAKTEN har samma villkor som i fixrundan (`profil == "prov"` och en
@@ -7139,7 +8130,8 @@ def _slutfynd(exam: dict, *, avsnitt, antal, delmoment, profil,
     räkna gratis."""
     fel = _raknade_fynd(exam, avsnitt=avsnitt, antal=antal,
                         delmoment=delmoment, profil=profil,
-                        bokuppgifter=bokuppgifter)
+                        bokuppgifter=bokuppgifter, koder=koder, kurs=kurs,
+                        referensprov=referensprov)
     if profil == "prov" and bokuppgifter:
         fel = fel + begriplighetssignaler(exam, profil)
     return _slapp_poanglaset(fel)
@@ -7150,6 +8142,7 @@ def _slutgrind(res: dict, *, model: str, llm, profil: str,
                koder: list[str] | None, niva_mal: dict | None,
                avsnitt: list[dict] | None, delmoment: list[dict] | None,
                bokuppgifter: list[dict] | None,
+               kurs: str = "", referensprov: dict | None = None,
                max_rounds: int = SLUTRUNDOR,
                log_cb: Callable[[str], None] | None = None) -> dict:
     """Sista ordet före exemplen. Se blocket ovan."""
@@ -7158,7 +8151,8 @@ def _slutgrind(res: dict, *, model: str, llm, profil: str,
     if exam is None:
         return res
     matt = dict(avsnitt=avsnitt, antal=antal, delmoment=delmoment,
-                profil=profil, bokuppgifter=bokuppgifter)
+                profil=profil, bokuppgifter=bokuppgifter, koder=koder,
+                kurs=kurs, referensprov=referensprov)
     fel = _slutfynd(exam, **matt)
     if not fel:
         # RENT PAPPER, NOLL ANROP. Gamla kopior av samma fynd rensas ändå:
@@ -7216,6 +8210,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                   grupp: dict | None = None, doma: bool = True,
                   illustration: bool = True,
                   bokuppgifter: list[dict] | None = None,
+                  referensprov: dict | None = None,
                   llm=llm_client.generate, max_rounds: int = MAX_ROUNDS,
                   log_cb: Callable[[str], None] | None = None,
                   steg_cb: Callable[[str], None] | None = None) -> dict:
@@ -7297,6 +8292,17 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     märks i prompten (build_ci_forbehall). Tom lista lämnar prompten ordagrant
     som den var.
 
+    `referensprov` är OMPROVETS ORIGINAL: dokumentet (samma form som den här
+    funktionen returnerar i `exam`) som eleven redan har skrivit. Anroparen
+    slår upp det, routes_exam löser `omprov_av` (exam-id) eller det senaste
+    godkända provet på samma klass, kurs och moment med tidigare datum, och
+    skickar hit själva dokumentet: den här filen läser aldrig basen. Det gör
+    tre saker som hör ihop: skelettet byggs ur originalets slots
+    (skelett_ur_prov) om anroparen inte skickat ett eget, planen går in i
+    prompten (build_omprov) och likvärdigheten räknas på svaret
+    (likvardighetsvakt). None, förvalet, lämnar allt tre orört, och
+    prompten är byte för byte den som gick i väg förut.
+
     `bokuppgifter` gäller sedan 2026-09-13 också PROVET, med kapitlets
     uppgifter i stället för lärarens remsa (bok.provuppgifter). Samma tre
     saker händer som för gruppuppgiften: förebilden begärs i prompten
@@ -7320,6 +8326,15 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # Balanserat skelett: appen äger balansen, modellen skriver innehållet.
     # Alla profilerna får ett (Del D1b) — provet med delar, arbetsbladet och
     # gruppuppgiften platta.
+    if skeleton is None and referensprov is not None:
+        # OMPROVET ÄRVER SINA SLOTS. Ett nybyggt balanserat skelett hade gett
+        # samma totalpoäng men andra uppgifter på andra platser, och då finns
+        # ingen plats att jämföra likvärdigheten på. Lärarens eget skelett
+        # (nivåvalet) vinner ändå, det står i `skeleton` och rörs inte.
+        skeleton = skelett_ur_prov(referensprov)
+        if skeleton:
+            log(f"Omprov: ärver originalets {len(skeleton)} uppgifter som "
+                "plan, samma slot, nya uppgifter.")
     if skeleton is None:
         # KURSEN styr nivåmixen: 1c:s prov ska vara C-tungt och 2a:s E-tungt,
         # och båda är uppmätta (niva_rubrik.NP_FORDELNING_PER_KURS). Utan den
@@ -7359,6 +8374,9 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     forbehallblock = build_ci_forbehall(punkter, forbjudna or [])
     forebildblock = (build_forebild_prov(bokuppgifter)
                      if profil == "prov" else "")
+    # OMPROVET (2026-09-19). Samma villkor och samma skäl som blocken ovan:
+    # utan referens en TOM STRÄNG och en oförändrad prompt.
+    omprovblock = build_omprov(referensprov)
     prompt = build_prompt(kurs, klass, punkter, antal=antal, tid_min=tid_min,
                           delar=delar, memory=memory, teman=teman,
                           variation=variation,
@@ -7366,7 +8384,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                           bok=bok, boknivaer=boknivaer, forlaga=forlaga,
                           spridning=spridning, delmoment=delmomentblock,
                           forbjudet=forbjudetblock, forbehall=forbehallblock,
-                          forebild=forebildblock,
+                          forebild=forebildblock, omprov=omprovblock,
                           hjalpmedel=hjalpmedel,
                           svart=svart, fokus=fokus, inriktning=inriktning,
                           profil=profil, koder=koder, grupp=grupp,
@@ -7423,6 +8441,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                              bokuppgifter=bokuppgifter if profil == "prov"
                              else None,
                              punkter=punkter, inriktning=inriktning,
+                             kurs=kurs, referensprov=referensprov,
                              doma=doma,
                              rounds_used=res["rounds"], max_rounds=max_rounds,
                              log_cb=log_cb)
@@ -7446,6 +8465,19 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
         """Blev en uppgift ändå en gammal uppgift med nya tal? Fältet
         `likheter` följer med svaret; det stoppar ingenting och kostar ingen
         runda (se variationsflaggor)."""
+        # ── TIDEN (2026-09-19) ───────────────────────────────────────
+        # SIST av allt och UTANFÖR reparationen, med flit. Ett prov som är
+        # längre än passet är inte trasigt, antalet är lärarens eget val och
+        # ska stå kvar, men det som ingen sa till prov 85 ska sägas här:
+        # tolv uppgifter och 26 poäng tar hundra minuter, och passet var
+        # sjuttio. Hade fyndet lagts bland `errors` före rundorna hade en
+        # reparationsrunda betalats för något ingen omskrivning kan laga.
+        tid = exam_spec.tidsvakt(antal, tid_min, profil,
+                                 delar=(profil == "prov" and delar),
+                                 niva_mal=niva_mal, kurs=kurs)
+        if tid:
+            log(tid[0]["message"])
+            r["errors"] = (r.get("errors") or []) + tid
         likheter = variationsflaggor(r.get("exam") or {}, tidigare)
         r["likheter"] = likheter
         for f in likheter:
@@ -7481,6 +8513,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                           avsnitt=avsnitt or [], delmoment=delmoment or [],
                           bokuppgifter=bokuppgifter if profil == "prov"
                           else None,
+                          kurs=kurs, referensprov=referensprov,
                           max_rounds=rundor, log_cb=log_cb)
 
     if not doma or res["exam"] is None:

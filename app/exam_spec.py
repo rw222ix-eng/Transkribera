@@ -2662,6 +2662,57 @@ def foreslag_antal(tid_min: int, profil: str = "prov",
                     "tid": tid_min, "takt": takt}
 
 
+# ── TIDEN: DET PROVET TAR MOT DET PASSET RYMMER (2026-09-19) ─────────────
+# Prov 85 (IndA, kapitel 1) hade tolv uppgifter och 26 poäng och skrevs på ett
+# pass på 70 minuter. `tidsatgang` ovan säger att ett sådant prov tar ungefär
+# 100 minuter, och ingen sa det till någon: antalet kom från läraren, tiden
+# stod i beställningen, och de två talen möttes aldrig.
+#
+# Vakten byter INTE antalet åt henne. Lärarens uttryckliga antal vinner, hon
+# kan mycket väl mena att provet ska skrivas på två pass, och ett prov som
+# tyst krymper från tolv uppgifter till åtta är värre än ett som tar för lång
+# tid. Det vakten gör är att säga det rakt ut, med båda talen och med det
+# antal som faktiskt ryms, och fyndet följer med pappret in i canvasen som
+# varje annan varning.
+
+# Hur mycket över passets tid ett prov får ligga innan det är fel och inte
+# avrundning. Tio minuter är `tidsatgang`:s egen upplösning (den avrundar till
+# fem) plus marginalen läraren själv räknar med när hon delar ut pappret.
+TID_MARGINAL_MIN = 10
+
+
+def tidsvakt(antal: int, tid_min: int, profil: str = "prov",
+             delar: bool | None = None,
+             niva_mal: dict | None = None,
+             takt: float | None = None,
+             kurs: str = "") -> list[dict]:
+    """Ryms `antal` uppgifter i `tid_min` minuter? Deterministiskt, ingen
+    modell, ingen kostnad, räknat på SAMMA skelett som faktiskt byggs och med
+    samma `tidsatgang` som «Uppskatta tiden» visar, så att provet och skärmen
+    inte kan säga olika om samma upplägg.
+
+    FAIL-OPEN utan tid: `tid_min` noll eller tomt betyder att ingen tid är
+    satt, och då finns inget att mäta mot."""
+    try:
+        antal, tid_min = int(antal or 0), int(tid_min or 0)
+    except (TypeError, ValueError):
+        return []
+    if antal <= 0 or tid_min <= 0:
+        return []
+    plan = skelettsummor(antal, profil, delar=delar, niva_mal=niva_mal,
+                         takt=takt, kurs=kurs)
+    if plan["tid"] <= tid_min + TID_MARGINAL_MIN:
+        return []
+    ryms = foreslag_antal(tid_min, profil, takt=takt, niva_mal=niva_mal,
+                          kurs=kurs)
+    return [_err("antal", "tidsvakt",
+                 f"{plan['antal']} uppgifter och {plan['poang']} poäng tar "
+                 f"ungefär {plan['tid']} minuter att skriva, och passet är "
+                 f"{tid_min} minuter. {ryms['antal']} uppgifter "
+                 f"({ryms['poang']} poäng) ryms på tiden. Antalet är ditt "
+                 "eget och står kvar, men provet är längre än passet.")]
+
+
 def _skeleton_doc(slots: list[dict]) -> "ExamDoc":
     return ExamDoc(
         titel="_", kurs="_", hjalpmedel="_",

@@ -137,7 +137,9 @@ def test_samma_rubrik_tva_dagar_ar_ett_delmoment_med_hela_spannet():
     rader = [{"datum": "2026-09-01", "fran": 4, "till": 5, "rubrik": "Potenser"},
              {"datum": "2026-09-02", "fran": 6, "till": 8, "rubrik": "potenser"}]
     assert exam_gen.delmoment_ur_lektioner(rader, fran=2, till=40) == \
-        [{"delmoment": "Potenser", "sidor": "4–8"}]
+        [{"delmoment": "Potenser", "sidor": "4–8", "lektioner": 2}]
+    # `lektioner` är undervisningstiden: två lektioner blev en rad, och det
+    # talet är vikten fördelningsvakten väger poängen mot (delmomentvikt).
 
 
 def test_raderna_utan_delar_och_med_trasiga_sidor_bar_anda_sitt_moment():
@@ -150,8 +152,8 @@ def test_raderna_utan_delar_och_med_trasiga_sidor_bar_anda_sitt_moment():
              {"datum": "2026-09-03", "fran": 15, "till": 15, "rubrik": "",
               "delar": [{"fran": "x", "till": "y"}]}]
     assert exam_gen.delmoment_ur_lektioner(rader, fran=2, till=40) == [
-        {"delmoment": "Grundpotensform", "sidor": "12"},
-        {"delmoment": "Prefix", "sidor": "13–14"}]
+        {"delmoment": "Grundpotensform", "sidor": "12", "lektioner": 1},
+        {"delmoment": "Prefix", "sidor": "13–14", "lektioner": 1}]
 
 
 def test_bokens_underrubriker_ar_reserven():
@@ -161,9 +163,11 @@ def test_bokens_underrubriker_ar_reserven():
              {"sida": 4, "rubrik": ""},                # oläst: hoppas över
              {"sida": 5, "rubrik": "Kubikrötter"},
              {"sida": 19, "rubrik": "Programmering i GeoGebra"}]
+    # Ur boken är «lektionerna» sidorna: samma sorts mått på samma sak, och
+    # det enda mått på undervisningstid en osynkad kalender kan ge.
     assert exam_gen.delmoment_ur_sidor(sidor) == [
-        {"delmoment": "Kvadratrötter", "sidor": "2–3"},
-        {"delmoment": "Kubikrötter", "sidor": "5"}]
+        {"delmoment": "Kvadratrötter", "sidor": "2–3", "lektioner": 2},
+        {"delmoment": "Kubikrötter", "sidor": "5", "lektioner": 1}]
     assert exam_gen.delmoment_ur_sidor([]) == []
 
 
@@ -505,8 +509,8 @@ def test_rutten_faller_tillbaka_pa_boken_och_tiger_utan_bokdorr(tmp_path):
     # Ingen kalender: boken bär listan.
     assert routes_planning.undervisade_delmoment(
         db_file, kropp, group_id=None, course_id=None) == [
-        {"delmoment": "Kvadratrötter", "sidor": "2"},
-        {"delmoment": "Kubikrötter", "sidor": "3"}]
+        {"delmoment": "Kvadratrötter", "sidor": "2", "lektioner": 1},
+        {"delmoment": "Kubikrötter", "sidor": "3", "lektioner": 1}]
     # Ingen bokdörr: tyst, och prompten är då den gamla.
     assert routes_planning.undervisade_delmoment(
         {}, {"datum": "2026-09-16"}, group_id=1, course_id=1) == []
@@ -1031,11 +1035,17 @@ def test_rutten_ger_forbudet_ur_kalendern_och_boken(tmp_path):
     finally:
         conn.close()
     kropp = {"bok": {"id": bid, "fran": 2, "till": 40}, "datum": "2026-09-16"}
-    # Kalendern först: lärarens egna rubriker för det som kommer efter provet.
+    # BÅDA källorna, inte den ena ELLER den andra (2026-09-19). Boken var förut
+    # bara reserv och lästes aldrig när kalendern hade rader, och omprov 87
+    # krävde då en ekvation med den obekanta i nämnaren, kapitel 2, på ett prov
+    # över kapitel 1. Rubrikerna kommer i bokens sidordning, så det som ligger
+    # NÄRMAST kapitlet överlever taket.
     assert [f["metod"] for f in routes_planning.forbjudna_metoder(
         db_file, kropp, group_id=gid, course_id=cid,
         undervisade=_delmoment())] == ["Ekvationer och balansmetoden",
-                                       "Ekvationer med parenteser och bråk"]
+                                       "Ekvationer",
+                                       "Ekvationer med parenteser och bråk",
+                                       "Olikheter"]
     # Utan kalender: bokens egna avsnitt efter spannet.
     assert [f["metod"] for f in routes_planning.forbjudna_metoder(
         db_file, kropp, group_id=None, course_id=None)] == ["Ekvationer",

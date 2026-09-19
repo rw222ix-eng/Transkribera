@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import sys
+from functools import lru_cache
 from pathlib import Path
 
 
@@ -125,6 +126,26 @@ def kod_till_kort() -> dict[str, str]:
             for n in gy_nivaer() for o in n["omraden"] for p in o["punkter"]}
 
 
+def kod_till_text() -> dict[str, str]:
+    """{kod: kort + Skolverkets egen text}, samma uppslagning som ovan, fast
+    hela punkten. CI-vakten i exam_gen mäter en uppgift mot punktens ORD, och
+    etiketten ensam är för kort för det: «Algebra» säger inget om huruvida en
+    uppgift prövar punkten, medan punkttexten nämner metoderna."""
+    return {p["kod"]: f"{p.get('kort') or ''} {p.get('text') or ''}".strip()
+            for n in gy_nivaer() for o in n["omraden"] for p in o["punkter"]}
+
+
+@lru_cache(maxsize=1)
+def kodtexter() -> dict[str, str]:
+    """kod_till_text(), men läst EN gång per körning.
+
+    Vakterna frågar en gång per uppgift och per generering, och varje fråga
+    läste annars om hela datakatalogen från disk. Cachen är säker därför att
+    filerna är bundlad, versionerad data: de ändras vid en uppgradering av
+    appen, inte medan den kör."""
+    return kod_till_text()
+
+
 # ── Centralt innehåll som ANDRAHANDSKÄLLA för lektionstavlan ────────────────
 # Lärarens dom (2026-09-05, kväll): «behandlar det verkligen de sidorna i
 # boken man ska göra? ÅTERANVÄND INTE UPPGIFTER, GÖR EGNA! I andra hand luta
@@ -168,6 +189,28 @@ def _ci_traff(momentord: set[str], punktord: set[str]) -> bool:
                 if gemensam >= _CI_STAM:
                     return True
     return False
+
+
+def ordstammar(text: str) -> set[str]:
+    """Textens betydelsebärande ord, gemena och utan skiljetecken.
+
+    Publik därför att exam_gen mäter SAMMA sak på ett annat underlag: prövar
+    uppgiften den punkt den är taggad med, och nämner den det delmoment
+    etiketten lovar? Två stavningar av samma stamjämförelse hade glidit isär,
+    och då hade två vakter svarat olika på samma fråga."""
+    return _ci_ord(text)
+
+
+def namner(text: str, sokta: set[str]) -> bool:
+    """Rör texten NÅGOT av orden i `sokta`, med samma stamregel som ovan?
+
+    Stammen och inte likheten: «faktorisera» i ett facit ska svara mot
+    rubriken «Faktorisering och förkortning», och «potenslagarna» mot
+    «Potenslagar». Tom sökmängd svarar True, då finns inget att kräva, och en
+    vakt utan krav ska aldrig fälla."""
+    if not sokta:
+        return True
+    return _ci_traff(sokta, _ci_ord(text))
 
 
 def _kursens_punkter(kurs: str) -> list[dict]:

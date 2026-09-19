@@ -634,6 +634,55 @@ RUBRIK_PER_KURS: dict[str, str] = {
     ),
 }
 
+# ── KURSENS FRÅGEFORM, SOM ETT RÄKNEBART KRAV (2026-09-19) ────────────────
+# Raderna ovan är prompttext, och prompttext är ett önskemål. Prov 85 var ett
+# 2a-prov och innehöll inte ordet «Motivera» en enda gång, fast raden för 2a
+# säger att «Motivera ditt svar» förekommer upp till sju gånger i kursens
+# nationella prov. Tabellen nedan är SAMMA mätning uttryckt som ett tal, så
+# att en vakt kan hålla den (exam_gen.rubrikordsvakt).
+#
+# Bara det som faktiskt är avläst står här, och det är bara två kurser:
+#
+#   2a, «Motivera ditt svar» förekommer på riktigt, upp till sju gånger.
+#        Kravet är MINST en gång; taket lämnas öppet, för sju är ett tak i
+#        materialet och inte en regel.
+#   1a, samma form står HÖGST en gång i hela provet. Kravet är alltså ett
+#        tak och inget golv: resonemang prövas i a-spåret av kurs 1 som
+#        «förklara vad beräkningen betyder» och «vilket alternativ stämmer
+#        alltid», inte som en motivering.
+#   2c, «Undersök om», «utred vilka» och «visa att» är kursens egna
+#        frågeformer och bär dess A-poäng. Minst en gång.
+#
+# 1c saknas med flit. Raden för 1c talar om formellt språk och exakta svar,
+# inte om en frågeform som går att räkna, och en siffra som inte är mätt hör
+# inte hemma i den här filen.
+KRAVORD_PER_KURS: dict[str, dict] = {
+    "1a": {"vad": "«Motivera ditt svar»",
+           "monster": r"motivera",
+           "minst": 0, "hogst": 1},
+    "2a": {"vad": "«Motivera ditt svar»",
+           "monster": r"motivera",
+           "minst": 1, "hogst": None},
+    "2c": {"vad": "«Undersök om», «utred vilka» eller «visa att»",
+           "monster": r"undersök om|utred vilka|visa att",
+           "minst": 1, "hogst": None},
+}
+
+
+def kravord(kurs: str = "") -> dict | None:
+    """Kursens mätta frågeform som en färdig regel, eller None.
+
+    Mönstret kompileras här och inte i tabellen ovan: tabellen är DATA och ska
+    gå att läsa och ändra av den som aldrig sett en regexp. `kurs` är vilket
+    som helst av kursens namn, kursnyckel gör om det till «2a»."""
+    nyckel = kursnyckel(kurs)
+    regel = KRAVORD_PER_KURS.get(nyckel or "")
+    if not regel:
+        return None
+    return {**regel, "kurs": f"kurs {nyckel}",
+            "monster": re.compile(regel["monster"], re.IGNORECASE)}
+
+
 # ── Ankare ────────────────────────────────────────────────────────────────
 # Rubriken ovan är abstrakt, och abstrakt text styr en språkmodell dåligt. Det
 # här är samma sak visat: egenskrivna uppgifter av samma TYP på olika nivåer,
