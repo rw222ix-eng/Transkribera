@@ -295,12 +295,22 @@
 /* Provets försättsblad: betygstabellen slutar en bit ner på sidan och resten är
    tomt papper. Bildplatsen tar den luften — och blir en riktig bild när läraren
    lägger in en i canvas. */
-.prforsatt{margin-top:26px}
+/* FÖRSÄTTSBILDEN FYLLER DET SOM ÄR KVAR AV ARKET. Arket är en flexkolumn
+   (display:flex ovan) och .prforsatt är dess enda växande barn: allt ovanför
+   tar sin höjd, bildrutan får resten, och bilden i den (blad.js, max-height
+   100 %) blir så stor som det utrymmet tillåter. Läraren (2026-09-19):
+   «Bilden på försättsbladet är ganska liten. Skulle kunna bli större så att
+   den passar bättre in.» PDF:en gör samma sak på sin sida (prov.tex.j2).
+   min-height 120 px på rutan: krymper den under det är det inte bilden som
+   är för stor utan texten ovanför, och då ska arket flöda över och mätas som
+   förut — inte bilden försvinna tyst. min-height:0 på .prforsatt själv är
+   flexens: utan den krymper rutan aldrig under sitt innehåll. */
+.prforsatt{margin-top:26px;flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
 .prforsatt .prbild{min-height:300px;display:grid;place-items:center}
-/* Med bilden på plats släpper rutan sin minsta höjd: bilden är sedan 2026-09-18 lägre
-   än 300 px (PDF:ens budget), och rutan lämnade då en tom remsa mellan bild och
-   bildtext — «texten är lite för långt bort från bilden» (läraren samma kväll). */
-.prforsatt .prbild:has(img){min-height:0}
+/* Med bilden på plats byter rutan till flex och fyller: bildens max-height i
+   procent löses mot rutans utflexade höjd, vilket grid-området inte ger. */
+.prforsatt .prbild:has(img){min-height:120px;flex:1 1 auto;display:flex;justify-content:center;align-items:center}
+.prforsatt .prbildtext{flex:0 0 auto}
 
 /* ══════════ ANTECKNINGAR — lärarens eget stödpapper ══════════
    Femte dokumenttypen, och den enda som inte delas ut. Kravet är ett annat än

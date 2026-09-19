@@ -310,15 +310,15 @@ def _krav(typ: str | None) -> str:
 
 
 def _nrlista(nrs: list[int]) -> str:
-    """«uppgift 1–2», «uppgift 3» eller «uppgift 1, 2 och 5» — spegel av
-    blad.js nrlista, tecken för tecken."""
+    """«1–2», «3» eller «1, 2 och 5» — spegel av blad.js nrlista, tecken för
+    tecken. Utan ordet «uppgift»: delraden börjar redan med det."""
     if not nrs:
         return ""
     if len(nrs) == 1:
-        return f"uppgift {nrs[0]}"
+        return f"{nrs[0]}"
     if all(n == nrs[k - 1] + 1 for k, n in enumerate(nrs) if k):
-        return f"uppgift {nrs[0]}–{nrs[-1]}"
-    return f"uppgift {', '.join(str(n) for n in nrs[:-1])} och {nrs[-1]}"
+        return f"{nrs[0]}–{nrs[-1]}"
+    return f"{', '.join(map(str, nrs[:-1]))} och {nrs[-1]}"
 
 
 def _stycken(text: str) -> list[dict]:
@@ -776,12 +776,16 @@ def _forsatt_vy(doc: exam_spec.ExamDoc, delar: list[dict],
         # numren: samma ord som skärmens provtabell (blad.js planvalProv),
         # annars säger papper och skärm olika om samma prov (2026-09-18).
         if d["_alla_kortsvar"]:
-            vad = "Endast svar krävs, svaret skrivs i provet."
+            vad = "Endast svar krävs, skrivs i provet."
         elif d["_nagot_kortsvar"]:
+            # EN RAD: «… på uppgift 1–2, fullständig lösning på lösblad på
+            # uppgift 3–7.» bröt raden och «3–7.» stod ensamt (läraren
+            # 2026-09-19). Raden börjar med «Uppgift», numren inuti står utan
+            # ordet, och lösbladet nämns i instruktionerna under.
             vad = (f"Endast svar på {_nrlista(d['_kort_nr'])}, fullständig "
-                   f"lösning på lösblad på {_nrlista(d['_langa_nr'])}.")
+                   f"lösning på {_nrlista(d['_langa_nr'])}.")
         else:
-            vad = "Fullständiga lösningar krävs, redovisas på lösblad."
+            vad = "Fullständiga lösningar på lösblad."
         # «3–7» får inte brytas vid strecket: sjuan hamnade ensam på nästa
         # rad (läraren 2026-09-18). Spannen sätts i \mbox efter escapen.
         delrader.append({"namn": escape_latex(d["rubrik"]),
@@ -869,25 +873,7 @@ def _forsatt_vy(doc: exam_spec.ExamDoc, delar: list[dict],
         "bildtext": (escape_latex(doc.forsattsbild.bildtext)
                      if doc.forsattsbild and doc.forsattsbild.bildtext
                      else None),
-        "bild_hojd": _forsattsbild_hojd(doc),
     }
-
-
-# FÖRSÄTTSBILDENS HÖJD I MM, räknad ur bildtextens längd. Läraren såg bilden
-# «för liten» i det tryckta provet mot canvasen (2026-09-14). Ett fast tak på
-# 47 mm var mätt för värsta fallet, 45 ord på fyra till fem rader, men de
-# flesta bildtexter är 25–30 ord, och då står 15 mm papper tomt. Budgeten är
-# prov.tex.j2:s egen: klassradens baslinje ~104 mm över underkanten (efter
-# att namnradernas luft kortats 2026-09-14), satsytan slutar vid 25 mm, luft
-# 5 mm före bilden och 3 mm efter, en \small-rad ≈ 4,3 mm och ~11 ord per rad
-# i en parbox på 0,8	extwidth. Golvet 45 mm är det gamla taket minus luften,
-# taket 66 mm är där en 16:9-bild slår i parboxens bredd.
-def _forsattsbild_hojd(doc: exam_spec.ExamDoc) -> int:
-    text = (doc.forsattsbild.bildtext if doc.forsattsbild else "") or ""
-    ord_ = len(text.split())
-    rader = max(1, -(-ord_ // 11)) if ord_ else 0
-    kvar = 80 - 5 - 3 - rader * 4.3 - 3
-    return int(max(45, min(66, kvar)))
 
 
 def _build_view(doc: exam_spec.ExamDoc,

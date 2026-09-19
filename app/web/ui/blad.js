@@ -296,19 +296,25 @@ window.Blad = (() => {
          säger den vilka uppgifter som är kortsvar (typ rutin, «Endast svar
          krävs» på arket) och vilka som redovisas på lösblad — samma ord som
          PDF:en (exam_latex delrader), annars säger skärm och papper olika. */
+      /* EN RAD PER DELRAD. «Uppgift 1–7. Endast svar på uppgift 1–2,
+         fullständig lösning på lösblad på uppgift 3–7.» bröt, och «3–7.» stod
+         ensamt på raden under — läraren (2026-09-19): «Jag vill att allting
+         ska stå på en och samma rad.» Raden börjar redan med «Uppgift», så
+         numren inuti står utan ordet, och lösbladet nämns i anvisningen
+         under tabellen. Samma ord som PDF:en (exam_latex delrader). */
       const nrlista = nrs => {
         if (!nrs.length) return '';
         const sammanhang = nrs.every((n, k) => !k || n === nrs[k - 1] + 1);
-        if (nrs.length === 1) return `uppgift ${nrs[0]}`;
-        if (sammanhang) return `uppgift ${nrs[0]}–${nrs[nrs.length - 1]}`;
-        return `uppgift ${nrs.slice(0, -1).join(', ')} och ${nrs[nrs.length - 1]}`;
+        if (nrs.length === 1) return `${nrs[0]}`;
+        if (sammanhang) return `${nrs[0]}–${nrs[nrs.length - 1]}`;
+        return `${nrs.slice(0, -1).join(', ')} och ${nrs[nrs.length - 1]}`;
       };
       const redovisning = items => {
         const kort = items.filter(u => u.ut === 'kort').map(u => kvar.get(u.nr));
         const langa = items.filter(u => u.ut !== 'kort').map(u => kvar.get(u.nr));
-        if (!langa.length) return 'Endast svar krävs, svaret skrivs i provet.';
-        if (!kort.length) return 'Fullständiga lösningar krävs, redovisas på lösblad.';
-        return `Endast svar på ${nrlista(kort)}, fullständig lösning på lösblad på ${nrlista(langa)}.`;
+        if (!langa.length) return 'Endast svar krävs, skrivs i provet.';
+        if (!kort.length) return 'Fullständiga lösningar på lösblad.';
+        return `Endast svar på ${nrlista(kort)}, fullständig lösning på ${nrlista(langa)}.`;
       };
       const [uppgB] = [plock.filter(u => !uppgA.includes(u))];
       /* DOKUMENTETS HJÄLPMEDELSREGEL VINNER — och då säger pappret den EN gång.
@@ -1960,22 +1966,22 @@ window.Blad = (() => {
        formen. Samma höjdtak som underlagssidorna (mallens 90 mm ≈ 340 px) —
        utan det tryckte ett 1200 px-foto innehållet under A4-kanten. Och ett
        formge-svep när bilden avkodats: höjden fanns inte när arket mättes. */
-    /* FÖRSÄTTSBILDENS HÖJD ÄR PDF:ENS (exam_latex._forsattsbild_hojd): 45–66 mm
-       räknat ur bildtextens längd, här i px (3,78 px/mm). Med det fasta taket
-       340 px sköt bilden bildtexten under arkets nederkant — läraren såg
-       texten försvinna i samma stund hon släppte bilden (2026-09-18), fast den
-       stod kvar i dokumentet. Uppgifternas bilder behåller sitt tak. */
-    const forsattHojd = () => {
-      const ord = ((((v.forsattsbild || {}).bildtext) || '').trim().split(/\s+/).filter(Boolean)).length;
-      const rader = ord ? Math.ceil(ord / 11) : 0;
-      const mm = Math.max(45, Math.min(66, 80 - 5 - 3 - rader * 4.3 - 3));
-      return Math.round(mm * 3.78);
-    };
+    /* FÖRSÄTTSBILDEN FYLLER DET SOM ÄR KVAR AV ARKET (blad.css .prforsatt):
+       rutan är den enda som växer i arkets flexkolumn, och bilden får
+       max-height 100 % av den. Förr var taket PDF:ens räknade millimeter
+       (45–66 mm ur bildtextens ordantal) — med det fasta taket 340 px sköt
+       bilden bildtexten under arkets nederkant (2026-09-18), och med det
+       räknade stod bilden «ganska liten» med tom remsa under (läraren,
+       2026-09-19). PDF:en mäter numera samma sak på sin sida
+       (prov.tex.j2 \pagegoal-\pagetotal). Uppgifternas bilder behåller
+       sitt tak. */
     Object.entries(v.bilder || {}).forEach(([nyckel, src]) => {
       const el = $(`[data-el="${nyckel}"] .prbild, [data-el="${nyckel}"] .gufigur`, trav);
       if (!el) return;
-      const tak = nyckel === 'forsatt' ? forsattHojd() : 340;
-      el.innerHTML = `<img src="${src}" alt="" style="display:block;margin:0 auto;max-width:100%;max-height:${tak}px;width:auto;height:auto" />`;
+      const matt = nyckel === 'forsatt'
+        ? 'max-width:100%;max-height:100%;width:auto;height:auto'
+        : 'max-width:100%;max-height:340px;width:auto;height:auto';
+      el.innerHTML = `<img src="${src}" alt="" style="display:block;margin:0 auto;${matt}" />`;
       const img = $('img', el);
       if (img && !img.complete) img.addEventListener('load', () => formge(), { once: true });
     });

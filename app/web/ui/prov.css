@@ -37,7 +37,12 @@
    Delprov, provtid, hjälpmedel. Två spalter, ingen ram: etiketten står i fet
    halvgrad, värdet i brödgrad, och raderna hålls ihop av luft. */
 .prmeta{width:100%;margin-top:20px;border-collapse:collapse;font-size:15px}
-.prmeta th{width:116px;padding:6px 12px 6px 0;text-align:left;vertical-align:top;font-weight:700;color:#000}
+/* Etikettspalten 100 px, inte 116: «Hjälpmedel» i fet 15 px är 84 px, och
+   varje pixel spalten inte behöver går till värdet, som ska stå på EN rad
+   (läraren 2026-09-19). Delraderna är kortade för samma sak (blad.js
+   redovisning); hjälpmedelsregeln är dokumentets egen mening och hålls kort
+   av prompten (exam_gen). */
+.prmeta th{width:100px;padding:6px 12px 6px 0;text-align:left;vertical-align:top;font-weight:700;color:#000}
 .prmeta td{padding:6px 0;vertical-align:top;color:#000}
 
 /* ── Namnraderna ──

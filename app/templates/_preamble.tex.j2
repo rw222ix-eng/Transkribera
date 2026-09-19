@@ -276,6 +276,10 @@
 ((# Uppgiftens första rad → första deluppgiften mäter 19,4 pt, alltså exakt
     ett styckeavstånd: listan får samma \topsep som ett stycke. #))
 \newlength{\pflistluft}\setlength{\pflistluft}{4.9pt}
+((# Försättsbildens box och höjd (prov.tex.j2): bildtexten sätts i en sparad
+    box så att dess höjd kan dras av från det som är kvar av sidan. #))
+\newsavebox{\pfbildtext}
+\newlength{\pfbildkvar}
 ((# Svarsraden: 22,6 pt från frågans sista rad ner till «Svar:», och 5,7 pt
     extra under linjen innan nästa deluppgift. #))
 \newlength{\pfsvarover}\setlength{\pfsvarover}{8.1pt}

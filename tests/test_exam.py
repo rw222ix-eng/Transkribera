@@ -3402,31 +3402,33 @@ def test_forsattsbladets_egna_bild_trycks_med_sin_bildtext():
         "Det är samma räknelagar du använder på det här provet.")
     tex = exam_latex.render_prov(doc, forsatt_bild="egen-forsatt.png")
     forsatt = _forsattsbladet(tex)
-    # Höjden RÄKNAS ur bildtextens längd sedan 2026-09-14 (exam_latex.
-    # _forsattsbild_hojd): 38 ord blir fyra rader, och då får bilden 51 mm.
-    # Bredden 0,8 så att en liggande bild blir lika bred som bildtextens
-    # parbox. Läraren såg bilden «för liten» mot canvasen.
-    assert (r"\includegraphics[width=0.8\textwidth,height=51mm,"
+    # Höjden MÄTS PÅ SIDAN sedan 2026-09-19 (prov.tex.j2): det som är kvar
+    # av försättsbladet efter klassraden, minus bildtextens uppmätta höjd,
+    # går till bilden. Den gamla räkningen ur ordantalet lät bildtexten
+    # hamna på sida 2 (prov 88). Bredden 0,8 så att en liggande bild blir
+    # lika bred som bildtextens parbox.
+    assert (r"\includegraphics[width=0.8\textwidth,height=\pfbildkvar,"
             r"keepaspectratio]{egen-forsatt.png}") in forsatt
+    assert r"\pagegoal-\pagetotal-\ht\pfbildtext-\dp\pfbildtext" in forsatt
     # Bildtexten står under bilden, i \small\itshape och i en \parbox som är
     # smalare än satsytan, och den är ESCAPAD: den är ren text och ett «&» i
-    # den skulle annars spräcka kompileringen.
-    assert r"\parbox{0.8\textwidth}{\centering\small\itshape En man böjd " \
-        r"över ett räknebord vid ljuset \& i lugn och ro." in forsatt
+    # den skulle annars spräcka kompileringen. Boxen sparas FÖRE bilden (så
+    # att höjden kan dras av) och sätts ut efter den.
+    assert r"\sbox{\pfbildtext}{\parbox{0.8\textwidth}{\centering\small" \
+        r"\itshape En man böjd över ett räknebord vid ljuset \& i lugn och ro." \
+        in forsatt
+    assert forsatt.index(r"\sbox{\pfbildtext}") < forsatt.index(r"\includegraphics")
+    assert forsatt.index(r"\includegraphics") < forsatt.index(r"\usebox{\pfbildtext}")
     assert "ljuset & i lugn" not in forsatt
 
 
-def test_forsattsbildens_hojd_foljer_bildtextens_langd():
-    """Kort bildtext ⇒ hög bild, lång ⇒ det gamla taket. Budgeten är
-    försättsbladets enda sida (prov.tex.j2), så höjden får aldrig växa förbi
-    66 mm eller krympa under 45 mm oavsett text."""
-    kort = _exam_med_forsattsbild("Descartes räknade med bokstäver. "
-                                  "Det gör du också här.")          # 9 ord
-    lang = _exam_med_forsattsbild(" ".join(["ord"] * 45))            # 45 ord
-    assert exam_latex._forsattsbild_hojd(kort) == 64
-    assert exam_latex._forsattsbild_hojd(lang) == 47
-    tex = exam_latex.render_prov(kort, forsatt_bild="egen-forsatt.png")
-    assert "height=64mm" in _forsattsbladet(tex)
+def test_forsattsbilden_utan_bildtext_far_tom_box():
+    """Gamla prov har ingen bildtext: boxen sparas tom (höjd 0), bilden får
+    hela resten, och ingen \\usebox sätts ut."""
+    doc = _exam_med_forsattsbild("")
+    forsatt = _forsattsbladet(exam_latex.render_prov(doc, forsatt_bild="egen-forsatt.png"))
+    assert r"\sbox{\pfbildtext}{\parbox{0.8\textwidth}{\centering\small\itshape }}" in forsatt
+    assert r"\usebox{\pfbildtext}" not in forsatt
 
 
 @pytest.mark.tectonic

@@ -240,7 +240,9 @@ INSTRUCTION = (
     "och i förhandsvisningens provtabell.\n"
     "- hjalpmedel: hjälpmedelsregeln i klartext, EN mening för hela provet — "
     "den står i provtabellen och i OBS-rutan över uppgifterna. Ber läraren om "
-    "en ändring av vad som är tillåtet är det HÄR den skrivs.\n"
+    "en ändring av vad som är tillåtet är det HÄR den skrivs. Högst 60 tecken: "
+    "raden ska rymmas på EN rad i provtabellen («Formelblad på hela provet, "
+    "digitala verktyg bara på del B.»), inte brytas.\n"
     # Gruppuppgiftens upplägg ÄR pappersformen: namnraderna räknas ur `elever`,
     # metaraden överst säger alla tre. Utan raden här kunde modellen inte ändra
     # dem i en omskrivning — build_refine_prompt får bara INSTRUCTION med sig —

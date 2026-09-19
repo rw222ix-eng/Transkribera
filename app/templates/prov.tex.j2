@@ -124,8 +124,8 @@ Provet kan ge totalt \textbf{((( forsatt.total ))) poäng}.
 
 ((# 10 → 7 mm och 6 → 4 mm (2026-09-14): läraren tyckte försättsbilden
     blev för liten mot canvasen. Millimetrarna som sparas här går till
-    bilden, vars höjd numera räknas ut ur bildtextens längd
-    (exam_latex._forsatt_vy, `bild_hojd`). #))
+    bilden, som numera får allt som är kvar av sidan (se försättsbladets
+    bild nedan). #))
 \vspace{7mm}
 
 \noindent
@@ -143,25 +143,14 @@ Provet kan ge totalt \textbf{((( forsatt.total ))) poäng}.
     aldrig med `egna_bilder` och pappret fick den aldrig: läraren såg
     bilden i canvas och inte i PDF:en (prov 40, 2026-09-06).
 
-    SIST PÅ SIDAN, under namnraderna, och HÖJDTAKET ÄR MÄTT: försättsbladet
-    ska rymmas på EN sida. Klassradens baslinje ligger 99,6 mm över papprets
-    underkant (mätt i den kompilerade PDF:en) och satsytan slutar vid 25 mm,
-    så 74 mm är allt som finns kvar. I dem ska rymmas 6 mm luft, bilden, och
-    en bildtext som numera är två till tre MENINGAR i stället för en rad.
-
-    RÄKNINGEN gjordes om mot den kompilerade PDF:en när bildtexten växte
-    (2026-09-06). Regelns tak är 45 ord, och 45 ord blir FYRA rader \small i
-    parboxen nedan, inte tre: ungefär 18 mm text, 6 mm luft ovanför bilden och
-    knappt 4 mm mellan bild och bildtext. Kvar till bilden blir då drygt 45 mm,
-    och 50 mm går ändå in eftersom center-omgivningens luft ger med sig. MÄTT
-    på en STÅENDE bild (då styr höjden och inte bredden) med en bildtext på 44
-    ord: sista textraden lade sig 26,8 mm över underkanten, alltså innanför
-    satsytan, och pappret blev tre sidor: försättsblad plus provets två delar.
-    Schemats hårda tak (400 tecken, exam_spec.Forsattsbild.bildtext) provades
-    också: 386 tecken går ner till 22,9 mm, alltså en bit in i undermarginalen,
-    men fortfarande på samma sida. 58 mm höjd höll bara så länge bildtexten
-    fick bli TVÅ rader. keepaspectratio gör att breddangivelsen gäller
-    liggande bilder och höjden stående.
+    SIST PÅ SIDAN, under namnraderna, och försättsbladet ska rymmas på EN
+    sida. Höjden RÄKNADES förr i förväg (2026-09-06 till 2026-09-19: mätt mot
+    den kompilerade PDF:en, 45–66 mm ur bildtextens ordantal) under
+    antagandet att allt ovanför alltid tog lika mycket plats — vilket
+    inlämningsraden och brutna delrader motbevisade. Nu MÄTS det som är kvar
+    av sidan när TeX står vid bilden, se blocket vid \includegraphics.
+    keepaspectratio gör att breddangivelsen gäller liggande bilder och
+    höjden stående.
 
     BILDTEXTEN under bilden, centrerad, i \small\itshape, och i en \parbox på
     0,8\textwidth: utan boxen sätts raderna över HELA satsytan och blir
@@ -171,23 +160,41 @@ Provet kan ge totalt \textbf{((( forsatt.total ))) poäng}.
     (exam_spec.Forsattsbild.bildtext) och står bara när det är ifyllt
     \textendash{} gamla prov har det inte. #))
 ((* if forsatt.bild_fil *))
+((# HÖJDEN MÄTS PÅ SIDAN, inte räknas i förväg. Den gamla räkningen
+    (exam_latex._forsattsbild_hojd, 45–66 mm ur bildtextens ordantal) utgick
+    från att allt ovanför bilden alltid tog lika mycket plats. Det gör det
+    inte: prov 88 (2026-09-19) hade en inlämningsrad och två delrader som
+    bröt, och då stod bildtexten ensam på sida 2 medan läraren såg bilden
+    som «ganska liten». Nu frågar mallen TeX hur mycket av sidan som är kvar
+    (\pagegoal minus \pagetotal), drar av bildtextens uppmätta höjd och
+    luften, och ger resten till bilden. En kort sida ovanför ger en stor
+    bild, en lång ger en mindre, och bildtexten hamnar alltid på samma sida.
+
+    \par\penalty0 först: \pagetotal räknar bara det som sidbyggaren redan
+    flyttat till sidan, och det gör den vid ett \par eller en \penalty i
+    vertikalt läge. Bildtexten sätts i en sparad box så att dess höjd är
+    exakt (två rader eller fyra), inte gissad ur ordantalet. Luften: 5 mm
+    före bilden, 3 mm mellan bild och text («för nära bilden», 2026-09-14),
+    och 8 mm för center-omgivningens egen luft (\topsep uppe och nere).
+    Taket 90 mm är där en stående bild blir orimlig; golvet 20 mm är bara
+    så att \includegraphics aldrig får en negativ höjd. #))
+\par\penalty0
+\sbox{\pfbildtext}{\parbox{0.8\textwidth}{\centering\small\itshape ((( forsatt.bildtext or '' )))}}
+\setlength{\pfbildkvar}{\dimexpr\pagegoal-\pagetotal-\ht\pfbildtext-\dp\pfbildtext-16mm\relax}
+\ifdim\pagegoal=\maxdimen \setlength{\pfbildkvar}{60mm}\fi
+\ifdim\pfbildkvar>90mm \setlength{\pfbildkvar}{90mm}\fi
+\ifdim\pfbildkvar<20mm \setlength{\pfbildkvar}{20mm}\fi
 \vspace{5mm}
 
 \begin{center}
-  ((# Höjden är RÄKNAD per prov (exam_latex._forsatt_vy): kort bildtext ⇒
-      hög bild, upp till 66 mm; 45 ord ⇒ 47 mm som förut. Bredden 0,8 i
-      stället för 0,7 så att en liggande bild får bli lika bred som
-      bildtextens parbox under den. #))
-  \includegraphics[width=0.8\textwidth,height=((( forsatt.bild_hojd or 47 )))mm,keepaspectratio]{((( forsatt.bild_fil )))}
+  ((# Bredden 0,8 i stället för 0,7 så att en liggande bild får bli lika
+      bred som bildtextens parbox under den. #))
+  \includegraphics[width=0.8\textwidth,height=\pfbildkvar,keepaspectratio]{((( forsatt.bild_fil )))}
 ((* if forsatt.bildtext *))
 
-  ((# 3 mm extra luft mellan bild och bildtext: läraren såg texten ligga
-      «för nära bilden» i det tryckta provet (2026-09-14). Luften tas från
-      bildens höjdtak (50 → 47 mm) så att räkningen ovan för värsta fallet,
-      45 ord på fyra rader, fortfarande går in på försättsbladets enda sida. #))
   \vspace{3mm}
 
-  \parbox{0.8\textwidth}{\centering\small\itshape ((( forsatt.bildtext )))}
+  \usebox{\pfbildtext}
 ((* endif *))
 \end{center}
 ((* endif *))
