@@ -697,6 +697,13 @@
     .fhfynd li::before{content:'';position:absolute;left:4px;top:.5em;width:6px;height:6px;border-radius:50%;background:#C08A2E}
     .fhfyndhuv{margin:0 0 6px;padding-left:0;font-weight:600;color:var(--ink)}
     .fhfyndhuv::before{display:none}
+    /* Foten: «Laga fynden», eller raden om provtiden som inte lagas av en
+       omskrivning. Ingen prick: den hör till fynden, inte till åtgärden. */
+    .fhfyndfot{padding-left:0;margin-top:10px;color:var(--ink-3)}
+    .fhfyndfot::before{display:none}
+    .fhlaga{border:1px solid var(--line);border-radius:var(--r-pill);background:transparent;color:var(--ink-2);font-family:inherit;font-size:.76rem;padding:5px 14px;cursor:pointer;transition:color var(--dur-2) var(--ease),border-color var(--dur-2) var(--ease)}
+    .fhlaga:hover{color:var(--berry);border-color:var(--berry)}
+    .fhlaga:focus-visible{outline:2px solid var(--sky-deep);outline-offset:1px}
     /* Markeringen i canvasen. Streckad ockra kant + ett litet utropstecken i
        hörnet: samma språk som listan, och tydligt skilt från `andrad` (varvets
        diff) och `data-mal` (lärarens markering), tre olika saker på samma

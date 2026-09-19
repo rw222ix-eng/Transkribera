@@ -481,3 +481,74 @@ def test_efterkontrollen_ar_med_i_varje_svar(client, monkeypatch):
     assert [f["kod"] for f in r["efterkontroll"]] == ["tid"]
     hamtat = client.get(f"/api/exams/{r['id']}").json()
     assert [f["kod"] for f in hamtat["efterkontroll"]] == ["tid"]
+    # «Laga fynden»-meningen följer med i samma svar. TOM här, för provtiden
+    # lagas inte av en omskrivning. Knappen visas då inte (plan.js ritaFynd).
+    assert r["efterkontroll_instruktion"] == ""
+    assert hamtat["efterkontroll_instruktion"] == ""
+
+
+# ── «LAGA FYNDEN»: FYNDEN SOM EN INSTRUKTION ─────────────────────
+# Meningen knappen skickar byggs på servern (routes_exam
+# .efterkontroll_instruktion) just för att den ska vara EN mening: samma knapp
+# sitter i förhandsvisningen och på varvets rad i canvasen, och två klienter
+# som formulerar om koderna var för sig blir två olika omskrivningar med samma
+# namn. Ren funktion in och ut, så den går att pröva utan papper.
+
+def _fynd(kod, nr, text):
+    return {"kod": kod, "nr": nr, "el": f"uppg{nr}" if nr else None,
+            "text": text}
+
+
+def test_instruktionen_bar_fyndets_mening_och_en_atgard():
+    """Fyndets egen mening står kvar. Den bär talen (vilken bokuppgift, vilket
+    sidspann) och är den enda källan till dem. Åtgärden läggs efter som en egen
+    mening: fyndet säger vad som är fel, åtgärden vad som får ändras."""
+    from app.web import routes_exam
+    text = routes_exam.efterkontroll_instruktion([
+        _fynd("forebild", 8, "Uppgift 8 är märkt med avsnitt 1.2 (s. 20–30) "
+                             "men bygger på bokuppgift 1112, som står på s. 12."),
+        _fynd("sprak", None, "Språkvakten fäller uppgift 7."),
+    ])
+    assert "bokuppgift 1112" in text and "Språkvakten fäller uppgift 7." in text
+    # Åtgärderna, en per kod, och de säger vad som INTE får röras.
+    assert "Byt förebild" in text and "poäng står kvar" in text
+    assert "kortare meningar" in text
+    # Numrerad lista, ett fynd per rad.
+    rader = [r for r in text.splitlines() if r[:2] in ("1.", "2.")]
+    assert len(rader) == 2
+
+
+def test_instruktionen_lamnar_provtiden_utanfor():
+    """Provtiden lagas genom att läraren sätter fler minuter eller stryker
+    poäng, och båda är hennes val. En modell som bads «laga» den hade tagit bort
+    uppgifter. Ensam ger den tom sträng, alltså ingen knapp."""
+    from app.web import routes_exam
+    tid = _fynd("tid", None, "Pappret är satt till 70 minuter men uppgifterna "
+                             "räknas till 100.")
+    assert routes_exam.efterkontroll_instruktion([tid]) == ""
+    assert routes_exam.efterkontroll_instruktion([]) == ""
+    assert routes_exam.efterkontroll_instruktion(None) == ""
+    text = routes_exam.efterkontroll_instruktion(
+        [tid, _fynd("avsnitt", 3, "Uppgift 3 är märkt med avsnitt 2.6.")])
+    assert "70 minuter" not in text and "avsnitt 2.6" in text
+    # …och raden numreras från ett, fast provtiden stod först i listan.
+    assert text.splitlines()[-1].startswith("1. Uppgift 3")
+
+
+def test_instruktionen_samlar_uppgiftsnumren():
+    """Numren är klientens lås på omskrivningen (`nummer` i refine-kroppen) och
+    står också i meningen. En gång var, i ordning, och provtidens saknade
+    nummer räknas inte."""
+    from app.web import routes_exam
+    fynd = [_fynd("avsnitt", 8, "Uppgift 8 är märkt fel."),
+            _fynd("bild", 3, "Uppgift 3 bär fel plåt."),
+            _fynd("forebild", 8, "Uppgift 8 pekar på fel bokuppgift."),
+            _fynd("tid", None, "Pappret är satt till 70 minuter.")]
+    assert routes_exam.efterkontroll_nummer(fynd) == [3, 8]
+    assert routes_exam.efterkontroll_nummer([]) == []
+    assert "De gäller uppgift 3 och 8." in routes_exam.efterkontroll_instruktion(fynd)
+    # Ett enda nummer skrivs utan «och», och ett fynd utan nummer (balansen
+    # gäller pappret) ger ingen numrering alls.
+    assert "uppgift 3." in routes_exam.efterkontroll_instruktion(fynd[1:2])
+    assert "De gäller" not in routes_exam.efterkontroll_instruktion(
+        [_fynd("balans", None, "Balansen mot kursens mål stämmer inte.")])

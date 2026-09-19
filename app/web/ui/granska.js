@@ -1092,6 +1092,74 @@
     korOnskan(onskan);
   }
 
+  /* ── «LAGA FYNDEN»: EFTERKONTROLLEN SOM ETT VARV ───
+     Fynden stod på skärmen och läraren fick göra resten: trycka «Fortsätt
+     ändra», läsa listan, skriva om den till en mening, vänta. Knappen gör de
+     tre stegen till ett.
+
+     Den går SAMMA väg som allt annat i tråden, genom kosatt, kön, låset och
+     «pappret skrivs redan om». En egen väg hade blivit en andra omskrivning att
+     hålla i takt med den här. Meningen är serverns
+     (`efterkontroll_instruktion`), inte vår: koderna är serverns och en klient
+     som tolkar dem glider ur takt vid nästa fynd.
+
+     MÅLEN är rutorna fynden pekar ut, och de läses ur PROVARKET (index 0):
+     fynden räknas på provets JSON, och facitets uppgift 3 är en annan ruta med
+     samma id. Ligger facit framme skickas rutorna som bara id och namn: det
+     räcker för `nummer`, och att läsa lösningsförslagets text som om den var
+     provets vore värre än att inte läsa någon alls. Fynd utan uppgift
+     (balansen, språket) ger inga mål. Varvet gäller då hela arket, precis som
+     en mening läraren skrivit utan att peka. */
+  const fyndMal = el => {
+    const node = arkIndex() === 0 ? $(`.gdok [data-el="${el}"]`, plan) : null;
+    if (node) return malAv(node);
+    const n = (String(el).match(/^uppg(\d+)$/) || [])[1];
+    return { el, namn: n ? `Uppgift ${n}` : String(el), text: '', renderat: '',
+             harledd: '' };
+  };
+  function lagaFynden(text, fynd) {
+    const mening = String(text || '').trim();
+    const lagbara = (Array.isArray(fynd) ? fynd : [])
+      .filter(f => f && !window.API.LAGAS_INTE.includes(String(f.kod || '')));
+    if (!mening || !lagbara.length) return false;
+    const elen = [...new Set(lagbara.map(f => f.el).filter(Boolean))];
+    kosatt({ text: mening, ark: 0, mal: elen.map(fyndMal),
+             /* Vilka fynd varvet skickades för. Står något av dem kvar i
+                svaret säger raden nedan det, och knappen heter «Laga igen». */
+             lagar: lagbara.map(window.API.efterkontrollNyckel) });
+    return true;
+  }
+  /* Knappen på varvets egen rad, efter svaret: lämnade varvet fynd kvar går de
+     att skicka en gång till. INGEN automatisk loop: två varv i rad på samma
+     lista är två notor och lika gärna samma svar, och det är läraren som ska
+     se att det inte rör sig. */
+  function ritaLagaFynd(varv, post, res) {
+    const instr = String((res && res.efterkontroll_instruktion) || '').trim();
+    const fynd = window.API.efterkontrollLagbara(res);
+    if (!instr || !fynd.length) return;
+    const nycklar = fynd.map(window.API.efterkontrollNyckel);
+    const kvar = (post.lagar || []).some(n => nycklar.includes(n));
+    if (kvar) {
+      const p = document.createElement('p');
+      p.className = 'gbortatext';
+      p.textContent = 'Fynden stod kvar efter varvet.';
+      $('.gsvar', varv).appendChild(p);
+    }
+    const b = document.createElement('button');
+    b.type = 'button';
+    /* `gomtag` är utseendet, samma pillerknapp som «Funkade inte». Den sitter
+       på samma rad och gör samma sorts sak. Den egna klassen är e2e:s och
+       plan.js krok att hålla i. */
+    b.className = 'gomtag glagafynd';
+    b.textContent = kvar ? 'Laga igen' : 'Laga fynden';
+    b.addEventListener('click', ev => {
+      ev.stopPropagation();
+      b.disabled = true;
+      lagaFynden(instr, fynd);
+    });
+    varv.appendChild(b);
+  }
+
   /* Raden i tråden. Byggs EN gång — en köad post och det varv den blir är samma
      rad, den dubbleras inte när turen kommer. */
   function nyRad(onskan) {
@@ -1291,7 +1359,11 @@
                    malen: funna, text: onskan.text,
                    /* De härledda mål som släpptes ur varvet. De går inte till
                       servern, bara till svaret i tråden. */
-                   slappta: slappta || [] };
+                   slappta: slappta || [],
+                   /* Vilka fynd varvet skickades för, när det kom ur «Laga
+                      fynden» (se lagaFynden). Tom för allt läraren själv
+                      skrivit. */
+                   lagar: onskan.lagar || [] };
     kommentarer.push(post);
     const varv = onskan.rad || nyRad(onskan);
     varv.removeAttribute('data-i-ko');
@@ -1361,6 +1433,9 @@
         const sagt = res && Array.isArray(res.andrade) ? res.andrade : null;
         ritaAndradeKort(varv, post, sagt);
         ritaOmtag(varv, post, res);
+        /* Och fynden som efterkontrollen räknade om PÅ SVARET: lämnade varvet
+           något kvar står knappen här, ett klick från nästa försök. */
+        ritaLagaFynd(varv, post, res);
         armeraBlink(sagt, post.ark);
         if (host && host.onAndra) host.onAndra(post.text, post.namn, post.elen, res);
         vantaDiff(varv, fore, 0, foreArk);
@@ -1647,6 +1722,11 @@
     return true;
   }
   window.Granska = { oppna, stang, sattOm, diffFor, visaVarv, satFynd,
+                     /* Förhandsvisningens «Laga fynden» skickar samma varv som
+                        canvasens egen knapp, genom samma kö och samma lås
+                        (plan.js lagaFynden). Meningen är serverns; hit kommer
+                        den bara för att skickas. */
+                     lagaFynden,
                      /* Fynden som ligger på rutorna, som text per element, 
                         e2e ska kunna fråga utan att gräva i DOM:en, samma skäl
                         som `blinkade` och `koad` nedan. */

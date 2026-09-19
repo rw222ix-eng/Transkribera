@@ -392,6 +392,98 @@ def efterkontroll(view: dict, doc, summor: dict | None, *,
     return ut[:_FYND_TAK]
 
 
+# ── «LAGA FYNDEN»: FYNDEN SOM EN INSTRUKTION ─────────────────────
+# Fynden stod på skärmen, och läraren fick göra resten själv: trycka «Fortsätt
+# ändra», läsa listan, skriva om den till en mening modellen förstår, vänta.
+# Tre moment för något appen redan vet exakt vad det är.
+#
+# Texten byggs HÄR och inte i klienten, av två skäl. Koderna är serverns
+# (`balans`, `forebild`, `delmoment` …) och en klient som tolkar dem blir en
+# andra sanning som glider ur takt vid nästa fynd. Och samma knapp sitter på
+# två ställen, i förhandsvisningen och på varvets rad i canvasen, och de två
+# ska skicka ORDAGRANT samma mening, annars är det två olika omskrivningar med
+# samma namn.
+#
+# FYNDETS EGEN MENING STÅR KVAR. Den är skriven åt läraren, men den är också
+# den enda som bär talen (vilken bokuppgift, vilket sidspann, vilken plåt), och
+# att skriva om den åt modellen vore att ha två formuleringar av samma sak att
+# hålla i takt. Åtgärden läggs EFTER som en egen mening: fyndet säger vad som
+# är fel, åtgärden vad som får ändras.
+#
+# `tid` är inte med. Provtiden lagas inte genom att skriva om pappret. Den
+# lagas genom att läraren sätter fler minuter eller tar bort poäng, och båda
+# valen är hennes. En modell som «lagar» provtiden skulle stryka uppgifter.
+_ATGARD = {
+    "forebild": "Byt förebild till en bokuppgift som står på avsnittets sidor, "
+                "eller sätt det avsnitt uppgiften faktiskt prövar. Uppgiftens "
+                "text, tal och poäng står kvar.",
+    "avsnitt": "Sätt ett avsnitt som finns i boken, det som uppgiften faktiskt "
+               "prövar. Rör inte uppgiftens text eller poäng.",
+    "delmoment": "Skriv delmomentsrubriken så att dess sidor ligger i "
+                 "uppgiftens eget avsnitt, eller sätt det avsnitt sidorna hör "
+                 "till. Uppgiften i övrigt står kvar.",
+    "balans": "Flytta poäng mellan de uppgifter som redan finns tills balansen "
+              "stämmer. Lägg inte till och ta inte bort uppgifter.",
+    "sprak": "Skriv om texten med kortare meningar utan staplade räkneord och "
+             "utan ord som är svårare än matematiken. Samma matematik, samma "
+             "tal, samma poäng.",
+    "bild": "Skriv om uppgiftens scen så att den handlar om det bilden visar, "
+            "eller ta bort scenen ur uppgiften.",
+    "delkrav": "Gör pappret samstämmigt: ändra hjälpmedelsregeln för delen, "
+               "eller gör uppgifterna i den till uppgifter där endast svar "
+               "krävs.",
+}
+
+
+def efterkontroll_nummer(fynd: list[dict] | None) -> list[int]:
+    """Uppgiftsnumren de LAGBARA fynden pekar ut, en gång var, i ordning.
+
+    Klienten låser omskrivningen till dem (`nummer` i refine-kroppen), och
+    meningen nedan säger dem högt. Ett fynd utan nummer (balansen, språket när
+    det gäller flera) räknas inte: det gäller pappret, och att låsa varvet till
+    en uppgift hade gjort det omöjligt att laga."""
+    ut: list[int] = []
+    for f in fynd or []:
+        if not isinstance(f, dict) or f.get("kod") == "tid":
+            continue
+        try:
+            nr = int(f.get("nr"))
+        except (TypeError, ValueError):
+            continue
+        if nr > 0 and nr not in ut:
+            ut.append(nr)
+    return sorted(ut)
+
+
+def efterkontroll_instruktion(fynd: list[dict] | None) -> str:
+    """Fynden som EN instruktion till modellen. Tom sträng utan något att laga.
+
+    En numrerad lista, ett fynd per rad, och inget annat: en instruktion som
+    också förklarar varför den finns blir en text modellen tolkar i stället för
+    följer. Ramen omkring säger det enda som inte står i raderna: att resten av
+    pappret ska stå still."""
+    rader = [f for f in (fynd or [])
+             if isinstance(f, dict) and f.get("kod") != "tid"
+             and str(f.get("text") or "").strip()]
+    if not rader:
+        return ""
+    ut = []
+    for i, f in enumerate(rader, 1):
+        text = str(f["text"]).strip()
+        atgard = _ATGARD.get(str(f.get("kod") or ""), "")
+        ut.append(f"{i}. {text}{' ' + atgard if atgard else ''}")
+    nummer = efterkontroll_nummer(rader)
+    inledning = "Laga fynden nedan på pappret som det ligger."
+    if nummer:
+        inledning += (" De gäller uppgift "
+                      + ", ".join(str(n) for n in nummer[:-1])
+                      + (" och " if len(nummer) > 1 else "")
+                      + str(nummer[-1]) + ".")
+    return (inledning + " Allt annat står still: uppgifternas antal, deras "
+            "poäng och deras nivåer ändras inte om inget fynd säger det.\n\n"
+            + "\n".join(ut))
+
+
 def create_router(base: Path, arbiter) -> APIRouter:
     router = APIRouter()
     db_file = base / "transkribera.db"
@@ -601,6 +693,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
         doc, _ = exam_spec.validate_exam_json(view.get("exam") or {})
         summor = exam_spec.poangsummor(doc) if doc else None
         bok, boksidor = _bokunderlag(view) if doc else (None, {})
+        fynd = efterkontroll(view, doc, summor, bok=bok, sidor=boksidor,
+                             base=base)
         return {
             # ── EFTERKONTROLLEN (2026-09-19) ─────────────────────
             # De deterministiska fynden på pappret SOM DET LIGGER NU, räknade
@@ -609,8 +703,14 @@ def create_router(base: Path, arbiter) -> APIRouter:
             # genereringen. VARNINGAR, inte `errors`: godkännandet går igenom
             # ändå, och listan står på skärmen i stället för att ta beslutet
             # ifrån läraren. Alltid en lista, av samma skäl som `likheter`.
-            "efterkontroll": efterkontroll(view, doc, summor, bok=bok,
-                                           sidor=boksidor, base=base),
+            "efterkontroll": fynd,
+            # «LAGA FYNDEN»-knappens mening, färdigskriven (se modulens
+            # `efterkontroll_instruktion`). Tom sträng när ingenting går att
+            # laga. Knappen visas inte då, och en klient som inte känner
+            # fältet beter sig som förut. Den ligger HÄR och inte i klienten
+            # för att förhandsvisningen och canvasen ska skicka ordagrant
+            # samma mening.
+            "efterkontroll_instruktion": efterkontroll_instruktion(fynd),
             # Variationsvaktens flaggor (Etapp 4): uppgifter som blev en
             # tidigare uppgift med nya tal. En VARNING och inget fel: den
             # står bredvid `errors` och inte i den, för den ska inte se ut som

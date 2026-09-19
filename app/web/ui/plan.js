@@ -2469,7 +2469,14 @@
          (en äldre server, ett svar som inte är examens) säger ingenting om
          fynden, och att tolka det som «inga fynd» hade tystat listan pappret
          redan visade. En TOM lista är däremot ett svar och skrivs. */
-      if (res && Array.isArray(res.efterkontroll)) v.efterkontroll = res.efterkontroll;
+      if (res && Array.isArray(res.efterkontroll)) {
+        v.efterkontroll = res.efterkontroll;
+        /* Och meningen «Laga fynden» skickar (routes_exam
+           efterkontroll_instruktion). Den följer listan hit och ingen
+           annanstans ifrån: knappen i förhandsvisningen ska skicka ordagrant
+           det servern skrev för DE fynden, inte en mening klienten gissat. */
+        v.efterkontrollInstruktion = res.efterkontroll_instruktion || '';
+      }
       /* Ett tomt svar skriver ingenting: hellre den gamla listan än ett blankt
          papper om examen råkar sakna uppgifter. */
       if (!nya.length) return false;
@@ -3323,6 +3330,7 @@
              varvet, och läraren som öppnar dokumentet i morgon ska se samma
              sak i förhandsvisningen. */
           utkast.efterkontroll = res.efterkontroll || [];
+          utkast.efterkontrollInstruktion = res.efterkontroll_instruktion || '';
           /* ── OMPROVETS ORIGINAL, SOM FÖRSLAG ───────────
              Servern hittade ett tidigare godkänt prov på samma klass, kurs och
              moment (routes_exam._omprovskandidat). Den ANVÄNDE det inte, ett
@@ -4262,6 +4270,7 @@
          VILLKORSLÖST och utan reserv: listan gäller varvet, och ett fynd från
          förra varvet som står kvar pekar på en uppgift som just skrevs om. */
       v.efterkontroll = res.efterkontroll || [];
+      v.efterkontrollInstruktion = res.efterkontroll_instruktion || '';
       /* Och rutorna i canvasen märks om i samma andetag. Omritningen som
          följer (omGranska → sattOm) sätter tillbaka märkena ur den här
          kartan, granska.js markeraFynd körs efter varje omritning, precis
@@ -5421,25 +5430,28 @@
       .catch(() => {}))).then(() => v);
   }
 
+  /* Svarar med ett löfte om det gick: «Laga fynden» väntar på det innan den
+     öppnar canvasen och skickar sitt varv (se lagaFynden). Knappen i
+     förhandsvisningen bryr sig inte och ser likadan ut som förut. */
   function fortsattAndra(i) {
     const v = sparat[i];
-    if (!v) return;
+    if (!v) return Promise.resolve(false);
     /* Ett utkast i taget: appen visar ett papper i rutan, och två hade betytt
        att det ena tyst skrevs över. */
     if (versioner.length) {
       window.toast && window.toast('Ett utkast ligger redan framme — godkänn '
         + 'eller släng det först, sedan går det här pappret att ändra.');
-      return;
+      return Promise.resolve(false);
     }
     /* Bilderna FÖRST, sedan pappret på bordet: hinner läraren godkänna innan
        bytesen är hemma trycks provet utan sina foton (se bilderHem). Det är
        ett anrop per bild över localhost och pappret ligger kvar i högen under
        tiden. */
-    bilderHem(v).then(() => fortsattAndraNu(v));
+    return bilderHem(v).then(() => fortsattAndraNu(v));
   }
   function fortsattAndraNu(v) {
     const i = sparat.indexOf(v);
-    if (i < 0 || versioner.length) return;
+    if (i < 0 || versioner.length) return false;
     const id = v.id;
     sparat.splice(i, 1);
     ritaSparat();
@@ -5477,6 +5489,7 @@
     }
     window.toast && window.toast(
       `${dokNamn(v)} ligger framme igen — ändra i canvas och godkänn på nytt.`);
+    return true;
   }
 
   const fhskal = $('#forhandsskal');
@@ -5603,6 +5616,56 @@
       const rad = document.createElement('li');
       rad.textContent = f.text;
       lista.appendChild(rad);
+    });
+    /* ── ETT KLICK: «LAGA FYNDEN» ─────────────────────
+       Vägen hit var lärarens egen: tryck «Fortsätt ändra», vänta på att
+       pappret läggs fram, öppna canvasen, läs listan igen, skriv om den till
+       en mening modellen förstår, skicka, vänta. Knappen gör de sex stegen
+       till ett, och meningen är serverns (`efterkontroll_instruktion`) så att
+       den här knappen och canvasens skickar ordagrant samma sak.
+
+       PROVTIDEN är inte med (api.js efterkontrollLagbara). Den lagas genom att
+       läraren sätter fler minuter eller stryker poäng, och båda är hennes val.
+       En modell som bads laga den hade tagit bort uppgifter. Står bara den i
+       listan säger foten vad som ska göras i stället, utan knapp.
+
+       Utan server, utan prov-id eller utan serverns mening syns ingen knapp:
+       det finns ingenting att skicka varvet till, och en knapp som inte gör
+       något är värre än ingen knapp. */
+    const lagbara = window.API.efterkontrollLagbara({ efterkontroll: fynd });
+    const instr = String(v.efterkontrollInstruktion || '').trim();
+    const gar = lagbara.length && instr && serverPa() && !v.provBorta && v.provId;
+    if (!gar && !fynd.some(f => f.kod === 'tid')) return;
+    const fot = document.createElement('li');
+    fot.className = 'fhfyndfot';
+    if (gar) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.id = 'fh-laga';
+      b.className = 'fhlaga';
+      b.textContent = 'Laga fynden';
+      b.addEventListener('click', () => lagaFynden(sparat.indexOf(v), instr, lagbara));
+      fot.appendChild(b);
+    } else {
+      fot.textContent = 'Lägg till tid';
+    }
+    lista.appendChild(fot);
+  }
+  /* Knappens tre steg, i ordning och med väntan emellan: pappret tillbaka som
+     utkast (samma väg som «Fortsätt ändra», med bilderna hem först), canvasen
+     öppnad på det, och varvet skickat genom granskningens EGEN kö, med samma lås,
+     samma «pappret skrivs redan om», samma rad i tråden som om läraren skrivit
+     meningen själv. Går något av stegen inte igenom (ett utkast ligger redan
+     framme) stannar det där; toasten har redan sagt varför. */
+  function lagaFynden(i, instr, fynd) {
+    if (i < 0 || !sparat[i]) return;
+    fhStang();
+    fortsattAndra(i).then(ok => {
+      if (!ok || !window.Granska) return;
+      const knapp = $('#granska');
+      if (!window.Granska.oppen && knapp) knapp.click();
+      if (!window.Granska.oppen) return;
+      window.Granska.lagaFynden(instr, fynd);
     });
   }
   /* ── E-GRÄNSEN PÅ ETT GODKÄNT PROV ────────────────────
@@ -5832,6 +5895,7 @@
              läraren öppnar det igen. Godkännandet stoppas inte av den; det
              här är ett kvitto, inte en grind. */
           godkant.efterkontroll = r.efterkontroll || [];
+          godkant.efterkontrollInstruktion = r.efterkontroll_instruktion || '';
           dokUppdatera(godkant);
           const fyndrad = window.API.efterkontrollText(r);
           window.toast && window.toast((r.pdf

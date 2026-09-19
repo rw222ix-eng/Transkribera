@@ -631,6 +631,22 @@
      kvittot) och bara siffran ska stå. */
   API.efterkontroll = res => (Array.isArray(res && res.efterkontroll)
     ? res.efterkontroll.filter(f => f && f.text) : []);
+  /* ── DE FYND SOM GÅR ATT LAGA MED ETT VARV ────────
+     «Laga fynden» skickar efterkontrollen som en omskrivning (plan.js
+     lagaFynden, granska.js lagaFynden), och provtiden hör inte hemma i den:
+     den lagas genom att läraren sätter fler minuter eller stryker poäng, och
+     båda valen är hennes. En modell som bads «laga» provtiden skulle ta bort
+     uppgifter i stället.
+
+     Listan är klientens ENDA tolkning av koderna. Själva meningen som skickas
+     är serverns (`efterkontroll_instruktion`), se routes_exam för varför. */
+  API.LAGAS_INTE = ['tid'];
+  API.efterkontrollLagbara = res => API.efterkontroll(res)
+    .filter(f => !API.LAGAS_INTE.includes(String(f.kod || '')));
+  /* Fyndens identitet över ett varv: kod och uppgift, inte texten. Samma fynd
+     kan byta sidtal när uppgiften skrivits om och ändå vara samma fynd. Står
+     ett av dem kvar efter varvet säger canvasen det i stället för att loopa. */
+  API.efterkontrollNyckel = f => `${(f && f.kod) || ''}#${(f && f.nr) || ''}`;
   API.efterkontrollText = function (res) {
     const fynd = API.efterkontroll(res);
     if (!fynd.length) return '';

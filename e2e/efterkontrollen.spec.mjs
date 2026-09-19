@@ -40,22 +40,39 @@ const EXAM = {
 
 /* Serverns form, ordagrant: kod, nummer, elementnyckel, lärarens mening. `el`
    är samma serie som blad.js markera() sätter, alltså rutan i pappret. */
-const FYND = [
-  { kod: "avsnitt", nr: 2, el: "uppg2",
-    text: "Uppgift 2 är märkt med avsnitt 2.6, som inte finns i Liber Ma 1c." },
-  { kod: "tid", nr: null, el: null,
-    text: "Pappret är satt till 90 minuter men uppgifterna räknas till 130." },
-];
+const AVSNITT = { kod: "avsnitt", nr: 2, el: "uppg2",
+  text: "Uppgift 2 är märkt med avsnitt 2.6, som inte finns i Liber Ma 1c." };
+const TID = { kod: "tid", nr: null, el: null,
+  text: "Pappret är satt till 90 minuter men uppgifterna räknas till 130." };
+const FYND = [AVSNITT, TID];
+
+/* Meningen «Laga fynden» skickar, byggd av servern
+   (routes_exam.efterkontroll_instruktion) och skickad ORDAGRANT, och det är hela
+   skälet till att den byggs där och inte i två klienter. Här står den som en
+   sträng: den här sviten prövar vägen, inte formuleringen, den ligger i
+   tests/test_prov_kontrakt.py. */
+const INSTRUKTION = [
+  "Laga fynden nedan på pappret som det ligger. De gäller uppgift 2. Allt "
+  + "annat står still: uppgifternas antal, deras poäng och deras nivåer "
+  + "ändras inte om inget fynd säger det.",
+  "",
+  "1. " + AVSNITT.text + " Sätt ett avsnitt som finns i boken, det som "
+  + "uppgiften faktiskt prövar. Rör inte uppgiftens text eller poäng.",
+].join("\n");
 
 const strom = h => h.map(x => `data: ${JSON.stringify(x)}\n\n`).join("");
 
-const svar = extra => ({
-  id: 9, exam: EXAM, typ: "prov", status: "utkast", errors: [], rounds: 1,
-  granser: { E: 4, C: 7, A: 9 }, summor: { totalt: 6 },
-  current_version: 1, efterkontroll: FYND, ...extra,
-});
-
-async function fejka(page, { efterkontroll = FYND } = {}) {
+async function fejka(page, { efterkontroll = FYND,
+                             instruktion = INSTRUKTION } = {}) {
+  /* Fynden OCH serverns mening om dem i varje svar. De följs åt hela vägen
+     (routes_exam._exam_result), och en fejkning där bara det ena ändras hade
+     prövat ett svar servern aldrig skickar. */
+  const svar = extra => ({
+    id: 9, exam: EXAM, typ: "prov", status: "utkast", errors: [], rounds: 1,
+    granser: { E: 4, C: 7, A: 9 }, summor: { totalt: 6 },
+    current_version: 1, efterkontroll,
+    efterkontroll_instruktion: instruktion, ...extra,
+  });
   const anrop = [];
   const json = (route, kropp) => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify(kropp) });
@@ -74,22 +91,22 @@ async function fejka(page, { efterkontroll = FYND } = {}) {
        förhandsvisningen läser om fynden för ett papper som legat i högen
        (plan.js speglaExamen). */
     if (route.request().method() === "GET") {
-      return json(route, svar({ efterkontroll }));
+      return json(route, svar({}));
     }
     if (vag.endsWith("/approve")) {
       return route.fulfill({ status: 200, contentType: "text/event-stream",
         body: strom([{ type: "done", result: {
           id: 9, pdf: "C:/Transkriberingar/prov/derivator.pdf",
           tex: "C:/Transkriberingar/prov/derivator.tex", errors: [],
-          efterkontroll } }]) });
+          efterkontroll, efterkontroll_instruktion: instruktion } }]) });
     }
     if (vag.endsWith("/refine")) {
       return route.fulfill({ status: 200, contentType: "text/event-stream",
         body: strom([{ type: "done",
-          result: svar({ efterkontroll, andrade: ["uppg2"] }) }]) });
+          result: svar({ andrade: ["uppg2"] }) }]) });
     }
     return route.fulfill({ status: 200, contentType: "text/event-stream",
-      body: strom([{ type: "done", result: svar({ efterkontroll }) }]) });
+      body: strom([{ type: "done", result: svar({}) }]) });
   });
   return anrop;
 }
@@ -179,6 +196,95 @@ test("förhandsvisningen räknar upp fynden före godkännandet", async ({ page 
      andra läsning, inte en spärr. */
   await expect(page.locator("#fh-pdf")).toBeVisible();
   await expect(page.locator("#fh-fortsatt")).toBeVisible();
+});
+
+/* ── «LAGA FYNDEN»: ETT KLICK ─────────────────────────────────
+ * Läraren fick göra sex steg för det appen redan visste exakt vad det var:
+ * «Fortsätt ändra», vänta, öppna canvasen, läsa listan igen, skriva om den
+ * till en mening modellen förstår, skicka. Knappen gör dem till ett, och
+ * meningen är SERVERNS, samma på båda ställena knappen sitter.
+ */
+test("förhandsvisningens knapp lägger fram pappret och skickar fynden", async ({ page }) => {
+  const anrop = await fejka(page);
+  await page.goto("/");
+  await hydrerad(page);
+  await skriv(page);
+
+  await page.locator("#godkann").click();
+  await expect(page.locator(".toast").last())
+    .toContainText("utskriven som PDF", { timeout: 15_000 });
+  await page.evaluate(() => window.Dokument.visa(0));
+  await expect(page.locator("#forhandsskal")).toBeVisible({ timeout: 15_000 });
+
+  const laga = page.locator("#fh-laga");
+  await expect(laga).toHaveText("Laga fynden");
+  await laga.click();
+
+  /* Pappret ligger framme igen OCH canvasen står öppen, de två stegen läraren
+     gjorde för hand. */
+  await expect(page.locator("#granskaskal")).toBeVisible({ timeout: 15_000 });
+  /* Meningen syns som HENNES varv i tråden: hon ska kunna läsa vad som
+     skickades, inte bara se att något hände. */
+  await expect(page.locator("#granskaskal .gvarv .gfraga").last())
+    .toContainText("avsnitt 2.6", { timeout: 15_000 });
+
+  /* Och varvet gick till refine med serverns mening ordagrant, låst till den
+     uppgift fynden pekar ut. Provtiden har inget nummer och drar inte med sig
+     hela pappret. */
+  await expect.poll(() => anrop.filter(a => a.vag.endsWith("/refine")).length,
+                    { timeout: 20_000 }).toBe(1);
+  const kropp = anrop.filter(a => a.vag.endsWith("/refine")).pop().kropp;
+  expect(kropp.message).toBe(INSTRUKTION);
+  expect(kropp.nummer).toBe(2);
+});
+
+test("bara provtiden ger ingen knapp, bara en rad", async ({ page }) => {
+  /* Provtiden lagas genom att läraren sätter fler minuter eller stryker poäng,
+     och båda är hennes val. Servern skickar därför tom instruktion, och då
+     ska ingen knapp stå där och lova något. */
+  await fejka(page, { efterkontroll: [TID], instruktion: "" });
+  await page.goto("/");
+  await hydrerad(page);
+  await skriv(page);
+
+  await page.locator("#godkann").click();
+  await expect(page.locator(".toast").last())
+    .toContainText("utskriven som PDF", { timeout: 15_000 });
+  await page.evaluate(() => window.Dokument.visa(0));
+  await expect(page.locator("#forhandsskal")).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator("#fh-fynd")).toContainText("Lägg till tid");
+  await expect(page.locator("#fh-laga")).toHaveCount(0);
+});
+
+test("varvet som lämnar fynd kvar erbjuder ett omtag, inte en loop", async ({ page }) => {
+  const anrop = await fejka(page);
+  await page.goto("/");
+  await hydrerad(page);
+  await skriv(page);
+
+  await page.locator("#granska").click();
+  await expect(page.locator("#granskaskal")).toBeVisible({ timeout: 15_000 });
+  await page.locator("#g-falt").fill("Gör uppgift 2 svårare");
+  await page.locator("#g-form button[type='submit']").click();
+
+  const knapp = page.locator("#granskaskal .glagafynd").first();
+  await expect(knapp).toHaveText("Laga fynden", { timeout: 20_000 });
+  await knapp.click();
+  /* Andra varvet bär serverns mening, samma sträng som förhandsvisningens
+     knapp skickar, samma kö och samma lås. */
+  await expect.poll(() => anrop.filter(a => a.vag.endsWith("/refine")).length,
+                    { timeout: 20_000 }).toBe(2);
+  const kropp = anrop.filter(a => a.vag.endsWith("/refine")).pop().kropp;
+  expect(kropp.message).toBe(INSTRUKTION);
+  expect(kropp.nummer).toBe(2);
+
+  /* Fejkade servern står fynden kvar, och då säger raden det och knappen byter
+     namn. Ingen automatisk omgång: två varv i rad på samma lista är två notor
+     och lika gärna samma svar. */
+  const sista = page.locator("#granskaskal .gvarv").last();
+  await expect(sista).toContainText("Fynden stod kvar efter varvet",
+                                    { timeout: 20_000 });
+  await expect(sista.locator(".glagafynd")).toHaveText("Laga igen");
 });
 
 test("ett papper utan fynd bär ingen lugnande rad", async ({ page }) => {
