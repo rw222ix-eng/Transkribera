@@ -520,10 +520,17 @@ def forbjudna_metoder(db_file: Path, body: dict, *,
     potensekvation (s. 50–52, lektionen 23/9, en vecka efter provet) och en
     procentuell förändring (kapitel 3, i december).
 
-    Samma två källor och samma ordning som delmomenten: kalendern först
-    (lektioner efter provdagen på sidor efter spannet), bokens egna avsnitt
-    som reserv. Det klassen FAKTISKT haft dras bort: en rubrik kan inte både
-    krävas och vara förbjuden (exam_gen.rensa_forbjudna).
+    BÅDA källorna, inte den ena ELLER den andra (2026-09-19). Här stod
+    kalendern först och bokens register som RESERV, läst bara när kalendern
+    teg. Omprov 87 visade vad det kostade: uppgift 6 a) krävde en ekvation med
+    den obekanta i nämnaren, alltså kapitel 2, på ett prov över kapitel 1.
+    Metoden stod i bokens register direkt efter provets sidspann, men klassen
+    hade lektionsrader efter provdagen, så registret lästes aldrig.
+
+    Sammanslagningen bor i exam_gen.forbjudna_metoder; den här funktionen
+    hämtar de två källorna ur basen och lämnar över. Kalendern går fortfarande
+    FÖRST, den är lärarens egna ord för samma metoder, och det klassen
+    FAKTISKT haft dras bort: en rubrik kan inte både krävas och vara förbjuden.
 
     Tom lista när bokdörren är stängd eller källorna tiger: prompten ska då se
     ut precis som den gjorde innan listan fanns."""
@@ -540,17 +547,16 @@ def forbjudna_metoder(db_file: Path, body: dict, *,
     try:
         rader = (db.lektionsinnehall_for_kurs(conn, gid, cid)
                  if gid and cid else [])
-        ut = exam_gen.forbjudna_ur_lektioner(rader, till=till,
-                                             provdatum=provdatum)
-        if not ut:
-            # Bokens register ur innehållsförteckningen (bok_avsnitt), som
-            # get_bok bär med sig. Rubrikerna är kapitlens egna och gäller
-            # hela boken, precis vad reserven ska vara.
-            ut = exam_gen.forbjudna_ur_avsnitt(
-                (db.get_bok(conn, bid) or {}).get("avsnitt") or [], till=till)
+        # Bokens register ur innehållsförteckningen (bok_avsnitt), som get_bok
+        # bär med sig. Rubrikerna är kapitlens egna och gäller hela boken, 
+        # den bredare av de två källorna, och därför en dålig reserv men en bra
+        # halva.
+        avsnitt = (db.get_bok(conn, bid) or {}).get("avsnitt") or []
     finally:
         conn.close()
-    return exam_gen.rensa_forbjudna(ut, undervisade)
+    return exam_gen.forbjudna_metoder(rader, avsnitt, till=till,
+                                      provdatum=provdatum,
+                                      delmoment=undervisade)
 
 
 def bok_avsnitt(db_file: Path, body: dict) -> list[dict]:

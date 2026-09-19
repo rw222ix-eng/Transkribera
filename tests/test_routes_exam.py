@@ -45,7 +45,11 @@ def _stub_generate(monkeypatch, result=None):
                       # nivåvalet (v25): rutten ska bygga skelettet och skicka
                       # banden — eller inget av dem, när väljaren står i default
                       "skeleton": _kw.get("skeleton"),
-                      "niva_mal": _kw.get("niva_mal")})
+                      "niva_mal": _kw.get("niva_mal"),
+                      # omprovets original (2026-09-19): rutten slår upp
+                      # DOKUMENTET ur basen och skickar det hit, exam_gen
+                      # läser aldrig själv.
+                      "referensprov": _kw.get("referensprov")})
         if log_cb:
             log_cb("Skriver provet …")
         return result or {"exam": _exam_doc(), "errors": [], "rounds": 1}
@@ -2143,3 +2147,93 @@ def test_elevernas_losningsforslag_byggs_pa_begaran(client, monkeypatch):
     r = client.get(f"/api/exams/{result['id']}/losningar")
     assert r.status_code == 200
     assert "losningsforslag.pdf" in r.headers["content-disposition"]
+
+
+# ── OMPROVET: ORIGINALET NÅR PROMPTEN, FÖRSLAGET GÖR DET INTE ────────────────
+#
+# `omprov_av` är prov-id:t på pappret eleven redan skrivit. Rutten slår upp
+# DOKUMENTET och skickar det som `referensprov` till exam_gen.generate_exam,
+# som ärver slotplanen, lägger planen i prompten och räknar likvärdigheten på
+# svaret. exam_gen läser aldrig basen, den kopplingen görs här.
+
+def _godkant_prov(client, *, titel, datum, klass, kurs):
+    """Ett godkänt prov i basen, skrivet direkt via db: approve-vägen
+    kompilerar LaTeX, och det är inte det som prövas här."""
+    exam = copy.deepcopy(_exam_doc())
+    exam["titel"] = titel
+    exam["uppgifter"][0]["delmoment"] = "Kapitel 1, avsnitt 1.2 (s. 7–11)"
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    try:
+        gid = appdb.get_or_create_group(conn, klass)
+        cid = appdb.get_or_create_course(conn, kurs)
+        vy = appdb.create_exam(conn, exam=exam, group_id=gid, course_id=cid,
+                               datum=datum, typ="prov")
+        appdb.set_exam_status(conn, vy["id"], "godkänt")
+    finally:
+        conn.close()
+    return vy["id"], gid, cid
+
+
+def test_omprov_av_skickar_originalet_som_referensprov(client, monkeypatch):
+    calls = _stub_generate(monkeypatch)
+    gammalt, gid, cid = _godkant_prov(
+        client, titel="Prov 1 · kapitel 1", datum="2026-09-16",
+        klass="TE26A", kurs="Matematik, nivå 2b")
+    r = client.post("/api/exams/generate", json={
+        "course_id": cid, "group_id": gid, "antal": 6,
+        "datum": "2026-10-05", "moment": "kapitel 1",
+        "omprov_av": gammalt})
+    assert r.status_code == 200
+    _done(r)
+    ref = calls[-1]["referensprov"]
+    assert ref and ref["titel"] == "Prov 1 · kapitel 1"
+    # Originalet kom som DOKUMENT, inte som id: exam_gen läser aldrig basen.
+    assert [u["typ"] for u in ref["uppgifter"]]
+
+
+def test_okant_omprov_av_lamnar_prompten_som_den_var(client, monkeypatch):
+    calls = _stub_generate(monkeypatch)
+    r = client.post("/api/exams/generate", json={
+        "course_id": _course_id(client), "antal": 6, "omprov_av": 99999})
+    assert r.status_code == 200
+    _done(r)
+    assert calls[-1]["referensprov"] is None
+    # …och utan fältet alls: samma sak, alltså byte-identisk prompt.
+    client.post("/api/exams/generate",
+                json={"course_id": _course_id(client), "antal": 6})
+    assert calls[-1]["referensprov"] is None
+
+
+def test_originalet_foreslas_men_anvands_aldrig_tyst(client, monkeypatch):
+    """Läraren som inte pekat ut originalet får en FRÅGA, inte ett prov som
+    tyst skrivits mot ett papper hon inte valt."""
+    calls = _stub_generate(monkeypatch)
+    gammalt, gid, cid = _godkant_prov(
+        client, titel="Prov 1 · kapitel 1", datum="2026-09-16",
+        klass="NA26F", kurs="Matematik, nivå 1b")
+    r = client.post("/api/exams/generate", json={
+        "course_id": cid, "group_id": gid, "antal": 6,
+        "datum": "2026-10-05", "moment": "kapitel 1, avsnitt 1.2"})
+    svar = _done(r)
+    assert svar["omprov_forslag"]["id"] == gammalt
+    assert svar["omprov_forslag"]["titel"] == "Prov 1 · kapitel 1"
+    # FÖRSLAG, inte tillämpat: prompten fick inget referensprov.
+    assert calls[-1]["referensprov"] is None
+
+
+def test_inget_forslag_utan_traff(client, monkeypatch):
+    _stub_generate(monkeypatch)
+    gammalt, gid, cid = _godkant_prov(
+        client, titel="Prov 1 · kapitel 1", datum="2026-09-16",
+        klass="EE26A", kurs="Matematik, nivå 2c")
+    assert gammalt
+    # Ett moment som inte delar ett enda kapitelnummer med originalet.
+    svar = _done(client.post("/api/exams/generate", json={
+        "course_id": cid, "group_id": gid, "antal": 6,
+        "datum": "2026-10-05", "moment": "kapitel 4, avsnitt 4.3"}))
+    assert "omprov_forslag" not in svar
+    # …och ett prov som ligger FÖRE originalet har inget original att ärva.
+    svar = _done(client.post("/api/exams/generate", json={
+        "course_id": cid, "group_id": gid, "antal": 6,
+        "datum": "2026-09-01", "moment": "kapitel 1"}))
+    assert "omprov_forslag" not in svar

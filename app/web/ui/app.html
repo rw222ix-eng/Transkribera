@@ -681,6 +681,34 @@
     @keyframes tickar{from{transform:scaleX(1)}to{transform:scaleX(0)}}
     .toast button{background:transparent;border:none;color:#fff;font-family:inherit;font-size:inherit;font-weight:500;text-decoration:underline;text-underline-offset:3px;cursor:pointer;padding:0}
 
+    /* ── EFTERKONTROLLENS FYND ───────────────────────────
+       Serverns deterministiska varningar på pappret som det ligger (balansen,
+       avsnittet mot boken, förebilden mot sidspannet, plåten mot scenen,
+       provtiden, språket). De står PÅ två ställen och ser likadana ut på båda:
+       i förhandsvisningen ovanför godkännandeknapparna, och som en markering
+       på uppgiften i canvasen.
+
+       Ockra och inte rött: de fäller ingenting. Läraren har skrivit om pappret
+       med flit, godkännandet går igenom, och listan är en andra läsning, inte
+       en spärr. Ett rött fält hade sagt «det här är trasigt» om ett papper som
+       ofta är precis som hon vill ha det. */
+    .fhfynd{margin:0;padding:12px 22px 0;background:var(--surface);list-style:none}
+    .fhfynd li{position:relative;margin:0 0 6px;padding-left:18px;font-size:.78rem;line-height:1.5;color:var(--ink-2)}
+    .fhfynd li::before{content:'';position:absolute;left:4px;top:.5em;width:6px;height:6px;border-radius:50%;background:#C08A2E}
+    .fhfyndhuv{margin:0 0 6px;padding-left:0;font-weight:600;color:var(--ink)}
+    .fhfyndhuv::before{display:none}
+    /* Markeringen i canvasen. Streckad ockra kant + ett litet utropstecken i
+       hörnet: samma språk som listan, och tydligt skilt från `andrad` (varvets
+       diff) och `data-mal` (lärarens markering), tre olika saker på samma
+       ruta måste gå att skilja åt utan att man frågar.
+
+       Märket är ett eget BARN och inte ett ::after, av samma skäl som
+       granskningens svep (granska.js markeraArbete): väljläget har redan tagit
+       pseudoelementet till sin etikett, och bladen sätter egna på sina rutor.
+       Titeln bär hela fyndet, så muspekaren ger texten utan att rutan växer. */
+    .gdok [data-fynd]{outline:1.5px dashed #C08A2E;outline-offset:3px;border-radius:3px}
+    .gfyndmarke{position:absolute;top:-9px;right:-9px;width:16px;height:16px;border-radius:50%;background:#C08A2E;color:#fff;font-size:.66rem;font-weight:700;line-height:16px;text-align:center;pointer-events:none;z-index:4}
+
   </style>
 </head>
 <body>
@@ -1451,6 +1479,14 @@
       <button class="stangx" id="fh-stang" aria-label="Stäng förhandsvisningen">✕</button>
     </header>
     <div class="fhark" id="fh-ark"></div>
+    <!-- EFTERKONTROLLEN, FÖRE GODKÄNNANDET. Servern räknar om de
+         deterministiska fynden vid varje svar (routes_exam.efterkontroll), 
+         balansen mot kursens mål, avsnittet mot boken, förebilden mot
+         sidspannet, plåten mot scenen, provtiden mot uppgifterna, språket, 
+         och det här är sista stället de går att läsa innan pappret blir en
+         PDF. De BLOCKERAR inte: godkännandeknappen står kvar där den stod,
+         listan är en andra läsning och inte en spärr. -->
+    <ul class="fhfynd" id="fh-fynd" hidden></ul>
     <!-- Godkännandet var en enkelriktad dörr, och ingenting sa det. «Bygg
          vidare» startar en HELT ny körning — nytt papper, ny nota — men det
          läraren nästan alltid vill är mindre än så: rätta en siffra i uppgift

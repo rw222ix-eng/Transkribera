@@ -2403,22 +2403,59 @@ def list_kalenderposter(conn: sqlite3.Connection) -> list[dict]:
 def add_kalenderpost(conn: sqlite3.Connection, *, datum: str, titel: str,
                      tid: str = "", klass: str = "", slag: str | None = None,
                      kalla: str = "appen") -> dict | None:
-    """Lägg in en post läraren godtagit (frontendens Kalender.lagg). Idempotent
-    via UNIQUE(datum, tid, titel): godkänner man samma dokument två gånger står
-    det ändå en gång i kalendern."""
+    """Lägg in en post läraren godtagit (frontendens Kalender.lagg).
+
+    IDEMPOTENT PÅ DAGEN OCH PAPPRET, inte på titeln. UNIQUE(datum, tid, titel)
+    räckte så länge titeln stod still, och den gör den inte: appens titel är
+    «Prov — {momentet}», och momentet är just det «Fortsätt ändra» ändrar. Ett
+    prov som godkändes, skrevs om och godkändes igen lämnade alltså TVÅ
+    «Prov — …»-poster på samma dag för samma klass, och läraren såg provet
+    dubbelt i kalendern (granskningen av prov 85, 2026-09-19).
+
+    Nyckeln är därför (datum, klass, slag) för appens egna poster: samma dag,
+    samma klass, samma sorts papper ÄR samma bokning, och den nya titeln skrivs
+    över den gamla i stället för att läggas bredvid. Bara `kalla='appen'`, de
+    lästa schemaposterna ägs av synken (replace_kalenderposter) och rörs inte,
+    och en post utan slag har ingen sådan identitet att slå ihop på.
+
+    Lärarens skrivna poster utan klass (ämneslagsmöten) faller tillbaka på den
+    gamla vägen: `group_id` är då NULL, och NULL är inte lika med NULL i SQL."""
     datum = (datum or "").strip()
     titel = (titel or "").strip()
+    tid = (tid or "").strip()
     if not datum or not titel:
         return None
     group_id = get_or_create_group(conn, klass or "")
+    samma = None
+    if kalla == "appen" and slag and group_id:
+        samma = conn.execute(
+            "SELECT id FROM kalenderposter WHERE kalla = ? AND datum = ? "
+            "AND group_id = ? AND slag = ?",
+            (kalla, datum, group_id, slag)).fetchone()
+    # Står den nya titeln REDAN på dagen (en annan klass fick samma rubrik, en
+    # schemapost heter likadant) går den inte att skriva dit igen, UNIQUE
+    # gäller hela tabellen. Då är raden redan sann och den gamla ska bort, inte
+    # skrivas om till en dubblett som kastar IntegrityError mitt i en
+    # transaktion.
+    krock = samma is not None and conn.execute(
+        "SELECT 1 FROM kalenderposter WHERE datum = ? AND tid = ? AND titel = ? "
+        "AND id <> ?", (datum, tid, titel, samma["id"])).fetchone() is not None
     with skriv(conn):
-        conn.execute(
-            "INSERT OR IGNORE INTO kalenderposter(datum, tid, titel, group_id, slag, kalla) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (datum, (tid or "").strip(), titel, group_id, slag or None, kalla))
+        if krock:
+            conn.execute("DELETE FROM kalenderposter WHERE id = ?",
+                         (samma["id"],))
+        elif samma is not None:
+            conn.execute(
+                "UPDATE kalenderposter SET tid = ?, titel = ? WHERE id = ?",
+                (tid, titel, samma["id"]))
+        else:
+            conn.execute(
+                "INSERT OR IGNORE INTO kalenderposter(datum, tid, titel, group_id, slag, kalla) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (datum, tid, titel, group_id, slag or None, kalla))
     row = conn.execute(
         _KALPOST_SELECT + "WHERE k.datum = ? AND k.tid = ? AND k.titel = ?",
-        (datum, (tid or "").strip(), titel)).fetchone()
+        (datum, tid, titel)).fetchone()
     # `ci` lämnas NULL: det här är posten LÄRAREN lade in i appen, inte en
     # kalenderhändelse med en beskrivning att läsa. Punkterna hon vill ha står
     # redan i dokumentet hon just godkände.
@@ -3515,6 +3552,30 @@ def get_bok(conn: sqlite3.Connection, bok_id: int) -> dict | None:
 def find_bok(conn: sqlite3.Connection, namn: str) -> dict | None:
     """Boken vid namn — hyllan i frontenden känner böcker på namnet, inte id."""
     row = conn.execute("SELECT * FROM bocker WHERE namn = ?", (namn,)).fetchone()
+    return _bok_view(conn, row) if row else None
+
+
+def bok_for_kurs(conn: sqlite3.Connection, course_id: int | None) -> dict | None:
+    """Klassens bok, slagen ur KURS-ID:t i stället för ur en begäran.
+
+    Bokdörren i planeringen skickar med bok-id i varje anrop (routes_planning
+    .bok_val), men provet bär det inte: `exams` har ingen bok-kolumn, och
+    efterkontrollen vid godkännandet har bara raden i basen att gå på. Kopplingen
+    finns ändå, `bocker.kurs` är kursens NAMN, samma sträng som `courses.namn`
+    («Matematik, nivå 1c» → «Liber Ma 1c»), och en SELECT räcker.
+
+    None när kursen saknar bok: efterkontrollens bokfrågor tiger då i stället för
+    att fälla ett papper vars bok appen aldrig sett (samma fail-open som
+    avsnittstackning)."""
+    try:
+        cid = int(course_id or 0)
+    except (TypeError, ValueError):
+        return None
+    if not cid:
+        return None
+    row = conn.execute(
+        "SELECT b.* FROM bocker b JOIN courses c ON c.namn = b.kurs "
+        "WHERE c.id = ? ORDER BY b.id", (cid,)).fetchone()
     return _bok_view(conn, row) if row else None
 
 

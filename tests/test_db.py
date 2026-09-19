@@ -1116,3 +1116,77 @@ def test_stampla_granser_skrivs_over_bara_pa_begaran(tmp_path):
     assert db.get_exam(conn, ex["id"])["exam"]["granser"]["E"]["minst"] == 6
     db.stampla_exam_granser(conn, ex["id"], ver, sedan, skriv_over=True)
     assert db.get_exam(conn, ex["id"])["exam"]["granser"]["E"]["minst"] == 8
+
+
+# ── KALENDERPOSTEN SOM BLEV TVÅ (granskningen 2026-09-19) ────────────────────
+# Prov 85 godkändes, lades tillbaka som utkast med «Fortsätt ändra», skrevs om
+# och godkändes igen. Appens kalenderpost heter «Prov — {momentet}» och
+# idempotensen satt på UNIQUE(datum, tid, titel), alltså på TITELN, det enda
+# fältet omskrivningen faktiskt ändrar. Resultatet var två «Prov — …»-poster
+# samma dag för samma klass.
+
+def test_kalenderposten_ar_samma_bokning_nar_momentet_bytt_namn(tmp_path):
+    conn = _conn(tmp_path)
+    forst = db.add_kalenderpost(
+        conn, datum="2026-10-20", tid="15:30–16:40", klass="IndA", slag="prov",
+        titel="Prov — 1.1 Uttryck · 1.2 Andragradsuttryck")
+    assert forst is not None
+    # Läraren skriver om pappret och godkänner igen; momentet har fått en rad
+    # till och titeln är därmed en annan sträng.
+    sedan = db.add_kalenderpost(
+        conn, datum="2026-10-20", tid="15:30–16:40", klass="IndA", slag="prov",
+        titel="Prov — 1.1 Uttryck · 1.2 Andragradsuttryck · 1.3 Ekvationer")
+    prov = [p for p in db.list_kalenderposter(conn)
+            if p["datum"] == "2026-10-20" and p.get("slag") == "prov"]
+    assert len(prov) == 1, prov
+    assert prov[0]["titel"] == sedan["titel"]
+    assert prov[0]["titel"].endswith("1.3 Ekvationer")
+
+
+def test_kalenderposten_ror_inte_schemats_egen_bokning(tmp_path):
+    """Skolans egen provpost ligger kvar bredvid appens. Synken äger den
+    (replace_kalenderposter), och appen skriver aldrig ovanpå schemat."""
+    conn = _conn(tmp_path)
+    db.replace_kalenderposter(
+        conn, [{"datum": "2026-10-20", "tid": "15:30–16:40", "klass": "IndA",
+                "slag": "prov", "titel": "IndA: PROV 1, Algebra (kap 1)"}],
+        "schema")
+    db.add_kalenderpost(conn, datum="2026-10-20", tid="15:30–16:40",
+                        klass="IndA", slag="prov", titel="Prov — Algebra")
+    db.add_kalenderpost(conn, datum="2026-10-20", tid="15:30–16:40",
+                        klass="IndA", slag="prov", titel="Prov — Algebra II")
+    poster = [p for p in db.list_kalenderposter(conn)
+              if p["datum"] == "2026-10-20"]
+    assert sorted(p["kalla"] for p in poster) == ["appen", "schema"]
+    assert [p["titel"] for p in poster if p["kalla"] == "schema"] \
+        == ["IndA: PROV 1, Algebra (kap 1)"]
+
+
+def test_kalenderposten_slar_inte_ihop_olika_klasser_eller_slag(tmp_path):
+    conn = _conn(tmp_path)
+    for klass, slag, titel in (("IndA", "prov", "Prov — Algebra"),
+                               ("NA26F", "prov", "Prov — Potenser"),
+                               ("IndA", "tavla", "Tavla — Algebra")):
+        db.add_kalenderpost(conn, datum="2026-10-20", tid="", klass=klass,
+                            slag=slag, titel=titel)
+    assert len([p for p in db.list_kalenderposter(conn)
+                if p["datum"] == "2026-10-20"]) == 3
+    # …och en post UTAN klass är ingens: den får inte slås ihop med något.
+    db.add_kalenderpost(conn, datum="2026-10-20", titel="Ämneslag Ma")
+    db.add_kalenderpost(conn, datum="2026-10-20", titel="Öppet hus")
+    assert len([p for p in db.list_kalenderposter(conn)
+                if p["datum"] == "2026-10-20"]) == 5
+
+
+def test_bok_for_kurs_slar_upp_klassens_bok(tmp_path):
+    conn = _conn(tmp_path)
+    cid = db.get_or_create_course(conn, "Matematik, nivå 1c")
+    assert db.bok_for_kurs(conn, cid) is None        # tom hylla: tig
+    bok = db.create_bok(conn, namn="Liber Ma 1c", kurs="Matematik, nivå 1c")
+    db.set_bok_register(conn, bok["id"],
+                        [{"nr": "1.1", "titel": "Rötter", "fran": 2, "till": 6}])
+    traff = db.bok_for_kurs(conn, cid)
+    assert traff["namn"] == "Liber Ma 1c"
+    assert [a["nr"] for a in traff["avsnitt"]] == ["1.1"]
+    assert db.bok_for_kurs(conn, db.get_or_create_course(conn, "Fysik 1")) is None
+    assert db.bok_for_kurs(conn, None) is None

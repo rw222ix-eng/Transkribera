@@ -304,6 +304,46 @@
       el.appendChild(s);
     }));
   }
+  /* ── EFTERKONTROLLENS FYND PÅ RUTORNA ──────────────
+     Servern räknar om de deterministiska fynden vid varje svar (routes_exam
+     .efterkontroll) och säger vilken RUTA de gäller, `el` är samma nyckel som
+     blad.js markera() sätter, alltså «uppg12». Här märks rutan: streckad ockra
+     kant och ett utropstecken i hörnet, med hela texten som `title`.
+
+     Skälet att den sitter på pappret och inte bara i tråden: prov 86:s uppgift
+     12 hade ett avsnitt som inte finns i boken OCH en plåt som visar en fyr
+     medan uppgiften handlar om ett tryckeri. Båda gick att se på skärmen, om
+     någon hade sagt vilken uppgift man skulle titta på. En mening i chatten
+     längst till höger gör inte det; en ring runt uppgiften gör det.
+
+     Märket är ett eget barn, som svepet (se markeraArbete ovan): väljlägets
+     etikett och bladens egna pseudoelement har redan tagit ::after på de
+     rutorna. Ritas om efter varje omritning av samma skäl. */
+  let fynden = {};
+  function satFynd(karta) {
+    fynden = karta && typeof karta === 'object' ? karta : {};
+    markeraFynd();
+  }
+  function markeraFynd() {
+    $$('.gfyndmarke', plan).forEach(m => m.remove());
+    $$('.gdok [data-fynd]', plan).forEach(el => {
+      el.removeAttribute('data-fynd');
+      el.removeAttribute('title');
+    });
+    Object.keys(fynden).forEach(id => {
+      const rader = fynden[id] || [];
+      if (!rader.length) return;
+      $$(`.gdok [data-el="${id}"]`, plan).forEach(el => {
+        el.setAttribute('data-fynd', String(rader.length));
+        el.title = rader.join('\n');
+        const m = document.createElement('span');
+        m.className = 'gfyndmarke';
+        m.textContent = '!';
+        el.appendChild(m);
+      });
+    });
+  }
+
   /* ── OMRITNINGAR VI INTE BAD OM ────────────────────
      Tavlan ritar om sig själv när den blivit mätbar (blad.js nar()), en stund
      efter att canvasen öppnats — och den omritningen slänger rutorna med
@@ -315,7 +355,8 @@
      bildruta. */
   let atersatt = 0;
   const varEgen = m => [...m.addedNodes, ...m.removedNodes].every(n =>
-    n.nodeType === 1 && (n.classList.contains('gpin') || n.classList.contains('gshimmer')));
+    n.nodeType === 1 && (n.classList.contains('gpin') || n.classList.contains('gshimmer')
+                         || n.classList.contains('gfyndmarke')));
   if (typeof MutationObserver === 'function') {
     new MutationObserver(muts => {
       if (atersatt || skal.hidden) return;
@@ -325,6 +366,7 @@
         if (skal.hidden) return;
         markeraMalen();
         markeraArbete();
+        markeraFynd();
       });
     }).observe(plan, { childList: true, subtree: true });
   }
@@ -880,8 +922,14 @@
        ett delmoment — det var precis så prov 82 tappade sitt prefixmoment —
        och då ska det stå i tråden, inte bara i en fellista ingen läser. */
     const tackning = window.API.tackningsfelText(res && res.errors);
+    /* Och efterkontrollen, som räknas om på pappret EFTER varvet. Det var
+       precis här prov 85 tappade sin balans: en riktad omskrivning flyttade en
+       poäng från A till C, ingen räknade om, och provet godkändes. Raden står
+       sist av vakternas, den gäller pappret som helhet, inte det läraren just
+       bad om, och rutorna den pekar på är märkta i pappret. */
+    const efter = window.API.efterkontrollText(res);
     return (text ? ' ' + text : '') + (bok ? ' ' + bok : '')
-      + (tackning ? ' ' + tackning : '');
+      + (tackning ? ' ' + tackning : '') + (efter ? ' ' + efter : '');
   };
   /* Varvets svar, plus det som INTE gick med. Släpptes ett härlett mål ur
      urvalet (se korOnskan) måste det stå i samma bubbla som resten: annars
@@ -1479,6 +1527,11 @@
     senaste = { varv: 0, ark: 0, par: {} };
     /* Nytt papper: svepet och den armerade blinken hörde till det förra. */
     arbetar = null; vantarBlink = null;
+    /* Fynden också: de gäller ETT papper, och ett fynd på «uppg12» som står
+       kvar när nästa dokument öppnas pekar på en uppgift ingen granskat.
+       `o.fynd` är kartan planeringen redan har (api.js efterkontrollPerElement)
+, utan den stod pappret omarkerat tills nästa varv landade. */
+    satFynd(o.fynd);
     satSnabb(false);          // nytt papper, inget element valt än
     /* Nytt papper, tom kö. Ett varv som fortfarande går hör till det förra
        pappret — plan.js slänger dess svar (se sammaPapper där) — och de köade
@@ -1573,6 +1626,7 @@
        står på skärmen, och en blink satt före omritningen hade slängts med
        klonen utan att någon sett den. */
     markeraArbete();
+    markeraFynd();
     blinkaNu();
     satVy();
   }
@@ -1592,7 +1646,11 @@
     fokusera(n);
     return true;
   }
-  window.Granska = { oppna, stang, sattOm, diffFor, visaVarv,
+  window.Granska = { oppna, stang, sattOm, diffFor, visaVarv, satFynd,
+                     /* Fynden som ligger på rutorna, som text per element, 
+                        e2e ska kunna fråga utan att gräva i DOM:en, samma skäl
+                        som `blinkade` och `koad` nedan. */
+                     get fynd() { return JSON.parse(JSON.stringify(fynden)); },
                      get oppen() { return !skal.hidden; },
                      /* Kön utåt, som text: e2e ska kunna fråga vad som väntar
                         utan att gräva i panelens DOM. */

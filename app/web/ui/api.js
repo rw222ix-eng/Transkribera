@@ -569,7 +569,108 @@
     if (poang.length) {
       rader.push(`Uppgift ${poang.join(', ')} ber om fler saker än den ger poäng för.`);
     }
+    /* ── DE TRETTON NYA VAKTERNA (2026-09-19) ──────────
+       Generatorns slutgrind fäller sedan granskningen också avsnittens nivå
+       och vikt, delmomentens vikt och märkning, det kryssade innehållet,
+       A-nivån, kravraden, kursens frågeform, omprovets likvärdighet och
+       bildbeställningen, och exam_spec varnar när provet är längre än passet
+       (tidsvakt, den enda som INTE repareras).
+
+       Serverns meddelanden är skrivna TILL MODELLEN («Byt ut en uppgift ur
+       det avsnitt som har flest …»). Lärarens rad står här, en per kod och
+       med uppgiftsnumren när koden bär dem, av samma skäl som raderna ovan:
+       ett prov som levereras med ett kvarstående fynd ska gå att läsa utan
+       att man öppnar en fellista. */
+    const RADER = {
+      avsnittsniva: n => `Avsnitt utan en enda E-poäng: ${n} st. Den som läser för E har ingenting att hämta där.`,
+      avsnittsvikt: n => `${n} avsnitt bär poäng som inte svarar mot hur många sidor de har.`,
+      avsnittsmarkning: (n, nr) => `Uppgift ${nr} är märkt med ett avsnitt den inte hämtar sitt stoff ur.`,
+      delmomentvikt: n => `${n} delmoment bär poäng som inte svarar mot lektionstiden klassen fick.`,
+      delmomentmarkning: (n, nr) => `Uppgift ${nr} prövar inte det delmoment den är märkt med.`,
+      citackning: n => `${n} kryssad(e) innehållspunkt(er) prövas inte av någon uppgift.`,
+      citaggning: (n, nr) => `Uppgift ${nr} är taggad med en innehållspunkt den inte prövar.`,
+      anivavakt: (n, nr) => `A-poängen på uppgift ${nr} kräver ingen insikt utöver C.`,
+      kravrad: (n, nr) => `Uppgift ${nr} säger emot sin egen typ: kravraden och uppgiften lovar olika saker.`,
+      rubrikord: n => 'Provet använder inte kursens egen frågeform.',
+      likvardighet: (n, nr) => (nr
+        ? `Uppgift ${nr} är inte likvärdig originalets på samma plats.`
+        : 'Omprovet är inte likvärdigt sitt original.'),
+      scenvakt: (n, nr) => `Bildbeställningen på uppgift ${nr} hör till en annan uppgift.`,
+      /* Tidsvakten repareras inte, antalet är LÄRARENS och står kvar. Därför
+         är serverns egen mening redan skriven åt henne, och den säger mer än
+         en sammanfattning skulle (hur många uppgifter som ryms på passet). */
+      tidsvakt: (n, nr, egen) => egen,
+    };
+    Object.keys(RADER).forEach(kod => {
+      const mina = fel.filter(f => f.code === kod);
+      if (!mina.length) return;
+      const nr = Array.from(new Set(mina
+        .map(f => parseInt(String(f.path || '').replace('uppgift ', ''), 10))
+        .filter(n => n > 0))).sort((a, b) => a - b);
+      rader.push(RADER[kod](mina.length, nr.join(', '),
+                            String(mina[0].message || '').trim()));
+    });
     return rader.join(' ');
+  };
+
+  /* ── EFTERKONTROLLEN: DET SOM RÄKNATS OM EFTER VARVET ─────
+     Serverns `efterkontroll` (routes_exam.efterkontroll) är de deterministiska
+     fynden på pappret SOM DET LIGGER NU, balansen mot kursens mål, avsnittet
+     mot boken, förebilden mot sidspannet, plåten mot scenen, provtiden mot
+     uppgifterna, språkvakten. De räknas om vid varje svar, alltså också efter
+     en riktad omskrivning i canvasen: det var just där prov 85 tappade sin
+     balans och prov 86 fick ett avsnitt som inte finns, utan att någon sa
+     något (granskningen 2026-09-19).
+
+     Meningarna är serverns egna och skrivna åt LÄRAREN (till skillnad från
+     `errors`, som är skrivna åt modellen), här räknas de bara ihop. Tom
+     sträng när ingenting fälls, som nivåns och bokens rader: ett papper utan
+     fynd ska inte bära en lugnande mening.
+
+     `antal` finns för de ställen där en lista inte får plats (chattbubblan,
+     kvittot) och bara siffran ska stå. */
+  API.efterkontroll = res => (Array.isArray(res && res.efterkontroll)
+    ? res.efterkontroll.filter(f => f && f.text) : []);
+  API.efterkontrollText = function (res) {
+    const fynd = API.efterkontroll(res);
+    if (!fynd.length) return '';
+    /* TVÅ rader i löpande text, resten som en siffra. Hela listan står på
+       pappret och i förhandsvisningen; en chattbubbla med nio varningar läses
+       inte alls, och då är även de två första borta. */
+    const forst = fynd.slice(0, 2).map(f => f.text).join(' ');
+    const kvar = fynd.length - 2;
+    return kvar > 0
+      ? `${forst} Och ${kvar} ${kvar === 1 ? 'fynd till' : 'fynd till'} står på pappret.`
+      : forst;
+  };
+  /* Fynden per canvaselement: {uppg3: ['…', '…']}. Rutorna märks med den
+     (granska.js, plan.js), och nycklarna är samma serie som blad.js markera()
+     sätter, servern räknar om uppgiftsnumret åt oss just för att klienten
+     inte ska behöva göra det en andra gång.
+
+     TVÅ KÄLLOR, EN MARKERING. `efterkontroll` är det som räknas om vid varje
+     svar; `errors` bär generatorns kvarstående fynd från slutgrinden, och de
+     som gäller EN uppgift (`path: "uppgift 7"`) hör lika mycket hemma på
+     rutan. Två olika markeringar för «appen såg något på uppgift 7» hade varit
+     två språk för samma sak. Fynd utan uppgift (provtiden, balansen) hamnar
+     inte på någon ruta alls, de står i listan och i tråden. */
+  const UPPGIFTSFEL = ['avsnittsmarkning', 'delmomentmarkning', 'citaggning',
+                       'anivavakt', 'kravrad', 'likvardighet', 'scenvakt',
+                       'poangvakt', 'begriplighet'];
+  API.efterkontrollPerElement = function (res) {
+    const ut = {};
+    const lagg = (el, text) => {
+      if (!el || !text) return;
+      const rader = (ut[el] = ut[el] || []);
+      if (!rader.includes(text)) rader.push(text);
+    };
+    API.efterkontroll(res).forEach(f => lagg(f.el, f.text));
+    (Array.isArray(res && res.errors) ? res.errors : []).forEach(f => {
+      if (!f || !UPPGIFTSFEL.includes(f.code)) return;
+      const n = parseInt(String(f.path || '').replace('uppgift ', ''), 10);
+      if (n > 0) lagg('uppg' + n, String(f.message || '').trim());
+    });
+    return ut;
   };
 
   window.API = API;

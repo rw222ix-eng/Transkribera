@@ -442,8 +442,30 @@ window.Kalender = (() => {
     }
   }
 
+  /* ── EN BOKNING, INTE EN PER TITEL ────────────────────
+     Posten appen skriver heter «Prov — {momentet}», och momentet ändras varje
+     gång läraren skriver om pappret i canvas. Så länge godkännandet bara
+     kollade att titeln inte redan stod där fick samma prov en post per
+     omskrivning: två «Prov — …» på samma dag för samma klass (granskningen av
+     prov 85, 2026-09-19).
+
+     Identiteten är dagen, klassen och slaget, samma dag, samma klass, samma
+     sorts papper ÄR samma bokning. Finns den redan skrivs titeln och tiden om
+     på plats i stället för att en till läggs bredvid. Servern har samma regel
+     (db.add_kalenderpost), så en omladdning ger samma lista som skärmen visar.
+
+     SCHEMAPOSTERNA RÖRS INTE. De ägs av synken och är lärarens egen kalender;
+     appen skriver aldrig ovanpå dem (se rubriken högst upp i filen). En post
+     utan klass rörs inte heller, den är ingens, och att slå ihop på dagen och
+     slaget hade kunnat träffa något helt annat. */
+  const minPost = post => (post.klass && post.slag
+    ? poster.find(p => p.datum === post.datum && (p.klass || '') === post.klass
+        && (p.slag || '') === post.slag && p.kalla !== 'schema') || null
+    : null);
   function lagg(post) {
-    poster.push(post);
+    const fanns = minPost(post);
+    if (fanns) Object.assign(fanns, post);
+    else poster.push(post);
     /* Utan server dör posten vid omladdning — det är prototypens läge, och
        det är sant om den. Med server ligger den kvar. */
     if (franServern && window.API) {

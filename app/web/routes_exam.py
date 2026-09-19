@@ -88,6 +88,296 @@ def _safe_component(raw: str, fallback: str) -> str:
 _TYPER = ("prov", "arbetsblad", "gruppuppgift")
 
 
+# ── EFTERKONTROLLEN: DET SOM RÄKNAS, RÄKNAS OM EFTER VARJE VARV ─────────────
+#
+# LÄRARENS GRANSKNING 2026-09-19 (prov 85, 86 och 87). Genereringen har sina
+# vakter, balansen, täckningen, språket, domarna, och de körs EN gång, på
+# vägen ut ur `generate`. Sedan öppnar läraren canvasen och skriver om pappret,
+# och därifrån och fram till PDF:en tittar ingen. Det syntes:
+#
+#   * Prov 85: en riktad omskrivning flyttade en poäng från A till C. Ingen
+#     mätte om balansen, ingen sa något, och provet godkändes.
+#   * Prov 86: uppgift 12 stod märkt med avsnitt «2.6», som inte finns i Liber
+#     Ma 1c. Flera uppgifter pekade på bokförebilder som står på sidor utanför
+#     sitt eget avsnitt, och uppgift 12 bar dessutom en plåt (a-14-fyr-bat, en
+#     fyr i kvällsmörker) medan SCENE-stycket beskriver ett tryckeri.
+#
+# Ingen av de frågorna kräver en modell. Alla är RÄKNINGAR mot något som redan
+# står i basen, kursens mål, bokens register, bokens uppgiftssidor,
+# plåtkatalogen, och en räkning ska räknas, inte läsas (samma dom som föll
+# över delmomentstäckningen 2026-09-13).
+#
+# Kontrollen hänger därför i `_exam_result`, alltså i det ENDA svar alla vägar
+# passerar: GET, generering, omskrivning och godkännande. Läraren ser samma
+# fynd i chatten efter varvet, på pappret i canvasen och i förhandsvisningen
+# innan hon godkänner.
+#
+# DEN BLOCKERAR INGENTING. Fynden är varningar och inte `errors`: det är
+# lärarens papper, hon har skrivit om det med flit, och ett godkännande som
+# vägrar därför att en förmåga ligger en procentenhet fel vore appen som
+# överprövar henne. Den säger vad den ser, och hon bestämmer.
+#
+# FAIL-OPEN överallt: saknas boken, saknas fältet, saknas katalogen, tig. Varje
+# papper i basen och varje inspelad kassett skrevs innan fälten fanns, och att
+# fälla dem för att appen blivit klokare vore att göra historien fel.
+_FYND_TAK = 24
+
+
+def _fynd(kod: str, text: str, nr: int | None = None) -> dict:
+    """En rad i efterkontrollen. `el` är canvasens elementnyckel, samma serie
+    som blad.js markera() sätter (`uppg3`), så att klienten kan lägga fyndet
+    på rätt ruta utan att räkna om numret."""
+    return {"kod": kod, "nr": nr, "el": f"uppg{nr}" if nr else None,
+            "text": text}
+
+
+def _uppgiftsnr(path: str) -> int | None:
+    """«uppgifter[4].deluppgifter[1]» → 5. Fellistornas vägar bär index, inte
+    nummer, och läraren räknar från ett."""
+    m = re.match(r"uppgifter\[(\d+)\]", str(path or ""))
+    if m:
+        return int(m.group(1)) + 1
+    m = re.match(r"uppgift (\d+)", str(path or ""))
+    return int(m.group(1)) if m else None
+
+
+def _spann(text) -> tuple[int, int] | None:
+    """«s. 31–34» → (31, 34); «(s. 52)» → (52, 52). None utan sidor."""
+    tal = re.findall(r"\d+", str(text or ""))
+    if not tal:
+        return None
+    a = int(tal[0])
+    b = int(tal[1]) if len(tal) > 1 else a
+    return (min(a, b), max(a, b))
+
+
+def _sidspann_i_etikett(etikett: str) -> list[tuple[int, int]]:
+    """Delmomentsrubrikens sidor, en per «(s. …)». Prompten ber om två rubriker
+    med semikolon emellan när en uppgift täcker två, och då finns två spann."""
+    ut = []
+    for m in re.finditer(r"s\.\s*(\d+)\s*(?:[–, -]\s*(\d+))?", str(etikett or "")):
+        a = int(m.group(1))
+        b = int(m.group(2) or a)
+        ut.append((min(a, b), max(a, b)))
+    return ut
+
+
+def _balansfynd(doc, typ: str, nivaval: dict | None) -> list[dict]:
+    """Balansen mot kursens mål, räknad om. Samma funktion som
+    reparationsloopen kör (exam_spec.validate_balance), det är hela poängen:
+    varvet som lagade balansen och varvet som bröt den ska mätas med samma
+    linjal."""
+    try:
+        fel = exam_spec.validate_balance(
+            doc, niva_mal=(nivaval or {}).get("mal"), profil=typ)
+    except Exception:                       # pragma: no cover, aldrig sett
+        return []
+    return [_fynd("balans", f["message"], _uppgiftsnr(f.get("path", "")))
+            for f in fel]
+
+
+def _bokfynd(doc, bok: dict | None, sidor: dict[int, int]) -> list[dict]:
+    """Avsnittet, förebilden och delmomentsetiketten mot BOKEN.
+
+    Tre frågor, alla med samma svarskälla (bokens register och dess lästa
+    uppgiftssidor) och alla tysta utan bok:
+
+    * Står avsnittet i boken alls? Prov 86:s uppgift 12 bar «2.6» och Liber
+      Ma 1c slutar på 2.5, ett avsnitt modellen hittat på, och det syntes
+      ingenstans.
+    * Ligger bokförebilden på avsnittets sidor? En uppgift märkt 2.5 (s. 64–99)
+      som pekar på bokuppgift 1253 (s. 14) är märkt fel, prövar något annat än
+      etiketten lovar, och räknas ändå in i täckningen.
+    * Rör delmomentets sidspann samma avsnitt? Rubriken bär sina sidor
+      («Formler (s. 64–68)»), och en rubrik vars sidor ligger i ett helt annat
+      avsnitt är samma felmärkning en gång till.
+
+    Etiketten får bära TVÅ rubriker (semikolonet i prompten), då räcker det
+    att en av dem rör avsnittet."""
+    if not bok:
+        return []
+    register = {str(a.get("nr") or "").strip(): (int(a["fran"]), int(a["till"]))
+                for a in (bok.get("avsnitt") or [])}
+    if not register:
+        return []
+    ut: list[dict] = []
+    for i, it in enumerate(doc.uppgifter):
+        nr = i + 1
+        avs = (it.avsnitt or "").strip()
+        sp = register.get(avs)
+        if avs and sp is None:
+            ut.append(_fynd(
+                "avsnitt", f"Uppgift {nr} är märkt med avsnitt {avs}, som inte "
+                f"finns i {bok['namn']}. Byt till ett avsnitt boken har, eller "
+                "ta bort märkningen.", nr))
+        if sp:
+            fb = it.forebild
+            sida = sidor.get(int(fb.nr)) if fb else None
+            if fb and sida is not None and not sp[0] <= sida <= sp[1]:
+                ut.append(_fynd(
+                    "forebild", f"Uppgift {nr} är märkt med avsnitt {avs} "
+                    f"(s. {sp[0]}–{sp[1]}) men bygger på bokuppgift {fb.nr}, "
+                    f"som står på s. {sida}. Antingen är avsnittet fel eller "
+                    "förebilden.", nr))
+            etikett = _sidspann_i_etikett(it.delmoment or "")
+            if etikett and not any(a <= sp[1] and b >= sp[0] for a, b in etikett):
+                rader = ", ".join(f"s. {a}–{b}" if a != b else f"s. {a}"
+                                  for a, b in etikett)
+                ut.append(_fynd(
+                    "delmoment", f"Uppgift {nr} är märkt med avsnitt {avs} "
+                    f"(s. {sp[0]}–{sp[1]}) men bär delmomentet {rader}, som "
+                    "ligger någon annanstans i boken. Täckningen räknar på "
+                    "etiketten, så en felmärkt uppgift döljer en lucka.", nr))
+    return ut
+
+
+def _delfynd(doc) -> list[dict]:
+    """«Endast svar krävs» mot uppgifternas typ.
+
+    Delraden på provets försättsblad byggs ur uppgifterna (exam_latex.delrader,
+    blad.js redovisning sedan c4d2469): alla uppgifter av typen `rutin` ger
+    «Endast svar krävs», något annat ger lösbladsraden. Kontrollen är därför en
+    VAKT och inte en mätning, den håller de två derivationerna ihop, och den
+    fäller dokumentets EGEN hjälpmedelsregel när den lovar något annat än
+    uppgifterna kan hålla.
+
+    Skälet att vakten finns: raden är härledd, den går inte att skriva om i
+    canvasen, och ändrar någon regeln på ena stället (poängsatt typbyte i ett
+    varv, en ny formulering i mallen) är det eleven i salen som upptäcker det."""
+    ut: list[dict] = []
+    regel = f"{doc.hjalpmedel or ''} {doc.instruktion or ''}".lower()
+    for kod, items in exam_spec.gruppera_per_del(doc.uppgifter):
+        langa = [i + 1 for i, it in enumerate(doc.uppgifter)
+                 if it.del_ == kod and it.typ != "rutin"]
+        if not langa:
+            continue
+        # DELENS NAMN ÄR DET INTERNA. exam_spec räknar B/C, pappret räknar om
+        # till A/B (blad-bygg delnamnVisning), och dokumentets egen regel är
+        # skriven i den INTERNA skrivningen, det är just därför blad.js måste
+        # översätta den innan den trycks. Att söka båda skrivningarna gick inte:
+        # «del B» är del B:s kod OCH del C:s bokstav på pappret, och varje regel
+        # om del B fällde då del C också.
+        namn = str(kod or "").lower()
+        if not namn:
+            continue
+        m = re.search(rf"del\s*{namn}\b[^.]{{0,80}}", regel)
+        if m and "endast svar" in m.group(0):
+            ut.append(_fynd(
+                "delkrav", f"Hjälpmedelsregeln säger att del {namn.upper()} "
+                f"bara kräver svar, men uppgift {', '.join(map(str, langa))} "
+                "i den delen kräver fullständig lösning. Pappret säger då "
+                "två olika saker om samma uppgift."))
+    return ut
+
+
+def _tidfynd(doc, summor: dict | None, typ: str) -> list[dict]:
+    """Provtiden på pappret mot tiden pappret faktiskt tar.
+
+    Samma modell som skärmen räknar med (exam_spec.tidsatgang, plan.js
+    uppskatta), alltså inte en ny sanning utan den som redan står i
+    förhandsvisningen, ställd mot minuterna som TRYCKS på försättsbladet.
+    Tolv procent slack: provet är uppskattat, och en varning som går på fem
+    minuter är en varning man slutar läsa. Prov 85 stod på 70 minuter med ett
+    papper på 100, det är inte slack, det är en lektion till."""
+    if not summor or not doc.tid_min:
+        return []
+    beraknad = exam_spec.tidsatgang(summor, len(doc.uppgifter),
+                                    takt=exam_spec.takt_for(typ))
+    if not beraknad or beraknad <= round(doc.tid_min * 1.12):
+        return []
+    return [_fynd(
+        "tid", f"Pappret är satt till {doc.tid_min} minuter men uppgifterna "
+        f"räknas till {beraknad}. Lägg till tid, eller ta bort poäng.")]
+
+
+def _bildfynd(doc, base: Path) -> list[dict]:
+    """Plåten mot scenen.
+
+    Prov 86:s uppgift 12 bar plåten a-14-fyr-bat, en fyr och en båt i
+    kvällsmörker, medan SCENE-stycket beskriver ett tryckeri. Plåten sätts av
+    appen själv (platar.matcha_exam) på uppgiftens `scen.begrepp`, och en
+    omskrivning som byter uppgiftens innehåll lämnar den gamla plåten kvar:
+    fältet står inte i grammatiken, så modellen kan varken sätta eller rensa
+    det.
+
+    Måttet är matchningens eget (platar.poang mot platar.MIN_POANG): faller
+    plåten under den gräns den en gång valdes över hör den inte längre till
+    uppgiften. Ingen ny linjal, alltså, samma som satte den dit."""
+    uppg = [(i + 1, it) for i, it in enumerate(doc.uppgifter)
+            if it.scen and it.scen.plat]
+    if not uppg:
+        return []
+    try:
+        poster = {p["namn"]: p for p in platar.katalog(base)}
+    except Exception:                       # pragma: no cover, katalogen borta
+        return []
+    if not poster:
+        return []
+    vikter = platar._vikter(list(poster.values()))
+    ut: list[dict] = []
+    for nr, it in uppg:
+        post = poster.get(str(it.scen.plat))
+        if post is None:
+            ut.append(_fynd(
+                "bild", f"Uppgift {nr} pekar på plåten {it.scen.plat}, som inte "
+                "finns i katalogen. Välj en annan bild i canvas.", nr))
+            continue
+        if platar.poang(post, it.scen.begrepp, it.text, vikter) < platar.MIN_POANG:
+            ut.append(_fynd(
+                "bild", f"Uppgift {nr} handlar om «{it.scen.begrepp}» men bär "
+                f"plåten {it.scen.plat} ({post.get('motiv') or 'annat motiv'}). "
+                "Bilden hör inte till uppgiften, byt eller ta bort den i "
+                "canvas.", nr))
+    return ut
+
+
+def _sprakfynd(exam: dict, typ: str) -> list[dict]:
+    """Språkvakten en gång till, på det som ligger framme. Den kördes vid
+    skrivningen; en omskrivning kan lägga tillbaka precis det den tog bort."""
+    if typ != "prov":
+        return []
+    try:
+        fel = exam_gen.sprakvakt(exam)
+    except Exception:                       # pragma: no cover
+        return []
+    # Vaktens meddelanden är skrivna TILL MODELLEN («Skriv vad eleven ska
+    # GÖRA …»). Läraren behöver numret och den första meningen; resten är
+    # reparationsinstruktioner hon inte ska behöva läsa.
+    nummer = sorted({_uppgiftsnr(f.get("path", "")) for f in fel} - {None})
+    if not nummer:
+        return []
+    return [_fynd(
+        "sprak", "Språkvakten fäller uppgift "
+        + ", ".join(str(n) for n in nummer)
+        + ": för långa meningar, staplade räkneord eller ord som är svårare än "
+        "matematiken. Läs dem högt en gång.")]
+
+
+def efterkontroll(view: dict, doc, summor: dict | None, *,
+                  bok: dict | None = None, sidor: dict[int, int] | None = None,
+                  base: Path | None = None) -> list[dict]:
+    """Alla deterministiska fynd på ETT papper, i läsordning.
+
+    `doc` är den validerade ExamDoc, är den None gick pappret inte att
+    validera alls, och då har `errors` redan sagt det som behöver sägas."""
+    if doc is None:
+        return []
+    typ = view.get("typ") or "prov"
+    nivaval = exam_spec.nivaval(typ, view.get("nivaval"))
+    ut: list[dict] = []
+    ut += _balansfynd(doc, typ, nivaval)
+    ut += _bokfynd(doc, bok, sidor or {})
+    if typ == "prov":
+        ut += _delfynd(doc)
+    ut += _tidfynd(doc, summor, typ)
+    ut += _bildfynd(doc, base or Path("."))
+    ut += _sprakfynd(view.get("exam") or {}, typ)
+    # Taket är läsarens, inte serverns: tjugofyra rader i en ruta är en vägg,
+    # och pappret som ger fler än så har ett annat problem än det listan kan
+    # beskriva.
+    return ut[:_FYND_TAK]
+
+
 def create_router(base: Path, arbiter) -> APIRouter:
     router = APIRouter()
     db_file = base / "transkribera.db"
@@ -178,6 +468,46 @@ def create_router(base: Path, arbiter) -> APIRouter:
         finally:
             conn.close()
 
+    def _omprovskandidat(conn, *, group_id, course_id, moment: str,
+                         datum: str | None) -> dict | None:
+        """Det troliga originalet till ett omprov, som FÖRSLAG, aldrig tyst.
+
+        Samma klass, samma kurs, samma moment, godkänt, och en dag FÖRE det
+        prov som skrivs nu. Momentet jämförs på provets titel och på dess
+        delmomentsetiketter: rubriken skrivs om mellan varven, men «kapitel 1»
+        står kvar i båda. Hittas inget svarar vi None, och klienten visar
+        ingenting.
+
+        Förslaget når svaret som `omprov_forslag` och gör INGENTING med
+        pappret. Att tyst skriva ett prov mot ett original läraren inte pekat
+        ut vore en gissning som ser ut som ett faktum, och hon har redan sagt
+        vad appen ska göra med sådana (se kalenderbeslutet)."""
+        if not group_id or not course_id:
+            return None
+        nyckel = {o for o in re.findall(r"\d+(?:\.\d+)?", moment or "")}
+        bast = None
+        for e in db.list_exams(conn, int(course_id)):
+            if e.get("group_id") != group_id or (e.get("typ") or "prov") != "prov":
+                continue
+            if str(e.get("status") or "") != "godkänt" or not e.get("exam"):
+                continue
+            if datum and (e.get("datum") or "") >= datum:
+                continue
+            if nyckel:
+                text = " ".join(
+                    [str(e["exam"].get("titel") or "")]
+                    + [str(u.get("delmoment") or "") + " "
+                       + str(u.get("avsnitt") or "")
+                       for u in e["exam"].get("uppgifter") or []
+                       if isinstance(u, dict)])
+                if not nyckel & set(re.findall(r"\d+(?:\.\d+)?", text)):
+                    continue
+            # list_exams sorterar nyast först, så första träffen är närmast.
+            bast = {"id": e["id"], "titel": e["exam"].get("titel") or "",
+                    "datum": e.get("datum") or "", "klass": e.get("group") or ""}
+            break
+        return bast
+
     def _satt_lararens_datum(exam: dict | None, datum: str | None,
                              klockslag: str | None = None) -> None:
         """Pappersdatumet — och klockslagen — är LÄRARENS, aldrig modellens.
@@ -227,6 +557,28 @@ def create_router(base: Path, arbiter) -> APIRouter:
         finally:
             conn.close()
 
+    def _bokunderlag(view: dict) -> tuple[dict | None, dict[int, int]]:
+        """Boken efterkontrollen mäter mot, plus dess uppgiftssidor (nr → sida).
+
+        EN anslutning och två SELECT:ar per svar. Att läsa hela hyllan hade
+        varit fel: det är KLASSENS bok som gäller, och den hittas ur provets
+        kurs (db.bok_for_kurs). Utan bok tiger bokfrågorna."""
+        if not view.get("course_id"):
+            return None, {}
+        conn = db.connect(db_file)
+        try:
+            bok = db.bok_for_kurs(conn, view["course_id"])
+            if bok is None:
+                return None, {}
+            sidor = {int(r["nr"]): int(r["sida"])
+                     for r in db.bok_uppgifter(conn, bok["id"])
+                     if r.get("nr") and r.get("sida")}
+            return bok, sidor
+        except Exception:                   # pragma: no cover, bokhyllan borta
+            return None, {}
+        finally:
+            conn.close()
+
     def _exam_result(view: dict, errors: list, rounds: int,
                      likheter: list | None = None,
                      nivafel: list | None = None,
@@ -234,7 +586,17 @@ def create_router(base: Path, arbiter) -> APIRouter:
                      begriplighetsfel: list | None = None) -> dict:
         doc, _ = exam_spec.validate_exam_json(view.get("exam") or {})
         summor = exam_spec.poangsummor(doc) if doc else None
+        bok, boksidor = _bokunderlag(view) if doc else (None, {})
         return {
+            # ── EFTERKONTROLLEN (2026-09-19) ─────────────────────
+            # De deterministiska fynden på pappret SOM DET LIGGER NU, räknade
+            # om vid varje svar: balans, bok, delkrav, tid, plåt, språk. Se
+            # modulens `efterkontroll` för varför de sitter här och inte i
+            # genereringen. VARNINGAR, inte `errors`: godkännandet går igenom
+            # ändå, och listan står på skärmen i stället för att ta beslutet
+            # ifrån läraren. Alltid en lista, av samma skäl som `likheter`.
+            "efterkontroll": efterkontroll(view, doc, summor, bok=bok,
+                                           sidor=boksidor, base=base),
             # Variationsvaktens flaggor (Etapp 4): uppgifter som blev en
             # tidigare uppgift med nya tal. En VARNING och inget fel: den
             # står bredvid `errors` och inte i den, för den ska inte se ut som
@@ -566,6 +928,30 @@ def create_router(base: Path, arbiter) -> APIRouter:
         if typ != "arbetsblad":
             elev_id, elev_namn = None, ""
         referens_id = body.get("referens_exam_id")
+        # ── OMPROVETS ORIGINAL ───────────────────────────────────
+        # `omprov_av` är prov-id:t på det papper eleven REDAN skrivit. Skickas
+        # det slås dokumentet upp här och följer med som `referensprov` till
+        # generate_exam, som gör tre saker med det: ärver slotplanen till
+        # skelettet, lägger planen i prompten (build_omprov) och räknar
+        # likvärdigheten på svaret (likvardighetsvakt). Se exam_gen.
+        #
+        # SKILT FRÅN `referens_exam_id`, som är motsatsen: det läget säger
+        # «variera och HÖJ svårighetsgraden». Ett omprov ska vara varken
+        # lättare eller svårare, och två fält som betyder olika saker ska inte
+        # dela namn.
+        #
+        # Saknas fältet, eller pekar det på ett prov som inte finns, går allt
+        # som förut: None lämnar prompten byte för byte som den var.
+        omprov_av = body.get("omprov_av")
+        # ── FÖRSLAGET, ALDRIG TYST ───────────────────────────────
+        # Klienten kan låta bli att peka ut originalet, «Omprov» i högen
+        # sätter `omprovAv` men äldre utkast bär inget prov-id. Servern letar
+        # då rätt på det troliga originalet (samma klass, samma kurs, samma
+        # moment, godkänt, tidigare datum) och lägger det i SVARET som ett
+        # förval. Den använder det inte: ett prov som tyst skrivs om mot ett
+        # original läraren inte pekat ut är precis den sortens gissning som
+        # gör att hon slutar lita på pappret.
+        omprov_forslag = None
         # Bildunderlag (Fas 4): samma uppladdningar som tavlans underlag.
         underlag_pid = body.get("underlag") or None
         underlag_filer = routes_planning.underlag_meta(base, underlag_pid)
@@ -655,6 +1041,21 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         [u.get("text") or ""
                          for u in ref["exam"].get("uppgifter") or []])
                     teman = ""       # referensläget ersätter undvik-listan
+            # Originalet omprovet ska vara likvärdigt. Dokumentet, inte id:t:
+            # exam_gen läser aldrig basen.
+            referensprov = None
+            try:
+                if omprov_av:
+                    rad = db.get_exam(conn, int(omprov_av))
+                    if rad and rad.get("exam"):
+                        referensprov = rad["exam"]
+            except (TypeError, ValueError):
+                referensprov = None
+            if referensprov is None and typ == "prov":
+                omprov_forslag = _omprovskandidat(
+                    conn, group_id=group_id, course_id=course_id,
+                    moment=(body.get("moment") or "").strip(),
+                    datum=datum)
         finally:
             conn.close()
         # «Följ den här förlagan» och «undvik det du gjort förut» är motsatta
@@ -798,6 +1199,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     koder=koder, skeleton=skelett, niva_mal=niva_mal,
                     riktat=riktat_block, grupp=grupp,
                     illustration=illustration,
+                    # OMPROVETS ORIGINAL, som DOKUMENT och inte som id:
+                    # exam_gen läser aldrig basen. None (det vanliga) lämnar
+                    # skelettet, prompten och vakterna orörda.
+                    referensprov=referensprov,
                     # ── TVÅ SPÅR, INGEN PROCENT PÅ NÅGOT AV DEM ───────
                     # Det stod länge bara EN kanal här: loggraden. Generatorn
                     # skickar «Skriver uppgift 4 av 12 …» ur strömmen
@@ -891,10 +1296,15 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         db.tag_content(conn, c["id"], exam_id=view["id"])
                 finally:
                     conn.close()
-                return _exam_result(view, res["errors"], res["rounds"],
+                svar = _exam_result(view, res["errors"], res["rounds"],
                                     res.get("likheter"), res.get("nivafel"),
                                     res.get("relevansfel"),
                                     res.get("begriplighetsfel"))
+                # FÖRSLAGET, aldrig tillämpat. Se _omprovskandidat: appen
+                # pekar ut det troliga originalet och låter läraren säga ja.
+                if omprov_forslag:
+                    svar["omprov_forslag"] = omprov_forslag
+                return svar
             finally:
                 arbiter.release_llm(llm)
 

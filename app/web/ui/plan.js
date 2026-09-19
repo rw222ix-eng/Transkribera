@@ -2459,6 +2459,17 @@
     speglat.add(v);
     return window.API.json(`/api/exams/${v.provId}`).then(res => {
       const nya = franProv(res && res.exam);
+      /* EFTERKONTROLLEN följer med hit också, och det är den enda vägen in för
+         ett papper som låg i högen sedan i går: GET-rutten räknar om fynden ur
+         pappret som det står nu (routes_exam._exam_result). Skrivs FÖRE
+         likhetsprövningen nedan, listan kan ha ändrats fast uppgifterna står
+         still (boken har lästs in, en regel har skärpts).
+
+         `Array.isArray` och inte sanningsvärde: ett svar som inte BÄR nyckeln
+         (en äldre server, ett svar som inte är examens) säger ingenting om
+         fynden, och att tolka det som «inga fynd» hade tystat listan pappret
+         redan visade. En TOM lista är däremot ett svar och skrivs. */
+      if (res && Array.isArray(res.efterkontroll)) v.efterkontroll = res.efterkontroll;
       /* Ett tomt svar skriver ingenting: hellre den gamla listan än ett blankt
          papper om examen råkar sakna uppgifter. */
       if (!nya.length) return false;
@@ -3085,6 +3096,15 @@
            finns i kroppen bara när läraren flyttat något från dagens papper.
            Arbetsbladet nedan har inga delar och skickar dem aldrig. */
         ...hjalpmedelsavvikelse(i0),
+        /* OMPROVETS ORIGINAL. «Omprov» i högen sätter både `omprovAv` och
+           `refDok`, och refDok BÄR provets id (plan.js omprov klonar pappret).
+           Utan den här raden fick servern bara förlagan, altså «följ det här
+           pappret», medan omprovet behöver något annat: samma slots, nya tal,
+           varken lättare eller svårare (exam_gen.build_omprov,
+           likvardighetsvakt). Skickas BARA när det är ett omprov, så ett
+           vanligt prov ger byte för byte samma kropp som förut. */
+        ...(omprovAv && refDok && refDok.provId
+          ? { omprov_av: refDok.provId } : {}),
         ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(), ...yrket(), ...u,
       }, { signal, log })).then(kravDone).then(r => {
         if (!r.exam) throw new Error('Provet gick inte att skriva den här gången. Försök igen.');
@@ -3198,6 +3218,10 @@
              säger inte VAD, och ett prov som tappat ett delmoment på vägen
              ska inte behöva läsas fram ur en fellista. */
           + (window.API.tackningsfelText(res.errors) ? window.API.tackningsfelText(res.errors) + ' ' : '')
+          /* Efterkontrollens fynd sist av vakternas rader och före den
+             allmänna uppmaningen: de gäller pappret som det ligger, inte
+             vägen dit, och hela listan står i förhandsvisningen. */
+          + (window.API.efterkontrollText(res) ? window.API.efterkontrollText(res) + ' ' : '')
           + `${(res.errors || []).length ? 'Något gick inte att rätta helt; läs igenom extra noga.' : 'Läs igenom och skriv vad som ska bli annorlunda.'}`
         : `Utkastet är skrivet. ${Best(typ)} täcker ${vald.size || 'inga'} valda moment — läs igenom och skriv vad som ska bli annorlunda.`,
       plan: [
@@ -3280,6 +3304,24 @@
              öppnar dokumentet i morgon ska se samma sak. */
           utkast.relevansfel = res.relevansfel || [];
           utkast.begriplighetsfel = res.begriplighetsfel || [];
+          /* Efterkontrollens fynd (api.js efterkontrollText) följer med
+             pappret av samma skäl som nivåns: de gäller uppgifterna, inte
+             varvet, och läraren som öppnar dokumentet i morgon ska se samma
+             sak i förhandsvisningen. */
+          utkast.efterkontroll = res.efterkontroll || [];
+          /* ── OMPROVETS ORIGINAL, SOM FÖRSLAG ───────────
+             Servern hittade ett tidigare godkänt prov på samma klass, kurs och
+             moment (routes_exam._omprovskandidat). Den ANVÄNDE det inte, ett
+             prov som tyst skrivs mot ett original läraren inte pekat ut är en
+             gissning som ser ut som ett faktum. Här sägs det, och hon får
+             sätta pappret som förlaga själv nästa gång. */
+          if (res.omprov_forslag && res.omprov_forslag.titel) {
+            const f = res.omprov_forslag;
+            window.toast && window.toast(
+              `Ska det här vara ett omprov på «${f.titel}»`
+              + `${f.datum ? ' (' + f.datum + ')' : ''}? Välj «Omprov» på det `
+              + 'pappret i Sparat, så får det nya samma uppgiftsplan.');
+          }
           if (res.exam.titel) utkast.titel = res.exam.titel;
           /* Mottagaren följer med pappret: namnet står på arket och `elevId`
              är det klassvyn skiljer två blad på samma lektion åt med
@@ -4183,6 +4225,20 @@
          pekar på en uppgift som inte finns längre. */
       v.relevansfel = res.relevansfel || [];
       v.begriplighetsfel = res.begriplighetsfel || [];
+      /* EFTERKONTROLLEN (2026-09-19). Serverns deterministiska fynd på pappret
+         som det ligger EFTER varvet, och det är just här de behövs: prov 85
+         tappade sin balans i en riktad omskrivning och prov 86 fick avsnittet
+         «2.6» som inte finns i boken, båda utan att något sades. Skrivs
+         VILLKORSLÖST och utan reserv: listan gäller varvet, och ett fynd från
+         förra varvet som står kvar pekar på en uppgift som just skrevs om. */
+      v.efterkontroll = res.efterkontroll || [];
+      /* Och rutorna i canvasen märks om i samma andetag. Omritningen som
+         följer (omGranska → sattOm) sätter tillbaka märkena ur den här
+         kartan, granska.js markeraFynd körs efter varje omritning, precis
+         som nålarna och svepet. */
+      if (window.Granska && window.Granska.satFynd) {
+        window.Granska.satFynd(window.API.efterkontrollPerElement(res));
+      }
       v.nyckelfraga = res.exam.nyckelfraga || v.nyckelfraga || null;
       /* Samma reserv som nyckelfrågan: skrev modellen inget band i det här
          varvet står det förra kvar. Utan reserven hade en omskrivning som
@@ -4720,6 +4776,13 @@
       titel: `${v.typ} — ${versal(v.moment)}`,
       meta: $('#dokmeta').textContent,
       ark: arkLage(v),
+      /* Efterkontrollens fynd per ruta (api.js efterkontrollPerElement).
+         Följer med in i canvasen med en gång: pappret bär dem redan från
+         genereringen eller från förra varvet, och att vänta till nästa
+         omskrivning hade betytt att läraren granskar ett papper vars kända
+         fel appen håller för sig själv. */
+      fynd: window.API.efterkontrollPerElement(
+        { efterkontroll: v.efterkontroll, errors: v.provFel }),
       onAndra: (text, etikett, elIds, res) => iterera(text, etikett, elIds, res),
       /* Finns ingen server, eller är pappret prototypens, returneras null och
          canvas kör sin egen takt precis som förut. */
@@ -5452,6 +5515,7 @@
     if ($('#fh-fortsatt')) $('#fh-fortsatt').hidden = !kanAndras;
     if ($('#fh-last')) $('#fh-last').hidden = !kanAndras;
     ritaEgrans(v);
+    ritaFynd(v);
     ritaIn($('#fh-ark'), medEgnaBilder(v));
     fhskal.hidden = false;
     requestAnimationFrame(() => fhskal.setAttribute('data-pa', ''));
@@ -5466,6 +5530,10 @@
        `fhIndex`-vakten: hann läraren stänga rutan eller bläddra till ett annat
        papper ska svaret inte rita in sig i det hon tittar på nu. */
     speglaExamen(v).then(bytt => {
+      /* Fynden skrivs om oavsett om ARKET behövde ritas om: GET-rutten räknar
+         dem ur pappret som det står nu, och ett papper som legat i högen sedan
+         i går har aldrig haft dem. */
+      if (fhIndex === i && !fhskal.hidden) ritaFynd(v);
       if (bytt && fhIndex === i && !fhskal.hidden) ritaIn($('#fh-ark'), medEgnaBilder(v));
     });
     /* Och bilderna ur utkatalogen när svaret landar, med samma vakt: hann läraren
@@ -5473,6 +5541,38 @@
        papper. Arket står färdigt under tiden; reserven fyller bara rutorna. */
     egnaFranDisk(v).then(fanns => {
       if (fanns && fhIndex === i && !fhskal.hidden) ritaIn($('#fh-ark'), medEgnaBilder(v));
+    });
+  }
+  /* ── EFTERKONTROLLEN I FÖRHANDSVISNINGEN ──────────────
+     Sista läsningen före PDF:en. Fynden är serverns (routes_exam
+     .efterkontroll) och räknas om vid varje svar, genereringen, varje varv i
+     canvasen, varje GET, så det som står här gäller pappret så som det
+     faktiskt ligger, inte så som det såg ut när det skrevs.
+
+     Godkännandeknapparna rörs INTE. Läraren skrev om pappret med flit, och en
+     app som vägrar trycka därför att en förmåga ligger en procentenhet fel
+     överprövar henne. Listan säger vad den ser; hon bestämmer.
+
+     Lösningsbladet är en klon utan eget prov-id och har inga egna fynd, samma
+     regel som E-gränsraden ovanför följer. */
+  function ritaFynd(v) {
+    const lista = $('#fh-fynd');
+    if (!lista) return;
+    const fynd = (v && !v.losningsblad && Array.isArray(v.efterkontroll)
+      ? v.efterkontroll.filter(f => f && f.text) : []);
+    lista.innerHTML = '';
+    lista.hidden = !fynd.length;
+    if (!fynd.length) return;
+    const huv = document.createElement('li');
+    huv.className = 'fhfyndhuv';
+    huv.textContent = fynd.length === 1
+      ? 'Ett fynd att läsa innan du godkänner'
+      : `${fynd.length} fynd att läsa innan du godkänner`;
+    lista.appendChild(huv);
+    fynd.forEach(f => {
+      const rad = document.createElement('li');
+      rad.textContent = f.text;
+      lista.appendChild(rad);
     });
   }
   /* ── E-GRÄNSEN PÅ ETT GODKÄNT PROV ────────────────────
@@ -5696,10 +5796,18 @@
              (test_approve_svaret_bar_falten_plan_js_laser). */
           godkant.pdf = r.pdf || null;
           godkant.tex = r.tex || null;
+          /* EFTERKONTROLLEN vid godkännandet. Samma räkning som canvasen
+             visade, gjord en sista gång på det som FAKTISKT trycktes, och
+             skriven på pappret, så att den står kvar i förhandsvisningen när
+             läraren öppnar det igen. Godkännandet stoppas inte av den; det
+             här är ett kvitto, inte en grind. */
+          godkant.efterkontroll = r.efterkontroll || [];
           dokUppdatera(godkant);
-          window.toast && window.toast(r.pdf
+          const fyndrad = window.API.efterkontrollText(r);
+          window.toast && window.toast((r.pdf
             ? `${Best(godkant.typ)} är utskriven som PDF`
-            : `${Best(godkant.typ)} är godkänd — PDF:en gick inte att bygga, .tex finns sparad`);
+            : `${Best(godkant.typ)} är godkänd, PDF:en gick inte att bygga, .tex finns sparad`)
+            + (fyndrad ? `. ${fyndrad}` : ''));
         })
         .catch(pdfFel);
     }
@@ -5726,11 +5834,23 @@
        släcker «Tavla saknas» i veckan. Ingenting läggs in innan godkännandet. */
     if (window.Kalender && v.datum) {
       const namn = `${v.variant === 'Omprov' ? 'Omprov' : v.typ} — ${versal(v.moment)}`;
-      const finns = window.Kalender.poster.some(p => p.datum === v.datum && p.titel === namn);
-      if (!finns) window.Kalender.lagg({
-        datum: v.datum,
-        tid: v.tid || (v.typ === 'Prov' ? (v.inst && v.inst.provtid ? v.inst.provtid : '') : ''),
-        titel: namn, klass: v.klass || '', slag: v.typ.toLowerCase(),
+      const slag = v.typ.toLowerCase();
+      const tid = v.tid || (v.typ === 'Prov' ? (v.inst && v.inst.provtid ? v.inst.provtid : '') : '');
+      /* ── SAMMA DAG, SAMMA KLASS, SAMMA PAPPER ÄR SAMMA BOKNING ──
+         Här stod en vakt på TITELN: `poster.some(p => p.datum === v.datum &&
+         p.titel === namn)`. Titeln är «Prov — {momentet}», och momentet är
+         just det «Fortsätt ändra» ändrar, ett prov som godkändes, skrevs om
+         och godkändes igen lade därför en ANDRA «Prov — …»-post på samma dag
+         för samma klass, och läraren såg provet dubbelt i kalendern
+         (granskningen 2026-09-19).
+
+         Vakten är borta och identiteten flyttad dit den hör hemma: Kalender
+         .lagg slår ihop på (datum, klass, slag) och skriver om titeln på plats,
+         och servern gör samma sak på sin sida (db.add_kalenderpost). Ett
+         anrop, ett svar, en post, också när momentet bytt namn på vägen. */
+      window.Kalender.lagg({
+        datum: v.datum, tid,
+        titel: namn, klass: v.klass || '', slag,
         antal: v.typ === 'Prov' ? 24 : 1
       });
       window.Klass && window.Klass.rita && window.Klass.rita();

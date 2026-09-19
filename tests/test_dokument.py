@@ -583,9 +583,14 @@ def test_lakningen_hanger_pa_bada_ingangarna():
     # `medEgnaBilder(v)` och inte `v`: pappret ritas med reserven ur
     # utkatalogen påslagen (egnaFranDisk nedanför i plan.js). Vakten är
     # densamma, det är bara vad som ritas som fått ett lager till.
-    assert ("speglaExamen(v).then(bytt => {\n"
-            "      if (bytt && fhIndex === i && !fhskal.hidden) "
-            "ritaIn($('#fh-ark'), medEgnaBilder(v));\n    });") in js
+    assert ("if (bytt && fhIndex === i && !fhskal.hidden) "
+            "ritaIn($('#fh-ark'), medEgnaBilder(v));") in js
+    # …och efterkontrollens fynd skrivs om OAVSETT om arket behövde ritas om:
+    # GET-rutten räknar dem ur pappret som det står NU (routes_exam
+    # ._exam_result), och ett papper som legat i högen sedan i går har aldrig
+    # haft dem. Vakten är densamma, hann läraren bläddra vidare ska svaret
+    # inte skriva i det hon tittar på nu.
+    assert "if (fhIndex === i && !fhskal.hidden) ritaFynd(v);" in js
     assert "speglaExamen(v).then(bytt => { if (bytt && versioner[nu] === v) visa(nu); });" in js
     # Två anropsställen, inte fler: läkningen får inte smyga in i visa(), för
     # den körs också av ångra/gör om — se nästa test.
