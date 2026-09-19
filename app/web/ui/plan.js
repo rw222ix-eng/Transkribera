@@ -957,6 +957,15 @@
      själv (`inforRord`) håller förvalet sig borta resten av sessionen. */
   const INFOR_DAGAR = 21;
   let inforForvalNyckel = '', inforRord = false;
+  /* En ny planering börjar om också för den här raden: står upplägget tillbaka
+     på standard är lärarens gamla val borta, och då ska förvalet få räkna en
+     gång till. Utan det stod «Inget prov» kvar från förra pappret. */
+  function glomInforForvalet() {
+    inforRord = false;
+    inforForvalNyckel = '';
+    inforTyper = null;
+    inforArvtext = '';
+  }
   function inforForval(s) {
     const klass = ($('#p-klass') || {}).value || '', kurs = ($('#p-kurs') || {}).value || '';
     const nyckel = `${klass}|${kurs}|${idagIso()}`;
@@ -4266,6 +4275,7 @@
     const typ = valt('skrivtyp');
     Object.assign(inst[typ], JSON.parse(JSON.stringify(STANDARD[typ])));
     arvtFran = null;
+    glomInforForvalet();
     ritaTypval();
     $('#arvrad').hidden = true;
     window.toast && window.toast('Tillbaka till standarduppägget');
@@ -4360,6 +4370,7 @@
     const typ = v.typ;
     Object.assign(inst[typ], JSON.parse(JSON.stringify(STANDARD[typ])));
     arvtFran = null;
+    glomInforForvalet();
     valdaLektioner.clear();
     /* Efter klass och kurs: bokhyllan ritar om sig när kursen byts (bok.js), och
        spannet ska sättas i den hylla som gäller. */
