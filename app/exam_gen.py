@@ -8193,7 +8193,8 @@ def _slutgrind(res: dict, *, model: str, llm, profil: str,
 
 
 def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
-                  antal: int = 10, tid_min: int = 120, delar: bool = True,
+                  antal: int = 10, tid_min: int = 120,
+                  takt: float | None = None, delar: bool = True,
                   memory: str = "", teman: str = "", referens: str = "",
                   tidigare: list[str] | None = None,
                   bilder: str = "", utfall: str = "", bok: str = "",
@@ -8218,6 +8219,11 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     balansfel inom rundbudgeten. `grupp` är gruppuppgiftens upplägg (elever,
     langd_min, redovisning) och ignoreras för de andra profilerna.
     Returnerar {"exam": dict|None, "errors": [...], "rounds": int}.
+
+    `takt` är lärarens minuter per poäng. Den ändrar INTE prompten och inte
+    skelettet, skelettet byggs med passets tak av anroparen (routes_exam,
+    exam_spec.poang_tak_for), utan bara vad tidsvakten mäter mot: hennes takt
+    i stället för husets. Utelämnad är varje tal detsamma som förut.
 
     `skeleton` låter anroparen lämna ett färdigt skelett i stället för att
     låta antalet bestämma. Lärarens nivåval gör det (routes_exam):
@@ -8472,9 +8478,12 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
         # tolv uppgifter och 26 poäng tar hundra minuter, och passet var
         # sjuttio. Hade fyndet lagts bland `errors` före rundorna hade en
         # reparationsrunda betalats för något ingen omskrivning kan laga.
+        # LÄRARENS TAKT när hon satt en (routes_exam skickar den): vakten ska
+        # mäta samma papper som skelettet byggdes mot, alltså med passets
+        # poängtak. Utan takt räknas allt som förut, ord för ord.
         tid = exam_spec.tidsvakt(antal, tid_min, profil,
                                  delar=(profil == "prov" and delar),
-                                 niva_mal=niva_mal, kurs=kurs)
+                                 niva_mal=niva_mal, kurs=kurs, takt=takt)
         if tid:
             log(tid[0]["message"])
             r["errors"] = (r.get("errors") or []) + tid

@@ -596,6 +596,18 @@ class ExamDoc(_Model):
     elev: str | None = None
     datum: str | None = None
     tid_min: int | None = None
+    # LÄRARENS TAKT, minuter per poäng (2026-09-19). Appens fält och aldrig
+    # modellens, poppas ur grammatiken i to_response_format av samma skäl som
+    # `klockslag` och `granser`: ett fält modellen ser är ett fält modellen
+    # fyller i, och takten är lärarens egen inställning i planeringen.
+    #
+    # Den står PÅ dokumentet och inte bara i beställningen därför att tre
+    # saker räknar med den efter att pappret är skrivet: tidsvakten, tiden i
+    # provets svar («tid») och förhandsvisningens uppskattning. Läses takten
+    # inte ur pappret räknar de med husets standardtakt (PROV_MIN_PER_POANG),
+    # och då säger skärmen en annan sak om provet än den beställning det
+    # skrevs mot. Tomt fält = husets takt, precis som före fältet.
+    takt: float | None = None
     # KLOCKSLAGEN, när läraren valt dem. Förlagan skriver «Provtid: kl.
     # 12.45–14.15 (90 minuter).» och inte «Provtid: 90 minuter.» — eleven som
     # sitter i salen vill veta när pennan ska ner, inte hur länge hon får hålla
@@ -749,6 +761,13 @@ def _bygg_response_format(antal: int | None = None,
     # fältet skulle den skriva en betygstabell den hittat på — och den hade
     # stått på försättsbladet.
     schema["properties"].pop("granser", None)
+    # TAKTEN STÅR INTE HELLER I GRAMMATIKEN, och av samma skäl som de två
+    # ovan: den är lärarens inställning i planeringen, skrivs på dokumentet av
+    # routen efter genereringen, och en modell som ser fältet skriver dit ett
+    # tal den hittat på. Att den poppas HÄR är också det som håller varje
+    # inspelad prompt orörd, schemat är byte för byte detsamma som innan
+    # fältet fanns.
+    schema["properties"].pop("takt", None)
     # DEN UTFÖRLIGA LÖSNINGEN STÅR INTE HELLER I GRAMMATIKEN (se
     # _Uppgiftsbas.utforlig): den skrivs av ett eget pass efter godkännandet.
     # Poppas ur BÅDA uppgiftsdefinitionerna innan skelettet kopierar dem
@@ -2181,11 +2200,80 @@ def _dela_del_b(grupper: list[list[dict]]) -> list[int]:
     return ut
 
 
+def _lagliga_tripplar(karaktar: str, formaga: str,
+                      rent: str | None) -> list[list[int]]:
+    """NP-tripplarna en skelettrad får bära, i NP:s egen frekvensordning och
+    med radens båda undantag inbakade: det rena nivåpapprets filter och
+    K-radens «ingen EK-poäng finns». Samma urval som konstruktionen i
+    balanced_skeleton gör rad för rad, bantningen nedan måste välja ur exakt
+    de tripplar rotationen valde ur, annars kan den byta bort en rad till
+    något NP inte har.
+
+    Konstruktionen anropar INTE hit, med flit: den cyklar på listans index och
+    måste filtrera i samma ordning som den alltid gjort, annars byter varje
+    skelett utseende och varje inspelad prompt med dem."""
+    ut: list[list[int]] = []
+    for t in niva_rubrik.NP_TRIPPLAR[karaktar]:
+        if rent:
+            i_rent = NIVAER_STORA.index(rent)
+            if any(v for j, v in enumerate(t) if j != i_rent):
+                continue
+        p = list(t)
+        if formaga == "K" and p[0]:
+            p[1] += p[0]
+            p[0] = 0
+        if _karaktar(p) != karaktar:
+            continue
+        ut.append(p)
+    return ut
+
+
+def _banta_skelett(slots: list[dict], tak: int,
+                   rent: str | None = None) -> None:
+    """Byt dyra NP-tripplar mot billigare tills summan ryms under `tak`.
+    Muterar `slots` på plats, före delindelningen.
+
+    LÄRARENS KRAV 2026-09-19: antalet uppgifter är HENNES (tolv är tolv), och
+    passet är passets (70 minuter i takt 3 = 23 poäng). Det enda som får ge
+    vika är alltså poängen PER uppgift, fler enpoängare, färre trepoängare, 
+    och det är precis vad ett byte inom karaktärens egna NP-tripplar är:
+    (0,3,0) blir (0,2,0) blir (0,1,0), och raden är fortfarande en C-uppgift
+    på samma förmåga, i samma del, på samma plats i trappan.
+
+    KARAKTÄREN RÖRS ALDRIG, av samma skäl som _drag inte rör den: karaktären
+    bestämde radens typ, dess del och dess ordning i svårighetstrappan.
+
+    ETT STEG I TAGET, och alltid på den dyraste raden. Att gå direkt till
+    billigaste trippel hade gett ett papper av enpoängare långt under taket;
+    stegvis nedifrån den dyraste änden landar nära taket och håller
+    fördelningen jämn. Nivåbalansen städas sedan av _justera_skelett, som med
+    taket satt aldrig får lägga tillbaka poängen den tog bort."""
+    while True:
+        total = sum(sum(s["poang"]) for s in slots)
+        if total <= tak:
+            return
+        # Dyraste raden först; lika dyra tas i tur och ordning (stabilt index)
+        # så att två skelett med samma ingång alltid bantas likadant.
+        for i in sorted(range(len(slots)),
+                        key=lambda j: (-sum(slots[j]["poang"]), j)):
+            nu = sum(slots[i]["poang"])
+            billigare = [p for p in _lagliga_tripplar(slots[i]["karaktar"],
+                                                      slots[i]["formaga"],
+                                                      rent)
+                         if sum(p) < nu]
+            if billigare:
+                slots[i]["poang"] = max(billigare, key=sum)
+                break
+        else:
+            return        # inget att banta: närmast möjliga summa är den här
+
+
 def balanced_skeleton(antal: int, profil: str = "prov",
                       delar: bool | None = None,
                       mix: tuple[float, float, float] | None = None,
                       niva_mal: dict | None = None,
-                      kurs: str = "") -> list[dict]:
+                      kurs: str = "",
+                      poang_tak: int | None = None) -> list[dict]:
     """Deterministiskt balanserat skelett: {del, formaga, typ, poang} per
     uppgift, konstruerat så förmåge- OCH nivåbalans + ordningsregler uppfylls
     BY CONSTRUCTION. Grammatiken tvingar modellen till skelettet, så modellen
@@ -2210,6 +2298,14 @@ def balanced_skeleton(antal: int, profil: str = "prov",
     `mix`/`niva_mal` är lärarens nivåval (NIVAVAL): mixen byter
     karaktärsfördelningen, banden byter sökningens mål. Utelämnade gäller
     profilens egna — exakt samma skelett som före väljaren.
+
+    `poang_tak` är PASSETS gräns (poang_tak_for: lärarens minuter delat med
+    hennes takt). Med ett tak satt väljs billigare NP-tripplar tills summan
+    ryms, fler enpoängare, färre trepoängare, men ALDRIG färre uppgifter än
+    `antal`: antalet är lärarens uttryckliga val och det är poängen per
+    uppgift som ska ge vika, inte pappret hon bad om. Går taket inte att nå
+    med de tripplar NP faktiskt använder blir summan den närmast möjliga, och
+    tidsvakt säger det rakt ut i stället för att skelettet tiger.
 
     Sist en liten sökning som flyttar enstaka poäng tills validate_balance och
     validate_ordning är rena; den är ett skyddsnät, inte huvudmekanismen."""
@@ -2273,6 +2369,17 @@ def balanced_skeleton(antal: int, profil: str = "prov",
             poang[0] = 0
         slots.append({"del": None, "formaga": f, "karaktar": kar,
                       "typ": _skelett_typ(f, kar), "poang": poang})
+
+    # POÄNGTAKET (2026-09-19): passets egen gräns, räknad ur lärarens takt
+    # (poang_tak_for). Bantningen sker HÄR, före delindelningen, därför att
+    # delningen och kortsvarstaket läser poängen: ett papper som bantas efteråt
+    # hade fått sin del B vägd på poäng den inte längre bär.
+    #
+    # Utan tak händer ingenting alls, och det är villkoret som håller varje
+    # inspelad prompt orörd: skelettet är byte för byte det som byggdes förut
+    # så länge ingen skickar ett tak.
+    if poang_tak is not None:
+        _banta_skelett(slots, int(poang_tak), rent)
 
     if delar:
         del_b: list[dict] = []
@@ -2345,7 +2452,8 @@ def balanced_skeleton(antal: int, profil: str = "prov",
     for s in slots:
         s.pop("karaktar")
 
-    _justera_skelett(slots, profil, niva_mal=niva_mal, kurs=kurs)
+    _justera_skelett(slots, profil, niva_mal=niva_mal, kurs=kurs,
+                     poang_tak=poang_tak)
     if profil == "prov":
         _dela_i_deluppgifter(slots)
     return slots
@@ -2538,21 +2646,56 @@ def takt_for(profil: str) -> float:
     return PROV_MIN_PER_POANG
 
 
-def taktfaktor(takt: float | None) -> float:
-    """Poängtermens faktor för en takt i minuter per poäng. None = NP-modellen
-    orörd (faktor 1,0), vilket är vad varje anropare fick före takten fanns.
+def spard_takt(takt: float | None) -> float | None:
+    """Lärarens takt i minuter per poäng, spärrad, eller None när ingen takt
+    är satt (eller när det som skickades inte är ett tal).
 
-    Spärrat till ett rimligt spann: en takt på noll skulle ge ett prov utan
-    tid alls, och ett dubbelt NP är ingen takt utan ett skrivfel."""
+    Spärren är densamma som taktfaktor alltid haft och av samma skäl: en takt
+    på noll skulle ge ett prov utan tid alls, och ett dubbelt NP är ingen takt
+    utan ett skrivfel. Den bor här nu därför att TVÅ saker läser takten sedan
+    poängtaket kom (2026-09-19): tidsmodellens faktor nedan och taket självt
+    (poang_tak_for). En spärr som står på två ställen släpper förr eller
+    senare igenom olika saker på de två."""
     if takt is None:
-        return 1.0
+        return None
     try:
         v = float(takt)
     except (TypeError, ValueError):
-        return 1.0
+        return None
     if not v > 0:
-        return 1.0
-    return min(max(v, 1.0), 2 * NP_MIN_PER_POANG) / NP_MIN_PER_POANG
+        return None
+    return min(max(v, 1.0), 2 * NP_MIN_PER_POANG)
+
+
+def taktfaktor(takt: float | None) -> float:
+    """Poängtermens faktor för en takt i minuter per poäng. None = NP-modellen
+    orörd (faktor 1,0), vilket är vad varje anropare fick före takten fanns."""
+    v = spard_takt(takt)
+    return 1.0 if v is None else v / NP_MIN_PER_POANG
+
+
+def poang_tak_for(tid_min: int | None, takt: float | None) -> int | None:
+    """Högsta poängsumma lärarens takt rymmer på passet: floor(tid / takt).
+
+    LÄRARENS RÄKNING 2026-09-19, ordagrant: tolv uppgifter på ett pass på 70
+    minuter i takten tre minuter per poäng är högst 23 poäng. Hon räknar RAKT
+, minuterna delat med takten, och inte med tidsatgang:s uppgiftsterm och
+    overhead. Taket är därför hennes räkning och inget annat: det är den
+    siffran hon jämför pappret mot, och ett tak som säger något annat än
+    hennes eget tal vore ett tak hon inte litar på.
+
+    None när takten saknas eller tiden är noll, och då finns inget tak alls, 
+    exakt det beteende varje anropare hade innan taket fanns."""
+    t = spard_takt(takt)
+    if t is None:
+        return None
+    try:
+        tid = int(tid_min or 0)
+    except (TypeError, ValueError):
+        return None
+    if tid <= 0:
+        return None
+    return max(1, int(tid // t))
 
 
 def tidsatgang(summor: dict, antal: int, takt: float | None = None) -> int:
@@ -2579,9 +2722,16 @@ def skelettsummor(antal: int, profil: str = "prov",
                   mix: tuple[float, float, float] | None = None,
                   niva_mal: dict | None = None,
                   takt: float | None = None,
-                  kurs: str = "") -> dict:
+                  kurs: str = "",
+                  tid_min: int | None = None) -> dict:
     """Vad ett upplägg SKULLE ge, räknat på skelettet som faktiskt byggs:
-    {antal, poang, summor {e, c, a}, tid, takt}.
+    {antal, poang, summor {e, c, a}, tid, takt, tak}.
+
+    `tid_min` TILLSAMMANS MED `takt` ger passets poängtak (poang_tak_for), och
+    då byggs skelettet med det taket, samma skelett genereringen bygger med
+    samma två tal. Utan båda är `tak` None och svaret är byte för byte det som
+    gavs innan taket fanns: «Uppskatta tiden» ska visa provets riktiga summa,
+    och den summan är 23 poäng när läraren skrivit 70 minuter och takt 3.
 
     LÄRAREN 2026-08-22: «Föreslå antal» gav tio uppgifter och 24 poäng, och
     «Uppskatta tiden» svarade sedan 16/8/0 E/C/A — noll A-poäng på ett
@@ -2595,16 +2745,18 @@ def skelettsummor(antal: int, profil: str = "prov",
     med den, och plan.js frågar rutten /api/exams/skelett innan provet är
     skrivet. Är provet väl skrivet räknar skärmen på dokumentets egna tripplar
     (`peca`) — då är skelettet inte längre en gissning utan en historia."""
+    tak = poang_tak_for(tid_min, takt)
     takt = takt_for(profil) if takt is None else takt
     if delar is None:
         delar = profil == "prov"
     skelett = balanced_skeleton(max(1, int(antal or 1)), profil, delar=delar,
-                                mix=mix, niva_mal=niva_mal, kurs=kurs)
+                                mix=mix, niva_mal=niva_mal, kurs=kurs,
+                                poang_tak=tak)
     summor = poangsummor(_skeleton_doc(skelett))
     return {"antal": len(skelett), "poang": summor["total"],
             "summor": {n: int(summor.get(n) or 0) for n in ("e", "c", "a")},
             "tid": tidsatgang(summor, len(skelett), takt=takt),
-            "takt": takt}
+            "takt": takt, "tak": tak}
 
 
 def foreslag_antal(tid_min: int, profil: str = "prov",
@@ -2639,15 +2791,23 @@ def foreslag_antal(tid_min: int, profil: str = "prov",
     uppgifter än ett C-tungt 1c-prov på samma tid. 80 minuter ger 9 uppgifter
     och 20 poäng i 1c, 2a och 2c, och 10 uppgifter i 1a. Utan kurs siktas det
     mot hela materialets spann, och då blir det 9 uppgifter och 19 poäng."""
+    # PASSETS TAK FÖRE DEFAULTTAKTEN, och ordningen är hela villkoret: taket
+    # gäller bara när ANROPAREN skickat en takt. Utan den faller raden nedan
+    # tillbaka på profilens standardtakt, och ett tak räknat ur den hade varit
+    # husets gissning och inte lärarens beslut, då hade varje gammalt anrop
+    # tyst fått ett annat antal än det fick förut.
+    tak = poang_tak_for(tid_min, takt)
     takt = takt_for(profil) if takt is None else takt
     tid_min = max(5, int(tid_min or 0))
     bast: dict | None = None
     for n in range(1, MAX_FORESLAGET_ANTAL + 1):
         # Samma funktion som «Uppskatta tiden» frågar (skelettsummor), så att
-        # de två knapparna inte kan svara olika på samma upplägg.
+        # de två knapparna inte kan svara olika på samma upplägg, och med
+        # samma tak, så att inte den ena räknar på ett papper genereringen
+        # aldrig skulle bygga.
         kandidat = skelettsummor(n, profil, delar=(profil == "prov"),
                                  mix=mix, niva_mal=niva_mal, takt=takt,
-                                 kurs=kurs)
+                                 kurs=kurs, tid_min=tid_min if tak else None)
         tid = kandidat["tid"]
         # Närmast vinner; står två lika nära vinner det MINDRE provet. Ett prov
         # som ryms är alltid bättre än ett som spiller över lika mycket åt andra
@@ -2659,7 +2819,7 @@ def foreslag_antal(tid_min: int, profil: str = "prov",
             break
     return bast or {"antal": 1, "poang": 0,
                     "summor": {"e": 0, "c": 0, "a": 0},
-                    "tid": tid_min, "takt": takt}
+                    "tid": tid_min, "takt": takt, "tak": tak}
 
 
 # ── TIDEN: DET PROVET TAR MOT DET PASSET RYMMER (2026-09-19) ─────────────
@@ -2692,7 +2852,12 @@ def tidsvakt(antal: int, tid_min: int, profil: str = "prov",
     inte kan säga olika om samma upplägg.
 
     FAIL-OPEN utan tid: `tid_min` noll eller tomt betyder att ingen tid är
-    satt, och då finns inget att mäta mot."""
+    satt, och då finns inget att mäta mot.
+
+    MED `takt` byggs skelettet mot passets poängtak (se balanced_skeleton), så
+    vakten mäter det papper som FAKTISKT skrivs, inte ett tyngre som taket
+    redan bantat bort. Utan takt är varje ord och varje tal i fynden nedan
+    detsamma som innan taket fanns."""
     try:
         antal, tid_min = int(antal or 0), int(tid_min or 0)
     except (TypeError, ValueError):
@@ -2700,7 +2865,27 @@ def tidsvakt(antal: int, tid_min: int, profil: str = "prov",
     if antal <= 0 or tid_min <= 0:
         return []
     plan = skelettsummor(antal, profil, delar=delar, niva_mal=niva_mal,
-                         takt=takt, kurs=kurs)
+                         takt=takt, kurs=kurs, tid_min=tid_min)
+    tak = plan["tak"]
+    # TAKET NÅDDES INTE. Med en takt satt byggs skelettet mot passets tak
+    # (balanced_skeleton poang_tak), och kommer det ändå tillbaka tyngre är
+    # det inte ett fel i pappret utan i beställningen: tolv uppgifter GÅR
+    # inte att skriva balanserat på 23 poäng. Då ska hon få veta vad det
+    # minsta balanserade pappret väger, inte ett tyst tyngre prov.
+    #
+    # KODEN ÄR «tidsvakt» OCH INTE EN EGEN, med flit. Skärmen skriver ut just
+    # den kodens meddelande ordagrant för läraren (api.js RADER.tidsvakt: «den
+    # enda som INTE repareras»), medan en okänd kod inte får någon rad alls, 
+    # och ett fynd hon inte ser är inget fynd. Det är samma sorts fel som
+    # vakten själv kom av: ingen sa något till prov 85.
+    if tak is not None and plan["poang"] > tak:
+        return [_err("antal", "tidsvakt",
+                     f"{plan['antal']} uppgifter ryms inte på {tid_min} "
+                     f"minuter i takt {spard_takt(takt):g} min/poäng, passet "
+                     f"bär {tak} poäng och minsta balanserade papper med så "
+                     f"många uppgifter är {plan['poang']} poäng (ungefär "
+                     f"{plan['tid']} minuter). Antalet är ditt eget och står "
+                     "kvar, men provet är längre än passet.")]
     if plan["tid"] <= tid_min + TID_MARGINAL_MIN:
         return []
     ryms = foreslag_antal(tid_min, profil, takt=takt, niva_mal=niva_mal,
@@ -2732,8 +2917,18 @@ def _avstand(andel: float, band: tuple[float, float]) -> float:
     return max(0.0, lo - andel) + max(0.0, andel - hi)
 
 
+# Vad en poäng över passets tak kostar i sökningens mått. Talet är satt så att
+# taket står ÖVER varje band: ett bandbrott kostar 0,1 plus avståndet i kvadrat
+# (se utanfor nedan), och alla band tillsammans når inte en enda poäng över
+# taket. Det är rätt hierarki, för banden är andelar och taket är lektionen:
+# ett prov som är fem procentenheter för C-tungt skrivs klart, ett prov som är
+# tjugo minuter för långt gör det inte.
+TAKSTRAFF = 10.0
+
+
 def _straff(slots: list[dict], profil: str,
-            niva_mal: dict | None = None, kurs: str = "") -> float:
+            niva_mal: dict | None = None, kurs: str = "",
+            poang_tak: int | None = None) -> float:
     """Hur långt skelettet ligger från målen, som ETT tal.
 
     Kvadrerade avstånd till bandkanterna (noll inuti bandet) plus en liten
@@ -2771,6 +2966,10 @@ def _straff(slots: list[dict], profil: str,
         return 0.1 + avstand ** 2 if avstand > 0 else 0.0
 
     straff = sum(utanfor(s[n] / total, nm[n]) for n in ("e", "c", "a"))
+    # Passets tak, och det är linjärt med flit: varje poäng över kostar lika
+    # mycket, så sökningen ser en rak väg ner och kan inte fastna på vägen.
+    if poang_tak is not None and total > poang_tak:
+        straff += TAKSTRAFF * (total - poang_tak)
     if len(slots) >= MIN_BARARE_FOR_BAND:
         # Samma undantag som valideringen gör: ett rent E-papper har ingen
         # K-uppgift, och ett straff för en förmåga inget drag kan nå hade bara
@@ -2883,7 +3082,7 @@ def _drag(slots: list[dict],
 
 def _justera_skelett(slots: list[dict], profil: str = "prov",
                      varv: int = 200, niva_mal: dict | None = None,
-                     kurs: str = "") -> bool:
+                     kurs: str = "", poang_tak: int | None = None) -> bool:
     """Sök poängen fria från balansfel med enpoängsdrag, ett i taget, alltid
     det som sänker straffet mest. Returnerar True när skelettet är rent.
 
@@ -2892,7 +3091,7 @@ def _justera_skelett(slots: list[dict], profil: str = "prov",
     fastna i ett lokalt minimum — då lämnas skelettet som det är, och
     reparationsloopen i exam_gen får ta vid. Det är samma kontrakt som förut,
     fast utan pingpongen."""
-    nuvarande = _straff(slots, profil, niva_mal, kurs)
+    nuvarande = _straff(slots, profil, niva_mal, kurs, poang_tak)
     stangda = stangda_nivaer(niva_mal)
     for _ in range(varv):
         if nuvarande <= 0:
@@ -2900,7 +3099,7 @@ def _justera_skelett(slots: list[dict], profil: str = "prov",
         basta = None
         for i, idx, delta in _drag(slots, stangda):
             slots[i]["poang"][idx] += delta
-            varde = _straff(slots, profil, niva_mal, kurs)
+            varde = _straff(slots, profil, niva_mal, kurs, poang_tak)
             slots[i]["poang"][idx] -= delta
             if varde < nuvarande - 1e-12 and (basta is None or varde < basta[0]):
                 basta = (varde, i, idx, delta)

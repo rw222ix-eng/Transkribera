@@ -3076,6 +3076,20 @@
         ...punktval,
         antal: Number(i0.antal) || undefined,
         tid_min: Number(i0.provminuter) || undefined,
+        /* ── TAKTEN FÖLJER MED IN I PROVET (2026-09-19) ──────────
+           Takten stod i panelen och i de två knapparna men nådde aldrig
+           genereringen: «Föreslå antal» räknade med den, provet skrevs utan
+           den, och prov 85 blev tolv uppgifter och 26 poäng på ett pass på 70
+           minuter. Nu bygger servern skelettet med passets poängtak
+           (tid_min / takt = 23 poäng) och skriver takten på dokumentet, så
+           att vakten och förhandsvisningen räknar med hennes tal.
+
+           Skickas alltid, till skillnad från nivåmixen och E-skärpningen: en
+           takt som bara gäller när den avviker från 3,5 hade gjort standard-
+           takten till ett annat beteende än varje annan takt, och det är just
+           den sortens tyst gren läraren inte kan se. Kassetterna rörs inte, 
+           de spelas in genom exam_gen, inte genom panelen. */
+        takt: Number(i0.takt) || PROV_TAKT,
         delar: i0.delprov !== 'En del',
         datum: utkast.datum || '',
         /* Klockslagen står på försättsbladet i förlagans form («Provtid: kl.
@@ -3717,16 +3731,23 @@
     }
     const i = v.inst || {};
     const antal = Math.max(1, Number(i.antal) || 1);
+    /* PROVTIDEN MED I FRÅGAN (2026-09-19): tid och takt tillsammans är passets
+       poängtak, och servern bygger skelettet mot det. Utan tiden svarade
+       rutten på ett tyngre papper än det genereringen skriver, och det var
+       precis den skillnaden läraren såg på prov 85. */
+    const tid = Number(i.provminuter) || parseInt(i.provtid, 10) || 0;
     return window.API.json(`/api/exams/skelett?antal=${antal}`
       + '&typ=prov'
       + `&nivamix=${encodeURIComponent(i.nivamix || '')}`
-      + `&takt=${taktFor(v)}`)
+      + `&takt=${taktFor(v)}`
+      + (tid ? `&tid=${tid}` : ''))
       .then(r => {
         const sum = r && r.summor;
         if (!r || !Number(r.antal) || !sum) throw new Error('inget skelett');
         return { min: Number(r.tid), antal: Number(r.antal),
                  poang: Number(r.poang), e: Number(sum.e) || 0,
-                 c: Number(sum.c) || 0, a: Number(sum.a) || 0, gissat: false };
+                 c: Number(sum.c) || 0, a: Number(sum.a) || 0,
+                 tak: r.tak == null ? null : Number(r.tak), gissat: false };
       });
   }
   function uppskattaNu() {
@@ -3756,7 +3777,16 @@
        tid med olika takt, och siffran är det enda som förklarar varför. */
     const takt = String(taktFor(v)).replace('.', ',');
     const lage = u.min > ram ? `ryms inte på provtidens ${ram} min` : `av provtidens ${ram} min`;
-    const text = `Uppgifterna tar ca ${u.min} min ${lage} — ${u.antal} uppgifter · ${u.poang} p · ${u.e}/${u.c}/${u.a} E/C/A${u.gissat ? ' (uppskattad fördelning)' : ''} · takt ${takt} min/p.`;
+    /* VAD PROVET BYGGS FÖR, med lärarens egna fyra tal: antalet uppgifter hon
+       skrev, poängen passet bär i hennes takt, minuterna och takten. Raden
+       kom av att de fyra talen aldrig stod tillsammans någonstans, antalet i
+       panelen, tiden i beställningen, takten i sitt fält, och prov 85 blev
+       tolv uppgifter och 26 poäng på ett pass på 70 minuter utan att någon
+       sa det. `tak` finns bara när servern räknade med båda talen. */
+    const byggt = u.tak
+      ? ` Provet byggs för ${u.antal} uppgifter, ${u.poang} p, ${ram} min i takt ${takt} min/p.`
+      : '';
+    const text = `Uppgifterna tar ca ${u.min} min ${lage}, ${u.antal} uppgifter · ${u.poang} p · ${u.e}/${u.c}/${u.a} E/C/A${u.gissat ? ' (uppskattad fördelning)' : ''} · takt ${takt} min/p.${byggt}`;
     if (!window.toast) return;
     if (u.min !== ram) window.toast(text, `Sätt provtiden till ${u.min} min`, () => sattProvtid(u.min));
     else window.toast(text);

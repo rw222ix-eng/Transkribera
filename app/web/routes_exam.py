@@ -281,8 +281,12 @@ def _tidfynd(doc, summor: dict | None, typ: str) -> list[dict]:
     papper på 100, det är inte slack, det är en lektion till."""
     if not summor or not doc.tid_min:
         return []
+    # PAPPRETS EGEN TAKT om det bär en (exam_spec.ExamDoc.takt): provet skrevs
+    # mot lärarens minuter per poäng, och då ska det mätas mot dem. Saknas
+    # fältet gäller husets takt, som för varje papper skrivet före fältet.
     beraknad = exam_spec.tidsatgang(summor, len(doc.uppgifter),
-                                    takt=exam_spec.takt_for(typ))
+                                    takt=(exam_spec.spard_takt(doc.takt)
+                                          or exam_spec.takt_for(typ)))
     if not beraknad or beraknad <= round(doc.tid_min * 1.12):
         return []
     return [_fynd(
@@ -641,12 +645,19 @@ def create_router(base: Path, arbiter) -> APIRouter:
             # har samma modell (plan.js uppskatta) men bara efter att arket
             # ritats; skärmen behöver siffran med en gång, för pappret skrevs
             # för att rymmas på en lektion och läraren ska se om det gjorde
-            # det. Takten kommer ur exam_spec.takt_for (lärarens kapiteltakt,
-            # 3,5 min/poäng) — samma val som plan.js gör på skärmen.
+            # det. Takten är PAPPRETS egen när det bär en (ExamDoc.takt, satt
+            # ur planeringens taktfält), annars exam_spec.takt_for (lärarens
+            # kapiteltakt, 3,5 min/poäng), samma val som plan.js gör på
+            # skärmen, och samma tal som pappret beställdes med.
             "tid": (exam_spec.tidsatgang(
                 summor, len(doc.uppgifter),
-                takt=exam_spec.takt_for(view.get("typ") or "prov"))
+                takt=(exam_spec.spard_takt(doc.takt)
+                      or exam_spec.takt_for(view.get("typ") or "prov")))
                 if doc else None),
+            # Takten med i svaret av samma skäl som nivåvalet: skärmen ska
+            # kunna visa vad pappret skrevs mot, och testerna se att den
+            # överlevde.
+            "takt": (exam_spec.spard_takt(doc.takt) if doc else None),
             "dubbletter": _dubbletter(view),
         }
 
@@ -691,9 +702,15 @@ def create_router(base: Path, arbiter) -> APIRouter:
     @router.get("/api/exams/skelett")
     def skelett(antal: int = Query(ge=1, le=200), typ: str = "prov",
                 nivamix: str | None = None,
-                takt: float | None = None, delar: bool | None = None):
+                takt: float | None = None, delar: bool | None = None,
+                tid: int | None = Query(default=None, ge=1, le=1440)):
         """Vad upplägget skulle ge INNAN pappret är skrivet: {antal, poang,
-        summor {e, c, a}, tid, takt}.
+        summor {e, c, a}, tid, takt, tak}.
+
+        `tid` TILLSAMMANS MED `takt` är passets poängtak (2026-09-19): då
+        svarar rutten på det skelett genereringen FAKTISKT bygger, med samma
+        tak, i stället för på ett tyngre papper som aldrig skrivs. Utan båda
+        talen är svaret byte för byte det som gavs förut, och `tak` är null.
 
         LÄRARENS FYND 2026-08-22: «Föreslå antal» sa tio uppgifter och 24
         poäng, «Uppskatta tiden» svarade 16/8/0 E/C/A — noll A-poäng på ett
@@ -705,7 +722,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         profil = "prov"
         val = exam_spec.nivaval(profil, nivamix)
         return exam_spec.skelettsummor(
-            antal, profil, delar=delar, takt=takt,
+            antal, profil, delar=delar, takt=takt, tid_min=tid,
             mix=(val or {}).get("mix"), niva_mal=(val or {}).get("mal"))
 
     # ---------------------------------------------------- innehållsstatus --
@@ -844,6 +861,19 @@ def create_router(base: Path, arbiter) -> APIRouter:
         antal = int(body.get("antal") or 10)
         tid_min = int(body.get("tid_min") or 120)
         delar = bool(body.get("delar", True))
+        # ── TAKTEN, OCH DÄRMED PASSETS POÄNGTAK (2026-09-19) ────────
+        # Lärarens minuter per poäng ur planeringens taktfält (plan.js
+        # inst.Prov.takt). Två saker hänger på den:
+        #   * skelettet byggs med taket floor(tid_min / takt), «tolv
+        #     uppgifter på 70 minuter i takt 3 är högst 23 poäng», hennes egen
+        #     räkning och inget annat;
+        #   * takten skrivs på dokumentet, så att tidsvakten, tiden i svaret
+        #     och förhandsvisningen räknar med HENNES takt och inte med husets.
+        # Skickas fältet inte alls (äldre klient, API-anrop, pytest) är svaret
+        # None: inget tak, ingen takt på pappret, och prompten byte för byte
+        # den som gick i väg förut.
+        takt = exam_spec.spard_takt(body.get("takt"))
+        poang_tak = exam_spec.poang_tak_for(tid_min, takt)
         # «Plats för illustration» ur planeringen (plan.js TYPVAL). Krysset
         # bodde bara i webbläsaren: bladet ritade en tom ruta när det stod på,
         # och modellen fick samma bildorder oavsett. Nu styr det om
@@ -1015,11 +1045,25 @@ def create_router(base: Path, arbiter) -> APIRouter:
             # Nivåvalets skelett byggs här, inte i exam_gen: mixen är känd
             # bara där valet är känt. Utan val lämnas None och generate_exam
             # bygger profilens defaultskelett precis som förut.
+            # PASSETS TAK går samma väg (2026-09-19): är takten satt byggs
+            # skelettet här med poang_tak, med eller utan nivåval, och lämnas
+            # som `skeleton=` till generate_exam. Kursen följer med precis som
+            # exam_gen:s egen defaultrad gör den, utan den byggs alla kurser
+            # mot hela materialets spann.
+            #
+            # OMPROVET UNDANTAGET: bär beställningen `omprov_av` ärver
+            # skelettet originalets slots (exam_gen, skelett_ur_prov), och det
+            # är hela likvärdigheten. Ett tak byggt här hade tagit den platsen
+            # och gjort omprovet lättare än provet det ska motsvara, då är
+            # det inte längre ett omprov. Nivåvalet vinner däremot som förut:
+            # det är ett uttryckligt val av vilka poäng pappret ska bära.
             skelett = None
-            if nivaval:
+            eget_tak = poang_tak is not None and not body.get("omprov_av")
+            if nivaval or eget_tak:
                 skelett = exam_spec.balanced_skeleton(
                     antal, typ, delar=(typ == "prov" and delar),
-                    mix=nivaval["mix"], niva_mal=niva_mal, kurs=kurs)
+                    mix=nivaval["mix"] if nivaval else None,
+                    niva_mal=niva_mal, kurs=kurs, poang_tak=poang_tak)
             memory = db.memory_for_prompt(conn, int(group_id), int(course_id)) \
                 if group_id else ""
             teman = db.exam_themes_for_prompt(conn, int(course_id))
@@ -1186,7 +1230,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     if typ == "prov" else [])
                 res = exam_gen.generate_exam(
                     kurs, klass or "klassen", punkter, model=_model_name(),
-                    antal=antal, tid_min=tid_min, delar=delar,
+                    antal=antal, tid_min=tid_min, takt=takt, delar=delar,
                     memory=memory, teman=teman, referens=referens,
                     tidigare=tidigare_uppgifter,
                     bilder=bilder_block, utfall=utfall_block, bok=bok_block,
@@ -1250,6 +1294,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # minuter, kl. …» — pappret och skärmen om samma prov.
                 if res["exam"] is not None:
                     res["exam"]["tid_min"] = tid_min
+                # TAKTEN OCKSÅ, och av samma skäl: den är lärarens val, och
+                # pappret ska kunna säga ett halvår senare vilken takt det
+                # skrevs mot. Bara när hon satt den, utan takt står fältet
+                # tomt, och då gäller husets, precis som före fältet.
+                if res["exam"] is not None and takt:
+                    res["exam"]["takt"] = takt
                 # Hjälpmedelsraden är MODELLENS så länge läraren inte sagt
                 # något: den skiljer delarna åt med lärarens egna ord, och
                 # skärmen har läst dokumentets regel sedan blad.js planvalProv.
@@ -1454,6 +1504,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 _satt_lararens_datum(
                     res["exam"], view.get("datum"),
                     (view.get("exam") or {}).get("klockslag") or "")
+                # TAKTEN likaså, och av exakt samma skäl: den står inte i
+                # grammatiken, så ett omskrivningsvarv hade tappat lärarens
+                # minuter per poäng och pappret hade börjat räknas med husets.
+                gammal_takt = (view.get("exam") or {}).get("takt")
+                if isinstance(res.get("exam"), dict) and gammal_takt:
+                    res["exam"]["takt"] = gammal_takt
                 # Plåtvalet överlever inte omskrivningen av sig självt:
                 # modellen skriver om hela dokumentet, och `scen.plat` står
                 # inte i grammatiken. Matchningen körs därför om — den är ren

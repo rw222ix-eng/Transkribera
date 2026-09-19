@@ -13,6 +13,7 @@ och den tryckta provtiden.
 """
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -447,3 +448,201 @@ def test_rutten_svarar_med_summor(client):
     bara_e = client.get(
         "/api/exams/skelett?antal=10&typ=prov&nivamix=Bara%20E").json()
     assert bara_e["summor"]["a"] == 0, bara_e
+
+
+# ── PASSETS POÄNGTAK: ANTALET ÄR HENNES, TIDEN ÄR PASSETS ────────────────
+#
+# LÄRARENS KRAV 2026-09-19: «ett prov med exakt tolv uppgifter som ryms på
+# lektionens 70 minuter i min takt, tre minuter per poäng». Tolv uppgifter i
+# 23 poäng, alltså, och det gick inte att beställa: skelettet cyklade NP:s
+# tripplar och gav 25, takten fanns bara i de två knapparna, och prov 85 blev
+# tolv uppgifter och 26 poäng på ett pass på 70 minuter.
+#
+# Taket är HENNES räkning (minuterna delat med takten), inte tidsmodellens:
+# det är den siffran hon jämför pappret mot.
+
+def test_taket_ar_lararens_egen_rakning():
+    assert exam_spec.poang_tak_for(70, 3) == 23
+    assert exam_spec.poang_tak_for(90, 3.5) == 25
+    # Utan takt finns inget tak alls, det är beteendet varje anropare hade
+    # innan taket fanns, och det som håller kassetterna orörda.
+    assert exam_spec.poang_tak_for(70, None) is None
+    assert exam_spec.poang_tak_for(0, 3) is None
+    assert exam_spec.poang_tak_for(70, "sju") is None
+    # Samma spärr som taktfaktor: en takt på noll är inget tak, och ett
+    # dubbelt NP är ett skrivfel.
+    assert exam_spec.poang_tak_for(70, 0.2) == exam_spec.poang_tak_for(70, 1.0)
+    assert exam_spec.poang_tak_for(70, 99) == exam_spec.poang_tak_for(
+        70, 2 * exam_spec.NP_MIN_PER_POANG)
+
+
+def test_tolv_uppgifter_ryms_pa_passet_med_gron_balans():
+    """Lärarens beställning, hela vägen: tolv uppgifter, högst 23 poäng, och
+    ett skelett balansvalideringen inte har något att säga om."""
+    tak = exam_spec.poang_tak_for(70, 3)
+    slots = exam_spec.balanced_skeleton(12, "prov", kurs="Ma2a",
+                                        poang_tak=tak)
+    doc = exam_spec._skeleton_doc(slots)
+    summor = exam_spec.poangsummor(doc)
+    assert len(slots) == 12, "antalet är lärarens och får aldrig krympa"
+    assert summor["total"] <= tak, summor
+    assert exam_spec.validate_balance(doc) == []
+
+
+@pytest.mark.parametrize("kurs", ["", "Ma1a", "Ma1c", "Ma2a", "Ma2c"])
+def test_taket_haller_i_varje_kurs(kurs):
+    """Kursen byter nivåmixen och därmed tripplarna. Taket ska hålla ändå, och
+    balansen med det."""
+    slots = exam_spec.balanced_skeleton(12, "prov", kurs=kurs, poang_tak=23)
+    doc = exam_spec._skeleton_doc(slots)
+    assert len(slots) == 12
+    assert exam_spec.poangsummor(doc)["total"] <= 23
+    assert exam_spec.validate_balance(doc) == [], kurs
+
+
+def test_taket_koper_utrymmet_av_trepoangarna():
+    """Fler billiga rader, färre dyra, inte färre uppgifter. Det är hela
+    mekaniken: (0,3,0) blir (0,2,0) blir (0,1,0), och raden är fortfarande
+    samma förmåga, samma del och samma plats i trappan."""
+    utan = exam_spec.balanced_skeleton(12, "prov", kurs="Ma2a")
+    med = exam_spec.balanced_skeleton(12, "prov", kurs="Ma2a", poang_tak=23)
+    assert len(med) == len(utan) == 12
+    assert sum(sum(s["poang"]) for s in utan) == 25
+    assert sum(sum(s["poang"]) for s in med) == 23
+    def dyra(sk):
+        return len([s for s in sk if sum(s["poang"]) >= 3])
+    assert dyra(med) < dyra(utan), (dyra(med), dyra(utan))
+    # Formen är orörd: samma delar, samma förmågor, samma typer.
+    assert [(s["del"], s["formaga"], s["typ"]) for s in med] \
+        == [(s["del"], s["formaga"], s["typ"]) for s in utan]
+
+
+@pytest.mark.parametrize("antal", range(1, 21))
+def test_utan_tak_ar_skelettet_ord_for_ord_som_forut(antal):
+    """Kassettregeln. Ett tak som ändrar skelettet också när ingen satt det
+    skriver om varje inspelad prompt i repot."""
+    assert exam_spec.balanced_skeleton(antal, "prov", kurs="Ma2c") \
+        == exam_spec.balanced_skeleton(antal, "prov", kurs="Ma2c",
+                                       poang_tak=None)
+
+
+def test_det_omojliga_taket_sager_det_rakt_ut():
+    """Tolv uppgifter på 30 minuter i takt 3 är tio poäng, och tolv uppgifter
+    kan inte väga mindre än tolv. Då ska vakten säga vad minsta balanserade
+    papper väger, inte tyst leverera ett tyngre."""
+    fynd = exam_spec.tidsvakt(12, 30, "prov", takt=3, kurs="Ma2a")
+    assert len(fynd) == 1, fynd
+    # Koden är vaktens egen, för det är den skärmen skriver ut ordagrant
+    # (api.js RADER.tidsvakt). En ny kod hade blivit ett fynd ingen ser.
+    assert fynd[0]["code"] == "tidsvakt"
+    assert "12 uppgifter" in fynd[0]["message"]
+    assert "30 minuter" in fynd[0]["message"]
+    assert "10 poäng" in fynd[0]["message"]     # passets tak
+    assert "12 poäng" in fynd[0]["message"]     # minsta balanserade papper
+
+
+def test_taket_tystar_vakten_nar_provet_ryms():
+    """Samma beställning som prov 85, med takten satt: tolv uppgifter på 70
+    minuter är 23 poäng, och då finns ingenting att varna för."""
+    assert exam_spec.tidsvakt(12, 70, "prov", takt=3, kurs="Ma2a") == []
+    # Utan takt är vakten ord för ord den den var: skelettet väger 25 poäng,
+    # tidsmodellen säger 100 minuter, och fyndet är det gamla.
+    utan = exam_spec.tidsvakt(12, 70, "prov", kurs="Ma2a")
+    assert len(utan) == 1 and utan[0]["code"] == "tidsvakt", utan
+
+
+def test_rutten_bygger_mot_taket_nar_bada_talen_skickas(client):
+    """«Uppskatta tiden» och genereringen ska säga samma sak, och det gör de
+    bara om rutten känner passets tid."""
+    med = client.get("/api/exams/skelett?antal=12&typ=prov&takt=3&tid=70")
+    assert med.status_code == 200, med.text
+    med = med.json()
+    assert med["tak"] == 23
+    assert med["poang"] <= 23
+    assert med["antal"] == 12
+    # Utan tiden finns inget tak, och svaret är det rutten alltid gett.
+    utan = client.get("/api/exams/skelett?antal=12&typ=prov&takt=3").json()
+    assert utan["tak"] is None
+    assert utan["poang"] > med["poang"]
+
+
+def test_uppskattningen_skickar_provtiden_och_visar_vad_provet_byggs_for():
+    js = PLAN_JS.read_text(encoding="utf-8")
+    assert "+ (tid ? `&tid=${tid}` : '')" in js
+    assert "Provet byggs för ${u.antal} uppgifter" in js
+    # Takten följer med in i genereringen, inte bara till de två knapparna.
+    assert "takt: Number(i0.takt) || PROV_TAKT," in js
+
+
+def test_generate_rutten_bygger_provet_mot_passets_tak(llm_ready, monkeypatch):
+    """Hela vägen: panelens takt in, skelettet byggt mot passets tak, takten
+    skriven på dokumentet så att vakten och skärmen räknar med HENNES tal."""
+    from app import exam_gen
+
+    monkeypatch.setattr(
+        exam_gen, "_llm_round",
+        lambda *a, **k: {"titel": "Prov", "kurs": "x", "hjalpmedel": "-",
+                         "uppgifter": [{"del": None, "formaga": "P",
+                                        "typ": "rutin", "poang": [2, 0, 0],
+                                        "text": "Beräkna", "losning": "1",
+                                        "bedomning": "+2 E"}]})
+    anrop: list[dict] = []
+    riktig = exam_spec.balanced_skeleton
+
+    def spion(*a, **k):
+        anrop.append(k)
+        return riktig(*a, **k)
+
+    monkeypatch.setattr(exam_spec, "balanced_skeleton", spion)
+    cid = llm_ready.post("/api/courses",
+                         json={"namn": "Matematik, nivå 2a"}).json()["id"]
+    r = llm_ready.post("/api/exams/generate",
+                       json={"course_id": cid, "klass": "TE26A", "antal": 12,
+                             "tid_min": 70, "takt": 3, "typ": "prov",
+                             "punkter_text": ["Potenser"]})
+    assert r.status_code == 200, r.text
+    res = [json.loads(rad[len("data:"):])
+           for rad in r.text.splitlines() if rad.startswith("data:")]
+    klart = [e for e in res if e["type"] == "done"]
+    assert klart, res
+    exam = klart[0]["result"]["exam"]
+    # Takten står på pappret: den ska gå att läsa ett halvår senare.
+    assert exam["takt"] == 3
+    # Och skelettet byggdes med passets tak, inte med NP:s tripplar rakt av.
+    tak = [k.get("poang_tak") for k in anrop if k.get("poang_tak") is not None]
+    assert tak and tak[0] == 23, anrop
+
+
+def test_generate_utan_takt_bygger_precis_som_forut(llm_ready, monkeypatch):
+    """Kassettregeln på ruttnivå: utan takt ska inget tak byggas, och då är
+    skelettet, och därmed prompten, byte för byte det som gick i väg
+    förut."""
+    from app import exam_gen
+
+    monkeypatch.setattr(
+        exam_gen, "_llm_round",
+        lambda *a, **k: {"titel": "Prov", "kurs": "x", "hjalpmedel": "-",
+                         "uppgifter": [{"del": None, "formaga": "P",
+                                        "typ": "rutin", "poang": [2, 0, 0],
+                                        "text": "Beräkna", "losning": "1",
+                                        "bedomning": "+2 E"}]})
+    anrop: list[dict] = []
+    riktig = exam_spec.balanced_skeleton
+
+    def spion(*a, **k):
+        anrop.append(k)
+        return riktig(*a, **k)
+
+    monkeypatch.setattr(exam_spec, "balanced_skeleton", spion)
+    cid = llm_ready.post("/api/courses",
+                         json={"namn": "Matematik, nivå 2a"}).json()["id"]
+    r = llm_ready.post("/api/exams/generate",
+                       json={"course_id": cid, "klass": "TE26A", "antal": 12,
+                             "tid_min": 70, "typ": "prov",
+                             "punkter_text": ["Potenser"]})
+    assert r.status_code == 200, r.text
+    assert all(k.get("poang_tak") is None for k in anrop), anrop
+    exam = [json.loads(rad[len("data:"):])
+            for rad in r.text.splitlines()
+            if rad.startswith("data:")][-1]["result"]["exam"]
+    assert exam.get("takt") is None
