@@ -6755,9 +6755,21 @@ def a_nivavakt(exam: dict) -> list[dict]:
     enheter = domarenheter(exam)
     if not enheter:
         return []
+    uppgifter = exam.get("uppgifter") or []
+
+    def notis(e: dict) -> str:
+        # Tipset bor ofta i uppgiftens `notis` (prov 88 uppg 6 och 11), inte
+        # i texten. Pappret trycker notisen under uppgiften, så den räknas.
+        m = re.match(r"(\d+)", str(e.get("nr") or ""))
+        i = int(m.group(1)) if m else 0
+        u = uppgifter[i - 1] if 0 < i <= len(uppgifter) else {}
+        delar = u.get("deluppgifter") or []
+        return " ".join([str(u.get("notis") or "")]
+                        + [str(x.get("notis") or "") for x in delar])
 
     def text(e: dict) -> str:
-        return f"{e['kort'].get('stam', '')} {e['kort'].get('text', '')}"
+        return (f"{e['kort'].get('stam', '')} {e['kort'].get('text', '')} "
+                f"{notis(e)}")
 
     oppet = any(_OPPEN_RE.search(text(e)) for e in enheter)
     fel: list[dict] = []

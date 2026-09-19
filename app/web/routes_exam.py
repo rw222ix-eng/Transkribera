@@ -379,11 +379,15 @@ def _tipsfynd(exam: dict, typ: str) -> list[dict]:
         fel = exam_gen.a_nivavakt(exam)
     except Exception:                       # pragma: no cover
         return []
-    ut = []
+    ut, sedda = [], set()
     for f in fel:
         if "tips" not in (f.get("message") or "").lower():
             continue
         nr = _uppgiftsnr(f.get("path", ""))
+        # Notisen är uppgiftens, så 6a och 6b bär samma tips: ett fynd per uppgift.
+        if nr in sedda:
+            continue
+        sedda.add(nr)
         ut.append(_fynd("tips", f"Uppgift {nr} bär ett tryckt tips som talar "
                         "om metoden. Nationella provet trycker aldrig tips.", nr))
     return ut

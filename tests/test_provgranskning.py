@@ -258,6 +258,10 @@ def test_tipset_falls_pa_alla_nivaer_men_sanningsvardet_bara_pa_A():
     assert "tips" in fel[0]["message"].lower()
     u2 = _u(text="Visa att $2 + 2 = 4$.", poang=(1, 1, 0))
     assert exam_gen.a_nivavakt(_prov([u2])) == []
+    # Tipset i uppgiftens `notis` (prov 88 uppg 6 och 11) räknas också.
+    u3 = _u(text="Beräkna arean.", poang=(1, 1, 0))
+    u3["notis"] = "Tips: Räkna ut hela ytan och dra bort dammen."
+    assert [f["code"] for f in exam_gen.a_nivavakt(_prov([u3]))] == ["anivavakt"]
 
 
 # ── 3. METODER UR SENARE KAPITEL ────────────────────────────────────────
