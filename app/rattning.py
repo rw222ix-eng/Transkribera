@@ -307,15 +307,14 @@ def granser(rader: list[dict], config: dict | None = None,
 
     ETT SKRIVET PROV BÄR SINA EGNA GRÄNSER. `sparade` är pappret dokumentets
     egna `granser`, och de vinner över den här räkningen. Annars hade en
-    kalibrering av KRAV_DEFAULT (NP-kalibreringen 2026-08-22 flyttade C med
-    nio procentenheter) räknat om betygen på prov klassen redan skrivit — och
+    ändring av KRAV_DEFAULT (den nya NP-modellen 2026-09-19 tog bort hela
+    varav-kravet) räknat om betygen på prov klassen redan skrivit, och
     en elev som fick C i maj hade blivit E i juni utan att någon rört hennes
     papper. Nya dokument får de nya gränserna; gamla behåller sina.
 
-    `kurs` väljer kursens egen NP-mätning (exam_spec.KRAV_PER_KURS) och gäller
-    bara när pappret INTE bär egna gränser. Annars räknades ett Ma 1c-prov
-    utan stämpel mot Ma 2a:s tal, och rättningen hade satt ett annat betyg än
-    försättsbladet lovade."""
+    `kurs` är utan verkan sedan 2026-09-19 (exam_spec.kravkonfig: NP-modellen
+    har en regel för alla kurser) och skickas bara vidare, så att anroparna
+    inte behöver ändras den dag kursen betyder något igen."""
     e = c = a = 0
     for r in rader or []:
         if r.get("grupp"):
@@ -326,10 +325,9 @@ def granser(rader: list[dict], config: dict | None = None,
              else exam_spec.kravgranser_ur_summor(
                  {"total": e + c + a, "e": e, "c": c, "a": a}, config, kurs))
     return grund | {
-        # Utan C- och A-poäng (gamla papper utan tripel, allt föll på E) är
-        # varav-kraven noll och A kan nås på enbart E-poäng. Sant enligt
-        # fallbacken — men UI:t ska kunna SÄGA det i stället för att låta
-        # betyget se fullvärdigt ut.
+        # Bär pappret nivåtripplar alls? Betyget räknas inte på dem längre
+        # (kravet är totalpoängen), men skärmen visar poängen per nivå, och ett
+        # gammalt papper där allt föll på E har inga rutor att visa.
         "tripel": (c + a) > 0}
 
 
@@ -399,25 +397,31 @@ def elevsummor(rader: list[dict], varden: dict | None) -> dict:
 def betyg(summor: dict, gr: dict) -> str:
     """Elevens F/E/C/A mot provets kravgränser.
 
-    Ordningen är NP:s: det HÖGSTA betyg vars båda villkor är uppfyllda. En
-    elev som når C-gränsen i total men inte tar sin andel av C- och
-    A-poängen har inte visat det C kräver — hon får E, inte C."""
+    ENBART TOTALPOÄNGEN, sedan 2026-09-19: det HÖGSTA betyg vars `minst` är
+    uppnått. Nationella provet kategoriserar inte längre sina poäng som E-,
+    C- eller A-poäng och ställer inget krav på VAR poängen togs, så en elev
+    som når C-gränsen får C även om varenda poäng satt på en E-uppgift. Se
+    exam_spec.KRAV_DEFAULT.
+
+    GAMLA STÄMPLADE GRÄNSER bär fortfarande `varav_ca`/`varav_a` (fälten fanns
+    till och med 2026-09-19). De läses inte: ett godkänt papper äger sina
+    TAL, inte den regel som en gång räknade fram dem, och att ett gammalt
+    prov skulle domineras av ett krav appen slutat ställa vore att straffa
+    eleven för när provet skrevs."""
     tot = int((summor or {}).get("total") or 0)
-    ca = int((summor or {}).get("c") or 0) + int((summor or {}).get("a") or 0)
-    a = int((summor or {}).get("a") or 0)
     g = gr or {}
     A, C, E = g.get("A") or {}, g.get("C") or {}, g.get("E") or {}
     # MELLANBETYGEN prövas bara om gränserna bär dem. NP har fem gränser,
     # lärarens papper trycker fyra (exam_spec.KRAV_DEFAULT «mellanbetyg»), och
     # ett B kan aldrig uppstå ur ett dokument som inte deklarerat B-gränsen.
     B, D = g.get("B") or {}, g.get("D") or {}
-    if tot >= int(A.get("minst") or 0) and a >= int(A.get("varav_a") or 0):
+    if tot >= int(A.get("minst") or 0):
         return "A"
-    if B and tot >= int(B.get("minst") or 0) and a >= int(B.get("varav_a") or 0):
+    if B and tot >= int(B.get("minst") or 0):
         return "B"
-    if tot >= int(C.get("minst") or 0) and ca >= int(C.get("varav_ca") or 0):
+    if tot >= int(C.get("minst") or 0):
         return "C"
-    if D and tot >= int(D.get("minst") or 0) and ca >= int(D.get("varav_ca") or 0):
+    if D and tot >= int(D.get("minst") or 0):
         return "D"
     if tot >= int(E.get("minst") or 0):
         return "E"

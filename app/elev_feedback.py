@@ -207,14 +207,17 @@ def build_uppgifter(rader: list[dict]) -> str:
 
 
 def build_granser(granser: dict) -> str:
+    """Gränserna i poäng, som prompten ska säga dem.
+
+    Bara totalpoäng: betyget sätts på summan och ingenting annat
+    (exam_spec.KRAV_DEFAULT). Stod «varav 3 p på C-nivå» kvar hade modellen
+    skrivit ett krav till eleven som provet inte ställer."""
     g = granser or {}
     return ("PROVETS KRAVGRÄNSER — betygen är räknade mot dem:\n"
             f"Provet är {g.get('total')} p. "
             f"E från {(g.get('E') or {}).get('minst')} p. "
-            f"C från {(g.get('C') or {}).get('minst')} p varav "
-            f"{(g.get('C') or {}).get('varav_ca')} p på C- eller A-nivå. "
-            f"A från {(g.get('A') or {}).get('minst')} p varav "
-            f"{(g.get('A') or {}).get('varav_a')} p på A-nivå.")
+            f"C från {(g.get('C') or {}).get('minst')} p. "
+            f"A från {(g.get('A') or {}).get('minst')} p.")
 
 
 def build_klassen(rader: list[dict], elever: list[dict]) -> str:
@@ -239,7 +242,10 @@ def build_klassen(rader: list[dict], elever: list[dict]) -> str:
 
 def _avstand(summor: dict, granser: dict, betyg: str) -> str:
     """Vad som fattas till nästa betyg, i poäng. Tonen ska följa avståndet:
-    en elev tre poäng från C ska få veta det, en elev trettio ska inte."""
+    en elev tre poäng från C ska få veta det, en elev trettio ska inte.
+
+    Ett enda tal, för det är ett enda krav: betyget sätts på totalpoängen
+    (exam_spec.KRAV_DEFAULT)."""
     g = granser or {}
     nasta = {"F": "E", "E": "C", "C": "A"}.get(betyg)
     if not nasta:
@@ -249,12 +255,6 @@ def _avstand(summor: dict, granser: dict, betyg: str) -> str:
     behov = []
     if tot < int(krav.get("minst") or 0):
         behov.append(f"{int(krav['minst']) - tot} p till")
-    ca = int(summor.get("c") or 0) + int(summor.get("a") or 0)
-    if nasta == "C" and ca < int(krav.get("varav_ca") or 0):
-        behov.append(f"{int(krav['varav_ca']) - ca} p till på C- eller A-nivå")
-    if nasta == "A" and int(summor.get("a") or 0) < int(krav.get("varav_a") or 0):
-        behov.append(f"{int(krav['varav_a']) - int(summor.get('a') or 0)} p "
-                     "till på A-nivå")
     return f" — {' och '.join(behov)} för {nasta}" if behov else ""
 
 

@@ -266,10 +266,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
             "underlag": view.get("underlag"),
             "status": view["status"], "versions": view["versions"],
             "errors": errors, "rounds": rounds,
-            # Kursens egen NP-mätning (exam_spec.KRAV_PER_KURS) och lärarens
-            # skärpning av E, båda innan pappret godkänts. Skärmens
-            # betygstabell ritas ur just de här talen (blad.js prbetyg) och ska
-            # visa samma sak som PDF:en kommer att trycka.
+            # Kravgränserna innan pappret godkänts, med lärarens skärpning
+            # av E. Skärmens betygstabell ritas ur just de här talen (blad.js
+            # prbetyg) och ska visa samma sak som PDF:en kommer att trycka.
             "granser": (exam_spec.kravgranser(
                 doc, {"e_extra": view.get("e_extra") or 0}) if doc else None),
             # Lärarens skärpning av E-gränsen (v30), med i svaret av samma
@@ -1309,10 +1308,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     # version_id är avgjort längre ner — annars hade .tex/.pdf
                     # hamnat på ett varv läraren aldrig pekade ut.
                     #
-                    # KURSEN och LÄRARENS SKÄRPNING följer med hit: gränserna
-                    # är Ma 1c:s när pappret är ett Ma 1c-prov (KRAV_PER_KURS),
-                    # och E-gränsen bär de poäng läraren lade på i planeringen.
-                    # Båda måste in i stämpeln. Det är den som gäller sedan.
+                    # LÄRARENS SKÄRPNING följer med hit: E-gränsen bär de
+                    # poäng läraren lade på i planeringen, och de måste in i
+                    # stämpeln. Det är den som gäller sedan. (Kursen skickas
+                    # också, men är utan verkan sedan 2026-09-19, NP-modellen
+                    # har en regel för alla kurser, se exam_spec.kravkonfig.)
                     if not exam.get("granser"):
                         exam["granser"] = exam_spec.kravgranser_ur_summor(
                             exam_spec.poangsummor(doc),
@@ -1751,7 +1751,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
             return JSONResponse({"error": "provet går inte att läsa",
                                  "errors": fel}, status_code=400)
         # REGELNS TAL, alltid räknat på nytt: det är golvet skärpningen mäts
-        # ifrån, och det ska komma ur kursens NP-mätning och inte ur den
+        # ifrån, och det ska komma ur dagens NP-modell och inte ur den
         # stämplade E-gränsen, som ju redan kan bära en skärpning.
         summor = exam_spec.poangsummor(doc)
         regelns = exam_spec.kravgranser_ur_summor(summor, None, doc.kurs)

@@ -82,9 +82,12 @@
 \vspace{4mm}
 ((# Bara de gränser provet kan dela ut (exam_spec.betygsrader): ett prov
     utan C- och A-poäng har ingen C-gräns att rätta mot. #))
+((# Bara totalpoäng: betyget sätts på summan och ingenting annat
+    (exam_spec.KRAV_DEFAULT). Uppgifternas (E/C/A) står kvar på raderna, 
+    det är poängens nivå, inte ett krav för betyget. #))
 {\small Poäng anges som (E/C/A). Kravgränser: E minst ((( granser.E.minst )))((* if 'C' in granser.get('betyg', ['E', 'C', 'A']) *)),
-C minst ((( granser.C.minst ))) varav ((( granser.C.varav_ca ))) C/A((* endif *))((* if 'A' in granser.get('betyg', ['E', 'C', 'A']) *)),
-A minst ((( granser.A.minst ))) varav ((( granser.A.varav_a ))) A((* endif *))
+C minst ((( granser.C.minst )))((* endif *))((* if 'A' in granser.get('betyg', ['E', 'C', 'A']) *)),
+A minst ((( granser.A.minst )))((* endif *))
  \textemdash{}
 av totalt ((( granser.total ))) poäng.}
 

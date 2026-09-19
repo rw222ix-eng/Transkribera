@@ -13,6 +13,7 @@ Två kontrakt hålls här och de är hela poängen med etappen:
 Betygets gränsfall står i egen sektion: reglerna är NP:s och de är ≥, inte >.
 """
 import re
+from fractions import Fraction
 from pathlib import Path
 
 import pytest
@@ -106,16 +107,16 @@ def test_granserna_ar_forsattsbladets():
     # UI:t) — talen är fortfarande försättsbladets, ograverade.
     assert g == ur_summor | {"tripel": True}
     assert g["total"] == 11
-    assert g["E"]["minst"] == 3          # ceil(11 · 0,26)
-    assert g["C"] == {"minst": 6, "varav_ca": 3}   # ceil(11·0,54), ceil(8·0,34)
-    assert g["A"] == {"minst": 9, "varav_a": 3}    # ceil(11·0,79), ceil(4·0,52)
+    assert g["E"]["minst"] == 3          # ceil(11 · 18/70)
+    assert g["C"] == {"minst": 6}        # ceil(11 · 37/70)
+    assert g["A"] == {"minst": 9}        # ceil(11 · 57/70)
 
 
 # ------------------------------------------------------------------ betyget --
 
 GRANSER = exam_spec.kravgranser_ur_summor({"total": 100, "e": 30, "c": 35,
                                            "a": 35})
-# E ≥ 26, C ≥ 54 varav ≥ 24 av C+A, A ≥ 79 varav ≥ 19 av A (NP-kalibrerat).
+# E ≥ 26, C ≥ 53, A ≥ 81, totalpoäng och ingenting annat (NP Ma 1c ht 2024).
 
 
 def test_de_fyra_utfallen():
@@ -129,19 +130,19 @@ def test_exakt_pa_gransen_ger_betyget():
     """Regeln är «minst» — ≥, inte >. En elev som ligger exakt på gränsen har
     nått den."""
     assert rattning.betyg({"total": 26, "e": 26, "c": 0, "a": 0}, GRANSER) == "E"
-    assert rattning.betyg({"total": 54, "e": 30, "c": 24, "a": 0}, GRANSER) == "C"
-    assert rattning.betyg({"total": 79, "e": 30, "c": 30, "a": 19}, GRANSER) == "A"
+    assert rattning.betyg({"total": 53, "e": 30, "c": 23, "a": 0}, GRANSER) == "C"
+    assert rattning.betyg({"total": 82, "e": 30, "c": 33, "a": 19}, GRANSER) == "A"
 
 
-def test_c_totalen_utan_c_villkoret_ar_e():
-    """54 poäng tagna på nästan enbart E-uppgifter är inte C. Eleven har visat
-    mängd, inte det C kräver."""
-    assert rattning.betyg({"total": 55, "e": 32, "c": 23, "a": 0}, GRANSER) == "E"
+def test_totalen_racker_aven_utan_poang_pa_niva():
+    """VÄNDNINGEN 2026-09-19: betyget sätts på totalpoängen.
 
-
-def test_a_totalen_utan_a_villkoret_ar_c():
-    """Motsvarande för A: totalen räcker, A-poängen gör det inte."""
-    assert rattning.betyg({"total": 85, "e": 30, "c": 50, "a": 5}, GRANSER) == "C"
+    Regeln VAR «54 poäng tagna på nästan enbart E-uppgifter är inte C», med
+    ett varav-krav ovanpå totalen. Nationella provet (Ma 1c ht 2024)
+    kategoriserar inte längre sina poäng som E-, C- eller A-poäng och ställer
+    inget sådant krav, så eleven som når gränsen når betyget."""
+    assert rattning.betyg({"total": 55, "e": 55, "c": 0, "a": 0}, GRANSER) == "C"
+    assert rattning.betyg({"total": 85, "e": 30, "c": 55, "a": 0}, GRANSER) == "A"
 
 
 def test_betyget_ar_alltid_ett_av_fyra():
@@ -155,14 +156,14 @@ def test_betyget_ar_alltid_ett_av_fyra():
 
 MELLAN = exam_spec.kravgranser_ur_summor({"total": 100, "e": 30, "c": 35,
                                           "a": 35}, {"mellanbetyg": True})
-# D ≥ 41 varav ≥ 14 av C+A, B ≥ 68 varav ≥ 11 av A.
+# D ≥ 40, B ≥ 68 (NP Ma 1c ht 2024: 28/70 och 47/70).
 
 
 def test_mellanbetygen_kravs_in_for_att_finnas():
     assert "D" not in GRANSER and "B" not in GRANSER
-    assert MELLAN["D"] == {"minst": 41, "varav_ca": 14}
-    assert MELLAN["B"] == {"minst": 68, "varav_a": 11}
-    assert "D: minst 41%" in MELLAN["regel"] and "B: minst 68%" in MELLAN["regel"]
+    assert MELLAN["D"] == {"minst": 40}
+    assert MELLAN["B"] == {"minst": 68}
+    assert "D: minst 40 %" in MELLAN["regel"] and "B: minst 67 %" in MELLAN["regel"]
 
 
 def test_samma_elev_far_d_eller_e_beroende_pa_flaggan():
@@ -177,7 +178,7 @@ def test_b_ligger_mellan_c_och_a():
     s = {"total": 70, "e": 30, "c": 28, "a": 12}
     assert rattning.betyg(s, GRANSER) == "C"
     assert rattning.betyg(s, MELLAN) == "B"
-    # A-gränsen står kvar: 79 poäng varav 18 A-poäng.
+    # A-gränsen står kvar: 82 poäng.
     assert rattning.betyg({"total": 85, "e": 30, "c": 35, "a": 20},
                           MELLAN) == "A"
 
@@ -307,12 +308,18 @@ def test_skarmens_krav_ar_serverns():
           / "elever.js").read_text(encoding="utf-8")
     rad = re.search(r"const KRAV = \{([^}]*)\}", js)
     assert rad, "elever.js KRAV hittades inte"
-    ur_js = {k: float(v) for k, v in re.findall(r"(\w+):\s*([\d.]+)", rad[1])}
-    assert ur_js == {"e": exam_spec.KRAV_DEFAULT["e_andel"],
-                     "c": exam_spec.KRAV_DEFAULT["c_andel"],
-                     "cCa": exam_spec.KRAV_DEFAULT["c_varav_ca"],
-                     "a": exam_spec.KRAV_DEFAULT["a_andel"],
-                     "aA": exam_spec.KRAV_DEFAULT["a_varav_a"]}
+    # Andelarna står som bråk i JS (18/70) så skärmen räknar lika exakt som
+    # servern gör med sina Fraction. En decimal ska också gå att läsa, det är
+    # talet som jämförs, inte hur det är skrivet.
+    ur_js = {}
+    for nyckel, uttryck in re.findall(r"(\w+):\s*([\d./]+)", rad[1]):
+        taljare, _, namnare = uttryck.partition("/")
+        ur_js[nyckel] = Fraction(taljare) / Fraction(namnare or 1)
+    # Inga varav-nycklar: kravet slutade titta på nivåerna 2026-09-19, och en
+    # kvarglömd cCa i JS hade räknat ett krav servern inte ställer.
+    assert ur_js == {"e": Fraction(exam_spec.KRAV_DEFAULT["e_andel"]),
+                     "c": Fraction(exam_spec.KRAV_DEFAULT["c_andel"]),
+                     "a": Fraction(exam_spec.KRAV_DEFAULT["a_andel"])}
 
 
 def test_pappret_bar_sina_egna_granser_och_de_raknas_inte_om():
@@ -338,7 +345,7 @@ def test_granser_for_en_annan_poangsumma_raknas_om():
     fel_summa = {"total": 20, "E": {"minst": 6}, "C": {"minst": 11, "varav_ca": 4},
                  "A": {"minst": 16, "varav_a": 3}, "regel": "Annat papper."}
     g = rattning.granser(rattning.bygg(UPPGIFTER), sparade=fel_summa)
-    assert g["total"] == 11 and g["C"] == {"minst": 6, "varav_ca": 3}
+    assert g["total"] == 11 and g["C"] == {"minst": 6}
 
 
 def test_sparade_granser_nar_hela_vagen_till_elevvyn(client):
@@ -350,8 +357,8 @@ def test_sparade_granser_nar_hela_vagen_till_elevvyn(client):
 
 
 def test_gransernas_tripelflagga_faller_utan_ca_poang():
-    """Papper utan tripel och nivå: allt föll på E, varav-kraven är noll och
-    A nås på E-poäng. Flaggan är UI:ts chans att säga det."""
+    """Papper utan tripel och nivå: allt föll på E och det finns ingen
+    nivåsplit att visa per uppgift. Flaggan är UI:ts chans att säga det."""
     rader = rattning.bygg([{"nr": 1, "t": "Beräkna.", "p": 4}])
     assert rattning.granser(rader)["tripel"] is False
 

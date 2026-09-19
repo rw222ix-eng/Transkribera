@@ -11,7 +11,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from app import exam_gen, exam_latex, exam_pdf, exam_spec, niva_rubrik
+from app import exam_gen, exam_latex, exam_pdf, exam_spec, niva_rubrik, rattning
 
 # Minimal giltig 1×1-pixels PNG (RGB, okomprimerad enda scanline) — samma
 # sond som tools/seed_tectonic_cache.py använder för att motionera
@@ -670,13 +670,11 @@ def test_kravgranser_np_model():
     doc, _ = exam_spec.validate_exam_json(_exam())
     g = exam_spec.kravgranser(doc)
     assert g["total"] == 20
-    assert g["E"]["minst"] == 6            # ceil(20 * 0.26)
-    assert g["C"]["minst"] == 11           # ceil(20 * 0.54)
-    assert g["C"]["varav_ca"] == 4         # ceil((6+5) * 0.34) = ceil(3,74)
-    assert g["A"]["minst"] == 16           # ceil(20 * 0.79)
-    assert g["A"]["varav_a"] == 3          # ceil(5 * 0.50)
+    assert g["E"]["minst"] == 6            # ceil(20 · 18/70) = ceil(5,14)
+    assert g["C"]["minst"] == 11           # ceil(20 · 37/70) = ceil(10,57)
+    assert g["A"]["minst"] == 17           # ceil(20 · 57/70) = ceil(16,29)
     assert "reproducerbar" not in g["regel"]   # regeln är själva texten
-    assert "26" in g["regel"] and "79" in g["regel"]
+    assert "26" in g["regel"] and "81" in g["regel"]
     # Papprets betygstabell har fyra rader (F/E/C/A) — mellanbetygen räknas
     # bara på begäran och får aldrig smyga sig in i regeltexten.
     assert "D:" not in g["regel"] and "B:" not in g["regel"]
@@ -726,185 +724,116 @@ def test_forsattsbladets_betygstabell_har_bara_de_rader_provet_kan_ge():
         == ["F", "E", "C", "A"]
 
 
-# ── Kalibreringen mot nationella provet ──────────────────────────────────────
-# NpMa2a vt2017 och vt2022, gränserna på provets sida 1. Båda 55 poäng. Testet
-# är hela skälet till att KRAV_DEFAULT har de tal den har: ändrar någon en
-# procentsats faller det här och inte elevens betyg ett halvår senare.
+# ── Kravgränserna: NP Matematik 1c ht 2024 ───────────────────────────────────
+# Skolverkets resultatrapport, provets fem kravgränser på 70 poäng. Testet är
+# hela skälet till att exam_spec.KRAV_DEFAULT har de tal den har: ändrar någon
+# en andel faller det här och inte elevens betyg ett halvår senare.
 #
-# ±1 poäng är golvet och inte slarv: E var 14 p vt17 och 15 p vt22 på samma
-# totalpoäng, alltså kan ingen fast procentsats träffa båda åren exakt.
+# Här finns inget ±1-spann som i den gamla 2a-kalibreringen. Modellen är mätt
+# på ETT prov och andelarna är provets egna bråk, så gränserna ska träffa
+# exakt, och gör de inte det är det avrundningen som glidit.
 
-_NP = {
-    #        summor {total,e,c,a}                     facit: E, D(+varav), C(+varav), B(+varav), A(+varav)
-    "vt17": ({"total": 55, "e": 23, "c": 19, "a": 13},
-             {"E": 14, "D": (22, 6), "C": (29, 11), "B": (37, 4), "A": (43, 6)}),
-    "vt22": ({"total": 55, "e": 23, "c": 20, "a": 12},
-             {"E": 15, "D": (23, 6), "C": (30, 11), "B": (38, 4), "A": (44, 7)}),
-}
+_NP_HT24 = {"total": 70, "e": 21, "c": 30, "a": 19}
+_NP_HT24_FACIT = {"E": 18, "D": 28, "C": 37, "B": 47, "A": 57}
 
 
-@pytest.mark.parametrize("ar", ["vt17", "vt22"])
-def test_np_kalibrering_traffar_riktiga_provets_granser(ar):
-    summor, facit = _NP[ar]
-    g = exam_spec.kravgranser_ur_summor(summor, {"mellanbetyg": True})
-    assert abs(g["E"]["minst"] - facit["E"]) <= 1
-    for b, (minst, varav) in ((k, v) for k, v in facit.items() if k != "E"):
-        falt = "varav_a" if b in ("A", "B") else "varav_ca"
-        assert abs(g[b]["minst"] - minst) <= 1, f"{ar} {b} total"
-        assert abs(g[b][falt] - varav) <= 1, f"{ar} {b} varav"
+def test_kravgranserna_traffar_np_ht24_exakt():
+    """70 poäng ska ge precis NP:s egna gränser: E 18, D 28, C 37, B 47, A 57.
+
+    Avrundningen är `math.ceil` på ett EXAKT bråk. Med flyttal blir 18/70 · 70
+    = 18,000000000000004 och gränsen 19, en poäng strängare än nationella
+    provet på just den summa regeln är mätt på."""
+    g = exam_spec.kravgranser_ur_summor(_NP_HT24, {"mellanbetyg": True})
+    assert g["total"] == 70
+    for b, np in _NP_HT24_FACIT.items():
+        assert g[b]["minst"] == np, f"{b}: {g[b]['minst']} mot NP:s {np}"
 
 
-def test_np_kalibrering_varav_kraven_ar_exakta():
-    """C:s varav-krav är 11 av 32 C+A-poäng båda åren, D:s 6 och B:s 4 — där
-    finns inget spann att missa, och där är gränsen alltså exakt NP:s."""
-    for ar in ("vt17", "vt22"):
-        summor, facit = _NP[ar]
-        g = exam_spec.kravgranser_ur_summor(summor, {"mellanbetyg": True})
-        assert g["C"]["varav_ca"] == facit["C"][1]
-        assert g["D"]["varav_ca"] == facit["D"][1]
-        assert g["B"]["varav_a"] == facit["B"][1]
+def test_kravgranserna_skalar_med_poangsumman():
+    """Dubbla provet, dubbla gränserna. 140 p delar jämnt och visar att inget
+    flyttalsfel kryper in när summan växer."""
+    g = exam_spec.kravgranser_ur_summor(
+        {"total": 140, "e": 42, "c": 60, "a": 38}, {"mellanbetyg": True})
+    assert [g[b]["minst"] for b in ("E", "D", "C", "B", "A")] == \
+        [36, 56, 74, 94, 114]
 
 
-def test_np_kalibrering_ligger_aldrig_under_np():
-    """PRINCIPEN, och den är hela kalibreringens dom: 0 ≤ appens gräns − NP:s
-    gräns ≤ 1, för varje gräns och båda årgångarna.
+def test_lararens_prov_81_far_ht24_granserna():
+    """Lärarens riktiga prov: 27 poäng (prov 81) och 26 poäng (prov 44).
 
-    En gräns UNDER NP:s delar ut ett betyg NP inte hade gett. Det får inte
-    hända på ett papper som säger «NP-modellen». Ett snäpp ÖVER är strängare än
-    NP och går att försvara. Faller det här testet är det inte talen som ska
-    justeras förrän någon förklarat vilken elev som ska förlora på det."""
-    for ar in ("vt17", "vt22"):
-        summor, facit = _NP[ar]
-        g = exam_spec.kravgranser_ur_summor(summor, {"mellanbetyg": True})
-        krav = [("E", "minst", facit["E"])]
-        for b in ("D", "C", "B", "A"):
-            falt = "varav_a" if b in ("A", "B") else "varav_ca"
-            krav += [(b, "minst", facit[b][0]), (b, falt, facit[b][1])]
-        for b, falt, np in krav:
-            assert 0 <= g[b][falt] - np <= 1, f"{ar} {b}.{falt}: {g[b][falt]} mot NP:s {np}"
+    Nivåerna spelar ingen roll längre, betyget sätts på totalpoängen, så
+    tripplarna nedan är bara papprets egna summor och gränserna följer bara
+    `total`."""
+    g27 = exam_spec.kravgranser_ur_summor({"total": 27, "e": 9, "c": 11,
+                                           "a": 7})
+    assert (g27["E"]["minst"], g27["C"]["minst"], g27["A"]["minst"]) == \
+        (7, 15, 22)
+    g26 = exam_spec.kravgranser_ur_summor({"total": 26, "e": 8, "c": 11,
+                                           "a": 7})
+    assert (g26["E"]["minst"], g26["C"]["minst"], g26["A"]["minst"]) == \
+        (7, 14, 22)
 
 
-# ── Kalibreringen per kurs ───────────────────────────────────────────────────
-# Samma mätning som _NP ovan, men för HELA korpusen: fem kurser och tio prov.
-# Kurs 1:s gränser står på sidan «Kravgränser» i Delprov B-häftet och
-# poängsummorna per nivå i bedömningsanvisningarnas kapitel 4; kurs 2 bär båda
-# på provhäftets sida 1. Talen är avlästa, inte härledda.
-#
-# Testet nedan är hela skälet till att exam_spec.KRAV_PER_KURS har de tal den
-# har, precis som _NP är skälet till KRAV_DEFAULT:s.
-
-_NP_KURSER = {
-    #             summor {total,e,c,a}                     E, D(+varav), C(+varav), B(+varav), A(+varav)
-    ("1a", "vt17"): ({"total": 76, "e": 33, "c": 27, "a": 16},
-                     {"E": 18, "D": (30, 8), "C": (40, 15), "B": (51, 5), "A": (60, 9)}),
-    ("1a", "vt22"): ({"total": 66, "e": 25, "c": 25, "a": 16},
-                     {"E": 14, "D": (26, 9), "C": (34, 14), "B": (44, 4), "A": (51, 8)}),
-    ("1b", "vt22"): ({"total": 67, "e": 23, "c": 26, "a": 18},
-                     {"E": 14, "D": (25, 9), "C": (33, 14), "B": (43, 6), "A": (51, 10)}),
-    ("1c", "vt17"): ({"total": 87, "e": 26, "c": 37, "a": 24},
-                     {"E": 19, "D": (32, 12), "C": (43, 22), "B": (55, 7), "A": (66, 13)}),
-    ("1c", "vt22"): ({"total": 70, "e": 21, "c": 30, "a": 19},
-                     {"E": 14, "D": (27, 12), "C": (35, 18), "B": (46, 6), "A": (55, 11)}),
-    ("2a", "vt17"): ({"total": 55, "e": 23, "c": 19, "a": 13},
-                     {"E": 14, "D": (22, 6), "C": (29, 11), "B": (37, 4), "A": (43, 6)}),
-    ("2a", "vt18"): ({"total": 55, "e": 22, "c": 20, "a": 13},
-                     {"E": 14, "D": (23, 7), "C": (30, 12), "B": (38, 4), "A": (44, 7)}),
-    ("2a", "vt22"): ({"total": 55, "e": 23, "c": 20, "a": 12},
-                     {"E": 15, "D": (23, 6), "C": (30, 11), "B": (38, 4), "A": (44, 7)}),
-    ("2c", "vt18"): ({"total": 57, "e": 20, "c": 20, "a": 17},
-                     {"E": 13, "D": (22, 7), "C": (29, 12), "B": (37, 5), "A": (44, 9)}),
-    ("2c", "vt22"): ({"total": 58, "e": 21, "c": 20, "a": 17},
-                     {"E": 14, "D": (22, 6), "C": (29, 11), "B": (38, 5), "A": (45, 9)}),
-}
-
-# De två celler i Ma 1c där inget tal klarar ±1 på båda årgångarna. Räknat:
-# a_andel kräver x ≤ 67/87 för vt17 och x > 54/70 för vt22, alltså tomt spann. Samma
-# för d_varav_ca (x > 11/49 för vt22 ger ceil(x·61) = 14 mot NP:s 12 på vt17).
-# Principen «aldrig under NP» väljer sida, och avvikelsen blir +2 på vt17.
-# Undantaget står här och inte i en lösare gräns för alla: en dag någon lägger
-# till en kurs ska testet fälla den, inte tiga.
-_KURS_UNDANTAG = {("1c", "vt17", "A", "minst"), ("1c", "vt17", "D", "varav_ca")}
+def test_kravet_bar_inga_varav_falt():
+    """Nationella provet kategoriserar inte längre sina poäng som E-, C- eller
+    A-poäng, och kravet har därför inget «varav». Fälten är borta ur utdata
+    2026-09-19, inte bara nollställda: ett fält som står kvar blir läst."""
+    g = exam_spec.kravgranser_ur_summor(_NP_HT24, {"mellanbetyg": True})
+    for b in ("C", "A", "D", "B"):
+        assert set(g[b]) == {"minst"}, f"{b}: {g[b]}"
+    assert "varav" not in g["regel"]
 
 
-def _kursnamn(nyckel: str) -> str:
-    return f"Matematik, nivå {nyckel}"
+def test_regeltexten_sager_andelarna_i_procent():
+    """Regeln på försättsbladet är det eleven läser, och den ska gå att räkna
+    efter: 26 %, 53 %, 81 % av totalpoängen."""
+    regel = exam_spec.kravgranser_ur_summor(_NP_HT24)["regel"]
+    assert "Ma 1c ht 2024" in regel
+    assert "E: minst 26 % av totalpoängen." in regel
+    assert "C: minst 53 % av totalpoängen." in regel
+    assert "A: minst 81 % av totalpoängen." in regel
+    assert "varav" not in regel
 
 
-@pytest.mark.parametrize("kurs,ar", sorted(_NP_KURSER))
-def test_kurskalibreringen_ligger_aldrig_under_np(kurs, ar):
-    """PRINCIPEN, nu per kurs: 0 ≤ appens gräns − NP:s gräns ≤ 1, för varje
-    kurs, varje årgång och varje gräns.
-
-    En gräns UNDER NP:s delar ut ett betyg NP inte hade gett. Det får inte
-    hända på ett papper som säger «NP-modellen för Ma 1c». Ett snäpp ÖVER är
-    strängare än NP och går att försvara för en elev.
-
-    Faller det här är det inte talen som ska justeras förrän någon förklarat
-    vilken elev som ska förlora på det."""
-    summor, facit = _NP_KURSER[(kurs, ar)]
-    g = exam_spec.kravgranser_ur_summor(summor, {"mellanbetyg": True},
-                                        _kursnamn(kurs))
-    krav = [("E", "minst", facit["E"])]
-    for b in ("D", "C", "B", "A"):
-        falt = "varav_a" if b in ("A", "B") else "varav_ca"
-        krav += [(b, "minst", facit[b][0]), (b, falt, facit[b][1])]
-    for b, falt, np in krav:
-        tak = 2 if (kurs, ar, b, falt) in _KURS_UNDANTAG else 1
-        assert 0 <= g[b][falt] - np <= tak, \
-            f"{kurs} {ar} {b}.{falt}: {g[b][falt]} mot NP:s {np}"
-
-
-def test_kurskalibreringens_undantag_ar_verkligen_omojliga():
-    """De två cellerna i _KURS_UNDANTAG får inte bli en bekvämlighet.
-
-    Testet räknar om omöjligheten: finns det NÅGON andel som klarar ±1 på båda
-    1c-årgångarna ska undantaget bort och talet rättas."""
-    for falt, betyg, nyckel, bas in (("a_andel", "A", "minst", "total"),
-                                     ("d_varav_ca", "D", "varav_ca", "ca")):
-        spann = []
-        for ar in ("vt17", "vt22"):
-            summor, facit = _NP_KURSER[("1c", ar)]
-            b = (summor["total"] if bas == "total"
-                 else summor["c"] + summor["a"])
-            np = facit[betyg] if betyg == "E" else facit[betyg][
-                0 if nyckel == "minst" else 1]
-            # ceil(x·b) ∈ {np, np+1}  ⟺  (np−1)/b < x ≤ (np+1)/b
-            spann.append(((np - 1) / b, (np + 1) / b))
-        lo = max(a for a, _ in spann)
-        hi = min(b for _, b in spann)
-        assert lo >= hi, (f"{falt}: spannet ({lo:.4f}, {hi:.4f}] är INTE tomt "
-                          f"rätta talet och ta bort undantaget")
-
-
-def test_okand_kurs_faller_tillbaka_pa_2a():
-    """Ma 4 och Ma 5 har inga lästa prov. Då gäller KRAV_DEFAULT, och regeln
-    säger det rakt ut. En gissning på närmaste kurs vore en påhittad
-    mätning."""
+def test_samma_regel_for_alla_kurser():
+    """Per-kurs-tabellen (KRAV_PER_KURS) är borta 2026-09-19: den nya
+    NP-modellen skiljer inte på kurser i sin konstruktion, och 1c-provet är
+    det enda som är läst i den. `kurs` står kvar som parameter men får inte
+    flytta ett enda tal."""
     summor = {"total": 26, "e": 8, "c": 11, "a": 7}
-    assert (exam_spec.kravgranser_ur_summor(summor, None, "Matematik 4")
-            == exam_spec.kravgranser_ur_summor(summor))
-    assert "Ma 2a" in exam_spec.kravgranser_ur_summor(summor)["regel"]
-
-
-def test_lararens_ma1c_prov_far_kursens_granser():
-    """Lärarens eget prov, 26 poäng (8 E, 11 C, 7 A). Ma 2a:s regel gav E 7,
-    C 15, A 21; Ma 1c:s NP är lägre, och det är den kursen provet gäller."""
-    summor = {"total": 26, "e": 8, "c": 11, "a": 7}
-    som_2a = exam_spec.kravgranser_ur_summor(summor)
-    som_1c = exam_spec.kravgranser_ur_summor(summor, None, "Matematik 1c")
-    assert (som_2a["E"]["minst"], som_2a["C"]["minst"]) == (7, 15)
-    assert (som_1c["E"]["minst"], som_1c["C"]["minst"]) == (6, 13)
-    assert "Ma 1c" in som_1c["regel"]
-
-
-def test_kursens_granser_nar_dokumentet_utan_extra_argument():
-    """kravgranser() läser kursen ur dokumentet självt. Varje anropsställe
-    hade annars behövt komma ihåg att skicka den, och ett enda som glömde hade
-    tryckt 2a:s tal på ett 1c-prov."""
+    utan = exam_spec.kravgranser_ur_summor(summor)
+    for kurs in ("Matematik 1c", "Matematik, nivå 2a", "Matematik 4", ""):
+        assert exam_spec.kravgranser_ur_summor(summor, None, kurs) == utan
+    assert not hasattr(exam_spec, "KRAV_PER_KURS")
     rad = _exam() | {"kurs": "Matematik, nivå 1c"}
     doc, fel = exam_spec.validate_exam_json(rad)
     assert fel == [] and doc is not None
-    assert "Ma 1c" in exam_spec.kravgranser(doc)["regel"]
+    assert exam_spec.kravgranser(doc) == exam_spec.kravgranser_ur_summor(
+        exam_spec.poangsummor(doc))
+
+
+def test_betyget_raknas_bara_pa_totalen():
+    """En elev som når C-gränsen får C även om varenda poäng satt på en
+    E-uppgift. Det gamla kravet («varav minst 34 % av C- och A-poängen») hade
+    gett henne E, och nationella provet ställer inte det kravet."""
+    g = exam_spec.kravgranser_ur_summor({"total": 70, "e": 21, "c": 30,
+                                         "a": 19})
+    assert rattning.betyg({"total": 37, "e": 37, "c": 0, "a": 0}, g) == "C"
+    assert rattning.betyg({"total": 57, "e": 57, "c": 0, "a": 0}, g) == "A"
+    assert rattning.betyg({"total": 36, "e": 36, "c": 0, "a": 0}, g) == "E"
+
+
+def test_betyget_ignorerar_gamla_varav_falt_i_stamplade_granser():
+    """Papper som stämplades före 2026-09-19 bär `varav_ca`/`varav_a`. De läses
+    inte: ett godkänt papper äger sina TAL, inte regeln som en gång räknade
+    fram dem, och eleven ska inte straffas för när provet skrevs."""
+    gammal = {"total": 55, "E": {"minst": 15},
+              "C": {"minst": 30, "varav_ca": 11},
+              "A": {"minst": 44, "varav_a": 7}, "regel": "Gamla regeln."}
+    assert rattning.betyg({"total": 30, "e": 30, "c": 0, "a": 0},
+                          gammal) == "C"
+    assert rattning.betyg({"total": 44, "e": 44, "c": 0, "a": 0},
+                          gammal) == "A"
 
 
 # ── Lärarens skärpning av E ──────────────────────────────────────────────────
@@ -914,11 +843,10 @@ def test_e_extra_lagger_poang_pa_e_gransen():
     mer för att få E.» Poängen läggs på EFTER avrundningen: de är lärarens
     poäng ovanpå NP:s tal, inte en procentsats som ska rundas med."""
     summor = {"total": 26, "e": 8, "c": 11, "a": 7}
-    utan = exam_spec.kravgranser_ur_summor(summor, None, "Matematik 1c")
-    med = exam_spec.kravgranser_ur_summor(summor, {"e_extra": 2},
-                                          "Matematik 1c")
-    assert utan["E"]["minst"] == 6 and "extra" not in utan["E"]
-    assert med["E"]["minst"] == 8 and med["E"]["extra"] == 2
+    utan = exam_spec.kravgranser_ur_summor(summor)
+    med = exam_spec.kravgranser_ur_summor(summor, {"e_extra": 2})
+    assert utan["E"]["minst"] == 7 and "extra" not in utan["E"]
+    assert med["E"]["minst"] == 9 and med["E"]["extra"] == 2
     assert "skärpning på 2 p" in med["regel"]
     # C, A och D står orörda: skärpningen gäller godkäntgränsen och ingenting
     # annat. Höjs E utan att D följer med krymper D-spannet, och det är precis
@@ -926,9 +854,9 @@ def test_e_extra_lagger_poang_pa_e_gransen():
     for b in ("C", "A"):
         assert med[b] == utan[b]
     mellan = exam_spec.kravgranser_ur_summor(
-        summor, {"e_extra": 3, "mellanbetyg": True}, "Matematik 1c")
+        summor, {"e_extra": 3, "mellanbetyg": True})
     utan_mellan = exam_spec.kravgranser_ur_summor(
-        summor, {"mellanbetyg": True}, "Matematik 1c")
+        summor, {"mellanbetyg": True})
     assert mellan["D"] == utan_mellan["D"]
 
 
@@ -990,10 +918,13 @@ def test_pappret_trycks_med_sina_sparade_granser(monkeypatch):
     for spann in (r"0\textendash{}4", r"5\textendash{}8",
                   r"9\textendash{}12", r"13\textendash{}20"):
         assert spann in tex, spann
-    # Bedömningsanvisningen läser samma gränser och ska säga samma sak.
+    # Bedömningsanvisningen läser samma gränser och ska säga samma sak. Det
+    # gamla pappret bär «varav»-fält i stämpeln (de fanns till 2026-09-19) och
+    # de trycks inte: raden säger de TAL som gällde, inte den regel som en gång
+    # räknade fram dem.
     bed = exam_latex.render_bedomning(doc)
-    assert "E minst 5" in bed and "C minst 9 varav 4 C/A" in bed
-    assert "A minst 13 varav 2 A" in bed
+    assert "E minst 5" in bed and "C minst 9" in bed and "A minst 13" in bed
+    assert "varav" not in bed
 
 
 def test_papper_utan_sparade_granser_raknas_ur_dagens_regel():

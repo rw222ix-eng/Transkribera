@@ -1076,6 +1076,9 @@ def test_satt_dokument_granser_traffar_bara_provets_egna_papper(tmp_path):
     blad.js tar då bort betygstabellen hellre än att fylla den med tal appen
     hittat på."""
     conn = _conn(tmp_path)
+    # En GAMMAL stämpel: varav-fälten fanns till 2026-09-19. De står kvar
+    # här med flit, db lagrar gränserna som de kom, och testet handlar om
+    # vilka papper som träffas, inte om vad talen betyder.
     gamla = {"total": 20, "E": {"minst": 6}, "C": {"minst": 11, "varav_ca": 4},
              "A": {"minst": 16, "varav_a": 3}, "regel": "gammal"}
     provet = db.create_dokument(
@@ -1104,6 +1107,7 @@ def test_stampla_granser_skrivs_over_bara_pa_begaran(tmp_path):
     cid = db.get_or_create_course(conn, "Ma1c")
     ex = db.create_exam(conn, exam=_mini_exam(), course_id=cid)
     ver = ex["current_version"]
+    # Gammal stämpel, se testet ovan: varav-fälten är opak last för db.
     forst = {"total": 20, "E": {"minst": 6}, "C": {"minst": 11, "varav_ca": 4},
              "A": {"minst": 16, "varav_a": 3}, "regel": "först"}
     db.stampla_exam_granser(conn, ex["id"], ver, forst)

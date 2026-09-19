@@ -61,9 +61,13 @@ def test_prompten_bar_uppgifterna_med_nivapoang():
 
 
 def test_prompten_bar_kravgranserna():
+    """Bara totalpoäng: betyget sätts på summan (exam_spec.KRAV_DEFAULT), och
+    ett «varav 3 p på C-nivå» i prompten hade blivit ett krav i elevens text
+    som provet inte ställer."""
     txt = elev_feedback.build_granser(GRANSER)
     assert "Provet är 11 p" in txt and "E från 3 p" in txt
-    assert "C från 6 p varav 3 p" in txt and "A från 9 p varav 3 p" in txt
+    assert "C från 6 p." in txt and "A från 9 p." in txt
+    assert "varav" not in txt
 
 
 def test_prompten_bar_klassens_utfall():
@@ -77,7 +81,8 @@ def test_eleven_ar_ett_nummer_och_avstandet_star_i_poang():
     txt = elev_feedback.build_elever(RADER, [_elev(HALVT, "E")], GRANSER)
     assert txt.startswith("ELEVERNA")
     assert "Elev 1 (betyg E, 3 av 11 p" in txt
-    assert "3 p till och 3 p till på C- eller A-nivå för C" in txt
+    # Ett enda tal: avståndet till nästa betyg är poäng, inget annat.
+    assert "3 p till för C" in txt
     assert "2a: 1/1 E + 0/2 C" in txt
 
 
