@@ -478,6 +478,22 @@
          stället (claude_code.SCHEMA_TAK_EXE). */
       { id: 'antal', namn: 'Antal uppgifter', typ: 'antal', min: 1, max: 20 },
       { id: 'niva', namn: 'Nivå', typ: 'seg', val: ['E-nivå', 'C-nivå', 'A-nivå', 'Blandat'] },
+      /* ── INFÖR PROVET ─────────────────────────────────
+         Lärarens beställning: proven blir klara minst en vecka före provdagen,
+         och veckan innan ska klassen träna på provets UPPGIFTSTYPER — aldrig
+         på provets uppgifter. Raden pekar ut vilket prov bladet förbereder;
+         servern får formen ur det (exam_gen.build_infor_prov) och aldrig
+         texterna. Bara arbetsbladet har raden: ett prov som förbereder ett
+         annat prov är inte en sak.
+         Raden ligger under nivåvalet därför att den är en KÄLLA och inte en
+         form — antalet och nivån är fortfarande lärarens, och de rörs inte av
+         att ett prov väljs. */
+      { id: 'inforProv', namn: 'Inför provet', typ: 'inforprov' },
+      /* Och vad i provet. Tom lista = «Blandat (hela provet)», vilket är
+         förvalet: hela provets bredd. Raden finns bara när ett prov är valt —
+         en fråga om vilka typer som ska drillas är meningslös utan prov. */
+      { id: 'inforNummer', namn: 'Vad ska tränas?', typ: 'infortyper',
+        bara: s => !!s.inforProv },
       { id: 'facit', namn: 'Facit', typ: 'seg', val: ['Inget facit', 'Facit i bladet', 'Separat facit'] },
       { id: 'illustration', namn: 'Plats för illustration', typ: 'switch' }
     ],
@@ -503,8 +519,12 @@
        att förstå ett halvår senare. */
     Prov: { nar: 'På lektionen', narDatum: '', narTid: '08:15', provminuter: 90, provtid: '90 min', antal: 6, nivamix: 'Balanserat', eextra: 0, delprov: 'Del A + Del B', losningar: true, formelblad: true, takt: 3.5,
             ...HJALPMEDEL_FORVAL },
+    /* `inforProv` är null tills läraren (eller förvalet) pekat ut ett prov, och
+       `inforNummer` tom = hela provet. Båda står i standarden så att
+       byggVidare/omprov nollar dem som allt annat i upplägget. */
     Arbetsblad: { antal: 3, niva: 'Blandat', facit: 'Facit i bladet', illustration: true,
-                  klassblad: true, elever: [], syfte: 'Stötta' },
+                  klassblad: true, elever: [], syfte: 'Stötta',
+                  inforProv: null, inforNummer: [] },
     Gruppuppgift: { antal: 4, grupp: 3, langd: 60, redovisning: 'Muntligt', illustration: true,
                     facit: 'Separat facit' },
     Anteckningar: { onskemal: '', lektioner: [] }
@@ -643,6 +663,79 @@
       .then(r => { profilCache.set(nyckel, r); return r; })
       .catch(() => null);
   }
+
+  /* ── KLASSENS KOMMANDE PROV ───────────────────────────
+     `nasta` frågar på ID:n och inte på namn — klassen och kursen heter olika
+     saker i olika listor, men raderna i basen är desamma. Registret läses en
+     gång per sidladdning: grupper och kurser ändras när läraren lägger upp en
+     klass, inte medan hon planerar en lektion. */
+  let registerLoftet = null;
+  function registret() {
+    if (registerLoftet) return registerLoftet;
+    if (!serverPa()) return Promise.resolve({ grupper: [], kurser: [] });
+    registerLoftet = Promise.all([
+      window.API.json('/api/groups').catch(() => []),
+      window.API.json('/api/courses').catch(() => []),
+    ]).then(([g, k]) => ({ grupper: g || [], kurser: k || [] }));
+    return registerLoftet;
+  }
+  /* Dagens datum som ISO. Serverns `nasta` KRÄVER det (testdatum-röta): en
+     rutt som läser sin egen klocka går inte att skriva ett test på som håller
+     nästa termin. Kalendern äger appens svar på «vilken dag är det»; utan den
+     räknas dagen ur den lokala klockan, inte ur toISOString (UTC ger fel dag
+     före klockan två på natten). */
+  const isoDag = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const idagIso = () => (window.Kalender && window.Kalender.idag
+    ? window.Kalender.idag() : isoDag(new Date()));
+  /* Godkända prov för klassen, från och med i dag. Cachas per klass, kurs och
+     dag: listan ändras när läraren godkänner ett prov, och då har hon lämnat
+     panelen. */
+  const inforCache = new Map();
+  function kommandeProv(klass, kurs) {
+    const nyckel = `${klass || ''}|${kurs || ''}|${idagIso()}`;
+    if (inforCache.has(nyckel)) return Promise.resolve(inforCache.get(nyckel));
+    if (!serverPa() || !klass) return Promise.resolve([]);
+    return registret().then(({ grupper, kurser }) => {
+      const g = (grupper || []).find(x => x.namn === klass);
+      if (!g) return [];
+      const k = (kurser || []).find(x => x.namn === kurs);
+      /* Kursen är valfri i kontraktet: hittas den inte i registret frågar vi
+         på klassen ensam hellre än att svara tomt. Ett prov på klassen är rätt
+         prov även när kursnamnet stavats om sedan det skrevs. */
+      const vag = `/api/exams/nasta?group_id=${g.id}`
+        + (k ? `&course_id=${k.id}` : '')
+        + `&idag=${idagIso()}`;
+      return window.API.json(vag).then(r => {
+        const lista = (r && r.kommande) || [];
+        inforCache.set(nyckel, lista);
+        return lista;
+      });
+    }).catch(() => []);
+  }
+  /* Provets uppgiftstyper, grupperade som servern grupperat dem (delmoment före
+     avsnitt före typ+förmåga). Cachas per prov: ett godkänt prov ändrar sig
+     inte. */
+  const typerCache = new Map();
+  function provtyper(provId) {
+    if (typerCache.has(provId)) return Promise.resolve(typerCache.get(provId));
+    if (!serverPa() || !provId) return Promise.resolve(null);
+    return window.API.json(`/api/exams/${provId}/uppgiftstyper`).then(r => {
+      const d = { typer: (r && r.typer) || [], grupper: (r && r.grupper) || [] };
+      typerCache.set(provId, d);
+      return d;
+    }).catch(() => null);
+  }
+  /* «20 okt» — kortare än kalenderns «20 oktober», för raden står i en metarad
+     bland fyra andra fält. Trailing punkt bort: sv-SE skriver «okt.». */
+  const kortDatum = d => {
+    const dt = new Date(String(d || '') + 'T12:00:00');
+    return isNaN(dt) ? String(d || '')
+      : dt.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' }).replace(/\.$/, '');
+  };
+  /* Raden kort och gott: «Inför provet 20 okt». Används av kortets metarad och
+     förhandsvisningens underrad — samma mening på båda ställena. */
+  const inforText = p => (p && p.datum ? `Inför provet ${kortDatum(p.datum)}`
+    : p ? 'Inför provet' : '');
 
   let transkriptLista = null;
   const transkriptNamn = {}, transkriptLangd = {};
@@ -784,6 +877,166 @@
       rita();
     });
   }
+  /* ── VÄLJAREN: KLASSENS KOMMANDE PROV ─────────────────
+     Samma panel som elev- och mötesväljaren, men ENVALIG: bladet förbereder
+     ett prov. «Inget prov» ligger sist som en egen rad — att ta bort provet
+     ska gå från samma ställe som att välja det. */
+  function valjProv(s, rad, efterat) {
+    const wrap = $('.typinforprov', rad);
+    if (!wrap || $('.valjpanel', wrap)) return;
+    const panel = document.createElement('div');
+    panel.className = 'valjpanel brett';
+    panel.setAttribute('role', 'listbox');
+    wrap.appendChild(panel);
+    wrap.setAttribute('data-oppen', '');
+    const stang = () => {
+      panel.remove();
+      wrap.removeAttribute('data-oppen');
+      document.removeEventListener('pointerdown', ut, true);
+      document.removeEventListener('keydown', tangent, true);
+    };
+    const ut = e => { if (!wrap.contains(e.target)) stang(); };
+    const tangent = e => { if (e.key === 'Escape') stang(); };
+    document.addEventListener('pointerdown', ut, true);
+    document.addEventListener('keydown', tangent, true);
+    panel.innerHTML = '<p class="ltomsok">Läser klassens prov …</p>';
+    kommandeProv($('#p-klass').value || '', $('#p-kurs').value || '').then(lista => {
+      if (!panel.isConnected) return;
+      if (!lista.length) {
+        panel.innerHTML = `<p class="ltomsok">${serverPa()
+          ? 'Inga godkända prov framåt i tiden för klassen — skriv provet först, så kan bladet förbereda det.'
+          : 'Utan server finns ingen provlista att välja ur.'}</p>`;
+        return;
+      }
+      panel.innerHTML = lista.map(p => `<button class="lrad-val" type="button" role="option" data-id="${p.id}" aria-selected="${!!(s.inforProv && s.inforProv.id === p.id)}">
+          <span class="lkryss">✓</span>
+          <span><span class="lvnamn"></span><span class="lvmeta">${[kortDatum(p.datum), p.kurs || '', p.klass || ''].filter(Boolean).join(' · ')}</span></span>
+          <span class="lvlangd">${p.antal_uppgifter || 0} uppg.</span>
+        </button>`).join('')
+        + '<div class="valjfot"><button class="lank" type="button" data-inga>Inget prov</button><span class="summa">Bladet tränar provets uppgiftstyper</span></div>';
+      $$('.lrad-val', panel).forEach(r => {
+        const p = lista.find(x => String(x.id) === r.dataset.id);
+        $('.lvnamn', r).textContent = (p && p.titel) || 'Provet';
+        r.addEventListener('click', () => {
+          /* Lärarens egen hand. Förvalet håller sig borta efter det här — också
+             om hon väljer exakt det prov förvalet hade föreslagit. */
+          inforRord = true;
+          if (!s.inforProv || s.inforProv.id !== p.id) {
+            s.inforProv = p;
+            s.inforNummer = [];
+            inforTyper = null;
+            inforArv(p);
+          }
+          stang();
+          ritaTypval();
+          planKoll();
+        });
+      });
+      $('[data-inga]', panel).addEventListener('click', () => {
+        inforRord = true;
+        s.inforProv = null;
+        s.inforNummer = [];
+        inforTyper = null;
+        inforArvtext = '';
+        stang();
+        ritaTypval();
+        planKoll();
+      });
+      if (efterat) efterat();
+    });
+  }
+  /* Provets uppgiftstyper som raden ritar brickor ur, och meningen om vad som
+     följde med ur provet. Båda hör till det VALDA provet och nollas när det
+     byts — de lever utanför ritaTypval, som river sina rader vid varje
+     omritning. */
+  let inforTyper = null, inforArvtext = '';
+  /* Förvalet: närmaste kommande provet, men bara inom tre veckor. Längre bort
+     än så är bladet inte «inför provet» utan vanlig träning, och ett förval som
+     gissar fel kostar läraren mer än inget förval alls. Nyckeln är klassen,
+     kursen och dagen: byter hon klass räknas det om. Har hon rört väljaren
+     själv (`inforRord`) håller förvalet sig borta resten av sessionen. */
+  const INFOR_DAGAR = 21;
+  let inforForvalNyckel = '', inforRord = false;
+  /* En ny planering börjar om också för den här raden: står upplägget tillbaka
+     på standard är lärarens gamla val borta, och då ska förvalet få räkna en
+     gång till. Utan det stod «Inget prov» kvar från förra pappret. */
+  function glomInforForvalet() {
+    inforRord = false;
+    inforForvalNyckel = '';
+    inforTyper = null;
+    inforArvtext = '';
+  }
+  function inforForval(s) {
+    const klass = ($('#p-klass') || {}).value || '', kurs = ($('#p-kurs') || {}).value || '';
+    const nyckel = `${klass}|${kurs}|${idagIso()}`;
+    if (inforRord || nyckel === inforForvalNyckel) return;
+    inforForvalNyckel = nyckel;
+    kommandeProv(klass, kurs).then(lista => {
+      /* Hann läraren byta klass, röra väljaren eller lämna arbetsbladet medan
+         listan lästes handlar svaret inte längre om det hon tittar på. */
+      if (inforRord || inforForvalNyckel !== nyckel) return;
+      const forst = (lista || [])[0] || null;
+      const dagar = forst && forst.datum
+        ? (new Date(forst.datum + 'T12:00:00') - new Date(idagIso() + 'T12:00:00')) / 864e5
+        : null;
+      const forval = dagar !== null && dagar >= 0 && dagar <= INFOR_DAGAR ? forst : null;
+      if (((s.inforProv || {}).id || null) === ((forval || {}).id || null)) return;
+      s.inforProv = forval;
+      s.inforNummer = [];
+      inforTyper = null;
+      inforArvtext = '';
+      if (forval) inforArv(forval);
+      if (valt('skrivtyp') === 'Arbetsblad') ritaTypval();
+      planKoll();
+    });
+  }
+  /* ── ARVET UR PROVET ──────────────────────────────────
+     Provet vet redan vad det handlar om och vilka sidor det vilar på. Att låta
+     läraren kryssa i samma punkter en andra gång är att låta appen glömma
+     något den har skrivet — samma skäl som bokarvet i byggVidare.
+     Två vägar till punkterna: provdokumentet i högen bär dem som koder på
+     varje uppgift (`ci`, se franProv), och finns det inte läses examen ur
+     basen. KODER, inte etiketter: `vald` bär korta etiketter, och
+     översättningen sker mot den nivå som faktiskt har punkten. */
+  function inforArv(p) {
+    inforArvtext = '';
+    const dok = sparat.find(v => v.provId === p.id && !v.losningsblad) || null;
+    /* Boken går byggVidares väg och säger till om den följde med. */
+    if (dok && dok.bokuppg) {
+      arvBok(dok);
+      if (bokArvet) inforArvtext = `boken följde med (${bokArvet.sidor})`;
+    }
+    const ur = dok
+      ? Promise.resolve([...new Set((dok.uppgifter || []).flatMap(u => u.ci || []))])
+      : (serverPa()
+        ? window.API.json(`/api/exams/${p.id}`)
+          .then(r => [...new Set((((r || {}).exam || {}).uppgifter || [])
+            .flatMap(u => u.innehall || []))])
+          .catch(() => [])
+        : Promise.resolve([]));
+    ur.then(koder => {
+      /* Provet kan ha bytts under läsningen. */
+      if (((inst.Arbetsblad.inforProv || {}).id) !== p.id) return;
+      const korta = [...new Set(koder.map(c => (window.Gy ? window.Gy.kortFor(c) : null))
+        .filter(Boolean))];
+      if (!korta.length) return ritaTypval();
+      korta.forEach(x => vald.add(x));
+      /* Nivån måste BÄRA punkterna, annars stryker ritaGy dem tyst (samma
+         fälla byggVidare lagade). Bär den valda nivån dem redan rörs den
+         inte — lärarens nivåval är hennes. */
+      if (window.Gy) {
+        const alla = [...vald];
+        const bar = id => alla.every(g => window.Gy.punkter(id).some(x => x.kort === g));
+        if (!bar(nivaId)) nivaId = (window.Gy.lista().find(n => bar(n.id)) || {}).id || nivaId;
+      }
+      inforArvtext = [inforArvtext,
+        `${korta.length} ${korta.length === 1 ? 'punkt' : 'punkter'} ur provet`]
+        .filter(Boolean).join(', ');
+      ritaGy();
+      ritaTypval();
+      planKoll();
+    });
+  }
   /* Noten under promptrutan uppdateras också av transkriptväljaren, som lever
      i en annan slutning — därför en pekare i stället för ett argument. */
   let antNotRef = null;
@@ -805,6 +1058,9 @@
        och ett nyskrivet prov fått ett lösningsblad ingen bett om. */
     if (!MED_BOKLOSNING.includes(typ)) { delete s.boklosning; delete s.boklosniva; }
     normalisera(s);
+    /* Förvalet räknas FÖRE radlistan filtreras: raden «Vad ska tränas?» finns
+       bara när ett prov är valt, och förvalet är det som väljer det. */
+    if (typ === 'Arbetsblad') inforForval(s);
     const lista = (TYPVAL[typ] || []).filter(k => !k.bara || k.bara(s));
     if (typ === 'Tavla') {
       /* Schemat vinner så länge det säger något nytt — sätter läraren tiden för
@@ -911,6 +1167,18 @@
           /* Transkriptdörren: möten ur biblioteket som pappret ska bygga på. */
           : k.typ === 'transkript'
           ? '<span class="typtranskript"><span class="tkchips"></span><button class="ghost tkvalj" type="button">Välj möte …</button></span>'
+          /* Provet bladet förbereder — samma form som transkriptdörren, för det
+             är samma gest: en bricka för det valda och en knapp som slår upp
+             listan. Klassen kan ha flera kommande prov, men bladet förbereder
+             ett. */
+          : k.typ === 'inforprov'
+          ? '<span class="typinforprov"><span class="tkchips"></span><button class="ghost tkvalj" type="button">Välj prov …</button></span>'
+          /* Och vad i provet: en bricka per uppgiftstyp, flerval, med «Blandat
+             (hela provet)» som nollställare. Brickorna är Gy25-brickornas
+             (`gychip`) — samma form, samma gest, och läraren har redan kryssat
+             i dem en gång i steg 3. */
+          : k.typ === 'infortyper'
+          ? '<span class="typinforprov"><span class="tkchips"></span></span>'
           : `<button class="switch" type="button" aria-pressed="${s[k.id]}" aria-label="${k.namn}" style="background:${s[k.id] ? 'var(--accent)' : 'var(--track)'};border-color:${s[k.id] ? 'var(--accent)' : 'var(--line)'}"><span class="knopp" style="transform:translateX(${s[k.id] ? 16 : 0}px)"></span></button>`;
       rad.innerHTML = `<span class="typnamn">${typeof k.namn === 'function' ? k.namn(s) : k.namn}</span>${kontroll}`;
       if (k.typ === 'minuter') {
@@ -1305,6 +1573,100 @@
         };
         knapp.addEventListener('click', () => valjTranskript(s, ritaChips));
         ritaChips();
+      }
+      /* ── PROVET BLADET FÖRBEREDER ──────────────────────
+         Brickan säger vilket prov, noten under säger vad det betyder —
+         «Förbereder inför provet 20 okt · Algebra och ekvationer» — och vad
+         som följde med av sig själv (punkterna, boken). Ett arv som inte står
+         skrivet är ett arv i smyg. */
+      if (k.typ === 'inforprov') {
+        const chips = $('.tkchips', rad), knapp = $('.tkvalj', rad);
+        const not = typnot(rad);
+        const ritaChips = () => {
+          chips.innerHTML = '';
+          const p = s.inforProv;
+          if (p) {
+            const b = document.createElement('button');
+            b.className = 'lchip';
+            b.type = 'button';
+            b.innerHTML = '<span></span><i>✕</i>';
+            $('span', b).textContent = `${p.titel || 'Provet'} · ${kortDatum(p.datum)}`;
+            b.dataset.tip = 'Skriv bladet utan något prov';
+            b.addEventListener('click', () => {
+              /* Att ta bort provet är ett val, inte ett tomrum: förvalet får
+                 inte smyga tillbaka det vid nästa omritning. */
+              inforRord = true;
+              s.inforProv = null;
+              s.inforNummer = [];
+              ritaTypval();
+              planKoll();
+            });
+            chips.appendChild(b);
+          }
+          knapp.textContent = p ? 'Byt prov …' : 'Välj prov …';
+          satNot(not, p ? 'ok' : '', p
+            ? `Förbereder inför provet ${kortDatum(p.datum)}`
+              + (p.titel ? ` · ${p.titel}` : '')
+              + (inforArvtext ? ` — ${inforArvtext}` : '')
+            : (serverPa()
+              ? 'Klassens godkända prov som ligger framåt i tiden. Bladet tränar provets uppgiftstyper, aldrig provets uppgifter.'
+              : ''));
+        };
+        knapp.addEventListener('click', () => valjProv(s, rad, ritaChips));
+        ritaChips();
+      }
+      /* ── VAD I PROVET ──────────────────────────────────
+         «Blandat (hela provet)» ÄR tomlistan: den är förvalet, och den är
+         nollställaren. Klickar läraren en typ försvinner blandat-läget av sig
+         själv, och klickar hon bort den sista typen är hon tillbaka i det. */
+      if (k.typ === 'infortyper') {
+        const chips = $('.tkchips', rad);
+        const not = typnot(rad);
+        const valda = () => (s.inforNummer || []);
+        const rita = grupper => {
+          chips.innerHTML = '';
+          const bricka = (etikett, pa, klick) => {
+            const b = document.createElement('button');
+            b.className = 'gychip';
+            b.type = 'button';
+            b.setAttribute('aria-pressed', String(pa));
+            b.textContent = etikett;
+            b.addEventListener('click', klick);
+            return b;
+          };
+          chips.appendChild(bricka('Blandat (hela provet)', !valda().length, () => {
+            s.inforNummer = [];
+            rita(grupper);
+            planKoll();
+          }));
+          (grupper || []).forEach(g => {
+            const nr = (g.nummer || []).filter(n => n > 0);
+            const pa = nr.length > 0 && nr.every(n => valda().includes(n));
+            chips.appendChild(bricka(g.etikett || 'Uppgifter', pa, () => {
+              /* Unionen av gruppernas nummer, inte gruppernas namn: det är
+                 `infor_nummer` servern vill ha, och två grupper kan dela en
+                 uppgift (delmoment och avsnitt pekar på samma rad). */
+              s.inforNummer = pa
+                ? valda().filter(n => !nr.includes(n))
+                : [...new Set(valda().concat(nr))].sort((a, b) => a - b);
+              rita(grupper);
+              planKoll();
+            }));
+          });
+          const n = valda().length;
+          satNot(not, n ? 'ok' : '', n
+            ? `${n} av provets uppgifter drillas — samma sorter och metoder, nya tal.`
+            : 'Hela provets bredd, jämnt fördelat över uppgiftstyperna.');
+        };
+        rita((inforTyper && inforTyper.grupper) || []);
+        /* Listan läses när provet valts. Kommer den efter att raden ritats
+           fylls brickorna på plats — en rad som står tom medan servern svarar
+           är inte fel, den är bara inte färdig. */
+        if (s.inforProv && !inforTyper) provtyper(s.inforProv.id).then(d => {
+          if (!d || !chips.isConnected) return;
+          inforTyper = d;
+          rita(d.grupper || []);
+        });
       }
       if (k.typ === 'switch') {
         const b = $('.switch', rad);
@@ -2523,6 +2885,20 @@
            skrevs UR, och det här är den enda källan appen inte kan härleda ur
            ett spår — utan inspelning finns ingen transkript-svårighet alls. */
         svart: !helhetstyp(vtyp) && ($('#svart') || {}).value ? $('#svart').value.trim() : '',
+        /* PROVET BLADET FÖRBEREDER, på pappret. Kortets metarad och
+           förhandsvisningens underrad läser den, och ett arbetsblad som öppnas
+           i november ska kunna säga vilket prov det tränade inför — provet
+           självt kan då vara skrivet, rättat och bortglömt.
+           Bara arbetsbladet: raden finns inte för de andra typerna, och ett
+           fält från en tidigare typ i samma session hör inte hemma här (se
+           `fokus` ovan). `nummer` är det lärarens brickor valde, tomt =
+           hela provet. */
+        inforProv: vtyp === 'Arbetsblad' && inst.Arbetsblad.inforProv
+          ? { id: inst.Arbetsblad.inforProv.id,
+              titel: inst.Arbetsblad.inforProv.titel || '',
+              datum: inst.Arbetsblad.inforProv.datum || '',
+              nummer: (inst.Arbetsblad.inforNummer || []).slice() }
+          : null,
         kontext: 'start', niva: false, svarighet: 0, andrat: [], anteckning: 'Första utkastet'
       };
     v.andrat = [];
@@ -2763,8 +3139,11 @@
       ? `byggt på ${antalK} ${antalK === 1 ? 'lektion' : 'lektioner'}${pap ? ` och ${pap} papper` : ''}`
       : 'fritt skrivet';
     $('#doktyp').textContent = v.typ;
+    /* «Inför provet 20 okt» står FÖRE underlaget: det är det första läraren
+       behöver veta om ett arbetsblad som förbereder ett prov, och canvasens
+       metarad (granska.js #g-meta) läser samma sträng. */
     $('#dokmeta').textContent = [v.kurs || 'ingen kurs', v.klass || 'ingen klass', datumText(v),
-      v.kalla ? byggt : 'fritt skrivet'].join(' · ');
+      inforText(v.inforProv), v.kalla ? byggt : 'fritt skrivet'].filter(Boolean).join(' · ');
     const vaxel = $('#arkval'), tva = harLosning(v);
     vaxel.hidden = !tva;
     if (!tva) visarLosning = false;
@@ -3153,6 +3532,16 @@
       ...(bladNu && bladNu.id ? {
         elev_id: bladNu.id, elev: bladNu.namn,
         syfte: String(i0.syfte || 'Stötta').toLowerCase() === 'utmana' ? 'utmana' : 'stotta',
+      } : {}),
+      /* INFÖR PROVET. Samma regel som nivån och hjälpmedlen: fälten finns i
+         kroppen bara när ett prov är valt. Servern lägger sitt promptblock på
+         ett ifyllt `infor_prov_id`, så ett blad utan prov ska ge byte för byte
+         samma kropp som före raden (kassettregeln).
+         `infor_nummer` följer med även tomt när ett prov är valt: tom lista ÄR
+         «blandat», och servern läser den så. */
+      ...(i0.inforProv && i0.inforProv.id ? {
+        infor_prov_id: i0.inforProv.id,
+        infor_nummer: (i0.inforNummer || []).slice(),
       } : {}),
       ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(), ...yrket(), ...u,
     }, { signal, log })).then(kravDone).then(r => {
@@ -3886,6 +4275,7 @@
     const typ = valt('skrivtyp');
     Object.assign(inst[typ], JSON.parse(JSON.stringify(STANDARD[typ])));
     arvtFran = null;
+    glomInforForvalet();
     ritaTypval();
     $('#arvrad').hidden = true;
     window.toast && window.toast('Tillbaka till standarduppägget');
@@ -3980,6 +4370,7 @@
     const typ = v.typ;
     Object.assign(inst[typ], JSON.parse(JSON.stringify(STANDARD[typ])));
     arvtFran = null;
+    glomInforForvalet();
     valdaLektioner.clear();
     /* Efter klass och kurs: bokhyllan ritar om sig när kursen byts (bok.js), och
        spannet ska sättas i den hylla som gäller. */
@@ -5083,7 +5474,7 @@
       const d = document.createElement('article');
       d.className = 'dokkort';
       const syskon = v.syskonAv ? 0 : sparat.filter(s => s.syskonAv === dokNamn(v)).length;
-      d.innerHTML = `${minisida(v)}<div class="dokmeta"><p class="dnamn"></p><p class="dmeta2">${[v.kurs || 'ingen kurs', v.klass || '—', v.datum || 'utan datum'].join(' · ')}</p>${v.syskonAv ? '<p class="doksyskon"></p>' : ''}${syskon ? `<span class="dokvarianter">${syskon} ${syskon === 1 ? 'syskon' : 'syskon'}</span>` : ''}</div><span class="dokbricka"${v.losningsblad ? ' data-losning' : ''}${v.variant ? ' data-variant' : ''}>${v.variant || (v.losningsblad ? (v.typ === 'Prov' ? 'Lösningar' : 'Facit') : v.typ)}</span>`;
+      d.innerHTML = `${minisida(v)}<div class="dokmeta"><p class="dnamn"></p><p class="dmeta2">${[v.kurs || 'ingen kurs', v.klass || '—', v.datum || 'utan datum', inforText(v.inforProv)].filter(Boolean).join(' · ')}</p>${v.syskonAv ? '<p class="doksyskon"></p>' : ''}${syskon ? `<span class="dokvarianter">${syskon} ${syskon === 1 ? 'syskon' : 'syskon'}</span>` : ''}</div><span class="dokbricka"${v.losningsblad ? ' data-losning' : ''}${v.variant ? ' data-variant' : ''}>${v.variant || (v.losningsblad ? (v.typ === 'Prov' ? 'Lösningar' : 'Facit') : v.typ)}</span>`;
       if (v.syskonAv) $('.doksyskon', d).textContent = v.syskontext || ('av ' + v.syskonAv);
       /* Åtgärderna ligger på pappret: en rad som glider in över miniatyrens nederkant
          vid hover. Kortet behåller sin höjd, och rutnätet blir tätare. */
@@ -5553,6 +5944,8 @@
     $('#fh-etikett').textContent = v.losningsblad ? 'Förhandsvisning · lösningsblad' : 'Förhandsvisning';
     $('#fh-titel').textContent = dokNamn(v);
     $('#fh-meta').textContent = [v.kurs || 'ingen kurs', v.klass || 'ingen klass', (v.datum ? (window.Kalender && window.Kalender.ord ? window.Kalender.ord(v.datum) : v.datum) : 'utan datum'),
+      /* Samma rad som kortet och canvasen: vilket prov bladet förbereder. */
+      inforText(v.inforProv),
       typeof beskriv === 'function' ? beskriv(v) : ''].filter(Boolean).join(' · ');
     /* Lösningsbladet är en KLON av sitt original och har inget eget liv som
        utkast — att lägga tillbaka det hade gett två papper i rutan som säger
