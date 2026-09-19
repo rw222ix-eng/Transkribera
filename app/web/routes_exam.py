@@ -21,6 +21,7 @@ import json
 import logging
 import re
 import threading
+from datetime import date
 from pathlib import Path
 
 from fastapi import APIRouter, Query, Request
@@ -961,6 +962,104 @@ def create_router(base: Path, arbiter) -> APIRouter:
         for e in exams:
             e.pop("exam", None)          # listvyn behöver inte hela JSON:en
         return {"exams": exams}
+
+    # ── «INFÖR PROVET»: KLASSENS KOMMANDE PROV ───────────────────
+    # Panelens väljare (plan.js, steg 3 «Upplägg») frågar här när läraren
+    # bygger ett arbetsblad. `_omprovskandidat` vänd framåt: samma tre krav på
+    # raden (prov, godkänt, samma klass) men datum FRAMÅT och stigande, för
+    # det här bladet ska förbereda inför nästa prov och inte repetera förra.
+    #
+    # `idag` är en PARAMETER och inte date.today(). Testerna måste kunna säga
+    # vilken dag det är, annars ruttnar de i takt med kalendern (samma regel
+    # som tolka_handelser lever under). Utelämnad betyder dagens datum, som
+    # klienten ändå alltid skickar.
+    #
+    # LÄSER BARA, ingen modell och ingen arbitergrind.
+    @router.get("/api/exams/nasta")
+    def nasta_prov(group_id: int | None = None, course_id: int | None = None,
+                   idag: str | None = None):
+        dag = (idag or "").strip() or date.today().isoformat()
+        if not group_id:
+            # Utan klass finns ingen fråga: «kommande prov» är alltid någons.
+            return {"prov": None, "kommande": []}
+        conn = db.connect(db_file)
+        try:
+            rader = db.list_exams(conn, course_id)
+        finally:
+            conn.close()
+        kommande = []
+        for e in rader:
+            if (e.get("typ") or "prov") != "prov" or not e.get("exam"):
+                continue
+            if str(e.get("status") or "") != "godkänt":
+                continue
+            if e.get("group_id") != group_id:
+                continue
+            if (e.get("datum") or "") < dag:
+                continue
+            kommande.append({
+                "id": e["id"],
+                # Titeln är dokumentets, inte radens: pappret kan ha bytt namn
+                # i en omskrivning utan att exams.titel följde med.
+                "titel": e["exam"].get("titel") or e.get("titel") or "",
+                "datum": e.get("datum") or "",
+                "antal_uppgifter": len(e["exam"].get("uppgifter") or []),
+                "course_id": e.get("course_id"),
+                "group_id": e.get("group_id"),
+            })
+        # list_exams sorterar NYAST först; framåt i tiden vill vi ha närmast
+        # först, så ordningen vänds här och inte i SQL (samma fråga används av
+        # högen, och den ska inte byta ordning för det här).
+        kommande.sort(key=lambda r: (r["datum"], r["id"]))
+        return {"prov": kommande[0] if kommande else None,
+                "kommande": kommande}
+
+    # ── «INFÖR PROVET»: PROVETS UPPGIFTSTYPER ────────────────────
+    # Chipsen läraren kryssar i panelen. Svaret bär både uppgifterna en och en
+    # (`typer`) och de grupper hon faktiskt väljer på (`grupper`), för
+    # grupperingen är serverns: etiketten ska vara densamma i väljaren, i
+    # payloaden och i loggen, och en klient som grupperar själv blir en andra
+    # sanning som glider ur takt.
+    #
+    # ETIKETTEN är den rad hon känner igen från lektionsrubriken, och därför
+    # tas DELMOMENTET först: det ÄR rubriken, ordagrant ur den lista provet
+    # skrevs mot. Bokens avsnitt är reserven, och typ + förmåga sista utvägen
+    # på ett papper som varken bär rubrik eller avsnitt (varje prov skrivet
+    # före de fälten fanns).
+    #
+    # FORMEN kommer ur exam_gen.provslots, samma funktion som omprovet och
+    # «Inför provet»-blocket läser. En egen uträkning här hade blivit en andra
+    # beskrivning av samma papper.
+    @router.get("/api/exams/{exam_id:int}/uppgiftstyper")
+    def uppgiftstyper(exam_id: Id64):
+        conn = db.connect(db_file)
+        try:
+            view = db.get_exam(conn, exam_id)
+        finally:
+            conn.close()
+        if view is None:
+            return JSONResponse({"error": "okänt prov"}, status_code=404)
+        typer = []
+        for s in exam_gen.provslots(view.get("exam") or {}):
+            etikett = s["delmoment"] or (
+                f"Avsnitt {s['avsnitt']}" if s["avsnitt"] else
+                f"{s['typ'].capitalize()}, "
+                f"{exam_spec.FORMAGA_NAMN.get(s['formaga'], s['formaga'])}")
+            typer.append({"nummer": s["nr"], "etikett": etikett,
+                          "delmoment": s["delmoment"], "avsnitt": s["avsnitt"],
+                          "typ": s["typ"], "formaga": s["formaga"],
+                          "niva": s["niva"], "del": s["del"],
+                          "poang": s["poang"]})
+        grupper: list[dict] = []
+        for t in typer:
+            for g in grupper:
+                if g["etikett"] == t["etikett"]:
+                    g["nummer"].append(t["nummer"])
+                    break
+            else:
+                grupper.append({"etikett": t["etikett"],
+                                "nummer": [t["nummer"]]})
+        return {"typer": typer, "grupper": grupper}
 
     @router.get("/api/exams/{exam_id:int}")
     def get_exam(exam_id: Id64):
