@@ -377,6 +377,16 @@ def test_efterkontrollen_tiger_om_forebild_ur_blandade_uppgifter():
     assert _kontroll(exam, bok=_BOK, sidor=sidor) == []
 
 
+def test_efterkontrollen_faller_tryckta_tips():
+    """Prov 88 (2026-09-19): tipsen skrevs bort på uppgift 4 men stod kvar på
+    6 och 11, och efterkontrollen sa inget. Nu ett fynd per uppgift."""
+    exam = copy.deepcopy(_exam_doc())
+    exam["uppgifter"][0]["text"] = (exam["uppgifter"][0].get("text") or "")         + " Tips: sätt in talet i formeln."
+    fynd = _kontroll(exam, bok=_BOK, sidor=_SIDOR)
+    assert [f["kod"] for f in fynd] == ["tips"]
+    assert fynd[0]["nr"] == 1
+
+
 def test_efterkontrollen_faller_delmomentsetikett_i_ett_annat_avsnitt():
     """Rubriken bär sina sidor («Intervall (s. 56–57)»). Ligger de i ett annat
     avsnitt än uppgiftens etikett är märkningen fel."""

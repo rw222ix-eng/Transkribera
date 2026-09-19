@@ -367,6 +367,28 @@ def _sprakfynd(exam: dict, typ: str) -> list[dict]:
         "matematiken. Läs dem högt en gång.")]
 
 
+def _tipsfynd(exam: dict, typ: str) -> list[dict]:
+    """Tryckta tips, en gång till på det som ligger framme (exam_gen.a_nivavakt,
+    som sedan 2026-09-19 fäller «Tips:» på alla nivåer). Prov 88 fick sina
+    tips bortskrivna på en uppgift och behöll dem på två andra; utan den här
+    raden syntes det ingenstans. Ett fynd per uppgift, med vaktens egen
+    mening."""
+    if typ != "prov":
+        return []
+    try:
+        fel = exam_gen.a_nivavakt(exam)
+    except Exception:                       # pragma: no cover
+        return []
+    ut = []
+    for f in fel:
+        if "tips" not in (f.get("message") or "").lower():
+            continue
+        nr = _uppgiftsnr(f.get("path", ""))
+        ut.append(_fynd("tips", f"Uppgift {nr} bär ett tryckt tips som talar "
+                        "om metoden. Nationella provet trycker aldrig tips.", nr))
+    return ut
+
+
 def efterkontroll(view: dict, doc, summor: dict | None, *,
                   bok: dict | None = None, sidor: dict[int, int] | None = None,
                   base: Path | None = None) -> list[dict]:
@@ -386,6 +408,7 @@ def efterkontroll(view: dict, doc, summor: dict | None, *,
     ut += _tidfynd(doc, summor, typ)
     ut += _bildfynd(doc, base or Path("."))
     ut += _sprakfynd(view.get("exam") or {}, typ)
+    ut += _tipsfynd(view.get("exam") or {}, typ)
     # Taket är läsarens, inte serverns: tjugofyra rader i en ruta är en vägg,
     # och pappret som ger fler än så har ett annat problem än det listan kan
     # beskriva.
@@ -427,6 +450,8 @@ _ATGARD = {
     "sprak": "Skriv om texten med kortare meningar utan staplade räkneord och "
              "utan ord som är svårare än matematiken. Samma matematik, samma "
              "tal, samma poäng.",
+    "tips": "Stryk tipset och låt uppgiften stå på egna ben. Samma text i "
+            "övrigt, samma tal, samma poäng.",
     "bild": "Skriv om uppgiftens scen så att den handlar om det bilden visar, "
             "eller ta bort scenen ur uppgiften.",
     "delkrav": "Gör pappret samstämmigt: ändra hjälpmedelsregeln för delen, "
