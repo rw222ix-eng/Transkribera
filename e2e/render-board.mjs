@@ -116,7 +116,41 @@ try {
             }
           });
         });
-        r({ utanfor: [...new Set(ut)].slice(0, 8) });
+        /* SPALTBALANSEN PÅ VÄNSTERTAVLAN (lärarens dom 2026-09-20, kväll):
+           «vänstra halvan av vänstra tavlan är bara x² = a, andragradsterm,
+           högerled och parentesen, sen inget annat; allt annat står på högra
+           delen och utrymmet under parentesen utnyttjas inte.»
+
+           Motorn mäter höjd per FLÖDE — hela tavlan och tavelnivåns
+           `columns` — men en col inuti en row i flödet får ingen egen
+           [WB]-rad. Därför mäts de här, i DOM:en, på den enda plats som ser
+           dem: harnesset. Appens renderingsreparation kan alltså INTE ta
+           emot det här fyndet i dag (se REPAIR_HINTS i lesson_board).
+           Gränsen 60 % är lärarens bild av «en remsa mot en vägg». */
+        const obalans = [];
+        const forsta = document.querySelectorAll('.whiteboard')[0];
+        if (forsta) {
+          /* Motorn sätter ingen klass på row/col — de är div:ar med
+             inline-flex-stilar, och barnen i en row får `wb-del`. Spalterna
+             känns därför igen på layouten: en flex-rad vars två barn själva
+             är flex-kolumner. */
+          const arKol = n => n.nodeType === 1
+            && getComputedStyle(n).display === 'flex'
+            && getComputedStyle(n).flexDirection === 'column';
+          for (const rad of forsta.querySelectorAll('div')) {
+            const cs = getComputedStyle(rad);
+            if (cs.display !== 'flex' || cs.flexDirection !== 'row') continue;
+            const kol = [...rad.children].filter(arKol);
+            if (kol.length !== 2) continue;
+            const h = kol.map(c => c.getBoundingClientRect().height);
+            const kvot = Math.min(...h) / Math.max(...h);
+            if (kvot < 0.6) {
+              obalans.push(`vänstertavlans spalter är ${Math.round(h[0])} `
+                + `och ${Math.round(h[1])} px (${Math.round(kvot * 100)} %)`);
+            }
+          }
+        }
+        r({ utanfor: [...new Set(ut)].slice(0, 8), obalans });
       })));
     }, spec);
     const namn = path.basename(f, '.json');
@@ -127,7 +161,12 @@ try {
     const fel = alla.filter(w => !/skalade upp/.test(w));
     alla.forEach(w => console.log('  ' + (/skalade upp/.test(w) ? '·' : '!') + ' ' + w));
     res.utanfor.forEach(u => console.log('  ! utanför: ' + u));
-    if (!alla.length && !res.utanfor.length) console.log('  inga [WB]-varningar');
+    /* Obalansen är en VARNING, inte ett fel: den fäller inte körningen
+       (exitkoden är fortfarande ryms-inte/överlapp/utanför), men den ska
+       synas — det var det första läraren såg på den skarpa tavlan. */
+    (res.obalans || []).forEach(o => console.log('  ! obalans: ' + o));
+    if (!alla.length && !res.utanfor.length && !(res.obalans || []).length)
+      console.log('  inga [WB]-varningar');
     if (fel.length || res.utanfor.length) daligt++;
     await page.close();
   }
