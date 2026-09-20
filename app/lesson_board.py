@@ -484,6 +484,24 @@ INSTRUCTION = (
     "redan täcker utan nytt handgrepp behöver inget exempel, den pratar "
     "läraren om. Saknas urval gäller sidornas typer. Pröva valet mot "
     "täckningen baklänges (nedan).\n"
+    # TRE TYPER, STIGANDE. Lärarens dom 2026-09-20 över IndA-tavlan: exempel
+    # 1 och 2 var samma fallande sten (5t² = 45, 5t² = 100), medan urvalet
+    # bar kvadrater i båda leden (1310), ett konstantled (1307) och en
+    # parentes att multiplicera in (1311). Regeln «ett exempel per ny
+    # metodtyp» fanns, men ingenting sa i vilken ORDNING typerna kommer eller
+    # att tre exempel måste vara tre TYPER — och röda tråden gjorde då det
+    # billigaste: samma uppgift igen med nya siffror.
+    "- TRE EXEMPEL ÄR TRE METODTYPER, i stigande svårighet. Sortera först "
+    "urvalets uppgifter efter vad HANDEN gör, och ta en typ per exempel i "
+    "den här ordningen: (1) GRUNDFORMEN — metoden används rakt av, utan "
+    "förarbete; (2) ORDNA FÖRST — uppgiften måste skrivas om innan metoden "
+    "går att använda (termer i båda leden, ett konstantled att flytta, en "
+    "parentes att multiplicera in, ett bråk att bli av med); (3) URVALETS "
+    "SVÅRASTE — typen med ett steg till (en sammansatt parentes, en "
+    "tillämpning i ord, en storhet att tolka). Har urvalet bara två typer "
+    "skrivs två exempel. Vilka typerna ÄR avgörs ur urvalets uppgifter, "
+    "aldrig ur en färdig lista: momentet bestämmer vad grundform och "
+    "förarbete betyder.\n"
     # BEGREPPEN I EXEMPLEN. Samma dom (2026-09-05): «Sen exemplen: jaha, nu
     # ska man utveckla det här uttrycket. Då trycker man på vad utveckla
     # betyder. Så trycker man på begreppen samtidigt som man visar med
@@ -513,6 +531,12 @@ INSTRUCTION = (
     "i just de här talen («3:an in i första parentesen», «minuset gäller "
     "alla tre termerna»), aldrig regeln i allmänhet («varje term mot varje "
     "term»). Ett steg som bara återger en vänsterrad eller en formel stryks. "
+    # RECEPTET STYR STEGEN (2026-09-20). Fanns som krav på VERBET (8f); det
+    # som saknades var att stegen ska gå IGENOM receptet i dess ordning, så
+    # att eleven ser samma metod på båda tavlorna.
+    "Exemplets steg går genom RECEPTETS punkter i receptets ordning — de "
+    "punkter uppgiften behöver, med UPPGIFTENS egna tal i varje steg; en typ "
+    "som hoppar över en receptpunkt hoppar över den, aldrig mer. "
     # Mätt på kontrollkörningen 2026-09-05: kravet på uppgiftens tal drog med
     # sig färdiga uträkningar in i exemplen. Talen hör till steget, ledet
     # inte — läraren räknar på plats.
@@ -555,6 +579,12 @@ INSTRUCTION = (
     "nästa exempels ingång — det sparar tavlyta och låter läraren peka "
     "bakåt. Kedjan är BEGREPPSDRIVEN: vändningen är ett nytt VERB eller en "
     "ny metodtyp, aldrig en ny värld eller bara nya tal.\n"
+    # UPPFÖLJARENS VILLKOR (2026-09-20). «Samma fall, nu 100 m» lydde tråden
+    # ordagrant och gav ändå läraren samma exempel två gånger.
+    "- En UPPFÖLJARE («Samma …, nu …») skrivs bara när METODTYPEN byter: "
+    "samma situation med ett nytt handgrepp är ett nytt exempel, samma "
+    "situation med nya siffror är inget. Räcker situationen inte till nästa "
+    "typ är det SITUATIONEN som ger vika, aldrig typen.\n"
     # Raden om att exemplens kroppar hämtas från vänstern stod här; struken
     # 2026-09-05 (kväll) och inbakad i förankringsregeln nedan, som säger
     # samma sak om formler och metodsteg. Prompten skulle KORTAS.
@@ -3246,9 +3276,28 @@ def bokkopior(board: dict | None, bok: str) -> list[dict]:
 # meningen). Och bara när exemplen går att skilja åt på sina rubriker: utan
 # rubriker vet vakten inte var ett exempel slutar och nästa börjar, och då
 # tiger den hellre än fäller fel rad (fail-open, som alla vakter här).
+#
+# VAR UPPGIFTSRADEN LIGGER (lärarens dom 2026-09-20 över IndA-tavlan om
+# andragradsekvationer, jobb 481). Vakten läste FÖRSTA math-raden efter
+# rubriken, och i exempel 1 var den raden situationens modell, 's = 5t^2'.
+# Uppgiften själv, '5t^2 = 45', stod en text-rad längre ned inne i en col —
+# och exempel 2, '5t^2 = 100', fick därför stå kvar fast det var samma tal en
+# gång till. Uppgiftsraderna är numera ALLA math-rader FÖRE exemplets
+# metodsteg (den första list-sektionen), också de som ligger i en row/col.
+# Saknar exemplet steglista faller vakten tillbaka på första raden: utan lista
+# finns ingen gräns mellan uppgift och steg, och då fäller den hellre för lite.
 _FORM_TAL = re.compile(r"\d+([,.]\d+)?")
 # Kortare skelett än så säger ingenting: 'x=#' är varje ekvation som finns.
 _FORM_MINSTA = 4
+# SITUATIONEN, andra halvan av samma dom. Formnyckeln fäller talen i
+# MATEMATIKEN; situationsnyckeln fäller talen i SPRÅKET, alltså samma mening
+# skriven två gånger («Hur lång tid tar det att falla 45 m?» mot «… att falla
+# 100 m?»). Röda tråden KRÄVER att exemplen delar situation, så vakten får
+# aldrig fälla på delad värld: bara på samma mening med bytta siffror. En
+# riktig uppföljare skriver en ny mening om det nya handgreppet.
+_SITUATION_BORT = re.compile(r"[^a-zåäö#]+")
+# Kortare än så är ingen uppgiftsmening, bara en etikett.
+_SITUATION_MINSTA = 15
 
 
 def _formnyckel(latex: str) -> str:
@@ -3256,53 +3305,111 @@ def _formnyckel(latex: str) -> str:
     return _FORM_TAL.sub("#", _kopienyckel(latex))
 
 
-def _exempelrader(sections: list, path: str, ut: list) -> None:
-    """(väg, latex) för FÖRSTA math-raden efter varje rubrik i en spalt."""
-    vantar = False
+def _situationsnyckel(text: str) -> str:
+    """Meningen med talen utbytta mot # och allt utom bokstäver bort."""
+    return _SITUATION_BORT.sub("", _FORM_TAL.sub("#", str(text or "").lower()))
+
+
+def _platta_rader(sections: list, path: str, ut: list) -> None:
+    """(väg, kind, sektion) i läsordning, ned genom row/col/callout.
+
+    Vägen är den yttersta sektionens: ett fynd ska peka på raden läraren ser,
+    och reparationsrundan hittar den lika bra där."""
     for si, sec in enumerate(sections or []):
         if not isinstance(sec, dict):
             continue
-        if sec.get("kind") == "heading":
-            vantar = True
-        elif sec.get("kind") == "math" and vantar:
-            ut.append((f"{path}[{si}]", str(sec.get("latex") or "")))
-            vantar = False
+        p = f"{path}[{si}]"
+        if sec.get("kind") in ("row", "col", "callout"):
+            _platta_rader(sec.get("children"), f"{p}.children", ut)
+        else:
+            ut.append((p, sec.get("kind"), sec))
+
+
+def _exempelrader(sections: list, path: str, ut: list) -> None:
+    """Ett exempel per rubrik i spalten: {math, text, steg}.
+
+    `math` och `text` är raderna FÖRE steglistan, `steg` säger om exemplet
+    har en sådan lista alls."""
+    aktuellt: dict | None = None
+    platt: list = []
+    _platta_rader(sections, path, platt)
+    for p, kind, sec in platt:
+        if kind == "heading":
+            aktuellt = {"math": [], "text": [], "steg": False}
+            ut.append(aktuellt)
+        elif aktuellt is None:
+            continue
+        elif kind == "list":
+            aktuellt["steg"] = True
+        elif aktuellt["steg"]:
+            continue            # allt efter stegen hör till lösningen
+        elif kind == "math":
+            aktuellt["math"].append((p, str(sec.get("latex") or "")))
+        elif kind == "text":
+            aktuellt["text"].append((p, str(sec.get("text") or "")))
 
 
 def formupprepning(board: dict | None) -> list[dict]:
     """Exempel på högertavlan vars uppgiftsrad har samma FORM som ett tidigare
-    exempels, med bara andra tal.
+    exempels, eller vars uppgiftsmening är samma SITUATION med bytta tal.
 
-    Går till reparationsrundan som en varning med koden `upprepad_form`,
-    precis som bokkopiorna."""
+    Går till reparationsrundan som en varning med koden `upprepad_form` eller
+    `upprepad_situation`, precis som bokkopiorna — och körs en gång till på
+    kompletteringen (se _tackning_pass), för det var domarens egen lapp som
+    skrev dubbletten på IndA-tavlan."""
     if not isinstance(board, dict):
         return []
-    sedda: dict[str, str] = {}
     ut: list[dict] = []
     for bi, tavla in enumerate(board.get("boards") or []):
         if bi == 0 or not isinstance(tavla, dict):
             continue        # vänstern bär bokstäver; exemplen bor till höger
-        rader: list = []
+        exempel: list = []
         for ci, kol in enumerate(tavla.get("columns") or []):
             _exempelrader((kol or {}).get("sections"),
-                          f"boards[{bi}].columns[{ci}].sections", rader)
-        _exempelrader(tavla.get("sections"), f"boards[{bi}].sections", rader)
-        for vag, latex in rader:
-            nyckel = _formnyckel(latex)
-            if len(nyckel) < _FORM_MINSTA:
-                continue
-            forra = sedda.get(nyckel)
-            if forra is None:
-                sedda[nyckel] = latex
-                continue
-            ut.append({
-                "path": vag, "code": "upprepad_form",
-                "message": f"'{latex[:40]}' har samma form som '{forra[:40]}' "
-                           "— bara talen skiljer. Två exempel med samma form är "
-                           "ETT exempel skrivet två gånger. Byt uppgiften mot en "
-                           "annan FORM (annan exponent, negativt högerled, en "
-                           "omskrivning, ett olikhetstecken) eller stryk "
-                           "exemplet."})
+                          f"boards[{bi}].columns[{ci}].sections", exempel)
+        _exempelrader(tavla.get("sections"), f"boards[{bi}].sections", exempel)
+        # Nycklarna registreras EXEMPELVIS: två rader i samma exempel är
+        # uppgiften och dess uppställning, aldrig en dubblett av varandra.
+        sedda: dict[str, str] = {}
+        sedd_text: dict[str, str] = {}
+        for ex in exempel:
+            nya: dict[str, str] = {}
+            for vag, latex in (ex["math"] if ex["steg"] else ex["math"][:1]):
+                nyckel = _formnyckel(latex)
+                if len(nyckel) < _FORM_MINSTA:
+                    continue
+                forra = sedda.get(nyckel)
+                if forra is None:
+                    nya.setdefault(nyckel, latex)
+                    continue
+                ut.append({
+                    "path": vag, "code": "upprepad_form",
+                    "message":
+                        f"'{latex[:40]}' har samma form som '{forra[:40]}' "
+                        "— bara talen skiljer. Två exempel med samma form är "
+                        "ETT exempel skrivet två gånger. Byt uppgiften mot en "
+                        "annan METODTYP ur urvalet (ett konstantled att "
+                        "flytta, kvadrater i båda leden, en parentes att "
+                        "multiplicera in) eller stryk exemplet."})
+            sedda.update(nya)
+            ny_text: dict[str, str] = {}
+            for vag, text in (ex["text"] if ex["steg"] else []):
+                nyckel = _situationsnyckel(text)
+                if len(nyckel) < _SITUATION_MINSTA:
+                    continue
+                forra = sedd_text.get(nyckel)
+                if forra is None:
+                    ny_text.setdefault(nyckel, text)
+                    continue
+                ut.append({
+                    "path": f"{vag}.text", "code": "upprepad_situation",
+                    "message":
+                        f"'{text[:40]}' är samma uppgiftsmening som "
+                        f"'{forra[:40]}' med bytta tal — samma situation, "
+                        "samma fråga. Ett exempel som bara byter siffror är "
+                        "ETT exempel skrivet två gånger. Byt uppgiften mot "
+                        "en metodtyp urvalet har men tavlan saknar."})
+            sedd_text.update(ny_text)
     return ut
 
 
@@ -3705,6 +3812,21 @@ TACKNING_INSTRUKTION = (
     "också stegen: ett metodsteg som bara återger en vänsterrad eller en "
     "formel («Multiplicera: varje term mot varje term») är ett fynd, och "
     "forslag är att skriva om steget med uppgiftens egna tal.\n"
+    # DUBBLETTERNA. IndA-tavlan 2026-09-20 (jobb 481): exempel 1 och 2 var
+    # samma fallande sten med bytt sträcka, och domaren såg luckan («få x²
+    # ensamt först saknas») utan att se att den fanns ett exempel över. Den
+    # egna lappen bytte därför ut exempel 3 och skrev en kopia av exempel 1.
+    "Pröva DUBBLETTERNA, och det här fyndet går FÖRE luckorna: har två "
+    "exempel samma METODTYP (samma handgrepp, bara andra tal) eller samma "
+    "SITUATION (samma sak att räkna på, samma fråga)? Det är ETT exempel "
+    "skrivet två gånger. forslag är att byta ut DET EXEMPEL SOM DUBBLERAR — "
+    "det andra av de två, aldrig det enda exemplet av sin typ — mot en "
+    "metodtyp urvalet har men tavlan saknar, och du SÄGER vilken uppgift i "
+    "urvalet typen kommer från («uppg. 1310 har kvadrater i båda leden»). "
+    "Skriv uppgiften och stegen färdiga. Tre exempel ska vara tre typer i "
+    "stigande svårighet: grundform, sedan en som måste ordnas först "
+    "(konstantled, termer i båda leden, en parentes att multiplicera in), "
+    "sedan urvalets svåraste.\n"
     # RÖDA TRÅDEN SOM DOMARUPPGIFT. Domen 2026-09-05 (kväll): tråden fanns som
     # regel i prompten men ingen grind fällde brottet. Rottavlan bar fyra lösa
     # exempel utan gemensam situation. «Följer det en tydlig röd tråd?»
@@ -3809,7 +3931,19 @@ TACKNING_INSTRUKTION = (
     "ska ha antingen en rad under «Att tänka på» på vänstern eller ett "
     "exempel på högern; saknas båda är det ett fynd, och forslag är raden, "
     "skriven som den ska stå. Räkna typer, inte uppgifter: tre uppgifter med "
-    "negativt högerled är ETT randfall.\n"
+    "negativt högerled är ETT randfall. "
+    # PÅHITTADE RANDFALL (jobb 482, TE26A, Liber Ma 1c 2.1): domaren fällde
+    # «randfallet parentes i kvadrat saknas» på en lektion om LINJÄRA
+    # ekvationer med parenteser och bråk, och kompletteringen skrev in
+    # (x + 2)² = 9 under «Att tänka på». Ingen av uppgifterna 2112–2127 har
+    # en kvadrerad parentes. Regeln stod redan («gå urvalet igenom»), men
+    # inget krävde att fyndet kunde PEKAS UT i en uppgift. Numret är kvittot,
+    # och grinden i koden (lesson_board._hittat_randfall) fäller resten.
+    "Ett randfallsfynd MÅSTE bära numret på den uppgift i urvalet som kräver "
+    "randfallet, i «uppgifter», och du ska kunna peka på randfallet i just "
+    "den uppgiften. Hittar du ingen sådan uppgift finns inget randfall att "
+    "fälla: skriv inget fynd. Randfall ur momentets grannskap — en typ "
+    "boken tar senare — är aldrig ett fynd.\n"
     # BÅDA MOMENTEN. Lärarens dom 2026-09-09: «på tavlan verkar det bara vara
     # potensekvationer, vi ska ta båda momenten samtidigt.» Delarna står i
     # kalendern och går numera till skrivningen (lesson_board.build_delar_block)
@@ -3893,10 +4027,16 @@ def doma_tackning(board: dict, *, model: str, llm, bok: str, delar: str = "",
         vad = str(s.get("vad") or "").strip()
         if not vad:
             continue
+        nummer = [int(u) for u in (s.get("uppgifter") or [])[:12]
+                  if str(u).strip().isdigit()]
         upp = ", ".join(str(u) for u in (s.get("uppgifter") or [])[:12])
         forslag = str(s.get("forslag") or "").strip()
         fynd.append({"path": f"täckning (uppgift {upp})" if upp else "täckning",
                      "code": "tackning",
+                     # Numren följer med som data, inte bara som text i
+                     # vägen: randfallsgrinden nedan måste kunna slå upp dem
+                     # mot remsan utan att tolka en sträng en gång till.
+                     "uppgifter": nummer,
                      "message": f"{vad} — lägg till: {forslag}" if forslag
                      else vad})
     # Fler än så är inte en lucka utan en annan lektion — då ska läraren se
@@ -3909,6 +4049,43 @@ def doma_tackning(board: dict, *, model: str, llm, bok: str, delar: str = "",
     for f in fynd[:5]:
         log(f"Domaren: {f['message'][:200]}")
     return fynd[:5]
+
+
+# ── Randfallsgrinden ─────────────────────────────────────────────────────────
+# Lärarens tavla för TE26A, Liber Ma 1c 2.1 «Ekvationer med parenteser och
+# bråk» (s. 46–47, uppg. 2112–2114 + 2116–2127, jobb 482): domaren fällde
+# «Randfallet parentes i kvadrat saknas helt … (x + 2)² = 9» och
+# kompletteringen skrev in raden under «Att tänka på». Ingen uppgift i urvalet
+# har en kvadrerad parentes — det är LINJÄRA ekvationer. Randfallsregeln i
+# domarprompten säger «gå urvalet igenom och plocka de uppgifter som ÄR
+# randfall», och domaren hoppade över urvalet och tog randfallet ur momentets
+# grannskap i stället.
+#
+# Grinden är deterministisk och sitter före kompletteringen: ett randfallsfynd
+# vars nummer saknas eller ligger utanför remsan når aldrig lappen. Andra
+# fynd rörs inte — ett räknefel har inget uppgiftsnummer och ska inte ha
+# något. Och utan urvalsrad tiger grinden: då finns ingen remsa att mäta mot
+# (fail-open, som vakterna).
+_RANDFALLSORD = ("randfall", "att tänka på")
+
+
+def _hittat_randfall(fynd: list, bok: str, log=lambda _m: None) -> list:
+    """Fynden som får driva kompletteringen — randfall utan en uppgift i
+    urvalet sorteras bort."""
+    m = _URVALSRAD_RE.search(bok or "")
+    urval = _remsnummer(m.group(1)) if m else set()
+    if not urval:
+        return fynd
+    kvar: list = []
+    for f in fynd:
+        text = str(f.get("message") or "").lower()
+        nummer = set(f.get("uppgifter") or [])
+        if any(o in text for o in _RANDFALLSORD) and not (nummer & urval):
+            log(f"Randfallet utan uppgift i urvalet lämnas: "
+                f"{str(f.get('message') or '')[:120]}")
+            continue
+        kvar.append(f)
+    return kvar
 
 
 def _tackning_pass(board: dict, errors: list, *, model: str, llm, bok: str,
@@ -3932,6 +4109,10 @@ def _tackning_pass(board: dict, errors: list, *, model: str, llm, bok: str,
     log = log_cb or (lambda _m: None)
     fynd = doma_tackning(board, model=model, llm=llm, bok=bok, delar=delar,
                          form=form, log_cb=log_cb)
+    # Påhittade randfall sorteras bort HÄR, innan de kan bli en rad på
+    # vänstern: ett fynd som inte går att peka ut i urvalet är inte en lucka
+    # (se Randfallsgrinden ovan).
+    fynd = _hittat_randfall(fynd, bok, log)
     if not fynd:
         return {"board": board, "errors": errors, "rounds": 0}
     if budget < 1:
@@ -3976,6 +4157,19 @@ def _tackning_pass(board: dict, errors: list, *, model: str, llm, bok: str,
     # visa fynden som varningar.
     if res["errors"] and not errors:
         return {"board": board, "errors": fynd, "rounds": res["rounds"]}
+    # …och inte heller variationen. IndA-tavlan (jobb 481): domaren SÅG att
+    # exempel 1 var en nära variant av bokens 1301 och bad om ett byte, och
+    # lappen skrev dit en kopia av exempel 2 i stället för den saknade
+    # metodtypen. Formvakten hade fällt dubbletten — men den kördes bara före
+    # domaren. Nu körs den på kompletteringen också, och en lapp som skapar
+    # dubbletten går tillbaka: den tavla läraren hade fått utan domaren är
+    # bättre än en tavla med samma exempel två gånger.
+    fore, efter = formupprepning(board), formupprepning(res["board"])
+    if len(efter) > len(fore):
+        log("Kompletteringen skrev samma exempel två gånger — den gamla "
+            "tavlan behålls och luckorna visas i stället.")
+        return {"board": board, "errors": errors + fynd,
+                "rounds": res["rounds"]}
     return res
 
 

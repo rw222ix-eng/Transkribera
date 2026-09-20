@@ -2376,6 +2376,151 @@ def test_formvakten_slapper_riktig_variation():
     assert lb.formupprepning(None) == []
 
 
+# TREDJE SKARPA KÖRNINGEN (jobb 481, högertavlan). Lärarens dom 2026-09-20
+# sen kväll: exempel 1 och 2 är samma fallande sten (5t² = 45, 5t² = 100) och
+# ingen av urvalets uppgifter med kvadrater i båda leden (1310), konstantled
+# (1307) eller en parentes att multiplicera in (1311) fick ett exempel.
+# Fixturen är tavlan som läraren fick den.
+def _indatavlan() -> dict:
+    return _kontrolltavlan("inda-2026-09-21.json")
+
+
+def test_formvakten_faller_den_fallande_stenen_tva_ganger():
+    """Uppgiftsraden 5t² = 45 ligger inte först i exempel 1 — före den står
+    situationens modell s = 5t², och inne i en col dessutom. Den gamla
+    vakten läste bara första math-raden och såg därför ingenting."""
+    fynd = lb.formupprepning(_indatavlan())
+    assert [f["code"] for f in fynd] == ["upprepad_form"], fynd
+    assert "5t^2 = 100" in fynd[0]["message"] and "5t^2 = 45" in fynd[0]["message"]
+
+
+def test_formvakten_slapper_tva_riktiga_metodtyper():
+    """Grundform mot «ordna först»: 5x² − 80 = 0 har kvadraten nästan ensam,
+    3x² − 50 = x² + 4 har kvadrater i BÅDA leden. Olika handgrepp, olika
+    form, inget fynd — annars hade vakten fällt just det byte beställningen
+    ber om."""
+    ex = [{"kind": "heading", "text": "Exempel 1"},
+          {"kind": "math", "latex": "5x^2 - 80 = 0"},
+          {"kind": "list", "items": ["Flytta: 80 till höger"]},
+          {"kind": "heading", "text": "Exempel 2"},
+          {"kind": "math", "latex": "3x^2 - 50 = x^2 + 4"},
+          {"kind": "list", "items": ["Samla: kvadraterna i ett led"]}]
+    assert lb.formupprepning(
+        {"boards": [{"sections": []}, {"columns": [{"sections": ex}]}]}) == []
+
+
+def test_formvakten_faller_samma_mening_med_bytta_tal():
+    """Situationsnyckeln: samma fråga, nya siffror. Formen kan vara olika och
+    ändå vara samma uppgift en gång till."""
+    def _ex(nr, fraga, latex):
+        return [{"kind": "heading", "text": f"Exempel {nr}"},
+                {"kind": "text", "text": fraga},
+                {"kind": "math", "latex": latex},
+                {"kind": "list", "items": ["Dra roten: glöm inte minus"]}]
+    sek = (_ex(1, "Hur lång tid tar det att falla 45 m?", "5t^2 = 45")
+           + _ex(2, "Hur lång tid tar det att falla 100 m?", "2t^2 + 3t^2 = 100"))
+    fynd = lb.formupprepning(
+        {"boards": [{"sections": []}, {"columns": [{"sections": sek}]}]})
+    assert [f["code"] for f in fynd] == ["upprepad_situation"], fynd
+    assert "falla 100 m" in fynd[0]["message"]
+    # Röda tråden rörs inte: en uppföljare skriver en NY mening om det nya
+    # handgreppet, och den delar situation utan att vara en dubblett.
+    sek = (_ex(1, "Hur lång tid tar det att falla 45 m?", "5t^2 = 45")
+           + _ex(2, "Samma fall, men nu står tiden i en parentes.",
+                 "(t + 2)^2 = 25"))
+    assert lb.formupprepning(
+        {"boards": [{"sections": []}, {"columns": [{"sections": sek}]}]}) == []
+
+
+def test_kompletteringen_far_inte_skriva_dubbletten():
+    """Domarens lapp bytte ut fel exempel och skrev en kopia av exempel 1
+    (jobb 481). Formvakten körs numera PÅ kompletteringen, och en lapp som
+    skapar dubbletten går tillbaka: tavlan läraren hade fått utan domaren är
+    bättre än en tavla med samma exempel två gånger."""
+    doc = _valid_doc()
+    kol = doc["boards"][1]["columns"][0]["sections"]
+    kol.append({"kind": "heading", "text": "Exempel 1"})
+    kol.append({"kind": "math", "latex": "x^4 = 625"})
+    dubblett = copy.deepcopy(doc)
+    dubblett["boards"][1]["columns"][0]["sections"] += [
+        {"kind": "heading", "text": "Exempel 2"},
+        {"kind": "math", "latex": "x^4 = 2000"}]
+    llm, _ = _stub_llm([_dom([{"uppgifter": [1105], "vad": "en typ saknas",
+                               "forslag": "ett exempel till"}]),
+                        json.dumps(dubblett)])
+    res = lb._tackning_pass(doc, [], model="m", llm=llm, bok=BOKBLOCK)
+    assert res["board"] == doc
+    assert any(f["code"] == "tackning" for f in res["errors"])
+
+
+# ── Randfallsgrinden (jobb 482) ─────────────────────────────────────────────
+BOKBLOCK_2_1 = ("UR LÄROBOKEN — Liber Ma 1c, s. 46–47. Lektionen SKA bygga "
+                "på de här sidorna.\n\nEkvationer med parenteser och bråk …\n\n"
+                "LÄRARENS URVAL: klassen ska räkna uppg. 2112–2114, 2116–2127 "
+                "på de här sidorna.")
+
+
+def test_randfall_utan_uppgift_i_urvalet_skrivs_inte_in():
+    """«Randfallet parentes i kvadrat saknas helt … (x + 2)² = 9» på en
+    lektion om LINJÄRA ekvationer med parenteser och bråk. Ingen av 2112–2127
+    har en kvadrerad parentes, och kompletteringen skrev ändå in raden under
+    «Att tänka på». Fyndet når numera aldrig lappen."""
+    doc = _valid_doc()
+    fynd = [{"uppgifter": [], "vad": "Randfallet «parentes i kvadrat» saknas",
+             "forslag": "(x + 2)^2 = 9 under Att tänka på"}]
+    llm, calls = _stub_llm([_dom(fynd)])
+    res = lb._tackning_pass(doc, [], model="m", llm=llm, bok=BOKBLOCK_2_1)
+    assert res["board"] == doc and res["errors"] == [] and res["rounds"] == 0
+    assert len(calls) == 1                  # ingen komplettering kördes
+    # Ett nummer UTANFÖR remsan duger inte heller.
+    fynd[0]["uppgifter"] = [2205]
+    llm, calls = _stub_llm([_dom(fynd)])
+    assert lb._tackning_pass(doc, [], model="m", llm=llm,
+                             bok=BOKBLOCK_2_1)["errors"] == []
+    assert len(calls) == 1
+    # Men ett randfall som PEKAR på en vald uppgift går fram som förut …
+    fynd[0]["uppgifter"] = [2119]
+    llm, calls = _stub_llm([_dom(fynd), json.dumps(_valid_doc())])
+    assert lb._tackning_pass(doc, [], model="m", llm=llm,
+                             bok=BOKBLOCK_2_1)["rounds"] == 1
+    # … och ett räknefel utan nummer är fortfarande ett fynd: det har aldrig
+    # haft något uppgiftsnummer och ska inte ha något.
+    llm, calls = _stub_llm([_dom([{"uppgifter": [], "vad": "18 är inte hälften "
+                                   "av 50", "forslag": "rätta siffran"}]),
+                            json.dumps(_valid_doc())])
+    assert lb._tackning_pass(doc, [], model="m", llm=llm,
+                             bok=BOKBLOCK_2_1)["rounds"] == 1
+
+
+def test_domarprompten_kraver_uppgiftsnummer_for_randfall():
+    t = lb.build_tackning_prompt({"boards": []}, BOKBLOCK_2_1)
+    assert "Ett randfallsfynd MÅSTE bära numret på den uppgift i urvalet" in t
+    assert "Hittar du ingen sådan uppgift finns inget randfall att fälla" in t
+
+
+def test_domarprompten_byter_ut_det_exempel_som_dubblerar():
+    t = lb.build_tackning_prompt({"boards": []}, BOKBLOCK)
+    assert "Pröva DUBBLETTERNA" in t
+    assert "byta ut DET EXEMPEL SOM DUBBLERAR" in t
+    assert "aldrig det enda exemplet av sin typ" in t
+    assert "vilken uppgift i urvalet typen kommer från" in t
+
+
+def test_prompten_kraver_tre_metodtyper_i_stigande_svarighet():
+    """Beställningen gäller alla moment: typerna avgörs ur urvalets
+    uppgifter, inte ur en lista över andragradsekvationer."""
+    p = lb.build_prompt("Ma2a", "IndA", "andragradsekvationer")
+    assert "TRE EXEMPEL ÄR TRE METODTYPER, i stigande svårighet" in p
+    assert "GRUNDFORMEN" in p and "ORDNA FÖRST" in p and "URVALETS " \
+        "SVÅRASTE" in p
+    assert "aldrig ur en färdig lista" in p
+    # Uppföljaren bara när metodtypen byter.
+    assert "skrivs bara när METODTYPEN byter" in p
+    # Och stegen går genom receptet med uppgiftens tal.
+    assert "går genom RECEPTETS punkter i receptets ordning" in p
+    assert "med UPPGIFTENS egna tal i varje steg" in p
+
+
 def test_generate_board_far_formupprepningen_som_fel_att_ratta():
     """Samma väg som bokkopiorna: fyndet rättas i reparationsrundan, inte som
     en varning läraren får läsa efteråt."""
