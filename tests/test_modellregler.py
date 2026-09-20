@@ -292,9 +292,10 @@ def test_prompten_bar_modellreglerna():
     assert "Samma ord betyder EN sak per tavla" in p
     assert "Frågor på tavlan är HELA frågor" in p
     assert "en ensam symbol hamnar på ny rad" in p
-    # Taket står kvar (test_prompten_ar_inte_orimligt_lang): reglerna
-    # betalades med fyra kortade rader, inte med ett höjt tak.
-    assert len(p) < 40_000
+    # Taket står där test_prompten_ar_inte_orimligt_lang satte det. Det låg
+    # på 40 000 till 2026-09-20, då vänsterskelettet (ankare, recept, «Att
+    # tänka på») kostade mer än de strukna raderna betalade.
+    assert len(p) < 46_000
 
 
 def test_domaren_provar_modellerna():

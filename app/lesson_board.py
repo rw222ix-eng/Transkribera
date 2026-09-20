@@ -240,14 +240,26 @@ INSTRUCTION = (
     # Samma dom, andra halvan: ett uträknat «∛125 = 5 (5·5·5 = 125)» hade
     # smugit sig in bland reglerna — «vi har exempel på högra tavlan som
     # täcker det. Vi behöver inte ha med det alls.»
-    "8b. Formlerna är REGLER i bokstäver — inga uträknade sifferexempel på "
+    #
+    # FÖRBUDET ÄR INTE LÄNGRE TOTALT (lärarens dom 2026-09-20 över Origo 2a
+    # 1.3 Andragradsekvationer): «rätt men för lite och för spretigt;
+    # eleverna får inte det som gör att de kan börja i boken». Vänstern bar
+    # x² = a ⇒ x = ±√a i rena bokstäver, och ±:et stod där utan sitt varför.
+    # Hon bad om x² = 64 ⇒ x = ±8 före formeln — och vakten strök raden som
+    # ett sifferexempel. En uträkning är det fortfarande inte: ankaret är EN
+    # rad, utan mellanled och utan uträkning. Meningen om «även en minsta
+    # sifferillustration» ströks därför; det var just den raden som sa nej.
+    "8b. Formlerna är REGLER i bokstäver — inga uträkningar på "
     "vänstertavlan: en rad med siffror och mellanled är ett exempel, och "
-    "exempel bor på högertavlan. Även en minsta sifferillustration av en "
-    # Samma sak gäller jämförelser som exakt-mot-närmevärde: de bärs av ett
-    # exempel på högertavlan, aldrig av en egen sifferruta på vänstern. Raden
-    # om det ströks 2026-09-05 — exempelreglerna säger redan samma sak, och
-    # prompten skulle KORTAS.
-    "regel ($\\sqrt[3]{-8} = -2$) hör dit: på vänstern står bokstäver.\n"
+    "exempel bor på högertavlan. ETT undantag: ANKARET i 8d, en enda "
+    "math-rad med tal direkt före den allmänna formeln. Spalten till höger "
+    # Skelettet står samlat här, så att modellen ser helheten innan reglerna
+    # kommer en och en. Ordningen ÄR domen 2026-09-20: det räckte inte att
+    # vänstern var rätt, den måste bära det eleven behöver för att börja.
+    "om figuren har sedan denna ordning, och ingen annan: BEGREPPSRADERNA "
+    "(8c), ANKARET (8d), FORMELN (8e), RECEPTET (8f), ATT TÄNKA PÅ (8g), "
+    "Vanligt fel (9). Ankaret hoppas över när formeln inte har något varför; "
+    "allt annat ska stå där.\n"
     # BEGREPPEN FÖRST. Lärarens dom (2026-09-05): «Vi behöver trycka mer på
     # begreppen. Utgå från grunden, från de begrepp vi berör. Snackar vi om
     # uttryck: vad är ett uttryck? Vad innehåller ett uttryck? Allt det kör vi
@@ -279,7 +291,30 @@ INSTRUCTION = (
     "klassen redan har — multiplicera, förenkla, beräkna värdet, "
     "teckenregler, sätta in, lösa ut — skrivs ALDRIG: de är för uppenbara för "
     "tavlan. Vilka orden blir avgörs av momentet, aldrig av en färdig lista.\n"
-    "8d. EN regel står EN gång, som FORMEL — aldrig som mening i en "
+    # PARET. Samma dom 2026-09-20: rottavlan skilde aldrig kvadratrot från
+    # rot, och det är just den förväxlingen uppgifterna lever på (1302 vill ha
+    # ETT tal, 1303 vill ha två). Två rader som står bredvid varandra bär
+    # kontrasten; en rad var på skilda ställen gör det inte.
+    "PARET hör till samma regel: förväxlas två av momentets begrepp "
+    "(kvadratrot och rot, uttryck och ekvation, faktor och term) skrivs de "
+    "som två begreppsrader DIREKT "
+    "efter varandra, och orden bär kontrasten («Kvadratrot: ETT tal, alltid "
+    "positivt» / «Rot: tal som löser ekvationen, kan vara två»). Paret "
+    "räknas som två begreppsrader.\n"
+    # ANKARET. «Eleverna får inte det som gör att de kan börja i boken.» En
+    # formel i bokstäver säger VAD regeln är, aldrig varför den ser ut så.
+    # ±:et i x = ±√a är obegripligt tills 8² och (−8)² står bredvid varandra.
+    # Vakten (whiteboard_spec._ankaret) släpper igenom exakt den här formen
+    # och fäller allt annat med tal — skriv ankaret som regeln säger, annars
+    # stryks det i reparationsrundan.
+    "8d. ANKARET: EN math-rad med TAL som visar formelns VARFÖR, direkt före "
+    "den allmänna formeln (x^2 = 64 \\Rightarrow x = \\pm 8), och under den "
+    "en etikett på högst FEM ORD («8 och −8 i kvadrat blir 64»). Bara EN "
+    "sådan rad på hela vänstertavlan, inga mellanled, ingen uträkning. "
+    "Ankaret skrivs när formeln har ett varför som ett tal gör synligt (±, "
+    "en teckenregel, definitionen av en rot); har momentet inget sådant "
+    "varför skrivs inget ankare alls.\n"
+    "8e. EN regel står EN gång, som FORMEL — aldrig som mening i en "
     "begreppsrad och som formel också. NORMEN ÄR EN FORMEL på vänstern, TVÅ "
     "bara när båda ÄR momentet: samma regel läst åt andra hållet "
     "(c = \\sqrt{a^2 + b^2} under a^2 + b^2 = c^2, v = u/2 under u = 2v) är "
@@ -292,14 +327,51 @@ INSTRUCTION = (
     "räknelagar och skit, det hör till deras formelsamling». Momentets "
     "tillämpningsformel (A = a^2 \\Rightarrow a = \\sqrt{A}) skrivs som "
     "FÖRSTA led i det exempel som använder den, inte på vänstern: vänstern "
-    "säger vad begreppet ÄR, exemplet visar vad det används till. Sist "
+    "säger vad begreppet ÄR, exemplet visar vad det används till.\n"
+    # RECEPTET. Lärarens dom 2026-09-20: «eleverna får inte det som gör att
+    # de kan börja i boken.» Begreppen och formeln säger vad saken ÄR; de
+    # säger inte vad handen gör när eleven slår upp uppgift 1305. Metodsteget
+    # på högern fanns redan, men det bodde bara i exemplet — eleven som
+    # räknar själv har ingenting att gå tillbaka till. Receptet är den raden,
+    # på vänstern, där den står kvar hela lektionen.
+    "8f. RECEPTET: en rubrikrad med momentets verb («Lösa») eller ordet «Så "
+    "här» — inne i en row/col skrivs den som text med weight 700, för där "
+    "finns ingen heading — och under den en list med HÖGST TRE punkter i "
+    "formen «Verb: högst "
+    "fyra ord» («Samla: allt x^2 i ett led», «Dela: gör x^2 ensamt», «Dra "
+    "roten: glöm inte minus»). Receptet är momentets METOD — det eleven "
+    "följer när hon räknar i boken. Högerns metodsteg BÖRJAR med receptets "
+    "verb, och ett steg vars verb varken står i receptet eller bland "
+    "begreppsraderna måste vara ett förkunskapsverb; annars saknas raden på "
+    "vänstern. Förkunskapsverb blir aldrig egna receptpunkter (8c gäller), "
+    "men de får stå INUTI ett receptsteg.\n"
+    # ATT TÄNKA PÅ. Samma dom. Randfallen fanns som regel redan (de skulle
+    # bli «en egen vändning i det exempel där de hör hemma»), och det räckte
+    # inte: ett enda exempel rymmer ett randfall, och urvalet hade fyra.
+    # Rottavlans urval bar negativt högerled (1302 d, 1308 b), exakt mot
+    # närmevärde (1308, 1310), noll (1302 c) och en parentes i kvadrat
+    # (1312, 1313) — inget av det stod på tavlan.
+    "8g. ATT TÄNKA PÅ: rubrikraden «Att tänka på» (samma form som receptets) "
+    "och under den 2–3 rader med "
+    "momentets RANDFALL, alltså det som överraskar eller tar slut. Välj dem "
+    "UR URVALET: de valda uppgifter som ÄR randfall (negativt högerled, "
+    "noll, en parentes i kvadrat, exakt mot närmevärde, enhet, "
+    "definitionsmängd, tecken). Formen är en math-rad med en etikett på "
+    "högst FEM ORD när det går (x^2 = -20 under «en kvadrat blir aldrig "
+    "negativ»), annars EN text-rad på högst 50 tecken. Saknas urval tas "
+    "randfallen ur momentet självt, högst två. Sist "
     "Vanligt fel.\n"
     "9. Sist i den högra spalten: \"Vanligt fel:\" i rött (text med weight 700) "
     "följt av en underline-sektion i rött, sedan det felaktiga ledet i en "
     "math-sektion. Förklaringen under det är HÖGST FEM ORD, och skrivs inte "
     "alls när det röda ledet säger felet självt. Inne i en row/col ritar motorn "
     "INTE en headings underline — där markeras rubriker med text + "
-    "underline-sektion.\n"
+    # HÖGST TVÅ (2026-09-20). Skelettet gav vänstern tre nya delar, och då
+    # blir raden om fel den första som svämmar över: de två som betyder
+    # något är momentets klassiska fel och det urvalet självt pekar ut.
+    "underline-sektion. HÖGST TVÅ vanliga fel på hela tavlan: momentets "
+    "klassiska och det urvalet självt avslöjar (uppgiften som frågar vilket "
+    "fel en elev har gjort).\n"
     "Skriv INTE någon lektionstid på tavlan — den lägger systemet dit.\n"
     "Högertavlan är antingen EXEMPEL (huvudregeln) eller ett FALLGALLERI:\n"
     # Antalet och facitförbudet stod här också; strukna 2026-09-05 (kväll) för
@@ -525,9 +597,10 @@ INSTRUCTION = (
     # EXAKT OCH NÄRMEVÄRDE. Lärarens dom (2026-08-21 kväll), på ett exempel
     # som bara visade ≈: «vi har inte nämnt det här med att svara exakt eller
     # med närmevärde — det har vi glömt, och det kommer på bokuppgifterna.»
-    "- Blir svaret en rot ska exemplet visa BÅDA svarsformerna: det exakta "
-    "($4\\sqrt{20}$) och närmevärdet, med en kort rad om vilket som är "
-    "vilket. Bokens uppgifter frågar efter båda.\n"
+    # Raden stod här som ett krav på exemplet till 2026-09-20. Nu är
+    # exakt-mot-närmevärde ett av randfallen i 8g och bor på vänstern, där
+    # det står kvar hela lektionen — prompten skulle KORTAS, och en regel som
+    # står på två ställen glider isär.
     # MÅLET NÄR BOKEN ÄR KÄLLAN. «Eleverna ska arbeta mest i boken. När jag
     # väljer att utgå från boken är syftet med genomgången att den ska vara
     # kort, lätt att fatta, intressant och naturligt följsam — men också ge
@@ -550,11 +623,17 @@ INSTRUCTION = (
     # RANDFALLET. Samma dom (2026-08-21): «en sak jag saknar, speciellt för
     # kuben: vad gör man om det står ett negativt tal under rotstecknet, fast
     # det är i kubik? Vad händer då?»
+    #
+    # REGELN VÄNDES 2026-09-20. Den sa «aldrig en regelrad på vänstern» och
+    # hänvisade randfallet till en vändning i ett exempel. Ett exempel rymmer
+    # ett randfall; rottavlans urval bar fyra, och tre föll bort. Nu är
+    # vänstern förstahandsplatsen (8g) och exemplet undantaget — det är bara
+    # det randfall som måste RÄKNAS som behöver en vändning.
     "- Momentets RANDFALL ska upp: fråga var begreppet tar slut eller "
     "överraskar (negativt tal under rotmärket: stopp för kvadratroten, "
-    "lagligt för kubikroten) och ge det en egen "
-    "vändning i det exempel där det hör hemma («och ett negativt tal under "
-    "roten?») — aldrig en regelrad på vänstern (se 8b).\n"
+    "lagligt för kubikroten). Det står som en rad under «Att tänka på» "
+    "(8g); kräver det en uträkning för att synas blir det i stället en egen "
+    "vändning i det exempel där det hör hemma.\n"
     # PEDAGOGISK FRIHET ÄVEN I FÖRKLARINGEN, inte bara i exemplen. «Boken är
     # jättebra. Men om man är smart och har lite fantasi så kan man göra det
     # bättre.» Lärarens eget exempel på formen: «roten går baklänges — från
@@ -633,11 +712,20 @@ INSTRUCTION = (
     # skriva allt detta, och det är svårt för eleverna att hänga med.» Hennes
     # tal var TOLV, och det är ett tak modellen kan räkna själv. Tecken kan
     # den inte.
+    #
+    # TOLV BLEV SEXTON (2026-09-20). Samma lärare, motsatt dom över tavlan
+    # för Origo 2a 1.3: «rätt men för lite och för spretigt; eleverna får
+    # inte det som gör att de kan börja i boken.» Tolv enheter räckte till
+    # begrepp och formel och lämnade en tom nedre tredjedel — receptet och
+    # randfallen fick aldrig plats. Fyra nya enheter är precis vad skelettet
+    # kostar: ankaret, och de tre raderna i receptet respektive Att tänka på
+    # som ersätter tomrummet. Taket är alltså inte slappare, det är omflyttat.
     "- Räkna de SKRIVNA ENHETERNA på vänstertavlan: rubriken, varje "
     "agendapunkt, öppningsfrågan, definitionsmeningen, uppställningen och "
-    "dess etikettrad, varje begreppsrad, varje formel, och Vanligt fel med "
-    "sin rubrik, sitt led och sin förklaring. HÖGST TOLV. Blir det fler: "
-    "stryk, slå ihop, korta. Aldrig krympa texten.\n"
+    "dess etikettrad, varje begreppsrad, ankaret med sin etikett, varje "
+    "formel, varje receptpunkt, varje rad under Att tänka på, och Vanligt "
+    "fel med sin rubrik, sitt led och sin förklaring. HÖGST SEXTON. Blir det "
+    "fler: stryk, slå ihop, korta. Aldrig krympa texten.\n"
     # Kedjans pris, uppmätt när röda tråden kom: uppföljarnas «Samma kurva,
     # men nu …»-rader och en avslutande kontrollrad sprängde budgeten två
     # inspelningar i rad (473 och 445 tecken mot taket ~400).
@@ -768,6 +856,9 @@ REPAIR_HINTS = (
 # texten prövas av tests/test_lesson_board.py: skrivs en regel om utan att
 # paret följer med faller testet i stället för att raden tyst blir kvar.
 _VANLIGT_FEL_BORT: tuple[tuple[str, str], ...] = (
+    # Skelettets uppräkning i 8b slutar då med «Att tänka på».
+    ("ATT TÄNKA PÅ (8g), Vanligt fel (9). Ankaret hoppas över",
+     "ATT TÄNKA PÅ (8g). Ankaret hoppas över"),
     # Regel 6: spalten till höger om figuren bär bara formelkedjan.
     ('och till höger om den en col med formelkedjan och "Vanligt fel:". ',
      'och till höger om den en col med formelkedjan. '),
@@ -788,12 +879,18 @@ _VANLIGT_FEL_BORT: tuple[tuple[str, str], ...] = (
      "motorn INTE en headings underline",
      '9. Läraren har VALT BORT "Vanligt fel" på den här tavlan: skriv ingen '
      "sådan rubrik, ingen röd varningsrad och inget felaktigt led på "
-     "vänstertavlan. Spalten slutar med sin sista formel. Inne i en row/col "
+     "vänstertavlan. Spalten slutar med «Att tänka på». Inne i en row/col "
      "ritar motorn INTE en headings underline"),
+    # … och då faller taket på antalet fel med den. Meningen sitter EFTER
+    # parets slut i regel 9 och måste därför strykas för sig.
+    (" HÖGST TVÅ vanliga fel på hela tavlan: momentets klassiska och det "
+     "urvalet självt avslöjar (uppgiften som frågar vilket fel en elev har "
+     "gjort).\n", "\n"),
     # Textbudgetens uppräkning av de skrivna enheterna.
-    ("varje formel, och Vanligt fel med sin rubrik, sitt led och sin "
-     "förklaring. HÖGST TOLV.",
-     "varje formel. HÖGST TOLV."),
+    ("varje formel, varje receptpunkt, varje rad under Att tänka på, och "
+     "Vanligt fel med sin rubrik, sitt led och sin förklaring. HÖGST SEXTON.",
+     "varje formel, varje receptpunkt, varje rad under Att tänka på. "
+     "HÖGST SEXTON."),
     # Innehållskravet sist i INSTRUCTION faller i sin helhet: det är just det
     # läraren strök 17 gånger.
     ("Vanliga fel (innehåll, inte form):\n"
@@ -821,9 +918,10 @@ _HINTS_VANLIGT_FEL_BORT: tuple[tuple[str, str], ...] = (
 _DOMARE_VANLIGT_FEL_BORT: tuple[tuple[str, str], ...] = (
     # Utan raden finns inget beställt felaktigt led på vänstern att undanta —
     # och då ska siffervakten fälla varje sifferrad där, utan bakdörr.
-    ("Undantagen är lektionstiden överst och det felaktiga ledet under "
-     "«Vanligt fel:», som är beställt. ",
-     "Undantaget är lektionstiden överst. "),
+    # ANKARET står kvar: det är inte lärarens kryss som bär det utan
+    # skelettet (8d), och vakten undantar det oavsett vad hon valt bort.
+    ("lektionstiden överst, det felaktiga ledet under «Vanligt fel:», och ",
+     "lektionstiden överst och "),
 )
 
 # NIVÅN — EN rad, och bara när den inte är Blandat. Lägena och orden är
@@ -1005,12 +1103,20 @@ def _cirkel(cx: float, cy: float, r: float, n: int = 48) -> list[list[float]]:
 # genom validate_board_json). En utan graf, en med graf/expr, en med
 # sammanfattningstabell och en med fallgalleri, så modellen ser alla mönstren.
 # ALLA fyra har samma vänstertavla i formen: rubrik → agenda → divider →
-# öppningsfråga → en mening → figur → BEGREPPSRADERNA → formel → vanligt fel.
+# öppningsfråga → en mening → figur → BEGREPPSRADERNA → ankaret → formel →
+# RECEPTET → ATT TÄNKA PÅ → vanligt fel.
 # Begreppsraderna kom med domen 2026-09-05, och de står i alla fyra av ett
 # skäl: formen bär utan algebra. Pythagoras har «Sätt in» och «Lös ut» där
 # uttrycken har «Utveckla» och «Faktorisera», och exemplens metodsteg
 # börjar med sitt eget moments verb. Prompttext utan few-shot-stöd följs
 # dåligt; det är shotarna som lär ut dramaturgin.
+#
+# RECEPTET OCH ATT TÄNKA PÅ kom med domen 2026-09-20 («rätt men för lite och
+# för spretigt; eleverna får inte det som gör att de kan börja i boken») och
+# står i alla fyra. ANKARET står i TVÅ: shot 2 och 3, där formeln har ett
+# varför ett tal gör synligt. Pythagoras sats och randvinkelsatsen har inget
+# sådant varför, och ett påhittat ankare hade lärt ut att raden alltid ska
+# dit — ett sifferexempel på vänstern är fortfarande felet 8b fäller.
 FEW_SHOTS: list[tuple[str, dict]] = [
     (
         "Ma1b, klass 9A — Pythagoras sats (introduktion)",
@@ -1036,7 +1142,7 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                          # där klassen ser dem.
                          "indent": 22, "align": "center", "items": [
                              "Vad satsen betyder",
-                             "Två exempel tillsammans",
+                             "Två exempel",
                              "Boken s. 88–90, uppg. 3110–3118"],
                          "gapAfter": 12},
                         {"kind": "divider", "width": 620, "gapAfter": 16},
@@ -1047,7 +1153,7 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                          "text": "Vad är en rätvinklig triangel?",
                          "size": 22, "gapAfter": 12},
                         {"kind": "text",
-                         "text": "Längsta sidan ligger mitt emot räta vinkeln.",
+                         "text": "Längsta sidan ligger mot räta vinkeln.",
                          "size": 20, "gapAfter": 14},
                         # Figuren till VÄNSTER, formlerna till höger om den:
                         # annars står tavlan i en smal remsa med tomt utrymme
@@ -1063,19 +1169,29 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                             # vi berör». Satsen talar om kateter och hypotenusa,
                             # och de orden ska stå skrivna innan formeln som
                             # använder dem. En rad var, «Ord: vad det är».
-                            {"kind": "col", "gap": 10, "children": [
+                            # Spalten bär en LIST (receptet) och måste därför
+                            # ha en width — utan den lägger sig raden ovanpå
+                            # punkterna (regel 6b).
+                            {"kind": "col", "width": 450, "gap": 8,
+                             "children": [
+                                # PARET (2026-09-20): katet och hypotenusa är
+                                # just de två orden eleverna byter ihop, och
+                                # då står de direkt efter varandra så att
+                                # raderna bär kontrasten.
                                 {"kind": "text",
                                  "text": "Katet: sidan vid räta vinkeln",
                                  "size": 18},
                                 # TVÅ RADER, INTE FYRA (domen 2026-09-05).
                                 # «Sätt in» och «Lös ut» stod här förut och
                                 # ströks: de är förkunskaper från Ma 1, inte
-                                # det satsen lär ut. Exemplens steg börjar
-                                # ändå med dem — ett förkunskapsverb behöver
-                                # ingen egen rad att peka på.
+                                # det satsen lär ut. De står nu i RECEPTET,
+                                # som är metoden och inte ett begrepp.
                                 {"kind": "text",
                                  "text": "Hypotenusa: sidan mitt emot vinkeln",
-                                 "size": 18, "gapAfter": 12},
+                                 "size": 18, "gapAfter": 10},
+                                # INGET ANKARE: satsen har inget varför ett
+                                # tal gör synligt. «3² + 4² = 5²» hade dessutom
+                                # varit exempel 1:s facit.
                                 # EN FORMEL (2026-09-05). c = √(a² + b²) stod
                                 # här som andra rad och ströks: det är satsen
                                 # en gång till, löst åt ett annat håll. Norm är
@@ -1083,7 +1199,36 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                                 # Omskrivningen görs i exempel 2, där den
                                 # behövs.
                                 {"kind": "math", "latex": "a^2 + b^2 = c^2",
-                                 "size": 30, "gapAfter": 18},
+                                 "size": 28, "gapAfter": 12},
+                                # RECEPTET (2026-09-20): momentets metod, den
+                                # eleven följer i boken. Rubriken är en TEXT
+                                # med weight 700 — schemat tillåter ingen
+                                # heading inne i en col, bara löv. Exemplens
+                                # steg börjar med receptets verb; «Namnge»
+                                # används bara här, och det är tillåtet åt
+                                # det hållet.
+                                {"kind": "text", "text": "Så här", "size": 18,
+                                 "weight": 700, "gapAfter": 6},
+                                {"kind": "list", "bullet": "–", "size": 17,
+                                 "gap": 4, "indent": 18, "items": [
+                                     "Namnge: vilken sida är c",
+                                     "Sätt in: de kända sidorna",
+                                     "Lös ut: dra roten sist"],
+                                 "gapAfter": 10},
+                                # ATT TÄNKA PÅ (2026-09-20): randfallen, det
+                                # som överraskar. Math-raden är gratis i
+                                # textbudgeten — etiketten under den bär fem
+                                # ord, inte en mening.
+                                {"kind": "text", "text": "Att tänka på",
+                                 "size": 18, "weight": 700, "gapAfter": 6},
+                                {"kind": "math", "latex": "c > a", "size": 20,
+                                 "gapAfter": 2},
+                                {"kind": "text",
+                                 "text": "Hypotenusan är längst.",
+                                 "size": 16, "gapAfter": 6},
+                                {"kind": "text",
+                                 "text": "Bara rätvinkliga trianglar.",
+                                 "size": 16, "gapAfter": 12},
                                 # Rött, och bara här: det är varningen.
                                 {"kind": "text", "text": "Vanligt fel:",
                                  "size": 19, "color": "red", "weight": 700,
@@ -1183,7 +1328,7 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                          "text": "Vad vet ni om x²?",
                          "size": 22, "gapAfter": 12},
                         {"kind": "text",
-                         "text": "Kurvan vänder i en punkt och är symmetrisk.",
+                         "text": "Kurvan vänder och är symmetrisk.",
                          "size": 20, "gapAfter": 14},
                         {"kind": "row", "gap": 26, "children": [
                             # Färgerna i grafen bär betydelse: kurvan och
@@ -1203,22 +1348,54 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                              "points": [{"x": -1, "y": -2}]},
                             # Samma form som i shot 1: orden lektionen bär
                             # står före formlerna som använder dem.
-                            {"kind": "col", "gap": 10, "children": [
+                            {"kind": "col", "width": 440, "gap": 8,
+                             "children": [
                                 {"kind": "text",
-                                 "text": "Symmetrilinje: linjen kurvan speglas i",
+                                 "text": "Symmetrilinje: kurvan speglas i den",
                                  "size": 18},
                                 # «Bestäm» och «Avläs» stod här förut och ströks
                                 # med domen 2026-09-05: att bestämma och att
                                 # avläsa är förkunskaper, inte det lektionen
                                 # lär ut. Kvar står de två orden grafen
-                                # faktiskt inför.
+                                # faktiskt inför — och verben står nu i
+                                # receptet, där de hör hemma.
                                 {"kind": "text",
-                                 "text": "Vändpunkt: där kurvan byter riktning",
-                                 "size": 18, "gapAfter": 12},
+                                 "text": "Vändpunkt: där kurvan vänder",
+                                 "size": 18, "gapAfter": 10},
+                                # ANKARET (2026-09-20): symmetrin och ±:et i
+                                # nästa kapitel har SAMMA varför, och det
+                                # varför är ett tal. «(−3)² = 9 = 3²» säger på
+                                # en rad varför kurvan är spegelvänd — i
+                                # bokstäver går det inte att se. Vakten
+                                # (whiteboard_spec._ankaret) släpper igenom
+                                # raden just därför att bokstavsformeln står
+                                # direkt under den.
+                                {"kind": "math", "latex": "(-3)^2 = 9 = 3^2",
+                                 "size": 20, "gapAfter": 2},
+                                {"kind": "text",
+                                 "text": "Minus försvinner i kvadrat.",
+                                 "size": 16, "gapAfter": 10},
                                 {"kind": "math", "latex": "f(x) = ax^2 + bx + c",
-                                 "size": 24, "gapAfter": 12},
+                                 "size": 22, "gapAfter": 8},
                                 {"kind": "math", "latex": "x = -\\frac{b}{2a}",
-                                 "size": 24, "gapAfter": 18},
+                                 "size": 22, "gapAfter": 12},
+                                {"kind": "text", "text": "Så här", "size": 18,
+                                 "weight": 700, "gapAfter": 6},
+                                {"kind": "list", "bullet": "–", "size": 17,
+                                 "gap": 4, "indent": 18, "items": [
+                                     "Bestäm: a och b",
+                                     "Avläs: vändpunkten i grafen"],
+                                 "gapAfter": 10},
+                                {"kind": "text", "text": "Att tänka på",
+                                 "size": 18, "weight": 700, "gapAfter": 6},
+                                {"kind": "math", "latex": "a > 0", "size": 20,
+                                 "gapAfter": 2},
+                                {"kind": "text",
+                                 "text": "Positivt a ger minimum.",
+                                 "size": 16, "gapAfter": 6},
+                                {"kind": "text",
+                                 "text": "Kurvan kan sakna nollställen.",
+                                 "size": 16, "gapAfter": 12},
                                 {"kind": "text", "text": "Vanligt fel:",
                                  "size": 19, "color": "red", "weight": 700,
                                  "gapAfter": 2},
@@ -1227,9 +1404,14 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                                 # EN felrad, högst fem ord. Den andra raden
                                 # («sätt in x i f(x), punkten har två tal»)
                                 # ströks 2026-09-05: den förklarade det första
-                                # redan sagt.
+                                # redan sagt. Det felaktiga LEDET kom till
+                                # 2026-09-20 och kostar ingenting i
+                                # textbudgeten — då fick förklaringen bli
+                                # kortare i stället.
+                                {"kind": "math", "latex": "x = (2, -1)",
+                                 "size": 19, "color": "red", "gapAfter": 6},
                                 {"kind": "text",
-                                 "text": "Symmetrilinjen är ett x-värde, inte punkten.",
+                                 "text": "Symmetrilinjen är ett x-värde.",
                                  "size": 17, "color": "red"}]}]},
                     ],
                 },
@@ -1369,31 +1551,68 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                             # Och de är NAMN med högst fem ord efter kolon
                             # (2026-09-05): «Faktorisera: bryt ut, sätt
                             # tillbaka parentesen» var en hel bisats.
-                            {"kind": "col", "gap": 8, "children": [
+                            {"kind": "col", "width": 470, "gap": 8,
+                             "children": [
                                 {"kind": "text",
-                                 "text": "Utveckla: multiplicera in parentesen",
+                                 "text": "Utveckla: multiplicera in",
                                  "size": 18},
+                                # «Förlänga» stod här som tredje begreppsrad
+                                # och flyttade 2026-09-20 ned i RECEPTET: det
+                                # är ett handgrepp i bråkmetoden, inte ett
+                                # begrepp vid sidan av. Två begreppsrader är
+                                # normen, och de två som står kvar är verben
+                                # lektionen heter efter.
                                 {"kind": "text",
-                                 "text": "Faktorisera: bryt ut gemensam faktor",
-                                 "size": 18},
+                                 "text": "Faktorisera: bryt ut faktorn",
+                                 "size": 18, "gapAfter": 10},
+                                # ANKARET: distributiva lagens varför är att
+                                # BÅDA termerna möter faktorn, och i
+                                # bokstäver syns det inte — a(b + c) = ab + c
+                                # ser lika rimligt ut. Ett tal avgör saken.
+                                {"kind": "math", "latex": "2(3 + 5) = 6 + 10",
+                                 "size": 20, "gapAfter": 2},
                                 {"kind": "text",
-                                 "text": "Förlänga: multiplicera uppe och nere",
-                                 "size": 18, "gapAfter": 12},
+                                 "text": "Båda termerna får 2:an.",
+                                 "size": 16, "gapAfter": 10},
                                 {"kind": "math", "latex": "a(b + c) = ab + ac",
-                                 "size": 24, "gapAfter": 10},
+                                 "size": 22, "gapAfter": 8},
                                 {"kind": "math",
                                  "latex": "\\frac{a}{b} = \\frac{ac}{bc}",
-                                 "size": 24, "gapAfter": 16},
+                                 "size": 22, "gapAfter": 12},
+                                # Receptet är BRÅKETS metod — exempel 3:s tre
+                                # steg, som eleven annars bara har i ett
+                                # exempel och inte som en rad att gå tillbaka
+                                # till. «Utveckla» och «Faktorisera» står
+                                # redan som begreppsrader och upprepas inte.
+                                {"kind": "text", "text": "Förenkla ett bråk",
+                                 "size": 18, "weight": 700, "gapAfter": 6},
+                                {"kind": "list", "bullet": "–", "size": 17,
+                                 "gap": 4, "indent": 18, "items": [
+                                     "Förlänga: samma nämnare",
+                                     "Förenkla: stryk lika faktorer"],
+                                 "gapAfter": 10},
+                                {"kind": "text", "text": "Att tänka på",
+                                 "size": 18, "weight": 700, "gapAfter": 6},
+                                {"kind": "math", "latex": "a(b - c) = ab - ac",
+                                 "size": 20, "gapAfter": 2},
+                                {"kind": "text",
+                                 "text": "Minuset gäller båda.",
+                                 "size": 16, "gapAfter": 6},
+                                {"kind": "text",
+                                 "text": "Stryk faktorer, inte termer.",
+                                 "size": 16, "gapAfter": 12},
                                 {"kind": "text", "text": "Vanligt fel:",
                                  "size": 19, "color": "red", "weight": 700,
                                  "gapAfter": 2},
                                 {"kind": "underline", "width": 120,
                                  "color": "red", "gapAfter": 8},
+                                # Ingen förklaring under ledet: regel 9 säger
+                                # att den skrivs inte alls när det röda ledet
+                                # säger felet självt, och «ab + c» gör det.
+                                # Raden ströks 2026-09-20 för att betala
+                                # receptet och Att tänka på.
                                 {"kind": "math", "latex": "a(b + c) = ab + c",
-                                 "size": 19, "color": "red", "gapAfter": 6},
-                                {"kind": "text",
-                                 "text": "Andra termen glöms bort.",
-                                 "size": 17, "color": "red"}]}]},
+                                 "size": 19, "color": "red"}]}]},
                     ],
                 },
                 {
@@ -1541,28 +1760,55 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                             # Satsen handlar om två sorters vinklar, och då
                             # är det de två orden som ska stå först: u = 2v
                             # betyder ingenting förrän u och v har namn.
-                            {"kind": "col", "gap": 10, "children": [
+                            {"kind": "col", "width": 450, "gap": 8,
+                             "children": [
+                                # PARET: randvinkel och medelpunktsvinkel är
+                                # de två orden satsen ställer mot varandra,
+                                # och de står direkt efter varandra.
                                 {"kind": "text",
                                  "text": "Randvinkel: hörnet ligger på cirkeln",
                                  "size": 18},
                                 {"kind": "text",
                                  "text": "Medelpunktsvinkel: hörnet i centrum",
-                                 "size": 18, "gapAfter": 12},
+                                 "size": 18, "gapAfter": 10},
+                                # INGET ANKARE: «v = 30° ⇒ u = 60°» hade bara
+                                # visat att 2 gånger 30 är 60. Faktorn 2 står
+                                # redan i formeln, och då har talet inget
+                                # varför att bära.
                                 # EN formel. v = u/2 stod under den och ströks
                                 # 2026-09-05: det är u = 2v läst åt andra
                                 # hållet, alltså samma regel två gånger.
-                                {"kind": "math", "latex": "u = 2v", "size": 28,
-                                 "gapAfter": 18},
+                                {"kind": "math", "latex": "u = 2v", "size": 26,
+                                 "gapAfter": 12},
+                                # Receptet är vad ögat gör i en cirkelfigur:
+                                # högertavlan är ett fallgalleri utan
+                                # metodsteg, och då är receptet det enda som
+                                # säger hur eleven angriper uppgiften.
+                                {"kind": "text", "text": "Så här", "size": 18,
+                                 "weight": 700, "gapAfter": 6},
+                                {"kind": "list", "bullet": "–", "size": 17,
+                                 "gap": 4, "indent": 18, "items": [
+                                     "Hitta: bågen vinkeln står på",
+                                     "Jämför: hörnet eller mitten"],
+                                 "gapAfter": 10},
+                                {"kind": "text", "text": "Att tänka på",
+                                 "size": 18, "weight": 700, "gapAfter": 6},
+                                {"kind": "text",
+                                 "text": "Vinklarna måste stå på samma båge.",
+                                 "size": 16, "gapAfter": 6},
+                                {"kind": "text",
+                                 "text": "Hörnet i centrum: ingen randvinkel.",
+                                 "size": 16, "gapAfter": 12},
                                 {"kind": "text", "text": "Vanligt fel:",
                                  "size": 19, "color": "red", "weight": 700,
                                  "gapAfter": 2},
                                 {"kind": "underline", "width": 120,
                                  "color": "red", "gapAfter": 8},
+                                # Ingen förklaring: u = 2v står ovanför, och
+                                # v = 2u bredvid den säger felet självt
+                                # (regel 9). Struken 2026-09-20.
                                 {"kind": "math", "latex": "v = 2u", "size": 19,
-                                 "color": "red", "gapAfter": 6},
-                                {"kind": "text",
-                                 "text": "Randvinkeln är halva, inte dubbla.",
-                                 "size": 17, "color": "red"}]}]},
+                                 "color": "red"}]}]},
                     ],
                 },
                 {
@@ -3220,11 +3466,19 @@ TACKNING_INSTRUKTION = (
     # SIFFROR PÅ VÄNSTERN. Samma tavla bar «y = 4 − 5x ⇒ k = −5, m = 4» på
     # vänstern, efter Vanligt fel: ett exempel på fel tavla. Regel 8b förbjöd
     # det redan, men ingen grind fällde det.
+    # ANKARET ÄR UNDANTAGET (2026-09-20). Samma lärare, motsatt håll: hon bad
+    # om x^2 = 64 ⇒ x = ±8 före formeln, och både vakten och domaren fällde
+    # raden. Definitionen är ORDAGRANT vaktens (whiteboard_spec._ankaret), så
+    # att de två aldrig pekar åt olika håll och domaren inte kan beställa
+    # bort det reparationsrundan just har låtit stå.
     "Fäll SIFFROR PÅ VÄNSTERN: en math-rad på vänstertavlan med konkreta tal "
     "är ett exempel på fel tavla — på vänstern står bokstäver. Undantagen är "
-    "lektionstiden överst och det felaktiga ledet under «Vanligt fel:», som "
-    "är beställt. forslag är att stryka raden eller flytta den till det "
-    "exempel den hör till.\n"
+    "lektionstiden överst, det felaktiga ledet under «Vanligt fel:», och "
+    "ANKARET: den FÖRSTA sifferraden vars nästa math-rad i samma spalt är en "
+    "bokstavsformel (x^2 = 64 \\Rightarrow x = \\pm 8 med x^2 = a "
+    "\\Rightarrow x = \\pm \\sqrt{a} under sig). Bara EN sådan rad per tavla "
+    "— en andra sifferrad fälls som förut. forslag är att stryka raden eller "
+    "flytta den till det exempel den hör till.\n"
     # EXEMPLEN MOT URVALET. Domen 2026-09-05 (del 2): domaren letade bara
     # LUCKOR, och därför fick «samma uttryck, nu med tal» — en nivå 1-typ som
     # ingen vald uppgift ber om — stå kvar medan tre valda typer saknades.
@@ -3264,7 +3518,14 @@ TACKNING_INSTRUKTION = (
     "saknas är forslag att BYTA UT det exempel som ligger längst från "
     "urvalet, eller att lägga saknaden som ett steg eller en vändning i ett "
     "av de tre — aldrig att lägga till ett fjärde exempel. Ryms det som "
-    "saknas inte alls: lämna det, läraren pratar också.\n"
+    # Samma tak åt det nya hållet (2026-09-20): domaren fick två grindar som
+    # BER om rader på vänstern, och utan ett tak skriver kompletteringen dit
+    # dem tills vänstern är den tjocka spalt domen strök 2026-09-05.
+    "saknas inte alls: lämna det, läraren pratar också. Vänstern har samma "
+    "slags tak: HÖGST TRE rader under «Att tänka på» och HÖGST TRE "
+    "receptpunkter. Står de redan där och ett randfall ändå saknas är "
+    "forslag att byta ut den rad som ligger längst från urvalet, aldrig att "
+    "lägga till en fjärde.\n"
     # MODELLERNA. Lärarens domar 2026-09-17 över tre tavlor för Liber Ma1c
     # s. 69–72 (ställa upp och jämföra modeller, rimlighet) — se INSTRUCTION,
     # avsnittet «Formler ur verkligheten». Domaren har sidorna framför sig
@@ -3299,10 +3560,36 @@ TACKNING_INSTRUKTION = (
     "raden som ska in. Ett metodsteg som bara använder ett förkunskapsverb "
     "(multiplicera, förenkla, sätt in, lös ut) kräver INGEN rad — kräv aldrig "
     "en. Fäll i stället en FÖR TJOCK vänster, och forslag är då att STRYKA "
-    "raden: fler än tre begreppsrader, fler än två formler, en regel som står "
+    "raden: fler än tre begreppsrader, fler än två formler, fler än tre "
+    "receptpunkter, fler än tre rader under «Att tänka på», fler än två "
+    "vanliga fel, en regel som står "
     "både som mening och som formel, en räknelag eleven kan slå upp i sin "
     "formelsamling, eller en kvadrat, rektangel eller annan kropp på ett "
     "moment som inte handlar om geometri eller grafer.\n"
+    # RECEPTET. Lärarens dom 2026-09-20: «eleverna får inte det som gör att
+    # de kan börja i boken.» Tjockleken hade en grind, tunnheten hade ingen —
+    # domaren letade aldrig efter något som SAKNADES på vänstern utom ett
+    # begrepp. Ett recept som saknas är den vanligaste tunnheten av alla.
+    "Pröva RECEPTET (vänsterns metodlista, 8f): finns det en rubrikrad med "
+    "momentets verb eller «Så här» och under den 2–3 punkter i formen «Verb: "
+    "högst fyra ord»? Saknas receptet är det ett fynd, och forslag är "
+    "punkterna, konkret skrivna. Pröva sedan åt andra hållet: börjar varje "
+    "metodsteg på högern med ett verb som står i receptet eller i en "
+    "begreppsrad? Ett förkunskapsverb (multiplicera, förenkla, sätt in, lös "
+    "ut) får stå utan rad; ett av MOMENTETS verb som bara finns i exemplet "
+    "är ett fynd, och forslag är receptpunkten som ska in.\n"
+    # RANDFALLEN. Samma dom. Rottavlans urval bar fyra randfall — negativt
+    # högerled (1302 d, 1308 b), exakt mot närmevärde (1308, 1310), noll
+    # (1302 c) och parentesen i kvadrat (1312, 1313) — och inget av dem stod
+    # på tavlan. Regeln fanns i prompten, men den hänvisade randfallet till
+    # «en vändning i exemplet», och ett exempel rymmer ett randfall.
+    "Pröva RANDFALLEN: gå urvalet igenom och plocka de uppgifter som är "
+    "randfall — negativt högerled, noll, en parentes i kvadrat, exakt mot "
+    "närmevärde, en enhet, en definitionsmängd, ett tecken. Varje sådan TYP "
+    "ska ha antingen en rad under «Att tänka på» på vänstern eller ett "
+    "exempel på högern; saknas båda är det ett fynd, och forslag är raden, "
+    "skriven som den ska stå. Räkna typer, inte uppgifter: tre uppgifter med "
+    "negativt högerled är ETT randfall.\n"
     # BÅDA MOMENTEN. Lärarens dom 2026-09-09: «på tavlan verkar det bara vara
     # potensekvationer, vi ska ta båda momenten samtidigt.» Delarna står i
     # kalendern och går numera till skrivningen (lesson_board.build_delar_block)
@@ -3631,6 +3918,22 @@ MALORD: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("vanligtfel", ("vanligt fel", "vanliga fel", "vanligt-fel"), ""),
     ("figur", ("figuren", "grafen", "kurvan"), ""),
     ("formel", ("formeln", "formlerna"), ""),
+    # SKELETTETS EGNA ORD (2026-09-20). Läraren skrev «lägg till receptet»
+    # och «en rad under att tänka på» i chatten, och ingenting kände igen
+    # orden: varvet gick som helomskrivning och hennes beställning föll bort
+    # (jobb 480). De tre delarna bor alla på vänstertavlan.
+    #
+    # DE TRE STÅR BARA HÄR, inte i granska.js: beställningen av skelettet
+    # drog gränsen vid app/web/ui. Följden är känd och ofarlig åt rätt håll —
+    # klienten sätter inget chip för «receptet», varvet går som fritext, och
+    # då är det lager 2 (diffvakten, las_maltyper) som känner igen ordet och
+    # kör om varvet som en riktad lapp. Det var precis det lagret som saknade
+    # orden när hennes beställning föll bort. Läggs de till i granska.js
+    # senare gissar de två lagren lika igen.
+    ("recept", ("receptet", "recept", "så här-rutan", "metodlistan"), "vanster"),
+    ("atttankapa", ("att tänka på", "att-tänka-på", "randfallen",
+                    "randfallet"), "vanster"),
+    ("ankare", ("ankaret", "ankarraden", "sifferankaret"), "vanster"),
 )
 
 
@@ -3708,6 +4011,30 @@ def _ar_exempelrubrik(sek, n: int | None = None) -> bool:
     return bool(re.match(rf"^\s*ex(?:empel|\.?)\s*{svans}", _rutext(sek), re.I))
 
 
+def _rubrik_ar(sek, ord_: str) -> bool:
+    """Skelettets rubrikrad: en text som börjar med ordet. Inne i en col
+    finns ingen heading (schemat tillåter bara löv), så rubriken är en text
+    med weight 700 — se INSTRUCTION 8f."""
+    return _rutext(sek).lower().startswith(ord_)
+
+
+def _syskon_efter(rutor, vag: str, antal: int) -> list[str]:
+    """De `antal` närmaste rutorna EFTER `vag` i samma flöde."""
+    flode, plats = _flodet(vag), _platsen(vag)
+    return sorted((r[2] for r in rutor
+                   if _flodet(r[2]) == flode and _platsen(r[2]) > plats),
+                  key=_platsen)[:antal]
+
+
+def _syskon_fore(rutor, vag: str, antal: int) -> list[str]:
+    """De `antal` närmaste rutorna FÖRE `vag` i samma flöde."""
+    flode, plats = _flodet(vag), _platsen(vag)
+    tidigare = sorted((r[2] for r in rutor
+                       if _flodet(r[2]) == flode and _platsen(r[2]) < plats),
+                      key=_platsen)
+    return tidigare[-antal:] if antal else []
+
+
 # Så många rutor får en textgissning som mest bära till prompten. Nyckelraden
 # och kandidatens sammanfogning klarar fler, men en målrad på tjugo vägar är
 # inte längre ett mål — det är en helomskrivning med extra steg.
@@ -3780,12 +4107,48 @@ def gissade_malvagar(board: dict, gissning: Malgissning) -> list[tuple[str, str]
                 # Raden ÄR bara etiketten; understrykningen, formeln och
                 # förklaringen under den hör till samma fel (dramaturgin) och
                 # låses med — annars låser vakten två ord och släpper resten.
-                flode, plats = _flodet(vag), _platsen(vag)
-                syskon = sorted((r[2] for r in rutor
-                                 if _flodet(r[2]) == flode
-                                 and _platsen(r[2]) > plats), key=_platsen)
-                for v2 in syskon[:3]:
+                for v2 in _syskon_efter(rutor, vag, 3):
                     lagg("«Vanligt fel»", v2)
+        # SKELETTETS TRE DELAR (2026-09-20). Alla tre bor i spalten till
+        # höger om figuren på vänstertavlan, alltså i en row/col — och det
+        # är just det som skiljer dem från agendan, som är en list i
+        # tavlans toppflöde.
+        elif sort == "recept":
+            for _eid, sek, vag in rutor:
+                if (_sidan(vag) == "vanster" and isinstance(sek, dict)
+                        and sek.get("kind") == "list" and ".children" in vag):
+                    # Rubrikraden över listan hör till samma sak: låser vi
+                    # bara punkterna kan varvet lämna «Så här» ensam kvar.
+                    for v2 in _syskon_fore(rutor, vag, 1):
+                        lagg("receptet", v2)
+                    lagg("receptet", vag)
+                    break
+        elif sort == "atttankapa":
+            for _eid, sek, vag in rutor:
+                if not _rubrik_ar(sek, "att tänka på"):
+                    continue
+                lagg("«Att tänka på»", vag)
+                for v2 in _syskon_efter(rutor, vag, 3):
+                    lagg("«Att tänka på»", v2)
+                break
+        elif sort == "ankare":
+            # Samma definition som vakten (whiteboard_spec._ankaret), läst ur
+            # elementkartan i stället för ur de parsade sektionerna.
+            # Predikaten är HÄMTADE därifrån, så regeln står på ett ställe.
+            matte = [(sek, vag) for _e, sek, vag in rutor
+                     if isinstance(sek, dict) and sek.get("kind") == "math"
+                     and _sidan(vag) == "vanster"]
+            for i, (sek, vag) in enumerate(matte[:-1]):
+                nasta, nvag = matte[i + 1]
+                if _flodet(nvag) != _flodet(vag):
+                    continue
+                if ws._har_tal(ws._talrensad(str(sek.get("latex") or ""))) \
+                        and ws._ar_bokstavsformel(str(nasta.get("latex") or "")):
+                    lagg("ankaret", vag)
+                    # Etiketten under ankaret är dess andra halva (8d).
+                    for v2 in _syskon_efter(rutor, vag, 1):
+                        lagg("ankaret", v2)
+                    break
         elif sort == "figur":
             for _eid, sek, vag in rutor:
                 if isinstance(sek, dict) and sek.get("kind") in (
@@ -3826,6 +4189,18 @@ def diffvakt(board: dict, resultat: dict, instruction: str,
     if not vagar:
         sag("Önskemålet pekar på något jag inte hittar i tavlans JSON — "
             "varvet får stå som det är.")
+        return []
+    # ETT TILLÄGG ÄR INGET MÅL (2026-09-20). «Lägg till ankaret före formeln»
+    # nämner två sorter: formeln finns, ankaret finns inte än. Låser vakten
+    # varvet mot de rutor som råkar finnas kastar den precis den rad läraren
+    # bad om — och det var så hennes fem omskrivningar blev en (jobb 480).
+    # Känns en av meningens sorter inte igen på tavlan är varvet alltså ett
+    # tillägg, och då gäller dagens väg. Samma fail-open som resten av vakten.
+    saknade = [s for s in gissning.sorter
+               if not gissade_malvagar(board, Malgissning((s,)))]
+    if saknade:
+        sag("Önskemålet ber om något tavlan inte har ännu — varvet får "
+            "lägga till det utan lås.")
         return []
     # Vägarna slås upp i FÖRE-tavlan, de ändrade id:na i EFTER-tavlan: en ruta
     # som lagts till mitt i flyttar indexen. Därför jämförs vägar mot vägar,

@@ -190,13 +190,20 @@ def test_few_shotarna_haller_textbudgeten():
             assert volym <= ws._MAX_BOARD_TEXT, f"{uppdrag}, tavla {i}: {volym}"
 
 
-def test_budgettaken_ar_sankta_och_shotarna_haller_dem():
-    """Lärarens dom 2026-09-05 (kväll): «det känns lite mycket på vissa
-    ställen … det är svårt att få med allt på tavlan när jag väl ska skriva
-    allt detta.» Taken sänktes 400→280, 250→170, 90→60 och 80→50, och
-    shotarna måste hålla dem: en modell härmar det den ser."""
-    assert (ws._MAX_BOARD_TEXT, ws._MAX_COLUMN_TEXT) == (280, 170)
+def test_budgettaken_ar_matta_och_shotarna_haller_dem():
+    """Lärarens dom 2026-09-05 (kväll) sänkte taken till 280/170/60/50. Domen
+    2026-09-20 gav vänstern ett skelett till — ankaret, receptet och «Att
+    tänka på» — och tavelbudgeten mättes om mot de omskrivna shotarna:
+    332–340 tecken, plus 15 % luft, alltså 390. Kolumntaket och radlängderna
+    rördes inte (högertavlan ändrades inte). Shotarna måste hålla taken: en
+    modell härmar det den ser."""
+    assert (ws._MAX_BOARD_TEXT, ws._MAX_COLUMN_TEXT) == (390, 170)
     assert (ws._MAX_TEXT_CHARS, ws._MAX_ITEM_CHARS) == (60, 50)
+    # Och taket är MÄTT: den största shoten ska ligga tätt under det, annars
+    # har talet blivit satt i stället för mätt.
+    storst = max(ws._text_volym(ws.validate_board_json(doc)[0].boards[0].sections)
+                 for _u, doc in lb.FEW_SHOTS)
+    assert 0.80 <= storst / ws._MAX_BOARD_TEXT <= 0.95, storst
     for uppdrag, doc in lb.FEW_SHOTS:
         parsed, _fel = ws.validate_board_json(doc)
         for i, board in enumerate(parsed.boards):
@@ -218,11 +225,23 @@ def test_en_sjuttiotecknig_rad_falls_nu():
     assert [f for f in fel if f["code"] == "text-lang"], fel
 
 
+def _spalten(doc: dict) -> list[dict]:
+    """Spalten till höger om figuren på vänstertavlan — skelettets hem."""
+    return _vanstersektioner(doc)[-1]["children"][1]["children"]
+
+
+def _rubrikrad(sek: dict) -> bool:
+    """Receptets och «Att tänka på»-blockets rubrik, och «Vanligt fel:».
+    Inne i en col finns ingen heading (schemat tillåter bara löv), så
+    rubriken är en text med weight 700 — se lesson_board 8f."""
+    return sek.get("kind") == "text" and sek.get("weight") == 700
+
+
 def _begreppsrader(doc: dict) -> list[str]:
-    """Raderna spalten öppnar med, före första formeln — «Ord: vad det är»."""
-    spalt = _vanstersektioner(doc)[-1]["children"][1]["children"]
+    """Raderna spalten öppnar med, före ankaret och formeln — «Ord: vad det
+    är». Paret (2026-09-20) är två sådana rader direkt efter varandra."""
     ut = []
-    for sek in spalt:
+    for sek in _spalten(doc):
         if sek["kind"] == "math":
             break
         if sek["kind"] == "text" and ": " in sek["text"]:
@@ -230,15 +249,44 @@ def _begreppsrader(doc: dict) -> list[str]:
     return ut
 
 
+def _ankarraden(doc: dict) -> str | None:
+    """Ankarets latex enligt PRODUKTIONENS definition (whiteboard_spec._ankaret)
+    — testet ska mäta exakt den rad vakten undantar, inte en egen gissning."""
+    parsed, _fel = ws.validate_board_json(doc)
+    ankare = ws._ankaret(parsed.boards[0].sections)
+    return ankare.latex if ankare is not None else None
+
+
+def _receptpunkter(doc: dict) -> list[str]:
+    """Receptets punkter: listan i vänsterspalten (8f)."""
+    return [i for sek in _spalten(doc) if sek["kind"] == "list"
+            for i in sek["items"]]
+
+
+def _att_tanka_pa(doc: dict) -> list[dict]:
+    """Sektionerna under rubriken «Att tänka på», fram till «Vanligt fel:»."""
+    ut, i_blocket = [], False
+    for sek in _spalten(doc):
+        if _rubrikrad(sek):
+            if i_blocket:
+                break
+            i_blocket = sek.get("text") == "Att tänka på"
+            continue
+        if i_blocket:
+            ut.append(sek)
+    return ut
+
+
 def _formler_i_spalten(doc: dict) -> int:
-    """Math-sektionerna i vänsterspalten FÖRE «Vanligt fel:» — alltså tavlans
-    regler, inte det felaktiga ledet som står under varningsrubriken."""
-    spalt = _vanstersektioner(doc)[-1]["children"][1]["children"]
+    """Math-sektionerna i vänsterspalten FÖRE första rubrikraden — alltså
+    tavlans REGLER. Ankaret räknas inte: det är formelns varför, inte en
+    andra formel (8d), och «Att tänka på»-raderna står efter sin rubrik."""
+    ankare = _ankarraden(doc)
     n = 0
-    for sek in spalt:
-        if sek.get("text", "").startswith("Vanligt fel"):
+    for sek in _spalten(doc):
+        if _rubrikrad(sek):
             break
-        if sek["kind"] == "math":
+        if sek["kind"] == "math" and sek.get("latex") != ankare:
             n += 1
     return n
 
@@ -267,9 +315,14 @@ def test_vanstern_borjar_i_begreppen():
         rader = _begreppsrader(doc)
         assert 1 <= len(rader) <= 3, (uppdrag, rader)
         assert _formler_i_spalten(doc) <= 2, (uppdrag, _formler_i_spalten(doc))
-    ord_i_verbshoten = " ".join(_begreppsrader(_algebrashoten())).lower()
+    # Verben står PÅ VÄNSTERN, men sedan 2026-09-20 inte nödvändigtvis som
+    # begreppsrader: «Förlänga» är ett handgrepp i bråkmetoden och flyttade
+    # ned i receptet (8f). Kravet är att steget på högern har något att peka
+    # tillbaka på, och receptet är lika mycket vänstern som raden ovanför.
+    shoten = _algebrashoten()
+    vanstern = " ".join(_begreppsrader(shoten) + _receptpunkter(shoten)).lower()
     for verb in ("utveckla", "faktorisera", "förlänga"):
-        assert verb in ord_i_verbshoten, verb
+        assert verb in vanstern, verb
     # Och orden kommer ur MOMENTET, inte ur en fast lista: Pythagoras och
     # uttrycken delar inte ett enda begrepp.
     pythagoras = next(d for u, d in lb.FEW_SHOTS if "Pythagoras" in u)
@@ -564,8 +617,11 @@ def test_prompten_bar_de_korta_namnen():
     assert "En ANDRA uppställning bara när momentet har två former" in p
     # Felförklaringen.
     assert "Förklaringen under det är HÖGST FEM ORD" in p
-    # Och lärarens eget tal på hur mycket som får stå.
-    assert "SKRIVNA ENHETERNA" in p and "HÖGST TOLV" in p
+    # Och lärarens eget tal på hur mycket som får stå. TOLV blev SEXTON
+    # 2026-09-20: skelettets tre nya delar kostar fyra enheter, och den tomma
+    # nedre tredjedelen var just det hon fällde («för lite och för spretigt»).
+    assert "SKRIVNA ENHETERNA" in p and "HÖGST SEXTON" in p
+    assert "HÖGST TOLV" not in p
 
 
 def test_prompten_skriver_inte_ord_som_matte():
@@ -578,8 +634,16 @@ def test_prompten_skriver_inte_ord_som_matte():
 
 def test_prompten_ar_inte_orimligt_lang():
     """Fyra kompletta few-shots (varav en med tre cirkelpolygoner) — prompten
-    ska ändå rymmas med marginal i kontexten."""
-    assert len(lb.build_prompt("Ma1b", "9A", "procent")) < 40_000
+    ska ändå rymmas med marginal i kontexten.
+
+    TAKET HÖJDES 40 000 → 46 000 (2026-09-20), och det är enda gången det
+    har hänt. Vänsterskelettet kostade ~2,7 kB i INSTRUCTION (ankaret,
+    receptet, «Att tänka på», paret och den omskrivna 8b) och ~2,5 kB i
+    few-shotarna, som alla fyra bär de nya delarna. Betalningen först: den
+    gamla exakt-mot-närmevärde-raden och halva randfallsregeln i
+    exempelavsnittet ströks, för skelettet säger nu det de sa. Det räckte
+    inte. Höjningen är alltså mätt mot vad den köpte, inte satt på känsla."""
+    assert len(lb.build_prompt("Ma1b", "9A", "procent")) < 46_000
 
 
 def test_prompten_bar_textbudgeten():
@@ -853,6 +917,71 @@ def test_refine_board_bar_elementet_lararen_pekade_pa():
     llm2, calls2 = _stub_llm([json.dumps(_valid_doc())])
     lb.refine_board(_valid_doc(), "gör den kortare", model="m", llm=llm2)
     assert "PEKADE PÅ" not in calls2[0]["prompt"]
+
+
+def _tavla_med_skelett() -> dict:
+    """Vänstertavlan läraren BAD OM i jobb 480: kvadratrot/rot som par,
+    ankaret x^2 = 64 ⇒ ±8 före formeln, receptet i tre verb och «Att tänka
+    på» med varför-raden och exakt-mot-närmevärde."""
+    doc = _valid_doc()
+    doc["boards"][0]["sections"][0]["text"] = "Andragradsekvationer"
+    doc["boards"][0]["sections"][-1]["children"][1]["children"] = [
+        {"kind": "text", "text": "Kvadratrot: ETT tal, alltid positivt",
+         "size": 18},
+        {"kind": "text", "text": "Rot: talet som löser ekvationen",
+         "size": 18, "gapAfter": 10},
+        {"kind": "math", "latex": "x^2 = 64 \\Rightarrow x = \\pm 8",
+         "size": 20, "gapAfter": 2},
+        {"kind": "text", "text": "Både 8 och −8 ger 64.", "size": 16,
+         "gapAfter": 10},
+        {"kind": "math", "latex": "x^2 = a \\Rightarrow x = \\pm \\sqrt{a}",
+         "size": 24, "gapAfter": 12},
+        {"kind": "text", "text": "Så här", "size": 18, "weight": 700,
+         "gapAfter": 6},
+        {"kind": "list", "bullet": "–", "size": 17, "gap": 4, "items": [
+            "Samla: allt x i ett led",
+            "Dela: gör kvadraten ensam",
+            "Dra roten: båda tecknen"], "gapAfter": 10},
+        {"kind": "text", "text": "Att tänka på", "size": 18, "weight": 700,
+         "gapAfter": 6},
+        {"kind": "math", "latex": "x^2 = -20", "size": 20, "gapAfter": 2},
+        {"kind": "text", "text": "En kvadrat blir aldrig negativ.",
+         "size": 16, "gapAfter": 6},
+        {"kind": "text", "text": "Exakt om inget annat sägs.", "size": 16},
+    ]
+    return doc
+
+
+def test_omskrivningsprompten_bar_samma_skelett_som_skrivningen():
+    """Jobb 480: läraren bad om ankaret, receptet och «Att tänka på» på
+    rottavlan, och tillbaka kom EN ändrad begreppsrad. Diffvakten kastade
+    ingenting — det var SKRIVNINGEN som höll igen, för omskrivningsprompten
+    bär INSTRUCTION, och den sa «HÖGST TOLV» och nej till varje tal på
+    vänstern. Skelettet måste alltså nå omskrivningen, inte bara
+    genereringen."""
+    p = lb.build_refine_prompt(_valid_doc(), "lägg till receptet")
+    for rad in ("8d. ANKARET", "8f. RECEPTET", "8g. ATT TÄNKA PÅ",
+                "HÖGST SEXTON", "ETT undantag: ANKARET i 8d"):
+        assert rad in p, rad
+    assert "HÖGST TOLV" not in p
+
+
+def test_omskrivning_som_ber_om_skelettet_nar_tavlan():
+    """Samma varv, hela vägen: lappen «siffror_vanster» strök ankaret läraren
+    bad om (jobb 480, event 3). Nu går raden igenom vakten, och varvet
+    behöver ingen reparationsrunda som kan stryka den igen."""
+    onskemal = ("lägg till ankaret x^2 = 64 före formeln, ett recept i tre "
+                "verb och en rad under att tänka på om negativt högerled")
+    llm, calls = _stub_llm([json.dumps(_tavla_med_skelett())])
+    res = lb.refine_board(_valid_doc(), onskemal, model="m", llm=llm)
+    assert res["errors"] == [], res["errors"]
+    latex = [s.get("latex") for s in _alla_sektioner(res["board"])
+             if s["kind"] == "math"]
+    assert "x^2 = 64 \\Rightarrow x = \\pm 8" in latex
+    assert "x^2 = -20" in latex
+    assert _receptpunkter(res["board"]), res["board"]
+    # EN modellrunda: ingen reparation och ingen omkörning behövdes.
+    assert len(calls) == 1, [c["prompt"][:60] for c in calls]
 
 
 def test_refine_board_autorepairs_invalid_result():
@@ -1179,6 +1308,21 @@ def test_diffvakt_star_stilla_nar_meningen_inte_pekar_pa_nagot():
     assert res["board"] == fritt
 
 
+def test_diffvakt_star_stilla_nar_onskemalet_ber_om_nagot_tavlan_saknar():
+    """«Lägg till ankaret före formeln» nämner två sorter: formeln finns,
+    ankaret finns inte. Låser vakten varvet mot formelns rutor kastar den
+    precis den rad läraren bad om — och det var så fem omskrivningar blev en
+    (jobb 480). Ett tillägg är inget mål, och då gäller dagens väg."""
+    doc = _valid_doc()
+    assert lb.las_maltyper("lägg till ankaret före formeln").sorter \
+        == ("formel", "ankare")
+    assert lb.diffvakt(doc, _tavla_med_skelett(),
+                       "lägg till ankaret före formeln") == []
+    # Och åt andra hållet: finns båda sorterna på tavlan biter vakten som förut.
+    med = _tavla_med_skelett()
+    assert lb.gissade_malvagar(med, lb.las_maltyper("ankaret"))
+
+
 def test_diffvakt_slapper_igenom_ett_varv_som_holl_sig_innanfor():
     """Ett litet, riktat varv kostar inget extra: ändrades bara det meningen
     nämner går svaret hem som det är."""
@@ -1244,6 +1388,108 @@ def test_domaren_provar_ocksa_begreppskopplingen():
     assert "täckningsdomare" in t
 
 
+# ── VÄNSTERNS SKELETT (lärarens dom 2026-09-20) ────────────────────────────
+# «Rätt men för lite och för spretigt; eleverna får inte det som gör att de
+# kan börja i boken.» Tavlan för Origo 2a 1.3 Andragradsekvationer bar två
+# begreppsrader, en bokstavsformel och en tom nedre tredjedel. Skelettet är
+# svaret: paret, ankaret, receptet och «Att tänka på».
+
+def test_prompten_bar_vansterns_skelett():
+    """Fem ord ska gå att hitta i prompten, för det är de fem delar läraren
+    saknade. Står de bara i few-shotarna följs de när shoten liknar
+    momentet och annars inte."""
+    p = lb.build_prompt("Ma2a", "IndA", "andragradsekvationer")
+    assert "ANKARET" in p and "8d. ANKARET" in p
+    assert "8f. RECEPTET" in p
+    assert "8g. ATT TÄNKA PÅ" in p
+    assert "PARET hör till samma regel" in p
+    assert "RANDFALL" in p
+    # Ordningen står samlad, så att modellen ser skelettet som en helhet.
+    assert ("BEGREPPSRADERNA (8c), ANKARET (8d), FORMELN (8e), RECEPTET "
+            "(8f), ATT TÄNKA PÅ (8g)") in p
+    # …och 8b säger inte längre nej till varje tal på vänstern.
+    assert "ETT undantag: ANKARET i 8d" in p
+
+
+def test_few_shotarna_bar_recept_och_att_tanka_pa():
+    """En modell härmar det den ser. Skelettet står i prompten OCH i alla
+    fyra shotarna — ankaret bara i de två där formeln har ett varför, för en
+    påhittad sifferrad är fortfarande felet 8b fäller."""
+    med_ankare = 0
+    for uppdrag, doc in lb.FEW_SHOTS:
+        parsed, fel = ws.validate_board_json(doc)
+        assert parsed is not None and fel == [], (uppdrag, fel)
+        punkter = _receptpunkter(doc)
+        assert 2 <= len(punkter) <= 3, (uppdrag, punkter)
+        for punkt in punkter:
+            verb, _, resten = punkt.partition(":")
+            assert verb.strip() and 1 <= len(resten.split()) <= 4, (uppdrag, punkt)
+        rader = _att_tanka_pa(doc)
+        assert 2 <= len([r for r in rader if r["kind"] == "text"]) <= 3, uppdrag
+        if _ankarraden(doc) is not None:
+            med_ankare += 1
+    assert med_ankare == 2, med_ankare
+
+
+def test_hogerns_metodsteg_borjar_i_nagot_som_star_pa_vanstern():
+    """Receptets verb är det högern använder (8f). Ett förkunskapsverb får
+    stå utan rad — men momentets egna verb ska gå att peka tillbaka på."""
+    forkunskap = {"sätt in", "lös ut", "multiplicera", "förenkla", "beräkna",
+                  "avläs", "bestäm", "rita", "namnge"}
+    for uppdrag, doc in lb.FEW_SHOTS:
+        vanstern = " ".join(_begreppsrader(doc) + _receptpunkter(doc)).lower()
+        for punkt in _metodsteg(doc):
+            verb = punkt.partition(":")[0].strip().lower()
+            assert verb in vanstern or verb in forkunskap, (uppdrag, punkt)
+
+
+def test_domaren_provar_receptet_och_randfallen():
+    """De två grindarna letar efter något som SAKNAS på vänstern — förut
+    letade domaren bara efter en tjock vänster och ett saknat begrepp, och
+    därför kunde fyra randfall i urvalet gå obemärkta förbi."""
+    t = lb.build_tackning_prompt({"boards": []}, "LÄRARENS URVAL: 1301–1315")
+    assert "Pröva RECEPTET" in t
+    assert "Saknas receptet är det ett fynd" in t
+    assert "Pröva RANDFALLEN" in t
+    assert "Räkna typer, inte uppgifter" in t
+    # Tjockleksgränserna följde med skelettet.
+    assert "fler än tre receptpunkter" in t
+    assert "fler än tre rader under «Att tänka på»" in t
+    assert "fler än två vanliga fel" in t
+    # Och kompletteringen har samma tak åt det nya hållet.
+    assert "HÖGST TRE rader under «Att tänka på»" in t
+
+
+def test_skelettets_ord_hittar_ratt_vansterrad():
+    """«Lägg till receptet» och «en rad under att tänka på» kände ingenting
+    igen (jobb 480), och varvet gick som helomskrivning. Nu binder orden."""
+    doc = _algebrashoten()
+    for mening, vantad in (("lägg till en punkt i receptet", "Förlänga"),
+                           ("en rad till under att tänka på", "Minuset"),
+                           ("stryk ankaret", "2(3 + 5)")):
+        gissning = lb.las_maltyper(mening)
+        assert gissning, mening
+        vagar = lb.gissade_malvagar(doc, gissning)
+        assert vagar, mening
+        träff = json.dumps([_ruta(doc, v) for _n, v in vagar],
+                           ensure_ascii=False)
+        assert vantad in träff, (mening, träff)
+        # Allt ligger på vänstertavlan, aldrig bland exemplen.
+        assert all(v.startswith("boards[0]") for _n, v in vagar), mening
+
+
+def _ruta(doc: dict, vag: str):
+    """Sektionen en JSON-väg pekar ut — testets egen uppslagning."""
+    nod = doc
+    for bit in vag.replace("]", "").split("."):
+        namn, _, idx = bit.partition("[")
+        if namn:
+            nod = nod[namn]
+        if idx:
+            nod = nod[int(idx)]
+    return nod
+
+
 def test_domaren_provar_exemplen_mot_urvalet():
     """Domen 2026-09-05 (del 2): domaren letade bara LUCKOR, och därför fick
     ett «beräkna värdet»-exempel stå kvar fast ingen vald uppgift bad om det.
@@ -1275,8 +1521,10 @@ def test_domaren_faller_facit_och_siffror_pa_vanstern():
     assert "steg i ORD som säger vad man GÖR" in t
     assert "SIFFROR PÅ VÄNSTERN" in t
     assert "på vänstern står bokstäver" in t
-    # Det felaktiga ledet under Vanligt fel är beställt (regel 9) och undantas.
-    assert "Vanligt fel:», som är beställt" in t
+    # Det felaktiga ledet under Vanligt fel är beställt (regel 9) och undantas
+    # — och sedan 2026-09-20 ankaret också, med vaktens egen definition.
+    assert "det felaktiga ledet under «Vanligt fel:»" in t
+    assert "ANKARET: den FÖRSTA sifferraden vars nästa math-rad" in t
 
 
 def test_domaren_hoppar_over_urvalsfragorna_utan_urval():
