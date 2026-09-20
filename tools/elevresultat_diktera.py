@@ -16,7 +16,8 @@ siffra räcker: den läggs på radens nivå. En rad som inte nämns lämnas tom
 (None), inte noll — «ej rättad» och «0 poäng» är olika saker för betyget.
 
 Elever som inte finns i klasslistan läggs till sist; ingen befintlig elev
-inaktiveras (save_elever gör det, därför synkas unionen).
+inaktiveras (save_elever gör det, därför synkas unionen). Redan sparade
+elever på provet står kvar — dikteringen är en elev i taget.
 
     python -m tools.elevresultat_diktera 131 resultat.txt --torr
     python -m tools.elevresultat_diktera 131 resultat.txt
@@ -123,8 +124,12 @@ def main(argv=None) -> int:
         for i, n in enumerate(nya):
             elever.setdefault(n.lower(), -(i + 1))  # torrkörning: låtsas-id
 
-        resultat = {elever[n.lower()]: till_tripel(rader, per, n)
-                    for n, per in dikterat.items()}
+        # Sparningen ersätter HELA provets elevrader (save_elevresultat), och
+        # klassen dikteras en elev i taget: det som redan står kvar behålls,
+        # bara de uppläsda eleverna skrivs om.
+        resultat = dict(db.get_elevresultat(conn, a.dokument_id))
+        resultat.update({elever[n.lower()]: till_tripel(rader, per, n)
+                         for n, per in dikterat.items()})
         rent = rattning.stada(rader, resultat)
         for n in dikterat:
             eid = elever[n.lower()]
