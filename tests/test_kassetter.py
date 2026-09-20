@@ -124,10 +124,16 @@ def test_bandet_bar_vansterns_skelett(fejk_claude):
     board = lesson_board.generate_board(
         "Matematik 3c", "NA25", "Derivatans definition", model="",
         max_rounds=1)["board"]
-    spalt = board["boards"][0]["sections"][5]["children"][1]["children"]
+    rad = board["boards"][0]["sections"][-1]["children"]
+    # TVÅ LIKA BREDA SPALTER sedan formdomen 2026-09-20 (kväll):
+    # «1. Vad är det?» och «2. Så löser vi» med «3. Att tänka på»
+    # under sig. Bandet ska bära formen, inte bara prompten.
+    assert len(rad) == 2 and all(c["kind"] == "col" for c in rad), rad
+    assert rad[0]["children"][0]["text"] == "1. Vad är det?", rad[0]
+    spalt = rad[1]["children"]
     rubriker = [s.get("text") for s in spalt
                 if s.get("kind") == "text" and s.get("weight") == 700]
-    assert "Att tänka på" in rubriker, rubriker
+    assert "3. Att tänka på" in rubriker, rubriker
     listor = [s for s in spalt if s.get("kind") == "list"]
     assert listor and 2 <= len(listor[0]["items"]) <= 3, spalt
     # Och receptet BÄR högern: varje punkt ska gå att känna igen som början
@@ -408,26 +414,27 @@ def test_mal_last_omskrivning_ror_bara_rutan_lararen_pekade_pa(fejk_claude):
     board = lesson_board.generate_board(
         "Matematik 3c", "NA25", "Derivatans definition", model="",
         max_rounds=1)["board"]
-    # Bandets form (omspelat 2026-09-20): raden är sektion 5 på vänstern och
-    # definitionen är formelspaltens TREDJE barn — begreppsparet står före
-    # den, receptet och «Att tänka på» efter. Lappbandet pekar på samma väg,
-    # så byter tavlabandet form måste tavellapp.json följa med.
-    rad = board["boards"][0]["sections"][5]
+    # Bandets form (omspelat 2026-09-20, kväll): raden är sektion 4 på
+    # vänstern, och definitionen är SISTA barnet i spalt 1 — tråden går
+    # kropp, mening, begrepp, ankare, pil, formel. Lappbandet pekar på
+    # samma väg, så byter tavlabandet form måste tavellapp.json följa med.
+    rad = board["boards"][0]["sections"][4]
     assert rad["kind"] == "row"          # klumpen läraren inte kunde peka i
-    fore = copy.deepcopy(rad["children"][1]["children"][2])
+    plats = len(rad["children"][0]["children"]) - 1
+    fore = copy.deepcopy(rad["children"][0]["children"][plats])
 
     ut = lesson_board.refine_board(board, "skriv definitionen med a i stället",
                                    model="", max_rounds=1,
-                                   mal={"el": "tav6.1.2",
+                                   mal={"el": f"tav5.0.{plats}",
                                         "namn": "Formel 1",
                                         "innehall": fore["latex"]})
     assert _utan_budget(ut["errors"]) == [], ut["errors"]
     assert ut["rounds"] == 1             # en lapp, inte en hel tavla
-    efter = ut["board"]["boards"][0]["sections"][5]["children"][1]["children"][2]
-    assert "f'(a)" in efter["latex"] and "f'(a)" not in fore["latex"]
+    spalt1 = ut["board"]["boards"][0]["sections"][4]["children"][0]["children"]
+    assert "f'(a)" in spalt1[plats]["latex"] and "f'(a)" not in fore["latex"]
     # …och ALLT annat på båda tavlorna står kvar, byte för byte.
     kopia = copy.deepcopy(ut["board"])
-    kopia["boards"][0]["sections"][5]["children"][1]["children"][2] = fore
+    kopia["boards"][0]["sections"][4]["children"][0]["children"][plats] = fore
     assert kopia == board
 
 
