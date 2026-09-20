@@ -97,8 +97,17 @@ def ren(text) -> str:
     return _TAGG.sub("", str(text or "")).strip()
 
 
-def bygg(uppgifter: list[dict] | None) -> list[dict]:
+def bygg(uppgifter: list[dict] | None,
+         kompensation: dict | None = None) -> list[dict]:
     """Raderna att fylla i — rattning.js bygg(), rad för rad.
+
+    `kompensation` är papprets poäng UTANFÖR uppgifterna: läraren gav hela
+    klassen en C-poäng för att uppgift 6 var otydligt formulerad (TE26A, prov
+    81). Den bor på pappret som {"peca": [0, 1, 0], "text": "..."} och blir
+    en sista rad med nyckeln K, så att elevens summa per nivå och provbetyget
+    räknar den — men den ritas inte på pappret (blad.js läser bara
+    uppgifter) och bär ingen förmåga och inget CI: en kompensationspoäng
+    säger inget om vad eleven kan.
 
     En uppgift med fler än en deluppgift blir en gruppubrik plus en rad per
     deluppgift, eftersom en tvåpoängsuppgift oftast är a) räkningen och b)
@@ -153,6 +162,12 @@ def bygg(uppgifter: list[dict] | None) -> list[dict]:
                        "peca": list(eca or _peca_fallback(up, niva)),
                        "formaga": formaga_av(kod_formaga, text),
                        "ci": list(ci)})
+    k = _tripel((kompensation or {}).get("peca")) if isinstance(kompensation, dict) else None
+    if k:
+        ut.append({"nyckel": "K", "kod": "K", "nr": "K",
+                   "text": ren(kompensation.get("text")) or "Kompensationspoäng",
+                   "p": sum(k), "peca": list(k), "formaga": "Kompensation",
+                   "ci": [], "kompensation": True})
     return ut
 
 
@@ -217,11 +232,12 @@ def svagaste(rader: list[dict]) -> dict | None:
 
 def sammanfatta(uppgifter: list[dict] | None, varden: dict | None,
                 elever=ELEVER_STANDARD,
-                per_rad: dict[str, int] | None = None) -> dict:
+                per_rad: dict[str, int] | None = None,
+                kompensation: dict | None = None) -> dict:
     """Hela rättningen i ett svep: raderna, klassens andel och de svaga
     momenten. `rattat` är exakt den form frontenden lägger på pappret
     (rattning.js:204-207) — servern räknar den, klienten skriver den."""
-    r = rakna(bygg(uppgifter), varden, elever, per_rad)
+    r = rakna(bygg(uppgifter, kompensation), varden, elever, per_rad)
     s = svagaste(r["rader"])
     return {
         "rader": r["rader"], "elever": r["elever"],
@@ -317,7 +333,10 @@ def granser(rader: list[dict], config: dict | None = None,
     inte behöver ändras den dag kursen betyder något igen."""
     e = c = a = 0
     for r in rader or []:
-        if r.get("grupp"):
+        # Kompensationsraden (bygg) ligger OVANPÅ provet: gränserna gäller
+        # papprets uppgifter, annars hade en poäng till alla flyttat gränserna
+        # och de sparade (27 p) sett ogiltiga ut mot raderna (28 p).
+        if r.get("grupp") or r.get("kompensation"):
             continue
         p = r.get("peca") or _peca_fallback(int(r.get("p") or 0), None)
         e, c, a = e + int(p[0]), c + int(p[1]), a + int(p[2])

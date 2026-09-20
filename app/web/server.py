@@ -1599,7 +1599,8 @@ def create_app(base_dir: Path | None = None,
             conn.close()
 
     def _rattning_svar(papper: dict, varden: dict, elever, sparad: dict | None) -> dict:
-        res = rattning.sammanfatta(papper.get("uppgifter"), varden, elever)
+        res = rattning.sammanfatta(papper.get("uppgifter"), varden, elever,
+                                   kompensation=papper.get("kompensation"))
         if sparad:
             gammal = {r["nyckel"]: r for r in sparad["rader"]}
             for rad in res["rader"]:

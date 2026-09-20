@@ -52,7 +52,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
             if d is None:
                 return None
             papper = d.get("dokument") or {}
-            rader = rattning.bygg(papper.get("uppgifter"))
+            rader = rattning.bygg(papper.get("uppgifter"),
+                                  papper.get("kompensation"))
             gid = db.get_or_create_group(conn, papper.get("klass") or "")
             # Pappret egna `granser` går före: ett prov som redan skrivits har
             # sina gränser, och en kalibrering av regeln får inte räkna om
@@ -150,7 +151,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
         try:
             if elever:
                 res = rattning.sammanfatta(papper.get("uppgifter"), varden, elever,
-                                           rattning.rader_per_nyckel(rent))
+                                           rattning.rader_per_nyckel(rent),
+                                           kompensation=papper.get("kompensation"))
                 db.save_rattning(
                     conn, dokument_id, elever=res["elever"],
                     andel=res["rattat"]["andel"], rader=res["rader"],

@@ -34,7 +34,7 @@ sys.path.insert(0, str(ROT))
 
 from app import db, rattning  # noqa: E402
 
-_PAR = re.compile(r"(\d+[a-z]?)\s*[:=]?\s*(-?\d+(?:[.,]\d+)?)")
+_PAR = re.compile(r"(\d+[a-z]?|K)\s*[:=]?\s*(-?\d+(?:[.,]\d+)?)")
 
 
 def tolka(text: str) -> dict[str, dict[str, float]]:
@@ -102,7 +102,7 @@ def main(argv=None) -> int:
         if d is None:
             raise SystemExit(f"okänt dokument {a.dokument_id}")
         papper = d.get("dokument") or {}
-        rader = rattning.bygg(papper.get("uppgifter"))
+        rader = rattning.bygg(papper.get("uppgifter"), papper.get("kompensation"))
         gr = rattning.granser(rader, sparade=papper.get("granser"),
                               kurs=papper.get("kurs") or "")
         gid = db.get_or_create_group(conn, papper.get("klass") or "")
@@ -143,7 +143,8 @@ def main(argv=None) -> int:
             return 0
         antal, varden = rattning.elevresultat_till_rattning(rent)
         res = rattning.sammanfatta(papper.get("uppgifter"), varden, antal,
-                                   rattning.rader_per_nyckel(rent))
+                                   rattning.rader_per_nyckel(rent),
+                                   kompensation=papper.get("kompensation"))
         db.save_rattning(conn, a.dokument_id, elever=res["elever"],
                          andel=res["rattat"]["andel"], rader=res["rader"],
                          exam_id=papper.get("provId"), klass=papper.get("klass"),

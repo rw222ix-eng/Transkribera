@@ -398,3 +398,29 @@ def test_utfallet_star_i_prompten_som_skickas():
     assert txt in exam_gen.build_prompt("Ma2c", "NA25", [], utfall=txt)
     assert txt in lesson_board.build_prompt("Ma2c", "NA25", "derivata",
                                             utfall=txt)
+
+
+def test_bygg_kompensation_blir_sista_raden_k():
+    """Pappret kan bära poäng utanför uppgifterna (TE26A prov 81: en C-poäng
+    till alla för en otydlig uppgift 6). Den blir raden K sist, räknas i
+    summan per nivå, men bär varken förmåga eller CI."""
+    from app import rattning
+    uppg = [{"nr": 1, "t": "Räkna", "peca": [1, 0, 0], "formaga": "P"}]
+    utan = rattning.bygg(uppg)
+    assert [r["nyckel"] for r in utan] == ["1"]
+    med = rattning.bygg(uppg, {"peca": [0, 1, 0], "text": "Uppgift 6 otydlig"})
+    assert [r["nyckel"] for r in med] == ["1", "K"]
+    k = med[-1]
+    assert k["peca"] == [0, 1, 0] and k["p"] == 1
+    assert k["formaga"] == "Kompensation" and k["ci"] == []
+    assert k["text"] == "Uppgift 6 otydlig"
+    s = rattning.elevsummor(med, {"1": [1, None, None], "K": [None, 1, None]})
+    assert (s["e"], s["c"], s["a"], s["tak"]) == (1, 1, 0, 2)
+    # gränserna räknas på uppgifterna, inte på kompensationen: de sparade
+    # (1 p totalt) är fortfarande giltiga och vinner
+    gr = rattning.granser(med, sparade={"total": 1, "E": {"minst": 1},
+                                        "C": {"minst": 1}, "A": {"minst": 1}})
+    assert gr["total"] == 1 and gr["E"]["minst"] == 1
+    # tom eller nollad kompensation ger ingen rad
+    assert rattning.bygg(uppg, {"peca": [0, 0, 0]}) == utan
+    assert rattning.bygg(uppg, {}) == utan
