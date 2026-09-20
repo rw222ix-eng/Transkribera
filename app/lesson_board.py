@@ -39,7 +39,14 @@ MAX_ROUNDS = 3          # totalt antal LLM-rundor inkl. första genereringen
 # exempel» på NA26F:s mönstertavla, och facitvakten hade strukit precis dem i
 # reparationsrundan. Genereringen fäller fortfarande uträkningar; en
 # omskrivning där hon uttryckligen ber om dem får behålla dem.
-REFINE_BEHALL: tuple[str, ...] = ("textbudget", "facit")
+#
+# `siffror_vanster` sedan 2026-09-20, av exakt samma skäl: hon bad om
+# ankaret x^2 = 64 ⇒ x = ±8 på rottavlan, och lappen strök raden (jobb 480,
+# event 3). Vakten undantar numera ankaret när det står där skelettet säger
+# (whiteboard_spec._ankaret), och det löser det vanliga fallet — men ber hon
+# om en sifferrad som INTE har formeln under sig är det fortfarande hennes
+# tavla och hennes beslut. Genereringen fäller raden som förut.
+REFINE_BEHALL: tuple[str, ...] = ("textbudget", "facit", "siffror_vanster")
 # Bench Fas 2: en tabelltung tavla trunkerades vid 6k tokens → ogiltig JSON.
 BOARD_MAX_TOKENS = 9_000
 

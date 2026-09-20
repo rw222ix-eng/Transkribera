@@ -83,4 +83,24 @@ def test_omskrivningen_behaller_lararens_losningar():
                           model="", llm=llm)
     assert len(calls) == 1 and res["board"] == svar
     assert [f["code"] for f in res["errors"]] == ["facit"]
-    assert lb.REFINE_BEHALL == ("textbudget", "facit")
+    assert lb.REFINE_BEHALL == ("textbudget", "facit", "siffror_vanster")
+
+
+def test_omskrivningen_behaller_en_sifferrad_lararen_bett_om():
+    """Samma regel, samma skäl (2026-09-20). Vakten undantar ankaret när
+    bokstavsformeln står direkt under det, och det löser det vanliga fallet.
+    Men ber hon om en sifferrad som INTE har någon formel efter sig fälls den
+    fortfarande — och då ska fyndet redovisas i en omskrivning, inte strykas.
+    Det var så ankaret hon bad om försvann (jobb 480, event 3)."""
+    fore = _valid_doc()
+    svar = _valid_doc()
+    spalt = svar["boards"][0]["sections"][-1]["children"][1]["children"]
+    spalt.append({"kind": "math",
+                  "latex": "x^2 = 64 \\Rightarrow x = \\pm 8"})
+    _p, fel = ws.validate_board_json(svar)
+    assert [f["code"] for f in fel] == ["siffror_vanster"], fel
+    llm, calls = _stub_llm([json.dumps(svar)])
+    res = lb.refine_board(fore, "lägg till raden med 64 sist i spalten",
+                          model="", llm=llm)
+    assert len(calls) == 1 and res["board"] == svar
+    assert [f["code"] for f in res["errors"]] == ["siffror_vanster"]
