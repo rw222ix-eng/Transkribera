@@ -820,7 +820,11 @@ def _randfallsblocket(sections: list) -> tuple[list, list]:
     i_blocket = False
     for sec in sections or []:
         if isinstance(sec, (TextSection, HeadingSection)):
-            lag = str(getattr(sec, "text", "")).strip().lower()
+            # Numret räknas bort: sedan formdomen 2026-09-20 (kväll) heter
+            # rubriken «3. Att tänka på» — numreringen är dispositionen,
+            # det närmaste en pil motorn kan rita i flödet.
+            lag = re.sub(r"^\s*\d+\.\s*", "",
+                         str(getattr(sec, "text", "")).strip().lower())
             if lag.startswith(_ATT_TANKA_PA):
                 i_blocket = True
                 continue
@@ -880,13 +884,27 @@ def _ar_bokstavsformel(latex: str) -> bool:
 # den allmänna formel det förklarar. Ett andra sifferled har ingen formel
 # efter sig och fälls som förut, och så gör också ett ankare som står ensamt
 # utan formeln det är till för.
+def _ar_pilrad(latex: str) -> bool:
+    """En math-sektion som bara är en PIL: «\\Downarrow», «\\Longrightarrow».
+
+    Röda tråden på vänstern ritas med en sådan rad (lärarens dom 2026-09-20:
+    «inga pilar, ingen tydlig disposition»). Motorns egen arrow är en
+    annotation i absoluta pixlar och kan inte ligga mellan två sektioner i
+    flödet, men KaTeX ritar pilen — och en pil mellan ankaret och formeln
+    får inte bryta ankarregeln bara för att den står emellan."""
+    ren = _talrensad(latex or "")
+    return not re.search(r"[A-Za-z0-9]", ren) and bool((latex or "").strip())
+
+
 def _ankarkandidater(sections: list, ut: list) -> None:
     math = [s for s in (sections or []) if isinstance(s, MathSection)]
     plats = {id(s): i for i, s in enumerate(math)}
     for sec in sections or []:
         if isinstance(sec, MathSection):
             i = plats[id(sec)]
-            nasta = math[i + 1] if i + 1 < len(math) else None
+            # Pilraderna hoppas över: nästa math som SÄGER något är formeln.
+            nasta = next((m for m in math[i + 1:] if not _ar_pilrad(m.latex)),
+                         None)
             if nasta is not None and _har_tal(_talrensad(sec.latex)) \
                     and _ar_bokstavsformel(nasta.latex):
                 ut.append(sec)
@@ -1005,7 +1023,38 @@ def ar_modelltavla(board) -> bool:
     return any(_ar_modellformel(r) for r in rader)
 
 
-def _text_volym(sections: list) -> int:
+def _ankaretiketten(sections: list):
+    """Etiketten direkt under ankaret, eller None.
+
+    Ankaret är en math-rad och kostar ingenting i budgeten; etiketten under
+    det («8 och −8 i kvadrat blir 64») är dess andra halva och är lika lite
+    prosa som randfallens bildtexter. Den skulle annars kunna vara det som
+    fäller tavlan — och det var precis vad som hände i den andra skarpa
+    körningen (jobb 481, seq 13): vänstern låg på 381 av 390, och
+    budgetlappen strök ankaret MED etikett för att komma under."""
+    ankare = _ankaret(sections)
+    if ankare is None:
+        return None
+    syskon: list = []
+
+    def leta(secs: list) -> bool:
+        for i, sec in enumerate(secs or []):
+            if sec is ankare:
+                syskon.extend(secs[i + 1:i + 2])
+                return True
+            if isinstance(sec, (CalloutSection, RowSection, ColSection)) \
+                    and leta(sec.children):
+                return True
+        return False
+
+    leta(sections)
+    nasta = syskon[0] if syskon else None
+    if isinstance(nasta, TextSection) and len(nasta.text) <= _ETIKETT_MAX:
+        return nasta
+    return None
+
+
+def _text_volym(sections: list, vanster: bool = False) -> int:
     """Summan av läsbar text i ett sektionsflöde — text och listpunkter, ned
     genom callout/row/col. Rubriker och matte räknas inte: se _MAX_BOARD_TEXT.
 
@@ -1013,18 +1062,50 @@ def _text_volym(sections: list) -> int:
     är bildtexter till en math-rad, inte prosa, och när budgeten vägde dem
     som meningar lappade den bort just de rader domaren nyss hade beställt
     (jobb 480, seq 13). Undantaget är kapat till tre rader à 45 tecken — en
-    längre rad är en mening och vägs som en mening. Se _randfallsblocket."""
-    fria = {id(s) for s in _randfallsblocket(sections)[1]}
+    längre rad är en mening och vägs som en mening. Se _randfallsblocket.
+
+    `vanster` friar också ankarets etikett (tredje rundan, jobb 481). Den
+    flaggan finns för att ankaret bara går att känna igen på vänstertavlan:
+    mönstret «sifferrad, etikett, bokstavsformel» kan uppstå av en slump i en
+    exempelspalt, och där ska raden vägas som vilken text som helst."""
+    fria: set[int] = set()
+    if vanster:
+        etikett = _ankaretiketten(sections)
+        if etikett is not None:
+            fria.add(id(etikett))
+    return _volym_rek(sections, fria)
+
+
+def _ar_rubrikrad(sec) -> bool:
+    """En KORT fet text är en rubrik, inte prosa.
+
+    Rubriker kostar ingenting i budgeten — men bara som HeadingSection, och
+    schemat tillåter ingen heading inne i en col (bara löv). Vänsterns
+    skelett bor i två col (lesson_board regel 6), så dess rubriker — «1. Vad
+    är det?», «3. Att tänka på», «Vanligt fel:» — måste skrivas som text med
+    weight 700. Att de då plötsligt vägde som meningar var ett mätfel som
+    kom ur schemat, inte ur tavlan (uppmätt 2026-09-20, kväll: de tre
+    numrerade rubrikerna kostade 43 tecken av 390 på varje vänstertavla).
+    Taket är smalt med flit: en fet rad längre än så är en mening."""
+    return (isinstance(sec, TextSection) and sec.weight == 700
+            and len(sec.text) <= 20)
+
+
+def _volym_rek(sections: list, fria: set[int]) -> int:
+    # Randfallen slås upp per FLÖDE (rubriken och raderna står i samma col),
+    # ankarets etikett en gång och bärs sedan ned: den bor i en col, och ett
+    # nytt uppslag där hade inte hittat bokstavsformeln ovanför.
+    lokala = fria | {id(s) for s in _randfallsblocket(sections)[1]}
     summa = 0
     for sec in sections or []:
         if isinstance(sec, TextSection):
-            if id(sec) in fria:
+            if id(sec) in lokala or _ar_rubrikrad(sec):
                 continue
             summa += len(sec.text)
         elif isinstance(sec, ListSection):
             summa += sum(len(i) for i in sec.items)
         elif isinstance(sec, (CalloutSection, RowSection, ColSection)):
-            summa += _text_volym(sec.children)
+            summa += _volym_rek(sec.children, fria)
     return summa
 
 
@@ -1113,7 +1194,9 @@ def validate_rules(doc: BoardDoc) -> list[dict]:
             _check_text_lengths(sections, path, errors)
             _check_rutor(sections, path, errors)
             _check_tankstreck(sections, path, errors)
-            volym += _text_volym(sections)
+            # `vanster` friar ankarets etikett, och ankaret finns bara på
+            # boards[0] — samma gräns som facitvakten drar.
+            volym += _text_volym(sections, vanster=(bi == 0))
             # Facitvakten (2026-09-05, kväll). Vänstertavlan är boards[0] —
             # där fälls sifferexemplet; exempeltavlorna är resten, och där
             # fälls den färdiga uträkningen. Se _check_facit.

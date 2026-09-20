@@ -599,6 +599,21 @@ def test_randfallen_under_att_tanka_pa_gar_igenom():
     assert fel == [], fel
 
 
+def test_randfallen_kanns_igen_ocksa_under_den_numrerade_rubriken():
+    """Rubriken heter «3. Att tänka på» sedan formdomen 2026-09-20 (kväll):
+    numreringen är dispositionen, det närmaste en pil motorn kan rita i
+    flödet. Kände vakten inte igen den föll randfallen igen — och det var
+    precis vad som hände i första renderingen av tredje rundans tavla."""
+    doc = _kontrolltavlan()
+    spalt = _att_tanka_pa_spalten(doc)
+    rubrik = next(s for s in spalt if s.get("text") == "Att tänka på")
+    rubrik["text"] = "3. Att tänka på"
+    del spalt[-3:]
+    spalt += RANDFALLEN
+    _d, fel = ws.validate_board_json(doc)
+    assert fel == [], fel
+
+
 def test_en_fjarde_randfallsrad_falls():
     """Undantaget är kapat vid tre. En fjärde sifferrad under rubriken är
     tillbaka till exempel på fel tavla — och taket är detsamma som domaren
