@@ -425,7 +425,8 @@ def _hoger(sektioner):
 def _tex(kort):
     for tecken, kommando in (("QQQ", "sqrt"), ("RR", "Rightarrow"),
                              ("QQ", "quad"), ("SS", ";"), ("TT", "to"),
-                             ("CC", "cdot"), ("FF", "frac"), ("KK", ",")):
+                             ("CC", "cdot"), ("FF", "frac"), ("KK", ","),
+                             ("PM", "pm")):
         kort = kort.replace(tecken, BS + kommando)
     return kort
 
@@ -511,6 +512,50 @@ def test_vakten_gar_ned_i_row_och_col():
             {"kind": "math", "latex": _tex("y = 4 - 5x RR k = -5,SS m = 4")}]}]}
     fel = ws.validate_board_json(_doc(_board(sections=[rad])))[1]
     assert [e["code"] for e in fel] == ["siffror_vanster"]
+
+
+# ------------------------------------------------------------- ankaret ----
+# Lärarens dom 2026-09-20 (Origo 2a 1.3): «rätt men för lite och för
+# spretigt; eleverna får inte det som gör att de kan börja i boken.» Hon bad
+# om x^2 = 64 ⇒ x = ±8 före den allmänna formeln, och siffervakten strök den.
+# Undantaget är ETT ankare, och de tre testerna nedan är hela definitionen.
+def _vanster_med(rader):
+    return _doc(_board(sections=[{"kind": "row", "children": [
+        {"kind": "col", "children": rader}]}]))
+
+
+ANKARET = {"kind": "math", "latex": _tex("x^2 = 64 RR x = PM 8")}
+FORMELN = {"kind": "math", "latex": _tex("x^2 = a RR x = PM QQQ{a}")}
+
+
+def test_ankaret_gar_igenom_siffervakten():
+    """Ankaret står DIREKT FÖRE bokstavsformeln det förklarar — och bara
+    därför får det stå: raden är varför ±:et finns."""
+    fel = ws.validate_board_json(_vanster_med([
+        {"kind": "text", "text": "Kvadratrot: ETT tal, alltid positivt"},
+        ANKARET,
+        {"kind": "text", "text": "Både 8 och −8 i kvadrat blir 64."},
+        FORMELN]))[1]
+    assert fel == [], fel
+
+
+def test_ett_andra_sifferled_falls_anda():
+    """ETT ankare, inte två. Det andra har ingen formel efter sig och är
+    tillbaka till det regel 8b alltid har förbjudit: ett exempel på vänstern."""
+    fel = ws.validate_board_json(_vanster_med([
+        ANKARET,
+        FORMELN,
+        {"kind": "math", "latex": _tex("x^2 = 25 RR x = PM 5")}]))[1]
+    assert [e["code"] for e in fel] == ["siffror_vanster"], fel
+
+
+def test_ankare_utan_bokstavsformel_efter_sig_falls():
+    """Utan formeln under sig är sifferraden inget ankare utan ett exempel —
+    det är formeln som gör raden till ett varför."""
+    fel = ws.validate_board_json(_vanster_med([
+        ANKARET,
+        {"kind": "text", "text": "Både 8 och −8 i kvadrat blir 64."}]))[1]
+    assert [e["code"] for e in fel] == ["siffror_vanster"], fel
 
 
 def test_figur_i_row_valideras_som_en_figur():

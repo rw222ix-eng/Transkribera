@@ -599,7 +599,23 @@ _MAX_ITEM_CHARS = 50
 # mätta mot few-shotarna efter trimningen (vänstertavlorna 217–268, kolumnerna
 # 83–154) och lämnar luft för en tät tavla, men fäller den som blivit ett
 # föredrag. Läraren sänkte 400 själv i augusti; nu sänkte hon igen.
-_MAX_BOARD_TEXT = 280
+#
+# OMMÄTT 2026-09-20 (280 → 390). Motsatt dom, samma lärare, över tavlan för
+# Origo 2a 1.3 Andragradsekvationer: «rätt men för lite och för spretigt;
+# eleverna får inte det som gör att de kan börja i boken.» Vänstern fick ett
+# fast skelett med tre nya delar — ankaret med sin etikett, receptet och
+# «Att tänka på» (lesson_board 8d, 8f, 8g) — och 280 räckte inte till dem.
+# Taket är MÄTT, inte satt, precis som förut: few-shotarnas vänstertavlor
+# bär efter omskrivningen 332, 338, 339 och 340 tecken, och 340 + 15 % är
+# 391. Tak 390, alltså, och det är fortfarande ett tak: den fällda tavlans
+# 603 tecken faller med stor marginal.
+#
+# Talet rör bara TAVLAN. Kolumntaket 170 står kvar orört — högertavlan
+# ändrades inte, och dess spalter mäter 0–154. Modelltavlans 400 (nedan) står
+# också kvar: den lämnar fortfarande mer, men marginalen är numera liten,
+# för det mesta av det modelltavlan behövde extra plats till har blivit
+# skelett för alla tavlor.
+_MAX_BOARD_TEXT = 390
 _MAX_COLUMN_TEXT = 170
 # MODELLTAVLOR FÅR MER (lärarens beslut 2026-09-17). Hennes godkända tavla
 # för Liber Ma1c s. 69–72 (formler ur verkligheten: ställa upp, jämföra,
@@ -796,17 +812,69 @@ def _fritt_vanligt_fel(sections: list) -> object | None:
     return None
 
 
+def _ar_bokstavsformel(latex: str) -> bool:
+    """Den ALLMÄNNA formeln: bokstäver, inga tal att räkna med. Exponenter och
+    index räknas inte som tal (x^2 = a och x_1 är bokstavsformler) — samma
+    rensning som siffervakten själv gör, så att de två aldrig blir osams."""
+    ren = _talrensad(latex or "")
+    return not _har_tal(ren) and bool(re.search(r"[A-Za-z]", ren))
+
+
+# ANKARET (lärarens dom 2026-09-20 över Origo 2a 1.3 Andragradsekvationer):
+# «rätt men för lite och för spretigt; eleverna får inte det som gör att de
+# kan börja i boken». Vänstern bar x^2 = a ⇒ x = ±√a i rena bokstäver, och
+# ±:et stod där utan sitt varför. Hon bad om raden x^2 = 64 ⇒ x = ±8 FÖRE
+# formeln, och lappen strök den som «ett uträknat sifferexempel» (jobb 480,
+# event 3). Regeln fällde alltså precis det hon bad om.
+#
+# Undantaget är ETT ankare per vänstertavla, och definitionen är
+# deterministisk så att vakten, prompten och domaren pekar på SAMMA rad: den
+# första math-raden med tal vars NÄSTA math-syskon i samma flöde är en
+# bokstavsformel. Ankaret får alltså bara stå där det hör hemma — direkt före
+# den allmänna formel det förklarar. Ett andra sifferled har ingen formel
+# efter sig och fälls som förut, och så gör också ett ankare som står ensamt
+# utan formeln det är till för.
+def _ankarkandidater(sections: list, ut: list) -> None:
+    math = [s for s in (sections or []) if isinstance(s, MathSection)]
+    plats = {id(s): i for i, s in enumerate(math)}
+    for sec in sections or []:
+        if isinstance(sec, MathSection):
+            i = plats[id(sec)]
+            nasta = math[i + 1] if i + 1 < len(math) else None
+            if nasta is not None and _har_tal(_talrensad(sec.latex)) \
+                    and _ar_bokstavsformel(nasta.latex):
+                ut.append(sec)
+        elif isinstance(sec, (CalloutSection, RowSection, ColSection)):
+            _ankarkandidater(sec.children, ut)
+
+
+def _ankaret(sections: list):
+    """Den första ankarkandidaten i tavlans läsordning, eller None."""
+    ut: list = []
+    _ankarkandidater(sections, ut)
+    return ut[0] if ut else None
+
+
 def _check_facit(sections: list, path: str, errors: list[dict],
                  vanstertavlan: bool) -> None:
+    # Ankaret slås upp EN gång per flöde och bärs sedan ned genom row/col:
+    # undantaget gäller tavlan, inte varje spalt för sig.
+    _facit_rek(sections, path, errors, vanstertavlan,
+               _ankaret(sections) if vanstertavlan else None)
+
+
+def _facit_rek(sections: list, path: str, errors: list[dict],
+               vanstertavlan: bool, ankare) -> None:
     undantag = _fritt_vanligt_fel(sections)
     for si, sec in enumerate(sections or []):
         spath = f"{path}[{si}]"
         if isinstance(sec, MathSection):
-            if sec is undantag:
+            if sec is undantag or (ankare is not None and sec is ankare):
                 continue
             if vanstertavlan:
                 # Regel 8b: på vänstern står bokstäver. En rad som RÄKNAR med
-                # tal är ett exempel, och exempel bor på högertavlan.
+                # tal är ett exempel, och exempel bor på högertavlan — utom
+                # ankaret ovan, som är beställt.
                 if _ar_utrakning(sec.latex) and _tal_pa_bada_sidor(sec.latex):
                     errors.append(_err(spath, "siffror_vanster",
                                        f"'{sec.latex[:60]}' är ett uträknat "
@@ -823,7 +891,8 @@ def _check_facit(sections: list, path: str, errors: list[dict],
                                    "eller stryk raden. Läraren räknar på "
                                    "plats."))
         elif isinstance(sec, (CalloutSection, RowSection, ColSection)):
-            _check_facit(sec.children, f"{spath}.children", errors, vanstertavlan)
+            _facit_rek(sec.children, f"{spath}.children", errors,
+                       vanstertavlan, ankare)
 
 
 # TANKSTRECKSVAKTEN (spåret 2026-09-06: «skriv kortare utan em dash», sex
