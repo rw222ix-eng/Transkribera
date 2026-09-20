@@ -220,7 +220,17 @@ INSTRUCTION = (
     "förstagradsterm, konstant»). Etiketten är ett NAMN, aldrig en mening om "
     "delen. En ANDRA uppställning bara när momentet har två former "
     "((x + 3)(x + 2): «binom»). Läraren ska kunna peka på termen när hon "
-    "säger ordet term.\n"
+    # GRUNDFORMEN FÖRST. Kontrolltavlan för Origo 2a 1.3 (2026-09-20, andra
+    # rundan) bar (x − p)² = a som enda uppställning medan ankaret och
+    # formeln var x²-form: anatomin visade specialfallet och grunden stod
+    # ingenstans. Domaren hade dessutom fällt x² = a som «tredje formel»
+    # (jobb 480, seq 9) — den räknade anatomin som en formel, och det var
+    # felet: anatomin är delarna med namn, inte en regel.
+    "säger ordet term. Den FÖRSTA uppställningen är momentets GRUNDFORM "
+    "(x^2 = a på en lektion om andragradsekvationer), aldrig ett specialfall; "
+    "specialfallet ((x - p)^2 = a) är den ANDRA och skrivs bara när urvalet "
+    "har sådana uppgifter. Uppställningarna är ANATOMI, inte formler: de "
+    "räknas INTE bland vänsterns högst två formler (8e).\n"
     # Lärarens fällning (2026-08-20) på ett exempel som plötsligt införde ett
     # K: «var kommer K ifrån? Vi har använt a och b överallt.»
     "7b. EN bokstavsuppsättning för hela tavlan: de bokstäver figuren inför "
@@ -322,7 +332,9 @@ INSTRUCTION = (
     "en teckenregel, definitionen av en rot); har momentet inget sådant "
     "varför skrivs inget ankare alls.\n"
     "8e. EN regel står EN gång, som FORMEL — aldrig som mening i en "
-    "begreppsrad och som formel också. NORMEN ÄR EN FORMEL på vänstern, TVÅ "
+    "begreppsrad och som formel också. Anatomins uppställningar (7) och "
+    "ankaret (8d) är inga formler och räknas inte här. "
+    "NORMEN ÄR EN FORMEL på vänstern, TVÅ "
     "bara när båda ÄR momentet: samma regel läst åt andra hållet "
     "(c = \\sqrt{a^2 + b^2} under a^2 + b^2 = c^2, v = u/2 under u = 2v) är "
     "inte en andra formel utan den första en gång till. De som får stå är de "
@@ -345,7 +357,8 @@ INSTRUCTION = (
     "här» — inne i en row/col skrivs den som text med weight 700, för där "
     "finns ingen heading — och under den en list med HÖGST TRE punkter i "
     "formen «Verb: högst "
-    "fyra ord» («Samla: allt x^2 i ett led», «Dela: gör x^2 ensamt», «Dra "
+    "fyra ord» («Samla: kvadraterna i ett led», «Dela: gör kvadraten "
+    "ensam», «Dra "
     # Den skarpa körningen 2026-09-20 (kassetten) skrev två punkter med kolon
     # och en tredje som en ren uppmaning, «Låt h gå mot noll». Kolonet är inte
     # pynt: det är ordet högerns metodsteg ska börja i, och domaren läser det.
@@ -355,7 +368,15 @@ INSTRUCTION = (
     "verb, och ett steg vars verb varken står i receptet eller bland "
     "begreppsraderna måste vara ett förkunskapsverb; annars saknas raden på "
     "vänstern. Förkunskapsverb blir aldrig egna receptpunkter (8c gäller), "
-    "men de får stå INUTI ett receptsteg.\n"
+    # SPRÅKET. Kontrolltavlan skrev «Dela: bort talet framför» — telegramsvenska
+    # som inte går att läsa högt. Punkten är kort, men den är en MENING.
+    "men de får stå INUTI ett receptsteg. Efter kolonet står en hel fras på "
+    "begriplig svenska, aldrig telegramspråk: «Dela: bort talet framför» är "
+    # …och ingen matematik i punkten. Motorn renderar ingen LaTeX i en
+    # listpunkt, så «x^2» står kvar som x^2 på tavlan (sett i renderingen av
+    # kontrolltavlans recept, 2026-09-20).
+    "inte svenska, «Dela: med talet framför kvadraten» är det. Skriv "
+    "«kvadraten», aldrig «x^2»: motorn renderar ingen LaTeX i en listpunkt.\n"
     # ATT TÄNKA PÅ. Samma dom. Randfallen fanns som regel redan (de skulle
     # bli «en egen vändning i det exempel där de hör hemma»), och det räckte
     # inte: ett enda exempel rymmer ett randfall, och urvalet hade fyra.
@@ -367,9 +388,19 @@ INSTRUCTION = (
     "momentets RANDFALL, alltså det som överraskar eller tar slut. Välj dem "
     "UR URVALET: de valda uppgifter som ÄR randfall (negativt högerled, "
     "noll, en parentes i kvadrat, exakt mot närmevärde, enhet, "
-    "definitionsmängd, tecken). Formen är en math-rad med en etikett på "
-    "högst FEM ORD när det går (x^2 = -20 under «en kvadrat blir aldrig "
-    "negativ»), annars EN text-rad på högst 50 tecken. Saknas urval tas "
+    # FORMEN ÄR TAL PLUS VARFÖR (2026-09-20, andra rundan). Kontrolltavlan
+    # skrev «x² = −20 / saknar lösning» och «Exakt svar eller avrundat?» —
+    # det första säger VAD som händer men inte varför, det andra är en fråga
+    # utan svar, och en fråga på tavlan lär ingen elev något. Randfallet är
+    # ett TAL med sitt skäl bredvid; matten kostar ingenting i textbudgeten,
+    # och etiketten är fri från den också (whiteboard_spec._randfallsblocket).
+    "definitionsmängd, tecken). VARJE rad är en math-rad med tal OCH en "
+    "etikett som säger VARFÖR, högst SEX ORD: «x^2 = -20: en kvadrat blir "
+    "aldrig negativ», «x^2 = 0: en enda rot», «\\sqrt{27} exakt, 5,2 "
+    "avrundat: exakt om inget sägs». ALDRIG en fråga («Exakt svar eller "
+    "avrundat?») och aldrig bara vad som händer («saknar lösning») — det "
+    "eleven behöver är skälet. Går randfallet inte att visa med ett tal "
+    "skrivs EN text-rad på högst 50 tecken. Saknas urval tas "
     "randfallen ur momentet självt, högst två. Sist "
     "Vanligt fel.\n"
     "9. Sist i den högra spalten: \"Vanligt fel:\" i rött (text med weight 700) "
@@ -751,15 +782,17 @@ INSTRUCTION = (
     # Innehållskravet, inte ett motorkrav. Det står sist och för sig: en tavla
     # kan vara felfri mot schemat och ändå tiga om det eleverna faktiskt gör
     # fel. Kravet är att felet SKRIVS UT, inte att det undviks.
+    # «2–3 fel» stod här och sa emot taket i regel 9 (HÖGST TVÅ, 2026-09-20).
+    # Blocket kortades samtidigt: uppräkningen av felsorter och kravet på «en
+    # kort mening om varför» säger vad regel 9 redan säger, och prompten
+    # skulle KORTAS för att betala vänsterskelettet.
     "Vanliga fel (innehåll, inte form):\n"
-    "- Tänk ut 2–3 fel som elever verkligen gör på just det här momentet — "
-    "teckenfel vid negativa tal, glömd eller fel enhet, en tappad rot, fel "
-    "prioriteringsordning, avrundning för tidigt, förväxlade begrepp. Ett "
-    "moment där eleven inte kan göra fel finns inte.\n"
-    "- Vänstertavlan SKA ha sin röda \"Vanligt fel:\" (formen står i 9) och "
-    "visa felet konkret — helst det felaktiga ledet i en math-sektion — med "
-    "en kort mening om varför. En förmaning räcker inte: eleven ska känna "
-    "igen sitt eget misstag.\n"
+    "- Momentets fel är konkreta: teckenfel, glömd enhet, en tappad rot, "
+    "avrundning för tidigt, förväxlade begrepp. Ett moment där eleven inte "
+    "kan göra fel finns inte.\n"
+    "- Vänstertavlan SKA ha sin röda \"Vanligt fel:\" (formen och taket står "
+    "i 9) och visa felet KONKRET, som det felaktiga ledet i en math-sektion. "
+    "En förmaning räcker inte: eleven ska känna igen sitt eget misstag.\n"
     # Raden om att minst ett exempel ska gå genom fallgropen stod förut här
     # också. Den slogs 2026-09-05 ihop med exempelavsnittets fallgropsregel,
     # som nu väljer fallgropen ur urvalets svåraste typ.
@@ -905,14 +938,12 @@ _VANLIGT_FEL_BORT: tuple[tuple[str, str], ...] = (
     # Innehållskravet sist i INSTRUCTION faller i sin helhet: det är just det
     # läraren strök 17 gånger.
     ("Vanliga fel (innehåll, inte form):\n"
-     "- Tänk ut 2–3 fel som elever verkligen gör på just det här momentet — "
-     "teckenfel vid negativa tal, glömd eller fel enhet, en tappad rot, fel "
-     "prioriteringsordning, avrundning för tidigt, förväxlade begrepp. Ett "
-     "moment där eleven inte kan göra fel finns inte.\n"
-     '- Vänstertavlan SKA ha sin röda "Vanligt fel:" (formen står i 9) och '
-     "visa felet konkret — helst det felaktiga ledet i en math-sektion — med "
-     "en kort mening om varför. En förmaning räcker inte: eleven ska känna "
-     "igen sitt eget misstag.\n",
+     "- Momentets fel är konkreta: teckenfel, glömd enhet, en tappad rot, "
+     "avrundning för tidigt, förväxlade begrepp. Ett moment där eleven inte "
+     "kan göra fel finns inte.\n"
+     '- Vänstertavlan SKA ha sin röda "Vanligt fel:" (formen och taket står '
+     "i 9) och visa felet KONKRET, som det felaktiga ledet i en math-sektion. "
+     "En förmaning räcker inte: eleven ska känna igen sitt eget misstag.\n",
      ""),
 )
 # FALLGROPEN I EXEMPLET STÅR KVAR. Den är en annan sak än rutan på vänstern:
@@ -1359,7 +1390,11 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                              "points": [{"x": -1, "y": -2}]},
                             # Samma form som i shot 1: orden lektionen bär
                             # står före formlerna som använder dem.
-                            {"kind": "col", "width": 440, "gap": 8,
+                            # gap 6 och något mindre formler: spalten bär en
+                            # randfallsrad till sedan 2026-09-20, och med
+                            # gap 8 krympte fit-passet tavlan till 85 % —
+                            # precis på gränsen där facitvakten fäller.
+                            {"kind": "col", "width": 440, "gap": 6,
                              "children": [
                                 {"kind": "text",
                                  "text": "Symmetrilinje: kurvan speglas i den",
@@ -1387,25 +1422,35 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                                  "text": "Minus försvinner i kvadrat.",
                                  "size": 16, "gapAfter": 10},
                                 {"kind": "math", "latex": "f(x) = ax^2 + bx + c",
-                                 "size": 22, "gapAfter": 8},
+                                 "size": 20, "gapAfter": 6},
                                 {"kind": "math", "latex": "x = -\\frac{b}{2a}",
-                                 "size": 22, "gapAfter": 12},
+                                 "size": 20, "gapAfter": 10},
                                 {"kind": "text", "text": "Så här", "size": 18,
                                  "weight": 700, "gapAfter": 6},
                                 {"kind": "list", "bullet": "–", "size": 17,
                                  "gap": 4, "indent": 18, "items": [
-                                     "Bestäm: a och b",
+                                     "Bestäm: koefficienterna a och b",
                                      "Avläs: vändpunkten i grafen"],
                                  "gapAfter": 10},
                                 {"kind": "text", "text": "Att tänka på",
                                  "size": 18, "weight": 700, "gapAfter": 6},
+                                # RANDFALLEN BÄR TAL (2026-09-20, andra
+                                # rundan): «Kurvan kan sakna nollställen»
+                                # säger VAD som händer, inte varför, och en
+                                # elev kan inte se det. Raden under visar
+                                # det, och etiketten säger skälet. Vakten
+                                # undantar math-raderna under rubriken
+                                # (whiteboard_spec._randfallsblocket), och
+                                # etiketterna kostar inget i textbudgeten.
                                 {"kind": "math", "latex": "a > 0", "size": 20,
                                  "gapAfter": 2},
                                 {"kind": "text",
                                  "text": "Positivt a ger minimum.",
                                  "size": 16, "gapAfter": 6},
+                                {"kind": "math", "latex": "x^2 + 1 = 0",
+                                 "size": 20, "gapAfter": 2},
                                 {"kind": "text",
-                                 "text": "Kurvan kan sakna nollställen.",
+                                 "text": "Kvadrat plus ett blir aldrig noll.",
                                  "size": 16, "gapAfter": 12},
                                 {"kind": "text", "text": "Vanligt fel:",
                                  "size": 19, "color": "red", "weight": 700,
@@ -1599,7 +1644,7 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                                  "size": 18, "weight": 700, "gapAfter": 6},
                                 {"kind": "list", "bullet": "–", "size": 17,
                                  "gap": 4, "indent": 18, "items": [
-                                     "Förlänga: samma nämnare",
+                                     "Förlänga: till samma nämnare",
                                      "Förenkla: stryk lika faktorer"],
                                  "gapAfter": 10},
                                 {"kind": "text", "text": "Att tänka på",
@@ -1800,7 +1845,7 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                                 {"kind": "list", "bullet": "–", "size": 17,
                                  "gap": 4, "indent": 18, "items": [
                                      "Hitta: bågen vinkeln står på",
-                                     "Jämför: hörnet eller mitten"],
+                                     "Jämför: hörnet mot cirkelns mitt"],
                                  "gapAfter": 10},
                                 {"kind": "text", "text": "Att tänka på",
                                  "size": 18, "weight": 700, "gapAfter": 6},
@@ -3488,7 +3533,15 @@ TACKNING_INSTRUKTION = (
     "ANKARET: den FÖRSTA sifferraden vars nästa math-rad i samma spalt är en "
     "bokstavsformel (x^2 = 64 \\Rightarrow x = \\pm 8 med x^2 = a "
     "\\Rightarrow x = \\pm \\sqrt{a} under sig). Bara EN sådan rad per tavla "
-    "— en andra sifferrad fälls som förut. forslag är att stryka raden eller "
+    # RANDFALLEN OCKSÅ (2026-09-20, andra rundan). Domaren fällde x^2 = -20
+    # och x = ±√27 som «andra sifferrad på vänstern» (jobb 480, seq 7–8), och
+    # kompletteringen strök dem — men ett randfall ÄR ett tal, och blocket
+    # hade beställts samma morgon. Vakten undantar samma rader
+    # (whiteboard_spec._randfallsblocket), och de två måste säga samma sak.
+    "— en andra sifferrad fälls som förut. UNDANTAGET GÄLLER OCKSÅ de HÖGST "
+    "TRE math-raderna under rubriken «Att tänka på»: de är randfall, alltså "
+    "illustrationer av var regeln tar slut, och de SKA bära tal (8g). "
+    "forslag är att stryka raden eller "
     "flytta den till det exempel den hör till.\n"
     # EXEMPLEN MOT URVALET. Domen 2026-09-05 (del 2): domaren letade bara
     # LUCKOR, och därför fick «samma uttryck, nu med tal» — en nivå 1-typ som
@@ -3571,7 +3624,13 @@ TACKNING_INSTRUKTION = (
     "raden som ska in. Ett metodsteg som bara använder ett förkunskapsverb "
     "(multiplicera, förenkla, sätt in, lös ut) kräver INGEN rad — kräv aldrig "
     "en. Fäll i stället en FÖR TJOCK vänster, och forslag är då att STRYKA "
-    "raden: fler än tre begreppsrader, fler än två formler, fler än tre "
+    # ANATOMIN ÄR INGEN FORMEL (2026-09-20, andra rundan). Domaren räknade
+    # uppställningen x^2 = a bland formlerna och beordrade den struken som
+    # «tredje formel» (jobb 480, seq 9) — kvar blev specialfallet
+    # (x − p)^2 = a som tavlans enda anatomi, medan ankaret och formeln var
+    # x²-form. Uppställningen är delarna med namn, inte en regel.
+    "raden: fler än tre begreppsrader, fler än två formler (uppställningen i "
+    "anatomin och ankaret räknas INTE som formler), fler än tre "
     "receptpunkter, fler än tre rader under «Att tänka på», fler än två "
     "vanliga fel, en regel som står "
     "både som mening och som formel, en räknelag eleven kan slå upp i sin "

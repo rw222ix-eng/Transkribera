@@ -2,6 +2,7 @@
 import copy
 import re
 import json
+from pathlib import Path
 
 from app import course_data
 from app import lesson_board as lb
@@ -10,6 +11,18 @@ from app import whiteboard_spec as ws
 
 def _valid_doc() -> dict:
     return copy.deepcopy(lb.FEW_SHOTS[0][1])
+
+
+# KONTROLLTAVLAN. Den första SKARPA tavlan skriven mot vänsterskelettet:
+# Origo 2a 1.3 Andragradsekvationer, s. 39–41, uppg. 1301–1308 + 1310–1315,
+# genererad 2026-09-20 (jobb 480). Läraren godkände ankaret, paret, receptet
+# och exemplen och fällde fyra saker — och det är dem den andra rundan
+# bygger. Fixturen ligger i repot för att taken ska gå att mäta mot en
+# riktig tavla i stället för mot few-shotarna, som är trimmade med flit.
+def _kontrolltavlan() -> dict:
+    with open(Path(__file__).parent / "tavlor" / "kontroll-origo-2a-1-3.json",
+              encoding="utf-8") as f:
+        return json.load(f)
 
 
 def _broken_doc() -> dict:
@@ -193,17 +206,20 @@ def test_few_shotarna_haller_textbudgeten():
 def test_budgettaken_ar_matta_och_shotarna_haller_dem():
     """Lärarens dom 2026-09-05 (kväll) sänkte taken till 280/170/60/50. Domen
     2026-09-20 gav vänstern ett skelett till — ankaret, receptet och «Att
-    tänka på» — och tavelbudgeten mättes om mot de omskrivna shotarna:
-    332–340 tecken, plus 15 % luft, alltså 390. Kolumntaket och radlängderna
+    tänka på» — och 280 räckte inte till dem. Kolumntaket och radlängderna
     rördes inte (högertavlan ändrades inte). Shotarna måste hålla taken: en
-    modell härmar det den ser."""
+    modell härmar det den ser.
+
+    MÄTT MOT EN SKARP TAVLA, inte mot shotarna (andra rundan samma dag).
+    Shotarna är trimmade med flit och ligger lågt; det som ska rymmas är en
+    riktig tavla med ett riktigt urval. Kontrolltavlan för Origo 2a 1.3 bär
+    316 tecken, och med grundformen i anatomin och en läsbar receptrad landar
+    den strax över 330. 390 lämnar den ~15 % luft."""
     assert (ws._MAX_BOARD_TEXT, ws._MAX_COLUMN_TEXT) == (390, 170)
     assert (ws._MAX_TEXT_CHARS, ws._MAX_ITEM_CHARS) == (60, 50)
-    # Och taket är MÄTT: den största shoten ska ligga tätt under det, annars
-    # har talet blivit satt i stället för mätt.
-    storst = max(ws._text_volym(ws.validate_board_json(doc)[0].boards[0].sections)
-                 for _u, doc in lb.FEW_SHOTS)
-    assert 0.80 <= storst / ws._MAX_BOARD_TEXT <= 0.95, storst
+    skarp = ws._text_volym(
+        ws.validate_board_json(_kontrolltavlan())[0].boards[0].sections)
+    assert 0.75 <= skarp / ws._MAX_BOARD_TEXT <= 0.95, skarp
     for uppdrag, doc in lb.FEW_SHOTS:
         parsed, _fel = ws.validate_board_json(doc)
         for i, board in enumerate(parsed.boards):
@@ -1458,6 +1474,68 @@ def test_domaren_provar_receptet_och_randfallen():
     assert "fler än två vanliga fel" in t
     # Och kompletteringen har samma tak åt det nya hållet.
     assert "HÖGST TRE rader under «Att tänka på»" in t
+
+
+def test_prompten_kraver_varfor_under_att_tanka_pa():
+    """Andra rundan 2026-09-20 över kontrolltavlan: blocket blev «x² = −20 /
+    saknar lösning» och «Exakt svar eller avrundat?» — det första utan skäl,
+    det andra en fråga. En fråga på tavlan lär ingen elev något. Regeln bär
+    nu både formen och de två motexemplen."""
+    p = lb.build_prompt("Ma2a", "IndA", "andragradsekvationer")
+    assert "en etikett som säger VARFÖR, högst SEX ORD" in p
+    assert "ALDRIG en fråga" in p and "Exakt svar eller avrundat?" in p
+    assert "aldrig bara vad som händer" in p and "saknar lösning" in p
+    # Och de tre raderna läraren själv skrev står som förebild.
+    for rad in ("en kvadrat blir aldrig negativ", "en enda rot",
+                "exakt om inget sägs"):
+        assert rad in p, rad
+
+
+def test_prompten_skiljer_anatomin_fran_formlerna():
+    """Domaren fällde x² = a som «tredje formel» och lämnade (x − p)² = a
+    ensam som anatomi (jobb 480, seq 9): tavlan visade specialfallet medan
+    grundformen stod ingenstans. Uppställningen är delarna med namn."""
+    p = lb.build_prompt("Ma2a", "IndA", "andragradsekvationer")
+    assert "Den FÖRSTA uppställningen är momentets GRUNDFORM" in p
+    assert "specialfallet ((x - p)^2 = a) är den ANDRA" in p
+    assert "är ANATOMI, inte formler" in p
+    assert "Anatomins uppställningar (7) och ankaret (8d) är inga formler" in p
+    t = lb.build_tackning_prompt({"boards": []}, "LÄRARENS URVAL: 1301–1315")
+    assert "uppställningen i anatomin och ankaret räknas INTE som formler" in t
+
+
+def test_prompten_kraver_hel_svenska_i_receptet():
+    """«Dela: bort talet framför» går inte att läsa högt. Punkten är kort,
+    men den är en mening."""
+    p = lb.build_prompt("Ma2a", "IndA", "andragradsekvationer")
+    assert "aldrig telegramspråk" in p
+    assert "«Dela: bort talet framför» är inte svenska" in p
+    assert "«Dela: med talet framför kvadraten» är det" in p
+    # …och ingen matematik i listpunkten: motorn renderar ingen
+    # LaTeX i text, så «x^2» hade stått kvar som x^2 på tavlan.
+    assert "Skriv «kvadraten», aldrig «x^2»" in p
+
+
+def test_domaren_undantar_randfallen_fran_siffervakten():
+    """Domaren fällde x² = −20 och x = ±√27 som «andra sifferrad på
+    vänstern» (jobb 480, seq 7–8), och kompletteringen strök dem — men
+    blocket hade beställts samma morgon, och ett randfall ÄR ett tal. Vakten
+    och domaren undantar samma rader, med samma tak."""
+    t = lb.build_tackning_prompt({"boards": []}, "LÄRARENS URVAL: 1301–1315")
+    assert "UNDANTAGET GÄLLER OCKSÅ de HÖGST TRE math-raderna under rubriken" in t
+    assert "de SKA bära tal" in t
+
+
+def test_few_shotarna_visar_randfall_med_tal():
+    """En modell härmar det den ser: står blocket bara i bokstäver skrivs det
+    i bokstäver, och då går randfallet inte att se."""
+    med_tal = 0
+    for _uppdrag, doc in lb.FEW_SHOTS:
+        for sek in _att_tanka_pa(doc):
+            if sek["kind"] == "math" and re.search(r"\d", sek["latex"]):
+                med_tal += 1
+                break
+    assert med_tal >= 1, "ingen shot visar ett randfall med tal"
 
 
 def test_skelettets_ord_hittar_ratt_vansterrad():
