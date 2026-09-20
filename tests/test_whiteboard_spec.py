@@ -1,4 +1,7 @@
 """WB-JSON v1: schema, regelvalidatorer och uttrycksparser-spegeln."""
+import json
+from pathlib import Path
+
 import pytest
 
 from app import whiteboard_spec as ws
@@ -547,6 +550,87 @@ def test_ett_andra_sifferled_falls_anda():
         FORMELN,
         {"kind": "math", "latex": _tex("x^2 = 25 RR x = PM 5")}]))[1]
     assert [e["code"] for e in fel] == ["siffror_vanster"], fel
+
+
+# ------------------------------------------------- «Att tänka på»-raderna --
+# Andra rundan 2026-09-20, mätt på den skarpa kontrolltavlan för Origo 2a 1.3
+# (tests/tavlor/kontroll-origo-2a-1-3.json). Blocket kom samma morgon och blev
+# tunt därför att domaren fällde x^2 = -20 och x = ±√27 som «andra sifferrad
+# på vänstern» (jobb 480, seq 7–8). Ett randfall ÄR ett tal: «en kvadrat blir
+# aldrig negativ» går inte att visa i bokstäver.
+def _kontrolltavlan() -> dict:
+    with open(Path(__file__).parent / "tavlor" / "kontroll-origo-2a-1-3.json",
+              encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _att_tanka_pa_spalten(doc: dict) -> list:
+    """Vänstertavlans andra col — den som bär skelettet."""
+    return doc["boards"][0]["sections"][-1]["children"][1]["children"]
+
+
+RANDFALLEN = [
+    {"kind": "math", "latex": _tex("x^2 = -20")},
+    {"kind": "text", "text": "En kvadrat blir aldrig negativ."},
+    {"kind": "math", "latex": _tex("x^2 = 0 RR x = 0")},
+    {"kind": "text", "text": "Noll ger en enda rot."},
+    {"kind": "math", "latex": _tex("x^2 = 27 RR x = PM QQQ{27}")},
+    {"kind": "text", "text": "Exakt om inget annat sägs."},
+]
+
+
+def test_kontrolltavlan_ar_giltig_som_den_star():
+    """Fixturen är den tavla läraren dömde, byte för byte. Ändras vakterna
+    ska det synas här först."""
+    doc, fel = ws.validate_board_json(_kontrolltavlan())
+    assert doc is not None and fel == [], fel
+
+
+def test_randfallen_under_att_tanka_pa_gar_igenom():
+    """De tre rader läraren bad om i andra rundan. Två av dem fälls utan
+    undantaget: x^2 = 0 ⇒ x = 0 och x^2 = 27 ⇒ x = ±√27 har tal på båda sidor
+    om pilen, och det är precis formen siffervakten finns för — utom här,
+    där talet ÄR poängen."""
+    doc = _kontrolltavlan()
+    spalt = _att_tanka_pa_spalten(doc)
+    del spalt[-3:]                        # den tunna versionen läraren fällde
+    spalt += RANDFALLEN
+    _d, fel = ws.validate_board_json(doc)
+    assert fel == [], fel
+
+
+def test_en_fjarde_randfallsrad_falls():
+    """Undantaget är kapat vid tre. En fjärde sifferrad under rubriken är
+    tillbaka till exempel på fel tavla — och taket är detsamma som domaren
+    och prompten säger."""
+    doc = _kontrolltavlan()
+    spalt = _att_tanka_pa_spalten(doc)
+    del spalt[-3:]
+    spalt += RANDFALLEN + [
+        {"kind": "math", "latex": _tex("x^2 = 49 RR x = PM 7")},
+        {"kind": "text", "text": "Sju och minus sju."}]
+    _d, fel = ws.validate_board_json(doc)
+    assert [f["code"] for f in fel] == ["siffror_vanster"], fel
+    assert "49" in fel[0]["message"]
+
+
+def test_randfallens_etiketter_kostar_inget_i_budgeten():
+    """Etiketten är en bildtext till math-raden, inte prosa. När budgeten
+    vägde den som en mening lappade den bort just de rader domaren nyss hade
+    beställt (jobb 480, seq 13)."""
+    def volym(d):
+        return ws._text_volym(ws.validate_board_json(d)[0].boards[0].sections)
+
+    doc = _kontrolltavlan()
+    spalt = _att_tanka_pa_spalten(doc)
+    del spalt[-3:]
+    fore = volym(doc)
+    spalt += RANDFALLEN
+    # Tre math-rader och tre etiketter, 78 tecken — och budgeten rör sig inte.
+    assert volym(doc) == fore, (fore, volym(doc))
+    # …men en LÅNG rad under rubriken är en mening och vägs som en mening.
+    spalt.append({"kind": "text", "text": "x" * 50})
+    assert volym(doc) == fore + 50
 
 
 def test_ankare_utan_bokstavsformel_efter_sig_falls():

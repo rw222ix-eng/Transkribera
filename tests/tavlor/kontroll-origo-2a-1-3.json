@@ -1,0 +1,298 @@
+{
+ "title": "Andragradsekvationer",
+ "boards": [
+  {
+   "width": 900,
+   "height": 780,
+   "padding": {
+    "top": 30,
+    "right": 30,
+    "bottom": 30,
+    "left": 40
+   },
+   "chrome": "aluminium",
+   "tray": true,
+   "name": "vanster",
+   "sections": [
+    {
+     "kind": "text",
+     "text": "08:10–09:40",
+     "size": 16,
+     "color": "black",
+     "gapAfter": 10
+    },
+    {
+     "kind": "heading",
+     "text": "Andragradsekvationer",
+     "size": 32,
+     "align": "center",
+     "underline": {
+      "amplitude": 2,
+      "thickness": 3,
+      "reserve": 14
+     },
+     "gapAfter": 14
+    },
+    {
+     "kind": "list",
+     "bullet": "–",
+     "size": 19,
+     "gap": 4,
+     "indent": 22,
+     "align": "center",
+     "items": [
+      "Lösa ekvationer med kvadrat",
+      "Hur många rötter finns",
+      "Boken s. 39–41, uppg. 1301–1308, 1310–1315"
+     ],
+     "gapAfter": 12
+    },
+    {
+     "kind": "divider",
+     "width": 620,
+     "gapAfter": 14
+    },
+    {
+     "kind": "heading",
+     "text": "Vad betyder roten ur 25?",
+     "size": 22,
+     "gapAfter": 12
+    },
+    {
+     "kind": "text",
+     "text": "Ekvation med obekant i kvadrat.",
+     "size": 20,
+     "gapAfter": 14
+    },
+    {
+     "kind": "row",
+     "gap": 26,
+     "children": [
+      {
+       "kind": "col",
+       "width": 300,
+       "gap": 6,
+       "children": [
+        {
+         "kind": "math",
+         "latex": "(x - p)^2 = a",
+         "size": 28,
+         "gapAfter": 8
+        },
+        {
+         "kind": "text",
+         "text": "parentes, högerled",
+         "size": 18
+        }
+       ]
+      },
+      {
+       "kind": "col",
+       "width": 470,
+       "gap": 8,
+       "children": [
+        {
+         "kind": "text",
+         "text": "Kvadratrot: ett tal, aldrig negativt",
+         "size": 18
+        },
+        {
+         "kind": "text",
+         "text": "Rot: lösning, kan vara två",
+         "size": 18,
+         "gapAfter": 10
+        },
+        {
+         "kind": "math",
+         "latex": "x^2 = 64 \\Rightarrow x = \\pm 8",
+         "size": 20,
+         "gapAfter": 2
+        },
+        {
+         "kind": "text",
+         "text": "Båda ger 64.",
+         "size": 16,
+         "gapAfter": 10
+        },
+        {
+         "kind": "math",
+         "latex": "x^2 = a \\Rightarrow x = \\pm\\sqrt{a}",
+         "size": 24,
+         "gapAfter": 12
+        },
+        {
+         "kind": "text",
+         "text": "Lösa",
+         "size": 18,
+         "weight": 700,
+         "gapAfter": 6
+        },
+        {
+         "kind": "list",
+         "bullet": "–",
+         "size": 17,
+         "gap": 4,
+         "indent": 18,
+         "items": [
+          "Ordna: få kvadraten ensam",
+          "Dela: bort talet framför",
+          "Dra roten: glöm inte minus"
+         ],
+         "gapAfter": 10
+        },
+        {
+         "kind": "text",
+         "text": "Att tänka på",
+         "size": 18,
+         "weight": 700,
+         "gapAfter": 6
+        },
+        {
+         "kind": "math",
+         "latex": "x^2 = -20",
+         "size": 20,
+         "gapAfter": 2
+        },
+        {
+         "kind": "text",
+         "text": "saknar lösning",
+         "size": 16,
+         "gapAfter": 8
+        },
+        {
+         "kind": "text",
+         "text": "Exakt svar eller avrundat?",
+         "size": 17,
+         "gapAfter": 12
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "width": 1800,
+   "height": 780,
+   "padding": {
+    "top": 30,
+    "right": 30,
+    "bottom": 30,
+    "left": 30
+   },
+   "chrome": "aluminium",
+   "tray": true,
+   "name": "hoger",
+   "columns": [
+    {
+     "weight": 1,
+     "sections": [
+      {
+       "kind": "heading",
+       "text": "Exempel 1",
+       "size": 28,
+       "underline": {},
+       "gapAfter": 12
+      },
+      {
+       "kind": "text",
+       "text": "Lös ekvationen.",
+       "size": 20,
+       "gapAfter": 10
+      },
+      {
+       "kind": "math",
+       "latex": "5x^2 - 80 = 0",
+       "size": 26,
+       "gapAfter": 16
+      },
+      {
+       "kind": "list",
+       "bullet": "–",
+       "size": 19,
+       "gap": 6,
+       "items": [
+        "Ordna: flytta 80 till höger",
+        "Dela: båda leden med 5",
+        "Dra roten ur 16: plus och minus 4"
+       ],
+       "gapAfter": 26
+      },
+      {
+       "kind": "heading",
+       "text": "Exempel 2: kvadrat i båda led",
+       "size": 26,
+       "underline": {},
+       "gapAfter": 12
+      },
+      {
+       "kind": "math",
+       "latex": "3x^2 - 50 = x^2 + 4",
+       "size": 26,
+       "gapAfter": 16
+      },
+      {
+       "kind": "list",
+       "bullet": "–",
+       "size": 19,
+       "gap": 6,
+       "items": [
+        "Ordna: samla kvadraterna i ett led",
+        "Dela: båda leden med 2",
+        "Dra roten: svara exakt"
+       ]
+      }
+     ]
+    },
+    {
+     "weight": 1,
+     "sections": [
+      {
+       "kind": "heading",
+       "text": "Exempel 3: parentes i kvadrat",
+       "size": 26,
+       "underline": {},
+       "gapAfter": 12
+      },
+      {
+       "kind": "text",
+       "text": "Lös ekvationen.",
+       "size": 20,
+       "gapAfter": 10
+      },
+      {
+       "kind": "math",
+       "latex": "(x + 4)^2 = 25",
+       "size": 26,
+       "gapAfter": 16
+      },
+      {
+       "kind": "list",
+       "bullet": "–",
+       "size": 19,
+       "gap": 6,
+       "items": [
+        "Dra roten: parentesen blir 5 eller -5",
+        "Ordna: flytta 4:an till höger"
+       ],
+       "gapAfter": 20
+      },
+      {
+       "kind": "text",
+       "text": "Här tappas den ena roten:",
+       "size": 18,
+       "gapAfter": 6
+      },
+      {
+       "kind": "math",
+       "latex": "x + 4 = 5",
+       "size": 24,
+       "color": "red",
+       "gapAfter": 26
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

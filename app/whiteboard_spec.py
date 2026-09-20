@@ -790,6 +790,52 @@ def _tal_pa_bada_sidor(latex: str) -> bool:
                for i in range(len(led) - 1))
 
 
+# «ATT TÄNKA PÅ» BÄR RANDFALL, INTE UTRÄKNINGAR (lärarens dom 2026-09-20,
+# andra rundan, över den skarpa kontrolltavlan för Origo 2a 1.3). Blocket kom
+# till samma morgon och blev genast tunt: domaren fällde x^2 = -20 och
+# x = ±√27 som «andra sifferrad på vänstern» (jobb 480, seq 7–8), och kvar
+# stod «saknar lösning» och en fråga utan svar. Randfallet ÄR ett tal — «en
+# kvadrat blir aldrig negativ» går inte att visa i bokstäver — så raderna
+# under rubriken är illustrationer, inte exempel på fel tavla.
+#
+# Undantaget är smalt med flit: HÖGST TRE math-rader, och bara de som står
+# efter rubrikraden i samma flöde. Ankarregeln (ovan) gäller fortfarande för
+# raden FÖRE formeln, och allt annat med tal fälls som förut.
+_ATT_TANKA_PA = "att tänka på"
+_RANDFALL_TAK = 3
+# Etiketten under en randfallsrad är en bildtext till matematiken, inte prosa:
+# «x^2 = 0: en enda rot» är sex ord. Längre än så är det en mening, och då
+# vägs den som en mening. Talet är ordregeln (≤6 ord) mätt i tecken.
+_ETIKETT_MAX = 45
+
+
+def _randfallsblocket(sections: list) -> tuple[list, list]:
+    """(math-raderna, etiketterna) under rubriken «Att tänka på» i ETT flöde.
+
+    Blocket börjar vid rubrikraden och slutar vid «Vanligt fel:» eller vid
+    flödets slut. Båda listorna är kapade vid :data:`_RANDFALL_TAK` — vakten
+    och budgeten ska inte kunna öppnas på vid gavel av en rubrik."""
+    matte: list = []
+    etiketter: list = []
+    i_blocket = False
+    for sec in sections or []:
+        if isinstance(sec, (TextSection, HeadingSection)):
+            lag = str(getattr(sec, "text", "")).strip().lower()
+            if lag.startswith(_ATT_TANKA_PA):
+                i_blocket = True
+                continue
+            if lag.startswith("vanligt fel"):
+                break
+            if (i_blocket and isinstance(sec, TextSection)
+                    and len(sec.text) <= _ETIKETT_MAX
+                    and len(etiketter) < _RANDFALL_TAK):
+                etiketter.append(sec)
+        elif (i_blocket and isinstance(sec, MathSection)
+                and len(matte) < _RANDFALL_TAK):
+            matte.append(sec)
+    return matte, etiketter
+
+
 def _fritt_vanligt_fel(sections: list) -> object | None:
     """Det FELAKTIGA ledet under «Vanligt fel:» är beställt (regel 9) och är
     undantaget från båda vakterna — annars fällde de tavlans egen fallgrop.
@@ -866,10 +912,15 @@ def _check_facit(sections: list, path: str, errors: list[dict],
 def _facit_rek(sections: list, path: str, errors: list[dict],
                vanstertavlan: bool, ankare) -> None:
     undantag = _fritt_vanligt_fel(sections)
+    # Randfallen slås upp per FLÖDE, som «Vanligt fel»: rubriken och raderna
+    # under den står i samma col, och en rubrik i en annan spalt är en annan
+    # sak. Se _randfallsblocket.
+    randfall = _randfallsblocket(sections)[0] if vanstertavlan else []
     for si, sec in enumerate(sections or []):
         spath = f"{path}[{si}]"
         if isinstance(sec, MathSection):
-            if sec is undantag or (ankare is not None and sec is ankare):
+            if sec is undantag or (ankare is not None and sec is ankare) \
+                    or any(sec is r for r in randfall):
                 continue
             if vanstertavlan:
                 # Regel 8b: på vänstern står bokstäver. En rad som RÄKNAR med
@@ -956,10 +1007,19 @@ def ar_modelltavla(board) -> bool:
 
 def _text_volym(sections: list) -> int:
     """Summan av läsbar text i ett sektionsflöde — text och listpunkter, ned
-    genom callout/row/col. Rubriker och matte räknas inte: se _MAX_BOARD_TEXT."""
+    genom callout/row/col. Rubriker och matte räknas inte: se _MAX_BOARD_TEXT.
+
+    Randfallens etiketter räknas inte heller (2026-09-20, andra rundan): de
+    är bildtexter till en math-rad, inte prosa, och när budgeten vägde dem
+    som meningar lappade den bort just de rader domaren nyss hade beställt
+    (jobb 480, seq 13). Undantaget är kapat till tre rader à 45 tecken — en
+    längre rad är en mening och vägs som en mening. Se _randfallsblocket."""
+    fria = {id(s) for s in _randfallsblocket(sections)[1]}
     summa = 0
     for sec in sections or []:
         if isinstance(sec, TextSection):
+            if id(sec) in fria:
+                continue
             summa += len(sec.text)
         elif isinstance(sec, ListSection):
             summa += sum(len(i) for i in sec.items)
