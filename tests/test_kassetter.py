@@ -111,6 +111,40 @@ def test_bandet_haller_textbudgeten(fejk_claude):
     assert res["rounds"] == 1
 
 
+def test_bandet_bar_vansterns_skelett(fejk_claude):
+    """Omspelningen 2026-09-20: en RIKTIG modellrunda mot den nya prompten
+    ska ge receptet och «Att tänka på», inte bara begrepp och formel. Det är
+    det enda sättet att veta att skelettet följs av något annat än testerna
+    — bandet från 2026-09-12 bar två begreppsrader och en tom tredjedel, och
+    det var precis den tavlan läraren fällde.
+
+    Ankaret prövas INTE här: derivatans definition har inget varför ett tal
+    gör synligt, och regeln säger då att inget ankare ska skrivas."""
+    fejk_claude(kassett="tavla")
+    board = lesson_board.generate_board(
+        "Matematik 3c", "NA25", "Derivatans definition", model="",
+        max_rounds=1)["board"]
+    spalt = board["boards"][0]["sections"][5]["children"][1]["children"]
+    rubriker = [s.get("text") for s in spalt
+                if s.get("kind") == "text" and s.get("weight") == 700]
+    assert "Att tänka på" in rubriker, rubriker
+    listor = [s for s in spalt if s.get("kind") == "list"]
+    assert listor and 2 <= len(listor[0]["items"]) <= 3, spalt
+    # Och receptet BÄR högern: varje punkt ska gå att känna igen som början
+    # på ett metodsteg, för det är den kopplingen som gör raden värd sin
+    # plats. Formen «Verb: ≤4 ord» följdes i två punkter av tre i den skarpa
+    # körningen — den tredje, «Låt h gå mot noll», är ett verb och fyra ord
+    # utan kolon. Prompten fick raden «VARJE punkt har sitt kolon»; testet
+    # mäter kopplingen, som höll hela vägen.
+    steg = [i for kol in board["boards"][1]["columns"]
+            for s in kol["sections"] if s.get("kind") == "list"
+            for i in s["items"]]
+    assert steg, board["boards"][1]
+    for punkt in listor[0]["items"]:
+        ord_ = punkt.partition(":")[0].strip().lower()
+        assert any(s.lower().startswith(ord_) for s in steg), punkt
+
+
 def test_en_trasig_tavla_repareras_i_nasta_runda(fejk_claude):
     """Första bandet bryter mot schemat, andra är rätt. Reparationsrundan ska
     köra på riktigt — det är den som gör att läraren får en tavla i stället för
@@ -374,25 +408,26 @@ def test_mal_last_omskrivning_ror_bara_rutan_lararen_pekade_pa(fejk_claude):
     board = lesson_board.generate_board(
         "Matematik 3c", "NA25", "Derivatans definition", model="",
         max_rounds=1)["board"]
-    # Bandets form (omspelat 2026-09-12): raden är sektion 5 på vänstern och
-    # definitionen är formelspaltens fjärde barn. Lappbandet pekar på samma
-    # väg, så byter tavlabandet form måste tavellapp.json följa med.
+    # Bandets form (omspelat 2026-09-20): raden är sektion 5 på vänstern och
+    # definitionen är formelspaltens TREDJE barn — begreppsparet står före
+    # den, receptet och «Att tänka på» efter. Lappbandet pekar på samma väg,
+    # så byter tavlabandet form måste tavellapp.json följa med.
     rad = board["boards"][0]["sections"][5]
     assert rad["kind"] == "row"          # klumpen läraren inte kunde peka i
-    fore = copy.deepcopy(rad["children"][1]["children"][3])
+    fore = copy.deepcopy(rad["children"][1]["children"][2])
 
     ut = lesson_board.refine_board(board, "skriv definitionen med a i stället",
                                    model="", max_rounds=1,
-                                   mal={"el": "tav6.1.3",
-                                        "namn": "Formel 2",
+                                   mal={"el": "tav6.1.2",
+                                        "namn": "Formel 1",
                                         "innehall": fore["latex"]})
     assert _utan_budget(ut["errors"]) == [], ut["errors"]
     assert ut["rounds"] == 1             # en lapp, inte en hel tavla
-    efter = ut["board"]["boards"][0]["sections"][5]["children"][1]["children"][3]
+    efter = ut["board"]["boards"][0]["sections"][5]["children"][1]["children"][2]
     assert "f'(a)" in efter["latex"] and "f'(a)" not in fore["latex"]
     # …och ALLT annat på båda tavlorna står kvar, byte för byte.
     kopia = copy.deepcopy(ut["board"])
-    kopia["boards"][0]["sections"][5]["children"][1]["children"][3] = fore
+    kopia["boards"][0]["sections"][5]["children"][1]["children"][2] = fore
     assert kopia == board
 
 

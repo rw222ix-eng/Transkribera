@@ -339,7 +339,11 @@ INSTRUCTION = (
     "finns ingen heading — och under den en list med HÖGST TRE punkter i "
     "formen «Verb: högst "
     "fyra ord» («Samla: allt x^2 i ett led», «Dela: gör x^2 ensamt», «Dra "
-    "roten: glöm inte minus»). Receptet är momentets METOD — det eleven "
+    # Den skarpa körningen 2026-09-20 (kassetten) skrev två punkter med kolon
+    # och en tredje som en ren uppmaning, «Låt h gå mot noll». Kolonet är inte
+    # pynt: det är ordet högerns metodsteg ska börja i, och domaren läser det.
+    "roten: glöm inte minus»). VARJE punkt har sitt kolon. Receptet är "
+    "momentets METOD — det eleven "
     "följer när hon räknar i boken. Högerns metodsteg BÖRJAR med receptets "
     "verb, och ett steg vars verb varken står i receptet eller bland "
     "begreppsraderna måste vara ett förkunskapsverb; annars saknas raden på "
