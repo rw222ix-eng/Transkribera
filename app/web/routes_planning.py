@@ -1375,6 +1375,30 @@ def create_router(base: Path, arbiter) -> APIRouter:
             return None
         return out_dir
 
+    def _befintlig_planerad(conn, st: dict, falt: dict) -> dict | None:
+        """Raden det här godkännandet redan har skrivit, eller None.
+
+        Två vägar, i den ordningen: planeringens egen `planned_id`, och —
+        om den är borta eller pekar på en raderad rad — lektionen raden står
+        på. Att gå på titeln vore fel: det är just rubriken en omskrivning
+        ändrar, och en ny rubrik hade gett en ny rad."""
+        pid_rad = st.get("planned_id")
+        if pid_rad:
+            rad = db.get_planned_lesson(conn, int(pid_rad))
+            if rad is not None:
+                return rad
+        if not (falt["datum"] and falt["group_id"]):
+            return None
+        for rad in db.list_planned_lessons(conn):
+            if (rad.get("datum") == falt["datum"]
+                    and (rad.get("starttid") or "") == (falt["starttid"] or "")
+                    and rad.get("group_id") == falt["group_id"]
+                    and (rad.get("moment") or "") == (falt["moment"] or "")
+                    and rad.get("status") == "planerad"
+                    and not rad.get("lesson_id")):
+                return rad
+        return None
+
     @router.post("/api/planning/{pid}/approve")
     async def approve(pid: str, req: Request):
         """Godkänn & spara: planeringen skrivs till DB:n (planned_lessons,
@@ -1416,14 +1440,36 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 {"error": "Kunde inte skriva till disk — kontrollera ledigt "
                           "utrymme. Ingenting sparades."}, status_code=507)
 
+        falt = dict(
+            titel=str(title), moment=st.get("moment") or "",
+            board_json=json.dumps(st["board"], ensure_ascii=False),
+            datum=st.get("datum"), starttid=st.get("starttid"),
+            group_id=int(st["group_id"]) if st.get("group_id") else None,
+            course_id=int(st["course_id"]) if st.get("course_id") else None)
         conn = db.connect(db_file)
         try:
-            planned = db.create_planned_lesson(
-                conn, titel=str(title), moment=st.get("moment") or "",
-                board_json=json.dumps(st["board"], ensure_ascii=False),
-                datum=st.get("datum"), starttid=st.get("starttid"),
-                group_id=int(st["group_id"]) if st.get("group_id") else None,
-                course_id=int(st["course_id"]) if st.get("course_id") else None)
+            # ── ETT GODKÄNNANDE, EN RAD ────────────────────────────
+            # Knappen i appen (#godkann) trycks om varje gång läraren skriver
+            # om tavlan: «Fortsätt ändra» lägger pappret tillbaka på bordet och
+            # godkännandet går hela vägen igen. Raden skrevs då NY varje gång —
+            # 2026-09-21 låg 54 och 56 i basen för samma pid, och 55 och 57 för
+            # nästa, och veckan visade samma lektion två gånger. Dokumentet
+            # dubbleras inte (utkastGodkann PATCH:ar sin rad) och inte heller
+            # kalenderposten (db.add_kalenderpost slår ihop på datum/tid/titel);
+            # planeringsraden var den sista som inte kände igen sig själv.
+            #
+            # Identiteten är i första hand `planned_id` i planeringens läge —
+            # det skrevs redan, men lästes aldrig. Föll läget bort (en annan
+            # maskin, ett rensat läge, en planering som lästs in på nytt) är
+            # LEKTIONEN identiteten: samma dag, samma klockslag, samma klass,
+            # samma moment är samma planerade lektion. Bara olänkade rader som
+            # fortfarande är `planerad` rörs — en planering som knutits till en
+            # hållen lektion är historik och skrivs inte om.
+            planned = _befintlig_planerad(conn, st, falt)
+            if planned is not None:
+                planned = db.update_planned_lesson(conn, planned["id"], **falt)
+            if planned is None:
+                planned = db.create_planned_lesson(conn, **falt)
         finally:
             conn.close()
 

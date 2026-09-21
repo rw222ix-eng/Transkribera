@@ -708,6 +708,88 @@ def test_approve_persists_to_db(llm_ready, monkeypatch):
     assert planned["board"]["title"] == "Pythagoras sats"
 
 
+def test_omgodkannande_uppdaterar_raden_i_stallet_for_att_dubblera(
+        llm_ready, monkeypatch):
+    """«Fortsätt ändra» → «Godkänn» trycker knappen en gång till på SAMMA
+    planering. Förr skrev varje tryck en ny rad i planned_lessons: 2026-09-21
+    låg 54 och 56 i basen för samma pid, och veckan visade lektionen två
+    gånger. Nu skrivs raden om — nytt innehåll, samma id."""
+    _stub_generate(monkeypatch,
+                   {"board": _valid_board(), "errors": [], "rounds": 1})
+    r = llm_ready.post("/api/planning/generate",
+                       json={"moment": "Pythagoras sats",
+                             "datum": "2026-09-01", "starttid": "09:10"})
+    pid = _done(r)["id"]
+    forst = llm_ready.post(f"/api/planning/{pid}/approve", json={}).json()
+
+    # Tavlan skrivs om och godkänns igen — samma pid, ny rubrik.
+    bord = copy.deepcopy(_valid_board())
+    bord["title"] = "Pythagoras sats — omskriven"
+    monkeypatch.setattr(lesson_board, "refine_board",
+                        lambda *a, **k: {"board": bord, "errors": [],
+                                         "rounds": 1})
+    _done(llm_ready.post(f"/api/planning/{pid}/refine",
+                         json={"message": "skriv om"}))
+    igen = llm_ready.post(f"/api/planning/{pid}/approve", json={}).json()
+
+    assert igen["planned_id"] == forst["planned_id"]
+    entries = llm_ready.get("/api/planning/calendar",
+                            params={"year": 2026, "month": 9}).json()["entries"]
+    assert len(entries) == 1
+    # Raden bär det SENASTE godkännandets tavla, inte det första.
+    planned = llm_ready.get(f"/api/planning/{forst['planned_id']}").json()
+    assert planned["board"]["title"] == "Pythagoras sats — omskriven"
+
+
+def test_omgodkannande_hittar_raden_aven_utan_planned_id(llm_ready, monkeypatch):
+    """Läget kan tappa sitt `planned_id` (en annan maskin, ett rensat läge).
+    Då är LEKTIONEN identiteten: samma dag, klockslag, klass och moment är
+    samma planerade lektion, och raden skrivs om i stället för att dubbleras."""
+    _stub_generate(monkeypatch,
+                   {"board": _valid_board(), "errors": [], "rounds": 1})
+    r = llm_ready.post("/api/planning/generate",
+                       json={"moment": "Pythagoras sats",
+                             "datum": "2026-09-01", "starttid": "09:10"})
+    pid = _done(r)["id"]
+    forst = llm_ready.post(f"/api/planning/{pid}/approve", json={}).json()
+
+    from app import db as appdb
+    conn = appdb.connect(llm_ready.base_dir / "transkribera.db")
+    lage = appdb.get_planering(conn, pid)
+    lage.pop("planned_id", None)
+    appdb.save_planering(conn, pid, lage)
+    conn.close()
+
+    igen = llm_ready.post(f"/api/planning/{pid}/approve", json={}).json()
+    assert igen["planned_id"] == forst["planned_id"]
+    entries = llm_ready.get("/api/planning/calendar",
+                            params={"year": 2026, "month": 9}).json()["entries"]
+    assert len(entries) == 1
+
+
+def test_omgodkannande_ror_inte_en_hallen_planering(llm_ready, monkeypatch):
+    """En planering som knutits till en hållen lektion är historik. Ett nytt
+    godkännande för samma lektion får en EGEN rad — annars skrivs det som
+    faktiskt hände om i efterhand."""
+    from app import db as appdb
+    approved = _make_planning_with_datum(llm_ready, monkeypatch)
+    conn = appdb.connect(llm_ready.base_dir / "transkribera.db")
+    les = appdb.create_lesson(conn, history_id="hx",
+                              ts="2026-09-01T09:00:00", name="lektion")
+    conn.close()
+    llm_ready.patch(f"/api/planning/{approved['planned_id']}",
+                    json={"lesson_id": les["id"], "status": "hållen"})
+
+    _stub_generate(monkeypatch,
+                   {"board": _valid_board(), "errors": [], "rounds": 1})
+    r = llm_ready.post("/api/planning/generate",
+                       json={"moment": "Pythagoras sats",
+                             "datum": "2026-09-01", "starttid": "09:10"})
+    ny = llm_ready.post(f"/api/planning/{_done(r)['id']}/approve",
+                        json={}).json()
+    assert ny["planned_id"] != approved["planned_id"]
+
+
 def test_get_planned_404(llm_ready):
     assert llm_ready.get("/api/planning/99999").status_code == 404
 

@@ -42,6 +42,16 @@
      bilder 2026-09-13: markören stod kvar på 0 och GET /api/dokument ritar det
      varv markören står på. */
   let utkastBas = 0;
+  /* ── RADEN UTKASTET KOM IFRÅN ───────────────────────
+     «Fortsätt ändra» tar ett GODKÄNT papper ur högen och lägger det på bordet
+     igen. Godkännandet ska då skriva om DEN raden — samma id, samma pdf-sökväg,
+     samma kalenderpost — inte lägga en andra kopia bredvid. Normalt räcker
+     `utkastId` till det, men det kan vara borta (se utkastGodkann), och då
+     skrevs en ny rad medan den gamla låg kvar: samma papper två gånger på
+     lektionskortet, och bara det ena med sin PDF.
+     Talet lever bara så länge pappret ligger framme: en ny rad, ett slängt
+     utkast och ett färdigt godkännande släpper det allihop. */
+  let utkastUr = null;
   /* Basen kommer med PATCH-svaret i «Fortsätt ändra». Markörflyttar som hinner
      före får vänta på det — en markör skickad med fel bas är just buggen. */
   let basKlar = Promise.resolve();
@@ -152,6 +162,7 @@
   function utkastNytt(v) {
     if (!serverPa()) return;
     utkastId = null;
+    utkastUr = null;              // ett nytt papper ärver ingen gammal rad
     nollstallBas();
     skicka('/api/dokument', 'POST', { dokument: v, status: 'utkast' })
       .then(d => { utkastId = d.id; })
@@ -180,8 +191,10 @@
     });
   }
   function utkastGodkann(v) {
-    const id = utkastId;
+    const id = utkastId || utkastUr;
+    const ur = utkastUr;
     utkastId = null;
+    utkastUr = null;
     if (!serverPa()) return Promise.resolve(null);
     if (!id) return dokSpara(v, true);     // utkastet hann aldrig skrivas
     delete v.id;
@@ -201,8 +214,20 @@
          — godkännandet sparade alltså TYST ingenting. Pappret försvann ur
          högen, och för ett prov blev bara lösningsbladet kvar, för det sparas
          en egen väg. En 404 betyder inte «ge upp», den betyder «skriv en ny
-         rad»: samma väg som ett papper som aldrig hann bli utkast. */
-      .catch(e => (e && e.status === 404) ? dokSpara(v, true) : null);
+         rad».
+         MEN INTE FÖRRÄN raden pappret KOM IFRÅN är prövad: «Fortsätt ändra»
+         lämnade en godkänd rad bakom sig, och att posta en ny bredvid den hade
+         gett läraren samma papper två gånger, med PDF:en på bara det ena.
+         Finns inte heller den skrivs en ny rad, samma väg som ett papper som
+         aldrig hann bli utkast. */
+      .catch(e => {
+        if (!e || e.status !== 404) return null;
+        if (!ur || ur === id) return dokSpara(v, true);
+        return skicka('/api/dokument/' + ur, 'PATCH',
+                      { status: 'godkant', dokument: v, foljd: null, stada: true })
+          .then(d => { v.id = d.id; stadatBesked(d); return d; })
+          .catch(() => dokSpara(v, true));
+      });
     sparasNu.set(v, p);
     return p;
   }
@@ -220,6 +245,7 @@
     return skicka('/api/dokument', 'POST', { dokument: vs[0], status: 'utkast' })
       .then(d => {
         utkastId = d.id;
+        utkastUr = null;         // den ångrade slängningen ÄR en ny rad
         nollstallBas();          // ny rad, hela arrayen skrivs om — bas noll
         return vs.slice(1).reduce(
           (p, v) => p.then(() => skicka('/api/dokument/' + d.id + '/versioner', 'POST', { dokument: v })),
@@ -246,6 +272,7 @@
     const koVar = bladko.slice(), nuVar = bladNu;
     bladNu = null; bladko = [];
     utkastId = null;
+    utkastUr = null;
     versioner = []; nu = -1;
     visarLosning = false;
     $('#dokument').hidden = true;
@@ -5843,11 +5870,19 @@
         + 'eller släng det först, sedan går det här pappret att ändra.');
       return Promise.resolve(false);
     }
-    /* Bilderna FÖRST, sedan pappret på bordet: hinner läraren godkänna innan
-       bytesen är hemma trycks provet utan sina foton (se bilderHem). Det är
-       ett anrop per bild över localhost och pappret ligger kvar i högen under
-       tiden. */
-    return bilderHem(v).then(() => fortsattAndraNu(v));
+    /* ── RADEN KAN VARA PÅ VÄG ATT SKRIVAS ────────────
+       `dokKlart` FÖRST, av samma skäl som dokUppdatera och dokTaBort väntar på
+       den: ett papper som just godkänts ligger i högen med sitt id på väg hem
+       i ett PATCH-svar. Hann läraren trycka «Fortsätt ändra» före svaret var
+       `v.id` undefined — ingen statusändring gick i väg, `utkastId` blev
+       undefined, och nästa godkännande skrev en NY rad medan den gamla låg
+       kvar godkänd med sin PDF. Samma papper två gånger på lektionskortet,
+       och bara det ena gick att skriva ut.
+       Bilderna sedan, och FÖRE pappret läggs på bordet: hinner läraren godkänna
+       innan bytesen är hemma trycks provet utan sina foton (se bilderHem). Det
+       är ett anrop per bild över localhost och pappret ligger kvar i högen
+       under tiden. */
+    return dokKlart(v).then(() => bilderHem(v)).then(() => fortsattAndraNu(v));
   }
   function fortsattAndraNu(v) {
     const i = sparat.indexOf(v);
@@ -5880,8 +5915,12 @@
       skicka(`/api/exams/${examId}/oppna`, 'POST', {}).catch(() => null);
     }
     aterstallUtkast({ id, versioner: [v], markor: 0 });
-    /* EFTER aterstallUtkast: den nollställer basen (rätt för alla andra
-       ingångar), och först här vet vi att den ska räknas om. */
+    /* EFTER aterstallUtkast: den nollställer både basen och ankaret (rätt för
+       alla andra ingångar), och först här vet vi vad de ska vara.
+       Ankaret är radens id: godkännandet ska skriva om DEN raden, också om
+       `utkastId` skulle tappas på vägen — annars ligger pappret två gånger i
+       högen och bara det ena bär PDF:en. */
+    utkastUr = id || null;
     if (statusPaVag) {
       basKlar = statusPaVag.then(d => {
         if (d && typeof d.markor === 'number' && utkastId === id) utkastBas = d.markor;
@@ -6806,6 +6845,9 @@
      hänger över en tom planering är sämre än inget papper alls. */
   function aterstallUtkast(u) {
     utkastId = u.id;
+    /* Förvalet: utkastet ÄR raden, det finns ingen godkänd rad bakom det.
+       «Fortsätt ändra» sätter ankaret själv, efter det här anropet. */
+    utkastUr = null;
     /* Basen sätts av den som VET att arrayen är en delmängd av radens historik
        — «Fortsätt ändra», efter sitt PATCH-svar. Här är den alltid noll: högen
        lämnar utkastet med hela sin historik, och slängningens ångra skriver om
