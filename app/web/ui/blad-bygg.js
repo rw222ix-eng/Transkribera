@@ -463,7 +463,15 @@ window.BladBygg = (() => {
              läraren just strukit ur bandet kommer tillbaka. Vakten där var
              `/redovisas/i` — den räcker inte, för ett band hon skrivit om kan
              mycket väl sakna ordet. */''}
+      ${/* HJÄLPMEDLEN STÅR I BANDET (lärarens beställning 2026-09-21: «det
+             måste stå om det ska användas räknare eller inte på vilka
+             uppgifter, lite kort»). Provet säger det på försättsbladet
+             (prov.tex.j2); gruppuppgiften och arbetsbladet har inget
+             försättsblad, och dokumentets `hjalpmedel» («Räknare: uppgift 3.
+             Övriga räknas utan.») nådde därför aldrig pappret. Raden står
+             fet efter arbetsregeln och före nyckelfrågan, en gång. */''}
       <div class="guband"${bandtext ? ' data-egen' : ''}>${esc(bandtext || BAND[v.typ] || BAND.Arbetsblad)}${
+        (v.hjalpmedel || '').trim() ? ` <b>${esc(v.hjalpmedel.trim())}</b>` : ''}${
         v.nyckelfraga ? ` <b>${mat(v.nyckelfraga)}</b>` : ''}</div>
       ${uppgifter.map(kort).join('')}
     </div>`;

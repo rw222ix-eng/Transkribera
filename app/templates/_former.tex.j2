@@ -12,9 +12,13 @@
     tabell ska gå att läsa i båda riktningar. #))
 ((* macro tabell(t) *))
 ((* if t *))\par\vspace{2mm}
-{\small\noindent\begin{tabular}{((( t.spec )))}\hline
+((# Radhöjden: en cell med ett bråk (4/x = 12/(x+4), gruppuppgiften
+    «Ekvationer med bråk» 2026-09-21) trycktes ihop mot rutnätet och
+    raderna gick i varandra. 1,6 ger bråket sin höjd; en tabell utan bråk
+    blir bara lite luftigare. #))
+{\small\renewcommand{\arraystretch}{1.6}\noindent\begin{tabular}{((( t.spec )))}\hline
 ((* for r in t.rubriker *))\tabrubrik{((( r )))}((* if not loop.last *)) & ((* endif *))((* endfor *)) \\ \hline
-((* for rad in t.rader *))((* for c in rad *))((( c )))((* if not loop.last *)) & ((* endif *))((* endfor *)) \\ \hline
+((* for rad in t.rader *))((* for c in rad *))((( c )))((* if 'frac' in c *))\bråkstrut((* endif *))((* if not loop.last *)) & ((* endif *))((* endfor *)) \\ \hline
 ((* endfor *))\end{tabular}}\par\vspace{2mm}
 ((* endif *))
 ((* endmacro *))
@@ -106,6 +110,9 @@
 ((* if t *))
 \vspace{4mm}
 \begin{center}
+((# Samma radhöjd som i `tabell`: bråk i cellerna (lösningsförslaget till
+    «Ekvationer med bråk», 2026-09-21) gick annars i varandra. #))
+\renewcommand{\arraystretch}{1.6}%
 \begin{tabular}{((( t.spec )))}
   \toprule
 ((# Ingen fetstil i rubrikraden: förlagans tabell är helt omarkerad, och
@@ -114,7 +121,7 @@
   ((* for r in t.rubriker *))((( r )))((* if not loop.last *)) & ((* endif *))((* endfor *)) \\
   \midrule
 ((* for rad in t.rader *))
-  ((* for c in rad *))((( c )))((* if not loop.last *)) & ((* endif *))((* endfor *)) \\
+  ((* for c in rad *))((( c )))((* if 'frac' in c *))\bråkstrut((* endif *))((* if not loop.last *)) & ((* endif *))((* endfor *)) \\
 ((* endfor *))
   \bottomrule
 \end{tabular}
