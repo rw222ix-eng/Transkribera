@@ -5570,7 +5570,13 @@
      `losningar` och inte `bedomning`: knappen gav förut bedömningsanvisningen,
      lärarens LaTeX-satta rättningsdokument, och det är ett annat papper än det
      läraren ser i förhandsvisningen. Anvisningen finns kvar på disk och är
-     rutens egen reserv när avritningen saknas (tryck.losningar_bredvid). */
+     rutens egen reserv när avritningen saknas (tryck.losningar_bredvid).
+     ELEVERNAS LÖSNINGSFÖRSLAG kommer ut ur BÅDA adresserna när det är byggt
+     (POST /api/exams/{id}/losningsforslag): provet via losningar_bredvid,
+     gruppuppgiften via facit_bredvid. Därför behöver raden ingen egen gren
+     för den — samma knapp, samma klon, nyare papper. Är det inte byggt ger
+     adressen det godkännandet lade där: provets avritade facitark respektive
+     gruppuppgiftens facit med bedömning. */
   const pdfVag = v => {
     const id = pdfId(v);
     if (!id) return null;

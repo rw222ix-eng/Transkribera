@@ -10,7 +10,13 @@
     står facit (`losning`) där i stället — kort, men rätt.
 
     Samma typografi som provet, av samma skäl som bedömningen: eleven läser
-    det här bredvid sitt eget rättade papper. #))
+    det här bredvid sitt eget rättade papper.
+
+    `med_poang` (exam_latex.render_losningsforslag) är poängen i
+    högermarginalen. Provet har den; GRUPPUPPGIFTEN har den inte, för gruppens
+    eget ark bär inga poäng alls — «en siffra i marginalen gör uppgiften till
+    en tävling» (gruppuppgift.tex.j2), och det gäller lika mycket det facit
+    som gås igenom på tavlan efteråt. #))
 ((* set med_grafik = false *))
 ((* set med_svarsrad = false *))
 ((* set forlaga = true *))
@@ -39,13 +45,17 @@
 \end{center}
 
 \vspace{2mm}
+((* if med_poang *))
 {\small Så här ser en fullständig lösning ut på varje uppgift. Poängen i
 högermarginalen är uppgiftens (E/C/A).}
+((* else *))
+{\small Så här ser en fullständig lösning ut på varje uppgift.}
+((* endif *))
 
 \vspace{4mm}
 ((* for del in delar *))
 ((* for u in del.uppgifter *))
-\begin{uppgift}{((( u.nummer )))}{((( u.poang_eca )))}\par
+\begin{uppgift}{((( u.nummer )))}{((* if med_poang *))((( u.poang_eca )))((* endif *))}\par
 {\itshape ((( former.stycken(u.stycken) )))}\par\vspace{2mm}
 ((* if u.bild_fil *))
 \begin{center}
@@ -56,7 +66,7 @@ högermarginalen är uppgiftens (E/C/A).}
 ((( former.kropp(u) )))
 ((* if u.har_deluppgifter *))
 ((* for d in u.deluppgifter *))
-\begin{deluppgift}{((( d.bokstav )))}{((( d.poang_eca )))}\par
+\begin{deluppgift}{((( d.bokstav )))}{((* if med_poang *))((( d.poang_eca )))((* endif *))}\par
 {\itshape ((( former.stycken(d.stycken) )))}\par\vspace{1mm}
 ((* if d.bild_fil *))
 \begin{center}

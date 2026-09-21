@@ -1230,13 +1230,19 @@ def render_bedomning(doc: exam_spec.ExamDoc,
 
 
 def render_losningsforslag(doc: exam_spec.ExamDoc,
-                           bilder: dict[int, str] | None = None) -> str:
+                           bilder: dict[int, str] | None = None,
+                           med_poang: bool = True) -> str:
     """Elevernas lösningsförslag (lärarens beställning 2026-09-17): uppgiften
     och hela lösningen utskriven, ingen poängtrappa, inga elevexempel, inga
     kravgränser. facit=True av samma skäl som bedömningen — pappret delas ut
-    EFTER provet, och rätt kryss och det brustna steget hör till lösningen."""
+    EFTER provet, och rätt kryss och det brustna steget hör till lösningen.
+
+    `med_poang` är poängen (E/C/A) i högermarginalen. Provet har den, för den
+    står på provet eleven just skrev. GRUPPUPPGIFTEN har den inte: gruppens
+    eget ark bär inga poäng alls (gruppuppgift.tex.j2), och ett facit som
+    sätter ut dem säger att pappret var ett prov ändå."""
     return _environment().get_template("losningsforslag.tex.j2").render(
-        **_build_view(doc, bilder, facit=True))
+        med_poang=med_poang, **_build_view(doc, bilder, facit=True))
 
 
 def render_arbetsblad(doc: exam_spec.ExamDoc, visa_poang: bool = False,

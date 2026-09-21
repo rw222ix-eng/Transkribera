@@ -2768,16 +2768,26 @@ def create_router(base: Path, arbiter) -> APIRouter:
     def get_losningsforslag(exam_id: Id64):
         """Elevernas lösningsförslag — hela lösningen utskriven, utan
         poängtrappa och elevexempel (lärarens beställning 2026-09-17). Byggs
-        av POST på samma adress."""
+        av POST på samma adress, för provet och för gruppuppgiften."""
         return _serve_bredvid(
             exam_id, tryck.losningsforslag_bredvid,
             "Elevernas lösningsförslag är inte skrivet — bygg det med POST "
             "/api/exams/{id}/losningsforslag.")
 
+    # Papperstyper som kan få elevernas lösningsförslag. Provet sedan
+    # 2026-09-17, gruppuppgiften sedan läraren bad om det: «Jag vill att man
+    # kan generera facit till gruppuppgifterna i appen.» Det är samma papper
+    # och samma pass — gruppuppgiftens uppgifter bär `losning` och `bedomning`
+    # precis som provets — och ARBETSBLADET är inte med: dess facit ÄR den
+    # utskrivna lösningen redan (arbetsblad.tex.j2 only_facit), så ett andra
+    # facit bredvid hade varit samma papper två gånger.
+    _LOSNINGSFORSLAG_TYPER = ("prov", "gruppuppgift")
+
     @router.post("/api/exams/{exam_id:int}/losningsforslag")
     async def bygg_losningsforslag(exam_id: Id64, req: Request):
-        """Skriv elevernas lösningsförslag till ett godkänt prov och sätt det
-        som PDF bredvid provet (``{stam} - losningsforslag.pdf``).
+        """Skriv elevernas lösningsförslag till ett godkänt prov eller en
+        godkänd gruppuppgift och sätt det som PDF bredvid pappret
+        (``{stam} - losningsforslag.pdf``).
 
         Läraren 2026-09-17: «vi får göra om lösningsförslagen så att de är
         tydligare, så att eleverna verkligen kan läsa ut det. Vi skiter i ett
@@ -2801,9 +2811,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
             conn.close()
         if view is None or view.get("exam") is None:
             return JSONResponse({"error": "okänt prov"}, status_code=404)
-        if (view.get("typ") or "prov") != "prov":
+        typ = view.get("typ") or "prov"
+        if typ not in _LOSNINGSFORSLAG_TYPER:
             return JSONResponse(
-                {"error": "elevernas lösningsförslag skrivs bara till provet"},
+                {"error": "elevernas lösningsförslag skrivs bara till provet "
+                          "och gruppuppgiften"},
                 status_code=400)
         view["exam"] = exam_gen._repair_ctrl_chars(view["exam"])
         _satt_lararens_datum(view["exam"], view.get("datum"))
@@ -2817,9 +2829,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
         skrivna = await run_in_threadpool(
             exam_gen.losningspass, view["exam"], model=_model_name(),
             nummer=nummer)
-        doc, fel = exam_spec.validate_exam_json(view["exam"], "prov")
+        # Profilen är pappersTYPEN och inte «prov»: gruppuppgiften faller på
+        # sin egen balans (exam_spec.PROFILER) och måste dessutom ha sitt
+        # grupp-block, och ett facit som validerats mot fel profil hade sagt
+        # att arket är trasigt när det bara är en annan sorts papper.
+        doc, fel = exam_spec.validate_exam_json(view["exam"], typ)
         if doc is None:
-            return JSONResponse({"error": "provet går inte att läsa",
+            return JSONResponse({"error": "pappret går inte att läsa",
                                  "errors": fel}, status_code=400)
         if skrivna:
             conn = db.connect(db_file)
@@ -2831,9 +2847,14 @@ def create_router(base: Path, arbiter) -> APIRouter:
         out_dir = _artifact_dir(view)
         pdf, varning = None, "utkatalogen gick inte att räkna ut"
         if out_dir is not None and out_dir.is_dir():
-            slug = _safe_component(doc.titel, "prov")
+            slug = _safe_component(doc.titel, typ)
             bilder, _egna, _forsatt = _bilder_ur_utkatalogen(view["exam"], out_dir)
-            tex = exam_latex.render_losningsforslag(doc, bilder=bilder)
+            # INGA POÄNG I MARGINALEN PÅ GRUPPUPPGIFTENS FACIT. Gruppens eget
+            # ark bär inga heller — «en siffra i marginalen gör uppgiften till
+            # en tävling» (gruppuppgift.tex.j2) — och ett facit som plötsligt
+            # sätter ut 2/1/0 säger att pappret var ett prov ändå.
+            tex = exam_latex.render_losningsforslag(
+                doc, bilder=bilder, med_poang=(typ != "gruppuppgift"))
             (out_dir / f"{slug} - losningsforslag.tex").write_text(
                 tex, encoding="utf-8")
             if not exam_pdf.engine_available():
@@ -2847,7 +2868,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     pdf, log = None, str(exc)
                 varning = "" if pdf else ("PDF:en gick inte att bygga:\n" + log)
         elif out_dir is not None:
-            varning = "provet har inga sparade filer att lägga pappret bredvid"
+            varning = "pappret har inga sparade filer att lägga facit bredvid"
         return {"id": exam_id, "skrivna": skrivna,
                 "pdf": str(pdf) if pdf else None, "varning": varning}
 

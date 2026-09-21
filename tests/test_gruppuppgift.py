@@ -1072,3 +1072,157 @@ def test_fynden_sager_att_poangen_ska_sta_kvar():
     rel = exam_gen.relevansfynd(
         kort, {"2": {"dom": "annan sort", "battre": "", "skal": "", "kraver": ""}})
     assert exam_gen.BEHALL_PLANEN in rel[0]["message"]
+
+
+# ------------------------------------------- elevernas lösningsförslag --
+#
+# Lärarens beställning 2026-09-21: «Jag vill att man kan generera facit till
+# gruppuppgifterna i appen, för båda gruppuppgifterna.» Provet hade det sedan
+# 2026-09-17 (POST /api/exams/{id}/losningsforslag); gruppuppgiften fick det
+# inte, därför att rutten släppte in typen «prov» och ingen annan.
+#
+# Det är SAMMA papper och samma pass: gruppuppgiftens uppgifter bär `losning`
+# och `bedomning` precis som provets, med deluppgifter. Det som skiljer är
+# poängen i marginalen — gruppens eget ark har inga, och då ska facit inte ha
+# några heller.
+
+
+def _fejkbygge(monkeypatch):
+    """Tectonic byts mot en fil på disk: den här sviten prövar VILKET papper
+    som byggs och var det hamnar, inte att LaTeX kompilerar (det gör
+    test_pappret_gar_att_kompilera)."""
+    byggda = {}
+
+    def fake_compile(tex, out_dir, jobname, **_kw):
+        byggda[jobname] = tex
+        out_dir.mkdir(parents=True, exist_ok=True)
+        p = out_dir / f"{jobname}.pdf"
+        p.write_bytes(b"%PDF-1.5 fejk")
+        return p, ""
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: True)
+    monkeypatch.setattr(exam_pdf, "compile_pdf", fake_compile)
+    return byggda
+
+
+def _godkand_gruppuppgift(client, monkeypatch):
+    _stub(monkeypatch)
+    ex = _done(client.post("/api/exams/generate", json={
+        "kurs": "Matematik, nivå 2c", "punkter_text": ["Derivator"],
+        "typ": "gruppuppgift",
+        "grupp": {"elever": 4, "langd_min": 45, "redovisning": "poster"}}))
+    _done(client.post(f"/api/exams/{ex['id']}/approve", json={}))
+    return ex["id"]
+
+
+def _fejkat_losningspass(monkeypatch):
+    def fake_generate(model, prompt, **_kw):
+        assert "lösningsskrivare" in prompt
+        rader = ["Ta bort nämnaren: $3x = 12$", "Dela båda sidor med 3",
+                 "Svar: $x = 4$"]
+        return json.dumps({"losningar": [{"enhet": n, "rader": rader}
+                                         for n in ("", "a", "b", "c")]})
+    monkeypatch.setattr(exam_gen.llm_client, "generate", fake_generate)
+
+
+def test_gruppuppgiften_far_elevernas_losningsforslag(client, monkeypatch):
+    """Hela vägen: GET säger att det inte är skrivet, POST skriver passet in i
+    den AKTUELLA versionen och lägger PDF:en bredvid gruppens ark med samma
+    stam som provets, GET ger den sedan."""
+    byggda = _fejkbygge(monkeypatch)
+    exam_id = _godkand_gruppuppgift(client, monkeypatch)
+    r = client.get(f"/api/exams/{exam_id}/losningsforslag")
+    assert r.status_code == 404 and "inte skrivet" in r.json()["error"]
+
+    _fejkat_losningspass(monkeypatch)
+    versioner_fore = len(client.get(f"/api/exams/{exam_id}").json()["versions"])
+    r = client.post(f"/api/exams/{exam_id}/losningsforslag", json={})
+    assert r.status_code == 200, r.text
+    svar = r.json()
+    assert svar["skrivna"] >= 1 and svar["varning"] == ""
+    assert svar["pdf"].endswith(" - losningsforslag.pdf")
+    view = client.get(f"/api/exams/{exam_id}").json()
+    assert len(view["versions"]) == versioner_fore, "ingen ny version"
+    assert any(u.get("utforlig") for u in view["exam"]["uppgifter"])
+
+    r = client.get(f"/api/exams/{exam_id}/losningsforslag")
+    assert r.status_code == 200
+    assert "losningsforslag.pdf" in r.headers["content-disposition"]
+    assert "losningsforslag" in " ".join(byggda)
+
+
+def test_gruppuppgiftens_facit_bar_hela_losningen_men_inga_poang(client, monkeypatch):
+    """Pappret är ett RENT facit: hela lösningen per uppgift och deluppgift,
+    ingen poängtrappa, inga elevexempel, ingen bedömningstext — och ingen
+    siffra i högermarginalen, för gruppens eget ark har ingen."""
+    byggda = _fejkbygge(monkeypatch)
+    exam_id = _godkand_gruppuppgift(client, monkeypatch)
+    _fejkat_losningspass(monkeypatch)
+    assert client.post(f"/api/exams/{exam_id}/losningsforslag",
+                       json={}).status_code == 200
+    tex = next(t for n, t in byggda.items() if n.endswith("losningsforslag"))
+    assert "Lösningsförslag" in tex and "Svar:" in tex
+    assert "Elevexempel" not in tex
+    # Trappan och bedömningen är lärarens ord och hör till det andra pappret.
+    assert "+1 E" not in tex and r"\delprovband{Facit och bedömning}" not in tex
+    # Brickan står tom där provet har sin E/C/A-trippel.
+    assert r"\begin{uppgift}{1}{}" in tex
+    assert "högermarginalen" not in tex
+    # …men provets eget lösningsförslag har den kvar.
+    from tests.test_exam import _exam
+    provdoc, _ = exam_spec.validate_exam_json(copy.deepcopy(_exam()), "prov")
+    assert "högermarginalen" in exam_latex.render_losningsforslag(provdoc)
+
+
+def test_lararens_lank_ger_losningsforslaget_nar_det_finns(client, monkeypatch):
+    """«Lösningar» i Sparat och raden i utskriftsrutan hämtar gruppuppgiftens
+    facit på /api/exams/{id}/facit (plan.js pdfVag). Innan passet körts är det
+    arket godkännandet byggde; efteråt är det elevernas lösningsförslag —
+    samma knapp, nyare papper (tryck.facit_bredvid)."""
+    _fejkbygge(monkeypatch)
+    exam_id = _godkand_gruppuppgift(client, monkeypatch)
+    r = client.get(f"/api/exams/{exam_id}/facit")
+    assert r.status_code == 200
+    assert r.headers["content-disposition"].endswith("-%20facit.pdf")
+
+    _fejkat_losningspass(monkeypatch)
+    assert client.post(f"/api/exams/{exam_id}/losningsforslag",
+                       json={}).status_code == 200
+    r = client.get(f"/api/exams/{exam_id}/facit")
+    assert r.status_code == 200
+    assert "losningsforslag.pdf" in r.headers["content-disposition"]
+
+
+def test_arbetsbladet_far_inget_eget_losningsforslag(client, monkeypatch):
+    """Arbetsbladets separata facit ÄR den utskrivna lösningen redan. Ett
+    andra facit bredvid hade varit samma papper två gånger."""
+    _fejkbygge(monkeypatch)
+    _stub(monkeypatch)
+    ex = _done(client.post("/api/exams/generate", json={
+        "kurs": "Matematik, nivå 2c", "punkter_text": ["Derivator"],
+        "typ": "arbetsblad"}))
+    _done(client.post(f"/api/exams/{ex['id']}/approve", json={}))
+    r = client.post(f"/api/exams/{ex['id']}/losningsforslag", json={})
+    assert r.status_code == 400
+    assert "gruppuppgiften" in r.json()["error"]
+
+
+@pytest.mark.tectonic
+def test_facit_utan_poangbricka_kompilerar(tmp_path):
+    """Den tomma brickan är det enda nya i sättningen: `uppgift`-miljön får
+    ett tomt andra argument där provet har «2/1/0». En miljö som kräver sitt
+    argument hade fällt hela pappret, och det syns först framför klassen."""
+    import pypdfium2
+
+    d = _doc()
+    d["uppgifter"][0]["utforlig"] = "Dela båda sidor med $3$\nSvar: $x = 4$"
+    doc, fel = exam_spec.validate_exam_json(d, "gruppuppgift")
+    assert doc is not None, fel
+    tex = exam_latex.render_losningsforslag(doc, med_poang=False)
+    pdf, log = exam_pdf.compile_pdf(tex, tmp_path, "gruppfacit")
+    assert pdf is not None, log[-2000:]
+    sidor = pypdfium2.PdfDocument(str(pdf))
+    text = " ".join("".join(sidor[i].get_textpage().get_text_range()
+                            for i in range(len(sidor))).split())
+    assert "Lösningsförslag" in text and "Svar: x = 4" in text
+    # Poängtrippeln står inte någonstans på elevernas papper.
+    assert "3/0/0" not in text

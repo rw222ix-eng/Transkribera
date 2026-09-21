@@ -151,9 +151,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         # rättningsunderlaget och ingenting annat.
                         pdf = tryck.bedomning_bredvid(provpdf)
                     elif rad.get("facit") and provpdf:
-                        # Arbetsbladets separata facit. Raden bad förut om
-                        # bedömningen även för bladet — som aldrig har någon —
-                        # och lärarens lösningsblad hamnade alltid i `saknas`.
+                        # Arbetsbladets och gruppuppgiftens separata facit.
+                        # Raden bad förut om bedömningen även för bladet — som
+                        # aldrig har någon — och lärarens lösningsblad hamnade
+                        # alltid i `saknas`. Har gruppuppgiften fått elevernas
+                        # lösningsförslag är det DET som läggs i högen
+                        # (tryck.facit_bredvid): läraren byggde det för att
+                        # dela ut det.
                         pdf = tryck.facit_bredvid(provpdf)
                     else:
                         pdf = provpdf

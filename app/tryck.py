@@ -393,10 +393,19 @@ def bedomning_bredvid(pdf: Path) -> Path | None:
 
 
 def facit_bredvid(pdf: Path) -> Path | None:
-    """Arbetsbladets separata facit, samma regel som bedömningen. Bladet bär
-    facit på sista sidan ändå — den här filen är för läraren som valde att ha
-    lösningarna på ett eget papper."""
-    return _bredvid(pdf, "facit")
+    """Arbetsbladets och gruppuppgiftens separata facit, samma regel som
+    bedömningen. Arket bär facit på sista sidan ändå — den här filen är för
+    läraren som valde att ha lösningarna på ett eget papper."""
+    # ELEVERNAS LÖSNINGSFÖRSLAG VINNER när det är byggt, precis som i
+    # losningar_bredvid ovan och av samma skäl. Läraren bad om det till
+    # GRUPPUPPGIFTERNA: «Jag vill att man kan generera facit till
+    # gruppuppgifterna i appen.» Hennes väg dit är «Lösningar» i Sparat och
+    # raden i utskriftsrutan, och båda hämtar det här — hade filen legat på
+    # disk utan att någon knapp gav den hade den lika gärna inte funnits.
+    # Arket som godkännandet bygger ({stam} - facit.pdf, facit MED bedömning)
+    # är reserven under tiden: det ligger där från första godkännandet, och
+    # lösningsförslaget skrivs först när läraren ber om det.
+    return _bredvid(pdf, "losningsforslag") or _bredvid(pdf, "facit")
 
 
 def losningar_bredvid(pdf: Path) -> Path | None:

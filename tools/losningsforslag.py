@@ -1,16 +1,19 @@
-"""Elevernas lösningsförslag till ett godkänt prov, från kommandoraden.
+"""Elevernas lösningsförslag till ett godkänt prov eller en godkänd
+gruppuppgift, från kommandoraden.
 
 Samma sak som POST /api/exams/{id}/losningsforslag (routes_exam
 bygg_losningsforslag), för kvällar när appen inte är igång: passet
 (exam_gen.losningspass) skriver `utforlig` per enhet, JSON:en stämplas i den
-aktuella versionen, och pappret sätts bredvid provet som
+aktuella versionen, och pappret sätts bredvid originalet som
 ``{stam} - losningsforslag.pdf``.
 
     python -m tools.losningsforslag 81          # alla uppgifter
     python -m tools.losningsforslag 81 6 12     # bara uppgift 6 och 12
+    python -m tools.losningsforslag 114         # gruppuppgiften går lika bra
 
 Lärarens beställning 2026-09-17: «vi laddar bara upp hela lösningen, full
-poäng, hur det ser ut. Väldigt tydligt.»"""
+poäng, hur det ser ut. Väldigt tydligt.» Och 2026-09-21, om gruppuppgifterna:
+«Jag vill att man kan generera facit till gruppuppgifterna i appen.»"""
 from __future__ import annotations
 
 import sys
@@ -33,15 +36,23 @@ def main(argv: list[str]) -> int:
     finally:
         conn.close()
     if view is None or view.get("exam") is None:
-        print("okänt prov", exam_id)
+        print("okänt papper", exam_id)
+        return 1
+    # Samma grind som rutten: provet och gruppuppgiften, inte arbetsbladet
+    # (routes_exam._LOSNINGSFORSLAG_TYPER). Typen bär också profilen som
+    # JSON:en valideras mot och slugen filen får.
+    typ = view.get("typ") or "prov"
+    if typ not in ("prov", "gruppuppgift"):
+        print("elevernas lösningsförslag skrivs bara till provet och "
+              "gruppuppgiften — det här är ett", typ)
         return 1
     exam = exam_gen._repair_ctrl_chars(view["exam"])
     skrivna = exam_gen.losningspass(exam, model="", nummer=nummer,
                                     log_cb=lambda m: print(m, flush=True))
     print("skrivna uppgifter:", skrivna)
-    doc, fel = exam_spec.validate_exam_json(exam, "prov")
+    doc, fel = exam_spec.validate_exam_json(exam, typ)
     if doc is None:
-        print("provet validerar inte:", fel)
+        print("pappret validerar inte:", fel)
         return 1
     if skrivna:
         conn = db.connect(db_file)
@@ -52,13 +63,15 @@ def main(argv: list[str]) -> int:
     pdf_path = next((v.get("pdf_path") for v in reversed(view["versions"])
                      if v.get("pdf_path")), None)
     if not pdf_path:
-        print("provet har ingen PDF — godkänn det först")
+        print("pappret har ingen PDF — godkänn det först")
         return 1
     out_dir = Path(pdf_path).parent
-    slug = _safe_component(doc.titel, "prov")
+    slug = _safe_component(doc.titel, typ)
     # Utan plåtar, som bedömningsanvisningen: bilderna är provets stämning,
     # lösningen är matematiken. Figurer (TikZ) ritas ur JSON:en ändå.
-    tex = exam_latex.render_losningsforslag(doc, bilder={})
+    # Inga poäng i marginalen på gruppuppgiftens facit — se rutten.
+    tex = exam_latex.render_losningsforslag(
+        doc, bilder={}, med_poang=(typ != "gruppuppgift"))
     (out_dir / f"{slug} - losningsforslag.tex").write_text(tex, encoding="utf-8")
     pdf, log = exam_pdf.compile_pdf(tex, out_dir, f"{slug} - losningsforslag")
     print("pdf:", pdf if pdf else "FÖLL:\n" + log[-2000:])
