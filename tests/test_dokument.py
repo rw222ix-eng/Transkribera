@@ -504,17 +504,26 @@ def test_plan_js_skickar_stada_bara_fran_godkannandet():
     väg. Skulle dokSpara börja skicka den alltid vore ett utkast under händerna
     inte längre säkert."""
     js = PLAN_JS.read_text(encoding="utf-8")
-    # Ett enda anrop bär flaggan: PATCH:en i utkastGodkann. Fallbacket när
-    # utkastet aldrig hann skrivas går via dokSpara(v, true) — samma gest.
-    assert js.count("foljd: null, stada: true") == 1
+    # Flaggan bärs av PATCH:arna i utkastGodkann och ingen annanstans: den
+    # ordinarie, och (sedan c0bddd2, omgodkännandet) den mot raden utkastet
+    # kom ifrån (`utkastUr`) när utkastraden själv hunnit försvinna. Fallbacket
+    # när utkastet aldrig hann skrivas går via dokSpara(v, true) — samma gest.
+    godkann = js[js.index("  function utkastGodkann(v) {"):]
+    godkann = godkann[:godkann.index("\n  }\n")]
+    assert js.count("foljd: null, stada: true") == 2
+    assert godkann.count("foljd: null, stada: true") == 2
     assert "dokSpara(v, true)" in js
     # TVÅ anrop bär den, och båda står i utkastGodkann: utkastet som aldrig
     # hann skrivas, och utkastraden som en ANNAN FLIK hann radera (404:an —
     # svaret sväljdes förr, och godkännandet sparade då tyst ingenting).
     # Ingen annan sparning gör det: de fyra andra dokSpara-anropen (blad, kopia,
     # ångrad radering, uppgiftsbanken) skickar inget andra argument.
-    kvar = js.replace("if (!id) return dokSpara(v, true);", "").replace(
-        "(e && e.status === 404) ? dokSpara(v, true) : null", "")
+    # Sedan c0bddd2 bär 404-grenen två: raden utkastet kom ifrån (`utkastUr`)
+    # prövas först, och faller den också går det som förut.
+    kvar = (js.replace("if (!id) return dokSpara(v, true);", "")
+            .replace("(e && e.status === 404) ? dokSpara(v, true) : null", "")
+            .replace("if (!ur || ur === id) return dokSpara(v, true);", "")
+            .replace(".catch(() => dokSpara(v, true));", ""))
     assert "dokSpara(v, true)" not in kvar
 
 
@@ -979,7 +988,11 @@ def test_plan_js_hamtar_hem_bytesen_innan_ett_papper_arbetas_pa():
     assert "function bilderHem(v) {" in js
     assert "readAsDataURL" in js
     kropp = js[js.index("  function fortsattAndra(i) {"):]
-    assert "bilderHem(v).then(() => fortsattAndraNu(v));" in kropp[:kropp.index("\n  }\n")]
+    # dokKlart FÖRST (c0bddd2): ett nyss godkänt papper får sitt id när
+    # godkännandets PATCH-svar landat, och «Fortsätt ändra» inom de
+    # millisekunderna skrev annars en ny rad vid nästa godkännande.
+    assert "dokKlart(v).then(() => bilderHem(v)).then(() => fortsattAndraNu(v));" \
+        in kropp[:kropp.index("\n  }\n")]
     # Och före en radering: ångra skriver tillbaka pappret som en NY rad, och
     # då finns ingen gammal rad att lösa upp adressen mot.
     radera = js[js.index("  function raderaDok(v) {"):]
