@@ -130,10 +130,11 @@ def test_alla_few_shots_foljer_dramaturgin():
             f"{uppdrag}: {arter}"
         # Rubriken och agendan står mitt på tavlan — så skriver läraren dem.
         assert s[0].get("align") == "center" and s[1].get("align") == "center", uppdrag
-        # Agendan: TRE korta punkter i vardaglig svenska, och boken i EN av
-        # dem. Taket var 3–4 till 2026-09-05: «agendan säger bok och uppgifter
-        # två gånger», och en fjärde punkt är en skriven enhet till.
-        assert len(s[1]["items"]) == 3, uppdrag
+        # Agendan: TVÅ korta punkter i vardaglig svenska, och boken i EN av
+        # dem. Taket var 3–4 till 2026-09-05 («agendan säger bok och uppgifter
+        # två gånger»), tre till 2026-09-21 — då sa hon «korta ner det, kanske
+        # 30 %», och mellanpunkten sa det rubriken och frågan redan säger.
+        assert len(s[1]["items"]) == 2, uppdrag
         assert all(len(p.split()) <= 5 for p in s[1]["items"]), uppdrag
         bokpunkter = [p for p in s[1]["items"] if "boken s." in p.lower()]
         assert len(bokpunkter) == 1, uppdrag
@@ -155,16 +156,23 @@ def test_alla_few_shots_foljer_dramaturgin():
         assert rad[0]["children"][0]["text"] == "1. Vad är det?", uppdrag
         assert rad[1]["children"][0]["text"] == "2. Så löser vi", uppdrag
         assert all(c["children"][0].get("weight") == 700 for c in rad), uppdrag
-        # Spalt 1: kroppen (om momentet har en) överst, sedan EN
-        # definitionsmening på högst ÅTTA ord — «om det ska vara meningar ska
-        # de vara korta» — och därefter anatomin och begreppen.
+        # Spalt 1: kroppen (om momentet har en) överst, sedan anatomin och
+        # begreppen. INGEN DEFINITIONSMENING (2026-09-21): regel 5 skriver
+        # den bara när varken anatomin eller begreppsraderna säger det, och
+        # i alla fyra shotarna gör de det. Skrivs den ändå är taket sex ord.
         ettan = rad[0]["children"]
-        meningar = [c for c in ettan[1:] if c["kind"] == "text"
-                    and ": " not in c["text"] and c.get("weight") != 700]
-        assert meningar, uppdrag
-        assert len(meningar[0]["text"].split()) <= 8, (uppdrag, meningar[0])
-        if ettan[1]["kind"] in ("shape", "graph"):
-            assert meningar[0] is ettan[2], uppdrag      # kroppen FÖRE meningen
+        # Etiketterna under anatomin och ankaret är bildtexter till raden
+        # ovanför, inte meningar: de känns igen på att en math står före dem.
+        meningar = [c for i, c in enumerate(ettan) if i and c["kind"] == "text"
+                    and ": " not in c["text"] and c.get("weight") != 700
+                    and ettan[i - 1]["kind"] != "math"]
+        assert not meningar, (uppdrag, meningar)
+        # PILEN (6c): en ensam ⇓ i varje spalt, och den kostar inget i
+        # budgeten — det är därför den fick plats samtidigt som texten gick.
+        for spalt in rad:
+            pilar = [c for c in spalt["children"] if c["kind"] == "math"
+                     and ws._ar_pilrad(c["latex"])]
+            assert len(pilar) == 1, (uppdrag, spalt["children"][0]["text"])
         # Och begreppsraden är ett NAMN, inte en mening: ord, kolon, högst
         # FEM ord (2026-09-05).
         for text in _begreppsrader(doc):
@@ -234,22 +242,25 @@ def test_few_shotarna_haller_textbudgeten():
 
 
 def test_budgettaken_ar_matta_och_shotarna_haller_dem():
-    """Lärarens dom 2026-09-05 (kväll) sänkte taken till 280/170/60/50. Domen
-    2026-09-20 gav vänstern ett skelett till — ankaret, receptet och «Att
-    tänka på» — och 280 räckte inte till dem. Kolumntaket och radlängderna
-    rördes inte (högertavlan ändrades inte). Shotarna måste hålla taken: en
-    modell härmar det den ser.
+    """Taket är lärarens egen procent. Hennes dom 2026-09-21 över kvällens
+    två tavlor: «de har blivit lite bättre. Problemet är bara att det blir så
+    jävla mycket på vänstra tavlan. Det vore bra att korta ner det, kanske
+    30 %.» 390 minus 30 % är 273; taket är 270. Kolumntaket och
+    radlängderna rördes inte — högertavlan var inte det hon klagade på.
 
-    MÄTT MOT EN SKARP TAVLA, inte mot shotarna (andra rundan samma dag).
-    Shotarna är trimmade med flit och ligger lågt; det som ska rymmas är en
-    riktig tavla med ett riktigt urval. Kontrolltavlan för Origo 2a 1.3 bär
-    316 tecken, och med grundformen i anatomin och en läsbar receptrad landar
-    den strax över 330. 390 lämnar den ~15 % luft."""
-    assert (ws._MAX_BOARD_TEXT, ws._MAX_COLUMN_TEXT) == (390, 170)
+    SHOTARNA ÄR BUDGETEN: en modell härmar det den ser, och en shot som
+    ligger över taket lär ut det taket förbjuder. Alla fyra kortades samma
+    dag, också med 30 %: 260/235/250/258 blev 180/162/171/172. Att den GAMLA
+    skarpa tavlan nu faller mäts i test_whiteboard_spec
+    (test_gamla_kontrolltavlan_faller_pa_det_nya_taket)."""
+    assert (ws._MAX_BOARD_TEXT, ws._MAX_COLUMN_TEXT) == (270, 170)
     assert (ws._MAX_TEXT_CHARS, ws._MAX_ITEM_CHARS) == (60, 50)
-    skarp = ws._text_volym(
-        ws.validate_board_json(_kontrolltavlan())[0].boards[0].sections)
-    assert 0.75 <= skarp / ws._MAX_BOARD_TEXT <= 0.95, skarp
+    vanstrar = [ws._text_volym(
+        ws.validate_board_json(doc)[0].boards[0].sections, vanster=True)
+        for _u, doc in lb.FEW_SHOTS]
+    # Shotarna ligger på 60–70 % av taket: tätt, men med luft för en riktig
+    # tavla med ett riktigt urval.
+    assert all(0.55 <= v / ws._MAX_BOARD_TEXT <= 0.72 for v in vanstrar), vanstrar
     for uppdrag, doc in lb.FEW_SHOTS:
         parsed, _fel = ws.validate_board_json(doc)
         for i, board in enumerate(parsed.boards):
@@ -539,8 +550,10 @@ def test_prompten_satter_begreppen_forst():
     assert "formelsamling" in p
     assert "Verben ÄR begrepp" in p
     # Aldrig en fast ordlista: momentet ger orden, och exemplen i prompten
-    # ska komma ur olika områden.
-    assert "aldrig " in p and "av en färdig lista" in p
+    # ska komma ur olika områden. Raden «Vilka orden blir avgörs av momentet,
+    # aldrig av en färdig lista» ströks 2026-09-21 för att betala pilarna
+    # (6c) — kravet bärs av «i varje moment och ur varje källa» i samma regel.
+    assert "i varje moment och ur varje källa" in p
     # Orden i prompten kommer ur olika områden. De stod förut i en uppräkning
     # inne i 8c; den ströks 2026-09-05 (uppräkningen lockade till fler rader,
     # och prompten skulle kortas), så nu bärs de av metodstegens exempel —
@@ -559,11 +572,13 @@ def test_prompten_forbjuder_areamodellen_och_taket():
     uttryck.» Prompten ska bära både taket och kroppsförbudet själv — shotarna
     visar formen, men prompten är den som gäller alla moment."""
     p = lb.build_prompt("Ma2a", "IndA", "andragradsuttryck")
-    # Taket: två rader som norm (tre bara när momentet inför tre nya
-    # begrepp), EN formel som norm, en regel en gång. Lydelsen skärptes
-    # 2026-09-05 (kväll) från «högst tre / högst två» till en NORM med ett
-    # villkorat undantag: «typ två regler. En regel kanske räcker.»
-    assert "NORMEN ÄR TVÅ, tre bara när momentet inför tre nya begrepp" in p
+    # Taket: två begreppsrader, EN formel som norm, en regel en gång.
+    # Lydelsen skärptes 2026-09-05 (kväll) från «högst tre / högst två»
+    # till en NORM med ett villkorat undantag: «typ två regler. En regel
+    # kanske räcker.» Och 2026-09-21 blev normen ett HÅRT tak: undantaget
+    # «tre bara när momentet inför tre nya begrepp» gick att läsa in i
+    # varje moment, och vänstern blev den vägg läraren fällde.
+    assert "HÖGST TVÅ, aldrig en tredje" in p
     assert "NORMEN ÄR EN FORMEL på vänstern, TVÅ bara när båda ÄR momentet" in p
     assert "EN regel står EN gång, som FORMEL" in p
     # Förkunskaperna skrivs aldrig, hur ofta exemplen än använder dem.
@@ -665,12 +680,14 @@ def test_prompten_bar_de_korta_namnen():
     vara meningar ska de vara korta.» (2026-09-05, kväll.) Taken måste stå i
     prompten själv: shotarna visar formen, prompten gäller alla moment."""
     p = lb.build_prompt("Ma2a", "IndA", "andragradsuttryck")
-    # Agendan: tre punkter, boken en gång.
-    assert "en list med TRE punkter" in p
+    # Agendan: TVÅ punkter sedan 2026-09-21, boken en gång.
+    assert "en list med TVÅ punkter" in p
     assert "Bok och uppgifter står i EN av dem, aldrig i två" in p
-    # Öppningsfrågan och definitionsmeningen.
+    # Öppningsfrågan och definitionsmeningen — den senare skrivs numera
+    # bara när anatomin och begreppsraderna tiger (2026-09-21).
     assert "EN rad på högst FEM ORD" in p
-    assert "högst ÅTTA ORD per begrepp momentet bär" in p
+    assert "EN definitionsmening på högst SEX ORD" in p
+    assert "skrivs ingen mening alls, och det är normalfallet" in p
     # Begreppsraden och steget.
     assert "ord, kolon, HÖGST FEM ORD" in p
     assert "kolon och HÖGST FYRA ORD" in p
@@ -681,10 +698,13 @@ def test_prompten_bar_de_korta_namnen():
     # Felförklaringen.
     assert "Förklaringen under det är HÖGST FEM ORD" in p
     # Och lärarens eget tal på hur mycket som får stå. TOLV blev SEXTON
-    # 2026-09-20: skelettets tre nya delar kostar fyra enheter, och den tomma
-    # nedre tredjedelen var just det hon fällde («för lite och för spretigt»).
-    assert "SKRIVNA ENHETERNA" in p and "HÖGST SEXTON" in p
-    assert "HÖGST TOLV" not in p
+    # 2026-09-20 när skelettet kom, och TOLV igen 2026-09-21: «korta ner det,
+    # kanske 30 %». Sexton minus 30 % är elva komma två, och tolv är hennes
+    # eget tal från september. Skelettet ryms när texten omkring det stryks.
+    assert "SKRIVNA ENHETERNA" in p and "HÖGST TOLV" in p
+    assert "HÖGST SEXTON" not in p
+    # Pilarna räknas inte: de är matematik, inte skrivna enheter.
+    assert "pilarna räknas inte" in p
 
 
 def test_prompten_skriver_inte_ord_som_matte():
@@ -1025,10 +1045,11 @@ def test_omskrivningsprompten_bar_samma_skelett_som_skrivningen():
     vänstern. Skelettet måste alltså nå omskrivningen, inte bara
     genereringen."""
     p = lb.build_refine_prompt(_valid_doc(), "lägg till receptet")
-    for rad in ("8d. ANKARET", "8f. RECEPTET", "8g. ATT TÄNKA PÅ",
-                "HÖGST SEXTON", "ETT undantag: ANKARET i 8d"):
+    for rad in ("8d. ANKARET", "6c. PILARNA", "8f. RECEPTET",
+                "8g. ATT TÄNKA PÅ",
+                "HÖGST TOLV", "ETT undantag: ANKARET i 8d"):
         assert rad in p, rad
-    assert "HÖGST TOLV" not in p
+    assert "HÖGST SEXTON" not in p
 
 
 def test_omskrivning_som_ber_om_skelettet_nar_tavlan():
@@ -1447,7 +1468,7 @@ def test_domaren_provar_ocksa_begreppskopplingen():
     assert "ÅT BÅDA HÅLL" in t
     assert "FÖR TJOCK" in t and "STRYKA" in t
     assert "förkunskapsverb" in t
-    assert "fler än tre begreppsrader" in t and "fler än två formler" in t
+    assert "fler än TVÅ begreppsrader" in t and "fler än två formler" in t
     # Fyndformen är oförändrad, och fejk.py matchar fortfarande på ordet.
     assert '{"saknas"' in t
     assert "täckningsdomare" in t
@@ -1470,8 +1491,10 @@ def test_prompten_bar_vansterns_skelett():
     assert "PARET hör till samma regel" in p
     assert "RANDFALL" in p
     # Ordningen står samlad, så att modellen ser skelettet som en helhet.
-    assert ("BEGREPPSRADERNA (8c), ANKARET (8d), FORMELN (8e) i spalt 1, "
-            "RECEPTET (8f), ATT TÄNKA PÅ (8g)") in p
+    # PILEN (6c) kom in i ordningen 2026-09-21: «lägga till kanske någon pil
+    # eller två».
+    assert ("BEGREPPSRADERNA (8c), ANKARET (8d), PILEN (6c), FORMELN (8e) i "
+            "spalt 1, RECEPTET (8f), PILEN (6c), ATT TÄNKA PÅ (8g)") in p
     # …och 8b säger inte längre nej till varje tal på vänstern.
     assert "ETT undantag: ANKARET i 8d" in p
 
@@ -1517,12 +1540,14 @@ def test_domaren_provar_receptet_och_randfallen():
     assert "Saknas receptet är det ett fynd" in t
     assert "Pröva RANDFALLEN" in t
     assert "Räkna typer, inte uppgifter" in t
-    # Tjockleksgränserna följde med skelettet.
+    # Tjockleksgränserna följde med skelettet, och sänktes 2026-09-21 med
+    # lärarens 30 %: två begreppsrader, två randfall.
+    assert "fler än TVÅ begreppsrader" in t
     assert "fler än tre receptpunkter" in t
-    assert "fler än tre rader under «Att tänka på»" in t
+    assert "fler än TVÅ rader under «Att tänka på»" in t
     assert "fler än två vanliga fel" in t
     # Och kompletteringen har samma tak åt det nya hållet.
-    assert "HÖGST TRE rader under «Att tänka på»" in t
+    assert "HÖGST TVÅ rader under «Att tänka på»" in t
 
 
 # ── LÄRARENS TRE FORMDOMAR (2026-09-20, kväll) ──────────────────────────────
@@ -1585,12 +1610,13 @@ def test_prompten_kraver_varfor_under_att_tanka_pa():
     det andra en fråga. En fråga på tavlan lär ingen elev något. Regeln bär
     nu både formen och de två motexemplen."""
     p = lb.build_prompt("Ma2a", "IndA", "andragradsekvationer")
-    assert "en etikett som säger VARFÖR, högst SEX ORD" in p
+    # SEX ORD BLEV FYRA 2026-09-21, och taket står nu också i tecken — samma
+    # tal som vakten friar etiketten på (whiteboard_spec._ETIKETT_MAX).
+    assert "en etikett som säger VARFÖR, högst FYRA ORD och högst 30 tecken" in p
     assert "ALDRIG en fråga" in p and "Exakt svar eller avrundat?" in p
     assert "aldrig bara vad som händer" in p and "saknar lösning" in p
-    # Och de tre raderna läraren själv skrev står som förebild.
-    for rad in ("en kvadrat blir aldrig negativ", "en enda rot",
-                "exakt om inget sägs"):
+    # Och raderna läraren själv skrev står som förebild, kortade.
+    for rad in ("x^2 = -20: aldrig negativ", "en enda rot"):
         assert rad in p, rad
 
 
@@ -1608,15 +1634,16 @@ def test_prompten_skiljer_anatomin_fran_formlerna():
 
 
 def test_prompten_kraver_hel_svenska_i_receptet():
-    """«Dela: bort talet framför» går inte att läsa högt. Punkten är kort,
-    men den är en mening."""
+    """«Dela: bort talet framför» går inte att läsa högt. Punkten är kort —
+    två–tre ord sedan 2026-09-21 — men den ska gå att säga."""
     p = lb.build_prompt("Ma2a", "IndA", "andragradsekvationer")
-    assert "aldrig telegramspråk" in p
-    assert "«Dela: bort talet framför» är inte svenska" in p
-    assert "«Dela: med talet framför kvadraten» är det" in p
+    assert "formen «Verb: TVÅ–TRE ord»" in p
+    assert "Orden efter kolonet ska gå att läsa högt" in p
+    assert "aldrig «Dela: bort talet framför»" in p
+    assert "«Dela: med talet framför»" in p
     # …och ingen matematik i listpunkten: motorn renderar ingen
     # LaTeX i text, så «x^2» hade stått kvar som x^2 på tavlan.
-    assert "Skriv «kvadraten», aldrig «x^2»" in p
+    assert "skriv «kvadraten», aldrig «x^2»" in p
 
 
 def test_domaren_undantar_randfallen_fran_siffervakten():
@@ -1646,11 +1673,14 @@ def test_few_shotarna_visar_randfall_med_tal():
 def test_ankarets_etikett_kostar_inget_i_budgeten():
     """Ankaret är en math-rad och kostar ingenting; etiketten under det är
     dess andra halva. Räknades den som prosa låg v2 på 393 av 390 — och det
-    var den nio tecknen som fick budgetlappen att stryka hela ankaret."""
+    var den nio tecknen som fick budgetlappen att stryka hela ankaret.
+
+    Talet är inte längre 365: etiketterna under «Att tänka på» åker gratis
+    bara två i taget sedan 2026-09-21, och v2 skrev tre. Det som prövas
+    här är ankarets etikett, och den är fri som förut."""
     doc = _v2_med_ankare()
     vanster = ws.validate_board_json(doc)[0].boards[0].sections
     fri = ws._text_volym(vanster, vanster=True)
-    assert fri == 365
     # Utan friandet ligger samma tavla nära taket, och de nio tecknen över
     # var precis vad budgetlappen betalade med hela ankaret.
     assert ws._text_volym(vanster) == fri + len("Båda ger 64.")
@@ -1725,9 +1755,13 @@ def test_lappprompten_forbjuder_strykning_av_skelettet():
     p = lb.build_lapp_prompt(_valid_doc(), _budgetproblem())
     assert "får ALDRIG gälla vänsterns skelett" in p
     assert "kortar du agendan, definitionsmeningen och begreppsradernas ORD" in p
-    # …och åtgärdsrådet för budgeten säger ordningen.
-    assert "korta först begreppsradernas ord" in p
-    assert "Ankaret med sin etikett, receptet och raderna under" in p
+    # …och åtgärdsrådet för budgeten säger ordningen. Den skrevs om
+    # 2026-09-21: strå först det som SAKNAR egen rad på tavlan —
+    # definitionsmeningen, den tredje agendapunkten, den tredje
+    # begreppsraden — innan något kortas ord för ord.
+    assert "stryk först definitionsmeningen helt" in p
+    assert "sedan den tredje agendapunkten" in p
+    assert "Ankaret med sin etikett, receptet, pilarna och raderna" in p
 
 
 def test_domarens_forslag_skrivs_i_radens_egen_form():
@@ -1737,7 +1771,8 @@ def test_domarens_forslag_skrivs_i_radens_egen_form():
     t = lb.build_tackning_prompt({"boards": []}, "LÄRARENS URVAL: 1301–1315")
     assert "FORSLAGET SKRIVS I DEN FORM RADEN SKA HA" in t
     assert "aldrig «Kvadratrot ur a: positiva talet vars kvadrat är a»" in t
-    assert "en receptpunkt är «Verb: högst fyra ord»" in t
+    assert "en receptpunkt är «Verb: två–tre ord»" in t
+    assert "en etikett på högst fyra ord" in t
 
 
 def test_skelettets_ord_hittar_ratt_vansterrad():

@@ -55,8 +55,8 @@ def test_ett_band_gar_genom_bryggan_ord_for_ord(fejk_claude):
 # ska skriva allt detta» — och bandet låg sedan dess över. Det var REGELN som
 # bet, inte kedjan som var trasig, så testerna mäter allt UTOM budgeten. Det
 # omspelade bandet (2026-09-12) håller taket, men filtret står kvar: ett
-# framtida band som ligger över ska fälla test_bandet_haller_textbudgeten,
-# inte hela kedjan.
+# framtida band som ligger över ska fälla
+# test_bandet_haller_vansterns_textbudget, inte hela kedjan.
 def _utan_budget(errors: list) -> list:
     return [e for e in errors
             if not (isinstance(e, dict) and e.get("code") == "textbudget")]
@@ -67,9 +67,13 @@ def _utan_budget(errors: list) -> list:
 # sortens mening vakten finns för, och ett band som bär den hade lärt oss att
 # vakten inte biter. Samtidigt fick tavelprompten sin egen tankstrecksregel,
 # så det nya bandet svarar på den prompt appen skickar (kassettregeln). Det
-# nya bandet håller också textbudgeten, så budgetfynden som testerna nedan
-# räknar bort finns inte längre i det — `_utan_budget` står kvar för att ett
-# framtida band inte ska fälla hela kedjan på ett fynd som är en varning.
+# nya bandet höll också textbudgeten.
+#
+# OCH OM 2026-09-21, när läraren sänkte vänstertaket 30 % och bad om pilarna
+# (lesson_board 6c): prompten ändrades, och ett band är inspelat mot en
+# prompt. Det nya bandet håller vänstern på 205 av 270 men ligger 34 tecken
+# över på högern, vars tak inte rördes — därför behövs `_utan_budget` igen i
+# testerna nedan, och därför mäter budgettestet PLATSEN för fyndet.
 
 
 def test_tavlan_ur_kassetten_ar_giltig_wb_json(fejk_claude):
@@ -95,20 +99,29 @@ def test_tavlan_ur_kassetten_ar_giltig_wb_json(fejk_claude):
     assert doc is not None and _utan_budget(fel) == []
 
 
-def test_bandet_haller_textbudgeten(fejk_claude):
+def test_bandet_haller_vansterns_textbudget(fejk_claude):
     """Bandet från 2026-09-05 bar 498 tecken löpande text på högertavlan mot
     taket 340 (två kolumner à 170), och testet här mätte att det sänkta taket
     bet på en riktig inspelning. Omspelningen 2026-09-12 gav en tavla INOM
-    budgeten — samma prompt, tystare svar — så det som går att mäta på bandet
-    nu är motsatsen: att en riktig inspelning kan hålla taket utan reparation.
-    Att taket biter på en pratig tavla mäts i test_whiteboard_spec
-    (test_textbudget_faller_en_pratig_tavla)."""
+    budgeten — samma prompt, tystare svar.
+
+    OMSPELNINGEN 2026-09-21 är mot det 30 % lägre vänstertaket (390 → 270,
+    lärarens egen procent). Det som mäts här är att en RIKTIG modellrunda
+    håller det på första försöket — bandet skriver 205 tecken på vänstern,
+    utan definitionsmening, med två agendapunkter, två begreppsrader och två
+    randfall. HÖGERN, vars tak inte rördes, kom in på 374 av 340 och får sin
+    reparationsrunda; det är taket som gör sitt jobb, inte kedjan som är
+    trasig, och därför mäts felets PLATS och inte bara dess frånvaro."""
     fejk_claude(kassett="tavla")
     res = lesson_board.generate_board(
         "Matematik 3c", "NA25", "Derivatans definition", model="",
         max_rounds=1)
-    assert res["errors"] == [], res["errors"]
     assert res["rounds"] == 1
+    assert [e["path"] for e in res["errors"]] == ["boards[1]"], res["errors"]
+    vanster = whiteboard_spec.validate_board_json(
+        res["board"])[0].boards[0].sections
+    volym = whiteboard_spec._text_volym(vanster, vanster=True)
+    assert volym <= whiteboard_spec._MAX_BOARD_TEXT, volym
 
 
 def test_bandet_bar_vansterns_skelett(fejk_claude):

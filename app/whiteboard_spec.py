@@ -615,7 +615,28 @@ _MAX_ITEM_CHARS = 50
 # också kvar: den lämnar fortfarande mer, men marginalen är numera liten,
 # för det mesta av det modelltavlan behövde extra plats till har blivit
 # skelett för alla tavlor.
-_MAX_BOARD_TEXT = 390
+#
+# SÄNKT 2026-09-21 (390 → 270). Lärarens dom över kvällens två tavlor
+# (NA26F potenslagarna i regelsamlingsformen, IndA nollproduktmetoden):
+# «de har blivit lite bättre. Problemet är bara att det blir så jävla mycket
+# på vänstra tavlan. Det vore bra att korta ner det, kanske 30 %, bara ha
+# kvar det mest väsentliga, ta bort lite text, och lägga till kanske någon
+# pil eller två.» Hennes egen procent, alltså: 390 − 30 % är 273.
+#
+# Skelettet från 2026-09-20 står kvar — anatomin, ankaret, formeln,
+# receptet, ett randfall — och det är TEXTEN omkring det som betalar:
+# definitionsmeningen (den står redan i anatomin och i öppningsfrågan),
+# den tredje agendapunkten, den tredje begreppsraden, den tredje
+# receptpunkten och det tredje randfallet. Matematiken kostar fortfarande
+# ingenting, och pilarna (\Downarrow mellan ankaret och formeln) är math:
+# tråden blir tydligare samtidigt som tavlan blir tunnare.
+#
+# Mätt som förut, mot few-shotarna efter kortningen: deras vänstertavlor bär
+# 162–180 tecken (var 235–260). Kvällens två tavlor mäter 303 (NA26F) och
+# 442 (IndA) med de nya etikettreglerna och faller båda — det är hela
+# poängen: det som ska falla är texten, inte skelettet, och båda tavlorna
+# bär sitt skelett med god marginal under taket när prosan är struken.
+_MAX_BOARD_TEXT = 270
 _MAX_COLUMN_TEXT = 170
 # MODELLTAVLOR FÅR MER (lärarens beslut 2026-09-17). Hennes godkända tavla
 # för Liber Ma1c s. 69–72 (formler ur verkligheten: ställa upp, jämföra,
@@ -633,6 +654,12 @@ _MAX_COLUMN_TEXT = 170
 # + 0,80x», «V = 400 − 50t» — en bokstav till vänster om = och minst två
 # tal (≥ 2 siffror eller decimaltal) till höger. Ett ensamt tal räcker inte
 # (O = 2πr är geometri) och \frac{1}{2}bh har bara ensiffriga tal.
+#
+# MODELLTAKEN RÖRDES INTE 2026-09-21 när den vanliga budgeten gick till 270.
+# De är mätta mot en tavla läraren själv godkände (392 tecken), och sänker
+# man dem fälls hennes egen tavla av generatorn nästa gång någon skriver om
+# den. Skillnaden 270/400 är stor nu, och den är det med flit: en
+# modellektion är ord på ett sätt en algebralektion inte är.
 _MAX_BOARD_TEXT_MODELL = 400
 _MAX_COLUMN_TEXT_MODELL = 220
 _ASPECT_TOLERANCE = 0.15  # motorn varnar vid >15 % avvikelse
@@ -803,18 +830,28 @@ def _tal_pa_bada_sidor(latex: str) -> bool:
 # raden FÖRE formeln, och allt annat med tal fälls som förut.
 _ATT_TANKA_PA = "att tänka på"
 _RANDFALL_TAK = 3
+# ETIKETTERNA SOM ÅKER GRATIS ÄR TVÅ (2026-09-21). Prompten säger HÖGST TVÅ
+# rader under «Att tänka på» sedan lärarens dom om vänsterns 30 %; skriver
+# modellen en tredje kostar dess etikett full budget och tavlan faller på
+# «textbudget» — det fyndet säger stryk, och det är rätt åtgärd. Math-taket
+# står kvar på tre: en tredje sifferrad ska fällas som för mycket TEXT, inte
+# som ett sifferexempel på vänstern (koden siffror_vanster säger «flytta
+# raden till exemplet», och det är fel råd för ett randfall).
+_FRIA_ETIKETTER = 2
 # Etiketten under en randfallsrad är en bildtext till matematiken, inte prosa:
-# «x^2 = 0: en enda rot» är sex ord. Längre än så är det en mening, och då
-# vägs den som en mening. Talet är ordregeln (≤6 ord) mätt i tecken.
-_ETIKETT_MAX = 45
+# «x^2 = 0: en enda rot» är fyra ord. Längre än så är det en mening, och då
+# vägs den som en mening. Talet är ordregeln mätt i tecken, och det gick
+# 45 → 30 med samma dom: sex ord var en bisats, fyra är en bildtext.
+_ETIKETT_MAX = 30
 
 
 def _randfallsblocket(sections: list) -> tuple[list, list]:
     """(math-raderna, etiketterna) under rubriken «Att tänka på» i ETT flöde.
 
     Blocket börjar vid rubrikraden och slutar vid «Vanligt fel:» eller vid
-    flödets slut. Båda listorna är kapade vid :data:`_RANDFALL_TAK` — vakten
-    och budgeten ska inte kunna öppnas på vid gavel av en rubrik."""
+    flödets slut. Listorna är kapade — vakten och budgeten ska inte kunna
+    öppnas på vid gavel av en rubrik: math vid :data:`_RANDFALL_TAK`,
+    etiketterna vid :data:`_FRIA_ETIKETTER`."""
     matte: list = []
     etiketter: list = []
     i_blocket = False
@@ -832,7 +869,7 @@ def _randfallsblocket(sections: list) -> tuple[list, list]:
                 break
             if (i_blocket and isinstance(sec, TextSection)
                     and len(sec.text) <= _ETIKETT_MAX
-                    and len(etiketter) < _RANDFALL_TAK):
+                    and len(etiketter) < _FRIA_ETIKETTER):
                 etiketter.append(sec)
         elif (i_blocket and isinstance(sec, MathSection)
                 and len(matte) < _RANDFALL_TAK):
@@ -1061,8 +1098,9 @@ def _text_volym(sections: list, vanster: bool = False) -> int:
     Randfallens etiketter räknas inte heller (2026-09-20, andra rundan): de
     är bildtexter till en math-rad, inte prosa, och när budgeten vägde dem
     som meningar lappade den bort just de rader domaren nyss hade beställt
-    (jobb 480, seq 13). Undantaget är kapat till tre rader à 45 tecken — en
-    längre rad är en mening och vägs som en mening. Se _randfallsblocket.
+    (jobb 480, seq 13). Undantaget är kapat till TVÅ rader à 30 tecken
+    (2026-09-21, lärarens 30 %) — en längre rad är en mening och vägs som en
+    mening, och den tredje raden ska kosta. Se _randfallsblocket.
 
     `vanster` friar också ankarets etikett (tredje rundan, jobb 481). Den
     flaggan finns för att ankaret bara går att känna igen på vänstertavlan:

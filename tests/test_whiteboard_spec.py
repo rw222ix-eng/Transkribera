@@ -569,21 +569,43 @@ def _att_tanka_pa_spalten(doc: dict) -> list:
     return doc["boards"][0]["sections"][-1]["children"][1]["children"]
 
 
+# BUDGETFYNDET RÄKNAS BORT I DE HÄR TESTERNA (2026-09-21). Fixturen är den
+# skarpa tavlan från 2026-09-20 och bär 288 tecken; taket gick samma vecka
+# till 270 på lärarens ord («det blir så jävla mycket på vänstra tavlan …
+# kanske 30 %»). Tavlan är alltså FÖR LÅNG nu, och det är hela poängen med
+# sänkningen — men det som prövas här är randfallens undantag från
+# SIFFERVAKTEN, inte budgeten. Att taket biter mäts för sig, i
+# test_gamla_kontrolltavlan_faller_pa_det_nya_taket.
+def _utan_budget(fel: list) -> list:
+    return [f for f in fel if f.get("code") != "textbudget"]
+
+
+# Etiketterna är korta med flit: taket gick 45 → 30 tecken 2026-09-21, och
+# «En kvadrat blir aldrig negativ.» var 31 och vägdes som en mening.
 RANDFALLEN = [
     {"kind": "math", "latex": _tex("x^2 = -20")},
-    {"kind": "text", "text": "En kvadrat blir aldrig negativ."},
+    {"kind": "text", "text": "Aldrig negativ."},
     {"kind": "math", "latex": _tex("x^2 = 0 RR x = 0")},
     {"kind": "text", "text": "Noll ger en enda rot."},
     {"kind": "math", "latex": _tex("x^2 = 27 RR x = PM QQQ{27}")},
-    {"kind": "text", "text": "Exakt om inget annat sägs."},
+    {"kind": "text", "text": "Exakt om inget sägs."},
 ]
 
 
 def test_kontrolltavlan_ar_giltig_som_den_star():
     """Fixturen är den tavla läraren dömde, byte för byte. Ändras vakterna
-    ska det synas här först."""
+    ska det synas här först — budgeten undantagen, se _utan_budget."""
     doc, fel = ws.validate_board_json(_kontrolltavlan())
-    assert doc is not None and fel == [], fel
+    assert doc is not None and _utan_budget(fel) == [], fel
+
+
+def test_gamla_kontrolltavlan_faller_pa_det_nya_taket():
+    """Och åt andra hållet: tavlan som gick igenom på 390 gör det inte på
+    270. Det är vad läraren beställde 2026-09-21 — «bara ha kvar det mest
+    väsentliga, ta bort lite text»."""
+    fel = ws.validate_board_json(_kontrolltavlan())[1]
+    assert [f["code"] for f in fel] == ["textbudget"], fel
+    assert "270" in fel[0]["message"]
 
 
 def test_randfallen_under_att_tanka_pa_gar_igenom():
@@ -596,28 +618,29 @@ def test_randfallen_under_att_tanka_pa_gar_igenom():
     del spalt[-3:]                        # den tunna versionen läraren fällde
     spalt += RANDFALLEN
     _d, fel = ws.validate_board_json(doc)
-    assert fel == [], fel
+    assert _utan_budget(fel) == [], fel
 
 
 def test_randfallen_kanns_igen_ocksa_under_den_numrerade_rubriken():
     """Rubriken heter «3. Att tänka på» sedan formdomen 2026-09-20 (kväll):
-    numreringen är dispositionen, det närmaste en pil motorn kan rita i
-    flödet. Kände vakten inte igen den föll randfallen igen — och det var
-    precis vad som hände i första renderingen av tredje rundans tavla."""
+    numreringen är dispositionen. Kände vakten inte igen den föll randfallen
+    igen — och det var precis vad som hände i första renderingen av tredje
+    rundans tavla. (Pilen mellan receptet och rubriken, 6c, är en ren
+    math-rad och stör inte uppslagningen.)"""
     doc = _kontrolltavlan()
     spalt = _att_tanka_pa_spalten(doc)
     rubrik = next(s for s in spalt if s.get("text") == "Att tänka på")
     rubrik["text"] = "3. Att tänka på"
     del spalt[-3:]
+    spalt.insert(len(spalt) - 1, {"kind": "math", "latex": "\\Downarrow"})
     spalt += RANDFALLEN
     _d, fel = ws.validate_board_json(doc)
-    assert fel == [], fel
+    assert _utan_budget(fel) == [], fel
 
 
 def test_en_fjarde_randfallsrad_falls():
-    """Undantaget är kapat vid tre. En fjärde sifferrad under rubriken är
-    tillbaka till exempel på fel tavla — och taket är detsamma som domaren
-    och prompten säger."""
+    """Undantaget är kapat vid tre math-rader. En fjärde sifferrad under
+    rubriken är tillbaka till exempel på fel tavla."""
     doc = _kontrolltavlan()
     spalt = _att_tanka_pa_spalten(doc)
     del spalt[-3:]
@@ -625,14 +648,17 @@ def test_en_fjarde_randfallsrad_falls():
         {"kind": "math", "latex": _tex("x^2 = 49 RR x = PM 7")},
         {"kind": "text", "text": "Sju och minus sju."}]
     _d, fel = ws.validate_board_json(doc)
-    assert [f["code"] for f in fel] == ["siffror_vanster"], fel
-    assert "49" in fel[0]["message"]
+    assert [f["code"] for f in _utan_budget(fel)] == ["siffror_vanster"], fel
+    assert "49" in _utan_budget(fel)[0]["message"]
 
 
 def test_randfallens_etiketter_kostar_inget_i_budgeten():
     """Etiketten är en bildtext till math-raden, inte prosa. När budgeten
     vägde den som en mening lappade den bort just de rader domaren nyss hade
-    beställt (jobb 480, seq 13)."""
+    beställt (jobb 480, seq 13).
+
+    TVÅ ÅKER GRATIS sedan 2026-09-21 (_FRIA_ETIKETTER): prompten säger HÖGST
+    TVÅ rader under «Att tänka på», och en tredje ska kosta sin plats."""
     def volym(d):
         return ws._text_volym(ws.validate_board_json(d)[0].boards[0].sections)
 
@@ -640,12 +666,15 @@ def test_randfallens_etiketter_kostar_inget_i_budgeten():
     spalt = _att_tanka_pa_spalten(doc)
     del spalt[-3:]
     fore = volym(doc)
-    spalt += RANDFALLEN
-    # Tre math-rader och tre etiketter, 78 tecken — och budgeten rör sig inte.
+    spalt += RANDFALLEN[:4]
+    # Två math-rader och två etiketter, 36 tecken — budgeten rör sig inte.
     assert volym(doc) == fore, (fore, volym(doc))
-    # …men en LÅNG rad under rubriken är en mening och vägs som en mening.
+    # Den TREDJE etiketten vägs som vilken text som helst.
+    spalt += RANDFALLEN[4:]
+    assert volym(doc) == fore + len("Exakt om inget sägs.")
+    # …och en LÅNG rad under rubriken är en mening och vägs som en mening.
     spalt.append({"kind": "text", "text": "x" * 50})
-    assert volym(doc) == fore + 50
+    assert volym(doc) == fore + len("Exakt om inget sägs.") + 50
 
 
 def test_ankare_utan_bokstavsformel_efter_sig_falls():
