@@ -266,4 +266,10 @@ def test_arbetsbladet_far_ingen_regel_ens_om_falten_skickas(llm_ready,
     assert r.status_code == 200, r.text
     res = _done(r)
     assert "HJÄLPMEDLEN ÄR LÄRARENS VAL" not in prompter[0]
-    assert res["exam"]["hjalpmedel"] == "Del B utan räknare. Del C med räknare."
+    # Lärarens delval nådde varken prompten eller dokumentet — det är vad
+    # testet heter efter. Raden är modellens egen, men KAPAD till en mening:
+    # övningspappret har inga delar, och hjälpmedelsraden där ska vara kort
+    # nog att läsas i bandet (exam_gen.korta_hjalpmedel, lärarens dom
+    # 2026-09-21). Provet ovan behåller sina två meningar, en per del.
+    assert res["exam"]["hjalpmedel"] == "Del B utan räknare."
+    assert "formelblad" not in res["exam"]["hjalpmedel"].lower()

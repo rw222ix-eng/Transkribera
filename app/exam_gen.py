@@ -825,6 +825,62 @@ FORLAGA_GRUPP = (
 )
 
 
+# ── TEXT → EKVATION ──────────────────────────────────────────────────────
+#
+# LÄRARENS ORD 2026-09-21, om uppgift 3 på gruppuppgiften till TE26A
+# («Ekvationer med bråk», exam 114): «Uppgift tre behöver skrivas mycket
+# enklare. Vi ska inte ge ut ekvationen på en gång: eleverna ska utifrån bara
+# texten i a) skriva ekvationen och i b) lösa den.»
+#
+# Pappret hade gett bort steget: situationen stod i texten OCH ekvationen stod
+# där färdigt uppställd, så det enda som återstod var att räkna. Att ställa upp
+# ekvationen ÄR momentet i Ma 1c; räknandet är det som kommer efter.
+#
+# BLOCKET ÄR VILLKORAT, och villkoret är momentets (ar_ekvationsmoment).
+# Regeln är i sig villkorlig — «handlar sidorna om ekvationer …» — och en
+# regel som ändå står i varje prompt är en regel modellen får tolka. Att låta
+# Python avgöra gör två saker: procentpappret slipper en ekvationsuppgift det
+# inte bad om, och prompten för ett moment utan ekvationer förblir byte för
+# byte den som kassetterna spelades in med (kassettregeln).
+TEXT_TILL_EKVATION = (
+    "TEXT → EKVATION, och det här är momentets egen poäng. MINST EN uppgift "
+    "ska vara en TEXTUPPGIFT där ekvationen INTE står i texten: eleverna ska "
+    "ställa upp den själva. Dela den i två deluppgifter — a) «Skriv en "
+    "ekvation som beskriver …» och b) «Lös ekvationen» — och skriv varken "
+    "ekvationen, uttrycket eller formeln i uppgiftstexten. Står den där är "
+    "steget redan taget, och uppgiften prövar bara räknandet.\n"
+    "SITUATIONEN SKA VARA ENKEL OCH ENTYDIG: EN sak, ett fast belopp plus ett "
+    "rörligt (eller ett enda okänt antal), och tal valda så att lösningen blir "
+    "ett heltal. Läraren strök den första versionen med orden «behöver skrivas "
+    "mycket enklare» — går situationen att teckna på två olika sätt är den "
+    "fel skriven, och två okända är en uppgift för en annan kurs.\n"
+    "Svarsfälten namnger de två stegen («Ekvation», «Svar»), så att det syns "
+    "på pappret att uppställningen är ett eget svar och inte ett mellanled."
+)
+_EKVATIONSORD = re.compile(r"ekvation", re.I)
+
+
+def ar_ekvationsmoment(punkter: list[str] | None,
+                       bokuppgifter: list[dict] | None = None) -> bool:
+    """Handlar det här pappret om ekvationer? Då gäller TEXT_TILL_EKVATION.
+
+    Läses ur MOMENTET och inte ur bokens lästa sidor: sidtexten i ett kapitel
+    om procent nämner ekvationer i förbigående, och ett block som slår till på
+    det hade beställt en ekvationsuppgift på ett procentpapper. Lärarens
+    kryssade innehållspunkter och de uppgifter hon valde ur boken
+    (bok.remsuppgifter) är däremot hennes egna beslut om vad passet ska öva.
+
+    Systerfunktion till lesson_board.ar_regelsamling, och av samma skäl: en
+    form som bara gäller ibland ska slås på av något som går att räkna."""
+    for p in punkter or ():
+        if _EKVATIONSORD.search(str(p or "")):
+            return True
+    for u in bokuppgifter or ():
+        if isinstance(u, dict) and _EKVATIONSORD.search(str(u.get("text") or "")):
+            return True
+    return False
+
+
 # Nivåskalningen: samma mall, olika klasser. Lärarens papper är slipat för
 # nivå 1a — små heltal, konkret kontext — och hennes andra klasser läser 1c
 # och 2c. Skrivs 1a:s mått in i MÖNSTRET som siffror får naturettan och
@@ -2009,6 +2065,265 @@ def build_hjalpmedel(regel: str) -> str:
         "om eleven minns en formel utantill.")
 
 
+# ── ÖVNINGSPAPPREN ────────────────────────────────────────────────────────
+# Gruppuppgiften och arbetsbladet är ÖVNING, inte mätning. De delar band,
+# instruktionsruta och hjälpmedelsrad, och de två deterministiska pass som
+# följer (räknarmarkeringen och kapningen av bandet) gäller båda och bara dem.
+# Provet har ett försättsblad, delar och en hjälpmedelsmening per del — där
+# gäller hjalpmedelsregel() i stället.
+OVNINGSPROFILER = frozenset({"gruppuppgift", "arbetsblad"})
+
+
+# ── BALANSEN ÄR ETT MÅTT PÅ HELA PAPPRET, OCH DET MÄTER FEL HÄR ──────────
+#
+# KVÄLLEN 2026-09-21: tre riktade omskrivningar av uppgift 2 på exam 115
+# (BA26B, «Andelar och procent») förkastades HELT. Varje varv skrev om
+# uppgiften precis som läraren bad — två delfrågor blev en — och varje varv
+# föll på att Kommunikation därmed hamnade på 0 % av pappret (formagabalans)
+# och nivåandelarna gled (nivabalans). Ingen ny exam_version skrevs, och
+# svaret bar det GAMLA pappret med de nya felen. Uppgift 2 stod kvar med a/b
+# efter tre försök och läraren rättade den för hand.
+#
+# Varför måttet är fel just här: gruppuppgiften och arbetsbladet är ÖVNING.
+# Fyra uppgifter kan inte bära sex förmågor jämnt, och det är HELHETSTYPERNA
+# i plan.js som säger vad som mäts — bara provet mäts som helhet. Att låta ett
+# mått på hela pappret kasta en ändring läraren gjort på EN uppgift är samma
+# feltyp som tankstrecket i uppgift 12:s elevexempel (se refine_exam): ett
+# fynd som önskemålet inte rör får inte äga önskemålet.
+#
+# MÖNSTRET ÄR TAVLANS (lesson_board.REFINE_BEHALL): fyndet följer med som
+# varning, pappret sparas. Läraren ser att balansen glidit och kan be om en
+# ny uppgift om hon vill — men hon får den ändring hon bad om.
+#
+# PROVET RÖRS INTE. Där ÄR balansen papprets uppgift, och en omskrivning som
+# river den ska fällas som förut. Och GENERERINGEN rörs inte heller, på någon
+# profil: ett nytt papper ska födas balanserat, och där finns hela
+# rundbudgeten att laga det med.
+BALANSVARNING: frozenset[str] = frozenset({"formagabalans", "nivabalans"})
+
+
+def balansvarningar(profil: str, riktning) -> frozenset[str]:
+    """Vilka balanskoder som blir VARNINGAR i det här varvet — tom mängd när
+    de ska fälla som förut. `riktning` är mål-låset (riktat_mal): är det None
+    skrev varvet om hela pappret, och då är balansen dess ansvar igen."""
+    if riktning is None or profil not in OVNINGSPROFILER:
+        return frozenset()
+    return BALANSVARNING
+
+
+# ── RÄKNAREN I KLARTEXT, PÅ VARJE UPPGIFT ────────────────────────────────
+#
+# LÄRARENS ORD 2026-09-21, efter två skarpa gruppuppgifter (exam 114 och 115):
+# «Det måste framgå direkt, alltså i uppgifterna på en gång, i klartext, om man
+# ska använda miniräknare eller inte. Lite kort.» Regeln stod redan på pappret
+# — hjälpmedelsraden trycks i bandet överst sedan afa89da — men gruppen läser
+# den uppgift den sitter med, inte bandet, och «Räknare: uppgift 3» säger
+# ingenting när man håller på med uppgift 1.
+#
+# DETERMINISTISKT, inte en promptrad. Regeln är redan skriven EN gång, av
+# modellen, i `hjalpmedel`; att be den skriva samma sak en gång till per
+# uppgift hade kostat en omspelning av varje kassett och gett en ny chans att
+# säga emot sig själv. Här LÄSES raden i stället.
+#
+# MARKERINGEN LÄGGS FÖRST I UPPGIFTENS TEXT, och det är platsen läraren själv
+# valde när hon rättade pappret för hand i kväll («Räknare tillåten. Ett
+# arbetslag …»). Ett eget fält hade varit renare i JSON:en och dyrare i
+# praktiken: det hade behövt en väg genom plan.js franProv, blad-bygg.js kort()
+# OCH båda LaTeX-mallarna, medan texten redan går alla fyra vägarna.
+#
+# Passet körs SIST, efter domare, grindar och vakter (se generate_exam och
+# refine_exam). Begriplighetsvakten räknar meningar och tal i uppgiftstexten,
+# och en mening appen själv lagt dit ska inte fällas som modellens.
+RAKNARE_JA = "Räknare tillåten."
+RAKNARE_NEJ = "Utan räknare."
+# Markeringen som den står i texten — silen som gör passet IDEMPOTENT. Utan
+# den hade nästa varv skrivit «Räknare tillåten. Räknare tillåten. Ett …»,
+# och varvet därpå tre gånger.
+_RAKNARMARKE = re.compile(r"^\s*(?:Räknare tillåten|Utan räknare)\.\s*")
+_RAKNARORD = re.compile(r"räknare", re.I)
+# Nekandet i raden. «utom» hör hit: «räknare på alla utom uppgift 2» pekar ut
+# uppgiften som INTE får den.
+_NEKANDE = re.compile(r"\b(?:inte|utan|ingen|inga|ej|utom|förbjuden|"
+                      r"förbjudet|förbjudna)\b", re.I)
+# Uppgiftsnumren i en sats, med spann («uppgift 1–3»). Tvåsiffriga räcker: ett
+# övningspapper har fyra till femton uppgifter.
+_RAKNARNUMMER = re.compile(r"\b(\d{1,2})\s*(?:[–—-]\s*(\d{1,2}))?\b")
+# Vad som delar raden i satser. Kolonet är med för lärarens kortaste form,
+# «Räknare: uppgift 3» — vänstersidan bär polariteten, högersidan siffrorna.
+_RAKNARSATS = re.compile(r"[,;.:]|\bmen\b|\bfast\b", re.I)
+# Var en mening SLUTAR. Punkten måste följas av en ny mening — versal, siffra,
+# citattecken — eller av radens slut. Utan villkoret blev «Räknare får
+# användas, t.ex. på uppgift 3.» tre meningar och kapningen strök just
+# siffrorna. Samma fälla som _FORKORTNING i elev_feedback finns för.
+_MENINGSSLUT = re.compile(r"(?<=[.!?])(?=\s+[A-ZÅÄÖ0-9«\"]|\s*$)")
+
+
+def _meningar(text: str) -> list[str]:
+    """Meningarna med sina skiljetecken kvar. Bandet och hjälpmedelsraden är
+    prosa i en ruta, och en rad som slutar utan punkt läses som avklippt."""
+    return [m.strip() for m in _MENINGSSLUT.split(str(text or "")) if m.strip()]
+
+
+def korta_hjalpmedel(rad: str | None) -> str:
+    """Hjälpmedelsraden som EN mening — övningspapprets, aldrig provets.
+
+    Prompten ber om en enda mening med uppgiftsnumren i («… på uppgift 4, men
+    inte på uppgift 1, 2 och 3»), och modellen skriver ibland tre: regeln,
+    ett skäl och en uppmaning. Raden står i bandet överst på pappret bredvid
+    tiden och redovisningsformen, och ett stycke där trycker ner allt annat.
+
+    Den mening som VÄLJS är den första som nämner räknaren, inte alltid den
+    allra första: skriver modellen «Arbeta i par. Räknare: uppgift 3.» är det
+    andra meningen som bär regeln, och att kapa till den första hade strukit
+    just det läraren bad om att få se. Nämns räknaren inte alls gäller första
+    meningen, som förut.
+
+    Kapningen sker FÖRE tolkningen nedan med flit: markeringarna på
+    uppgifterna ska säga samma sak som den rad pappret faktiskt trycker."""
+    text = str(rad or "").strip()
+    if not text:
+        return text
+    bitar = _meningar(text)
+    if len(bitar) < 2:
+        return text
+    for b in bitar:
+        if _RAKNARORD.search(b):
+            return b
+    return bitar[0]
+
+
+def tolka_raknarrad(rad: str | None, antal: int) -> dict[int, bool] | None:
+    """Hjälpmedelsraden → {uppgiftsnummer: räknaren tillåten}, eller None.
+
+    None betyder «raden går inte att tolka», och då sätts INGEN markering:
+    ett papper utan besked är bättre än ett papper som ljuger om räknaren.
+    Nämns räknaren inte alls i raden är svaret alltid None.
+
+    Formerna är lärarens egna, ur de två papper hon skrev i kväll och ur
+    prompten (FORLAGA_GRUPP, «HJÄLPMEDLET STYRS PER UPPGIFT»):
+
+        «Räknare får användas på alla uppgifter.»   → alla ja
+        «Utan räknare.»                             → alla nej
+        «Räknare: uppgift 3.»                       → 3 ja, resten nej
+        «Räknare på uppgift 3 och 4, inte på 1 och 2.»
+
+    LÄSNINGEN är sats för sats. Varje sats får en polaritet av sitt eget
+    ordval — ett nekande ord gör den negativ, ordet «räknare» gör den positiv
+    — och satser som bara bär siffror ÄRVER den föregående satsens («… inte på
+    uppgift 1, 2 och 3» är tre satser och ett enda besked).
+
+    FÖRVALET för de uppgifter raden inte nämner är motsatsen till det den
+    räknar upp: står det vilka uppgifter räknaren FÅR användas på är den
+    förbjuden på de andra, och står det vilka den inte får användas på är den
+    tillåten på resten. Det är så meningarna läses av en människa, och det är
+    den läsning som gör «Räknare: uppgift 3» till ett fullständigt besked."""
+    text = str(rad or "")
+    if antal <= 0 or not _RAKNARORD.search(text):
+        return None
+    beslut: dict[int, bool] = {}
+    polaritet: bool | None = None
+    hel: bool | None = None            # radens polaritet när inga siffror finns
+    for sats in _RAKNARSATS.split(text):
+        if not sats.strip():
+            continue
+        if _NEKANDE.search(sats):
+            polaritet = False
+        elif _RAKNARORD.search(sats):
+            polaritet = True
+        if _RAKNARORD.search(sats) and hel is None:
+            hel = polaritet
+        if polaritet is None:
+            continue
+        for m in _RAKNARNUMMER.finditer(sats):
+            lo = int(m.group(1))
+            hi = int(m.group(2) or m.group(1))
+            if lo > hi:
+                lo, hi = hi, lo
+            for nr in range(lo, hi + 1):
+                if 1 <= nr <= antal:
+                    beslut[nr] = polaritet
+    if not beslut:
+        # Ingen siffra i raden: beskedet gäller hela pappret.
+        return None if hel is None else {n: hel for n in range(1, antal + 1)}
+    forval = not any(beslut.values())
+    return {n: beslut.get(n, forval) for n in range(1, antal + 1)}
+
+
+def satt_raknarmarkering(exam: dict, profil: str) -> list[int]:
+    """Kort räknarbesked först i varje uppgiftstext. Returnerar de nummer som
+    fick ett besked (tom lista när raden inte gick att tolka).
+
+    Kapar också `hjalpmedel` till en mening (korta_hjalpmedel). Idempotent:
+    en gammal markering rensas först, så ett papper kan gå varv efter varv
+    utan att texten växer — och ändrar läraren hjälpmedelsraden i ett varv
+    följer markeringarna med i samma varv."""
+    if profil not in OVNINGSPROFILER or not isinstance(exam, dict):
+        return []
+    uppgifter = exam.get("uppgifter")
+    if not isinstance(uppgifter, list) or not uppgifter:
+        return []
+    if isinstance(exam.get("hjalpmedel"), str):
+        exam["hjalpmedel"] = korta_hjalpmedel(exam["hjalpmedel"])
+    beslut = tolka_raknarrad(exam.get("hjalpmedel"), len(uppgifter))
+    satta: list[int] = []
+    for nr, u in enumerate(uppgifter, start=1):
+        if not isinstance(u, dict):
+            continue
+        ren = _RAKNARMARKE.sub("", str(u.get("text") or "")).lstrip()
+        val = None if beslut is None else beslut.get(nr)
+        if val is None:
+            u["text"] = ren
+            continue
+        u["text"] = f"{RAKNARE_JA if val else RAKNARE_NEJ} {ren}".strip()
+        satta.append(nr)
+    return satta
+
+
+# ── INSTRUKTIONSBANDET: EN ELLER TVÅ MENINGAR ────────────────────────────
+#
+# LÄRARENS ORD 2026-09-21: «Den inrutade texten under namnen (instruktionen)
+# behöver skrivas mycket, mycket kortare.» Modellen skrev fyra meningar plus
+# en metodregel i rutan; hon vill ha en eller två.
+#
+# Kapningen är DETERMINISTISK av samma skäl som räknarmarkeringen ovan: en
+# promptrad är en önskan, och rutan hade ändå blivit fyra meningar var tredje
+# gång. Prompten ber också om det (se build_prompt), men det är den här raden
+# som håller.
+#
+# NYCKELFRÅGAN RÖRS INTE. Den har ett eget fält (exam_spec.nyckelfraga), sätts
+# fet efter bandet och är momentets metodregel — den som klipper bandet
+# klipper inte den.
+INSTRUKTION_MENINGAR = 2
+
+
+def korta_instruktion(exam: dict, profil: str) -> bool:
+    """Kapa `instruktion` till högst två meningar. Sant när något ströks."""
+    if profil not in OVNINGSPROFILER or not isinstance(exam, dict):
+        return False
+    text = exam.get("instruktion")
+    if not isinstance(text, str) or not text.strip():
+        return False
+    bitar = _meningar(text)
+    if len(bitar) <= INSTRUKTION_MENINGAR:
+        return False
+    exam["instruktion"] = " ".join(bitar[:INSTRUKTION_MENINGAR])
+    return True
+
+
+def ovningspappret_stadat(exam: dict | None, profil: str) -> dict | None:
+    """De två deterministiska passen på övningspappret, i tur och ordning:
+    bandet kapas och räknarbeskedet skrivs in i uppgifterna.
+
+    ETT ställe, så att genereringen och omskrivningen gör exakt samma sak —
+    annars hade ett refine kunnat lämna ett papper utan markeringar efter en
+    generering som satt dem."""
+    if not isinstance(exam, dict) or profil not in OVNINGSPROFILER:
+        return exam
+    korta_instruktion(exam, profil)
+    satt_raknarmarkering(exam, profil)
+    return exam
+
+
 def _rent_skelett(skeleton: list[dict] | None) -> str | None:
     """«E», «C» eller «A» när VARJE rad i uppgiftsplanen bär sina poäng på
     samma nivå — annars None. Lärarens rena nivåval (exam_spec.ren_niva) ger
@@ -2218,6 +2533,11 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
         n = int(g.get("elever") or 3)
         min_ = int(g.get("langd_min") or 45)
         red = str(g.get("redovisning") or "muntligt")
+        # TEXT → EKVATION, bara när momentet handlar om ekvationer. Tom sträng
+        # lämnar prompten ordagrant som den var — radbrytningen sitter INNE i
+        # blocket och inte i f-strängen, av just det skälet (jfr hjalpmedel).
+        ekvationsregeln = (f"{TEXT_TILL_EKVATION}\n"
+                           if ar_ekvationsmoment(punkter, bokuppgifter) else "")
         block.append(
             f"Uppdrag: skriv en GRUPPUPPGIFT för {kurs}, klass {klass}, med "
             f"EXAKT {antal} uppgifter (varken fler eller färre). {n} elever per "
@@ -2271,6 +2591,10 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             # uppgifter ur förlagan.
             f"{build_forebild(bokuppgifter)}\n"
             f"{FORLAGA_GRUPP}\n"
+            # Ekvationsregeln står EFTER mönstret av samma skäl som nivån
+            # nedan: mönstret ger formerna, och den här raden säger vilken av
+            # dem momentet kräver. Tom sträng på allt som inte är ekvationer.
+            f"{ekvationsregeln}"
             # Nivån står EFTER mönstret och inte före: utdragen är ett
             # 1a-papper, och raden här är den som säger att måtten i dem gäller
             # 1a och ingen annan kurs. Läses den först är den en abstraktion
@@ -2356,6 +2680,14 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             "uppgiftens nummer skrivs överst på lösbladet, och räkningen ska "
             "visas — inte bara svaret. "
             "Lösningsförslagen blir facit, och facit ska vara kort: svaret och på sin höjd ett par led. Svara med enbart JSON.")
+        # TEXT → EKVATION på arbetsbladet också. Lärarens dom gällde
+        # gruppuppgiften, men regeln är momentets och inte formens: ett
+        # övningsblad om ekvationer som ger bort uppställningen övar bara
+        # räknandet. Eget block.append och inte en rad i uppdraget ovan, så att
+        # ett blad om något annat får en prompt som är byte för byte den som
+        # kassetten spelades in med (jfr BILD_PA nedan).
+        if ar_ekvationsmoment(punkter, bokuppgifter):
+            block.append(TEXT_TILL_EKVATION)
         # Lärarens illustrationskryss (se BILD_PA/BILD_AV).
         block.append(BILD_PA if illustration else BILD_AV)
         # «Stigande svårighet» stod här förut, och det är en instruktion utan
@@ -5792,12 +6124,18 @@ def _repair_until_valid(exam: dict | None, errors: list, *, model: str, llm,
                         niva_mal: dict | None = None,
                         riktning=None,
                         log_cb: Callable[[str], None] | None = None,
-                        ignorera: frozenset = frozenset()) -> dict:
+                        ignorera: frozenset = frozenset(),
+                        ignorera_koder: frozenset = frozenset()) -> dict:
     """`ignorera` är felnycklar (_felnyckel) som inte ska räknas som fel i någon
     runda: det som var trasigt redan FÖRE en riktad omskrivning (refine_exam).
     Utan den hittade varje ny runda samma gamla fel igen och drev slingan
     till taket — tre rundor över alla tolv uppgifter för ett tankstreck
-    mål-låset ändå inte lät den röra."""
+    mål-låset ändå inte lät den röra.
+
+    `ignorera_koder` är samma sak en nivå trubbigare: hela felKODER som inte
+    ska räknas här. Nyckeln bär meddelandet, och en balans som glidit ett steg
+    till i en reparationsrunda får en NY rad och hade smugit förbi `ignorera`.
+    Övningspapprets balansfynd går den vägen (se BALANSVARNING)."""
     log = log_cb or (lambda _m: None)
     while errors and rounds_used < max_rounds and exam is not None:
         rounds_used += 1
@@ -5823,7 +6161,9 @@ def _repair_until_valid(exam: dict | None, errors: list, *, model: str, llm,
                 continue
         _doc, new_errors = _validate(candidate, profil, koder, niva_mal)
         exam = candidate
-        errors = [f for f in new_errors if _felnyckel(f) not in ignorera]
+        errors = [f for f in new_errors
+                  if _felnyckel(f) not in ignorera
+                  and f.get("code") not in ignorera_koder]
     return {"exam": exam, "errors": errors, "rounds": rounds_used}
 
 
@@ -8801,6 +9141,13 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
         # en uppgift som liknar en gammal.
         if r["nivafel"]:
             log(nivafel_text(r["nivafel"]))
+        # ── ÖVNINGSPAPPRETS TVÅ DETERMINISTISKA PASS ─────────────────
+        # SIST av allt, efter domare, grindar, vakter och variationsflaggor:
+        # bandet kapas till två meningar och räknarbeskedet skrivs först i
+        # varje uppgift (ovningspappret_stadat). Ligger passet tidigare mäter
+        # begriplighetsvakten en mening appen själv lagt dit, och
+        # variationsvakten jämför uppgifter som alla börjar likadant.
+        ovningspappret_stadat(r.get("exam"), profil)
         return r
 
     def slut(r: dict, rundor: int) -> dict:
@@ -8998,13 +9345,21 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
     fore = {_felnyckel(f) for f in _validate(exam, profil, niva_mal=niva_mal)[1]}
     gamla = [f for f in errors if _felnyckel(f) in fore]
     errors = [f for f in errors if _felnyckel(f) not in fore]
+    # ── BALANSEN FÄLLER INTE EN RIKTAD ÄNDRING PÅ ETT ÖVNINGSPAPPER ──
+    # Se BALANSVARNING. Fynden lyfts ur grindens fråga och läggs bland
+    # varningarna i svaret; pappret sparas.
+    koder_som_varnar = balansvarningar(profil, riktning)
+    if koder_som_varnar:
+        gamla = gamla + [f for f in errors if f.get("code") in koder_som_varnar]
+        errors = [f for f in errors if f.get("code") not in koder_som_varnar]
     if errors:
         steg("reparerar")
     res = _repair_until_valid(candidate, errors, model=model, llm=llm,
                               rounds_used=1, max_rounds=max_rounds,
                               profil=profil, niva_mal=niva_mal,
                               riktning=riktning, log_cb=log_cb,
-                              ignorera=frozenset(fore))
+                              ignorera=frozenset(fore),
+                              ignorera_koder=koder_som_varnar)
     # Gick målets ändring inte igenom grinden ens efter reparation lämnas
     # ORIGINALET tillbaka, med felen kvar i svaret. Ett halvt genomfört
     # önskemål på ett papper läraren tror är helt är värre än ett önskemål som
@@ -9058,6 +9413,18 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
             steg("domare")
             bedomningspass(res["exam"], model=model, llm=llm, nummer=nummer,
                            log_cb=log_cb)
+    # ── ÖVNINGSPAPPRETS TVÅ DETERMINISTISKA PASS ─────────────────────
+    # Samma två pass som genereringen kör sist (se flagga i generate_exam),
+    # och de körs HÄR av två skäl. Skrev varvet om hjälpmedelsraden ska
+    # markeringarna på uppgifterna följa med i samma varv; och skrev det om en
+    # uppgiftstext ska markeringen stå kvar först i den nya texten i stället
+    # för att försvinna för att modellen inte kände till den.
+    #
+    # Inte på ett KASTAT varv: då är `res["exam"]` lärarens original, ord för
+    # ord ur basen, och ett pass här hade ändrat det på skärmen utan att något
+    # sparades. Skärmen ska säga samma sak som raden i exam_versions.
+    if res.get("exam") is not exam:
+        ovningspappret_stadat(res.get("exam"), profil)
     return res
 
 

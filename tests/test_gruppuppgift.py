@@ -1226,3 +1226,328 @@ def test_facit_utan_poangbricka_kompilerar(tmp_path):
     assert "Lösningsförslag" in text and "Svar: x = 4" in text
     # Poängtrippeln står inte någonstans på elevernas papper.
     assert "3/0/0" not in text
+
+
+# ── KVÄLLEN 2026-09-21: FYRA DOMAR OM ÖVNINGSPAPPRET ────────────────────────
+#
+# Läraren genererade två gruppuppgifter via API:t (exam 114 «Ekvationer med
+# bråk» TE26A, exam 115 «Andelar och procent» BA26B), och båda krävde fem
+# omskrivningsvarv och handpåläggning. Domarna, ordagrant, och vad de blev:
+#
+#  a) «Det måste framgå direkt, alltså i uppgifterna på en gång, i klartext,
+#     om man ska använda miniräknare eller inte. Lite kort.»
+#       → exam_gen.satt_raknarmarkering
+#  b) «Den inrutade texten under namnen (instruktionen) behöver skrivas
+#     mycket, mycket kortare.»  → exam_gen.korta_instruktion
+#  c) «Uppgift tre behöver skrivas mycket enklare. Vi ska inte ge ut
+#     ekvationen på en gång.»   → exam_gen.TEXT_TILL_EKVATION
+#  d) Tre riktade omskrivningar av uppgift 2 på exam 115 förkastades HELT av
+#     balansvakterna  → exam_gen.BALANSVARNING
+
+
+def _grupppapper(**extra):
+    """Ett fyruppgifters gruppuppgiftspapper som GÅR IGENOM balansen.
+
+    Samma form som exam 115: uppgift 2 bär två delfrågor, och den ena av dem
+    är papprets enda kommunikationspoäng. Det är den detaljen som gör pappret
+    till kvällens fall — skrivs uppgiften om till EN fråga faller K till noll.
+    """
+    def uppg(formaga, typ, delar=None, poang=(0, 0, 0), text="Beräkna talet."):
+        u = {"del": None, "formaga": formaga, "typ": typ, "poang": list(poang),
+             "text": text, "losning": "Svar: 4", "bedomning": "+1 E rätt svar"}
+        if delar:
+            u.update(poang=[0, 0, 0], losning="", bedomning="",
+                     deluppgifter=delar)
+        return u
+
+    def delfraga(formaga, poang):
+        return {"formaga": formaga, "poang": list(poang),
+                "text": "Förklara hur ni tänker.", "losning": "Svar: 4",
+                "bedomning": "+1 E rätt svar"}
+
+    papper = {
+        "titel": "Andelar och procent", "kurs": "Matematik, nivå 1a",
+        "klass": "BA26B", "tid_min": 45,
+        "hjalpmedel": "Räknare: uppgift 3.",
+        "instruktion": ("Läs uppgiften tillsammans. Bestäm vem som skriver. "
+                        "Alla i gruppen ska kunna förklara lösningen efteråt. "
+                        "Redovisas muntligt: två minuter per grupp."),
+        "grupp": {"elever": 3, "langd_min": 45, "redovisning": "muntligt"},
+        "uppgifter": [
+            uppg("P", "rutin",
+                 delar=[delfraga("P", (1, 0, 0)), delfraga("B", (1, 1, 0))]),
+            uppg("K", "redovisning",
+                 delar=[delfraga("K", (0, 1, 0)), delfraga("R", (0, 1, 1))]),
+            uppg("M", "problem",
+                 delar=[delfraga("M", (1, 1, 0)), delfraga("PL", (0, 1, 1))]),
+            uppg("P", "rutin", poang=(1, 0, 0)),
+        ],
+    }
+    papper.update(extra)
+    return papper
+
+
+# ── a) RÄKNAREN I KLARTEXT PÅ VARJE UPPGIFT ────────────────────────────────
+
+@pytest.mark.parametrize("rad,vantat", [
+    ("Räknare får användas på alla uppgifter.", [True] * 4),
+    ("Utan räknare.", [False] * 4),
+    ("Räknare: uppgift 3.", [False, False, True, False]),
+    ("Räknare på uppgift 3 och 4, inte på 1 och 2.",
+     [False, False, True, True]),
+    ("Räknare får användas på uppgift 4, men inte på uppgift 1, 2 och 3.",
+     [False, False, False, True]),
+    ("Räknare får användas på alla uppgifter utom uppgift 2.",
+     [True, False, True, True]),
+    ("Uppgift 1–2 görs utan räknare, uppgift 3 och 4 med räknare.",
+     [False, False, True, True]),
+])
+def test_raknarraden_tolkas_i_lararens_egna_former(rad, vantat):
+    """Formerna är hennes egna — de två pappren i kväll och prompten
+    (FORLAGA_GRUPP, «HJÄLPMEDLET STYRS PER UPPGIFT»). Förvalet för det raden
+    inte nämner är motsatsen till det den räknar upp: «Räknare: uppgift 3» är
+    ett fullständigt besked om alla fyra uppgifterna, inte bara om den tredje.
+    """
+    beslut = exam_gen.tolka_raknarrad(rad, 4)
+    assert [beslut[n] for n in range(1, 5)] == vantat
+
+
+@pytest.mark.parametrize("rad", ["", "Formelblad och digitala verktyg",
+                                 "Arbeta i par och lämna in ett svar."])
+def test_en_rad_utan_raknare_ger_ingen_markering(rad):
+    """Ett papper utan besked är bättre än ett papper som ljuger om räknaren."""
+    assert exam_gen.tolka_raknarrad(rad, 4) is None
+    papper = _grupppapper(hjalpmedel=rad)
+    assert exam_gen.satt_raknarmarkering(papper, "gruppuppgift") == []
+    assert papper["uppgifter"][0]["text"] == "Beräkna talet."
+
+
+def test_markeringen_star_forst_i_uppgiftstexten():
+    """Lärarens egen plats, den hon satte den på när hon rättade exam 114 för
+    hand: «Räknare tillåten. Ett arbetslag …». Texten går redan alla fyra
+    vägarna — plan.js franProv, blad-bygg.js kort(), och båda mallarna."""
+    papper = _grupppapper(hjalpmedel="Räknare: uppgift 3.")
+    assert exam_gen.satt_raknarmarkering(papper, "gruppuppgift") == [1, 2, 3, 4]
+    texter = [u["text"] for u in papper["uppgifter"]]
+    assert texter[0].startswith("Utan räknare. Beräkna")
+    assert texter[2].startswith("Räknare tillåten. Beräkna")
+
+
+def test_markeringen_skrivs_aldrig_tva_ganger():
+    """Varvet därpå, och varvet därpå igen. Utan silen hade pappret läst
+    «Räknare tillåten. Räknare tillåten. Räknare tillåten. Beräkna …»."""
+    papper = _grupppapper(hjalpmedel="Räknare får användas på alla uppgifter.")
+    for _ in range(3):
+        exam_gen.satt_raknarmarkering(papper, "gruppuppgift")
+    assert papper["uppgifter"][0]["text"] == "Räknare tillåten. Beräkna talet."
+    # …och byter läraren regeln i ett varv följer markeringen med i samma varv.
+    papper["hjalpmedel"] = "Utan räknare."
+    exam_gen.satt_raknarmarkering(papper, "gruppuppgift")
+    assert papper["uppgifter"][0]["text"] == "Utan räknare. Beräkna talet."
+
+
+def test_hjalpmedelsraden_kapas_till_meningen_som_bar_regeln():
+    """Raden står i bandet överst bredvid tiden och redovisningsformen, och
+    ett stycke där trycker ner allt annat. Meningen som VÄLJS är den som
+    nämner räknaren, inte alltid den första."""
+    assert exam_gen.korta_hjalpmedel(
+        "Arbeta i par. Räknare: uppgift 3. Lämna in på slutet.") \
+        == "Räknare: uppgift 3."
+    assert exam_gen.korta_hjalpmedel("Utan räknare.") == "Utan räknare."
+    papper = _grupppapper(hjalpmedel="Räknare: uppgift 3. Räkna i huvudet "
+                                     "på de andra. Visa hur ni tänker.")
+    exam_gen.satt_raknarmarkering(papper, "gruppuppgift")
+    assert papper["hjalpmedel"] == "Räknare: uppgift 3."
+
+
+def test_provet_far_varken_markering_eller_kapad_rad():
+    """Provet har delar, och dess hjälpmedelsrad är EN mening per del
+    (hjalpmedelsregel). Kapas den försvinner del C:s regel från
+    försättsbladet, och en markering per uppgift hade sagt emot delrubriken."""
+    papper = _grupppapper(hjalpmedel="Del B utan räknare. Del C med räknare.")
+    assert exam_gen.satt_raknarmarkering(papper, "prov") == []
+    assert exam_gen.ovningspappret_stadat(papper, "prov") is papper
+    assert papper["hjalpmedel"] == "Del B utan räknare. Del C med räknare."
+    assert papper["uppgifter"][0]["text"] == "Beräkna talet."
+
+
+def test_markeringen_foljer_med_till_pappret():
+    """Skärmen ritas av ur samma text (blad-bygg.js kort → u.t), så det som
+    mäts här är den andra vägen: LaTeX-pappret eleven får i handen."""
+    papper = _grupppapper(hjalpmedel="Räknare: uppgift 3.")
+    exam_gen.ovningspappret_stadat(papper, "gruppuppgift")
+    doc, fel = exam_spec.validate_exam_json(papper, "gruppuppgift")
+    assert doc is not None, fel
+    tex = exam_latex.render_gruppuppgift(doc)
+    assert "Räknare tillåten." in tex and "Utan räknare." in tex
+
+
+def test_genereringen_satter_markeringen_pa_pappret_lararen_far():
+    """Passet ligger SIST i kedjan (generate_exam, flagga) — efter domare,
+    grindar och vakter. Ligger det tidigare mäter begriplighetsvakten en
+    mening appen själv lagt dit."""
+    papper = _grupppapper(hjalpmedel="Utan räknare.")
+    res = exam_gen.generate_exam(
+        "Matematik, nivå 1a", "BA26B", ["Andelar"], model="", antal=4,
+        profil="gruppuppgift", doma=False,
+        grupp={"elever": 3, "langd_min": 45, "redovisning": "muntligt"},
+        llm=lambda *_a, **_kw: json.dumps(papper))
+    assert res["exam"] is not None, res["errors"]
+    assert all(u["text"].startswith("Utan räknare. ")
+               for u in res["exam"]["uppgifter"])
+
+
+# ── b) INSTRUKTIONSBANDET: EN ELLER TVÅ MENINGAR ───────────────────────────
+
+def test_bandet_kapas_till_tva_meningar():
+    """«Den inrutade texten under namnen behöver skrivas mycket, mycket
+    kortare.» Modellen skrev fyra meningar plus en metodregel."""
+    papper = _grupppapper()
+    assert exam_gen.korta_instruktion(papper, "gruppuppgift") is True
+    assert papper["instruktion"] == ("Läs uppgiften tillsammans. Bestäm vem "
+                                     "som skriver.")
+    # Och en gång till ändrar ingenting — passet körs varje varv.
+    assert exam_gen.korta_instruktion(papper, "gruppuppgift") is False
+
+
+def test_nyckelfragan_ror_inte_bandet_och_bandet_inte_den():
+    """Nyckelfrågan har ett eget fält, sätts fet efter bandet och är momentets
+    metodregel. Den som klipper bandet klipper inte den."""
+    papper = _grupppapper(nyckelfraga="Vad ska räknas först?")
+    exam_gen.ovningspappret_stadat(papper, "gruppuppgift")
+    assert papper["nyckelfraga"] == "Vad ska räknas först?"
+    assert papper["instruktion"].count(".") == 2
+
+
+def test_provets_band_ror_vi_inte():
+    papper = _grupppapper()
+    assert exam_gen.korta_instruktion(papper, "prov") is False
+    assert papper["instruktion"].count(".") == 4
+
+
+# ── c) TEXT → EKVATION ─────────────────────────────────────────────────────
+
+def test_ekvationsmomentet_far_regeln_om_att_stalla_upp_sjalv():
+    """Uppgift 3 på exam 114 gav bort steget: situationen stod i texten OCH
+    ekvationen stod där färdigt uppställd, så det enda som återstod var att
+    räkna. Att ställa upp ekvationen ÄR momentet i Ma 1c."""
+    p = exam_gen.build_prompt(
+        "Matematik, nivå 1c", "TE26A", ["Ekvationer med bråk"], antal=4,
+        profil="gruppuppgift",
+        grupp={"elever": 3, "langd_min": 45, "redovisning": "muntligt"})
+    assert "TEXT → EKVATION" in p
+    assert "Skriv en ekvation som beskriver" in p
+    assert "Lös ekvationen" in p
+    assert "ett fast belopp plus ett rörligt" in p
+
+
+def test_momentet_utan_ekvationer_far_prompten_orord():
+    """KASSETTREGELN. Villkoret är momentets, inte formens: ett procentpapper
+    ska inte få en ekvationsuppgift det inte bad om, och gruppuppgiftens
+    kassett (Andragradsfunktioner) ska inte behöva spelas om för en regel som
+    inte gäller den."""
+    assert exam_gen.ar_ekvationsmoment(["Andragradsfunktioner"]) is False
+    assert exam_gen.ar_ekvationsmoment(["Andelen i procent"]) is False
+    assert exam_gen.ar_ekvationsmoment(["Linjära ekvationer"]) is True
+    # …och bokens egna uppgifter räcker också: läraren kryssade sidorna.
+    assert exam_gen.ar_ekvationsmoment(
+        ["Algebra"], [{"nr": 1268, "text": "Lös ekvationen $3x + 5 = 20$."}]) \
+        is True
+    assert exam_gen.TEXT_TILL_EKVATION not in _grupprompt()
+
+
+def test_arbetsbladet_far_samma_regel():
+    """Domen gällde gruppuppgiften, men regeln är momentets och inte formens:
+    ett övningsblad om ekvationer som ger bort uppställningen övar bara
+    räknandet."""
+    blad = exam_gen.build_prompt("Matematik, nivå 1c", "TE26A",
+                                 ["Ekvationer med bråk"], antal=6,
+                                 profil="arbetsblad")
+    assert "TEXT → EKVATION" in blad
+    utan = exam_gen.build_prompt("Matematik, nivå 1c", "TE26A",
+                                 ["Andelen i procent"], antal=6,
+                                 profil="arbetsblad")
+    assert "TEXT → EKVATION" not in utan
+
+
+# ── d) RIKTAD OMSKRIVNING FÖRKASTAS INTE AV BALANSEN ───────────────────────
+
+def _skriv_om_uppgift_tva(papper):
+    """Kvällens omskrivning: uppgift 2 från två delfrågor till EN. K faller
+    till noll och E-andelen skjuter över taket — på HELA pappret, inte i den
+    uppgift läraren pekade på."""
+    nytt = json.loads(json.dumps(papper))
+    nytt["uppgifter"][1] = {
+        "del": None, "formaga": "R", "typ": "redovisning",
+        "poang": [2, 0, 0], "text": "Förklara vilken andel som är störst.",
+        "losning": "Svar: den andra", "bedomning": "+2 E rätt svar"}
+    return nytt
+
+
+def test_kvallens_fall_riktad_omskrivning_overlever_att_balansen_glider():
+    """EXAM 115, TRE FÖRKASTADE VARV. Varje varv skrev om uppgift 2 precis som
+    läraren bad, och varje varv föll på att K därmed hamnade på 0 % av
+    pappret. Ingen ny exam_version skrevs, svaret bar det GAMLA pappret med de
+    NYA felen, och uppgift 2 stod kvar med a/b efter tre försök.
+
+    Nu går ändringen igenom och fynden följer med som VARNINGAR — samma
+    mönster som tavlan har (lesson_board.REFINE_BEHALL)."""
+    fore = _grupppapper()
+    assert exam_spec.validate_exam_json(fore, "gruppuppgift")[1] == []
+    efter = _skriv_om_uppgift_tva(fore)
+    # Det är de två koderna som fällde kvällens varv, och båda mäter HELA
+    # pappret.
+    assert {e["code"]
+            for e in exam_spec.validate_exam_json(efter, "gruppuppgift")[1]} \
+        == {"formagabalans", "nivabalans"}
+
+    res = exam_gen.refine_exam(
+        fore, "skriv om uppgift 2 till en enda fråga", model="", nummer=2,
+        profil="gruppuppgift", llm=lambda *_a, **_kw: json.dumps(efter))
+    # Pappret ÄR omskrivet: uppgift 2 bär en fråga, inte två.
+    assert res["exam"] is not fore
+    assert "deluppgifter" not in res["exam"]["uppgifter"][1]
+    assert res["exam"]["uppgifter"][1]["text"].endswith(
+        "Förklara vilken andel som är störst.")
+    # …och fynden står kvar i svaret, som varningar läraren ser.
+    assert {e["code"] for e in res["errors"]} == {"formagabalans",
+                                                  "nivabalans"}
+    # Uppgifterna hon INTE pekade på är orörda (mål-låset).
+    assert res["exam"]["uppgifter"][2]["deluppgifter"] \
+        == fore["uppgifter"][2]["deluppgifter"]
+
+
+def test_omskrivningen_bar_raknarmarkeringen_in_i_den_nya_texten():
+    """Modellen känner inte markeringen och skriver om texten utan den. Utan
+    passet i refine hade uppgift 2 tappat sitt räknarbesked i just det varv
+    läraren skrev om den, och bara den."""
+    fore = _grupppapper(hjalpmedel="Räknare: uppgift 3.")
+    efter = _skriv_om_uppgift_tva(fore)
+    res = exam_gen.refine_exam(
+        fore, "skriv om uppgift 2", model="", nummer=2, profil="gruppuppgift",
+        llm=lambda *_a, **_kw: json.dumps(efter))
+    assert res["exam"]["uppgifter"][1]["text"].startswith("Utan räknare. ")
+    assert res["exam"]["uppgifter"][2]["text"].startswith("Räknare tillåten. ")
+
+
+def test_provets_balans_faller_varvet_som_forut():
+    """Där ÄR balansen papprets uppgift. Ett prov vars omskrivning river den
+    ska lämna originalet tillbaka, precis som före den här ändringen."""
+    assert exam_gen.balansvarningar("prov", ("uppgift", 2)) == frozenset()
+    assert exam_gen.balansvarningar("arbetsblad", ("uppgift", 2)) \
+        == exam_gen.BALANSVARNING
+    assert exam_gen.balansvarningar("gruppuppgift", ("uppgift", 2)) \
+        == exam_gen.BALANSVARNING
+
+
+def test_en_omskrivning_utan_mal_ager_balansen_sjalv():
+    """Mål-låset är villkoret. Skriver varvet om HELA pappret finns ingen
+    enskild ändring att skydda, och då är balansen dess eget ansvar igen."""
+    assert exam_gen.balansvarningar("gruppuppgift", None) == frozenset()
+    fore = _grupppapper()
+    efter = _skriv_om_uppgift_tva(fore)
+    res = exam_gen.refine_exam(
+        fore, "skriv om hela pappret", model="", profil="gruppuppgift",
+        max_rounds=1, llm=lambda *_a, **_kw: json.dumps(efter))
+    assert {e["code"] for e in res["errors"]} == {"formagabalans",
+                                                  "nivabalans"}
