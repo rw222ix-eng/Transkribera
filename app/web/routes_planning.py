@@ -202,7 +202,7 @@ def tavelform_val(body: dict) -> tuple[bool, str, str]:
             inriktning_val(body))
 
 
-def tavelform_ur_laget(st: dict, body: dict) -> tuple[bool, str, str]:
+def tavelform_ur_laget(st: dict, body: dict) -> tuple[bool, str, str, bool]:
     """Samma val för en omskrivning eller en reparation. Begäran vinner när
     den bär fälten (läraren kan ha kryssat om i panelen och sparat om
     utkastet); annars gäller det läget tavlan SKREVS med. En planering från
@@ -212,11 +212,15 @@ def tavelform_ur_laget(st: dict, body: dict) -> tuple[bool, str, str]:
     kommer ur KLASSPROFILEN och inte ur panelen, så en klient som skickar
     yrket men inte krysset ska få behålla det kryss tavlan skrevs med."""
     inr = inriktning_val(body) or str(st.get("inriktning") or "").strip()
+    # Regelsamlingen (Vidma-formen) är momentets, inte panelens: en planering
+    # från före formen bär inget fält, och då läses den ur momentet i läget
+    # så att en omskrivning inte stryker det numrerade formelbladet.
+    regel = bool(st.get("regelsamling")) if "regelsamling" in st         else lesson_board.ar_regelsamling(st.get("moment"))
     if body.get("vanligt_fel") is None and not str(body.get("niva") or "").strip():
         return (bool(st.get("vanligt_fel", True)),
-                str(st.get("niva") or "").strip(), inr)
+                str(st.get("niva") or "").strip(), inr, regel)
     vf, niva, _ = tavelform_val(body)
-    return (vf, niva, inr)
+    return (vf, niva, inr, regel)
 
 
 def varvhistorik(body: dict) -> list[str]:
@@ -1046,6 +1050,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # beteendet: raden är med, nivån är Blandat. Förvalet AV bor i
         # planeringspanelen, inte här.
         vanligt_fel, niva, inriktning = tavelform_val(body)
+        # Vidma-formen (lesson_board.REGELSAMLING_BLOCK): avgörs ur momentet
+        # här, en gång, och SPARAS med planeringen som de andra formvalen.
+        regelsamling = lesson_board.ar_regelsamling(moment)
 
         llm = arbiter.try_acquire_llm()
         if not llm:
@@ -1084,6 +1091,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     utfall=utfall_txt, bok=bok_txt, forlaga=forlaga_txt,
                     svart=svart_txt, fokus=fokus_txt, delar=delar_txt,
                     vanligt_fel=vanligt_fel, niva=niva, inriktning=inriktning,
+                    regelsamling=regelsamling,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 # Lektionstiden uppe till vänster är lärarens, inte modellens:
@@ -1098,7 +1106,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     "group_id": group_id, "course_id": course_id,
                     "datum": datum, "starttid": starttid, "sluttid": sluttid,
                     "vanligt_fel": vanligt_fel, "niva": niva,
-                    "inriktning": inriktning,
+                    "inriktning": inriktning, "regelsamling": regelsamling,
                 })
                 return {"id": pid, "board": board,
                         "errors": res["errors"], "rounds": res["rounds"]}
@@ -1201,7 +1209,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
             return {"ok": True, "repaired": False, "exhausted": True}
         # Formen tavlan SKREVS med. Reparationen skriver om hela tavlan, och
         # utan den hade en trängselrättning lagt tillbaka «Vanligt fel».
-        vanligt_fel, niva, inriktning = tavelform_ur_laget(st, body)
+        vanligt_fel, niva, inriktning, regelsamling = tavelform_ur_laget(st, body)
 
         llm = arbiter.try_acquire_llm()
         if not llm:
@@ -1217,6 +1225,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     st["board"], warnings, model=_model_name(),
                     rounds_used=st["rounds"],
                     vanligt_fel=vanligt_fel, niva=niva, inriktning=inriktning,
+                    regelsamling=regelsamling,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 # Modellen har skrivit om hela tavlan och kan ha tappat
@@ -1272,7 +1281,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # Formen tavlan skrevs med följer med varvet: omskrivningen skriver om
         # HELA tavlan (eller lappar den), och ett önskemål om något helt annat
         # får inte smyga tillbaka «Vanligt fel» eller sänka nivån.
-        vanligt_fel, niva, inriktning = tavelform_ur_laget(st, body)
+        vanligt_fel, niva, inriktning, regelsamling = tavelform_ur_laget(st, body)
 
         llm = arbiter.try_acquire_llm()
         if not llm:
@@ -1297,6 +1306,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     st["board"], message, model=_model_name(), mal=mal,
                     malen=malen, bok=bok_txt, historik=historik,
                     vanligt_fel=vanligt_fel, niva=niva, inriktning=inriktning,
+                    regelsamling=regelsamling,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 # Sa hon åt oss att sluta? Raden frågade förr om NÅGON

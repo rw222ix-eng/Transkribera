@@ -2762,3 +2762,35 @@ def test_gamla_anrop_utan_falten_beter_sig_som_forr():
                       llm=llm)
     assert calls[0]["prompt"] == lb.build_prompt("Ma1b", "9A",
                                                  "Pythagoras sats")
+
+
+# ── REGELSAMLINGEN (Vidma-formen, 2026-09-21) ────────────────────────────────
+
+def test_regelsamlingen_kanns_igen_ur_momentet():
+    """Reglerna ÄR momentet, eller lektionen är en repetition: då blir
+    vänstern ett numrerat formelblad. Allt annat är som förut."""
+    for m in ("Repetition · Potenslagarna inför provet", "Potensreglerna",
+              "Deriveringsreglerna", "Repetera kap 1", "Logaritmlagarna"):
+        assert lb.ar_regelsamling(m), m
+    for m in ("Faktorisering som lösningsmetod", "1.3 Andragradsekvationer",
+              "Pythagoras sats", "procent", "", None):
+        assert not lb.ar_regelsamling(m), m
+
+
+def test_regelsamlingen_lagger_till_blocket_bara_nar_den_ar_vald():
+    """Kassettregeln: standardformen är byte för byte den gamla prompten.
+    Med formen vald följer blocket med i skrivningen, reparationen och
+    domaren, och det står FÖRE nivå- och yrkesraden."""
+    assert lb.Tavelform().instruktion() == lb.INSTRUCTION
+    f = lb.tavelform(True, "", "", True)
+    assert f.instruktion() == lb.INSTRUCTION + lb.REGELSAMLING_BLOCK
+    assert f.hints() == lb.REPAIR_HINTS + lb.REGELSAMLING_HINT
+    assert f.domarinstruktion() == (lb.TACKNING_INSTRUKTION
+                                    + lb.REGELSAMLING_DOMARRAD)
+    g = lb.tavelform(True, "C-nivå", "bygg", True)
+    assert g.instruktion().index(lb.REGELSAMLING_BLOCK) \
+        < g.instruktion().index(g.nivarad)
+    assert "\\text{①}" in lb.REGELSAMLING_BLOCK
+    # Prompten med blocket ryms fortfarande under taket.
+    assert len(lb.build_prompt("Ma1c", "NA26F", "Potenslagarna", form=f)) \
+        < 50_000

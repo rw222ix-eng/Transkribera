@@ -379,7 +379,8 @@ def test_render_report_triggers_repair(llm_ready, monkeypatch):
 
     def fake_repair(board, warnings, *, model, llm=None, rounds_used=1,
                     max_rounds=lesson_board.MAX_ROUNDS,
-                    vanligt_fel=True, niva="", inriktning="", log_cb=None,
+                    vanligt_fel=True, niva="", inriktning="",
+                    regelsamling=False, log_cb=None,
                     token_cb=None):
         captured["warnings"] = warnings
         captured["rounds_used"] = rounds_used
@@ -420,7 +421,7 @@ def test_refine_updates_board(llm_ready, monkeypatch):
 
     def fake_refine(board, instruction, *, model, mal=None, malen=None,
                     bok="", historik=None, vanligt_fel=True, niva="",
-                    inriktning="",
+                    inriktning="", regelsamling=False,
                     llm=None, max_rounds=lesson_board.MAX_ROUNDS, log_cb=None,
                     token_cb=None):
         captured["instruction"] = instruction
@@ -975,7 +976,7 @@ def test_refine_far_hela_meddelandet_inklusive_kallviktningen(llm_ready, monkeyp
 
     def fake_refine(board, message, *, model, mal=None, malen=None,
                     bok="", historik=None, vanligt_fel=True, niva="",
-                    inriktning="",
+                    inriktning="", regelsamling=False,
                     llm=None, max_rounds=lesson_board.MAX_ROUNDS, log_cb=None,
                     token_cb=None):
         sett["message"] = message
@@ -1045,7 +1046,7 @@ def test_tavlan_gar_att_andra_efter_en_omstart(llm_ready, monkeypatch):
 
     def fake_refine(board, instruction, *, model, mal=None, malen=None,
                     bok="", historik=None, vanligt_fel=True, niva="",
-                    inriktning="",
+                    inriktning="", regelsamling=False,
                     llm=None, max_rounds=lesson_board.MAX_ROUNDS, log_cb=None,
                     token_cb=None):
         sett["board"] = board

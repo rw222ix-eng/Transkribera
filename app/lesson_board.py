@@ -1162,6 +1162,93 @@ def _byt(text: str, par: tuple[tuple[str, str], ...]) -> str:
     return ut
 
 
+# ── REGELSAMLINGEN (Vidma-formen, 2026-09-21) ────────────────────────────────
+#
+# Lärarens beställning inför repetitionen av potenslagarna (NA26F, inför prov
+# 86): «ta inspiration från riktiga tavlor på nätet, framför allt Vidma, hur
+# vänstertavlan ser ut, hur man presenterar något så att eleverna ska fatta.»
+# Jonas Vikströms klassrumstavla om potensreglerna (youtube 8WM8--tEssk) gör
+# fyra saker som skelettet ovan inte gör när momentet ÄR en uppsättning
+# regler:
+#   1. definitionen står med ett tal (3^4 = 3·3·3·3) och delarna döpta;
+#   2. regel ① HÄRLEDS ur definitionen genom att faktorerna skrivs ut
+#      (2^5 · 2^3 = 2·2·2·2·2 · 2·2·2 = 2^8) INNAN den skrivs i bokstäver,
+#      och förväxlingen (2^5 + 2^3 ≠ 2^8) står struken i rött bredvid;
+#   3. alla regler står NUMRERADE ① … ⑧ som ett formelblad på tavlan;
+#   4. uppgifterna frågar «Vilken regel?» innan de räknas.
+#
+# Skelettet (8c–8e) säger tvärtom: högst två formler, «inte en massa räknelagar,
+# det hör till formelsamlingen». Den domen gäller när reglerna är förkunskap.
+# När reglerna ÄR momentet, eller lektionen är en repetition inför provet,
+# är formelbladet själva tavlan. Blocket läggs därför BARA till när momentet
+# säger så (ar_regelsamling) — standardprompten står byte för byte som förut
+# (kassettregeln), och blocket kostar ~2 kB bara på de tavlor som behöver det.
+#
+# Numreringen skrivs som \text{①} i LaTeX, inte \textcircled{1}: KaTeX ritar
+# unicode-tecknet fint (renderat 2026-09-21), och siffervakten
+# (whiteboard_spec._ar_bokstavsformel) ser ingen siffra i «①», så regelraden
+# räknas som bokstavsformel och ankaret före den känns igen som ankare.
+_REGELSAMLING_RE = re.compile(
+    r"potenslag|potensregl|räknelag|räkneregl|deriveringsregl|logaritmlag|"
+    r"kvadreringsregl|konjugatregel|\blagar(?:na)?\b|\bregler(?:na)?\b|"
+    r"repetition|repetera|inför prov", re.IGNORECASE)
+
+
+def ar_regelsamling(moment: str | None) -> bool:
+    """Är momentet en uppsättning regler, eller en repetition av dem?"""
+    return bool(_REGELSAMLING_RE.search(moment or ""))
+
+
+REGELSAMLING_BLOCK = (
+    "\nREGELSAMLINGEN. Momentet ÄR en uppsättning regler, eller en repetition "
+    "av dem (potenslagarna, deriveringsreglerna, logaritmlagarna, «inför "
+    "provet»). Vänstern är då ett FORMELBLAD: regel ① härleds ur "
+    "definitionen med ett tal, alla regler står numrerade, och uppgifterna "
+    "frågar «vilken regel?». Följande gäller i stället för 8c–8e; allt annat "
+    "som förut:\n"
+    "- Spalt 1 «1. Vad är det?»: anatomin (7) är definitionen i bokstäver med "
+    "faktorerna utskrivna (a^n = \\underbrace{a \\cdot a \\cdots a}_{n}) och "
+    "etiketterna «bas, exponent» under. Ankaret (8d) är UTSKRIVNINGEN som "
+    "visar varför den första regeln gäller: EN math-rad där definitionen "
+    "skrivs ut med tal, 2^5 \\cdot 2^3 = \\underbrace{2 \\cdot 2 \\cdot 2 "
+    "\\cdot 2 \\cdot 2}_{5} \\cdot \\underbrace{2 \\cdot 2 \\cdot 2}_{3} = "
+    "2^8, med etiketten «räkna faktorerna: 5 + 3». Bara den raden bär tal.\n"
+    "- Direkt under ankaret står REGLERNA som numrerade math-rader, EN regel "
+    "per rad, i bokstäver, med numret som \\\\text{①} … \\\\text{⑧} först på "
+    "raden: \"latex\": \"\\\\text{①}\\\\; a^x \\\\cdot a^y = a^{x+y}\". Taket "
+    "på två formler (8e) gäller inte här: ALLA regler urvalets uppgifter "
+    "kräver står, högst ÅTTA, i bokens ordning, utan förklaring under. "
+    "Förbudet mot räknelagar (8c/8e) gäller inte när reglerna ÄR momentet.\n"
+    "- Spalt 2 «2. Så löser vi»: receptet (8f) är hur eleven VÄLJER regel "
+    "(«Titta: samma bas eller samma exponent?», «Välj: regelns nummer», "
+    "«Skriv om: till en enda potens»). «Att tänka på» (8g) bär reglernas "
+    "randfall ur urvalet (a^0 = 1, negativ exponent blir ett bråk, exponent "
+    "i bråkform är en rot). Vanligt fel är FÖRVÄXLINGEN med den regel den "
+    "liknar (2^5 + 2^3 \\neq 2^8: regeln gäller gånger, inte plus).\n"
+    "- Högertavlan: varje exempels FÖRSTA steg namnger regeln med nummer "
+    "(«Regel ①: samma bas, addera exponenterna»), så att klassen svarar på "
+    "«vilken regel?» innan den räknar. Ett exempel per regel-TYP i urvalet, "
+    "i stigande svårighet; det sista exemplet kombinerar två regler i samma "
+    "tal, och stegen namnger båda.\n"
+)
+
+REGELSAMLING_HINT = (
+    "\nRegelsamlingen: de numrerade regelraderna (\\text{①} …) och ankaret "
+    "med faktorerna utskrivna är beställda. Stryk aldrig dem för att korta; "
+    "korta etiketter och listpunkter i stället.\n"
+)
+
+REGELSAMLING_DOMARRAD = (
+    "\nREGELSAMLING: tavlan är ett numrerat formelblad (regler \\text{①} … "
+    "på vänstern). Reglerna är kontraktet: fäll en regel som urvalets "
+    "uppgifter kräver men som saknas, och ett exempel vars första steg inte "
+    "namnger en regel med nummer. De numrerade regelraderna i bokstäver är "
+    "formler, inte sifferrader, och taket på två formler gäller inte; "
+    "ankaret får bära utskrivningen 2 \\cdot 2 \\cdot 2 som sitt enda "
+    "mellanled.\n"
+)
+
+
 @dataclass(frozen=True)
 class Tavelform:
     """Lärarens val om tavlans form: bär den «Vanligt fel» raden, vilken nivå
@@ -1174,6 +1261,10 @@ class Tavelform:
     # Klassprofilens «Inriktning» (profil.js). Fritext, tom för de flesta
     # klasser: lärarens fynd 2026-09-12 gäller yrkesprogrammen.
     inriktning: str = ""
+    # Momentet är en uppsättning regler eller en repetition av dem
+    # (ar_regelsamling): vänstern blir ett numrerat formelblad med regel ①
+    # härledd ur definitionen. Se REGELSAMLING_BLOCK.
+    regelsamling: bool = False
 
     @property
     def nivarad(self) -> str:
@@ -1183,38 +1274,48 @@ class Tavelform:
     def yrkesrad(self) -> str:
         return inriktningsrad(self.inriktning)
 
+    @property
+    def regelblock(self) -> str:
+        return REGELSAMLING_BLOCK if self.regelsamling else ""
+
     def instruktion(self) -> str:
-        if self.vanligt_fel and not self.nivarad and not self.yrkesrad:
+        if self.vanligt_fel and not self.nivarad and not self.yrkesrad \
+                and not self.regelsamling:
             return INSTRUCTION
         text = INSTRUCTION if self.vanligt_fel \
             else _byt(INSTRUCTION, _VANLIGT_FEL_BORT)
         # Yrket sist av de två raderna, alltså närmast few-shotarna och
         # uppdraget: nivån säger hur SVÅRA exemplen ska vara, yrket VAR de ska
         # utspela sig, och den senare är den läraren saknade mest.
-        return text + self.nivarad + self.yrkesrad
+        # Regelblocket före dem båda: det byter FORM på vänstern och ska läsas
+        # som en del av skelettet, inte som ett tillägg om exemplen.
+        return text + self.regelblock + self.nivarad + self.yrkesrad
 
     def hints(self) -> str:
-        return REPAIR_HINTS if self.vanligt_fel \
+        text = REPAIR_HINTS if self.vanligt_fel \
             else _byt(REPAIR_HINTS, _HINTS_VANLIGT_FEL_BORT)
+        return text + (REGELSAMLING_HINT if self.regelsamling else "")
 
     def domarinstruktion(self) -> str:
         text = TACKNING_INSTRUKTION if self.vanligt_fel \
             else _byt(TACKNING_INSTRUKTION, _DOMARE_VANLIGT_FEL_BORT)
-        return text + inriktning_domarrad(self.inriktning)
+        return (text + (REGELSAMLING_DOMARRAD if self.regelsamling else "")
+                + inriktning_domarrad(self.inriktning))
 
 
 STANDARDFORM = Tavelform()
 
 
 def tavelform(vanligt_fel=True, niva: str = "",
-              inriktning: str = "") -> Tavelform:
+              inriktning: str = "", regelsamling: bool = False) -> Tavelform:
     """Formen ur rutternas kroppar: tåligt mot None, tomma strängar och
     «Blandat» — de betyder alla «som förut»."""
     val = (niva or "").strip()
     return Tavelform(vanligt_fel=bool(vanligt_fel) if vanligt_fel is not None
                      else True,
                      niva="" if val == NIVA_BLANDAT else val,
-                     inriktning=" ".join(str(inriktning or "").split()))
+                     inriktning=" ".join(str(inriktning or "").split()),
+                     regelsamling=bool(regelsamling))
 
 
 def _cirkel(cx: float, cy: float, r: float, n: int = 48) -> list[list[float]]:
@@ -4180,11 +4281,18 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
                    doma: bool = True,
                    vanligt_fel: bool = True, niva: str = "",
                    inriktning: str = "",
+                   regelsamling: bool | None = None,
                    llm=llm_client.generate,
                    max_rounds: int = MAX_ROUNDS,
                    log_cb: Callable[[str], None] | None = None,
                    token_cb: Callable[[str], None] | None = None) -> dict:
     """Generera en tavla och auto-reparera valideringsfel.
+
+    `regelsamling` (Vidma-formen, REGELSAMLING_BLOCK): None läser det ur
+    momentet själv (ar_regelsamling), så att tools/ och kassetterna får rätt
+    form utan att skicka fältet. Rutten skickar sitt eget värde och sparar det
+    i planeringens läge, så att omskrivning och reparation skriver om tavlan
+    med samma form som skrev den.
 
     Returnerar {"board": dict|None, "errors": [...], "rounds": int}.
     Anroparen (rutterna) äger GPU-arbiterlåset. `token_cb` får modellens
@@ -4228,7 +4336,12 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     _log = log_cb or (lambda _m: None)
     log = lambda m: _log(_stamplad(m))
     log("Genererar lektionstavlan …")
-    form = tavelform(vanligt_fel, niva, inriktning)
+    form = tavelform(vanligt_fel, niva, inriktning,
+                     ar_regelsamling(moment) if regelsamling is None
+                     else regelsamling)
+    if form.regelsamling:
+        log("Momentet är en regelsamling: vänstern skrivs som ett numrerat "
+            "formelblad med regel ① härledd ur definitionen.")
     prompt = build_prompt(course, group, moment, memory, underlag, utfall, bok,
                           forlaga, svart, fokus, delar, form)
     board = _llm_round(prompt, model, llm, token_cb=token_cb)
@@ -4285,7 +4398,7 @@ def repair_board(board: dict, warnings: list[str], *, model: str,
                  llm=llm_client.generate, rounds_used: int = 1,
                  max_rounds: int = MAX_ROUNDS,
                  vanligt_fel: bool = True, niva: str = "",
-                 inriktning: str = "",
+                 inriktning: str = "", regelsamling: bool = False,
                  log_cb: Callable[[str], None] | None = None,
                  token_cb: Callable[[str], None] | None = None) -> dict:
     """Reparera utifrån klientens renderingsvarningar ([WB] …).
@@ -4300,7 +4413,8 @@ def repair_board(board: dict, warnings: list[str], *, model: str,
     return _repair_until_valid(board, problems, model=model, llm=llm,
                                rounds_used=rounds_used, max_rounds=max_rounds,
                                log_cb=log_cb, token_cb=token_cb,
-                               form=tavelform(vanligt_fel, niva, inriktning))
+                               form=tavelform(vanligt_fel, niva, inriktning,
+                                              regelsamling))
 
 
 # ── DIFFVAKTEN: FRITEXT UTAN MARKERING ──────────────────────────────────────
@@ -4678,7 +4792,7 @@ def refine_board(board: dict, instruction: str, *, model: str,
                  mal: dict | None = None, malen=None,
                  bok: str = "", historik=None,
                  vanligt_fel: bool = True, niva: str = "",
-                 inriktning: str = "",
+                 inriktning: str = "", regelsamling: bool = False,
                  llm=llm_client.generate,
                  max_rounds: int = MAX_ROUNDS,
                  log_cb: Callable[[str], None] | None = None,
@@ -4697,7 +4811,7 @@ def refine_board(board: dict, instruction: str, *, model: str,
     DIFFVAKTEN (blocket ovan, lärarens ord 2026-09-12): nämner meningen ett
     mål och varvet ändrade något annat körs det om som en lapp."""
     log = log_cb or (lambda _m: None)
-    form = tavelform(vanligt_fel, niva, inriktning)
+    form = tavelform(vanligt_fel, niva, inriktning, regelsamling)
     vagar = malvagar(board, mal, malen, log=log)
     if vagar:
         return _riktad_refine(board, instruction, vagar, model=model, llm=llm,
