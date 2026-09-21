@@ -2338,6 +2338,11 @@ function measure(node, board) {
 }
 
 // Layout one flow (column or full board)
+/* Den kortare spalten i en row får vara lägst så här stor del av den längre
+   (se spaltbalansen i layoutFlow). Samma tal som e2e/render-board.mjs. */
+const SPALTBALANS = 0.6;
+const _spaltSagt = new Set();
+
 function layoutFlow(sections, board, opts) {
   const {
     x0, y0,         // starting position
@@ -2424,6 +2429,34 @@ function layoutFlow(sections, board, opts) {
     node.style.top = y + 'px';
 
     board.appendChild(node);
+
+    /* SPALTBALANSEN (2026-09-21). Vänsterns skelett är en row med två col
+       (lesson_board regel 6: «SPALTERNA SKA VARA UNGEFÄR LIKA HÖGA»), och
+       regeln fanns bara i prompten: motorn mätte raden som EN höjd och sa
+       ingenting om att den ena spalten var en remsa och den andra en vägg
+       (IndA-tavlan 2026-09-21: 218 mot 367 px, nedre tredjedelen tom).
+       Vakten låg i e2e/render-board.mjs, som reparationsvägen aldrig ser.
+       Nu skrivs den som en [WB]-varning här, så att blad.js fångar den
+       och plan.js skickar den till /render-report som vilket
+       renderingsfel som helst. Sextio procent är harnessets gräns.
+       Mätningen görs HÄR, efter att noden sitter i tavlan: i measure() är
+       spalternas offsetHeight fortfarande 0 (mätt 2026-09-21).
+       Fit-passet placerar samma rad vid flera skalor; kvoten är skalfri, så
+       raden sägs EN gång per tavla (samma text = samma fynd). */
+    if (sec.kind === 'row' && (sec.children || []).some(c => c && c.kind === 'col')) {
+      const hojder = [...node.children].map(n => n.offsetHeight).filter(h => h > 0);
+      if (hojder.length >= 2) {
+        const kort = Math.min(...hojder), lang = Math.max(...hojder);
+        const kvot = kort / lang;
+        if (kvot < SPALTBALANS) {
+          const rad = `[WB] rad med ${hojder.length} spalter: den korta spalten är `
+            + `${Math.round(kvot * 100)} % av den långa `
+            + '— flytta ett block till den korta spalten eller korta den långa, '
+            + 'så att spalterna blir ungefär lika höga.';
+          if (!_spaltSagt.has(rad)) { _spaltSagt.add(rad); console.warn(rad); }
+        }
+      }
+    }
 
     // underline under heading?
     if (sec.kind === 'heading' && sec.underline) {
