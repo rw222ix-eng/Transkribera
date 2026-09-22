@@ -841,14 +841,17 @@ window.BladBygg = (() => {
     /* «Räknare» och inget mer — «digitala hjälpmedel» var för vagt (lärarens
        dom 2026-09-18); datorn skriver hon själv när en uppgift kräver den. */
     'Räknare': 'Räknare tillåten.',
-    'Räknare och formelblad': 'Räknare och formelblad tillåtna.'
+    'Räknare och formelblad': 'Räknare och formelblad tillåtna.',
+    /* Datorn med GeoGebra, aldrig räknaren (lärarens dom 2026-09-22). */
+    'Digitala verktyg och formelblad': 'GeoGebra på datorn och formelblad tillåtna.'
   };
   /* Kortformen i delens sidhuvud («Del A · utan digitala hjälpmedel»). */
   const HJALPMEDELSETIKETT = {
     'Inga digitala': 'utan digitala hjälpmedel',
     'Formelblad': 'formelblad, utan digitala hjälpmedel',
     'Räknare': 'räknare',
-    'Räknare och formelblad': 'räknare och formelblad'
+    'Räknare och formelblad': 'räknare och formelblad',
+    'Digitala verktyg och formelblad': 'GeoGebra på datorn och formelblad'
   };
   /* Del A är `hjalpmedelA`, del B `hjalpmedelB` — och «En del» är ett prov med
      bara den första. Ett papper utan fälten (allt som skrevs före

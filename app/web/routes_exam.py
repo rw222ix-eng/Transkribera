@@ -563,6 +563,8 @@ _ATGARD = {
                  "övrigt, samma tal, samma poäng.",
     "parametervakt": "Ge en bokstavskonstant ett tal, eller skriv om uppgiften "
                      "med en bokstav färre. Samma poäng, samma förmåga.",
+    "lasregel": "Skriv om uppgiftens text så som fyndet säger. Samma "
+                "matematik, samma tal, samma poäng; övriga uppgifter står kvar.",
     "kursvakt": "Byt ut uppgiften mot en som prövar samma förmåga inom kursens "
                 "eget innehåll, eller fråga efter ett bestämt fall. Samma del "
                 "och samma poäng.",

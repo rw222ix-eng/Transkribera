@@ -168,7 +168,8 @@ def _environment() -> Environment:
 _DELNAMN_PAPPER = {"B": "Del A", "C": "Del B", "D": "Del C"}
 
 
-def _del_instruktion(del_kod: str, utan_raknare: bool) -> str:
+def _del_instruktion(del_kod: str, utan_raknare: bool,
+                     verktyg: str = "digitala verktyg") -> str:
     """Delens egen rad: vilka hjälpmedel den löses med, och vad som krävs.
 
     Var en tabell med tre färdiga meningar — «Del A löses utan räknare …»,
@@ -187,10 +188,11 @@ def _del_instruktion(del_kod: str, utan_raknare: bool) -> str:
         return ""
     if del_kod == "B":
         krav = "Endast svar krävs om inget annat anges."
+    elif utan_raknare:
+        krav = "Fullständig redovisning krävs."
     else:
-        krav = ("Fullständig redovisning krävs." if utan_raknare else
-                "Fullständig redovisning krävs, och du ska visa hur du "
-                "använder ditt digitala verktyg.")
+        krav = ("Fullständig redovisning krävs. "
+                + REDOVISA_VERKTYGET.get(verktyg, REDOVISA_VERKTYGET["digitala verktyg"]))
     return f"{namn} löses {'utan' if utan_raknare else 'med'} räknare. {krav}"
 
 
@@ -212,7 +214,8 @@ _MED_RE = re.compile(r"\b(räknare|miniräknare|digitala verktyg|"
                      r"digitala hjälpmedel|geogebra)\b", re.IGNORECASE)
 
 
-def _digitala_i_delen(hjalpmedel: str | None, del_kod: str) -> bool | None:
+def _klausul(hjalpmedel: str | None, del_kod: str) -> str | None:
+    """Den del av regeln som gäller just den här delen, eller None."""
     namn = _DELNAMN_PAPPER.get(del_kod or "")
     if not namn or not hjalpmedel:
         return None
@@ -224,14 +227,51 @@ def _digitala_i_delen(hjalpmedel: str | None, del_kod: str) -> bool | None:
     text = str(hjalpmedel)
     vill = namn.split()[-1] if _DELNAMN_REDAN_RE.search(text) else del_kod
     for bokstav, klausul in _DEL_KLAUSUL_RE.findall(text):
-        if bokstav != vill:
-            continue
-        if _UTAN_RE.search(klausul):
-            return False
-        if _MED_RE.search(klausul):
-            return True
-        return None
+        if bokstav == vill:
+            return klausul
     return None
+
+
+def _digitala_i_delen(hjalpmedel: str | None, del_kod: str) -> bool | None:
+    klausul = _klausul(hjalpmedel, del_kod)
+    if klausul is None:
+        return None
+    if _UTAN_RE.search(klausul):
+        return False
+    if _MED_RE.search(klausul):
+        return True
+    return None
+
+
+# RÄKNAREN ÄR INTE ETT DIGITALT VERKTYG (lärarens dom 2026-09-22): «när vi
+# pratar om digitala verktyg, då pratar vi om dator, punkt slut», och den
+# använder eleverna i GeoGebra. En del som bara tillåter räknare ska därför
+# heta «Räknare är tillåten» och be eleven redovisa räknaren, aldrig ett
+# digitalt verktyg hon inte har. Tiger regeln om delen står husets gamla ord
+# kvar.
+_DATOR_RE = re.compile(r"\b(digitala verktyg|digitalt verktyg|dator|geogebra)\b",
+                       re.IGNORECASE)
+
+
+def _verktyget_i_delen(hjalpmedel: str | None, del_kod: str) -> str:
+    """«räknare» när delens regel bara nämner räknaren, annars «digitala
+    verktyg» (också när regeln tiger, som förut)."""
+    klausul = _klausul(hjalpmedel, del_kod) or ""
+    if (_MED_RE.search(klausul) and not _DATOR_RE.search(klausul)
+            and not _UTAN_RE.search(klausul)):
+        return "räknare"
+    return "digitala verktyg"
+
+
+# NP skriver «visa hur du använder ditt digitala verktyg». Läraren (2026-09-22):
+# eleven kan läsa «visa» som att hon ska visa upp något, en film. Pappret ber
+# om det som faktiskt ska göras, på pappret, och säger vilket verktyg det är:
+# hennes två meningar, ordagrant.
+REDOVISA_VERKTYGET = {
+    "räknare": "Redovisa kort på pappret hur du har använt din räknare.",
+    "digitala verktyg": ("Redovisa kort på pappret hur du har använt "
+                         "GeoGebra på datorn."),
+}
 
 
 _DELNAMN_RE = [(re.compile(r"\b([Dd]el)\s+B\b"), r"\1 A"),
@@ -807,9 +847,13 @@ def _forsatt_vy(doc: exam_spec.ExamDoc, delar: list[dict],
     inlamning = None
     if len(delrader) >= 2:
         forsta = delar[0]["rubrik"]
-        nasta = [d["rubrik"] for d in delar if d["rubrik"]][1]
+        nasta_del = [d for d in delar if d["rubrik"]][1]
+        nasta = nasta_del["rubrik"]
+        # Räknaren är inte ett digitalt verktyg (se _verktyget_i_delen).
+        fram = ("räknaren" if nasta_del.get("verktyg") == "räknare"
+                else "digitala verktyg")
         inlamning = escape_latex(
-            f"Du lämnar in {forsta} innan du tar fram digitala verktyg och "
+            f"Du lämnar in {forsta} innan du tar fram {fram} och "
             f"börjar på {nasta}.")
 
     g = exam_spec.kravgranser(doc)
@@ -1048,14 +1092,20 @@ def _build_view(doc: exam_spec.ExamDoc,
         # Lärarens val väger tyngre än husets delning (se _digitala_i_delen).
         sagt = _digitala_i_delen(doc.hjalpmedel, del_kod or "")
         utan_raknare = (del_kod == "B") if sagt is None else not sagt
+        verktyg = _verktyget_i_delen(doc.hjalpmedel, del_kod or "")
         alla_kortsvar = all(_krav(i.typ) == _KRAV_TEXT["rutin"] for i in items)
         nagot_kortsvar = any(_krav(i.typ) == _KRAV_TEXT["rutin"] for i in items)
+        if utan_raknare:
+            tillatet = "Digitala verktyg är inte tillåtna"
+        elif verktyg == "räknare":
+            tillatet = "Räknare är tillåten"
+        else:
+            tillatet = "Digitala verktyg är tillåtna"
         delar.append({
             "rubrik": escape_latex(rubrik) if rubrik else None,
-            "titelrad": (escape_latex(
-                f"{rubrik} – Digitala verktyg är "
-                f"{'inte tillåtna' if utan_raknare else 'tillåtna'}")
-                if rubrik else None),
+            "verktyg": None if utan_raknare else verktyg,
+            "titelrad": (escape_latex(f"{rubrik} – {tillatet}")
+                         if rubrik else None),
             # Den FÖRSTA delen behöver ingen egen hjälpmedels- och namnrad:
             # försättsbladet ligger kvar i elevens hand. De följande delarna
             # delas ut för sig, och då måste pappret själv säga vad som gäller
@@ -1074,9 +1124,9 @@ def _build_view(doc: exam_spec.ExamDoc,
             "kravrad": (None if nagot_kortsvar else escape_latex(
                 "Fullständiga lösningar krävs på samtliga uppgifter."
                 + ("" if utan_raknare else
-                   " Visa också hur du använder ditt digitala verktyg."))),
+                   " " + REDOVISA_VERKTYGET[verktyg]))),
             "instruktion": escape_latex(
-                _del_instruktion(del_kod or "", utan_raknare)) or None,
+                _del_instruktion(del_kod or "", utan_raknare, verktyg)) or None,
             "uppgifter": vy_items,
             # exam-klassens räknare sätts till numret FÖRE delens första
             # uppgift, precis som förlagans «\setcounter{question}{6} %

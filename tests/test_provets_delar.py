@@ -144,7 +144,9 @@ def test_inlamningsraden_ar_lararens_provrutin():
     from tests.test_exam import _exam
     doc, _ = exam_spec.validate_exam_json(_exam())
     tex = exam_latex.render_prov(doc)
-    assert "innan du tar fram digitala verktyg" in tex
+    # Fixturens Del C har räknare, och räknaren är inte ett digitalt verktyg
+    # (lärarens dom 2026-09-22): raden säger vad eleven faktiskt tar fram.
+    assert "innan du tar fram räknaren" in tex
     assert "innan du hämtar" not in tex
 
 

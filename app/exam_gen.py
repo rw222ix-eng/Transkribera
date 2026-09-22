@@ -513,6 +513,40 @@ INSTRUCTION = (
     "Vilket är det minsta värde som x² + 6x kan få? Visa med en uträkning "
     "att inget värde är mindre.» Meningen säger VAD som söks, aldrig hur: "
     "den är varken ett tips eller en metod.\n"
+    # LÄSREGLERNA (lärarens dom 2026-09-22 kväll, exam 118 och 119). Varje
+    # rad är en uppgift eleverna skulle ha läst fel. np_vakter.lasregelvakt
+    # fäller det som går att se i texten; resten fångar elevläsaren.
+    "- LÄSREGLERNA, så att eleven förstår uppgiften efter en läsning:\n"
+    "  • Det en deluppgift behöver står i den deluppgiften. Stammen bär bara "
+    "det som gäller alla, och varje deluppgift säger konkret vad som ska "
+    "svaras: «Elias köper x pennor för 12 kr styck. a) Skriv ett uttryck för "
+    "vad pennorna kostar tillsammans. b) Elias betalar med 200 kr. Skriv ett "
+    "uttryck för hur mycket han får tillbaka.»\n"
+    "  • Skriv aldrig bara «leden». Säg vilka: «vänsterledet (x + 5)² och "
+    "högerledet x² + 25».\n"
+    "  • Ett påstående som kan vara fel står som ett PÅSTÅENDE: «Hugo påstår "
+    "att (x + 5)² = x² + 25.» Frågan är «Avgör om Hugo har rätt.» Skriv "
+    "aldrig «Hugo skriver likheten …» som om den stämde, och aldrig «avgör "
+    "om modellen stöder påståendet».\n"
+    "  • Står två eller fler ekvationer i uppgiften får de nummer (1), (2) "
+    "till vänster, och texten hänvisar till numren: «ekvation (1) och "
+    "ekvation (2) har samma lösning».\n"
+    "  • Ett räkneexempel i uppgiften står steg för steg, ett steg per rad, "
+    "och frågan står för sig efter exemplet.\n"
+    "  • Ett fenomen eleven kanske inte känner förklaras i en mening: «Man "
+    "ser blixten direkt men hör knallen några sekunder senare.»\n"
+    "  • En modell ur verkligheten handlar om något eleven känner igen: "
+    "pris, lön, sparande, sträcka och tid, temperatur, befolkning. Aldrig en "
+    "formel för en fisk eller ett djur med ovanliga exponenter.\n"
+    "  • Namnen är vanliga svenska förnamn som är lätta att läsa: Elias, "
+    "Maja, Noah, Ella, Hugo, Alva, Liam, Saga, Ali, Sara, Leo, Nora.\n"
+    "  • Ber uppgiften om en skrivform (intervall med hakparenteser, "
+    "grundpotensform) visar uppgiften formen med ett exempel med andra tal: "
+    "«Exempel: alla tal större än 1 och högst 4 skrivs ]1, 4].»\n"
+    "  • Ska eleven redovisa verktyget står det «Redovisa kort på pappret "
+    "hur du har använt din räknare.» eller «Redovisa kort på pappret hur du "
+    "har använt GeoGebra på datorn.», aldrig «visa hur du använder ditt "
+    "digitala verktyg». Räknaren är inte ett digitalt verktyg.\n"
     "- figur: lägg en matematisk figur på en uppgift genom att välja typ och "
     "sätta talen (aldrig fri kod): linjar {k, m}, andragrad {a, b, c}, "
     "exponential {C, bas}, normalfordelning {mu, sigma}, triangel {a, b, c}, "
@@ -2073,6 +2107,12 @@ HJALPMEDEL_KLAUSUL = {
     # skriver hon det själv. Spegel i blad-bygg HJALPMEDELSFRAS.
     "Räknare": "med räknare",
     "Räknare och formelblad": "med räknare och formelblad",
+    # DATORN, uttryckligen (lärarens dom 2026-09-22): digitala verktyg är
+    # dator med GeoGebra, aldrig räknaren. Valet fanns inte, och ett 2a-prov
+    # med DIG-1 fick därför modellens egen rad. Spegel i blad-bygg
+    # HJALPMEDELSFRAS och HJALPMEDELSETIKETT, och i plan.js HJALPMEDELSVAL.
+    "Digitala verktyg och formelblad": ("med digitala verktyg (GeoGebra på "
+                                        "datorn) och formelblad"),
 }
 # Dagens papper. Står valen här är det INGEN avvikelse: prompten ska då vara
 # byte för byte den som tests/kassetter spelades in med, och klienten skickar
@@ -2127,7 +2167,11 @@ def build_hjalpmedel(regel: str) -> str:
         "fältet \"hjalpmedel\". Uppgifterna ska följa den: en del utan "
         "digitala hjälpmedel får ingen uppgift som kräver räknare eller graf"
         "ritande program, och en del där formelbladet är tillåtet prövar inte "
-        "om eleven minns en formel utantill.")
+        "om eleven minns en formel utantill. Räknaren är INTE ett digitalt "
+        "verktyg: digitalt verktyg betyder GeoGebra på datorn. En del med "
+        "räknare får ingen uppgift som kräver graf eller GeoGebra, och "
+        "uppgifterna där säger «räknare»; en del med digitala verktyg säger "
+        "«GeoGebra» eller «digitalt verktyg».")
 
 
 # ── ÖVNINGSPAPPREN ────────────────────────────────────────────────────────
@@ -2779,7 +2823,9 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
         # Källa: NpMa2a vt 2017 och vt 2022, sidan 1. Delprov B «Endast svar
         # krävs», delprov C «Fullständiga lösningar krävs» — båda utan digitala
         # verktyg — och delprov D med digitala verktyg, fullständiga lösningar
-        # PLUS «visa hur du använder ditt digitala verktyg». Lärarens Del B är
+        # PLUS «visa hur du använder ditt digitala verktyg» (läraren skriver
+        # «Redovisa kort på pappret …», se exam_latex.REDOVISA_VERKTYGET, och
+        # räknaren är inte ett digitalt verktyg). Lärarens Del B är
         # alltså NP:s B+C och hennes Del C är NP:s D. Skelettet lägger redan
         # kortsvaren i Del B (exam_spec, NP:S DELORDNING); den här raden säger
         # vad räknardelen ska INNEHÅLLA, och det kan ingen grammatik göra.
@@ -2787,10 +2833,13 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             "Dela provet i Del B (utan räknare) och Del C (med räknare). "
             "Del B börjar med kortsvaren och fortsätter med uppgifter som "
             "kräver fullständig lösning. Del C har BARA uppgifter med "
-            "fullständig lösning, och minst en av dem ska KRÄVA det digitala "
-            "verktyget — en regression, en graf att avläsa, en ekvation som "
-            "bara går att lösa numeriskt. Skriv i den uppgiftens text att "
-            "eleven ska visa hur hon använt sitt digitala verktyg."
+            "fullständig lösning, och minst en av dem ska KRÄVA verktyget "
+            "delen tillåter: med GeoGebra på datorn en regression, en graf att "
+            "avläsa eller en ekvation som bara går att lösa numeriskt, med "
+            "enbart räknare en beräkning som inte går för hand. Skriv i den "
+            "uppgiftens text «Redovisa kort på pappret hur du har använt din "
+            "räknare.» eller «Redovisa kort på pappret hur du har använt "
+            "GeoGebra på datorn.», efter vad delen tillåter."
             if delar else
             "Provet har inga delar (del: null på alla uppgifter).")
         # Lärarens hjälpmedelsval, och bara när hon flyttat något (se

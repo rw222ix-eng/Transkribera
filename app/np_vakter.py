@@ -586,15 +586,94 @@ def doltkravvakt(exam: dict) -> list[dict]:
     return fel[:DOLTKRAV_MAX_FYND]
 
 
-# ── ALLA SJU, i läsordning ───────────────────────────────────────────────
+# ── 8. LÄSREGELVAKTEN (lärarens dom 2026-09-22, exam 118 och 119) ───────
+# Inte NP-form utan LÄSBARHET, och bara det läraren själv har pekat ut på
+# pappret. Varje regel är en mening hon sa om en uppgift eleverna läste fel:
+#   «Visa hur du använder ditt digitala verktyg» kan läsas som att eleven ska
+#     visa upp något («jag kan inte spela in en film»); hennes två meningar
+#     är «Redovisa kort på pappret hur du har använt din räknare.» och
+#     «… hur du har använt GeoGebra på datorn.»
+#   «Visa att leden skiljer sig åt»: vadå leden? Säg vänsterledet och
+#     högerledet.
+#   «Avgör om modellen stöder påståendet»: fråga om personen har rätt.
+#   «de två ekvationerna har samma lösning» utan nummer: numrera (1) och (2).
+#   Hakparenteser: eleven har hört vad det är men ser det inte, visa formen.
+#   Räknaren är inte ett digitalt verktyg: en räknardel talar om räknaren.
+# Ordval i övrigt fälls aldrig (fortydligande-fraser-star-kvar).
+LASREGEL_MAX_FYND = 5
+_VISA_VERKTYG_RE = re.compile(
+    r"\bvisa\s+hur\s+du\s+(?:har\s+)?använ\w*\s+(?:ditt|din|dina|ett|en)\s+"
+    r"(?:digital\w*|räknare|miniräknare)", re.IGNORECASE)
+# «båda leden» är det vanliga och tydliga («dra bort tre från båda leden»);
+# det läraren fällde var «leden» som syftar bakåt på en likhet högre upp.
+_LEDEN_RE = re.compile(r"(?<!båda\s)\bleden\b", re.IGNORECASE)
+_NAMNGIVNA_LED_RE = re.compile(r"vänsterled|högerled", re.IGNORECASE)
+_MODELLEN_STODER_RE = re.compile(r"\bmodellen\s+stöd", re.IGNORECASE)
+_TVA_EKVATIONER_RE = re.compile(r"\b(?:de\s+två|båda|två)\s+ekvationerna\b",
+                                re.IGNORECASE)
+_NUMRERAD_RE = re.compile(r"\(\s*1\s*\)")
+_HAKPARENTES_RE = re.compile(r"hakparentes", re.IGNORECASE)
+_EXEMPEL_RE = re.compile(r"exempel|skrivs\s", re.IGNORECASE)
+_DATORORD_RE = re.compile(r"digitalt?\s+verktyg|geogebra", re.IGNORECASE)
+
+
+def lasregelvakt(exam: dict) -> list[dict]:
+    """Lärarens läsregler på uppgifternas text. Ett fynd per uppgift och
+    regel; stammen upprepas i varje deluppgift och ska inte ge dubbletter."""
+    from app import exam_latex          # samma skäl som _enheter ovan
+    hjalp = str((exam or {}).get("hjalpmedel") or "")
+    fel: list[dict] = []
+    sett: set[tuple[str, str]] = set()
+
+    def fynd(nr: str, regel: str, text: str) -> None:
+        uppg = re.match(r"\d+", nr).group() if re.match(r"\d+", nr) else nr
+        if (uppg, regel) in sett:
+            return
+        sett.add((uppg, regel))
+        fel.append(_err(f"uppgift {nr}", "lasregel",
+                        f"Uppgift {nr}: {text} Samma matematik, samma tal, "
+                        "samma poäng."))
+
+    for e in _enheter(exam):
+        nr, t = str(e["nr"]), _text(e)
+        m = _VISA_VERKTYG_RE.search(t)
+        if m:
+            fynd(nr, "visa", f"«{m.group(0)}» kan läsas som att eleven ska visa "
+                 "upp något. Skriv «Redovisa kort på pappret hur du har använt "
+                 "din räknare.» eller «Redovisa kort på pappret hur du har "
+                 "använt GeoGebra på datorn.», efter vad delen tillåter.")
+        if _LEDEN_RE.search(t) and not _NAMNGIVNA_LED_RE.search(t):
+            fynd(nr, "leden", "«leden» säger inte vilka led. Skriv ut dem: "
+                 "«vänsterledet … och högerledet …».")
+        if _MODELLEN_STODER_RE.search(t):
+            fynd(nr, "stoder", "«om modellen stöder påståendet» är krångligt. "
+                 "Fråga om personen har rätt: «Avgör om … har rätt.»")
+        if _TVA_EKVATIONER_RE.search(t) and not _NUMRERAD_RE.search(t):
+            fynd(nr, "numrera", "två ekvationer utan nummer. Sätt (1) och (2) "
+                 "till vänster om ekvationerna och hänvisa till numren i "
+                 "frågan: «ekvation (1) och ekvation (2)».")
+        if _HAKPARENTES_RE.search(t) and not _EXEMPEL_RE.search(t):
+            fynd(nr, "hakparentes", "eleven ska svara med hakparenteser men "
+                 "ser aldrig hur de ser ut. Visa formen med ett exempel med "
+                 "andra tal: «Exempel: alla tal större än 1 och högst 4 skrivs "
+                 "]1, 4].»")
+        if (e.get("del") in ("C", "D") and _DATORORD_RE.search(t)
+                and exam_latex._verktyget_i_delen(hjalp, e["del"]) == "räknare"):
+            fynd(nr, "raknare", "delen tillåter räknare, inte dator, och "
+                 "räknaren är inte ett digitalt verktyg. Skriv «räknare» och "
+                 "låt uppgiften gå att lösa med räknaren.")
+    return fel[:LASREGEL_MAX_FYND]
+
+
+# ── ALLA ÅTTA, i läsordning ──────────────────────────────────────────────
 KODER = ("stegvakt", "poangform", "metodvakt", "parametervakt", "kursvakt",
-         "familjvakt", "doltkrav")
+         "familjvakt", "doltkrav", "lasregel")
 
 
 def np_vakter(exam: dict, kurs: str = "") -> list[dict]:
-    """De sju vakterna på ett prov, i den ordning läraren läser dem. Körs på
+    """De åtta vakterna på ett prov, i den ordning läraren läser dem. Körs på
     profilen «prov» i exam_gen._raknade_fynd (fixrundan och slutgrinden) och i
     routes_exam.efterkontroll (canvasen och Laga-knappen)."""
     return (stegvakt(exam) + poangformvakt(exam, kurs) + metodvakt(exam)
             + parametervakt(exam, kurs) + kursvakt(exam, kurs)
-            + familjvakt(exam) + doltkravvakt(exam))
+            + familjvakt(exam) + doltkravvakt(exam) + lasregelvakt(exam))

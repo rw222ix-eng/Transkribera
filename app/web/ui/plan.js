@@ -314,7 +314,8 @@
      (HJALPMEDELSFRAS) och till dokumentets regel i app/exam_gen.py
      (HJALPMEDEL_KLAUSUL). Tre listor som måste säga samma sak; ändras en ska de
      andra två ändras i samma commit. */
-  const HJALPMEDELSVAL = ['Inga digitala', 'Formelblad', 'Räknare', 'Räknare och formelblad'];
+  const HJALPMEDELSVAL = ['Inga digitala', 'Formelblad', 'Räknare', 'Räknare och formelblad',
+    'Digitala verktyg och formelblad'];
   /* Förvalet är precis det papper appen skrev före valet fanns. Det är inte
      smak utan kassettregeln: står valen här skickas inga fält, och prompten är
      byte-identisk med den tests/kassetter spelades in med. */

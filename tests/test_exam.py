@@ -1194,7 +1194,9 @@ def test_render_prov_golden_markers():
     assert "Provtid:" in tex and "Hjälpmedel:" in tex
     # Lärarens provrutin: båda delarna delas ut samtidigt, räknaren hämtas
     # först när Del A är inlämnad (2026-08-22).
-    assert ("Du lämnar in Del A innan du tar fram digitala verktyg och "
+    # Fixturens Del C tillåter räknare och formelblad, och räknaren är inte
+    # ett digitalt verktyg (lärarens dom 2026-09-22).
+    assert ("Du lämnar in Del A innan du tar fram räknaren och "
             "börjar på Del B." in tex)
     assert "Provet kan ge totalt \\textbf{20 poäng}" in tex
     assert "Instruktioner" in tex and "Poängen för varje uppgift anges" in tex
@@ -1204,7 +1206,8 @@ def test_render_prov_golden_markers():
     # delrubrikerna räknar från A (lärarens beslut 2026-08-20)
     assert (r"Del A \textendash{} Digitala verktyg är inte tillåtna"
             in tex)
-    assert r"Del B \textendash{} Digitala verktyg är tillåtna" in tex
+    assert r"Del B \textendash{} Räknare är tillåten" in tex
+    assert "Redovisa kort på pappret hur du har använt din räknare." in tex
     # uppgifterna i exam-klassens questions/parts, med kravetiketten i kursiv
     assert "\\begin{questions}" in tex and "\\setcounter{question}{0}" in tex
     assert "\\question[3] \\pfkrav{Endast svar krävs.}" in tex

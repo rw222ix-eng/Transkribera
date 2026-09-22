@@ -302,6 +302,55 @@ def test_lararens_fortydliganden_kostar_inget(exam88):
     assert np_vakter.np_vakter(_prov([lang]), "Matematik 2a") == []
 
 
+def test_lasreglerna_ur_lararens_dom_over_118_och_119():
+    """Lärarens dom 2026-09-22 kväll, en regel per uppgift hon läste som en
+    elev: «visa hur du använder ditt digitala verktyg» (en film?), «leden»
+    (vilka?), «om modellen stöder påståendet», två onumrerade ekvationer,
+    hakparenteser utan exempel, och en räknardel som talar om GeoGebra."""
+    del_c = {"del": "C"}
+    fall = [
+        _u(text="Bestäm längden. Visa hur du använder ditt digitala verktyg.",
+           **del_c),
+        _u(text="Hugo påstår att $(x+5)^2 = x^2+25$. Visa att leden skiljer "
+                "sig åt med $10x$."),
+        _u(text="Kenji säger att vikten blir åtta gånger så stor. Avgör om "
+                "modellen stöder påståendet.", **del_c),
+        _u(text="Bestäm talet $a$ så att de två ekvationerna har samma "
+                "lösning. $x + 1 = 3$ och $3(x - a) = x$"),
+        _u(text="Ange intervallet med hakparenteser då $k = 3$."),
+    ]
+    fel = np_vakter.lasregelvakt(_prov(fall))
+    assert [f["path"] for f in fel] == [f"uppgift {i}" for i in range(1, 6)]
+    assert {f["code"] for f in fel} == {"lasregel"}
+    assert "GeoGebra på datorn" in fel[0]["message"]
+    assert "vänsterledet" in fel[1]["message"]
+    assert "har rätt" in fel[2]["message"]
+    assert "(1) och (2)" in fel[3]["message"]
+    assert "]1, 4]" in fel[4]["message"]
+    # Rätt skrivna passerar: lärarens egna meningar, namngivna led, «båda
+    # leden», numrerade ekvationer och ett exempel på hakparenteserna.
+    ratt = _prov([
+        _u(text="Bestäm längden. Redovisa kort på pappret hur du har använt "
+                "GeoGebra på datorn.", **del_c),
+        _u(text="Visa att vänsterledet och högerledet skiljer sig åt med "
+                "$10x$. Dra bort tre från båda leden."),
+        _u(text="Avgör om Maja har rätt."),
+        _u(text="Visa att de två ekvationerna (1) och (2) har samma lösning."),
+        _u(text="Ange intervallet med hakparenteser. Exempel: alla tal större "
+                "än 1 och högst 4 skrivs ]1, 4]."),
+    ])
+    assert np_vakter.lasregelvakt(ratt) == []
+    # Räknaren är inte ett digitalt verktyg: en räknardel som ber om
+    # GeoGebra fälls, en datordel gör det inte.
+    rad = _u(text="Lös ekvationen i GeoGebra.", **del_c)
+    raknare = _prov([rad]) | {"hjalpmedel": "Del B utan räknare. Del C med "
+                                            "räknare och formelblad."}
+    assert [f["code"] for f in np_vakter.lasregelvakt(raknare)] == ["lasregel"]
+    dator = _prov([rad]) | {"hjalpmedel": "Del C med digitala verktyg "
+                                          "(GeoGebra på datorn) och formelblad."}
+    assert np_vakter.lasregelvakt(dator) == []
+
+
 def test_hela_domen_over_prov_88(exam88):
     """Uppgift för uppgift, som läraren skrev tabellen: 1b/2a/2b metod, 3+8+11
     familj, 7 poängform, 9 steg, 11 dolt krav, 12b kursgräns. Det hon
