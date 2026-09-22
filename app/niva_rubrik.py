@@ -17,9 +17,13 @@ det egentliga guldet: de säger inte bara vad som gav poäng utan vad som INTE
 gjorde det. Metoden var planens: isolera uppgifter av samma typ på olika nivåer
 och läsa av vad som skiljer dem. Två omständigheter gjorde det ovanligt lätt:
 
-* 2a- och 2c-provet från samma termin DELAR ett tjugotal uppgifter, ibland med
-  olika poängsättning. Det är ett färdigt kontrollexperiment — samma uppgift,
-  olika nivå — och det är där de flesta gränserna nedan kommer ifrån.
+* 2a- och 2c-provet från samma termin DELAR ett tjugotal uppgifter. Det är ett
+  färdigt kontrollexperiment, och det är där de flesta gränserna nedan kommer
+  ifrån. RÄTTAT 2026-09-22 av NP-profilen (tools/np_profil.py): de delade
+  uppgifterna har SAMMA poängtrippel i båda kurserna, 47 av 47 i vt18/vt22
+  (och 36 av 38 i 1a/1c). «Ibland med olika poängsättning» var läst av ögat
+  och fel. Kursgränsen sitter i innehållet och i ett extra lager på samma
+  uppgift, inte i poängen; se NP_GRANNKURS nedan.
 * Bedömningsanvisningarnas egna ord för resonemangskvalitet («enkelt»,
   «välgrundat», «välgrundat och nyanserat») är en explicit nivåskala som inte
   behövde härledas alls, bara läsas av.
