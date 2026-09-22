@@ -29,7 +29,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from app import (ci_profil, course_data, db, dokumentdiff, exam_gen,
                  exam_latex, exam_pdf, exam_spec, gpu_arbiter, llm_client,
-                 platar, spar, tryck)
+                 np_vakter, platar, spar, tryck)
 # Egen rad och eget namn: modulen heter `kalibrering` och rutten som svarar med
 # den heter också det. Utan omdöpningen skuggar funktionen modulen inne i
 # create_router, och anropet blir ett rekursivt HTTP-lager djupt.
@@ -394,6 +394,24 @@ def _tipsfynd(exam: dict, typ: str) -> list[dict]:
     return ut
 
 
+def _npfynd(exam: dict, typ: str) -> list[dict]:
+    """NP-formen på det som ligger framme (app/np_vakter.np_vakter): steg per
+    poäng, poängform, metodföreskrift, parametrar, kursgräns, modellfamilj,
+    dolt krav. Samma sju som fixrundan och slutgrinden kör; här räknas de om
+    efter varje canvasvarv, för en omskrivning kan lägga tillbaka precis det
+    rundan tog bort. Vaktens kod är fyndets kod, så Laga-knappen (_ATGARD)
+    kan säga vad som får ändras. Ett fynd per enhet, med vaktens egen mening:
+    den bär talen (vilken poäng, vilket steg, vilken bokstav)."""
+    if typ != "prov":
+        return []
+    try:
+        fel = np_vakter.np_vakter(exam, kurs=str(exam.get("kurs") or ""))
+    except Exception:                       # pragma: no cover
+        return []
+    return [_fynd(f["code"], f["message"], _uppgiftsnr(f.get("path", "")))
+            for f in fel]
+
+
 def _kopiefynd(exam: dict, infor: dict | None) -> list[dict]:
     """Skrev arbetsbladet av provet det ska förbereda inför?
 
@@ -461,6 +479,7 @@ def efterkontroll(view: dict, doc, summor: dict | None, *,
     ut += _bildfynd(doc, base or Path("."))
     ut += _sprakfynd(view.get("exam") or {}, typ)
     ut += _tipsfynd(view.get("exam") or {}, typ)
+    ut += _npfynd(view.get("exam") or {}, typ)
     # Kopieringsvakten sist bland fynden, och bara när anroparen pekat ut
     # provet (se _kopiefynd). Den tiger på varje annat papper i appen.
     ut += _kopiefynd(view.get("exam") or {}, infor)
@@ -515,6 +534,24 @@ _ATGARD = {
     "delkrav": "Gör pappret samstämmigt: ändra hjälpmedelsregeln för delen, "
                "eller gör uppgifterna i den till uppgifter där endast svar "
                "krävs.",
+    # NP-formens sju (app/np_vakter.py). Fyndets egen mening säger redan vad
+    # som ska göras; raden här säger vad som får RÖRAS, som för de andra.
+    "stegvakt": "Höj poängen (en rad per poäng i bedömningen, kravgränserna "
+                "räknas om) eller ta bort ett räknesteg ur uppgiften. Nivån, "
+                "förmågan och platsen står kvar.",
+    "poangform": "Ändra poängen och bedömningsraderna på den uppgiften, eller "
+                 "dess typ, så som fyndet säger. Övriga uppgifter står kvar.",
+    "metodvakt": "Stryk metodangivelsen ur uppgiftstexten. Samma uppgift i "
+                 "övrigt, samma tal, samma poäng.",
+    "parametervakt": "Ge en bokstavskonstant ett tal, eller skriv om uppgiften "
+                     "med en bokstav färre. Samma poäng, samma förmåga.",
+    "kursvakt": "Byt ut uppgiften mot en som prövar samma förmåga inom kursens "
+                "eget innehåll, eller fråga efter ett bestämt fall. Samma del "
+                "och samma poäng.",
+    "familjvakt": "Byt ut den sist nämnda uppgiften mot en ur en annan "
+                  "modellfamilj: samma del, samma poäng, samma förmåga.",
+    "doltkrav": "Skriv kravet i uppgiftstexten eller stryk det ur "
+                "bedömningsraden. Poängen står kvar.",
 }
 
 
