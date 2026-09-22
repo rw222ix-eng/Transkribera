@@ -27,8 +27,8 @@ from pathlib import Path
 ROT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROT))
 
-from app import (ci_forslag, claude_code, exam_gen, exam_spec,     # noqa: E402
-                 lesson_board, llm_client, notes_gen, postprocess)
+from app import (ci_forslag, claude_code, elevlasare, exam_gen,    # noqa: E402
+                 exam_spec, lesson_board, llm_client, notes_gen, postprocess)
 from tests import fejk                                             # noqa: E402
 
 TRANSKRIPT = (
@@ -307,6 +307,20 @@ SCENARIER = {
             exam_gen.uppgiftskort(_bandets_dokument("gruppuppgift"))),
         "system": lambda: exam_gen.BEGRIP_SYSTEM,
         "schema": lambda: exam_gen.BEGRIP_SCHEMA,
+    },
+    # Elevläsaren (2026-09-22) döms mot EXAM 88 (tests/np/exam88.json, Ma 2a,
+    # lärarens prov), inte mot provbandet: bandet ska visa lärarens dom, att
+    # uppgift 5a och 10 (hennes förtydliganden) passerar och att 11 (årsmodell
+    # med höjd avgift, antagandet dolt) faller. Till dess bandet är inspelat
+    # är det konstruerat (`inspelad: false`).
+    "elevlasare": {
+        "vad": ("elevlasare.doma_elevlasare: läser en elev exam 88:s "
+                "uppgifter som facit räknar?"),
+        "prompt": lambda: elevlasare.build_elevlasare_prompt(
+            exam_gen.domarenheter(json.loads(
+                (ROT / "tests" / "np" / "exam88.json").read_text("utf-8")))),
+        "system": lambda: elevlasare.ELEVLASARE_SYSTEM,
+        "schema": lambda: elevlasare.ELEVLASARE_SCHEMA,
     },
     # Bedömningspasset (2026-08-23). Ett anrop är EN uppgift, så bandet spelas
     # in på provbandets uppgift 1 — samma dokument som resten av sviten

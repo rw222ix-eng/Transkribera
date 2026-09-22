@@ -1,0 +1,927 @@
+{
+ "titel": "Algebra och ekvationer",
+ "kurs": "Matematik 2a",
+ "klass": "IndA",
+ "datum": "2026-10-20",
+ "tid_min": 70,
+ "hjalpmedel": "Formelblad är tillåtet på hela provet, medan digitala verktyg endast får användas i Del C.",
+ "instruktion": null,
+ "forsattsbild": {
+  "person": "René Descartes (1596–1650), fransmannen som gav algebran dess moderna skrivsätt med okända tal som x och upphöjda siffror för potenser, och som band samman geometri och andragradsuttryck.",
+  "scene": "SCENE. A quiet winter study in a Dutch town at first light, seen slightly from the side. A man in a dark cloak with a broad white collar sits low in a heavy chair beside a tall leaded window, one leg drawn up, a blank sheet resting on his knee. Pale silver morning light falls across his face and across the pen in his hand, while the rest of the room sinks into warm brown shadow. On the small table beside him lie a plain inkpot, a folded pair of compasses and an unmarked sheet of paper. Behind him a shelf of dark leather bindings fades into the gloom, and a low fire glows deep red in the far corner. The air feels cold, still and thoughtful, as if he has been awake all night with a single idea.\nIntended use: René Descartes, andragradsuttryck och andragradsekvationer.",
+  "bildtext": "René Descartes levde 1596 till 1650 och gav algebran sitt moderna skrivsätt med okända tal som x och upphöjda siffror."
+ },
+ "grupp": null,
+ "uppgifter": [
+  {
+   "del": "B",
+   "formaga": "B",
+   "typ": "rutin",
+   "poang": [
+    0,
+    0,
+    0
+   ],
+   "avsnitt": "1.3",
+   "delmoment": "Ekvationer av typen x² = a och nollprodukt (s. 39–41); pq-formeln (s. 45–48)",
+   "innehall": [
+    "G25-M2A-ALG-8"
+   ],
+   "forebild": {
+    "nr": 1331,
+    "sort": "samma sorts andragradsekvationer lösta med nollproduktmetoden och med pq-formeln"
+   },
+   "text": "Lös ekvationerna.",
+   "losning": "",
+   "bedomning": "",
+   "deluppgifter": [
+    {
+     "poang": [
+      1,
+      0,
+      0
+     ],
+     "text": "Lös ekvationen $x(x - 5) = 0$",
+     "losning": "Nollproduktmetoden ger $x = 0$ eller $x = 5$.",
+     "bedomning": "+1 E båda rötterna $x = 0$ och $x = 5$"
+    },
+    {
+     "poang": [
+      1,
+      0,
+      0
+     ],
+     "text": "Lös ekvationen $x^2 - 6x - 16 = 0$ med pq-formeln",
+     "losning": "pq-formeln ger $x = 3 \\pm \\sqrt{9 + 16} = 3 \\pm 5$, alltså $x = 8$ eller $x = -2$.",
+     "bedomning": "+1 E båda rötterna $x = 8$ och $x = -2$"
+    }
+   ],
+   "elevlosningar": [
+    {
+     "etikett": "0 p",
+     "partier": [
+      {
+       "rader": [
+        "a) $x - 5 = 0$",
+        "a) $x = 5$",
+        "b) $x = -3 \\pm \\sqrt{9 + 16}$",
+        "b) $x = 2$ eller $x = -8$"
+       ],
+       "poang": [
+        0,
+        0,
+        0
+       ],
+       "dom": "Delar bort $x$ i a och får fel tecken i b."
+      }
+     ]
+    },
+    {
+     "etikett": "1 p",
+     "partier": [
+      {
+       "rader": [
+        "a) $x = 0$ eller $x = 5$",
+        "b) $x = 3 \\pm \\sqrt{9 - 16}$",
+        "b) Roten går inte att beräkna, ingen lösning"
+       ],
+       "poang": [
+        1,
+        0,
+        0
+       ],
+       "dom": "Sätter fel tecken på $q$ i b."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "del": "B",
+   "formaga": "P",
+   "typ": "rutin",
+   "poang": [
+    0,
+    0,
+    0
+   ],
+   "avsnitt": "1.2",
+   "delmoment": "Kvadrerings- och konjugatreglerna (s. 31–35)",
+   "innehall": [
+    "G25-M2A-ALG-6"
+   ],
+   "forebild": {
+    "nr": 1237,
+    "sort": "samma sorts utveckling av binom med kvadrerings- och konjugatregeln"
+   },
+   "text": "Utveckla uttrycken.",
+   "losning": "",
+   "bedomning": "",
+   "deluppgifter": [
+    {
+     "poang": [
+      1,
+      0,
+      0
+     ],
+     "text": "Utveckla uttrycket $(x - 7)^2$ med kvadreringsregeln.",
+     "losning": "$x^2 - 2 \\cdot 7x + 49 = x^2 - 14x + 49$",
+     "bedomning": "+1 E rätt utvecklat med kvadreringsregeln"
+    },
+    {
+     "poang": [
+      1,
+      0,
+      0
+     ],
+     "text": "Utveckla uttrycket $(4a + 3)(4a - 3)$ med konjugatregeln.",
+     "losning": "$(4a)^2 - 3^2 = 16a^2 - 9$",
+     "bedomning": "+1 E rätt utvecklat med konjugatregeln"
+    }
+   ],
+   "elevlosningar": [
+    {
+     "etikett": "0 p",
+     "partier": [
+      {
+       "rader": [
+        "a) $(x-7)^2 = x^2 - 49$",
+        "b) $(4a+3)(4a-3) = 16a^2 + 9$"
+       ],
+       "poang": [
+        0,
+        0,
+        0
+       ],
+       "dom": "Saknar dubbla produkten i a och fel tecken i b."
+      }
+     ]
+    },
+    {
+     "etikett": "1 p",
+     "partier": [
+      {
+       "rader": [
+        "a) $(x-7)^2 = x^2 - 2\\cdot 7x + 49 = x^2 - 14x + 49$",
+        "b) $(4a+3)(4a-3) = 4a^2 - 9$"
+       ],
+       "poang": [
+        1,
+        0,
+        0
+       ],
+       "dom": "Kvadrerar inte fyran i b."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "del": "B",
+   "formaga": "M",
+   "typ": "problem",
+   "poang": [
+    2,
+    0,
+    0
+   ],
+   "avsnitt": "1.1",
+   "delmoment": "Budget för privat- och företagsekonomi (s. 19–26)",
+   "innehall": [
+    "G25-M2A-PRO-2",
+    "G25-M2A-YRK-1"
+   ],
+   "forebild": {
+    "nr": 1165,
+    "sort": "samma sorts budget där ett givet samband används för att nå ett önskat resultat"
+   },
+   "deluppgifter": null,
+   "text": "Elias gör en budget för kaféets nästa månad. Resultatet i kronor ges av\n$R = 45n - 12\\,000$\ndär $n$ är antalet luncher.\nBeräkna hur många luncher som ger resultatet $6\\,000$ kr.",
+   "enhet": "luncher",
+   "losning": "600 luncher. $45n - 12\\,000 = 6\\,000$ ger $45n = 18\\,000$.",
+   "bedomning": "+1 E tecknar $45n - 12\\,000 = 6\\,000$\n+1 E i övrigt godtagbar lösning med svaret 600 luncher",
+   "scen": {
+    "begrepp": "kafé budget",
+    "scene": "SCENE. A small neighbourhood café seen straight from the side at eye level, a long wooden counter running parallel to the lower edge of the picture. Morning sun comes through a wide street window on the left and lays warm stripes across the plank floor. A young baker in an apron stands behind the counter, arranging lunch boxes in a neat row on a tray. Two tiny customer figures wait near the door, small enough to give the room its scale. The upper third of the picture, the plain wall above the counter, is completely empty and calm. Colours are warm oak, cream and soft green.\nIntended use: kafé, budget med intäkter och kostnader.",
+    "filnamn": "a-03-kafe"
+   },
+   "elevlosningar": [
+    {
+     "etikett": "0 p",
+     "partier": [
+      {
+       "rader": [
+        "$45n = 6\\,000$",
+        "$n = \\frac{6\\,000}{45} \\approx 133$",
+        "Svar: 133 luncher"
+       ],
+       "poang": [
+        0,
+        0,
+        0
+       ],
+       "dom": "Glömmer de fasta kostnaderna, så ekvationen blir fel."
+      }
+     ]
+    },
+    {
+     "etikett": "1 p",
+     "partier": [
+      {
+       "rader": [
+        "$45n - 12\\,000 = 6\\,000$",
+        "$45n = 6\\,000 - 12\\,000 = -6\\,000$",
+        "$n = \\frac{-6\\,000}{45} \\approx -133$",
+        "Svar: $-133$ luncher"
+       ],
+       "poang": [
+        1,
+        0,
+        0
+       ],
+       "dom": "Flyttar över 12 000 med fel tecken och reagerar inte på minussvaret."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "del": "B",
+   "formaga": "P",
+   "typ": "redovisning",
+   "poang": [
+    0,
+    2,
+    0
+   ],
+   "avsnitt": "1.3",
+   "delmoment": "pq-formeln (s. 45–48); Faktorisering som lösningsmetod (s. 42–44)",
+   "innehall": [
+    "G25-M2A-ALG-8"
+   ],
+   "forebild": {
+    "nr": 1321,
+    "sort": "samma sorts andragradsekvation där en konstant först bestäms ur en känd rot"
+   },
+   "deluppgifter": null,
+   "text": "Andragradsekvationen\n$x^2 - 8x + c = 0$\nhar lösningen $x = 3$. Bestäm ekvationens andra lösning.",
+   "notis": null,
+   "losning": "Den andra lösningen är $x = 5$. Insättning av $x = 3$ ger $9 - 24 + c = 0$, alltså $c = 15$. pq-formeln på andragradsekvationen $x^2 - 8x + 15 = 0$ ger $x = 4 \\pm 1$.",
+   "bedomning": "+1 C sätter in $x = 3$ och får $c = 15$\n+1 C korrekt andra rot $x = 5$",
+   "elevlosningar": [
+    {
+     "etikett": "0 p",
+     "partier": [
+      {
+       "rader": [
+        "$9 - 24 + c = 0$",
+        "$c = -15$",
+        "$x^2 - 8x - 15 = 0$",
+        "$x = 4 \\pm \\sqrt{16 + 15}$",
+        "$x \\approx 9{,}57$"
+       ],
+       "poang": [
+        0,
+        0,
+        0
+       ],
+       "dom": "Teckenfel vid lösning av $c$, allt därefter blir fel."
+      }
+     ]
+    },
+    {
+     "etikett": "1 p",
+     "partier": [
+      {
+       "rader": [
+        "$3^2 - 8 \\cdot 3 + c = 0$",
+        "$c = 15$",
+        "$x^2 - 8x + 15 = 0$",
+        "$x = 4 \\pm \\sqrt{16 - 15} = 4 \\pm 1$",
+        "Svar: $x = 3$"
+       ],
+       "poang": [
+        0,
+        1,
+        0
+       ],
+       "dom": "Väljer fel rot och svarar med den redan kända."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "del": "B",
+   "formaga": "R",
+   "typ": "resonemang",
+   "poang": [
+    0,
+    0,
+    0
+   ],
+   "avsnitt": "1.3",
+   "delmoment": "Ekvationer av typen x² = a (s. 39–41); Kvadratkomplettering (s. 53–55)",
+   "innehall": [
+    "G25-M2A-ALG-8"
+   ],
+   "forebild": {
+    "nr": 1307,
+    "sort": "samma sorts ekvation där en kvadrat är lika med ett tal"
+   },
+   "text": "Elin löser andragradsekvationen $x^2 = 36$ och svarar $x = 6$.",
+   "losning": "",
+   "bedomning": "",
+   "deluppgifter": [
+    {
+     "poang": [
+      1,
+      0,
+      0
+     ],
+     "text": "Avgör om Elin har hittat alla lösningar.",
+     "losning": "Nej. Även $x = -6$ är en lösning, eftersom $(-6)^2 = 36$.",
+     "bedomning": "+1 E svarar nej och anger roten $x=-6$"
+    },
+    {
+     "poang": [
+      0,
+      1,
+      0
+     ],
+     "text": "Avgör hur många lösningar ekvationen $(x - 3)^2 + 7 = 0$ har.",
+     "losning": "Ingen lösning. $(x - 3)^2 \\ge 0$ för alla $x$, så vänstra ledet är minst $7$.",
+     "bedomning": "+1 C svarar ingen lösning, kvadraten aldrig negativ"
+    }
+   ],
+   "elevlosningar": [
+    {
+     "etikett": "0 p",
+     "partier": [
+      {
+       "rader": [
+        "a) Ja, $6 \\cdot 6 = 36$ så $x = 6$ stämmer.",
+        "b) Två lösningar, det är en andragradsekvation."
+       ],
+       "poang": [
+        0,
+        0,
+        0
+       ],
+       "dom": "Missar negativa roten och gissar antalet lösningar i b."
+      }
+     ]
+    },
+    {
+     "etikett": "1 p",
+     "partier": [
+      {
+       "rader": [
+        "a) Nej, $x = -6$ går också, $(-6)^2 = 36$.",
+        "b) Ekvationen har ingen lösning."
+       ],
+       "poang": [
+        1,
+        0,
+        0
+       ],
+       "dom": "Svarar rätt i b men motiverar inte svaret."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "del": "B",
+   "formaga": "PL",
+   "typ": "problem",
+   "poang": [
+    0,
+    0,
+    0
+   ],
+   "avsnitt": "1.2",
+   "delmoment": "Uttryck av andra graden (s. 27–30); Dessutom problemlösning nivå 3 (s. 52)",
+   "innehall": [
+    "G25-M2A-ALG-6",
+    "G25-M2A-PRO-1"
+   ],
+   "notis": null,
+   "text": "En damm är kvadratisk och har sidan $x$ m.\nRunt dammen ligger en gång av sten. Gången är $2$ m bred och går runt dammens alla fyra sidor.",
+   "losning": "",
+   "bedomning": "",
+   "forebild": {
+    "nr": 1224,
+    "sort": "samma sorts uttryck för arean av ett område mellan två figurer"
+   },
+   "scen": {
+    "begrepp": "kvadratisk damm med stengång",
+    "scene": "SCENE. A garden pond seen from directly above, square and dark, its four straight edges parallel to the edges of the picture. Around the pond runs an even walkway of pale grey stone slabs, of exactly the same width on all four sides, so that the pond and the walkway together form one larger square. Outside the walkway lies short green lawn, smooth and open. The water is still and holds a soft reflection of the sky without ripples. Sunlight comes from the upper left and lays a gentle shadow along the inner edge of the stone. The whole lower third of the picture is plain empty grass with nothing on it.\nIntended use: kvadratisk damm med stengång runt om, area.",
+    "filnamn": "a-06-damm-stengang"
+   },
+   "deluppgifter": [
+    {
+     "poang": [
+      0,
+      2,
+      0
+     ],
+     "text": "Skriv gångens area som ett uttryck i $x$. Utveckla och förenkla uttrycket.",
+     "losning": "Stora kvadratens sida är $x + 4$ m. $(x + 4)^2 - x^2 = x^2 + 8x + 16 - x^2 = 8x + 16$",
+     "bedomning": "+1 C tecknar arean som $(x+4)^2-x^2$\n+1 C korrekt utveckling och svaret $8x+16$"
+    },
+    {
+     "poang": [
+      0,
+      0,
+      1
+     ],
+     "text": "Gången görs i stället $b$ m bred. Skriv gångens area som ett förenklat uttryck i $x$ och $b$.",
+     "losning": "$(x + 2b)^2 - x^2 = x^2 + 4bx + 4b^2 - x^2 = 4bx + 4b^2$",
+     "bedomning": "+1 A korrekt förenklat till $4bx+4b^2$"
+    }
+   ],
+   "elevlosningar": [
+    {
+     "etikett": "0 p",
+     "partier": [
+      {
+       "rader": [
+        "a) Gången är 4 remsor, var och en $2 \\cdot x$",
+        "a) $4 \\cdot 2x = 8x$",
+        "a) Svar: $8x$ m$^2$",
+        "b) $4bx$ m$^2$"
+       ],
+       "poang": [
+        0,
+        0,
+        0
+       ],
+       "dom": "Glömmer de fyra hörnrutorna i gången."
+      }
+     ]
+    },
+    {
+     "etikett": "1 p",
+     "partier": [
+      {
+       "rader": [
+        "a) $(x+4)^2 - x^2$",
+        "a) $= x^2 + 16 - x^2 = 16$",
+        "b) $(x+2b)^2 - x^2 = x^2 + 4b^2 - x^2 = 4b^2$"
+       ],
+       "poang": [
+        0,
+        1,
+        0
+       ],
+       "dom": "Kvadrerar parentesen fel, dubbelprodukten saknas."
+      }
+     ]
+    },
+    {
+     "etikett": "2 p",
+     "partier": [
+      {
+       "rader": [
+        "a) $(x+4)^2 - x^2 = x^2 + 8x + 16 - x^2$",
+        "a) Svar: $8x + 16$ m$^2$",
+        "b) $(x+b)^2 - x^2 = x^2 + 2bx + b^2 - x^2$",
+        "b) Svar: $2bx + b^2$ m$^2$"
+       ],
+       "poang": [
+        0,
+        2,
+        0
+       ],
+       "dom": "Lägger bara till bredden $b$ på ena sidan."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "del": "B",
+   "formaga": "K",
+   "typ": "redovisning",
+   "poang": [
+    0,
+    0,
+    1
+   ],
+   "avsnitt": "1.1",
+   "delmoment": "Algebraiska uttryck (s. 8–11)",
+   "innehall": [
+    "G25-M2A-ALG-6"
+   ],
+   "forebild": {
+    "nr": 1118,
+    "sort": "samma sorts förenkling av ett algebraiskt uttryck där slutsatsen dras ur det förenklade uttrycket"
+   },
+   "deluppgifter": null,
+   "text": "Undersök om uttrycket $(2x + 3)^2 - 4x(x + 3)$ kan bli negativt för något värde på $x$. Motivera ditt svar.",
+   "losning": "Nej, uttrycket kan aldrig bli negativt. Kvadreringsregeln ger $(2x + 3)^2 = 4x^2 + 12x + 9$ och $4x(x + 3) = 4x^2 + 12x$. Då blir $4x^2 + 12x + 9 - 4x^2 - 12x = 9$, alltså $9$ för alla $x$.",
+   "bedomning": "+1 A förenklar korrekt till $9$ och drar slutsats",
+   "elevlosningar": [
+    {
+     "etikett": "0 p",
+     "partier": [
+      {
+       "rader": [
+        "$(2x+3)^2 = 4x^2 + 9$",
+        "$4x(x+3) = 4x^2 + 12x$",
+        "$4x^2 + 9 - 4x^2 - 12x = 9 - 12x$",
+        "Ja, t.ex. $x = 2$ ger $9 - 24 = -15$"
+       ],
+       "poang": [
+        0,
+        0,
+        0
+       ],
+       "dom": "Glömmer dubbelprodukten vid kvadreringen, så hela förenklingen blir fel."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "del": "C",
+   "formaga": "R",
+   "typ": "resonemang",
+   "poang": [
+    2,
+    0,
+    0
+   ],
+   "avsnitt": "1.1",
+   "delmoment": "Ekvationer, uttryck och formler (s. 12–18)",
+   "innehall": [
+    "G25-M2A-PRO-1",
+    "G25-M2A-YRK-1"
+   ],
+   "forebild": {
+    "nr": 1142,
+    "sort": "samma sorts prövning av en formel genom insättning av värden"
+   },
+   "deluppgifter": null,
+   "text": "En bilverkstad räknar ut priset i kronor för en reparation med formeln\n$K = 850 + 795t$\ndär $t$ är antalet timmar.\nAli säger att en reparation på $3$ timmar kostar $4\\,935$ kr. Avgör om Ali har räknat rätt. Motivera ditt svar.",
+   "losning": "Nej. Formeln ger $K = 850 + 795 \\cdot 3 = 3\\,235$ kr. Ali har multiplicerat också den fasta avgiften $850$ kr med $3$.",
+   "bedomning": "+1 E räknar ut $K$ då $t = 3$\n+1 E svarar nej och förklarar Alis fel",
+   "scen": {
+    "begrepp": "bilverkstad reparation",
+    "scene": "SCENE. A small car workshop seen straight from the side at eye level, the open garage door framing the space. A car stands on a low lift with its bonnet raised, both ends of the car fully visible with room around them. A mechanic in blue overalls stands beside the front wheel, wiping her hands on a rag, while a customer waits as a small figure near the door for scale. Afternoon light falls in from the left through the open door and lies in a warm band across the concrete floor, which runs unbroken from edge to edge. The upper third of the picture is plain grey workshop wall, empty and calm. Colours are cool grey, worn red and warm daylight.\nIntended use: bilverkstad, formel för pris per timme.",
+    "filnamn": "a-08-bilverkstad"
+   },
+   "elevlosningar": [
+    {
+     "etikett": "0 p",
+     "partier": [
+      {
+       "rader": [
+        "$850 + 795 = 1\\,645$",
+        "$1\\,645 \\cdot 3 = 4\\,935$",
+        "Ja, Ali har räknat rätt."
+       ],
+       "poang": [
+        0,
+        0,
+        0
+       ],
+       "dom": "Multiplicerar även den fasta avgiften med 3."
+      }
+     ]
+    },
+    {
+     "etikett": "1 p",
+     "partier": [
+      {
+       "rader": [
+        "$K = 850 + 795 \\cdot 3$",
+        "$K = 850 + 2\\,385 = 3\\,235$",
+        "Nej, Ali har räknat fel."
+       ],
+       "poang": [
+        1,
+        0,
+        0
+       ],
+       "dom": "Skriver inte vad Ali gjort för fel."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "del": "C",
+   "formaga": "PL",
+   "typ": "problem",
+   "poang": [
+    0,
+    1,
+    0
+   ],
+   "avsnitt": "1.3",
+   "delmoment": "Problemlösning med andragradsekvationer (s. 49–52)",
+   "innehall": [
+    "G25-M2A-ALG-8",
+    "G25-M2A-PRO-1"
+   ],
+   "forebild": {
+    "nr": 1349,
+    "sort": "samma sorts problem som leder fram till en andragradsekvation"
+   },
+   "deluppgifter": null,
+   "text": "I en serie möter varje lag alla andra lag en gång. Antalet matcher ges av\n$m = \\frac{n(n - 1)}{2}$\ndär $n$ är antalet lag. En serie med 45 matcher utökas med två lag. Bestäm hur många fler matcher serien då får.",
+   "enhet": "matcher",
+   "losning": "21 matcher. $n(n - 1)/2 = 45$ ger $n = 10$. Med 12 lag blir $m = 12 \\cdot 11/2 = 66$ och $66 - 45 = 21$.",
+   "bedomning": "+1 C löser ekvationen rätt och svarar 21 matcher",
+   "elevlosningar": [
+    {
+     "etikett": "0 p",
+     "partier": [
+      {
+       "rader": [
+        "$\\frac{n(n-1)}{2} = 45$",
+        "$n^2 - n - 90 = 0$",
+        "$n = 10$",
+        "$m = \\frac{12 \\cdot 11}{2} = 66$",
+        "Svar: 66 matcher"
+       ],
+       "poang": [
+        0,
+        0,
+        0
+       ],
+       "dom": "Svarar totala antalet matcher i stället för ökningen."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "del": "C",
+   "formaga": "K",
+   "typ": "redovisning",
+   "poang": [
+    0,
+    3,
+    0
+   ],
+   "avsnitt": "1.3",
+   "delmoment": "Problemlösning med andragradsekvationer (s. 49–52)",
+   "innehall": [
+    "G25-M2A-ALG-8",
+    "G25-M2A-DIG-1",
+    "G25-M2A-PRO-1"
+   ],
+   "forebild": {
+    "nr": 1345,
+    "sort": "samma sorts areaproblem som leder fram till en andragradsekvation"
+   },
+   "deluppgifter": null,
+   "text": "Ett rektangulärt lager ska byggas. Golvytan ska bli $180$ m². Längden ska bli $10$ m större än bredden.\nBestäm lagrets bredd med minst en decimal. Visa hur du har räknat med hjälp av miniräknare.",
+   "enhet": "m",
+   "losning": "Bredden är cirka $9{,}3$. $b(b + 10) = 180$ ger $b^2 + 10b - 180 = 0$ och $b = -5 + \\sqrt{205}$. Miniräknaren ger $\\sqrt{205} \\approx 14{,}32$, alltså $b \\approx 9{,}32$.",
+   "bedomning": "+1 C tecknar ekvationen $b(b+10)=180$\n+1 C visar räkningen med miniräknaren\n+1 C korrekt svar med minst en decimal",
+   "scen": {
+    "begrepp": "bygge av lager",
+    "scene": "SCENE. An open building site on a summer afternoon, seen straight from the side at eye level. A rectangular concrete foundation slab lies flat on bare brown earth, its long edge parallel to the lower edge of the picture and both ends fully visible with plenty of room around them. A small yellow excavator rests at the right, and two tiny workers in helmets stand near the left corner of the slab for scale. The ground line runs unbroken from the left edge of the picture to the right edge. The upper half is clear pale blue sky, empty and calm, with one soft cloud far to the right. Colours are warm earth, grey concrete and soft summer light.\nIntended use: bygge av rektangulärt lager, area och bredd.",
+    "filnamn": "a-10-lagerbygge"
+   },
+   "elevlosningar": [
+    {
+     "etikett": "0 p",
+     "partier": [
+      {
+       "rader": [
+        "$b+(b+10)=180$",
+        "$2b+10=180$",
+        "$2b=170$",
+        "$b=85$",
+        "Svar: bredden är $85$ m"
+       ],
+       "poang": [
+        0,
+        0,
+        0
+       ],
+       "dom": "Räknar med omkrets i stället för area."
+      }
+     ]
+    },
+    {
+     "etikett": "1 p",
+     "partier": [
+      {
+       "rader": [
+        "$b(b+10)=180$",
+        "$b^2+10b-180=0$",
+        "$b=-5\\pm\\sqrt{10+180}$",
+        "$\\sqrt{190}\\approx 13{,}78$",
+        "$b\\approx 8{,}8$ m"
+       ],
+       "poang": [
+        0,
+        1,
+        0
+       ],
+       "dom": "Sätter in fel tal under rottecknet i pq-formeln."
+      }
+     ]
+    },
+    {
+     "etikett": "2 p",
+     "partier": [
+      {
+       "rader": [
+        "$b(b+10)=180$",
+        "$b^2+10b-180=0$",
+        "$b=-5\\pm\\sqrt{25+180}$",
+        "$\\sqrt{205}\\approx 14{,}32$",
+        "Svar: bredden är ungefär $9$ m"
+       ],
+       "poang": [
+        0,
+        2,
+        0
+       ],
+       "dom": "Avrundar till heltal trots att en decimal krävs."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "del": "C",
+   "formaga": "M",
+   "typ": "problem",
+   "poang": [
+    0,
+    0,
+    2
+   ],
+   "avsnitt": "1.1",
+   "delmoment": "Budget för privat- och företagsekonomi (s. 19–26)",
+   "innehall": [
+    "G25-M2A-PRO-2",
+    "G25-M2A-YRK-1"
+   ],
+   "forebild": {
+    "nr": 1107,
+    "sort": "samma sorts omskrivning av en budget när förutsättningarna ändras"
+   },
+   "notis": null,
+   "deluppgifter": null,
+   "text": "Sofia gör en budget för sitt gym. Resultatet för en månad i kronor beskrivs av\n$R = 430m - 38\\,600$\ndär $m$ är antalet medlemmar. Avgiften höjs med $20$ kr per medlem och månad. Kostnaderna i budgeten är oförändrade.\nSkriv en modell för gymmets resultat under ett helt år.",
+   "losning": "$R_{\\text{år}} = 5\\,400m - 463\\,200$. Budgeten för en månad blir $R = 450m - 38\\,600$ och ett år ger $12(450m - 38\\,600)$. Modellen förutsätter lika många medlemmar varje månad.",
+   "bedomning": "+1 A ny månadsmodell $R = 450m - 38\\,600$\n+1 A korrekt årsmodell och antagandet utskrivet",
+   "scen": {
+    "begrepp": "gym medlemmar",
+    "scene": "SCENE. A small neighbourhood gym seen straight from the side at eye level, a row of exercise machines standing along the far wall. Late afternoon light falls through a tall window on the right and throws long soft shadows across the rubber floor. Two tiny figures train quietly, one on a rowing machine, one stretching on a mat, both small enough to give the room its scale. The owner stands by a plain reception desk in the foreground. The upper third of the picture is bare painted wall, calm and empty. Colours are muted blue grey with warm light from the window.\nIntended use: gym, budget med medlemsavgifter.",
+    "filnamn": "a-11-gym"
+   },
+   "elevlosningar": [
+    {
+     "etikett": "0 p",
+     "partier": [
+      {
+       "rader": [
+        "Ett år är 12 månader",
+        "$R_{\\text{år}} = 12(430m - 38\\,600)$",
+        "$R_{\\text{år}} = 5\\,160m - 463\\,200$"
+       ],
+       "poang": [
+        0,
+        0,
+        0
+       ],
+       "dom": "Räknar med den gamla avgiften, höjningen saknas helt."
+      }
+     ]
+    },
+    {
+     "etikett": "1 p",
+     "partier": [
+      {
+       "rader": [
+        "Ny avgift: $430 + 20 = 450$ kr per medlem",
+        "$R = 450m - 38\\,600$",
+        "$R_{\\text{år}} = 12(450m - 38\\,600) = 5\\,400m - 463\\,200$"
+       ],
+       "poang": [
+        0,
+        0,
+        1
+       ],
+       "dom": "Skriver inte ut antagandet om lika många medlemmar varje månad."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "del": "C",
+   "formaga": "B",
+   "typ": "redovisning",
+   "poang": [
+    0,
+    0,
+    0
+   ],
+   "avsnitt": "1.2",
+   "delmoment": "Att faktorisera uttryck (s. 36–38)",
+   "innehall": [
+    "G25-M2A-ALG-6"
+   ],
+   "forebild": {
+    "nr": 1271,
+    "sort": "samma sorts undersökning av för vilka konstanter ett uttryck har ett visst tecken"
+   },
+   "text": "Uttrycket\n$x^2 + 10x + c$\nska undersökas för olika värden på konstanten $c$.",
+   "losning": "",
+   "bedomning": "",
+   "deluppgifter": [
+    {
+     "poang": [
+      1,
+      0,
+      0
+     ],
+     "text": "Låt $c = 25$. Skriv uttrycket som en kvadrat.",
+     "losning": "$x^2 + 10x + 25 = (x + 5)^2$",
+     "bedomning": "+1 E korrekt kvadrat $(x+5)^2$"
+    },
+    {
+     "poang": [
+      0,
+      0,
+      1
+     ],
+     "text": "Bestäm alla värden på $c$ som gör uttrycket positivt för varje $x$.",
+     "losning": "$c > 25$. Kvadratkomplettering ger $(x + 5)^2 + c - 25$, och minsta värdet $c - 25$ antas då $x = -5$.",
+     "bedomning": "+1 A kvadratkomplettering ger villkoret $c>25$ för alla $x$"
+    }
+   ],
+   "elevlosningar": [
+    {
+     "etikett": "0 p",
+     "partier": [
+      {
+       "rader": [
+        "a) $x^2+10x+25=(x+10)^2$",
+        "b) Testar $c=30$:",
+        "$x^2+10x+30$, sätter $x=0$ ger $30>0$",
+        "Svar: $c=30$ fungerar"
+       ],
+       "poang": [
+        0,
+        0,
+        0
+       ],
+       "dom": "Fel kvadreringsregel i a och bara ett prövat exempel i b."
+      }
+     ]
+    },
+    {
+     "etikett": "1 p",
+     "partier": [
+      {
+       "rader": [
+        "a) $x^2+10x+25=(x+5)^2$",
+        "b) $x^2+10x+c=(x+5)^2+c-25$",
+        "Minsta värdet är $c-25$",
+        "Svar: $c\\ge 25$"
+       ],
+       "poang": [
+        1,
+        0,
+        0
+       ],
+       "dom": "Tar med $c=25$, där uttrycket blir noll för $x=-5$."
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "takt": 3.0,
+ "klockslag": "15:30–16:40",
+ "granser": {
+  "total": 23,
+  "betyg": [
+   "E",
+   "C",
+   "A"
+  ],
+  "E": {
+   "minst": 6
+  },
+  "C": {
+   "minst": 13
+  },
+  "A": {
+   "minst": 19
+  },
+  "regel": "NP-modellen (Ma 1c ht 2024). E: minst 26 % av totalpoängen. C: minst 53 % av totalpoängen. A: minst 81 % av totalpoängen."
+ }
+}

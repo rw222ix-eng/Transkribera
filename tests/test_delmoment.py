@@ -950,21 +950,21 @@ def test_sprakvakten_faller_langa_och_pahangda_uppmaningar():
     assert exam_gen.sprakvakt(_kafe()) == []
 
 
-def test_provets_begriplighetsdomare_har_lararens_fem_krav():
-    p = exam_gen.build_begriplighet_prompt([{"nr": "1", "text": "x"}], "",
-                                           "prov")
-    assert "begriplighetsdomare" in p           # bandvalet i tests/fejk.py
-    for krav in ("EN SITUATION", "EN FRÅGA", "ALLA TAL SOM BEHÖVS",
-                 "ENTYDIG TOLKNING", str(exam_gen.ORD_FORE_FRAGAN),
-                 # Det sjätte kravet, lärarens efter prov 81 — och dess
-                 # skärpning samma kväll.
-                 "ORDEN ÄR ELEVENS", "på varandra följande", "aktiva",
-                 "högst 24 ord", "«samtliga»", "Jämför sedan priset"):
-        assert krav in p
-    # Gruppuppgiftens prompt är orörd: fyra elever vid ett bord, uppgift 2
-    # hårdast. Byte för byte den som spelades in.
+def test_provets_begriplighet_ar_elevlasaren_och_gruppens_prompt_ar_oror():
+    """Provets kravlista flyttade 2026-09-22 till elevläsaren
+    (app/elevlasare.py, tests/test_elevlasare.py): den läser som en elev och
+    jämför med facit i stället för att pricka av krav, och den får inte fälla
+    för längd eller ordval (lärarens dom). Gruppuppgiftens prompt är orörd:
+    fyra elever vid ett bord, uppgift 2 hårdast. Byte för byte den som
+    spelades in."""
+    from app import elevlasare
     g = exam_gen.build_begriplighet_prompt([{"nr": "1", "text": "x"}])
+    assert "begriplighetsdomare" in g           # bandvalet i tests/fejk.py
     assert "Fyra elever" in g and "UPPGIFT 2" in g and "EN SITUATION" not in g
+    assert exam_gen.build_begriplighet_prompt([{"nr": "1", "text": "x"}], "",
+                                              "prov") == g
+    p = elevlasare.build_elevlasare_prompt(exam_gen.domarenheter(_stenhuggeri()))
+    assert "elevläsare" in p and "begriplighetsdomare" not in p
 
 
 def test_provets_relevansdomare_domer_pa_losningen_inte_amnet():
@@ -987,9 +987,16 @@ def test_de_tre_domarna_gar_i_samma_reparationsprompt():
     relevansdom = json.dumps({"domar": [{"nr": "1", "dom": "annan sort",
                                          "battre": "1112",
                                          "skal": "ingen sådan i kapitlet"}]})
-    begripdom = json.dumps({"domar": [{"nr": "1", "forstar": "nej",
-                                       "stor": "två läsningar"}]})
-    llm, anrop = _stub_llm([delmomentdom, relevansdom, begripdom,
+    # Elevläsaren (2026-09-22) står där begriplighetsdomaren stod: samma
+    # anrop i ordningen, samma runda. Enheten är «1a» (stenhuggeriets enda
+    # deluppgift), och avvikelsen följer med in i reparationsprompten.
+    elevdom = json.dumps({"domar": [{"nr": "1a",
+                                     "omskrivning": "jag väger båda kuberna",
+                                     "forstar": "nej",
+                                     "avvikelse": "två läsningar",
+                                     "fortydligande": "Lägg till: «Svara i "
+                                                      "cm.»"}]})
+    llm, anrop = _stub_llm([delmomentdom, relevansdom, elevdom,
                             json.dumps(_stenhuggeri())])
     res = exam_gen._tackning_pass(_stenhuggeri(), [], model="m", llm=llm,
                                   profil="prov", antal=1, skeleton=None,
@@ -998,6 +1005,7 @@ def test_de_tre_domarna_gar_i_samma_reparationsprompt():
                                   bokuppgifter=_bokuppgifter(),
                                   rounds_used=1, max_rounds=4)
     assert len(anrop) == 4, [a["prompt"][:40] for a in anrop]
+    assert "elevläsare" in anrop[2]["prompt"]          # provets textdomare
     reparationen = anrop[3]["prompt"]
     assert "potensekvationer" in reparationen         # metoden utanför
     assert "annan sort" in reparationen or "förebild" in reparationen

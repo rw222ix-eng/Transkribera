@@ -277,6 +277,14 @@ _CI = "innehållsdomare"
 _RELEVANS = "relevansdomare"
 _BEGRIPLIGHET = "begriplighetsdomare"
 
+# Elevläsaren (2026-09-22, app/elevlasare.py) ersatte provets
+# begriplighetsdomare och prövas av samma skäl FÖRE nivådomaren: prompten bär
+# hela pappret med facit. Ordet står bara i elevlasare.build_elevlasare_prompt.
+# Bandet är KONSTRUERAT på exam 88 (tests/np/exam88.json), en dom per enhet:
+# spelas det upp på ett annat papper svarar det om enheter som inte finns
+# där, och tystnad fäller aldrig.
+_ELEVLASARE = "elevläsare"
+
 # Delmomentsdomaren (2026-09-13) prövas av EXAKT samma skäl och FÖRE
 # nivådomaren: dess prompt bär hela provets uppgifter och matchar därför både
 # «matteprov» och nivådomarens nyckelfras. Ordet står bara i
@@ -298,6 +306,8 @@ def _auto(prompt):
         return os.path.join(BAND, "innehallsdomare.json")
     if _RELEVANS in prompt:
         return os.path.join(BAND, "relevansdomare.json")
+    if _ELEVLASARE in prompt:
+        return os.path.join(BAND, "elevlasare.json")
     if _BEGRIPLIGHET in prompt:
         return os.path.join(BAND, "begriplighetsdomare.json")
     if _DELMOMENT in prompt:
