@@ -28,7 +28,7 @@ ROT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROT))
 
 from app import (ci_forslag, claude_code, exam_gen, exam_spec,     # noqa: E402
-                 lesson_board, llm_client, notes_gen, postprocess)
+                 kursdomare, lesson_board, llm_client, notes_gen, postprocess)
 from tests import fejk                                             # noqa: E402
 
 TRANSKRIPT = (
@@ -271,6 +271,20 @@ SCENARIER = {
         "system": lambda: exam_gen.RAKNE_SYSTEM,
         "schema": lambda: exam_gen.RAKNE_SCHEMA,
     },
+    # Kursdomaren (2026-09-22) döms mot PROV 88 (tests/fixtures/exam88.json,
+    # Ma 2a, lärarens dom uppgift för uppgift i planen), inte mot provbandet:
+    # bandets kurs är Ma3c, och för den finns ingen mätt kursgräns
+    # (kursdomare.kursgrans ger None och domaren körs inte). Prov 88 är
+    # dessutom det papper testerna mäter mot — uppgift 12b ska bli «granne».
+    "kursdomare": {
+        "vad": ("kursdomare.doma_kurs — vilken kurs hör prov 88:s (Ma 2a) "
+                "uppgifter hemma i?"),
+        "prompt": lambda: kursdomare.build_kurs_prompt(
+            exam_gen.domarenheter(_exam88()),
+            kursdomare.kursgrans(_exam88()["kurs"])),
+        "system": lambda: kursdomare.KURS_SYSTEM,
+        "schema": lambda: kursdomare.KURS_SCHEMA,
+    },
     # Gruppuppgiftens två domare (2026-09-09, lärarens dom om relevansen och
     # om uppgift 2). Båda döms mot GRUPPUPPGIFTSBANDET, av samma skäl som
     # nivådomaren döms mot ett färdigt dokument: en dom utan papper är ingen
@@ -333,6 +347,12 @@ SCENARIER = {
 # in: skalan i domarprompten måste vara den dokumentet faktiskt skrevs mot.
 _DOMARENS_BAND = {"prov": ("prov", 6), "arbetsblad": ("arbetsblad", 6),
                   "gruppuppgift": ("gruppuppgift", 4)}
+
+
+def _exam88() -> dict:
+    """Lärarens prov 88 (Ma 2a), fixturen kursdomarens tester mäter mot."""
+    return json.loads((ROT / "tests" / "fixtures" / "exam88.json")
+                      .read_text(encoding="utf-8"))
 
 
 def _bandets_dokument(namn: str) -> dict:
