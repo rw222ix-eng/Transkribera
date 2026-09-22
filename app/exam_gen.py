@@ -3802,7 +3802,7 @@ SPRAKVAKTENS_MARKE = "svårt språk för eleven"
 # («priset per kWh vid 20 kWh med priset per kWh vid 60 kWh»). Måttet fällde
 # parallellerna som HJÄLPER — «Ottilias uthyrning kostar … och Jonas
 # uthyrning kostar …» (prov 82) — och elvans täta jämförelse får domaren ta
-# (se _begriplighet_prov).
+# (elevläsaren, app/elevlasare.py).
 _RAKNEORD_RE = re.compile(
     r"\b(summan?|produkt(?:en)?|kvot(?:en)?|differens(?:en)?"
     r"|kvadrater(?:na)?|kvadraten\s+(?:av|på))\b", re.I)
@@ -3904,7 +3904,7 @@ def begriplighetssignaler(exam: dict, profil: str = "gruppuppgift") -> list[dict
     Det som fällde prov 81 var inte längden i sig utan att förutsättningen
     växte till ett stycke innan frågan kom — och, sa läraren efteråt, att
     språket i uppgift 6 var för svårt (se sprakvakt). Resten av
-    begripligheten är domarens (se _begriplighet_prov); det som går att
+    begripligheten är elevläsarens (app/elevlasare.py); det som går att
     RÄKNA räknas här."""
     if profil == "prov":
         ut: list[dict] = sprakvakt(exam)
@@ -4293,8 +4293,10 @@ def build_begriplighet_prompt(kort: list[dict], inriktning: str = "",
     för just det som gör den begriplig för klassen."""
     utan_facit = [{k: v for k, v in rad.items() if k != "losning"}
                   for rad in kort]
-    if profil == "prov":
-        return _begriplighet_prov(utan_facit, inriktning)
+    # `profil` är kvar i signaturen men väljer inte längre prompt: provets
+    # variant ersattes 2026-09-22 av elevläsaren (app/elevlasare.py), som
+    # läser som en elev och jämför med facit i stället för att pricka av en
+    # kravlista. Gruppens prompt nedan är byte för byte den som spelades in.
     return (
         "Du är begriplighetsdomare för en gruppuppgift i matematik. Fyra "
         "elever ska läsa uppgiften vid ett bord och komma i gång utan att "
@@ -4334,73 +4336,18 @@ def build_begriplighet_prompt(kort: list[dict], inriktning: str = "",
 #               i kilo mot en formel i gram, och därefter p procent. Det står
 #               inte vad eleven ska göra förrän i sista raden.
 #
-# Kraven nedan är hennes, översatta till något en domare kan svara ja eller
-# nej på. Det är samma domare och samma schema som gruppuppgiftens, med en
-# annan kravlista: ett prov skrivs ensamt och tyst, och där finns ingen
-# gruppkamrat att fråga vad uppgiften menar.
+# Det räknebara i hennes dom är ordvakten nedan (begriplighetssignaler); det
+# som inte går att räkna tar elevläsaren (app/elevlasare.py). Ett prov skrivs
+# ensamt och tyst, och där finns ingen gruppkamrat att fråga vad uppgiften
+# menar.
 # Taket är KALIBRERAT mot prov 81, inte gissat. Orden räknas på den rena
 # texten (utan LaTeX) i varje poängbärande enhet, och de tolv uppgifterna låg
 # på 0, 7, 10, 0, 17, 28, 12, 40, 17, 23, 38, 32, 42, 29, 6 och 6. Läraren
 # pekade ut uppgift 11 (42) och uppgift 9 (38). Taket 40 fäller den värsta och
 # lämnar uppgift 6b (40) och uppgift 10 (32) i fred: en vakt som fäller halva
-# provet blir en vakt läraren slutar tro på. Domaren (_begriplighet_prov) tar
-# de övriga fyra kraven, som inte går att räkna.
+# provet blir en vakt läraren slutar tro på. Elevläsaren tar de övriga
+# kraven, som inte går att räkna: läser eleven uppgiften som facit gör?
 ORD_FORE_FRAGAN = 40
-
-
-def _begriplighet_prov(utan_facit: list[dict], inriktning: str = "") -> str:
-    """Begriplighetsdomarens prompt för PROVET.
-
-    Ordet «begriplighetsdomare» står här av samma skäl som i gruppens prompt:
-    uppspelningen väljer band på det (tests/fejk.py `_auto`)."""
-    return (
-        "Du är begriplighetsdomare för ett prov i matematik. Eleven sitter "
-        "ensam, får inte fråga, och har några minuter på sig per uppgift.\n"
-        f"{json.dumps(utan_facit, ensure_ascii=False)}\n\n"
-        "Svara för varje uppgift på EN fråga: vet eleven efter en genomläsning "
-        "exakt vad hon ska göra? Kraven är sex, och det räcker att ETT "
-        "brister:\n"
-        "- EN SITUATION per uppgift. Ett kafé eller ett stenhuggeri, inte "
-        "båda, och inte en situation som byter skepnad mellan a) och b).\n"
-        "- EN FRÅGA per deluppgift. Det som ska besvaras står i EN mening.\n"
-        f"- HÖGST ETT PAR RADER TEXT före frågan, cirka {ORD_FORE_FRAGAN} ord. "
-        "Ett prov är inte en läsförståelseuppgift.\n"
-        "- ALLA TAL SOM BEHÖVS står i uppgiften, och inga som inte behövs. Ett "
-        "tal eleven inte använder får henne att leta efter felet hos sig "
-        "själv.\n"
-        "- ENTYDIG TOLKNING. Läs uppgiften två gånger med olika förutsättning "
-        "där du kan: räknas inköpet med, gäller kostnaden per styck eller "
-        "totalt, är enheten gram eller kilo? Ger två rimliga läsningar OLIKA "
-        "svar är uppgiften ett fynd.\n"
-        # Lärarens dom efter prov 81 (2026-09-16): «språket var för svårt för
-        # dem — det här med på varandra följande heltal och kvadrera varje tal
-        # och summera och produkten av talen». Domaren får hennes exempel
-        # ordagrant; det räknebara i det tar sprakvakt.
-        "- ORDEN ÄR ELEVENS. Räkningen står som verb i den ordning stegen tas "
-        "(«Kvadrera varje tal. Lägg ihop kvadraterna.»), aldrig som räkneord "
-        "inuti varandra («summan av de tre talens kvadrater», «produkten av "
-        "talen ökas med»), och det som går att skriva ut skrivs ut («$n-1$, "
-        "$n$ och $n+1$», inte «tre på varandra följande heltal»). Verben är "
-        "aktiva («Lägg till», inte «ökas med»), meningarna korta (högst 24 "
-        "ord) och orden elevens («alla», inte «samtliga»; «var och en», inte "
-        "«vardera»; «vilket som helst», inte «godtyckligt»). Och eleven ska "
-        "efter en läsning veta VAD HON SKA RÄKNA UT FÖRST. Läraren fällde två "
-        "uppgifter till på det: «Teckna ett uttryck för hur mycket kaféet "
-        "sparar per år med flergångsmuggar och beräkna besparingen då …» "
-        "säger inte vilka två kostnader som ska ställas mot varandra, och "
-        "«Förklara vad talen $49$ och $2{,}75$ betyder. Jämför sedan priset "
-        "per kWh vid $20$ kWh med priset per kWh vid $60$ kWh.» ber om tre "
-        "saker i två meningar utan a), b), c). En fråga som bara den förstår "
-        "som redan kan matematiken är ett fynd.\n"
-        "Skriv forstar \"nej\" när något av dem brister, och KORT i fältet "
-        "stor vad det är: talet som saknas, de två läsningarna, meningen som "
-        "ställer två frågor. Skriv \"ja\" när uppgiften håller, och "
-        "\"oklart\" när du inte kan avgöra det; oklart fäller ingenting.\n"
-        f"{_yrkesrad_domare(inriktning)}"
-        "Döm på FÖRSTÅELSEN, inte på svårighetsgraden. Provets sista uppgifter "
-        "SKA vara svåra att lösa, och en kort och glasklar A-uppgift är rätt "
-        "skriven. Svara med enbart JSON."
-    )
 
 
 def _parse_begriplighet(raw: str) -> dict[str, dict]:
@@ -4450,9 +4397,9 @@ def doma_begriplighet(exam: dict, *, model: str, inriktning: str = "",
     """Ett begriplighetsdomaranrop → fynd där uppgiften inte går att förstå
     vid första läsningen. Fail-open som de andra domarna.
 
-    `profil` byter kravlista: gruppuppgiftens fyra elever vid ett bord mot
-    provets ensamma elev (se _begriplighet_prov). Förvalet är gruppens, och
-    dess prompt är byte för byte den som spelades in."""
+    Kallas bara för GRUPPUPPGIFTEN sedan 2026-09-22: provets variant är
+    elevläsaren (app/elevlasare.py). `profil` står kvar i signaturen, och
+    gruppens prompt är byte för byte den som spelades in."""
     log = log_cb or (lambda _m: None)
     kort = uppgiftskort(exam)
     if not kort:
@@ -8081,9 +8028,14 @@ def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
             fel = fel + doma_relevans(exam, bokuppgifter, model=model,
                                       punkter=punkter, inriktning=inriktning,
                                       profil=profil, llm=llm, log_cb=log_cb)
-            fel = fel + doma_begriplighet(exam, model=model,
-                                          inriktning=inriktning, profil=profil,
-                                          llm=llm, log_cb=log_cb)
+            # Elevläsaren (app/elevlasare.py, 2026-09-22) ersatte provets
+            # begriplighetsdomare här: samma plats, samma runda, samma
+            # bokdörr som villkor (kassettregeln ovan). Lat import: modulen
+            # lånar domarenheter och _err härifrån.
+            from app import elevlasare
+            fel = fel + elevlasare.doma_elevlasare(exam, model=model,
+                                                   inriktning=inriktning,
+                                                   llm=llm, log_cb=log_cb)
     # SIST, när alla fynden är samlade: har poängvakten fällt en uppgift ska
     # de andra fyndens «Behåll uppgiftens poäng» inte stå kvar på just den.
     fel = _slapp_poanglaset(fel)
@@ -8110,6 +8062,8 @@ def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                                   "kapitlet, byter ut …"),
                      ("begriplighet", "Texten: {n} uppgift(er) är otydligt "
                                       "skrivna, skriver om …"),
+                     ("elevlasare", "Elevläsaren: {n} uppgift(er) läses inte "
+                                    "som facit räknar, förtydligar …"),
                      # De fem nya (2026-09-19). Samma regel som raderna ovan:
                      # loggen namnger VAD som fälldes, inte hur många fynd det
                      # blev, så att läraren kan läsa efteråt varför en uppgift

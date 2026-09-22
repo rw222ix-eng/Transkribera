@@ -672,7 +672,7 @@
      inte på någon ruta alls, de står i listan och i tråden. */
   const UPPGIFTSFEL = ['avsnittsmarkning', 'delmomentmarkning', 'citaggning',
                        'anivavakt', 'kravrad', 'likvardighet', 'scenvakt',
-                       'poangvakt', 'begriplighet'];
+                       'poangvakt', 'begriplighet', 'elevlasare'];
   API.efterkontrollPerElement = function (res) {
     const ut = {};
     const lagg = (el, text) => {
