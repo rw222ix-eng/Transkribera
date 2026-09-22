@@ -62,7 +62,10 @@ filen eller i prompterna den matar — samma regel som exam_gen.SYSTEM redan bä
 """
 from __future__ import annotations
 
+import json
 import re
+from functools import lru_cache
+from pathlib import Path
 
 NIVAER: tuple[str, str, str] = ("E", "C", "A")
 
@@ -574,24 +577,36 @@ RUBRIK_KURSNIVA: str = (
 )
 
 RUBRIK_PER_KURS: dict[str, str] = {
+    # Raderna är rättade 2026-09-22 mot NP-profilen (app/data/
+    # np_uppgiftsprofil.json), som räknade det som tidigare var läst av ögat.
+    # Det som ströks stod emot datat: «yrkesliv» i 1a (1 enhet av 71),
+    # «inga flervalsfrågor i 2a» (9 av 112), «(0/0/4) normalt i 2c» (ingen
+    # enhet över 3 p), «visa att bär 2c:s A-poäng» (formen är C där, två
+    # gånger; A begärs med «undersök» och «utred»), «A är oftast kortsvar i
+    # kurs 1» (13 av 19 A-enheter i 1a är lösningar). Siffrorna i måttblocket
+    # (build_np_matt_block) hämtas ur filen; raderna här är läsningen av dem.
     "1a": (
         "Kurs 1a — mest E av alla fyra kurserna, och kortsvarens kurs.\n"
         "- Mix: 38–45 % av poängen är E, 35–38 % C, 20–25 % A. Tyngdpunkten "
         "ligger på E och ska göra det.\n"
-        "- Halva provet är kortsvar, och två till fyra uppgifter är "
-        "flervalsfrågor («Ringa in ditt svar») — en form som inte förekommer "
-        "en enda gång i kurs 2. Använd den, men bara där felalternativen "
-        "betyder något.\n"
+        "- Halva provet är kortsvar, och fyra till fem enheter är "
+        "flervalsfrågor («Ringa in ditt svar») på alla nivåer: envalet ger en "
+        "E-poäng, flervalet med två rätta poängsätts i trappa (E/C eller "
+        "C/A). Använd formen, men bara där felalternativen betyder något.\n"
         "- «Motivera ditt svar» står högst EN gång i hela provet. Resonemang "
         "prövas i stället som «förklara vad den här beräkningen betyder» eller "
         "«vilket eller vilka alternativ stämmer alltid?».\n"
-        "- Kontexten är vardag och yrkesliv: ränta, rabatt, procentenheter, "
-        "blandning, material som ska räcka. Bokstäver dyker upp i en formel av "
-        "typen fast avgift plus rörlig kostnad, inte som uttryck att förenkla "
-        "för sin egen skull.\n"
+        "- Kontexten är vardag och ren matematik: ränta, rabatt, "
+        "procentenheter, blandning, material som ska räcka. Yrkeskontext "
+        "förekommer nästan aldrig. Bokstäver dyker upp i en formel av typen "
+        "fast avgift plus rörlig kostnad, och på A som ett samband att sätta "
+        "in i ett uttryck; aldrig som uttryck att förenkla för sin egen "
+        "skull.\n"
         "- A ser likadant ut som i alla andra kurser — en insikt i stället för "
-        "en procedur — men bärs oftast av en kort fråga med ett uttryck som "
-        "svar."
+        "en procedur — och bärs oftast av det SISTA steget i en "
+        "lösningsuppgift (rätt svar efter C:s uppställning, ekvation i stället "
+        "för prövning, generell form); en tredjedel av A-enheterna är korta "
+        "frågor med ett uttryck som svar."
     ),
     "1c": (
         "Kurs 1c — C-tyngst av alla fyra kurserna. E-delen är knappt en "
@@ -601,35 +616,43 @@ RUBRIK_PER_KURS: dict[str, str] = {
         "- Provet är STÖRRE än a-spårets samma termin (70 poäng mot 66 vt "
         "2022), och det extra är C- och A-poäng.\n"
         "- Steget från a-spåret till c-spåret är inte en svårare uppgift utan "
-        "ETT STEG TILL på samma uppgift, och det steget ligger på A-nivå: "
-        "samma modell ska sedan användas baklänges, eller svaret ska ges som "
-        "ett intervall eller en definitionsmängd i stället för som ett tal.\n"
-        "- Kortsvarsdelen slutar med flera raka A-uppgifter värda en poäng "
-        "var: omvända frågor, sammansatta funktioner, uttryck som svar. Det är "
-        "normalformen för A i kurs 1 — kort fråga, insikt, kort svar.\n"
+        "ETT STEG TILL i toppen av samma uppgift: en C-poäng för formeln med "
+        "definierade variabler, två A-poäng för att lösa exponentialekvationen "
+        "exakt via basbyte. Delade uppgifter har annars samma poäng.\n"
+        "- Kortsvarsdelen slutar med raka A-uppgifter värda en poäng var: "
+        "omvända frågor, sammansatta funktioner, uttryck som svar — korta "
+        "frågor som lever på variabelbyte. Det är A:s ena form; den andra är "
+        "den långa lösningsuppgiften där A-poängen är generalitet, egen "
+        "ekvation eller rätt tolkning av vilket tal som efterfrågas.\n"
         "- Formellt matematiskt språk och exakta svar hör hemma här, till "
-        "skillnad från i a-spåret."
+        "skillnad från i a-spåret; svarsformskrav («exakt», decimaler) finns "
+        "bara på A."
     ),
     "2a": (
-        "Kurs 2a — E-tungt som 1a, men utan kurs 1:s kortsvarsformer.\n"
+        "Kurs 2a — E-tungt som 1a, men med kurs 2:s former.\n"
         "- Mix: 40–42 % E, 34–37 % C, 21–24 % A.\n"
-        "- Inga flervalsfrågor alls. Kortsvarsuppgifter finns, men de ber om "
-        "ett svar — inte om att ringa in ett av fem alternativ.\n"
+        "- Flerval finns (välj bland A–F, ibland «vilket eller vilka»), "
+        "ungefär tre per prov och nästan bara på E/C. Kortsvarsuppgifterna "
+        "ber annars om ett svar.\n"
         "- «Motivera ditt svar» förekommer på riktigt här (upp till sju gånger "
-        "i ett prov), och resonemang bär nästan dubbelt så stor andel av "
-        "poängen som i kurs 1.\n"
-        "- A-poängen bor oftare i redovisningsuppgifterna än i kurs 1: "
-        "ansatsen ÄR insikten, och den ska synas i lösningen."
+        "i ett prov), men det är ett E-verktyg: sju av elva står på "
+        "enpoängs-E. A-resonemang begärs med «undersök» och «utred».\n"
+        "- Hälften av A-enheterna är kortsvar värda 1 p för tre steg; "
+        "A-lösningar ger minst 2 p och där ÄR ansatsen insikten, och den ska "
+        "synas i lösningen. Kommunikationspoäng finns bara på C/A och bara i "
+        "enheter med minst 3 p: 3 p = 2 + K."
     ),
     "2c": (
         "Kurs 2c — A-tyngst av alla fyra kurserna.\n"
         "- Mix: 35–37 % E, 34–36 % C, 29–30 % A. Nästan var tredje poäng är "
-        "en A-poäng, och de ligger i tunga uppgifter: (0/0/3) och (0/0/4) är "
-        "normala tripplar här.\n"
+        "en A-poäng, och de ligger i tunga uppgifter: (0/0/3) är en normal "
+        "trippel här, och nästan varje 3-poängare på en nivå är 2 + en "
+        "K-poäng. Ingen enhet är värd mer än 3 p.\n"
         "- Där 1c lägger sina extra poäng på C lägger 2c dem på A. Det är hela "
         "skillnaden mellan kurserna: samma spår, olika ände av skalan.\n"
-        "- «Undersök om», «utred vilka» och «visa att» är kursens egna "
-        "frågeformer, och det är där A-poängen sitter.\n"
+        "- «Undersök om … alltid» och «utred vilka» är kursens egna "
+        "A-frågeformer. «Visa att» finns också, men som C-form (delad med "
+        "2a).\n"
         "- Formellt språk, exakta uttryck och algebra som står för sig själv."
     ),
 }
@@ -651,7 +674,10 @@ RUBRIK_PER_KURS: dict[str, str] = {
 #        «förklara vad beräkningen betyder» och «vilket alternativ stämmer
 #        alltid», inte som en motivering.
 #   2c, «Undersök om», «utred vilka» och «visa att» är kursens egna
-#        frågeformer och bär dess A-poäng. Minst en gång.
+#        frågeformer. Minst en gång. NP-profilen (2026-09-22) skiljer dem
+#        åt: «undersök»/«utred» bär A-poängen, «visa att» är C-form (två
+#        gånger, båda C). Vakten räknar ändå alla tre som en frågeform, för
+#        det den mäter är att provet resonerar i kursens form alls.
 #
 # 1c saknas med flit. Raden för 1c talar om formellt språk och exakta svar,
 # inte om en frågeform som går att räkna, och en siffra som inte är mätt hör
@@ -681,6 +707,262 @@ def kravord(kurs: str = "") -> dict | None:
         return None
     return {**regel, "kurs": f"kurs {nyckel}",
             "monster": re.compile(regel["monster"], re.IGNORECASE)}
+
+
+# ── MÅTTEN UR NATIONELLA PROVEN (2026-09-22) ──────────────────────────────
+# Rubriken ovan beskriver nivån i ORD, och lärarens dom över prov 88 (Ma 2a,
+# 12 uppgifter) var att uppgifterna ändå blev för svåra, hamnade utanför
+# kursen eller krävde tre räknesteg för en poäng. Ord räcker inte: modellen
+# fyller «A» med det den själv tycker är A, och det är oftare 2c-abstraktion
+# än 2a:s korta insikt. Det här blocket är samma nivåer i MÅTT, lästa ur
+# app/data/np_uppgiftsprofil.json (334 bedömda enheter ur 1a, 1c, 2a och 2c,
+# byggd av tools/np_profil.py). Siffrorna hämtas ur filen vid körning, inte
+# skrivs av för hand: bygger någon om profilen ändras prompten med.
+#
+# Vad datat sa, och som styr vad blocket tar med:
+#   * Textlängd och frågeverb mäter INTE nivån (medianen är lika på E, C och
+#     A i alla fyra kurserna). Blocket säger det rakt ut och bär därför inga
+#     ordgränser och inga verbregler. Det som växer med nivån är räknesteg,
+#     bokstavskonstanter och hur mycket eleven själv måste bygga.
+#   * Steg per poäng ligger platt (1–1,5 på lösningar oavsett nivå). En
+#     A-poäng köper abstraktion, inte fler steg. Undantaget är A-kortsvaret i
+#     kurs 2: 1 p för 3 steg, provets svåraste poäng per ord.
+#   * Poäng per enhet är snävt: E 1–2 p, A-lösning minst 2 p, aldrig över
+#     4 p. I kurs 2 är 3 p på en nivå = 2 + en K-poäng, och K finns bara på
+#     C/A i enheter med minst 3 p. Prov 88:s uppgift 7 («kommunikation» på en
+#     enpoängare) och 10 (tre C-poäng för en pq-lösning) bröt mot just det.
+#   * Kursgränsen sitter i INNEHÅLL och i ett EXTRA LAGER, inte i poängen:
+#     delade uppgifter har samma trippel i 2a/2c (47 av 47) och 1a/1c (36 av
+#     38). Uppgift 12b i prov 88 var 2c:s A («för varje x» kräver
+#     kvadratkomplettering som argument), inte 2a:s.
+#   * LÄRARENS DOM 2026-09-22: en förtydligande mening är alltid tillåten och
+#     önskad när den gör frågan lättare att förstå. NP har själv sådana i
+#     5–26 % av enheterna. Blocket mäter svårighet och begriplighet, aldrig
+#     hur NP-likt ordvalet är.
+#
+# Tvärsnitten i JSON:en (fältet `tvarsnitt`) är analytikerns läsning i
+# klartext och går INTE in i prompten; de är underlaget för de handskrivna
+# raderna nedan (NP_A_FORMER, NP_GRANNKURS, NP_MOTIVERA_BRUK), som är egna
+# ord om mönster. Ingen provtext.
+
+NP_PROFIL_FIL: Path = Path(__file__).with_name("data") / "np_uppgiftsprofil.json"
+
+
+@lru_cache(maxsize=1)
+def _las_np_profil() -> dict:
+    """Profilen som dict, eller {} när filen saknas eller är trasig.
+
+    Saknad fil är ett riktigt läge (en maskin utan datat, en gammal
+    utcheckning) och får inte fälla genereringen: då står nivårubriken i ord
+    kvar och måttblocket blir tomt. Cachad: filen är 3 MB och läses en gång
+    per process."""
+    try:
+        return json.loads(NP_PROFIL_FIL.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def np_mall(kurs: str) -> dict | None:
+    """Kursens `mall` ur profilen, eller None när kursen inte är mätt eller
+    filen saknas. `kurs` är kursnamnet; kursnyckel gör om det till «2a»."""
+    nyckel = kursnyckel(kurs) or kurs
+    return (_las_np_profil().get("kurser") or {}).get(nyckel, {}).get("mall")
+
+
+# Kursens egna A-former, ur tvärsnittens avsnitt «E mot C mot A av samma typ»
+# och «bara på A». Egna ord om mönstret, inga uppgifter. Det här är det
+# modellen saknade när den skrev prov 88: vad A ÄR i just den här kursen.
+NP_A_FORMER: dict[str, str] = {
+    "1a": ("ekvationen byggs ur villkor i ord (prövning med rätt svar stannar "
+           "på C); procentbasen är okänd, symbolisk eller ändras av åtgärden; "
+           "ett samband sätts in i ett uttryck med två bokstäver och en ska "
+           "bort; svaret ska gälla generellt; komplementhändelse över flera "
+           "försök. A-poängen är oftast SISTA steget efter C:s uppställning "
+           "(«gå i mål», «räkna algebraiskt»), sällan abstrakt resonemang."),
+    "1c": ("generalitet (visas för alla x, exakt formel för steg n, exakt "
+           "uttryck i r eller a); egen ekvation ur en relation med två okända; "
+           "rätt tolkning av vilket tal som efterfrågas; parameter i en olikhet "
+           "så att lösningsmängden blir den givna; sammansatt funktion; "
+           "exponentialekvation löst exakt via basbyte. Svarsformskrav (exakt, "
+           "två decimaler) finns bara på A. A-kortsvaren lever på variabelbyte "
+           "utan räkning; A-lösningarna är långa och kräver redovisning som är "
+           "lätt att följa."),
+    "2a": ("villkor på en parameter eller svar i parameter (sällsynt); "
+           "resonemang som täcker en hel mängd (alla "
+           "heltal, alla k); eget koordinatsystem eller egen variabel; byte av "
+           "tidsenhet i exponenten; sammansatt argument med faktor eller kvot; "
+           "ekvationssystem som är ofullständigt eller icke-linjärt. "
+           "A-kortsvar: 1 p för 3 steg. A-lösning: ansatsen är insikten."),
+    "2c": ("svar i parameter (gärna ur en figur); egen ansats eller eget "
+           "koordinatsystem som ansatspoäng (ett specialfall ger 0); "
+           "variabelroll bytt (funktion av y, tidsenhet i exponent); "
+           "komplettera ett påbörjat ekvationssystem; negativ metodföreskrift "
+           "(«prövning godtas inte»); undersök om något ALLTID gäller, med "
+           "K-poäng för redovisningen. «Visa att» är en C-form här, inte A."),
+}
+
+# Gränsen mot grannkursen, ur tvärsnittens «gränsen 1a/1c» (1c §8.3) och
+# «gränsen 2a/2c». För a-spåret är det en förbudslista: innehållet och det
+# extra lagret som gör en uppgift till grannkursens. För c-spåret är det
+# omvänt en rad om vad som ÄR kursens eget, så att ett 2c-prov inte skrivs
+# som ett 2a-prov med högre poäng.
+NP_GRANNKURS: dict[str, str] = {
+    "1a": ("HÖR HEMMA I GRANNKURSEN 1c, SKRIV INTE: trigonometri, vektorer, "
+           "potenslagar eller rötter med variabel, formell funktionslära "
+           "(definitions- och värdemängd, sammansättning med parameter, område "
+           "mellan grafer), olikhet med parameter, bevis eller generell "
+           "härledning i geometri, talsystem och delbarhet; svar som exakt "
+           "uttryck i en parameter som inte är den okända (area i r) eller som "
+           "formel med definierade variabler; exponentialekvation som måste "
+           "lösas utan tumregel eller prövning. Vardagskontext, procent, "
+           "linjär eller exponentiell modell med tal och sannolikhet med tal "
+           "passar båda kurserna och får samma poäng."),
+    "1c": ("KURSENS EGNA A-FORMER, som 1a inte har: trigonometri, vektorer, "
+           "potenslagar med variabel, formell funktionslära, olikhet med "
+           "parameter, bevisbegreppet, talsystem, exakta svar i rot, π eller "
+           "parameter, formel med definierade variabler, exponentialekvation "
+           "löst exakt. Det är innehåll och ett lager till, inte svårare "
+           "poäng: delade uppgifter har samma poäng i båda kurserna."),
+    "2a": ("HÖR HEMMA I GRANNKURSEN 2c, SKRIV INTE: logaritmlagar utöver "
+           "x = lg b / lg a, komplexa tal, geometrisatser, regression, "
+           "implikation som begrepp, heltalsegenskaper. Inte heller ett EXTRA "
+           "LAGER på en "
+           "gemensam uppgift: metod utesluten («prövning godtas inte»), "
+           "variabelroll bytt (funktion av y, tidsenhet i exponenten), en "
+           "tredje variabel i systemet, svar i parameter tillsammans med "
+           "figur, «för alla»-generalisering värd minst 2 A-poäng. Normalform, "
+           "linjär funktion ur punkter, system ur text och exponentiell "
+           "förändring med tal hör hemma i båda och får samma poäng."),
+    "2c": ("KURSENS EGNA A-FORMER, som 2a inte har: logaritmlagar, komplexa "
+           "tal, geometrisatser, regression, implikation, heltalsegenskaper; "
+           "och det extra lagret på en gemensam uppgift: metod utesluten, "
+           "variabelroll bytt, tredje variabel, svar i parameter med figur, "
+           "«alltid»-undersökning på A. Det är innehåll och ett lager till, "
+           "inte svårare poäng: delade uppgifter har samma poäng i båda "
+           "kurserna."),
+}
+
+# Hur resonemang faktiskt begärs, per kurssteg. Siffrorna står i blocket
+# (ur JSON:en); det här är läsningen av dem.
+NP_MOTIVERA_BRUK: dict[str, str] = {
+    "1": ("alltså nästan aldrig. Resonemang prövas i stället som tolkning "
+          "av en given beräkning, som påståenden i flervalsform och som krav "
+          "på redovisningen, inte som en uppmaning att motivera."),
+    "2": ("ett E/C-verktyg för 1-poängs resonemang (välj graf, har hon "
+          "rätt). A-resonemang begärs med «undersök», «utred» eller «bestäm "
+          "vad som måste gälla» och kräver att ALLA fall täcks; ett "
+          "specialfall ger 0."),
+}
+
+# Lärarens dom 2026-09-22, ordagrant i prompten: prov 88:s förtydligande
+# fraser var medvetna och ska stå kvar. Ett block om mått får inte läsas som
+# «skriv som NP».
+NP_FORTYDLIGANDE: str = (
+    "En förtydligande mening är alltid tillåten och önskad när den gör "
+    "frågan lättare att förstå; en uppgift som är utförligare än NP är inte "
+    "fel för det.")
+
+
+def _t(x) -> str:
+    """Tal som svensk prompttext: 2.0 → «2», 1.33 → «1,33»."""
+    if x is None:
+        return "?"
+    if float(x).is_integer():
+        return str(int(x))
+    return f"{x:g}".replace(".", ",")
+
+
+def _andel(post: dict) -> str:
+    return f"{post.get('antal', 0)} av {post.get('av', 0)}"
+
+
+def build_np_matt_block(kurs: str) -> str:
+    """«MÅTTEN UR NATIONELLA PROVEN I KURS X» — ett block per mätt kurs, ur
+    profilens `mall`. Tom sträng för okänd kurs eller saknad fil.
+
+    Håller sig under ~2 500 tecken med flit: blocket står i varje
+    genereringsprompt, och det som inte får plats är det som inte mäter
+    nivån (ordantal, verb)."""
+    nyckel = kursnyckel(kurs) or kurs
+    m = np_mall(nyckel)
+    if not m or nyckel not in NP_A_FORMER:
+        return ""
+    matt = m["matt"]
+
+    def g(niva: str, form: str, falt: str, nyckel2: str = "median"):
+        return matt.get(f"{niva}_{form}", {}).get(falt, {}).get(nyckel2)
+
+    def per_niva(form: str, falt: str, nyckel2: str = "median") -> str:
+        return " / ".join(f"{n} {_t(g(n, form, falt, nyckel2))}" for n in NIVAER)
+
+    poang = m["poang"]
+    tot = sum(poang) or 1
+    andelar = "/".join(str(round(100 * p / tot)) for p in poang)
+    steg = nyckel[0]                       # «2a» → kurssteg 2
+
+    e_min = min(g("E", f, "poang_per_enhet", "min") or 1 for f in ("kortsvar", "losning"))
+    e_max = max(g("E", f, "poang_per_enhet", "max") or 1 for f in ("kortsvar", "losning"))
+    tak = max(post["poang_per_enhet"]["max"] for post in matt.values()
+              # Matrisbedömda helheter i kurs 1 (12 p på en rad) är inte en
+              # enhet appen kan skriva; taket är det största som inte är en
+              # sådan: 4 i 2a, 3 i 1a, 1c och 2c. NP går aldrig över 4.
+              if post["poang_per_enhet"]["max"] <= 4)
+    k = m.get("k_poang") or {}
+    k_nivaer = [n for n in NIVAER if (k.get("per_niva") or {}).get(n)]
+    k_stora = sum(v for s, v in (k.get("enhetsstorlek") or {}).items() if int(s) >= 3)
+    k_alla = sum((k.get("enhetsstorlek") or {}).values())
+    if k_nivaer and "E" not in k_nivaer:
+        k_rad = (f" K-poäng (kommunikation) finns bara på {'/'.join(k_nivaer)} "
+                 f"och i {k_stora} fall av {k_alla} i enheter med minst 3 p: "
+                 "3 p på en nivå = 2 + K, aldrig K på en enpoängare.")
+    else:
+        k_rad = ""
+    konst = m.get("konstanter") or {}
+    mot = m.get("motivera") or {}
+    met = m.get("metodforeskrift") or {}
+    fort = m.get("fortydligande") or {}
+    a_kort_steg = g("A", "kortsvar", "steg")
+    los_p90 = max(g(n, "losning", "steg_per_poang", "p90") or 0 for n in NIVAER)
+
+    rader = [
+        f"MÅTTEN UR NATIONELLA PROVEN I KURS {nyckel} ({m['enheter']} bedömda "
+        f"enheter; poäng E/C/A {'/'.join(map(str, poang))} = {andelar} %). "
+        "Textlängd och frågeverb mäter INTE nivån; räknesteg, "
+        "bokstavskonstanter och hur mycket eleven själv bygger gör det.",
+        f"- Räknesteg (median): kortsvar {per_niva('kortsvar', 'steg')}, "
+        f"lösning {per_niva('losning', 'steg')}. Steg per poäng: lösning "
+        f"{per_niva('losning', 'steg_per_poang')} (aldrig över {_t(los_p90)}), "
+        f"kortsvar {per_niva('kortsvar', 'steg_per_poang')}. En A-poäng köper "
+        "abstraktion, inte fler steg; fler steg per poäng än så är för svårt "
+        "för poängen: höj poängen eller ta bort ett steg.",
+        f"- Poäng per enhet: E {e_min}–{e_max} p, C-lösning "
+        f"{_t(g('C', 'losning', 'poang_per_enhet', 'min'))}–"
+        f"{_t(g('C', 'losning', 'poang_per_enhet', 'max'))} p, A-lösning minst "
+        f"{_t(g('A', 'losning', 'poang_per_enhet', 'min'))} p (median "
+        f"{_t(g('A', 'losning', 'poang_per_enhet'))}), A-kortsvar "
+        f"{_t(g('A', 'kortsvar', 'poang_per_enhet'))} p för upp till "
+        f"{_t(a_kort_steg)} steg. Högst {tak} p per enhet.{k_rad}",
+        "- Bokstavskonstanter utöver den okända: "
+        + ", ".join(f"{n} {konst.get(n, {}).get('med_konstant', 0)} av "
+                    f"{konst.get(n, {}).get('av', 0)} enheter" for n in NIVAER)
+        + f" (högst {max(konst.get(n, {}).get('max', 0) for n in NIVAER)}). "
+        "Parametrar hör till A.",
+        "- «Motivera ditt svar» i uppgiftstexten: "
+        + ", ".join(f"{n} {_andel(mot.get(n, {}))}" for n in NIVAER)
+        + ", " + NP_MOTIVERA_BRUK[steg],
+        "- Metodföreskrift: "
+        + ", ".join(f"{n} {_andel(met.get(n, {}))}" for n in NIVAER)
+        + ". Aldrig «med pq-formeln», «kvadreringsregeln» eller "
+        "«konjugatregeln». Det som finns: «med algebraisk metod» (E/C), "
+        "«använd formeln», «bryt ut», «med hjälp av grafen»."
+        + (" Aldrig föreskrift på A." if not met.get("A", {}).get("antal") else ""),
+        "- Förtydligande mening i NP: "
+        + ", ".join(f"{n} {_andel(fort.get(n, {}))}" for n in NIVAER)
+        + ". " + NP_FORTYDLIGANDE,
+        f"- Kursens egna A-former: {NP_A_FORMER[nyckel]}",
+        NP_GRANNKURS[nyckel],
+    ]
+    return "\n".join(rader)
 
 
 # ── Ankare ────────────────────────────────────────────────────────────────
@@ -1005,6 +1287,11 @@ def build_niva_block(typer: list[str] | None = None,
     if nyckel:
         kursrad = RUBRIK_PER_KURS.get(nyckel)
         delar.append(RUBRIK_KURSNIVA + ("\n\n" + kursrad if kursrad else ""))
+        # Måtten ur NP för kursen (prov 88-läxan). Tom sträng när profilen
+        # saknas eller kursen inte är mätt; då står rubriken i ord ensam.
+        matt = build_np_matt_block(nyckel)
+        if matt:
+            delar.append(matt)
     typ_rader = _krav_rader(RUBRIK_PER_TYP, typer)
     if typ_rader:
         delar.append("Per uppgiftstyp:\n" + "\n".join(typ_rader))
