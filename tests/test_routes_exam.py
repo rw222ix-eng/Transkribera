@@ -2243,3 +2243,36 @@ def test_inget_forslag_utan_traff(client, monkeypatch):
         "course_id": cid, "group_id": gid, "antal": 6,
         "datum": "2026-09-01", "moment": "kapitel 1"}))
     assert "omprov_forslag" not in svar
+
+
+def test_godkannandet_raknar_om_granser_nar_summan_andrats(client, monkeypatch):
+    """Prov 88 (2026-09-22): godkänt på 23 p, omskrivet till 24 p, godkänt
+    igen — och JSON:en bar kvar 23-poängsblocket medan PDF:en tryckte 24.
+    Nu räknas blocket om vid godkännandet när summan inte stämmer, och det
+    stämplas på varvet utan att ett nytt varv skapas."""
+    result, _ = _make_exam(client, monkeypatch)
+    _fangar_tex(monkeypatch)
+    forsta = _done(client.post(f"/api/exams/{result['id']}/approve", json={}))
+    total0 = forsta["granser"]["total"]
+
+    # Omskrivning som höjer en poäng.
+    ny = _exam_doc()
+    ny["uppgifter"][0]["poang"] = [
+        ny["uppgifter"][0]["poang"][0] + 1] + list(ny["uppgifter"][0]["poang"][1:])
+    ny["granser"] = dict(forsta["granser"])   # modellen skickar tillbaka allt
+    monkeypatch.setattr(exam_gen, "refine_exam",
+                        lambda *a, **k: {"exam": ny, "errors": [], "rounds": 1})
+    assert client.post(f"/api/exams/{result['id']}/oppna").status_code == 200
+    varv = _done(client.post(f"/api/exams/{result['id']}/refine",
+                             json={"message": "höj poängen"}))
+    andra = _done(client.post(f"/api/exams/{result['id']}/approve",
+                              json={"version": varv["current_version"]}))
+    assert andra["granser"]["total"] == total0 + 1
+
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    try:
+        vy = appdb.get_exam(conn, result["id"])
+        assert vy["current_version"] == varv["current_version"]
+        assert vy["exam"]["granser"]["total"] == total0 + 1
+    finally:
+        conn.close()

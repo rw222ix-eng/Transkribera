@@ -435,6 +435,11 @@ def _kopiefynd(exam: dict, infor: dict | None) -> list[dict]:
     return ut
 
 
+def _utan_granser(exam: dict | None) -> dict:
+    """Pappret utan sitt gränsblock, för jämförelsen vid godkännandet."""
+    return {k: v for k, v in (exam or {}).items() if k != "granser"}
+
+
 def efterkontroll(view: dict, doc, summor: dict | None, *,
                   bok: dict | None = None, sidor: dict[int, int] | None = None,
                   base: Path | None = None,
@@ -2174,10 +2179,23 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     # stämpeln. Det är den som gäller sedan. (Kursen skickas
                     # också, men är utan verkan sedan 2026-09-19, NP-modellen
                     # har en regel för alla kurser, se exam_spec.kravkonfig.)
-                    if not exam.get("granser"):
+                    #
+                    # OCH DE RÄKNAS OM NÄR SUMMAN ÄNDRATS (2026-09-22, prov 88):
+                    # en omskrivning efter första godkännandet höjde pappret
+                    # från 23 till 24 p, men blocket från 23-poängsvarvet
+                    # följde med JSON:en och stämplades in på det nya varvet
+                    # oförändrat. PDF och skärm räknade rätt ändå, för
+                    # kravgranser() förkastar ett block vars total inte
+                    # stämmer — men exam_json och stämpeln sa 6/13/19 av 23
+                    # medan pappret tryckte 7/13/20 av 24. Samma fråga som
+                    # kravgranser ställer, ställd här, så att det som stämplas
+                    # är det som trycks.
+                    summor = exam_spec.poangsummor(doc)
+                    if not exam_spec.giltiga_granser(
+                            exam.get("granser"), int(summor.get("total") or 0)):
                         exam["granser"] = exam_spec.kravgranser_ur_summor(
-                            exam_spec.poangsummor(doc),
-                            {"e_extra": view.get("e_extra") or 0}, doc.kurs)
+                            summor, {"e_extra": view.get("e_extra") or 0},
+                            doc.kurs)
                     doc.granser = exam["granser"]
                     steg.na("latex")
                     emit({"type": "log", "msg": "Renderar LaTeX …"})
@@ -2438,7 +2456,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     # .tex/.pdf på ett varv de inte hörde till — filen på disk
                     # var ett annat papper än det databasen pekade ut.
                     version_id = view.get("current_version")
-                    if exam != view["exam"]:
+                    # Gränserna räknas inte som en ändring av pappret (se
+                    # stämpeln nedan): ett omräknat block ska inte kosta ett
+                    # varv i ångra-historiken.
+                    if _utan_granser(exam) != _utan_granser(view["exam"]):
                         ny = db.add_exam_version(conn, exam_id, exam)
                         version_id = (ny or {}).get("current_version") or version_id
                     # Kravgränserna skrivs in i det varv som renderades. Se
@@ -2447,9 +2468,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     # ändrats. En fixrunda kan ha tappat fältet på vägen genom
                     # modellen — därför stämplas det HÄR, på det varv som
                     # faktiskt blev papper, och inte bara i JSON:en ovan.
+                    # `skriv_over`: blocket i JSON:en är det som TRYCKTES (det
+                    # räknades om ovan om summan ändrats), och ett varv som
+                    # bar ett block från en annan poängsumma ska inte få
+                    # behålla det (prov 88, 2026-09-22).
                     if exam.get("granser"):
                         db.stampla_exam_granser(conn, exam_id, version_id,
-                                                exam["granser"])
+                                                exam["granser"], skriv_over=True)
                     # Godkänt MED ENBART .tex är ärligt: LaTeX:en finns och går
                     # att kompilera för hand. Godkänt UTAN någon fil alls är
                     # det inte — föll redan valideringen skrevs ingenting, och
