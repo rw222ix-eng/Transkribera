@@ -305,12 +305,16 @@ def test_lararens_exempel():
     kursen — ligger 80 minuter kvar på 20 poäng."""
     assert exam_spec.foreslag_antal(80, "prov")["antal"] == 9
     assert exam_spec.foreslag_antal(80, "prov")["poang"] == 19
-    for kurs in ("Ma1c", "Ma2a", "Ma2c"):
+    # Nio uppgifter i alla fyra kurserna sedan poängformen (exam_spec.np_form,
+    # 2026-09-22): 1c och 2a väger 19 där de vägde 20, för A-poängen på 1 p
+    # är kortsvar och K-raden i 2a ligger på C; 2c ligger kvar på 20. 1a
+    # köpte förut en tionde uppgift på samma tid, men tio väger nu 22 poäng
+    # (85 minuter) och nio är närmast: A-kortsvaren gör inte ett E-tungt
+    # papper billigare per uppgift än ett C-tungt.
+    for kurs, poang in (("Ma1c", 19), ("Ma2a", 19), ("Ma2c", 20),
+                        ("Ma1a", 19)):
         r = exam_spec.foreslag_antal(80, "prov", kurs=kurs)
-        assert (r["antal"], r["poang"]) == (9, 20), kurs
-    # 1a är E-tungt och köper därför en uppgift till för samma tid: fler och
-    # billigare uppgifter är precis vad a-spårets prov består av.
-    assert exam_spec.foreslag_antal(80, "prov", kurs="Ma1a")["antal"] == 10
+        assert (r["antal"], r["poang"]) == (9, poang), kurs
     assert exam_spec.foreslag_antal(90, "prov")["antal"] == 10
     assert exam_spec.foreslag_antal(100, "prov")["antal"] == 12
     slots = exam_spec.balanced_skeleton(9, "prov", delar=True)
@@ -538,7 +542,10 @@ def test_det_omojliga_taket_sager_det_rakt_ut():
     assert "12 uppgifter" in fynd[0]["message"]
     assert "30 minuter" in fynd[0]["message"]
     assert "10 poäng" in fynd[0]["message"]     # passets tak
-    assert "12 poäng" in fynd[0]["message"]     # minsta balanserade papper
+    # Minsta balanserade papper: 15 poäng sedan poängformen (np_form): en
+    # K-rad i kurs 2 väger 3 och en A-lösning minst 2, så tolv uppgifter
+    # kan inte längre väga tolv.
+    assert "15 poäng" in fynd[0]["message"]
 
 
 def test_taket_tystar_vakten_nar_provet_ryms():

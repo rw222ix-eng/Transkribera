@@ -2116,7 +2116,7 @@ def _karaktarsfoljd(antal: int, mix: tuple[float, float, float]) -> list[str]:
     return foljd
 
 
-def _varva(kandidater: list[dict]) -> list[dict]:
+def _varva(kandidater: list[dict], form: dict | None = None) -> list[dict]:
     """Ordna en dels uppgifter så att varken typ eller förmåga upprepas fler än
     MAX_LIKA_I_RAD gånger i rad — utan att bryta karaktärstrappan.
 
@@ -2146,7 +2146,25 @@ def _varva(kandidater: list[dict]) -> list[dict]:
         # så förturen ändrar bara skelett med eget nivåval (NIVAVAL).
         if not ut:
             valbara = [s for s in valbara if s["formaga"] != "K"] or valbara
-        val = next((s for s in valbara if duger(s)), valbara[0])
+        dugliga = [s for s in valbara if duger(s)] or valbara[:1]
+        # MED POÄNGFORMEN (np_form, bara provet): av dem som duger tas den
+        # vars typ har FLEST rader kvar i gruppen, i andra hand den vars typ
+        # och förmåga skiljer sig från raden före. Det är den vanliga
+        # ordningen för att sprida lika element: den talrikaste typen läggs
+        # ut tidigt så att den inte blir en svans. Varvningen tog förut
+        # «första som duger», och när A-raderna blev tyngre (A-lösningar om
+        # minst 2 p, K-rader om 3 p) blev A-gruppen fyra redovisningsrader
+        # och ett problem: läggs problemet först står de fyra i rad, och
+        # duger() ser det inte förrän det är för sent. Utan form är valet
+        # «första som duger» som förut, byte för byte.
+        if form and ut:
+            forra = ut[-1]
+            kvar_per_typ = {t: sum(1 for s in valbara if s["typ"] == t)
+                            for t in {s["typ"] for s in valbara}}
+            dugliga.sort(key=lambda s: (-kvar_per_typ[s["typ"]],
+                                        s["typ"] == forra["typ"],
+                                        s["formaga"] == forra["formaga"]))
+        val = dugliga[0]
         ut.append(val)
         # Identitet, inte likhet: två slots kan vara innehållsligt lika, och
         # list.remove() hade då plockat bort fel objekt.
@@ -2233,8 +2251,152 @@ def _dela_del_b(grupper: list[list[dict]]) -> list[int]:
     return ut
 
 
+# ── NP:S POÄNGFORM PER RAD (2026-09-22, lärarens dom över prov 88) ────────
+# Prov 88 hade en A-uppgift med fullständig lösning värd 1 p (uppgift 7,
+# dessutom märkt Kommunikation) och två deluppgifter till av samma slag (6b,
+# 12b). Läraren: «Kommunikation för en enpoängare stämmer inte med NP», och
+# 12b var «utanför 2a». Ingen av dem var modellens fel: skelettet hade LÅST
+# poängen innan modellen skrev ett ord, och de tripplarna var rätt tripplar
+# på fel rad. Tre saker är mätta i app/data/np_uppgiftsprofil.json och gäller
+# därför här, där poängen bestäms (app/np_vakter.py bär samma regler som
+# backstopp för refine och canvas, med mätningen utskriven rad för rad):
+#
+#   * A-LÖSNING MINST 2 P. 2a: alla elva A-enheter på 1 p är kortsvar, alla
+#     A-lösningar ger minst 2. 1a och 1c: samma (min 2). En A-poäng på 1 p är
+#     alltså ett KORTSVAR, och en A-rad med typen redovisning/problem/
+#     resonemang får inte bära (0, 0, 1) eller (1, 2, 1).
+#   * E-ENHET HÖGST 2 P. E-enheter ger 1 eller 2 p i alla fyra kurserna (2a:
+#     45 av 55 ger 1). (3, 0, 0) finns i NP_TRIPPLAR därför att kortsvaren
+#     summerar dit (a, b, c à 1 p, se _dela_poang), och det är det enda
+#     stället en E-rad får bära tre.
+#   * K-POÄNG I KURS 2 BARA I 3-POÄNGSENHETER. 2a: K-enheter om 3 p ×8, 4 p
+#     ×2, 1 p ×1; 2c: 3 p ×9, och formen är alltid 2 + 1 K på EN nivå. En
+#     K-rad i kurs 2 är alltså (0, 3, 0) eller (0, 0, 3). I kurs 1 finns K på
+#     E-nivå och på tvåpoängare (1a ×5, 1c ×6), så regeln stannar vid kurs 2.
+#
+# BARA PROVET, och det är kassettregeln: arbetsbladets och gruppuppgiftens
+# skelett är byte för byte som förut. Provets skelett ÄNDRAS, med flit — det
+# var provets poäng som var fel.
+NP_A_LOSNING_MIN_POANG = 2
+NP_E_ENHET_MAX_POANG = 2
+NP_K_ENHET_POANG = 3
+
+
+def np_form(profil: str, kurs: str = "", antal: int = 0) -> dict | None:
+    """Poängformens regler för ett skelett, eller None när inga gäller
+    (allt utom provet). `k3` är kurs 2:s K-regel; A- och E-reglerna gäller
+    varje prov, för de är desamma i alla fyra mätta kurserna. `kortsvar`
+    säger om en A-rad om (0, 0, 1) får bli ett kortsvar (se
+    NP_KORTSVAR_MIN_ANTAL); annars höjs den till 2 p av _np_stadning."""
+    if profil != "prov":
+        return None
+    niva = niva_rubrik.kursniva(kurs or "")
+    return {"k3": bool(niva and niva[0] == 2),
+            "k_niva": NP_K_NIVA.get(niva_rubrik.kursnyckel(kurs or "") or ""),
+            "kortsvar": antal >= NP_KORTSVAR_MIN_ANTAL}
+
+
+# Nivån en K-rad tar i kurs 2, där mätningen säger vilken. 2a: K-poängen
+# ligger på C 7 gånger och på A 4 (np_uppgiftsprofil k_poang.per_niva), och
+# kursens A-andel är NP:s lägsta (21–24 %): en K-rad om 3 p på A åt upp hela
+# A-bandet på lärarens tolv uppgifter och 23 poäng, och tidsmodellen sa 85
+# minuter om ett pass på 70. 2c: A 6, C 3, och A-bandet (29–30 %) bär det, så
+# där följer K-raden trappan som förut.
+NP_K_NIVA: dict[str, str] = {"2a": "C"}
+
+
+def _np_tripplar(kandidater: list[list[int]], karaktar: str, typ: str,
+                 formaga: str, form: dict | None) -> list[list[int]]:
+    """Kandidaterna som håller poängformen (efter K-skiftet). Tom lista blir
+    aldrig resultatet: går inget igenom lämnas kandidaterna orörda, hellre
+    ett skelett med ett fynd än ett skelett som inte går att bygga."""
+    if not form:
+        return kandidater
+    ut = []
+    for p in kandidater:
+        # En A-rad om exakt en A-poäng är ett KORTSVAR (typen sätts till
+        # rutin av den som väljer trippeln, se _np_kortsvar); det som inte
+        # får finnas är den blandade (1, 2, 1), vars b) blir en 1-poängs
+        # A-lösning när stegringen delas (_dela_poang). På ett prov som är
+        # för litet för A-kortsvar faller (0, 0, 1) bort med.
+        if (karaktar == "A" and typ != "rutin"
+                and 0 < p[2] < NP_A_LOSNING_MIN_POANG
+                and (sum(p) != p[2] or not form.get("kortsvar"))):
+            continue
+        if karaktar == "E" and typ != "rutin" and p[0] > NP_E_ENHET_MAX_POANG:
+            continue
+        if form.get("k3") and formaga == "K" and not (
+                sum(p) == NP_K_ENHET_POANG and sum(1 for v in p if v) == 1):
+            continue
+        ut.append(p)
+    return ut or kandidater
+
+
+def _formagefoljd(antal: int, ordning: tuple[str, ...],
+                  form: dict | None) -> list[str]:
+    """Förmåga per uppgiftsplats: round-robin över `ordning`, roterad ett
+    steg per varv — exakt den följd balanced_skeleton alltid haft.
+
+    MED K-REGELN (kurs 2, prov) hoppas Kommunikation över vartannat varv. En
+    K-rad bär då alltid 3 p, halvannan gång en vanlig rad, och två K-rader på
+    ett prov om 12 uppgifter och 23 p är 26 % av poängen: över förmågebandets
+    tak (FORMAGA_MAL 25 %) hur poängen än flyttas. Nationella provet löser det
+    på samma sätt: K-poängen är få (4–9 % av poängen i kurs 2) men sitter i
+    stora enheter. Med en K-rad på tolv ligger K på 13 %, nära lärarens
+    sjättedel, och tvåan kommer tillbaka först vid femton uppgifter."""
+    ut: list[str] = []
+    varv = 0
+    while len(ut) < antal:
+        rotation = [ordning[(plats + varv) % len(ordning)]
+                    for plats in range(len(ordning))]
+        if form and form.get("k3") and varv % 2 == 1:
+            rotation = [f for f in rotation if f != "K"]
+        ut += rotation
+        varv += 1
+    return ut[:antal]
+
+
+# Minsta antal uppgifter på provet för att en A-rad om (0, 0, 1) ska bli ett
+# kortsvar i stället för att höjas till 2 p. Kortsvaren står först i Del B
+# och ett A-kortsvar sist bland dem; i en Del B om fyra rader (sex–sju
+# uppgifter) hamnar det då i första halvan, och validate_ordning mäter
+# «lättare mot slutet» på ett papper som är byggt rätt. Från åtta uppgifter
+# har Del B fem rader och lösningarna efter blocket väger upp det.
+NP_KORTSVAR_MIN_ANTAL = 8
+
+
+def _np_kortsvar(typ: str, poang: list[int], form: dict | None) -> str:
+    """Typen en rad får med sin trippel: en A-rad om exakt en A-poäng är ett
+    kortsvar. 2a: alla elva A-enheter på 1 p är kortsvar, och hälften av
+    kursens A-enheter är det (11 av 22), så det är NP:s vanligaste A-form
+    och inte ett undantag. Raden sorteras in i kortsvarsblocket av
+    delindelningen som varje annan rutinrad."""
+    if (form and form.get("kortsvar") and typ != "rutin"
+            and poang[2] == 1 and sum(poang) == 1):
+        return "rutin"
+    return typ
+
+
+def _np_stadning(slots: list[dict], form: dict | None) -> None:
+    """Delindelningen skriver om rutinrader till redovisning (Del C har inga
+    kortsvar, kortsvarstaket i Del B): en E-rutinrad om (3, 0, 0) blir då en
+    E-lösning om 3 p, och ett A-kortsvar om (0, 0, 1) en A-lösning om 1 p.
+    Regeln ovan gäller raden som den BLEV, så poängen följer med typen."""
+    if not form:
+        return
+    for s in slots:
+        if s["typ"] == "rutin":
+            continue
+        kar = _karaktar(s["poang"])
+        if kar == "E" and s["poang"][0] > NP_E_ENHET_MAX_POANG:
+            s["poang"][0] = NP_E_ENHET_MAX_POANG
+        if kar == "A" and s["poang"][2] < NP_A_LOSNING_MIN_POANG:
+            s["poang"][2] = NP_A_LOSNING_MIN_POANG
+
+
 def _lagliga_tripplar(karaktar: str, formaga: str,
-                      rent: str | None) -> list[list[int]]:
+                      rent: str | None, form: dict | None = None,
+                      typ: str = "") -> list[list[int]]:
     """NP-tripplarna en skelettrad får bära, i NP:s egen frekvensordning och
     med radens båda undantag inbakade: det rena nivåpapprets filter och
     K-radens «ingen EK-poäng finns». Samma urval som konstruktionen i
@@ -2258,11 +2420,11 @@ def _lagliga_tripplar(karaktar: str, formaga: str,
         if _karaktar(p) != karaktar:
             continue
         ut.append(p)
-    return ut
+    return _np_tripplar(ut, karaktar, typ, formaga, form)
 
 
 def _banta_skelett(slots: list[dict], tak: int,
-                   rent: str | None = None) -> None:
+                   rent: str | None = None, form: dict | None = None) -> None:
     """Byt dyra NP-tripplar mot billigare tills summan ryms under `tak`.
     Muterar `slots` på plats, före delindelningen.
 
@@ -2292,10 +2454,15 @@ def _banta_skelett(slots: list[dict], tak: int,
             nu = sum(slots[i]["poang"])
             billigare = [p for p in _lagliga_tripplar(slots[i]["karaktar"],
                                                       slots[i]["formaga"],
-                                                      rent)
+                                                      rent, form,
+                                                      slots[i]["typ"])
                          if sum(p) < nu]
             if billigare:
                 slots[i]["poang"] = max(billigare, key=sum)
+                # Bantas en A-lösning ner till en A-poäng blir den ett
+                # kortsvar, som i konstruktionen (_np_kortsvar).
+                slots[i]["typ"] = _np_kortsvar(slots[i]["typ"],
+                                               slots[i]["poang"], form)
                 break
         else:
             return        # inget att banta: närmast möjliga summa är den här
@@ -2378,11 +2545,19 @@ def balanced_skeleton(antal: int, profil: str = "prov",
     if rent and any(v for j, v in enumerate(mix)
                     if j != NIVAER_STORA.index(rent)):
         rent = None                   # bandet är rent men mixen blandad
+    form = np_form(profil, kurs, len(karaktarer))
+    formagor = _formagefoljd(len(karaktarer), ordning, form)
+    # A-kortsvaren ställer sig sist i kortsvarsblocket, och blocket måste
+    # BÖRJA med ett E-kortsvar (MIN_START_E, och ett kortsvar bär en nivå):
+    # utan en enda E-rad i Begrepp eller Procedur (C/A-tunga nivåval) blir
+    # (0, 0, 1) i stället en A-lösning om 2 p (_np_stadning).
+    if form and not any(kar == "E" and f in ("B", "P")
+                        for kar, f in zip(karaktarer, formagor)):
+        form["kortsvar"] = False
     slots: list[dict] = []
     raknat = {"E": 0, "C": 0, "A": 0}
     for i, kar in enumerate(karaktarer):
-        varv, plats = divmod(i, len(ordning))
-        f = ordning[(plats + varv) % len(ordning)]
+        f = formagor[i]
         # Kommunikation har ingen E-nivå (uppmätt över de fyra proven i
         # niva_rubrik.ANALYSERADE_PROV: CK och AK förekommer, EK aldrig). En
         # K-uppgift som lottats till E-karaktär skulle bli värd noll poäng —
@@ -2390,18 +2565,31 @@ def balanced_skeleton(antal: int, profil: str = "prov",
         # skevheten det ger i nivåandelarna.
         if f == "K" and kar == "E":
             kar = "C"
+        # Kursens egen K-nivå (NP_K_NIVA): samma sorts lyft som raden ovan,
+        # och nivåsökningen städar skevheten på samma sätt.
+        if f == "K" and form and form.get("k_niva") and not rent:
+            kar = form["k_niva"]
         tripplar = niva_rubrik.NP_TRIPPLAR[kar]
         if rent:
             i_rent = NIVAER_STORA.index(rent)
             tripplar = [t for t in tripplar
                         if all(v == 0 for j, v in enumerate(t) if j != i_rent)]
-        poang = list(tripplar[raknat[kar] % len(tripplar)])
+        kandidater = []
+        for t in tripplar:
+            p = list(t)
+            if f == "K" and p[0]:
+                p[1] += p[0]               # samma skäl: ingen EK-poäng finns
+                p[0] = 0
+            kandidater.append(p)
+        typ = _skelett_typ(f, kar)
+        # NP:s poängform per rad (se np_form): på provet får en A-lösning inte
+        # bära (0, 0, 1) och en K-rad i kurs 2 bär alltid 3 p. Utan form är
+        # listan orörd och rotationen byte för byte som förut.
+        kandidater = _np_tripplar(kandidater, kar, typ, f, form)
+        poang = list(kandidater[raknat[kar] % len(kandidater)])
         raknat[kar] += 1
-        if f == "K" and poang[0]:
-            poang[1] += poang[0]           # samma skäl: ingen EK-poäng finns
-            poang[0] = 0
         slots.append({"del": None, "formaga": f, "karaktar": kar,
-                      "typ": _skelett_typ(f, kar), "poang": poang})
+                      "typ": _np_kortsvar(typ, poang, form), "poang": poang})
 
     # POÄNGTAKET (2026-09-19): passets egen gräns, räknad ur lärarens takt
     # (poang_tak_for). Bantningen sker HÄR, före delindelningen, därför att
@@ -2412,7 +2600,7 @@ def balanced_skeleton(antal: int, profil: str = "prov",
     # inspelad prompt orörd: skelettet är byte för byte det som byggdes förut
     # så länge ingen skickar ett tak.
     if poang_tak is not None:
-        _banta_skelett(slots, int(poang_tak), rent)
+        _banta_skelett(slots, int(poang_tak), rent, form)
 
     if delar:
         del_b: list[dict] = []
@@ -2457,13 +2645,13 @@ def balanced_skeleton(antal: int, profil: str = "prov",
             s["typ"] = _EJ_RUTIN.get(s["formaga"], "redovisning")
         del_b_kort = del_b_kort[:tak]
         slots = (del_b_kort
-                 + _varva([s for s in del_b if s["typ"] != "rutin"])
-                 + _varva(del_c))
+                 + _varva([s for s in del_b if s["typ"] != "rutin"], form)
+                 + _varva(del_c, form))
     else:
         # Platt dokument: samma stigande ordning, ingen delindelning.
         # Gruppuppgiften mäts inte på stigande svårighet (fyra ingångar, inte en
         # trappa) men tar ingen skada av att ändå ligga lätt först.
-        slots = _varva(slots)
+        slots = _varva(slots, form)
 
     # Rutinuppgiften: validate_balance kräver EN i varje dokument (också i
     # gruppuppgiften — läraren ska kunna se att någon del går att svara på
@@ -2482,11 +2670,12 @@ def balanced_skeleton(antal: int, profil: str = "prov",
                                             FORMAGE_ORDNING.index(s["formaga"])))
         lattast["typ"] = "rutin"
 
+    _np_stadning(slots, form)
     for s in slots:
         s.pop("karaktar")
 
     _justera_skelett(slots, profil, niva_mal=niva_mal, kurs=kurs,
-                     poang_tak=poang_tak)
+                     poang_tak=poang_tak, form=form)
     if profil == "prov":
         _dela_i_deluppgifter(slots)
     return slots
@@ -2961,8 +3150,9 @@ TAKSTRAFF = 10.0
 
 def _straff(slots: list[dict], profil: str,
             niva_mal: dict | None = None, kurs: str = "",
-            poang_tak: int | None = None) -> float:
-    """Hur långt skelettet ligger från målen, som ETT tal.
+            poang_tak: int | None = None, brett: bool = False) -> float:
+    """Hur långt skelettet ligger från målen, som ETT tal. `brett` byter
+    kursens hårda band mot valideringens (se _justera_skelett).
 
     Kvadrerade avstånd till bandkanterna (noll inuti bandet) plus en liten
     avgift per ordningsfel. Poängen med ett mått i stället för en fellista är
@@ -2979,7 +3169,8 @@ def _straff(slots: list[dict], profil: str,
     # den vet vilken av dem den bygger. Valideringen behåller det breda bandet
     # — den ska fälla ett prov som är fel, inte ett som är en annan kurs.
     eget_val = niva_mal is not None
-    if not eget_val and profil == "prov" and niva_rubrik.kursnyckel(kurs):
+    if (not eget_val and not brett and profil == "prov"
+            and niva_rubrik.kursnyckel(kurs)):
         niva_mal = niva_rubrik.niva_mal_prov(kurs=kurs)
     nm = niva_mal or prof_nm
     doc = _skeleton_doc(slots)
@@ -3072,7 +3263,8 @@ def stangda_nivaer(niva_mal: dict | None) -> tuple[int, ...]:
 
 
 def _drag(slots: list[dict],
-          stangda: tuple[int, ...] = ()) -> list[tuple[int, int, int]]:
+          stangda: tuple[int, ...] = (),
+          form: dict | None = None) -> list[tuple[int, int, int]]:
     """Tillåtna enpoängsdrag: (uppgift, nivå, ±1).
 
     Dragen får ALDRIG ändra en uppgifts karaktär (högsta nivå med poäng). Det
@@ -3109,13 +3301,34 @@ def _drag(slots: list[dict],
                     continue
                 if _karaktar(provad) != _karaktar(p):
                     continue
+                # NP:S POÄNGFORM (np_form): sökningen får inte ta tillbaka
+                # det konstruktionen gav. En K-rad i kurs 2 står stilla på
+                # sina 3 p; en A-lösning behåller minst 2 A-poäng; en
+                # E-lösning stannar på högst 2.
+                if form and sl["typ"] != "rutin":
+                    if form.get("k3") and sl["formaga"] == "K":
+                        continue
+                    if (_karaktar(p) == "A"
+                            and provad[2] < NP_A_LOSNING_MIN_POANG):
+                        continue
+                    if (_karaktar(p) == "E"
+                            and provad[0] > NP_E_ENHET_MAX_POANG):
+                        continue
+                # Ett kortsvar bär EN nivå: (1/0/0), (0/2/0), (0/0/1) och deras
+                # a/b-par. Ett A-kortsvar som fått en E-poäng på köpet är
+                # ingen NP-form, och delningen (_dela_poang) vet inte vad den
+                # ska göra med det.
+                if form and sl["typ"] == "rutin" and idx != NIVAER_STORA.index(
+                        _karaktar(p)):
+                    continue
                 ut.append((i, idx, delta))
     return ut
 
 
 def _justera_skelett(slots: list[dict], profil: str = "prov",
                      varv: int = 200, niva_mal: dict | None = None,
-                     kurs: str = "", poang_tak: int | None = None) -> bool:
+                     kurs: str = "", poang_tak: int | None = None,
+                     form: dict | None = None) -> bool:
     """Sök poängen fria från balansfel med enpoängsdrag, ett i taget, alltid
     det som sänker straffet mest. Returnerar True när skelettet är rent.
 
@@ -3124,23 +3337,87 @@ def _justera_skelett(slots: list[dict], profil: str = "prov",
     fastna i ett lokalt minimum — då lämnas skelettet som det är, och
     reparationsloopen i exam_gen får ta vid. Det är samma kontrakt som förut,
     fast utan pingpongen."""
-    nuvarande = _straff(slots, profil, niva_mal, kurs, poang_tak)
     stangda = stangda_nivaer(niva_mal)
-    for _ in range(varv):
-        if nuvarande <= 0:
-            return True
-        basta = None
-        for i, idx, delta in _drag(slots, stangda):
+
+    def sok(brett: bool) -> float:
+        nuvarande = _straff(slots, profil, niva_mal, kurs, poang_tak, brett)
+        for _ in range(varv):
+            if nuvarande <= 0:
+                break
+            basta = None
+            for i, idx, delta in _drag(slots, stangda, form):
+                slots[i]["poang"][idx] += delta
+                varde = _straff(slots, profil, niva_mal, kurs, poang_tak, brett)
+                slots[i]["poang"][idx] -= delta
+                if varde < nuvarande - 1e-12 and (basta is None
+                                                  or varde < basta[0]):
+                    basta = (varde, i, idx, delta)
+            if basta is None:
+                break
+            _, i, idx, delta = basta
             slots[i]["poang"][idx] += delta
-            varde = _straff(slots, profil, niva_mal, kurs, poang_tak)
-            slots[i]["poang"][idx] -= delta
-            if varde < nuvarande - 1e-12 and (basta is None or varde < basta[0]):
-                basta = (varde, i, idx, delta)
-        if basta is None:
-            break
-        _, i, idx, delta = basta
-        slots[i]["poang"][idx] += delta
-        nuvarande = basta[0]
+            nuvarande = basta[0]
+        return nuvarande
+
+    def sok_par(brett: bool, nuvarande: float, varv_par: int = 6) -> float:
+        """PARDRAG när enpoängsdragen tagit slut: +1 på en rad och −1 på en
+        annan i SAMMA steg. Med poängformen (np_form) är fler rader låsta i
+        botten (A-lösningar om 2, K-rader om 3), så när summan ligger på
+        taket, eller när ett bandbrott bara kan bytas mot ett annat, kan
+        ingen enskild poäng flyttas med vinst, medan paret «PL +1, P −1»
+        lagar bandet och håller summan. Kostnaden är kvadratisk i antalet
+        drag och betalas bara när sökningen redan fastnat. Samma fallback
+        med och utan tak, med flit: «Uppskatta tiden» (utan tak) och
+        «Föreslå antal» (med) ska bygga samma skelett när taket inte
+        biter."""
+        for _ in range(varv_par):
+            if nuvarande <= 0:
+                break
+            basta = None
+            drag = _drag(slots, stangda, form)
+            for i, idx, d in drag:
+                if d != 1:
+                    continue
+                slots[i]["poang"][idx] += 1
+                for j, jdx, e in _drag(slots, stangda, form):
+                    if e != -1 or j == i:
+                        continue
+                    slots[j]["poang"][jdx] -= 1
+                    varde = _straff(slots, profil, niva_mal, kurs, poang_tak,
+                                    brett)
+                    slots[j]["poang"][jdx] += 1
+                    if varde < nuvarande - 1e-12 and (basta is None
+                                                      or varde < basta[0]):
+                        basta = (varde, i, idx, j, jdx)
+                slots[i]["poang"][idx] -= 1
+            if basta is None:
+                break
+            _, i, idx, j, jdx = basta
+            slots[i]["poang"][idx] += 1
+            slots[j]["poang"][jdx] -= 1
+            nuvarande = sok(brett)
+        return nuvarande
+
+    nuvarande = sok(brett=False)
+    # Båda reservvarven nedan gäller BARA provet (form): arbetsbladets och
+    # gruppuppgiftens sökning slutar där den alltid slutat (kassettregeln).
+    if nuvarande > 0 and form:
+        nuvarande = sok_par(False, nuvarande)
+    # ANDRA VARVET MOT DET BREDA BANDET (2026-09-22). Med kursens smala band
+    # som hårt mål fastnar sökningen på små prov sedan poängformen (np_form)
+    # låst A-lösningar vid minst 2 p och K-rader i kurs 2 vid 3 p: ett
+    # sexradigt 2a-prov kan ha Problemlösning under 10 % OCH kursens A-tak
+    # inom räckhåll för samma enda poäng, och varje enskilt drag byter det ena
+    # bandbrottet mot det andra. Valideringen kräver bara det breda bandet
+    # (NIVA_MAL), så sökningen får fortsätta mot DET från den punkt där den
+    # fastnade; kursens spann drar fortfarande, mjukt (fordelning-termen i
+    # _straff). Nås kursens band går varvet aldrig hit, och skelettet är
+    # byte för byte som förut.
+    if (nuvarande > 0 and form and niva_mal is None
+            and niva_rubrik.kursnyckel(kurs)):
+        nuvarande = sok(brett=True)
+        if nuvarande > 0:
+            nuvarande = sok_par(True, nuvarande)
     return nuvarande <= 0
 
 

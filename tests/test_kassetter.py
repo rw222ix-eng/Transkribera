@@ -353,6 +353,16 @@ def test_delmomentsdomen_ur_kassetten_gar_hela_vagen(fejk_claude):
     assert all("Byt UT den" in f["message"] for f in fel)
 
 
+# BANDET ÄR INSPELAT FÖRE NP-VAKTERNA (app/np_vakter.py, 2026-09-22). Dess
+# uppgift 4 är en A-lösning om 1 p med fem räknesteg och ett dolt
+# motiveringskrav, och 5b har fyra steg på 1 p: fynd som täckningspasset och
+# slutgrinden nu ber om reparation för, och bandet svarar likadant, så
+# rundorna blir sex och pappret som levereras är ett senare svar på bandet
+# (utan talsignalen på uppgift 6). Talen nedan gäller igen när bandet spelas
+# om skarpt (tools/spela_in_kassett.py); `strict` gör att omspelningen märks
+# här och markören tas bort.
+@pytest.mark.xfail(strict=True,
+                   reason="prov.json är inspelad före NP-vakterna; spela om")
 def test_provbandet_gar_genom_bada_domarna_och_talvakten(fejk_claude):
     """Auto-läget lägger i räknedomarens band när prompten ber om en räknedom.
     Två saker prövas, och båda är mätta på det SKARPA provbandet:

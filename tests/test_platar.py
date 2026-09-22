@@ -289,7 +289,10 @@ def test_arbetsbladets_schema_ryms_med_drillfaltet():
     # PROVET, med och utan: samma tal, för taket offrar fältet i stället för
     # tvånget (exam_spec.to_response_format).
     assert _schemalangd("prov", 20) == _schemalangd("prov", 20, drillar=True)
-    assert _schemalangd("prov", 20) == 29844, "provets mått har rört sig"
+    # 29 844 fram till 2026-09-22; 28 616 sedan poängformen (exam_spec.np_form)
+    # tog bort de blandade A-tripplarna ((1, 2, 1) delas inte längre) och
+    # gjorde 1-poängs-A till kortsvar: färre deluppgiftsgrenar i grammatiken.
+    assert _schemalangd("prov", 20) == 28616, "provets mått har rört sig"
 
 
 def _ref_i_faltkarta(nod, karta=False):

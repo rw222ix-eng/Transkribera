@@ -18,7 +18,8 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
 
-from app import course_data, exam_spec, llm_client, niva_rubrik, rakneverk
+from app import (course_data, exam_spec, llm_client, niva_rubrik, np_vakter,
+                 rakneverk)
 
 MAX_ROUNDS = 3          # generering + balansreparation (delad budget)
 MAX_LATEX_ROUNDS = 2    # kompileringsfel → korrigering
@@ -7992,7 +7993,11 @@ def _raknade_fynd(exam: dict, *, avsnitt: list[dict] | None, antal: int | None,
     if profil == "prov":
         fel += (a_nivavakt(exam) + kravradsvakt(exam)
                 + rubrikordsvakt(exam, kurs)
-                + likvardighetsvakt(exam, referensprov))
+                + likvardighetsvakt(exam, referensprov)
+                # NP-formen (2026-09-22, prov 88): steg per poäng, poängform,
+                # metodföreskrift, parametrar, kursgräns, modellfamilj, dolt
+                # krav. Mätningen och reglerna står i app/np_vakter.py.
+                + np_vakter.np_vakter(exam, kurs))
     return fel + scenvakt(exam)
 
 
@@ -8710,7 +8715,7 @@ def _raknas_om(fel: dict) -> bool:
     if kod in ("avsnittstackning", "poangvakt", "avsnittsniva", "avsnittsvikt",
                "avsnittsmarkning", "delmomentvikt", "delmomentmarkning",
                "citackning", "citaggning", "anivavakt", "kravrad",
-               "rubrikord", "likvardighet", "scenvakt"):
+               "rubrikord", "likvardighet", "scenvakt") + np_vakter.KODER:
         return True
     if kod == "delmomenttackning":
         return path == "uppgifter"

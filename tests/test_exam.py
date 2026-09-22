@@ -72,8 +72,13 @@ def _exam() -> dict:
              "bedomning": "+1 E ansats\n+1 C korrekt kvadratkomplettering\n"
                           "+1 A generell metod"},
             {"del": "C", "formaga": "PL", "typ": "problem", "poang": [1, 1, 1],
+             # «Motivera» står i texten därför att A-raden nedan kräver en
+             # motivering: ett krav bedömningen ställer utan att uppgiften
+             # ber om det är ett dolt krav (app/np_vakter.doltkravvakt,
+             # lärarens dom över prov 88 uppgift 11), och fixturen är den
+             # kanoniskt giltiga.
              "text": "En rektangulär hage har omkretsen 60 m. Bestäm de mått "
-                     "som maximerar arean.",
+                     "som maximerar arean. Motivera ditt svar.",
              "innehall": ["optimering", "andragradsfunktioner"],
              "losning": "Kvadrat $15 \\times 15$ m ger max.",
              "bedomning": "+1 E tecknar arean\n+1 C löser ut måtten\n"
@@ -1894,9 +1899,16 @@ def test_generate_flode_undantar_arbetsblad_fran_variation():
 
 
 def test_generate_exam_repairs_imbalance():
+    """Obalansen är HELA felet: två E-poäng på varje rad, inte tre, för en
+    E-lösning om 3 p är ett eget fynd (np_vakter.poangformvakt) som skulle
+    kosta en runda till i täckningspasset och göra räkningen till något
+    annat än en balansreparation."""
     bad = _exam()
     for u in bad["uppgifter"]:
-        u["poang"] = [3, 0, 0]
+        # K-raden behåller sina 3 C-poäng: EK-poäng finns inte i kurs 2 och
+        # är ett eget fynd (np_vakter), och slutgrinden lagar räknade fynd i
+        # en extra runda som här hade räknats som en balansrunda.
+        u["poang"] = [0, 3, 0] if u["formaga"] == "K" else [2, 0, 0]
     llm, calls = _stub_llm([json.dumps(bad), json.dumps(_exam())])
     res = exam_gen.generate_exam("Ma2b", "SA23", [], model="m", llm=llm)
     assert res["rounds"] == 2 and res["errors"] == []
@@ -1905,8 +1917,8 @@ def test_generate_exam_repairs_imbalance():
 
 def test_generate_exam_gives_up_after_budget():
     bad = _exam()
-    for u in bad["uppgifter"]:
-        u["poang"] = [3, 0, 0]
+    for u in bad["uppgifter"]:          # bara obalansen, se testet ovan
+        u["poang"] = [0, 3, 0] if u["formaga"] == "K" else [2, 0, 0]
     llm, calls = _stub_llm([json.dumps(bad)])
     res = exam_gen.generate_exam("Ma2b", "SA23", [], model="m", llm=llm)
     assert res["rounds"] == exam_gen.MAX_ROUNDS
@@ -2740,9 +2752,16 @@ def _bara_e_prov() -> dict:
     beställer."""
     data = _exam()
     data["uppgifter"][6]["formaga"] = "R"
+    # Treorna ligger på KORTSVAR: en E-lösning om 3 p finns inte i NP
+    # (app/np_vakter.poangformvakt, 2026-09-22), ett kortsvar om 3 p är
+    # a/b/c-formen. Sexton poäng med två R-rader kräver två treor, och P-raderna
+    # tål ingen (bandet 10–25 %), så modelleringsuppgiften blir ett kortsvar:
+    # «bestäm när populationen har fördubblats» är ett svar, inte en
+    # redovisning.
+    data["uppgifter"][4]["typ"] = "rutin"
     for u, poang in zip(data["uppgifter"],
-                        [[3, 0, 0], [2, 0, 0], [2, 0, 0], [3, 0, 0],
-                         [2, 0, 0], [2, 0, 0], [2, 0, 0]]):
+                        [[3, 0, 0], [2, 0, 0], [2, 0, 0], [2, 0, 0],
+                         [3, 0, 0], [2, 0, 0], [2, 0, 0]]):
         u["poang"] = poang
         # Poängen flyttades, alltså flyttas trappan med: en rad per poäng, på
         # den nivå poängen faktiskt ligger (exam_gen.bedomningssignaler mäter
@@ -3144,7 +3163,14 @@ def test_np_delordningen_kortsvar_i_del_a_fullstandiga_i_del_b(antal):
     # Ingen rutinrad efter den första fullständiga: blocket är sammanhängande.
     assert typer == sorted(typer, reverse=True), \
         f"kortsvaren ligger utspridda i Del A: {[s['typ'] for s in del_a]}"
-    assert 1 <= sum(typer) <= exam_spec.MAX_LIKA_I_RAD
+    # Blocket är högst KORTSVAR_ANDEL_DEL_A av delen (mätt: 60 % i NpMa2a
+    # vt17). Taket var förut MAX_LIKA_I_RAD, ett arv från samlingens tid;
+    # sedan A-kortsvaren (exam_spec.np_form, 2026-09-22) ställer sig sist i
+    # blocket är det andelen som gäller, som i balanced_skeleton.
+    assert 1 <= sum(typer) <= max(1, round(exam_spec.KORTSVAR_ANDEL_DEL_A
+                                           * len(del_a)))
+    # Ett E-kortsvar först: MIN_START_E, och ett kortsvar bär EN nivå.
+    assert del_a[0]["poang"][0] >= exam_spec.MIN_START_E
 
 
 def test_skelettets_deluppgifter_tvingas_av_grammatiken():
