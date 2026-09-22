@@ -361,26 +361,21 @@ def test_delmomentsdomen_ur_kassetten_gar_hela_vagen(fejk_claude):
 # (utan talsignalen på uppgift 6). Talen nedan gäller igen när bandet spelas
 # om skarpt (tools/spela_in_kassett.py); `strict` gör att omspelningen märks
 # här och markören tas bort.
-@pytest.mark.xfail(strict=True,
-                   reason="prov.json är inspelad före NP-vakterna; spela om")
 def test_provbandet_gar_genom_bada_domarna_och_talvakten(fejk_claude):
-    """Auto-läget lägger i räknedomarens band när prompten ber om en räknedom.
-    Två saker prövas, och båda är mätta på det SKARPA provbandet:
+    """Auto-läget lägger i räknedomarens band när prompten ber om en räknedom,
+    och hela kedjan körs på det SKARPA provbandet (omspelat 2026-09-22 efter
+    NP-mallen, np_vakter och poängformen i skelettet).
 
-    * räknedomaren fäller ingenting där, och lägger alltså ingen runda till —
-      den enda reparationen kommer ur nivådomen (uppgift 6 är poängsatt A och
-      bedöms som C i bandet), precis som före den här domaren fanns.
-    * talvakten tänder på uppgift 6, som ordagrant säger «Avrunda till två
-      decimaler.» Det är frasen som fick hela talarbetet skrivet — den finns
-      inte i något av de tio nationella prov underlaget vilar på, och den kom
-      ändå ut på ett riktigt prov. Bandet är alltså beviset på att vakten
-      behövs, och det står kvar tills ett nytt prov spelas in utan frasen.
-
-    Och sedan grinden (2026-09-07) prövas ett tredje: bandet svarar LIKADANT
-    varje gång, så uppgift 6 fortsätter dömas C hur många rundor den än får.
-    Fyra rundor — en generering, domarpassets och grindens två extra — och
-    sedan bär pappret `nivafel`. Det är exakt det utfall läraren bad om: hellre
-    ett papper som SÄGER att nivån inte gick att säkra än ett som tiger."""
+    * Räknedomaren anropas («Räknar igenom facit») och fäller ingenting.
+    * TALVAKTEN: bandet från 2026-08-22 bar «Avrunda till två decimaler» på
+      uppgift 6, frasen som fick hela talarbetet skrivet. Det omspelade bandet
+      bär den INTE, på någon uppgift — det är talreglernas bevis nu, och
+      testet låser att signalen inte tänds på ett rent papper.
+    * Grinden (2026-09-07) ger nivåfynden två extrarundor, och bandet svarar
+      likadant varje gång, så fynden står kvar och pappret SÄGER det:
+      `nivafel` bär de tre enheterna, i klartext i sista loggraden. Sex
+      rundor: generering, A-nivåvaktens omskrivning, domarpassets runda, två
+      extrarundor, slutkontrollens byte."""
     fejk_claude("auto")
     loggat = []
     res = exam_gen.generate_exam("Matematik 3c", "NA25",
@@ -388,27 +383,13 @@ def test_provbandet_gar_genom_bada_domarna_och_talvakten(fejk_claude):
                                  log_cb=loggat.append)
     assert any("Räknar igenom facit" in r for r in loggat), loggat
     assert [e for e in res["errors"] if e["code"] == "rakning"] == []
-    # SEX rundor sedan 2026-09-19, inte fyra: generering, A-nivåvaktens
-    # omskrivning (a_nivavakt, «2 A-poäng kräver ingen insikt»), domarpassets
-    # runda, grindens två extrarundor och slutkontrollens byte. Bandet svarar
-    # likadant varje gång, så varje pass som får fälla fäller. Räknades om
-    # 2026-09-22 — testet hade stått rött sedan vakterna kom.
     assert res["rounds"] == 6, "grindens och slutkontrollens rundor kördes inte"
-    # Talsignalen är RÄKNAD PÅ DET LEVERERADE PAPPRET. Slutkontrollens byte
-    # kastade den (och nivådomens fynd) tillsammans med den gamla
-    # valideringen, så bandet levererade «Avrunda till två decimaler» utan
-    # varning fast frasen stod kvar. Lagat 2026-09-22: _slutgrind räknar om
-    # signalerna sist av allt, och domarfynden följer med bytet.
-    tal = [e for e in res["errors"] if e["code"] == "talsignal"]
-    assert [e["path"] for e in tal] == ["uppgift 6"]
-    assert "avrunda till ett antal decimaler" in tal[0]["message"]
-    # Grinden gav upp ärligt: uppgiften står kvar, och den står i klartext.
-    assert [(f["nr"], f["pastadd"], f["domd"]) for f in res["nivafel"]] \
-        == [("6", "A", "C")]
-    assert loggat[-1] == "Nivån gick inte att säkra på uppgift 6."
-    # …och fyndet ligger kvar i fellistan, som är klientens `provFel`.
-    assert [e["path"] for e in res["errors"] if e["code"] == "niva"] \
-        == ["uppgift 6"]
+    assert [e for e in res["errors"] if e["code"] == "talsignal"] == []
+    # Grinden gav upp ärligt: enheterna står kvar, och de står i klartext.
+    assert [(f["nr"], f["pastadd"], f["domd"]) for f in res["nivafel"]]         == [("5", "C", "A"), ("6a", "C", "E"), ("6b", "A", "C")]
+    assert loggat[-1] == "Nivån gick inte att säkra på uppgift 5, 6a, 6b."
+    # …och fynden ligger kvar i fellistan, som är klientens `provFel`.
+    assert [e["path"] for e in res["errors"] if e["code"] == "niva"]         == ["uppgift 5", "uppgift 6a", "uppgift 6b"]
 
 
 def test_insikterna_ur_den_skarpa_kassetten_bar_inga_namn(fejk_claude):

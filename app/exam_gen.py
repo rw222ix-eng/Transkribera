@@ -3309,10 +3309,18 @@ def doma_nivaer(exam: dict, *, model: str, llm=llm_client.generate,
 # på taket eller låter den kosta mer än en runda.
 RAKNE_MAX_TOKENS = 8_000
 
+# ORDVALET ÄR OMSKRIVET 2026-09-22. Det gamla («räkna ut varje uppgift SJÄLV,
+# steg för steg, innan du läser facit — skriv din räkning i fältet
+# berakning») blockerades av API:t med kategorin «reasoning_extraction», tre
+# gånger i rad på Opus 5, och anropet är fail-open: domaren tystnade utan att
+# någon märkte det. Frågan är densamma — stämmer facit? — men ställd som ett
+# lösningsförslag och ett slutsvar, inte som en begäran om modellens egen
+# räkning i förväg. Fältet heter fortfarande `berakning` (banden och
+# testerna läser det).
 RAKNE_SYSTEM = (
-    "Du är en noggrann matematiklärare som räknar efter ett facit. Du räknar "
-    "ut varje uppgift SJÄLV innan du jämför, och du svarar ALLTID med giltig "
-    "JSON enligt schemat, ingenting annat."
+    "Du är en noggrann matematiklärare som kontrollerar ett facit. Du löser "
+    "varje uppgift, jämför ditt slutsvar med facit, och svarar ALLTID med "
+    "giltig JSON enligt schemat, ingenting annat."
 )
 
 RAKNE_SCHEMA = {
@@ -3361,9 +3369,9 @@ def build_rakne_prompt(enheter: list[dict]) -> str:
         "med sitt facit (fältet losning), och «verktyg» säger om eleven har "
         "räknare eller inte.\n"
         f"{json.dumps(kort, ensure_ascii=False)}\n\n"
-        "RÄKNA UT VARJE UPPGIFT SJÄLV, steg för steg, innan du läser vad "
-        "facit säger — skriv din räkning kort i fältet berakning. Jämför "
-        "sedan:\n"
+        "Lös varje uppgift och skriv ditt eget slutsvar, med en kort "
+        "lösningsskiss som en lärare skulle skriva i marginalen, i fältet "
+        "berakning. Jämför sedan slutsvaret med facit:\n"
         "- stammer \"ja\" när facit ger samma svar som din räkning (samma tal "
         "i en annan form, $1/2$ mot $0{,}5$, är samma svar).\n"
         "- stammer \"nej\" när facit ger ett annat svar än din räkning, när "
