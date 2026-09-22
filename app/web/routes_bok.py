@@ -232,6 +232,31 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     raise RuntimeError("Språkmodellen är inte installerad.")
                 conn2 = _db()
                 try:
+                    # ── OLÄSTA SIDOR LÄSES, INTE HOPPAS ÖVER ──────────
+                    # `olasta_uppg` fanns för att INGENTING ska gissas fram ur
+                    # en sida ingen läst — och det gäller fortfarande. Men att
+                    # svara «sidan är inte inläst» när läraren just bett om
+                    # lösningarna är att lämna arbetet halvgjort: sidorna går
+                    # att läsa, tavlan gör det redan själv inne i sitt jobb
+                    # (routes_planning.bok_las_text), och det är samma
+                    # sekunder här. Skarpt 2026-09-22: BA26B:s s. 58–60 var
+                    # olästa, och arken hade blivit tomma platshållare.
+                    # Redan lästa sidor kostar ingenting (las_spann läser bara
+                    # det som saknas). Faller läsningen — en sida som inte går
+                    # att rendera, en modell som säger nej — står `olasta_uppg`
+                    # kvar som förut och arket säger det.
+                    if bok_mod.olasta(conn2, bok_id, sidnr[0], sidnr[-1]):
+                        emit({"type": "log",
+                              "msg": "Några av sidorna är inte inlästa — "
+                                     "läser dem först."})
+                        try:
+                            bok_mod.las_spann(base, conn2, bok_id, sidnr[0],
+                                              sidnr[-1], emit=emit)
+                        except Exception as fel:          # noqa: BLE001
+                            emit({"type": "log",
+                                  "msg": f"Läsningen gick inte hela vägen "
+                                         f"({fel}) — skriver lösningar till "
+                                         f"de sidor som finns."})
                     sidor = [s for s in db.bok_sidor(
                         conn2, bok_id, sidnr[0], sidnr[-1])
                         if s["sida"] in set(sidnr)]

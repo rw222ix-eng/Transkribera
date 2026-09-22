@@ -1332,15 +1332,54 @@ def test_losningsrutten_sager_vilka_uppgifter_som_inte_fick_plats(
     assert res["olasta_uppg"] == []
 
 
-def test_losningsrutten_sager_ifran_nar_sidorna_ar_olasta(client, ocr):
-    """En oläst sida ger inga lösningar — och numren måste ändå hem: klienten
-    stämplar posterna på pappret så att nästa öppning inte frågar igen."""
+def test_losningsrutten_laser_sidorna_som_saknar_text(client, ocr, monkeypatch):
+    """En oläst sida LÄSES — den gissas fortfarande inte fram.
+
+    Rutten svarade förut «olasta_uppg» och lämnade arket med platshållare, fast
+    sidorna gick att läsa och tavlan redan läser sina egna inne i sitt jobb
+    (routes_planning.bok_las_text). Skarpt 2026-09-22: BA26B:s s. 58–60 var
+    lästa bara med faktapasset, och lösningsarken hade blivit tomma."""
+    from app import bok_losning
+
+    b = _importera(client)
+    # BARA faktapasset: uppgiftsnumren finns, sidtexten gör det inte.
+    _done(client.post(f"/api/bocker/{b['id']}/las",
+                      json={"fran": 10, "till": 11, "bara": "fakta"}))
+    uppg = [u["nr"] for u in
+            client.get(f"/api/bocker/{b['id']}/uppslag?fran=10&till=11")
+            .json()["uppgifter"]]
+    assert not ocr.text                      # ingen sidtext läst ännu
+
+    riktig = bok_losning.generate_losningar
+
+    def fejk_llm(model, prompt, **k):
+        return json.dumps({"poster": [
+            {"nr": nr, "text": f"Uppgift {nr}.", "svar": "$1$", "vag": []}
+            for nr in uppg if str(nr) in prompt]})
+
+    monkeypatch.setattr(bok_losning, "generate_losningar",
+                        lambda *a, **k: riktig(*a, **dict(k, llm=fejk_llm)))
+    res = _done(client.post(f"/api/bocker/{b['id']}/losningar",
+                            json={"uppg": uppg}))
+    assert ocr.text                          # sidorna lästes av rutten
+    assert [p["nr"] for p in res["poster"]] == uppg
+    assert res["olasta_uppg"] == []
+
+
+def test_losningsrutten_sager_ifran_nar_sidan_inte_gar_att_lasa(
+        client, ocr, monkeypatch):
+    """Går texten inte att få fram gissas ingenting: numren kommer hem i
+    `olasta_uppg`, och klienten stämplar posterna så att nästa öppning inte
+    frågar igen. Det var hela poängen med fältet."""
     b = _importera(client)
     _done(client.post(f"/api/bocker/{b['id']}/las",
                       json={"fran": 10, "till": 11, "bara": "fakta"}))
     uppg = [u["nr"] for u in
             client.get(f"/api/bocker/{b['id']}/uppslag?fran=10&till=11")
             .json()["uppgifter"]]
+    monkeypatch.setattr(bok_ocr, "las_sidtext",
+                        lambda *a, **k: (_ for _ in ()).throw(
+                            RuntimeError("sidan gick inte att rendera")))
     res = _done(client.post(f"/api/bocker/{b['id']}/losningar",
                             json={"uppg": uppg}))
     assert res["poster"] == []
