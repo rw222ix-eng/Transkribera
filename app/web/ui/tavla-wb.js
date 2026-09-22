@@ -2014,15 +2014,29 @@ function scaleSections(sections, s) {
     'width', 'height', 'cellW', 'cellH', 'digitSize',
     'labelSize', 'thickness',
   ]);
+  /* ── SPALTBREDDEN VÄXER INTE MED TEXTEN ─────────────────
+     `row` och `col` är LAYOUT, inte innehåll: deras `width` är en bit av
+     tavlan, och tavlan blir inte bredare av att texten blir större. Att
+     skala den med allt annat gjorde uppskalning omöjlig så fort vänstern
+     hade sitt skelett — två col à 400 i en row blir 2 × 520 vid 130 %, och
+     `fits()` mäter bredden mot tavlans 832 px. Vänstern stod därför kvar i
+     storlek 1 med nedre tredjedelen tom medan högerns kolumner gick till
+     160 % (mätt 2026-09-21, sett igen 2026-09-22).
+     NEDÅT skalas bredden som förut: krymper raden för att den är för bred
+     är det just bredden som ska ge efter, och det beteendet ska vara byte
+     för byte det gamla. */
+  const containerBredd = (v) => s > 1 && (v.kind === 'row' || v.kind === 'col');
   const round = (v) => Math.max(1, Math.round(v * s * 100) / 100);
   const walk = (v) => {
     if (v == null) return v;
     if (Array.isArray(v)) return v.map(walk);
     if (typeof v === 'object') {
       const out = {};
+      const fastBredd = containerBredd(v);
       for (const k of Object.keys(v)) {
         const val = v[k];
-        if (typeof val === 'number' && SIZE_KEYS.has(k)) {
+        if (typeof val === 'number' && SIZE_KEYS.has(k)
+            && !(fastBredd && k === 'width')) {
           out[k] = round(val);
         } else {
           out[k] = walk(val);
@@ -2064,6 +2078,15 @@ function scaleSections(sections, s) {
    på servern finns ingen renderare. Så repareras överlappen också. */
 const KRYMPGRANS = 0.85;
 
+/* Spillvakten i fit-passet (se tryOnce): en behållare räknas som en SPALT
+   först vid den här bredden, och några pixlar över kanten är inget spill.
+   Etikettstaplarna i vänsterns begreppsrader är 110–170 px breda och ligger
+   ett par pixlar utanför sin egen ruta i var och varannan tavla — mätt
+   2026-09-22, och det har alltid sett rätt ut. Det som inte får hända är att
+   en formel hamnar utanför vänsterns halva, och halvorna är 400 px. */
+const SPALT_MINBREDD = 200;
+const SPILL_SLACK = 4;
+
 function krympvarning(skala) {
   return skala < KRYMPGRANS;
 }
@@ -2102,15 +2125,35 @@ function layoutFlowFit(sections, board, opts, debugName = '') {
       const w = nodeLeft - opts.x0 + (n._intrinsicSize?.w ?? n.offsetWidth);
       if (w > maxW) maxW = w;
     }
-    return { ...res, maxW };
+    /* ── SPILLET INNE I EN SPALT ────────────────────────────
+       `maxW` mäter bara de yttre elementen, och en row/col med satt `width`
+       är exakt så bred som specen säger hur brett innehållet än är. Sedan
+       spaltbredden slutade växa med texten (scaleSections) är det just där
+       en uppskalning kan gå fel: en math-rad bryter inte, så 130 % kan lägga
+       formeln utanför sin 400 px-spalt utan att bredden ändras. Mätningen är
+       nodens egen — scrollWidth är innehållet, clientWidth är lådan. */
+    let spill = false;
+    for (const n of tracked) {
+      if (spill) break;
+      for (const d of n.querySelectorAll ? n.querySelectorAll('.wb-del') : []) {
+        /* Bara de RIKTIGA spalterna. En etikettstapel på 170 px ligger några
+           pixlar utanför sin egen ruta i var och varannan tavla — det har den
+           alltid gjort och det syns inte. Vakten frågar om en formel hamnar
+           utanför vänsterns halva, och den halvan är bred. */
+        const bredd = parseFloat(d.style.width) || 0;
+        if (bredd < SPALT_MINBREDD) continue;
+        if (d.scrollWidth > d.clientWidth + SPILL_SLACK) { spill = true; break; }
+      }
+    }
+    return { ...res, maxW, spill };
   };
 
   // Width budget is the column/row width. Leave 2px slop for sub-pixel
   // rounding and handwriting jitter.
   const widthBudget = opts.width + 2;
-  const fits = (r) => r.height <= budget && r.maxW <= widthBudget;
+  const fits = (r) => r.height <= budget && r.maxW <= widthBudget && !r.spill;
   const heightFits = (r) => r.height <= budget;
-  const widthFits = (r) => r.maxW <= widthBudget;
+  const widthFits = (r) => r.maxW <= widthBudget && !r.spill;
 
   // 1) Probe at scale=1 to see which direction we need to move.
   let scale = 1;
@@ -2162,7 +2205,9 @@ function layoutFlowFit(sections, board, opts, debugName = '') {
   if (!fits(res)) {
     const why = !heightFits(res)
       ? `h\u00f6jd ${Math.round(res.height)}/${Math.round(budget)}px`
-      : `bredd ${Math.round(res.maxW)}/${Math.round(widthBudget)}px`;
+      : res.spill
+        ? 'en rad ligger utanf\u00f6r sin spalt'
+        : `bredd ${Math.round(res.maxW)}/${Math.round(widthBudget)}px`;
     console.warn(
       `[WB] ${debugName || 'flow'}: inneh\u00e5llet ryms inte (${why}) vid min-skala ${scale.toFixed(2)}.`
     );
