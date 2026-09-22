@@ -160,6 +160,23 @@ def test_delrubriken_i_pdf_foljer_lararens_val():
         "Formelblad", "Digitala verktyg och formelblad")
 
 
+def test_verktyget_fore_delnamnet_lases_ocksa():
+    """Exam 119 (2026-09-22): modellen skrev «Formelblad på hela provet,
+    räknare bara på del C.» Verktyget står FÖRE delnamnet, och delen fick
+    ändå GeoGebra-meningen. Hela satsdelen avgör."""
+    assert exam_latex._verktyget_i_delen(
+        "Formelblad på hela provet, räknare bara på del C.", "C") == "räknare"
+    assert exam_latex._verktyget_i_delen(
+        "Formelblad på hela provet, digitala verktyg bara på del C.",
+        "C") == "digitala verktyg"
+    assert exam_latex._digitala_i_delen(
+        "Formelblad på hela provet, räknare bara på del C.", "B") is None
+    tex = exam_latex.render_prov(_doc(
+        "Formelblad på hela provet, räknare bara på del C."))
+    assert r"Del B \textendash{} Räknare är tillåten" in tex
+    assert "GeoGebra" not in tex
+
+
 def test_delrubriken_star_kvar_nar_regeln_tiger_om_delen():
     """Ett prov skrivet före valet — eller en modellmening som inte nämner
     delarna — ska se ut precis som förut."""

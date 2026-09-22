@@ -207,7 +207,6 @@ def _del_instruktion(del_kod: str, utan_raknare: bool,
 # Svaret är True (verktyg tillåtna), False (inte tillåtna) eller None: säger
 # regeln ingenting om just den delen står husets gamla antagande kvar, och ett
 # prov skrivet före valet ser ut precis som förut.
-_DEL_KLAUSUL_RE = re.compile(r"\b[Dd]el\s+([A-D])\b([^.;]*)")
 _UTAN_RE = re.compile(r"\butan\s+(digitala|räknare|miniräknare|räknar)",
                       re.IGNORECASE)
 _MED_RE = re.compile(r"\b(räknare|miniräknare|digitala verktyg|"
@@ -226,10 +225,18 @@ def _klausul(hjalpmedel: str | None, del_kod: str) -> str | None:
     # del C sin granne del B:s klausul och trodde att räknaren var förbjuden.
     text = str(hjalpmedel)
     vill = namn.split()[-1] if _DELNAMN_REDAN_RE.search(text) else del_kod
-    for bokstav, klausul in _DEL_KLAUSUL_RE.findall(text):
-        if bokstav == vill:
-            return klausul
+    # HELA SATSDELEN, inte bara texten efter delnamnet: modellen skriver
+    # «Formelblad på hela provet, räknare bara på del C.» (exam 119,
+    # 2026-09-22), och där står verktyget FÖRE «del C». Satsdelen går till
+    # närmaste komma, punkt eller semikolon åt båda hållen.
+    for bit in re.split(r"[.;,]", text):
+        m = _DEL_I_BIT_RE.search(bit)
+        if m and m.group(1) == vill:
+            return bit
     return None
+
+
+_DEL_I_BIT_RE = re.compile(r"\b[Dd]el\s+([A-D])\b")
 
 
 def _digitala_i_delen(hjalpmedel: str | None, del_kod: str) -> bool | None:
