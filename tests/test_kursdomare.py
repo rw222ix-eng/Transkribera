@@ -251,10 +251,10 @@ def test_kursdomaren_kors_for_prov_och_arbetsblad_men_inte_gruppuppgift():
 
 
 def test_bandet_domer_varje_enhet_i_prov_88():
-    """Bandet är KONSTRUERAT (inspelad: false) mot prov 88: rätt form, en dom
+    """Bandet är SKARPT inspelat (2026-09-22, Opus 5) mot prov 88: en dom
     per poängbärande enhet, och ingen dom om uppgifter som inte finns."""
     band = fejk.las_kassett("kursdomare")
-    assert band["inspelad"] is False
+    assert band["inspelad"] is True
     domar = kursdomare._parse_kursdom(json.loads(band["rader"][-1])["result"])
     enheter = {e["nr"] for e in exam_gen.domarenheter(_exam88())}
     assert set(domar) == enheter

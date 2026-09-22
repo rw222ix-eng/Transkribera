@@ -123,6 +123,11 @@ _KURS2_BADA = [
     "avstånd och mittpunkt",
     "pröva någon annans lösning eller påstående (E), resonemang om ett samband "
     "i EN variabel (C), och «alltid»-resonemang på C-nivå med två poäng",
+    "resonemang som ska täcka ALLA fall på A-nivå («undersök om uttrycket "
+    "alltid är ett heltal», «utred alla k»): båda kursernas nationella prov "
+    "har det, det gör inte en uppgift till 2c",
+    "att en andragradsekvation saknar reella lösningar, eller hur många "
+    "lösningar den har (x² = a med a < 0, kvadrat plus tal = 0)",
     "svar som uttryck i en bokstav (parameter) UTAN figur",
 ]
 
@@ -167,13 +172,22 @@ KURSGRANS: dict[str, dict] = {
         "granne_innehall": [
             "logaritmlagar utöver lg b / lg a: logaritmekvationer, dubbelolikhet "
             "med lg, tiopotensekvation som kräver en logaritmlag",
-            "komplexa tal, rötter till andragradsekvation utan reella lösningar",
+            # Att ANGE icke-reella rötter är 2c. Att konstatera att en
+            # ekvation saknar reella lösningar, eller säga hur många lösningar
+            # den har, är 2a-stoff (x² = a utan lösning) — det skarpa bandet
+            # 2026-09-22 fällde prov 88:s 5b på den här raden när den löd
+            # «rötter till andragradsekvation utan reella lösningar».
+            "komplexa tal: att ange icke-reella rötter (i, roten ur ett "
+            "negativt tal). INTE att konstatera att reella lösningar saknas "
+            "eller att räkna antalet lösningar — det är gemensamt stoff",
             "geometrisatser: likformighet, areaskala, randvinkel och "
             "medelpunktsvinkel, bisektris, rätvinklighet ur koordinater",
             "regression: anpassad linje ur tabell, räknarregression, modellens "
             "begränsning",
             "implikation och ekvivalens som begrepp eller symbol",
-            "talteori: egenskaper hos uttryck i följande heltal, «alltid heltal»",
+            # «Uttrycket är alltid ett heltal» (A) finns i 2a vt17 — talteori
+            # ströks ur 2a:s grannlista 2026-09-22; 2c-agenten hade bara
+            # jämfört vt18/vt22.
             "potens- eller rotekvation som ska lösas EXAKT via lagar, inte med "
             "räknare",
         ],
@@ -190,9 +204,11 @@ KURSGRANS: dict[str, dict] = {
             "kvadratkomplettering eller diskriminant som argument om minsta "
             "värde eller om att reella rötter saknas; ett ENDA värde (dubbelrot) "
             "är gemensamt",
-            "generalisering på A-nivå: «visa», «undersök» eller «utred» att något "
-            "gäller «alltid» eller «för alla», med minst två poäng varav "
-            "resonemang",
+            # Generalisering på A («undersök om … alltid», «utred alla k»)
+            # stod här som 2c:s extralager, men 2a:s egna NP har den (vt17:14
+            # heltalsuttryck, vt22:27 alla k). Struken 2026-09-22 sedan det
+            # skarpa bandet fällde prov 88:s uppgift 7 på den. Raden i `bada`
+            # säger nu det motsatta.
         ],
         "bada": _KURS2_BADA,
         "utanfor": _KURS2_UTANFOR,

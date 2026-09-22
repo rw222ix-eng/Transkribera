@@ -199,10 +199,13 @@ def test_anropet_har_domarnas_kontrakt():
 
 def test_exam88_med_bandet_slapper_lararens_fortydliganden_och_faller_11(
         fejk_claude):
-    """Bandet är KONSTRUERAT (`inspelad: false`) på lärarens dom: en
-    omskrivning per enhet, «ja» på allt utom 11. Den skarpa inspelningen
-    (tools/spela_in_kassett.py elevlasare) byter ut det; det här testet ska
-    hålla också då, för det är lärarens dom det mäter."""
+    """Bandet är SKARPT inspelat 2026-09-22 (Opus 5) på prov 88. Det fäller
+    5a, 5b, 8 och 11, och alla fyra är samma sak: facit kräver något texten
+    inte ber om (roten x = −6 när frågan är ja/nej, en motivering, Alis fel,
+    antagandet). Lärarens förtydligande fraser (5a, 10) fälls INTE för sitt
+    ordval — 5a:s fynd är ett TILLÄGG («ange alla lösningar»), och det är
+    precis vad hennes dom tillåter: förtydliga, stryk aldrig, aldrig kortare.
+    Det här testet mäter den domen, inte bandets exakta lista."""
     fejk_claude(kassett="elevlasare")
     exam = _exam88()
     enheter = exam_gen.domarenheter(exam)
@@ -214,14 +217,21 @@ def test_exam88_med_bandet_slapper_lararens_fortydliganden_och_faller_11(
     assert all(d["omskrivning"] for d in domar.values())
     fynd = elevlasare.doma_elevlasare(exam, model="")
     assert fynd == elevlasare.elevlasarfynd(enheter, domar)
-    # Lärarens förtydliganden passerar.
-    assert not [f for f in fynd if f["path"] in ("uppgift 5a", "uppgift 10")]
     # Årsmodellen med höjd avgift och det dolda antagandet faller.
-    assert [f["path"] for f in fynd] == ["uppgift 11"]
-    m = fynd[0]["message"]
-    assert "gångrar med 12" in m               # elevens läsning citerad
-    assert "höjda avgiften" in m               # förtydligandet är ett tillägg
-    assert "kortare" not in m.split("Lägg till, stryk inte")[0]
+    per = {f["path"]: f["message"] for f in fynd}
+    assert "uppgift 11" in per
+    assert "gångrar" in per["uppgift 11"]          # elevens läsning citerad
+    assert "antagande" in per["uppgift 11"]        # förtydligandet är ett tillägg
+    # Lärarens förtydliganden: ett fynd får bara be om MER text, aldrig om
+    # mindre, och aldrig peka på ordvalet.
+    for m in per.values():
+        fore = m.split("Lägg till, stryk inte")[0]
+        assert "Lägg till, stryk inte" in m, m
+        assert "kortare" not in fore and "stryk" not in fore.lower(), m
+    for nr in ("uppgift 5a", "uppgift 10"):
+        if nr in per:
+            assert "ordval" not in per[nr].lower()
+            assert "nationella" not in per[nr].lower()
     # Auto-läget slår upp bandet på ordet i prompten och ger samma dom.
     fejk_claude("auto")
     assert elevlasare.doma_elevlasare(exam, model="") == fynd
