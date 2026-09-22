@@ -384,6 +384,11 @@ def test_provbandet_gar_genom_bada_domarna_och_talvakten(fejk_claude):
     # likadant varje gång, så varje pass som får fälla fäller. Räknades om
     # 2026-09-22 — testet hade stått rött sedan vakterna kom.
     assert res["rounds"] == 6, "grindens och slutkontrollens rundor kördes inte"
+    # Talsignalen är RÄKNAD PÅ DET LEVERERADE PAPPRET. Slutkontrollens byte
+    # kastade den (och nivådomens fynd) tillsammans med den gamla
+    # valideringen, så bandet levererade «Avrunda till två decimaler» utan
+    # varning fast frasen stod kvar. Lagat 2026-09-22: _slutgrind räknar om
+    # signalerna sist av allt, och domarfynden följer med bytet.
     tal = [e for e in res["errors"] if e["code"] == "talsignal"]
     assert [e["path"] for e in tal] == ["uppgift 6"]
     assert "avrunda till ett antal decimaler" in tal[0]["message"]

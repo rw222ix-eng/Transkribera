@@ -6167,6 +6167,12 @@ def forsattsignaler(exam: dict, profil: str) -> list[dict]:
     return []
 
 
+# Signalernas koder, i samma ordning som _signaler räknar dem. Slutgrinden
+# rensar bort de gamla på den nyckeln innan den räknar om på det levererade
+# pappret (se _slutgrind, `signaler`).
+SIGNALKODER = ("nivasignal", "talsignal", "bedomningssignal")
+
+
 def _signaler(exam: dict) -> list[dict]:
     """De deterministiska varningarna, samlade. Alla räknas om efter en
     reparation — ett fynd som lagats ska inte stå kvar som varning."""
@@ -8707,13 +8713,31 @@ def _slutgrind(res: dict, *, model: str, llm, profil: str,
                avsnitt: list[dict] | None, delmoment: list[dict] | None,
                bokuppgifter: list[dict] | None,
                kurs: str = "", referensprov: dict | None = None,
-               max_rounds: int = SLUTRUNDOR,
+               max_rounds: int = SLUTRUNDOR, signaler: bool = False,
                log_cb: Callable[[str], None] | None = None) -> dict:
-    """Sista ordet före exemplen. Se blocket ovan."""
+    """Sista ordet före exemplen. Se blocket ovan.
+
+    `signaler=True` betyder att domarpasset har mätt de deterministiska
+    signalerna (_signaler: nivå, tal, bedömning) och att de ska RÄKNAS OM på
+    det papper som lämnar grinden. Nivåsäkringen och efterrundan här byter
+    uppgifter efter att domarpasset sa sitt, och en signal som mättes på ett
+    mellanläge säger ingenting om pappret läraren får: provbandet
+    (test_kassetter) levererade «Avrunda till två decimaler» i uppgift 6 utan
+    talsignal, för efterrundan hade kastat den tillsammans med den gamla
+    valideringen (2026-09-22). Utan domare (doma=False) mäts inga signaler
+    någonstans, och då ska grinden inte börja."""
     log = log_cb or (lambda _m: None)
     exam = res.get("exam")
     if exam is None:
         return res
+
+    def med_signaler(ut: dict) -> dict:
+        if not signaler:
+            return ut
+        kvar = [e for e in (ut.get("errors") or [])
+                if e.get("code") not in SIGNALKODER]
+        return {**ut, "errors": kvar + _signaler(ut["exam"])}
+
     matt = dict(avsnitt=avsnitt, antal=antal, delmoment=delmoment,
                 profil=profil, bokuppgifter=bokuppgifter, koder=koder,
                 kurs=kurs, referensprov=referensprov)
@@ -8723,8 +8747,8 @@ def _slutgrind(res: dict, *, model: str, llm, profil: str,
         # står ett fynd kvar i `errors` från en tidig runda och pappret sedan
         # lagades, pekar varningen på en uppgift som inte finns längre.
         kvar = [e for e in (res.get("errors") or []) if not _raknas_om(e)]
-        return {**res, "errors": kvar} if len(kvar) != len(
-            res.get("errors") or []) else res
+        return med_signaler({**res, "errors": kvar} if len(kvar) != len(
+            res.get("errors") or []) else res)
     log(f"Slutkontrollen: {len(fel)} fynd står kvar efter sista rundan, "
         "byter ut uppgifter …")
     # De fel som INTE räknas om här (schemafel, domarnas fynd) följer med
@@ -8746,14 +8770,29 @@ def _slutgrind(res: dict, *, model: str, llm, profil: str,
                 # före och trasigt efter är omskrivningen en försämring.
                 log("Efterrundan bröt balansen — pappret står kvar som det var.")
             else:
-                exam, ovrigt = kandidat, brutna
+                # BYTET RÖR BARA VALIDERINGEN. Det gamla pappret bär tre slags
+                # fel som inte räknas om: valideringens (schema, balans), som
+                # gällde det papper som just byttes bort och ersätts av
+                # kandidatens; domarnas fynd (nivå, räkning, kurs, porträtt),
+                # som följer med. Grinden kan inte döma om dem, och ett
+                # `niva`-fynd som försvinner ur `errors` medan `nivafel` står
+                # kvar är två besked om samma papper; och signalerna, som
+                # räknas om längst ned. `ovrigt = brutna` rakt av kastade de
+                # två senare (provbandet, 2026-09-22).
+                gammal_validering = {_felnyckel(f)
+                                     for f in _validate(exam, profil, koder,
+                                                        niva_mal)[1]}
+                exam = kandidat
+                ovrigt = [e for e in ovrigt
+                          if _felnyckel(e) not in gammal_validering
+                          and e.get("code") not in SIGNALKODER] + brutna
     # SISTA RÄKNINGEN, på det som faktiskt levereras. Det som står kvar blir
     # lärarens varning i stället för en tystnad.
     kvar = _slutfynd(exam, **matt)
     if kvar:
         log(f"Slutkontrollen: {len(kvar)} fynd gick inte att laga — de står "
             "som varningar på pappret.")
-    return {**res, "exam": exam, "errors": ovrigt + kvar}
+    return med_signaler({**res, "exam": exam, "errors": ovrigt + kvar})
 
 
 def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
@@ -9125,7 +9164,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                           bokuppgifter=bokuppgifter if profil == "prov"
                           else None,
                           kurs=kurs, referensprov=referensprov,
-                          max_rounds=rundor, log_cb=log_cb)
+                          max_rounds=rundor, signaler=doma, log_cb=log_cb)
 
     if not doma or res["exam"] is None:
         # `doma=False` betyder «inga extra modellanrop», och en efterrunda är

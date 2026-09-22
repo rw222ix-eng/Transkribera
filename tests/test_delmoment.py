@@ -1134,12 +1134,12 @@ def _balanserat_prov(tappat: str = "") -> dict:
             "hjalpmedel": "Del A utan räknare", "uppgifter": uppgifter}
 
 
-def _slutgrind(exam, llm, *, errors=None, rundor=1):
+def _slutgrind(exam, llm, *, errors=None, rundor=1, signaler=False):
     return exam_gen._slutgrind(
         {"exam": exam, "errors": list(errors or []), "rounds": 3},
         model="m", llm=llm, profil="prov", antal=10, skeleton=None,
         koder=None, niva_mal=None, avsnitt=[], delmoment=_delmoment(),
-        bokuppgifter=None, max_rounds=rundor)
+        bokuppgifter=None, max_rounds=rundor, signaler=signaler)
 
 
 def test_papperet_haller_som_underlag_for_slutgrinden():
@@ -1211,6 +1211,43 @@ def test_domarnas_fynd_overlever_slutgrinden():
     llm, _ = _stub_llm(["{}"])
     res = _slutgrind(_balanserat_prov(), llm, errors=domarfynd)
     assert res["errors"] == domarfynd
+
+
+def test_domarnas_fynd_och_signalerna_overlever_efterrundans_byte():
+    """Efterrundan bytte pappret med `ovrigt = brutna` och kastade allt som
+    inte var kandidatens validering: nivådomens fynd försvann ur `errors`
+    fast `nivafel` stod kvar, och talsignalen mättes aldrig på det papper
+    som levererades (provbandet, 2026-09-22). Domarfynden följer med bytet;
+    signalerna räknas om på det som lämnar grinden."""
+    tappat = _balanserat_prov("Grundpotensform, prefix och enheter")
+    lagat = _balanserat_prov()
+    domarfynd = exam_gen._err("uppgift 6", "niva", "påstådd A, dömd C")
+    gammal = exam_gen._err("uppgift 3", "talsignal", "mätt på mellanläget")
+    llm, anrop = _stub_llm([json.dumps(lagat)])
+    res = _slutgrind(tappat, llm, errors=[domarfynd, gammal], signaler=True)
+    assert len(anrop) == 1 and res["exam"] == lagat
+    assert domarfynd in res["errors"]
+    assert gammal not in res["errors"]
+    assert [e for e in res["errors"] if e["code"] in exam_gen.SIGNALKODER] \
+        == exam_gen._signaler(lagat)
+
+
+def test_signalerna_raknas_om_ocksa_utan_efterrunda():
+    """Nivåsäkringen byter uppgifter utan att slutgrinden behöver ringa, och
+    signalerna ska ändå gälla det pappret. Håller pappret kostar omräkningen
+    ingenting, kassettregeln står."""
+    gammal = exam_gen._err("uppgift 3", "talsignal", "mätt på mellanläget")
+    llm, anrop = _stub_llm(["{}"])
+    res = _slutgrind(_balanserat_prov(), llm, errors=[gammal], signaler=True)
+    assert anrop == [] and res["rounds"] == 3
+    assert res["errors"] == exam_gen._signaler(_balanserat_prov())
+
+
+def test_utan_domare_ror_slutgrinden_inte_signalerna():
+    """`doma=False` mäter inga signaler någonstans; grinden ska inte börja."""
+    llm, _ = _stub_llm(["{}"])
+    res = _slutgrind(_balanserat_prov(), llm)
+    assert res["errors"] == []
 
 
 def test_generate_exam_raknar_om_sist_ocksa_utan_domare():
