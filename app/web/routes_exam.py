@@ -29,7 +29,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from app import (ci_profil, course_data, db, dokumentdiff, exam_gen,
                  exam_latex, exam_pdf, exam_spec, gpu_arbiter, llm_client,
-                 np_vakter, platar, spar, tryck)
+                 niva_rubrik, np_vakter, platar, spar, tryck)
 # Egen rad och eget namn: modulen heter `kalibrering` och rutten som svarar med
 # den heter också det. Utan omdöpningen skuggar funktionen modulen inne i
 # create_router, och anropet blir ett rekursivt HTTP-lager djupt.
@@ -167,13 +167,31 @@ def _balansfynd(doc, typ: str, nivaval: dict | None) -> list[dict]:
     """Balansen mot kursens mål, räknad om. Samma funktion som
     reparationsloopen kör (exam_spec.validate_balance), det är hela poängen:
     varvet som lagade balansen och varvet som bröt den ska mätas med samma
-    linjal."""
+    linjal.
+
+    PROVET MÄTS MOT SIN EGEN KURS (lärarens dom 2026-09-22, exam 118). Utan
+    eget nivåval mätte kontrollen mot hela materialets band, E upp till 50 %,
+    och ett 2a-prov med 48 % E och 17 % A passerade fast 2a:s nationella prov
+    ligger på 40–42 % E och 21–24 % A. Kurserna skiljer sig (1c bär C, 2c bär
+    A, a-spåret bär E), så bandet är kursens egen mätning med marginal
+    (niva_rubrik.niva_mal_prov). Reparationsloopen behåller det breda bandet
+    (exam_spec.validate_exam_json och _straff säger varför), och fyndet här
+    är det som ber om en sista justering. En kurs utan mätning (Ma3c och uppåt) står kvar på
+    det breda bandet."""
+    mal = (nivaval or {}).get("mal")
+    kursband = (mal is None and typ == "prov"
+                and niva_rubrik.kursnyckel(doc.kurs or ""))
+    if kursband:
+        mal = niva_rubrik.niva_mal_prov(kurs=doc.kurs)
     try:
-        fel = exam_spec.validate_balance(
-            doc, niva_mal=(nivaval or {}).get("mal"), profil=typ)
+        fel = exam_spec.validate_balance(doc, niva_mal=mal, profil=typ)
     except Exception:                       # pragma: no cover, aldrig sett
         return []
-    return [_fynd("balans", f["message"], _uppgiftsnr(f.get("path", "")))
+    efter = (f" Bandet är nationella provets fördelning för kurs {kursband}."
+             if kursband else "")
+    return [_fynd("balans",
+                  f["message"] + (efter if f.get("code") == "nivabalans" else ""),
+                  _uppgiftsnr(f.get("path", "")))
             for f in fel]
 
 

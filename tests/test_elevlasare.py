@@ -128,6 +128,50 @@ def test_bara_ett_uttryckligt_nej_faller():
     assert m.endswith(exam_gen.BEHALL_PLANEN)
 
 
+def test_en_obekant_situation_faller_och_ber_om_en_annan():
+    """Lärarens dom 2026-09-22, exam 118 uppgift 10: «En robotcell målar
+    detaljer. […] En körning avbryts efter 600 minuter.» Ingen kunde se den
+    framför sig. Fyndet ber om en ANNAN situation, inte ett tillägg, och
+    fäller även när eleven till slut räknar rätt."""
+    enheter = exam_gen.domarenheter(_exam([
+        _uppg(1, (0, 1, 0), text="En robotcell målar detaljer."),
+        _uppg(2, (1, 0, 0), text="Elias köper $x$ pennor."),
+        _uppg(3, (1, 0, 0))]))
+    domar = elevlasare.parse_elevlasare(json.dumps({"domar": [
+        {"nr": "1", "omskrivning": "jag löser ekvationen", "forstar": "ja",
+         "sammanhang": "obekant",
+         "avvikelse": "eleven vet inte vad en robotcell är",
+         "ny_situation": "En målare målar staketbrädor"},
+        {"nr": "2", "omskrivning": "pennorna", "forstar": "ja",
+         "sammanhang": "tydligt"},
+        {"nr": "3", "omskrivning": "talet", "forstar": "ja",
+         "sammanhang": "inget"}]}))
+    fynd = elevlasare.elevlasarfynd(enheter, domar)
+    assert [f["path"] for f in fynd] == ["uppgift 1"]
+    m = fynd[0]["message"]
+    assert fynd[0]["code"] == "elevlasare"
+    assert "Byt situationen" in m and "En målare målar staketbrädor" in m
+    assert "eleven vet inte vad en robotcell är" in m
+    assert "stryk inte" not in m
+    assert m.endswith(exam_gen.BEHALL_PLANEN)
+    # Frivilligt fält: ett band inspelat före det läses som tystnad.
+    falt = elevlasare.ELEVLASARE_SCHEMA["properties"]["domar"]["items"]
+    assert "sammanhang" not in falt["required"]
+
+
+def test_prompten_fragar_om_situationen_och_om_allmant_stallda_fragor():
+    """Samma dom, uppgift 12: «Bestäm med algebraisk metod det minsta värde
+    som uttrycket kan anta» var för allmänt ställd. Förtydligandet säger VAD
+    som söks, aldrig hur."""
+    p = elevlasare.build_elevlasare_prompt(
+        exam_gen.domarenheter(_exam([_uppg(1, (1, 0, 0))])))
+    assert "STEG 3, SITUATIONEN" in p and "robotcell" in p
+    assert "frågar allmänt" in p and "aldrig hur" in p
+    # Samma två regler står i skrivningens uppdrag.
+    assert "SAMMANHANGET SKA GÅ ATT SE FRAMFÖR SIG" in exam_gen.INSTRUCTION
+    assert "EN UPPGIFT UTAN SITUATION SOM FRÅGAR ALLMÄNT" in exam_gen.INSTRUCTION
+
+
 def test_fortydligandet_ar_alltid_ett_tillagg():
     """Aldrig «skriv som NP», aldrig «kortare»: ett förslag som ber om det
     byts mot det neutrala tillägget."""

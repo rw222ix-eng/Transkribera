@@ -481,6 +481,38 @@ INSTRUCTION = (
     "metod», «använd formeln», «bryt ut» och «med hjälp av grafen». På "
     "arbetsblad och gruppuppgift får metoden stå i notisen, aldrig i "
     "frågan.\n"
+    # SAMMANHANGET SKA GÅ ATT SE FRAMFÖR SIG (lärarens dom 2026-09-22, exam
+    # 118 uppgift 10): «En robotcell målar detaljer. […] En körning avbryts
+    # efter 600 minuter.» Hennes ord: jätteoklart, inte ens jag fattar det.
+    # Räkningen var rätt; felet var att eleven inte kan föreställa sig vad
+    # som händer, och då blir uppgiften en läsuppgift i stället för en
+    # matematikuppgift. Regeln gäller även yrkesklasser: yrkets situation ska
+    # vara en eleven har stått i eller sett (build_yrke), inte en process i
+    # en fabrik. Elevläsaren (app/elevlasare.py) fäller det som ändå slinker
+    # igenom.
+    "- SAMMANHANGET SKA GÅ ATT SE FRAMFÖR SIG efter en läsning. En uppgift "
+    "med en situation handlar om något eleven själv har gjort eller sett: "
+    "handla, lön per timme, ett mobilabonnemang, en resa, sport, matlagning, "
+    "måla en vägg, lägga plattor. Säg med vanliga ord VAD som räknas "
+    "(burkar, plattor, timmar, kronor), aldrig «detaljer», «enheter», "
+    "«körning», «process» eller «cell». Ett fackord förklaras i samma mening "
+    "eller byts mot vardagsordet. En formel ur verkligheten säger i ord vad "
+    "varje bokstav står för. Välj hellre en enkel vardaglig situation än en "
+    "ovanlig: det är matematiken som ska vara svår, aldrig att förstå vad "
+    "som händer.\n"
+    # EN ALLMÄNT STÄLLD UPPGIFT SÄGER VAD SOM SÖKS (samma dom, uppgift 12):
+    # «Bestäm med algebraisk metod det minsta värde som uttrycket kan anta.»
+    # Nationella provet frågar ibland så, och läraren vill inte hjälpa
+    # eleven med metoden, men frågan ska gå att förstå. Förtydligandet är
+    # hennes egen form (fortydligande-fraser-star-kvar): en mening till som
+    # säger vad som räknas som svar, aldrig ett tips och aldrig metoden.
+    "- EN UPPGIFT UTAN SITUATION SOM FRÅGAR ALLMÄNT («det minsta värde som "
+    "uttrycket kan anta», «det största möjliga», «med algebraisk metod») får en "
+    "mening till som säger med vanliga ord vad eleven ska ta fram och vad "
+    "som räknas som svar. Exempel: «Talet x kan vara vilket tal som helst. "
+    "Vilket är det minsta värde som x² + 6x kan få? Visa med en uträkning "
+    "att inget värde är mindre.» Meningen säger VAD som söks, aldrig hur: "
+    "den är varken ett tips eller en metod.\n"
     "- figur: lägg en matematisk figur på en uppgift genom att välja typ och "
     "sätta talen (aldrig fri kod): linjar {k, m}, andragrad {a, b, c}, "
     "exponential {C, bas}, normalfordelning {mu, sigma}, triangel {a, b, c}, "
@@ -1368,7 +1400,12 @@ def build_yrke(inriktning: str, profil: str = "prov") -> str:
         f"YRKET: klassen går {inr}. {vilka} ska utspela sig i det yrket: en "
         "situation eleverna kan möta på riktigt, med riktiga mått, enheter, "
         "material och verktyg, och med ett svar som går att KONTROLLERA PÅ "
-        "PLATS («sex burkar à 3/4 liter blir 4½ liter, det stämmer»).\n"
+        "PLATS («sex burkar à 3/4 liter blir 4½ liter, det stämmer»). "
+        # Lärarens dom 2026-09-22 (exam 118 uppgift 10, IndA): «En robotcell
+        # målar detaljer» var yrkesnära men gick inte att se framför sig.
+        "Situationen ska vara en eleverna redan har stått i eller sett "
+        "(måla, mäta, köpa material, lön per timme), aldrig en process i en "
+        "fabrik de inte kan föreställa sig.\n"
         "Så här ser nivån ut. Lärarens eget exempel till en byggklass om "
         "division av bråk: «En burk färg rymmer 3/4 liter. Väggen kräver 4½ "
         "liter. Hur många burkar behövs?», med $9/2 \\div 3/4 = 9/2 \\cdot "

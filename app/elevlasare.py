@@ -76,6 +76,15 @@ ELEVLASARE_SCHEMA = {
                                 "enum": ["ja", "nej", "oklart"]},
                     "avvikelse": {"type": "string"},
                     "fortydligande": {"type": "string"},
+                    # Går situationen att se framför sig? Egen fråga och eget
+                    # fynd (lärarens dom 2026-09-22, exam 118 uppgift 10): en
+                    # obekant situation lagas inte med ett tillägg utan med en
+                    # ANNAN situation, och förtydligandets regel «lägg till,
+                    # stryk inte» hade låst fast den. Frivilligt, så ett band
+                    # inspelat före fältet läses som tystnad.
+                    "sammanhang": {"type": "string",
+                                   "enum": ["tydligt", "obekant", "inget"]},
+                    "ny_situation": {"type": "string"},
                 },
                 "required": ["nr", "omskrivning", "forstar"],
             },
@@ -164,6 +173,12 @@ def build_elevlasare_prompt(enheter: list[dict], inriktning: str = "") -> str:
         "stället för verb i den ordning stegen tas («Kvadrera varje tal. "
         "Lägg ihop kvadraterna.»), och ord eleven inte har («samtliga», "
         "«vardera», «godtyckligt»)\n"
+        "- en uppgift utan situation som frågar allmänt («Bestäm med "
+        "algebraisk metod det minsta värde som uttrycket kan anta») utan att "
+        "säga med vanliga ord vad eleven ska ta fram och vad som räknas som "
+        "svar. Förtydligandet är då en mening som säger det: «Talet x kan "
+        "vara vilket tal som helst. Vilket är det minsta värde som x² + 6x "
+        "kan få?» Den säger VAD som söks, aldrig hur.\n"
         "Det som ALDRIG ger \"nej\":\n"
         "- att uppgiften är svår att LÖSA. Provets sista uppgifter ska vara "
         "svåra, och en uppgift eleven förstår men inte klarar är rätt "
@@ -174,7 +189,19 @@ def build_elevlasare_prompt(enheter: list[dict], inriktning: str = "") -> str:
         "- ordvalet. En uppgift som frågar med andra ord än en lärobok eller "
         "ett nationellt prov gör är inte fel för det.\n"
         "- att facit använder en annan metod än den eleven först tänker på, "
-        "när båda leder rätt.\n"
+        "när båda leder rätt.\n\n"
+        "STEG 3, SITUATIONEN. Sätt sammanhang för varje uppgift:\n"
+        "- \"inget\" när uppgiften är ren matematik utan situation.\n"
+        "- \"tydligt\" när eleven kan se situationen framför sig efter en "
+        "läsning: något hon själv har gjort eller sett, med vanliga ord för "
+        "det som räknas.\n"
+        "- \"obekant\" när hon inte kan det: en process hon aldrig sett (en "
+        "robotcell som målar detaljer, en körning som avbryts), ett fackord "
+        "som inte förklaras, eller något som räknas utan att det står vad "
+        "det är («detaljer», «enheter»). Skriv då i ny_situation EN "
+        "situation eleven har stått i eller sett som bär SAMMA matematik och "
+        "samma tal, med vanliga ord för det som räknas. Yrkets vanliga ord "
+        "(material, verktyg, mått) gör aldrig en situation obekant.\n"
         f"{exam_gen._yrkesrad_domare(inriktning)}"
         "Svara med enbart JSON."
     )
@@ -197,7 +224,9 @@ def parse_elevlasare(raw: str) -> dict[str, dict]:
         ut[nr] = {"omskrivning": str(d.get("omskrivning") or "").strip(),
                   "forstar": exam_gen._stammer(d.get("forstar")),
                   "avvikelse": str(d.get("avvikelse") or "").strip(),
-                  "fortydligande": str(d.get("fortydligande") or "").strip()}
+                  "fortydligande": str(d.get("fortydligande") or "").strip(),
+                  "sammanhang": str(d.get("sammanhang") or "").strip().lower(),
+                  "ny_situation": str(d.get("ny_situation") or "").strip()}
     return ut
 
 
@@ -225,7 +254,29 @@ def elevlasarfynd(enheter: list[dict], domar: dict[str, dict]) -> list[dict]:
     ut = []
     for e in enheter:
         dom = domar.get(e["nr"])
-        if not dom or dom["forstar"] != "nej":
+        if not dom:
+            continue
+        # SITUATIONEN FÖRST, och med eget fynd: den lagas genom att BYTAS,
+        # vilket förtydligandets «stryk inte» nedan förbjuder. Situationen
+        # fälls oavsett om eleven till slut räknar rätt, för läraren fällde
+        # uppgift 10 på exam 118 just därför att ingen kunde se den framför
+        # sig, inte därför att räkningen var fel.
+        if dom.get("sammanhang") == "obekant":
+            text = (f"uppgift {e['nr']}: situationen går inte att se framför "
+                    "sig för en elev i årskurs 1.")
+            if dom["avvikelse"]:
+                text += f" {exam_gen._kort(dom['avvikelse'], 200).rstrip('.')}."
+            ny = exam_gen._kort(dom.get("ny_situation") or "", 240)
+            text += (" Byt situationen mot en eleven har stått i eller sett, "
+                     "med vanliga ord för det som räknas"
+                     + (f", till exempel: {ny.rstrip('.')}." if ny else ".")
+                     + " Samma matematik, samma tal och samma svar.")
+            # Samma kod som elevläsarens andra fynd: klienten (api.js
+            # UPPGIFTSFEL) och reparationsrundan känner redan den.
+            ut.append(exam_gen._err(f"uppgift {e['nr']}", "elevlasare",
+                                    text + exam_gen.BEHALL_PLANEN))
+            continue
+        if dom["forstar"] != "nej":
             continue
         lasning = exam_gen._kort(dom["omskrivning"], 200) or "ingenting"
         facit = exam_gen._kort((e.get("kort") or {}).get("losning", ""), 100) \

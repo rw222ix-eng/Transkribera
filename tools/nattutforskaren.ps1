@@ -234,6 +234,9 @@ try {
         # --tools utan Bash: en obevakad natt ska inte kunna kora skalkommandon.
         # bypassPermissions: ingen manniska kan svara pa en behorighetsfraga
         # kl. 03:00, sa gransen dras av verktygslistan i stallet.
+        # --model claude-opus-5-5 --effort high: lararens beslut 2026-09-22.
+        # Utan flaggan korde agenten CLI:ts forval ur settings.json (Fable 5.1).
+        # Opus 5.5 har medium som forval, darfor pinnas effort. Kraver CLI 2.1.280.
         $claude = Join-Path $env:APPDATA 'npm\claude.cmd'
         if (-not (Test-Path $claude)) { $claude = 'claude' }
         $agentut = Join-Path $rapport 'agent.log'
@@ -241,6 +244,8 @@ try {
         $arg = @(
             '-p',
             '--output-format', 'text',
+            '--model', 'claude-opus-5-5',
+            '--effort', 'high',
             '--mcp-config', ('"' + $mcpfil + '"'),
             '--strict-mcp-config',
             '--permission-mode', 'bypassPermissions',

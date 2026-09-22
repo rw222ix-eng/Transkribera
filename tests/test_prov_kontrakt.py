@@ -321,6 +321,23 @@ def test_efterkontrollen_faller_balansen_efter_en_omskrivning():
     assert any("%" in f["text"] for f in fynd)
 
 
+def test_efterkontrollen_mater_provet_mot_sin_egen_kurs():
+    """Lärarens dom 2026-09-22 (exam 118): nivåkontrollen ska följa kursens
+    nationella prov, inte hela materialets breda band. Samma papper, 20 p
+    med E 9 / C 6 / A 5 (45/30/25 %): inom 2a:s band (E 40–42 % med
+    marginal), men 1c:s nationella prov bär C och har E på 29–31 %."""
+    exam = copy.deepcopy(_exam_doc())
+    exam["kurs"] = "Matematik, nivå 2a"
+    assert "balans" not in _koder(_kontroll(exam))
+    exam["kurs"] = "Matematik, nivå 1c"
+    fynd = [f for f in _kontroll(exam) if f["kod"] == "balans"]
+    assert fynd and any("E-poängen är 45%" in f["text"] for f in fynd)
+    assert all("kurs 1c" in f["text"] for f in fynd
+               if "poängen är" in f["text"] and "av totalen" in f["text"])
+    # En kurs utan mätning (fixturens Ma2b) står kvar på det breda bandet.
+    assert _kontroll(_exam_doc()) == []
+
+
 def test_efterkontrollen_faller_avsnitt_som_inte_finns_i_boken():
     """Prov 86:s uppgift 12 stod märkt «2.6». Liber Ma 1c slutar på 2.5."""
     exam = copy.deepcopy(_exam_doc())

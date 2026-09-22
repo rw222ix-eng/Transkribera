@@ -932,6 +932,23 @@ def test_pappret_trycks_med_sina_sparade_granser(monkeypatch):
     assert "varav" not in bed
 
 
+def test_inga_avstavade_ord_pa_nagot_papper():
+    """Lärarens dom 2026-09-22 (exam 118 uppgift 6): «Utgif-» sist på en rad
+    och «terna» på nästa. Ett ord bryts aldrig, det flyttas helt till nästa
+    rad. Preamblen delas av provet och bedömningsanvisningen, och minipages
+    (bedömningstabellens spalter) ska få samma ojämna högerkant, utan den
+    \\g@addto@macro som gjorde \\@minipagerestore självrefererande."""
+    doc, fel = exam_spec.validate_exam_json(_exam())
+    assert fel == [] and doc is not None
+    for tex in (exam_latex.render_prov(doc), exam_latex.render_bedomning(doc)):
+        huvud = tex.split(r"\begin{document}", 1)[0]
+        assert r"\hyphenpenalty=10000" in huvud
+        assert r"\exhyphenpenalty=10000" in huvud
+        assert r"\raggedright" in huvud
+        assert r"\def\@minipagerestore{\pfminipageforut\raggedright}" in huvud
+        assert r"\g@addto@macro\@minipagerestore" not in huvud
+
+
 def test_papper_utan_sparade_granser_raknas_ur_dagens_regel():
     """Gamla dokument — skrivna före stämpeln — har inget fält. Då gäller
     KRAV_DEFAULT, och det är allt appen kan veta."""

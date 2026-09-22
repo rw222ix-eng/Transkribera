@@ -91,6 +91,36 @@
 \usepackage{tabularx}
 \usepackage{enumitem}
 \usepackage[swedish]{babel}
+((# ── INGA AVSTAVADE ORD (lärarens dom 2026-09-22, exam 118) ──────────
+    «Utgif-» sist på en rad och «terna» på nästa, i en provuppgift. Hennes
+    regel: ett ord bryts aldrig, det flyttas HELT till nästa rad. Eleven ska
+    läsa uppgiften i ett svep, och ett avstavat ord är ett hinder till.
+
+    Två delar, och båda behövs. Straffet 10 000 förbjuder TeX att avstava
+    (babels svenska mönster står kvar men används inte). Med rak högermarginal
+    hade förbudet i stället gett gapiga ord eller en rad som sticker ut i
+    marginalen, så texten sätts ojämnt i högerkanten, som en handskriven
+    uppgift. \raggedright och inte ragged2e: paketet ligger inte i den seedade
+    Tectonic-cachen, och ett prov som inte kompilerar offline är värre.
+    Gäller alla papper som delar preamblen.
+
+    MINIPAGES MED. Varje minipage nollställer högermarginalen
+    (\@parboxrestore), och det är där spalterna är smalast: bedömnings-
+    tabellens högerspalt är 41 % av satsytan. Utan avstavning OCH med rak
+    kant hade ett långt ord där stuckit ut över spaltkanten. \raggedright
+    läggs därför också i \@minipagerestore, som minipage kör efter
+    nollställningen. INTE med \g@addto@macro: kärnan har \let makrot till
+    \relax, och då blir det självrefererande («TeX capacity exceeded»,
+    bedömningsanvisningen till exam 118). Det gamla värdet sparas i stället
+    och anropas först. #))
+\hyphenpenalty=10000
+\exhyphenpenalty=10000
+\makeatletter
+\AtBeginDocument{%
+  \raggedright
+  \let\pfminipageforut\@minipagerestore
+  \def\@minipagerestore{\pfminipageforut\raggedright}}
+\makeatother
 ((# Bara `med_tikz`, inte `tikz_pa`: det är biblioteket quotes som slåss med
     babels genvägstecken, och vändmärket laddar inget bibliotek. #))
 ((* if med_tikz is defined and med_tikz *))
