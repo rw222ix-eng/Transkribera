@@ -14,6 +14,7 @@ där nivåarbetet kan gå sönder tyst:
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 
@@ -186,6 +187,174 @@ def test_okand_kurs_ger_det_breda_bandet_och_ingen_kursrubrik():
     assert niva_rubrik.RUBRIK_KURSNIVA not in block
     assert niva_rubrik.niva_mal_prov(kurs="Matematik, nivå 4") == \
         niva_rubrik.niva_mal_prov()
+
+
+# ─────────────────────────────────────── måtten ur NP (3A, 2026-09-22) ─────
+# Prov 88 (Ma 2a) fick uppgifter som var för svåra för poängen, utanför
+# kursen eller svåra att förstå, fast rubriken i ord stod i prompten. Blocket
+# «MÅTTEN UR NATIONELLA PROVEN I KURS X» är samma nivåer i tal, lästa ur
+# app/data/np_uppgiftsprofil.json. Testerna håller tre saker: att blocket
+# finns per mätt kurs och ingen annan, att siffrorna KOMMER UR filen (en
+# ombyggd profil ska ändra prompten), och att lärarens dom om förtydligande
+# meningar står i det.
+
+_MATTA_KURSER = ("1a", "1c", "2a", "2c")
+
+
+def _profil() -> dict:
+    return json.loads(niva_rubrik.NP_PROFIL_FIL.read_text(encoding="utf-8"))
+
+
+def test_mattblocket_finns_per_matt_kurs_och_haller_sig_kort():
+    for k in _MATTA_KURSER:
+        blk = niva_rubrik.build_np_matt_block(k)
+        assert blk.startswith(f"MÅTTEN UR NATIONELLA PROVEN I KURS {k}"), k
+        # Står i varje genereringsprompt; det som inte mäter nivån (ord, verb)
+        # får inte plats, och det är meningen.
+        assert len(blk) <= 2600, (k, len(blk))
+        prompt = niva_rubrik.build_niva_block(["rutin"], ["P"],
+                                              kurs=f"Matematik, nivå {k}")
+        assert blk in prompt, k
+        # Kursnamnet i Gy25-form ger samma block som nyckeln.
+        assert niva_rubrik.build_np_matt_block(f"Matematik, nivå {k}") == blk
+    # Okänd kurs: inget block, och ingen gissning på närmaste kurs.
+    assert niva_rubrik.build_np_matt_block("Matematik, nivå 4") == ""
+    assert "MÅTTEN UR NATIONELLA PROVEN" not in niva_rubrik.build_niva_block(
+        kurs="Matematik, nivå 4")
+    # Arbetsblad och gruppuppgift (kursrubrik=False): måtten är mätta på PROV
+    # och följer kursraden, inte ankarna.
+    assert "MÅTTEN UR NATIONELLA PROVEN" not in niva_rubrik.build_niva_block(
+        kurs="Matematik, nivå 2a", kursrubrik=False)
+
+
+def test_grannkursen_star_som_forbud_i_a_sparet_och_som_egna_former_i_c():
+    for k in ("1a", "2a"):
+        granne = "1c" if k == "1a" else "2c"
+        assert f"HÖR HEMMA I GRANNKURSEN {granne}, SKRIV INTE" in \
+            niva_rubrik.build_np_matt_block(k), k
+    for k in ("1c", "2c"):
+        blk = niva_rubrik.build_np_matt_block(k)
+        assert "KURSENS EGNA A-FORMER" in blk, k
+        assert "HÖR HEMMA I GRANNKURSEN" not in blk, k
+    # Lärarens exempel ur prov 88: «för varje x» med kvadratkomplettering
+    # som argument är 2c:s A, och 2a-blocket säger det.
+    tva_a = niva_rubrik.build_np_matt_block("2a")
+    assert "«för alla»-generalisering" in tva_a
+    assert "prövning godtas inte" in tva_a
+
+
+def test_siffrorna_i_blocket_kommer_ur_profilen(monkeypatch):
+    """Skriv siffrorna ur JSON:en, inte för hand: byggs profilen om ska
+    prompten ändras med. Kontrollen är att en ÄNDRAD profil ger ett ändrat
+    block, inte bara att dagens siffror råkar stå där."""
+    profil = _profil()
+    m = profil["kurser"]["2a"]["mall"]
+    blk = niva_rubrik.build_np_matt_block("2a")
+    # Dagens värden står i blocket, hämtade ur samma fält.
+    assert f"({m['enheter']} bedömda enheter" in blk
+    assert "/".join(map(str, m["poang"])) in blk
+    steg = " / ".join(f"{n} {int(m['matt'][f'{n}_kortsvar']['steg']['median'])}"
+                      for n in "ECA")
+    assert f"kortsvar {steg}" in blk
+    mot = m["motivera"]
+    assert f"E {mot['E']['antal']} av {mot['E']['av']}" in blk
+    # Och en ombyggd profil byter ut dem.
+    m["matt"]["A_kortsvar"]["steg"]["median"] = 7.0
+    m["enheter"] = 999
+    m["motivera"]["E"]["antal"] = 42
+    monkeypatch.setattr(niva_rubrik, "_las_np_profil", lambda: profil)
+    andrat = niva_rubrik.build_np_matt_block("2a")
+    assert "(999 bedömda enheter" in andrat
+    assert "kortsvar E 1 / C 2 / A 7" in andrat
+    assert f"E 42 av {mot['E']['av']}" in andrat
+
+
+def test_saknad_profil_ger_tomt_block_men_rubriken_star_kvar(monkeypatch, tmp_path):
+    """En maskin utan datat får inte tappa genereringen: då är rubriken i
+    ord ensam, precis som före 2026-09-22."""
+    monkeypatch.setattr(niva_rubrik, "NP_PROFIL_FIL", tmp_path / "finns-inte.json")
+    niva_rubrik._las_np_profil.cache_clear()
+    try:
+        assert niva_rubrik.np_mall("2a") is None
+        assert niva_rubrik.build_np_matt_block("2a") == ""
+        block = niva_rubrik.build_niva_block(["rutin"], ["P"],
+                                             kurs="Matematik, nivå 2a")
+        assert niva_rubrik.RUBRIK_PER_KURS["2a"] in block
+        assert "MÅTTEN UR NATIONELLA PROVEN" not in block
+        # Trasig fil är samma läge som saknad.
+        (tmp_path / "trasig.json").write_text("{inte json", encoding="utf-8")
+        monkeypatch.setattr(niva_rubrik, "NP_PROFIL_FIL", tmp_path / "trasig.json")
+        niva_rubrik._las_np_profil.cache_clear()
+        assert niva_rubrik.build_np_matt_block("2a") == ""
+    finally:
+        niva_rubrik._las_np_profil.cache_clear()
+
+
+def test_fortydligande_meningen_ar_lararens_dom():
+    """LÄRARENS DOM 2026-09-22: hennes förtydligande fraser i prov 88 var
+    medvetna och ska stå kvar. Ett block om mått får aldrig läsas som «skriv
+    som NP», och meningen står därför i blocket för varje kurs."""
+    assert "alltid tillåten och önskad" in niva_rubrik.NP_FORTYDLIGANDE
+    for k in _MATTA_KURSER:
+        blk = niva_rubrik.build_np_matt_block(k)
+        assert niva_rubrik.NP_FORTYDLIGANDE in blk, k
+        assert "utförligare än NP är inte fel" in blk, k
+
+
+def test_blocket_bar_inga_verbregler_och_inga_ordgranser():
+    """Frågeverb och textlängd mäter INTE nivån i datat (medianen är lika på
+    E, C och A i alla fyra kurserna). Profilens verbtabell får därför inte
+    läcka in som regler, och inga ordantal får stå som gränser."""
+    profil = _profil()
+    for k in _MATTA_KURSER:
+        blk = niva_rubrik.build_np_matt_block(k)
+        assert "frågeverb mäter INTE nivån" in blk, k
+        verb = profil["kurser"][k]["mall"]["fragverb"]
+        for niva, tabell in verb.items():
+            for v, antal in tabell.items():
+                assert f"{v} {antal}" not in blk, (k, niva, v)
+        # «högst 25 ord» vore en ordgräns; «villkor i ord» är inte det.
+        assert not re.search(r"\d+\s*ord\b", blk), k
+        assert "ord_stam" not in blk and "ordantal" not in blk.lower(), k
+
+
+def test_poangreglerna_foljer_kurssteget():
+    """K-regeln (3 p på en nivå = 2 + K, aldrig på E) är mätt i kurs 2 och
+    gäller inte kurs 1, där PRIM märker K även på E-poäng. Steg-per-poäng-
+    regeln och A-kortsvarets pris står i alla fyra."""
+    for k in ("2a", "2c"):
+        blk = niva_rubrik.build_np_matt_block(k)
+        assert "3 p på en nivå = 2 + K" in blk, k
+        assert "K-poäng (kommunikation) finns bara på C/A" in blk, k
+    for k in ("1a", "1c"):
+        assert "2 + K" not in niva_rubrik.build_np_matt_block(k), k
+    for k in _MATTA_KURSER:
+        blk = niva_rubrik.build_np_matt_block(k)
+        assert "Steg per poäng" in blk and "A-kortsvar 1 p för upp till" in blk, k
+        assert "Aldrig «med pq-formeln»" in blk, k
+        assert "Kursens egna A-former:" in blk, k
+
+
+def test_kursraderna_star_inte_emot_profilen():
+    """RUBRIK_PER_KURS rättades 2026-09-22 mot datat. Det som ströks ska inte
+    komma tillbaka: 2a HAR flerval, 2c har ingen enhet över 3 p, 1a:s kontext
+    är inte yrkesliv, och «visa att» är C i 2c."""
+    profil = _profil()
+    text = niva_rubrik.RUBRIK_PER_KURS
+    flerval_2a = sum(v["antal"] for v in
+                     profil["kurser"]["2a"]["mall"]["flerval"].values())
+    assert flerval_2a > 0 and "Inga flervalsfrågor" not in text["2a"]
+    assert "Flerval finns" in text["2a"]
+    tak_2c = max(p["poang_per_enhet"]["max"] for p in
+                 profil["kurser"]["2c"]["mall"]["matt"].values())
+    assert tak_2c <= 3 and "(0/0/4)" not in text["2c"]
+    yrke_1a = sum(v.get("yrke", 0) for v in
+                  profil["kurser"]["1a"]["mall"]["kontext"].values())
+    assert yrke_1a <= 2 and "yrkesliv" not in text["1a"]
+    assert "«Visa att» finns också, men som C-form" in text["2c"]
+    # Definitionerna av E, C och A är oförändrade: kursraden är mix och form.
+    assert "insikt" in niva_rubrik.RUBRIK_GENERELL["A"].lower()
+    assert "VÄLGRUNDAT resonemang" in niva_rubrik.RUBRIK_GENERELL["C"]
 
 
 # ────────────────────────────────────────────────────── domaren (C4) ──────
