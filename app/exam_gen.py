@@ -447,13 +447,40 @@ INSTRUCTION = (
     # för $x$ cm.» och «Börja gärna med att testa påståendet för något
     # specifikt värde på $a$.» En låda mitt i en uppgift läser som ett villkor;
     # kursiven läser som en hjälpande hand, och det är vad den är.
-    "- notis: EN kort ledtråd till uppgiften eller deluppgiften, satt i kursiv "
-    "på egen rad under frågan: 'Tips: Gör en skiss och kalla bredden för "
-    "$x$ cm.', 'Bestäm först vid vilken tidpunkt $t$ raketen når sin högsta "
-    "punkt.', 'Börja gärna med att testa påståendet för något värde på $a$.' "
-    "Den ska ge vägen in, aldrig svaret. Skriv den på de flerstegsuppgifter "
-    "där en elev annars fastnar redan på första steget — inte på "
-    "rutinuppgifter, och aldrig på fler än ungefär var tredje uppgift.\n"
+    # PÅ PROVET FINNS INGEN NOTIS (lärarens dom 2026-09-22, exam 116). Raden
+    # nedan lärde modellen att skriva «Tips: …» på var tredje uppgift, ur
+    # lärarens egen förlaga, samtidigt som a_nivavakt (2026-09-19) fällde
+    # varje tips: prompten och vakten sa emot varandra, och reparations-
+    # rundorna gick runt i cirkel (tre tips kvar på exam 116). Nationella
+    # provet trycker aldrig tips, och metoden är det som prövas. Ledtråden
+    # är kvar för arbetsbladet och gruppuppgiften, där eleven sitter utan
+    # lärare (build_uppdrag ber om den uttryckligen).
+    "- notis: PÅ PROVET LÄMNAS FÄLTET TOMT, på varje uppgift och deluppgift: "
+    "nationella provet trycker aldrig tips eller ledtrådar, och metoden är "
+    # Gemener på «arbetsblad» och «gruppuppgift» med flit: kassettväljaren
+    # (tests/fejk.py _VAL) lägger i bladets band på VERSALT «ARBETSBLAD».
+    "det som prövas. Ett prov med «Tips:» avvisas. På arbetsblad och "
+    "gruppuppgift: EN kort ledtråd till uppgiften eller deluppgiften, satt i "
+    "kursiv på egen rad under frågan: 'Tips: Gör en skiss och kalla bredden "
+    "för $x$ cm.', 'Bestäm först vid vilken tidpunkt $t$ raketen når sin "
+    "högsta punkt.' Den ska ge vägen in, aldrig svaret, och står bara på de "
+    "flerstegsuppgifter där en elev annars fastnar redan på första steget, "
+    "aldrig på fler än ungefär var tredje uppgift.\n"
+    # METODEN FÖRESKRIVS ALDRIG PÅ PROVET (samma dom, samma dag). NP-profilen
+    # (app/data/np_uppgiftsprofil.json) har noll «med pq-formeln» i 334
+    # enheter; det som finns är «med algebraisk metod» (E/C), «använd
+    # formeln», «bryt ut», «med hjälp av grafen». Måttblocket sa det redan,
+    # men mitt bland siffror; exam 116 skrev ändå «Använd kvadreringsregeln»
+    # och «Bestäm med pq-formeln». Här står det som en regel i det block
+    # som följer med i VARJE runda, också reparationerna (np_vakter.metodvakt
+    # fäller det som ändå slinker igenom).
+    "- METODEN FÖRESKRIVS ALDRIG PÅ PROVET: skriv inte «med pq-formeln», "
+    "«med kvadreringsregeln», «använd konjugatregeln», «med "
+    "nollproduktmetoden», «genom faktorisering» i en uppgiftstext. Eleven "
+    "väljer metoden, det är det som prövas. Tillåtet är bara «med algebraisk "
+    "metod», «använd formeln», «bryt ut» och «med hjälp av grafen». På "
+    "arbetsblad och gruppuppgift får metoden stå i notisen, aldrig i "
+    "frågan.\n"
     "- figur: lägg en matematisk figur på en uppgift genom att välja typ och "
     "sätta talen (aldrig fri kod): linjar {k, m}, andragrad {a, b, c}, "
     "exponential {C, bas}, normalfordelning {mu, sigma}, triangel {a, b, c}, "
