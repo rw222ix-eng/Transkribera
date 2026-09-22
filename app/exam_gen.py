@@ -7888,7 +7888,10 @@ def poangvakt(exam: dict, profil: str = "prov",
     # ska BE OM FÄRRE SAKER i stället.
     total = sum(sum(e.get("poang") or (0, 0, 0))
                 for e in domarenheter(exam or {}))
-    pa_taket = poang_tak is not None and total >= poang_tak
+    # Utrymmet räknas NED fynd för fynd (exam 117, 2026-09-23): två fynd på
+    # ett 22-poängspapper med tak 23 fick båda rådet «höj», och pappret blev
+    # 24. Det första fyndet får det som ryms, resten får «stryk».
+    utrymme = (poang_tak - total) if poang_tak is not None else None
     ut: list[dict] = []
     rader: list[dict] = []
     for e in domarenheter(exam or {}):
@@ -7903,6 +7906,9 @@ def poangvakt(exam: dict, profil: str = "prov",
         krav = min(len(verb), POANG_TAK)
         fullstandig = (e.get("typ") or "") != "rutin"
         if krav > summa and (fullstandig or summa == 1):
+            pa_taket = utrymme is not None and utrymme < (krav - summa)
+            if utrymme is not None and not pa_taket:
+                utrymme -= (krav - summa)
             if pa_taket:
                 rad = (f"uppgift {nr} kräver {_RAKNEORD.get(krav, krav)} "
                        f"saker ({', '.join(verb[:POANG_TAK])}) men ger "

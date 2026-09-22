@@ -149,9 +149,17 @@ KURSINNEHALL: dict[str, list[tuple[str, re.Pattern]]] = {
 # och resonemangspoäng, 2c:s R2 lånad som gräns), "fritt" (2c).
 GENERALISERING: dict[str, str] = {"1a": "aldrig", "1c": "aldrig",
                                   "2a": "A2R", "2c": "fritt"}
+# «För vilka värden på c blir kostnaden ALDRIG negativ» (exam 117 uppg 7,
+# 2026-09-23) är samma sak som «för varje x» med bokstaven flyttad: ett
+# villkor på en konstant som ska gälla för alla x. Lärarens dom över 12b i
+# prov 88 gällde just den formen. Kravet på ordet aldrig/alltid gör att
+# «för vilka värden på k har ekvationen två rötter» (2a vt18, A 3 p) inte
+# fälls av raden här utan av A2R-regeln som förut.
 _GENERALISERING_RE = re.compile(
     r"för (?:varje|alla) \$?[a-zA-Z]\$?|för alla värden|alla värden på"
-    r"|för varje värde|gäller för alla|för alla reella", re.I)
+    r"|för varje värde|gäller för alla|för alla reella"
+    r"|för vilka värden på \$?[a-zA-Z]\$?[^.?!]{0,80}\b(?:aldrig|alltid)\b",
+    re.I)
 
 # Metodföreskriften (regel 3): formen «med/använd/genom <metod>». Verbet
 # «Faktorisera …» är en uppgift (E-form i kurs 1), inte en föreskrift.

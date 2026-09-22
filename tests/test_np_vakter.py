@@ -471,3 +471,26 @@ def test_bantningen_gor_a_losningen_till_kortsvar_inte_till_noll():
           "poang": [0, 3, 0]}]
     exam_spec._banta_skelett(k, 1, None, form)
     assert k[0]["poang"] == [0, 3, 0]
+
+
+def test_kursvakten_faller_for_vilka_varden_pa_c_aldrig():
+    """Exam 117 uppgift 7 (2026-09-23): «Undersök för vilka värden på $c$
+    kostnaden aldrig blir negativ» slank förbi både kursdomaren och vakten.
+    Det är 12b:s form med bokstaven flyttad, och i 2a får den bara stå på en
+    A-enhet med minst 2 p OCH resonemangspoäng."""
+    from app import np_vakter
+    u = {"del": "B", "formaga": "M", "typ": "problem", "poang": [0, 0, 2],
+         "text": "Kostnaden ges av $K = x^2 - 40x + c$. Undersök för vilka "
+                 "värden på $c$ kostnaden aldrig blir negativ.",
+         "losning": "$c \\ge 400$", "bedomning": "+1 A\n+1 A"}
+    exam = {"titel": "t", "kurs": "Matematik 2a", "uppgifter": [u]}
+    fel = np_vakter.kursvakt(exam, "Matematik 2a")
+    assert [f["path"] for f in fel] == ["uppgift 1"], fel
+    # Samma text som R-uppgift med 2 p passerar (2a vt18-formen).
+    exam["uppgifter"][0]["formaga"] = "R"
+    assert np_vakter.kursvakt(exam, "Matematik 2a") == []
+    # Utan «aldrig» är «för vilka värden på k» inte generaliseringen.
+    exam["uppgifter"][0]["formaga"] = "M"
+    exam["uppgifter"][0]["text"] = ("Bestäm för vilka värden på $k$ "
+                                    "ekvationen har två rötter.")
+    assert np_vakter.kursvakt(exam, "Matematik 2a") == []

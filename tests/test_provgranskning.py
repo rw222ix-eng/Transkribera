@@ -523,3 +523,9 @@ def test_poangvakten_hojer_inte_poangen_pa_taket():
     # Under taket gäller det gamla rådet.
     under = exam_gen.poangvakt(exam, "prov", poang_tak=5)
     assert "höj poängtrippeln" in under[0]["message"]
+    # Utrymmet räknas ned: två fynd på ett papper med EN poäng kvar under
+    # taket får ett «höj» och ett «stryk» (exam 117: 22 → 24 p med tak 23).
+    u2 = dict(u, text="Teckna uttrycket. Beräkna arean. Avgör om det stämmer.")
+    tva = {"titel": "t", "kurs": "Matematik 2a", "uppgifter": [u, u2]}
+    fynd = exam_gen.poangvakt(tva, "prov", poang_tak=3)
+    assert [("Höj INTE" in f["message"]) for f in fynd] == [False, True]
