@@ -747,6 +747,14 @@ INSTRUCTION = (
     "negativ koefficient, är enheter fallgropen byts enhet på vägen). "
     "Ett fel som bara står som en regel känns inte igen; ett fel som står i "
     "exemplet gör det.\n"
+    # STRYKET ÖVER DET FELAKTIGA LEDET (2026-09-22). Rött ensamt säger inte
+    # vilken rad som är fel: på BA26B-tavlan stod «156/0,24» svart och
+    # «156 · 0,24» rött bredvid, utan ett ord om vilken som gällde, och
+    # domaren fällde samma sak på TE26A-tavlan. Vidma stryker felet (minnet
+    # vidma-regelsamlingen): en elev som tittar en sekund ska se det.
+    "- DET FELAKTIGA LEDET SKRIVS STRUKET, i rött: \\cancel{…} runt hela "
+    "ledet («\\cancel{156 \\cdot 0{,}24}»). Rött utan streck är bara en annan "
+    "färg — eleven ser inte vilken av raderna som gäller.\n"
     # EXAKT OCH NÄRMEVÄRDE. Lärarens dom (2026-08-21 kväll), på ett exempel
     # som bara visade ≈: «vi har inte nämnt det här med att svara exakt eller
     # med närmevärde — det har vi glömt, och det kommer på bokuppgifterna.»
@@ -3909,6 +3917,68 @@ def vanligtfel_kvar(board: dict | None,
     return ut
 
 
+# ── Vakten för det röda ledet som inte säger att det är fel ─────────────────
+# Rött är tavlans enda varningsfärg, men färgen ensam är inget besked: står
+# «156/0,24» svart och «156 · 0,24» rött bredvid varandra i ett exempel vet
+# eleven inte vilken som gäller — hon ser två uträkningar, en i en annan färg.
+# Täckningsdomaren fällde det på TE26A-tavlan 2026-09-22 («utan ett ord som
+# säger det») och samma sak stod oanmärkt kvar på BA26B-tavlan samma kväll.
+# Den här vakten gör det deterministiskt i stället för att hoppas på domaren:
+# ett rött led ska bära sitt streck (\cancel, samma sak Vidma gör på tavlan),
+# eller stå under en rubrik som redan säger felet («Vanligt fel:»).
+_STRYK = ("\\cancel", "\\bcancel", "\\xcancel", "\\neq", "\\ne ", "≠")
+
+
+def _sager_fel(text: str) -> bool:
+    """Bär raden själv beskedet att något är fel? Rubriken «Vanligt fel:» gör
+    det, och så gör en kort etikett av lärarens eget slag."""
+    t = " ".join(str(text or "").split()).lower()
+    return t.startswith("vanligt fel") or "inte så här" in t or t.startswith("fel:")
+
+
+def _rott_led(sektioner: list, vag: str, ut: list[str],
+              sagt_fel: bool = False) -> None:
+    """Röda math-sektioner utan streck, i den ordning de står. `sagt_fel` är
+    sant när en rubrik tidigare i SAMMA behållare redan sagt att det som
+    följer är felet — då bär raden sitt besked utifrån."""
+    for i, sec in enumerate(sektioner or []):
+        if not isinstance(sec, dict):
+            continue
+        stig = f"{vag}[{i}]"
+        if sec.get("kind") in ("text", "heading") and _sager_fel(sec.get("text")):
+            sagt_fel = True
+        if (sec.get("kind") == "math" and str(sec.get("color") or "") == "red"
+                and not sagt_fel
+                and not any(m in str(sec.get("latex") or "") for m in _STRYK)):
+            ut.append(stig)
+        if isinstance(sec.get("children"), list):
+            _rott_led(sec["children"], f"{stig}.children", ut, sagt_fel)
+
+
+def rott_led_ostruket(board: dict | None) -> list[dict]:
+    """Fel för varje rött led som varken är struket eller står under en rubrik
+    som säger att det är fel."""
+    if not isinstance(board, dict):
+        return []
+    ut: list[dict] = []
+    for bi, tavla in enumerate(board.get("boards") or []):
+        if not isinstance(tavla, dict):
+            continue
+        traffar: list[str] = []
+        _rott_led(tavla.get("sections") or [], f"boards[{bi}].sections", traffar)
+        for ki, kol in enumerate(tavla.get("columns") or []):
+            if isinstance(kol, dict):
+                _rott_led(kol.get("sections") or [],
+                          f"boards[{bi}].columns[{ki}].sections", traffar)
+        ut += [{"path": t, "code": "rott_led_ostruket",
+                "message": "det röda ledet säger inte att det ÄR fel — rött "
+                           "ensamt är bara en annan färg. Skriv ledet struket "
+                           "(\\cancel{…} runt hela uttrycket), så ser eleven "
+                           "på en sekund vilken av raderna som inte gäller."}
+               for t in traffar]
+    return ut
+
+
 # ── Täckningsdomaren ────────────────────────────────────────────────────────
 # Lärarens beställning (2026-08-20): «målet är att eleverna efter genomgången
 # ska kunna klara av alla uppgifter på de sidor jag valt att utgå ifrån» —
@@ -4479,7 +4549,8 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     # varning läraren får läsa själv. Kostar inget anrop.
     errors = (errors + bokkopior(board, bok) + formupprepning(board)
               + vanligtfel_kvar(board, form) + stodordsfragor(board)
-              + hanvisningar(board) + symbolvakt(board, bok))
+              + hanvisningar(board) + symbolvakt(board, bok)
+              + rott_led_ostruket(board))
     res = _repair_until_valid(board, errors, model=model, llm=llm,
                               rounds_used=rounds, max_rounds=max_rounds,
                               log_cb=log, token_cb=token_cb, form=form)
@@ -4495,7 +4566,7 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
             + formupprepning(res["board"])
             + vanligtfel_kvar(res["board"], form)
             + stodordsfragor(res["board"]) + hanvisningar(res["board"])
-            + symbolvakt(res["board"], bok)
+            + symbolvakt(res["board"], bok) + rott_led_ostruket(res["board"])
             if (f["path"], f["code"]) not in sedda]
     if doma and res.get("board") is not None:
         dom = _tackning_pass(res["board"], res["errors"], model=model, llm=llm,

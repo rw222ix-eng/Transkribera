@@ -2776,6 +2776,40 @@ def test_vanligtfel_kvar_faller_raden_nar_krysset_ar_av():
     assert lb.vanligtfel_kvar(None, av) == []
 
 
+def test_rott_led_utan_streck_falls():
+    """Rött ensamt säger inte VILKEN rad som är fel. Läraren såg det på
+    BA26B-tavlan 2026-09-22: «156/0,24» svart och «156 · 0,24» rött bredvid,
+    utan ett ord om vilken som gällde. Struket led, eller en rubrik som redan
+    säger felet, och vakten tiger."""
+    naket = {"boards": [{"sections": [
+        {"kind": "heading", "text": "Exempel 2"},
+        {"kind": "math", "latex": "\frac{156}{0,24}"},
+        {"kind": "math", "latex": r"156 \cdot 0{,}24", "color": "red"},
+    ]}]}
+    fynd = lb.rott_led_ostruket(naket)
+    assert [f["code"] for f in fynd] == ["rott_led_ostruket"]
+    assert fynd[0]["path"] == "boards[0].sections[2]"
+
+    struket = {"boards": [{"sections": [
+        {"kind": "math", "latex": r"\cancel{156 \cdot 0{,}24}", "color": "red"},
+    ]}]}
+    assert lb.rott_led_ostruket(struket) == []
+
+    # Rubriken «Vanligt fel:» säger det som strecket säger — då räcker den.
+    under_rubrik = {"boards": [{"sections": [
+        {"kind": "text", "text": "Vanligt fel:"},
+        {"kind": "math", "latex": "2^5 + 2^3 = 2^8", "color": "red"},
+    ]}]}
+    assert lb.rott_led_ostruket(under_rubrik) == []
+
+    # Svart matte och röda figurfärger rörs inte.
+    assert lb.rott_led_ostruket({"boards": [{"sections": [
+        {"kind": "math", "latex": "x = 4"},
+        {"kind": "graf", "plots": [{"expr": "x^2", "color": "red"}]},
+    ]}]}) == []
+    assert lb.rott_led_ostruket(None) == []
+
+
 def test_generate_board_far_bortvalt_vanligt_fel_som_fel_att_ratta():
     """Samma väg som bokkopiorna och formvakten: fyndet rättas i
     reparationsrundan, inte som en varning läraren får läsa efteråt."""
