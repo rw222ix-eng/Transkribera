@@ -54,8 +54,12 @@ if (!utanLos && u.poster) {
   if (u.klara < u.poster) console.log('   VARNING: alla poster blev inte skrivna');
 }
 
-/* Sidan bär postrna först när den läst tillbaka dem — skrivningen lägger dem på
-   `v` i minnet, så den här sidan HAR dem om den var den som skrev. */
+/* Knappen bor i planeringens steg 4, och den fliken är inte den appen öppnar
+   på: utan det här klicket står #godkann i en gömd flik och Playwright väntar
+   ut sin timeout på ett element som finns men inte syns. */
+await page.getByRole('tab', { name: 'Planering' }).click();
+await page.locator('#dokument').waitFor({ state: 'visible', timeout: 30000 });
+await page.locator('#godkann').scrollIntoViewIfNeeded();
 await vila(2000);
 const wbId = u.wbId;
 const approve = wbId ? page.waitForResponse(
@@ -65,10 +69,12 @@ const exportet = wbId ? page.waitForResponse(
 await page.locator('#godkann').click();
 if (approve) console.log('   approve svarade', (await approve).status());
 if (exportet) console.log('   export svarade', (await exportet).status());
-const id = await page.waitForFunction(m => {
-  const v = window.Dokument.sparade().find(x => x.moment === m && x.id);
-  return v ? v.id : null;
-}, u.moment, { timeout: 120000 }).then(h => h.jsonValue()).catch(() => null);
-console.log('   godkänt som dokument', id);
+/* Raden behåller sitt id: godkännandet är en PATCH på utkastraden, inte en ny
+   post (plan.js utkastGodkann). Att leta upp pappret på MOMENTET i högen gav
+   ett annat dokument med samma rubrik. */
+const status = await page.evaluate(n => fetch('/api/dokument').then(r => r.json())
+  .then(d => ((d.sparade || []).find(x => x.id === n) ? 'godkant' : 'saknas')),
+  u.id).catch(() => 'okänt');
+console.log(`   dokument ${u.id}: ${status}`);
 await vila(2000);
 await browser.close();
