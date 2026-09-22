@@ -7828,7 +7828,8 @@ POANG_TAK = 3
 _RAKNEORD = {1: "en", 2: "två", 3: "tre"}
 
 
-def poangvakt(exam: dict, profil: str = "prov") -> list[dict]:
+def poangvakt(exam: dict, profil: str = "prov",
+              poang_tak: int | None = None) -> list[dict]:
     """Ger uppgiften en poäng per sak den ber om? Deterministiskt, ingen
     modell, ingen kostnad, och samma felform som avsnittstackning.
 
@@ -7852,6 +7853,15 @@ def poangvakt(exam: dict, profil: str = "prov") -> list[dict]:
     att svika."""
     if profil != "prov":
         return []
+    # TAKET (2026-09-22, exam 116). «Höj poängtrippeln» var vaktens enda råd,
+    # och på ett pass med tak (lärarens takt: 12 uppgifter på 70 minuter i
+    # takt 3 = högst 23 p) höjde fyra sådana fynd pappret till 27 p, E-andelen
+    # till 52 % och tiden till 85 minuter, allt utanför det skelettet
+    # garanterade. Ligger pappret på taket får poängen inte höjas: uppgiften
+    # ska BE OM FÄRRE SAKER i stället.
+    total = sum(sum(e.get("poang") or (0, 0, 0))
+                for e in domarenheter(exam or {}))
+    pa_taket = poang_tak is not None and total >= poang_tak
     ut: list[dict] = []
     rader: list[dict] = []
     for e in domarenheter(exam or {}):
@@ -7866,16 +7876,24 @@ def poangvakt(exam: dict, profil: str = "prov") -> list[dict]:
         krav = min(len(verb), POANG_TAK)
         fullstandig = (e.get("typ") or "") != "rutin"
         if krav > summa and (fullstandig or summa == 1):
-            ut.append({
-                **_err(f"uppgift {nr}", "poangvakt",
-                       f"uppgift {nr} kräver {_RAKNEORD.get(krav, krav)} "
+            if pa_taket:
+                rad = (f"uppgift {nr} kräver {_RAKNEORD.get(krav, krav)} "
+                       f"saker ({', '.join(verb[:POANG_TAK])}) men ger "
+                       f"{summa} p, och pappret ligger redan på taket "
+                       f"{poang_tak} p. Höj INTE poängen: skriv om uppgiften "
+                       f"så att den ber om exakt {_RAKNEORD.get(summa, summa)} "
+                       "sak(er), stryk en uppmaning eller slå ihop två till "
+                       "en prestation. Behåll poängtrippeln, delen och "
+                       "förmågan.")
+            else:
+                rad = (f"uppgift {nr} kräver {_RAKNEORD.get(krav, krav)} "
                        f"saker ({', '.join(verb[:POANG_TAK])}) men ger "
                        f"{summa} p. Ge den {krav} p inom SAMMA del av provet: "
                        "höj poängtrippeln på den nivå uppgiften redan ligger "
                        "på ([0, 1, 0] blir [0, 2, 0]) och skriv EN "
                        "bedömningsrad per prestation, «+1 <nivå> …». Byt inte "
-                       "ut uppgiften och flytta den inte till en annan del."),
-                "nr": nr})
+                       "ut uppgiften och flytta den inte till en annan del.")
+            ut.append({**_err(f"uppgift {nr}", "poangvakt", rad), "nr": nr})
             continue
         for r in exam_spec.bedomningsrader(e.get("bedomning")):
             if r["not"] or r["poang"] != 1 or len(_prestationsled(r["krav"])) < 2:
@@ -7926,7 +7944,8 @@ def _raknade_fynd(exam: dict, *, avsnitt: list[dict] | None, antal: int | None,
                   delmoment: list[dict] | None, profil: str,
                   bokuppgifter: list[dict] | None = None,
                   koder: list[str] | None = None, kurs: str = "",
-                  referensprov: dict | None = None) -> list[dict]:
+                  referensprov: dict | None = None,
+                  poang_tak: int | None = None) -> list[dict]:
     """ALLA de RÄKNADE vakterna i en och samma ordning, på ett ställe.
 
     Ordningen är prompten läraren annars läser i loggen, och den ska vara
@@ -7946,7 +7965,7 @@ def _raknade_fynd(exam: dict, *, avsnitt: list[dict] | None, antal: int | None,
     A-poäng att skydda och ingen kravrad att motsäga."""
     fel = (avsnittstackning(exam, avsnitt or [], antal or 0)
            + delmomenttackning(exam, delmoment or [], bokuppgifter)
-           + poangvakt(exam, profil)
+           + poangvakt(exam, profil, poang_tak)
            + avsnittsniva(exam, avsnitt or [], bokuppgifter)
            + delmomentvikt(exam, delmoment or [])
            + delmomentmarkning(exam, delmoment or [])
@@ -7963,6 +7982,7 @@ def _raknade_fynd(exam: dict, *, avsnitt: list[dict] | None, antal: int | None,
 
 
 def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
+                   poang_tak: int | None = None,
                    antal: int | None, skeleton: list[dict] | None,
                    avsnitt: list[dict], rounds_used: int, max_rounds: int,
                    koder: list[str] | None = None,
@@ -8007,7 +8027,7 @@ def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
     fel = _raknade_fynd(exam, avsnitt=avsnitt, antal=antal,
                         delmoment=delmoment, profil=profil,
                         bokuppgifter=bokuppgifter, koder=koder, kurs=kurs,
-                        referensprov=referensprov)
+                        referensprov=referensprov, poang_tak=poang_tak)
     # Loggraden namnger avsnitten, inte antalet fynd: «Täckningen: 1.1 saknar
     # uppgifter» säger vad som är fel, «1 problem» säger ingenting. Filtret på
     # koden finns för att de andra vakternas meddelanden har en annan
@@ -8700,8 +8720,8 @@ def _raknas_om(fel: dict) -> bool:
 
 
 def _slutfynd(exam: dict, *, avsnitt, antal, delmoment, profil,
-              bokuppgifter, koder=None, kurs="", referensprov=None
-              ) -> list[dict]:
+              bokuppgifter, koder=None, kurs="", referensprov=None,
+              poang_tak=None) -> list[dict]:
     """Allt slutgrinden kan avgöra själv: de räknade vakterna plus
     ordvakten.
 
@@ -8713,7 +8733,7 @@ def _slutfynd(exam: dict, *, avsnitt, antal, delmoment, profil,
     fel = _raknade_fynd(exam, avsnitt=avsnitt, antal=antal,
                         delmoment=delmoment, profil=profil,
                         bokuppgifter=bokuppgifter, koder=koder, kurs=kurs,
-                        referensprov=referensprov)
+                        referensprov=referensprov, poang_tak=poang_tak)
     if profil == "prov" and bokuppgifter:
         fel = fel + begriplighetssignaler(exam, profil)
     return _slapp_poanglaset(fel)
@@ -8726,6 +8746,7 @@ def _slutgrind(res: dict, *, model: str, llm, profil: str,
                bokuppgifter: list[dict] | None,
                kurs: str = "", referensprov: dict | None = None,
                max_rounds: int = SLUTRUNDOR, signaler: bool = False,
+               poang_tak: int | None = None,
                log_cb: Callable[[str], None] | None = None) -> dict:
     """Sista ordet före exemplen. Se blocket ovan.
 
@@ -8752,7 +8773,7 @@ def _slutgrind(res: dict, *, model: str, llm, profil: str,
 
     matt = dict(avsnitt=avsnitt, antal=antal, delmoment=delmoment,
                 profil=profil, bokuppgifter=bokuppgifter, koder=koder,
-                kurs=kurs, referensprov=referensprov)
+                kurs=kurs, referensprov=referensprov, poang_tak=poang_tak)
     fel = _slutfynd(exam, **matt)
     if not fel:
         # RENT PAPPER, NOLL ANROP. Gamla kopior av samma fynd rensas ändå:
@@ -9047,6 +9068,9 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                             "message": "modellen svarade inte med giltig JSON"}],
                 "rounds": rounds}
     _doc, errors = _validate(exam, profil, koder, niva_mal)
+    # Passets poängtak ur lärarens takt (samma räkning som skelettet byggdes
+    # med i routes_exam), till poängvakten: på taket får poängen inte höjas.
+    poang_tak = exam_spec.poang_tak_for(tid_min, takt)
     # Bara när det FINNS något att reparera. Ett steg som tänds för att sedan
     # vara över på en millisekund är brus i förloppet, och ett prov som gick
     # igenom på första försöket ska inte se ut som ett som inte gjorde det.
@@ -9076,6 +9100,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     if res["exam"] is not None and (avsnitt or delmoment or profil == "prov"):
         res = _tackning_pass(res["exam"], res["errors"], model=model, llm=llm,
                              profil=profil, antal=antal, skeleton=grammatik,
+                             poang_tak=poang_tak,
                              avsnitt=avsnitt or [], koder=koder,
                              niva_mal=niva_mal, delmoment=delmoment or [],
                              forbjudna=forbjudna or [],
@@ -9176,7 +9201,8 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                           bokuppgifter=bokuppgifter if profil == "prov"
                           else None,
                           kurs=kurs, referensprov=referensprov,
-                          max_rounds=rundor, signaler=doma, log_cb=log_cb)
+                          max_rounds=rundor, signaler=doma,
+                          poang_tak=poang_tak, log_cb=log_cb)
 
     if not doma or res["exam"] is None:
         # `doma=False` betyder «inga extra modellanrop», och en efterrunda är
@@ -9277,7 +9303,8 @@ def _poangpass(fore: dict, res: dict, *, model: str, llm, profil: str,
     if profil != "prov" or exam is None or exam is fore:
         return res
     rorda = set(andrade_uppgifter(fore, exam))
-    fynd = [f for f in poangvakt(exam, profil)
+    fynd = [f for f in poangvakt(exam, profil, exam_spec.poang_tak_for(
+                exam.get("tid_min"), exam.get("takt")))
             if _uppgiftsnr(f.get("nr")) in rorda]
     if not fynd:
         return res

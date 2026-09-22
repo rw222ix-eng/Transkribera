@@ -503,3 +503,23 @@ def test_generate_exam_lagger_omprovsplanen_i_prompten():
                            referensprov=REFERENS)
     assert "DET HÄR ÄR ETT OMPROV" in prompter[0]
     assert "GÖR DEM INTE ENKLARE" in prompter[0]
+
+
+def test_poangvakten_hojer_inte_poangen_pa_taket():
+    """Exam 116 (2026-09-22): fyra «höj poängen»-fynd tog ett 23-poängspass
+    till 27 p. På taket ska vakten be uppgiften om FÄRRE saker i stället."""
+    from app import exam_gen
+    u = {"del": "B", "formaga": "PL", "typ": "problem", "poang": [0, 1, 0],
+         "text": "Teckna ett uttryck för arean. Beräkna arean när sidan är 4.",
+         "losning": "x", "bedomning": "+1 C rätt area"}
+    exam = {"titel": "t", "kurs": "Matematik 2a", "uppgifter": [u]}
+    utan = exam_gen.poangvakt(exam, "prov")
+    assert utan and "höj poängtrippeln" in utan[0]["message"]
+    # Samma papper på taket (1 p av 1): inte höja, utan stryka en uppmaning.
+    pa = exam_gen.poangvakt(exam, "prov", poang_tak=1)
+    assert pa and "Höj INTE" in pa[0]["message"]
+    assert "stryk en uppmaning" in pa[0]["message"]
+    assert "höj poängtrippeln" not in pa[0]["message"]
+    # Under taket gäller det gamla rådet.
+    under = exam_gen.poangvakt(exam, "prov", poang_tak=5)
+    assert "höj poängtrippeln" in under[0]["message"]
