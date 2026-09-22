@@ -238,6 +238,18 @@ _TACKNING = "täckningsdomare"
 # (exam_gen.build_rakne_prompt) och ingen annanstans i appen.
 _RAKNING = "räknedomare"
 
+# Kursdomaren (app/kursdomare.doma_kurs, 2026-09-22) prövas av EXAKT samma
+# skäl och FÖRE nivådomaren: dess prompt bär hela pappret och matchar därför
+# både «matteprov» och «ARBETSBLAD». Ordet står bara i den prompten
+# (kursdomare.build_kurs_prompt) och ingen annanstans i appen — fyndets text
+# säger «kursgränsen», inte domarens namn, så att reparationsprompten inte tar
+# bandet.
+#
+# ETT band räcker, som för räknedomaren: bandet är byggt mot prov 88 (Ma 2a,
+# lärarens dom 2026-09-22), och spelas det upp på ett annat papper handlar
+# domen om uppgiftsnummer som inte finns där. Tystnad fäller aldrig.
+_KURSDOMARE = "kursdomare"
+
 # Bedömningspasset (exam_gen.bedomningspass) prövas av EXAKT samma skäl och
 # FÖRE nivådomaren: dess prompt bär en färdig uppgift med facit och matchar
 # därför både «matteprov» och nivådomarens nyckelfras. Ordet står bara i den
@@ -308,6 +320,8 @@ def _auto(prompt):
         return os.path.join(BAND, "tackningsdomare.json")
     if _RAKNING in prompt:
         return os.path.join(BAND, "raknedomare.json")
+    if _KURSDOMARE in prompt:
+        return os.path.join(BAND, "kursdomare.json")
     if _BEDOMNING in prompt:
         return os.path.join(BAND, "bedomning.json")
     if _KRITERIE in prompt:

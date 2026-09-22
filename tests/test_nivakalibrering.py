@@ -542,7 +542,7 @@ def test_domaren_kors_inte_pa_ett_dokument_utan_poang():
 # ─────────────────────────────────────────── nivåpasset i genereringen ────
 
 def _stub(svar: list[str], *, dom: str = "{}", krit: str | None = None,
-          rakne: str = "{}"):
+          rakne: str = "{}", kursdom: str = "{}"):
     """En stubbad modell som svarar efter vad prompten FRÅGAR om.
 
     `svar` är svaren på DOKUMENTprompterna i tur och ordning (den sista
@@ -556,7 +556,10 @@ def _stub(svar: list[str], *, dom: str = "{}", krit: str | None = None,
     helt prov, hade gått till en domare som svarade med det.
 
     `dom="{}"` betyder «domaren svarade inget tolkbart» och är alltså
-    fail-open: den kontrollen räknas som icke körd och fäller ingenting."""
+    fail-open: den kontrollen räknas som icke körd och fäller ingenting.
+    Kursdomaren (app/kursdomare, 2026-09-22) får `kursdom` på samma villkor —
+    utan raden hade dess prompt räknats som ett DOKUMENT och förskjutit
+    svaren."""
     anrop, dokument = [], []
 
     def llm(model, prompt, **kw):
@@ -570,6 +573,8 @@ def _stub(svar: list[str], *, dom: str = "{}", krit: str | None = None,
             return dom
         if "räknedomare" in prompt:
             return rakne
+        if "kursdomare" in prompt:
+            return kursdom
         dokument.append(prompt)
         return svar[min(len(dokument) - 1, len(svar) - 1)]
 
@@ -623,10 +628,11 @@ def test_utan_avvikelser_kostar_domaren_ingen_reparation():
     llm, anrop = _stub([json.dumps(_giltigt_prov())], dom=dom)
     res = exam_gen.generate_exam("Ma1a", "NA25", ["ekvationer"], model="m",
                                  antal=2, profil="arbetsblad", llm=llm)
-    # Generering + två nivådomare + räknedomaren = fyra anrop, noll rundor och
-    # noll extrarundor: domare som inte fäller får aldrig kosta läraren en
+    # Generering + två nivådomare + räknedomaren + kursdomaren (Ma1a är en
+    # mätt kurs, app/kursdomare 2026-09-22) = fem anrop, noll rundor och noll
+    # extrarundor: domare som inte fäller får aldrig kosta läraren en
     # omskrivning, och grinden ska inte döma om ett papper som är rent.
-    assert len(anrop) == 4 and res["rounds"] == 1 and res["errors"] == []
+    assert len(anrop) == 5 and res["rounds"] == 1 and res["errors"] == []
     assert res["nivafel"] == []
 
 
@@ -1141,7 +1147,8 @@ def test_talsignaler_ensamma_kostar_aldrig_en_runda():
     llm, anrop = _stub([json.dumps(prov)], dom=enig)
     res = exam_gen.generate_exam("Ma1a", "NA25", ["ekvationer"], model="m",
                                  antal=2, profil="arbetsblad", llm=llm)
-    assert len(anrop) == 4 and res["rounds"] == 1 and res["nivafel"] == []
+    # Fem anrop: generering, två nivådomare, räknedomaren, kursdomaren.
+    assert len(anrop) == 5 and res["rounds"] == 1 and res["nivafel"] == []
     # Två signaler: frasen på uppgiften, och pappret som helhet (en av två
     # uppgifter är över andelstaket).
     assert [e["code"] for e in res["errors"]] == ["talsignal", "talsignal"]

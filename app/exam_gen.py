@@ -18,7 +18,8 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
 
-from app import course_data, exam_spec, llm_client, niva_rubrik, rakneverk
+from app import (course_data, exam_spec, kursdomare, llm_client,
+                 niva_rubrik, rakneverk)
 
 MAX_ROUNDS = 3          # generering + balansreparation (delad budget)
 MAX_LATEX_ROUNDS = 2    # kompileringsfel → korrigering
@@ -8269,13 +8270,15 @@ def _domar_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                 rounds_used: int, max_rounds: int, koder: list[str] | None = None,
                 niva_mal: dict | None = None,
                 delmoment: list[dict] | None = None,
+                kurs: str = "",
                 log_cb: Callable[[str], None] | None = None) -> dict:
     """Domarrundan + högst EN reparationsrunda på dess fynd (C4).
 
-    TRE domaranrop, alla blinda, alla i SAMMA pass och samma reparationsrunda:
+    FYRA domaranrop, alla i SAMMA pass och samma reparationsrunda:
     nivådomen är DUBBEL (den blinda klassningen och kriteriedomaren, se
-    avvikelser) och räknedomaren frågar om facit stämmer med uppgiftens tal.
-    Reparationen kostar en runda, och den delas.
+    avvikelser), räknedomaren frågar om facit stämmer med uppgiftens tal och
+    kursdomaren (app/kursdomare) om uppgiften hör hemma i lärarens kurs eller
+    i grannkursens prov. Reparationen kostar en runda, och den delas.
 
     Ligger efter balansreparationen med flit: domarna ska läsa det dokument
     läraren annars hade fått, inte ett halvfärdigt mellanläge.
@@ -8305,7 +8308,11 @@ def _domar_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
 
     # Det saknade porträttet FÄLLER, till skillnad från signalerna: en tom
     # bildplats är inte en smaksak utan ett hål på försättsbladet.
+    # Kursdomaren (app/kursdomare, 2026-09-22) frågar VILKEN KURS uppgiften
+    # hör hemma i — tom utan mätt kurs och på gruppuppgiften.
     avv = (niva + doma_rakning(exam, model=model, llm=llm, log_cb=log_cb)
+           + kursdomare.doma_kurs(exam, kurs=kurs, profil=profil, model=model,
+                                  llm=llm, log_cb=log_cb)
            + forsattsignaler(exam, profil))
     if not avv:
         return svar({"exam": exam, "errors": errors + signaler,
@@ -9176,7 +9183,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     res = _domar_pass(res["exam"], res["errors"], model=model, llm=llm,
                       profil=profil, skala=skala,
                       antal=antal, skeleton=grammatik, koder=koder,
-                      niva_mal=niva_mal, delmoment=delmoment,
+                      niva_mal=niva_mal, delmoment=delmoment, kurs=kurs,
                       rounds_used=res["rounds"], max_rounds=max_rounds,
                       log_cb=log_cb)
     # ── GRINDEN ──────────────────────────────────────────────────────
