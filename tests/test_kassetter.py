@@ -378,7 +378,12 @@ def test_provbandet_gar_genom_bada_domarna_och_talvakten(fejk_claude):
                                  log_cb=loggat.append)
     assert any("Räknar igenom facit" in r for r in loggat), loggat
     assert [e for e in res["errors"] if e["code"] == "rakning"] == []
-    assert res["rounds"] == 4, "grindens två extrarundor kördes inte"
+    # SEX rundor sedan 2026-09-19, inte fyra: generering, A-nivåvaktens
+    # omskrivning (a_nivavakt, «2 A-poäng kräver ingen insikt»), domarpassets
+    # runda, grindens två extrarundor och slutkontrollens byte. Bandet svarar
+    # likadant varje gång, så varje pass som får fälla fäller. Räknades om
+    # 2026-09-22 — testet hade stått rött sedan vakterna kom.
+    assert res["rounds"] == 6, "grindens och slutkontrollens rundor kördes inte"
     tal = [e for e in res["errors"] if e["code"] == "talsignal"]
     assert [e["path"] for e in tal] == ["uppgift 6"]
     assert "avrunda till ett antal decimaler" in tal[0]["message"]
