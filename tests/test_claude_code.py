@@ -59,6 +59,7 @@ def _strom(*texter, kostnad=0.01):
 
 
 def _inloggad(monkeypatch, ja=True, finns=True):
+    monkeypatch.setattr(claude_code, "_CLI_VERSION", {})
     monkeypatch.setattr(claude_code, "binar", lambda: "claude" if finns else None)
     monkeypatch.setattr(claude_code.subprocess, "run", lambda *a, **k: type(
         "R", (), {"stdout": json.dumps({"loggedIn": ja, "email": "l@skola.se",
@@ -519,14 +520,16 @@ def test_forbi_cmd_valjer_exe_bredvid_men_bara_om_den_finns(tmp_path):
 
 # ── Modellen ───────────────────────────────────────────────────────────────
 
-def test_tom_modell_pinnas_till_opus_5(monkeypatch):
+def test_tom_modell_pinnas_till_opus_5_5_med_effort_high(monkeypatch):
     """Förvalet löste ut till claude-opus-5[1m] — samma modell, men den långa
-    kontextvägen som appens ~25k-prompter aldrig behöver."""
+    kontextvägen som appens ~25k-prompter aldrig behöver. Efforten pinnas med:
+    Opus 5.5 har medium som förval."""
     _inloggad(monkeypatch)
     sett = _fanga_argv(monkeypatch)
     claude_code.generate("fråga")
     argv = sett["argv"]
-    assert argv[argv.index("--model") + 1] == claude_code.MODELL == "claude-opus-5"
+    assert argv[argv.index("--model") + 1] == claude_code.MODELL == "claude-opus-5-5"
+    assert argv[argv.index("--effort") + 1] == claude_code.EFFORT == "high"
 
 
 def test_en_utpekad_modell_far_gå_före(monkeypatch):
@@ -535,3 +538,40 @@ def test_en_utpekad_modell_far_gå_före(monkeypatch):
     claude_code.generate("fråga", modell="claude-haiku-4-5")
     argv = sett["argv"]
     assert argv[argv.index("--model") + 1] == "claude-haiku-4-5"
+    assert "--effort" not in argv          # Haiku 4.5 tar ingen effort
+
+
+def _version(monkeypatch, ut: str):
+    """CLI:n svarar `ut` på --version; allt annat är inloggningsfrågan."""
+    monkeypatch.setattr(claude_code, "_CLI_VERSION", {})
+    monkeypatch.setattr(claude_code, "binar", lambda: "claude")
+
+    def run(argv, *a, **k):
+        if "--version" in argv:
+            return type("R", (), {"stdout": ut})()
+        return type("R", (), {"stdout": json.dumps({"loggedIn": True})})()
+    monkeypatch.setattr(claude_code.subprocess, "run", run)
+
+
+def test_for_gammal_cli_far_opus_5_utan_effort(monkeypatch):
+    """2.1.220 svarar «does not support this model» på Opus 5.5 — då hellre
+    förra modellen än ett fel på varje anrop."""
+    _version(monkeypatch, "2.1.220 (Claude Code)\n")
+    sett = _fanga_argv(monkeypatch)
+    claude_code.generate("fråga")
+    argv = sett["argv"]
+    assert argv[argv.index("--model") + 1] == claude_code.MODELL_RESERV == "claude-opus-5"
+    assert "--effort" not in argv
+
+
+def test_ny_nog_cli_far_opus_5_5(monkeypatch):
+    _version(monkeypatch, "2.1.280 (Claude Code)\n")
+    sett = _fanga_argv(monkeypatch)
+    claude_code.generate("fråga")
+    argv = sett["argv"]
+    assert argv[argv.index("--model") + 1] == "claude-opus-5-5"
+
+
+def test_oläsbar_version_raknas_som_ny_nog(monkeypatch):
+    _version(monkeypatch, "något annat")
+    assert claude_code.modell_och_effort("claude") == ("claude-opus-5-5", "high")

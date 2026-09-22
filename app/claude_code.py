@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import os
 import queue
+import re
 import shutil
 import subprocess
 import tempfile
@@ -174,7 +175,52 @@ def kravs() -> None:
 # Samma modell, men den långa kontextvägen: appens prompter är ~25k tokens och
 # behöver den aldrig. Pinnas här i stället för att bero på en inställning i
 # CLI:n som ingen i appen ser.
-MODELL = "claude-opus-5"
+#
+# OPUS 5.5 SEDAN 2026-09-22 (lärarens beslut): samma nivå, billigare per token.
+# EFFORTEN PINNAS OCKSÅ. Förut ärvde `claude -p` effortLevel ur lärarens
+# settings.json («high»), och Opus 5 har high som förval ändå. Opus 5.5 har
+# MEDIUM som förval, så utan flaggan hade bytet tyst sänkt nivån ett steg.
+MODELL = "claude-opus-5-5"
+EFFORT = "high"
+# Opus 5.5 kräver CLI 2.1.280. En äldre CLI svarar «400 … does not support this
+# model» på VARJE anrop (2.1.220 på lärarens Windows-dator 2026-09-22), och
+# Macen uppdateras för sig. Då körs Opus 5 i stället, med CLI:ns eget förval
+# för effort, så appen fungerar tills någon kört `claude update`.
+MODELL_RESERV = "claude-opus-5"
+_MODELL_KRAVER = (2, 1, 280)
+_CLI_VERSION: dict = {}
+
+
+def _cli_version(exe: str) -> tuple[int, int, int] | None:
+    """CLI:ns version, en gång per binär. Nyckeln bär filens mtime så att en
+    `claude update` medan servern kör ger en ny fråga, inte det gamla svaret."""
+    try:
+        nyckel = (exe, os.stat(exe).st_mtime)
+    except OSError:
+        nyckel = (exe, None)
+    if nyckel not in _CLI_VERSION:
+        try:
+            ut = subprocess.run([exe, "--version"], capture_output=True, text=True,
+                                encoding="utf-8", errors="replace", timeout=30,
+                                stdin=subprocess.DEVNULL,
+                                cwd=_neutral_cwd()).stdout
+            m = re.match(r"\s*(\d+)\.(\d+)\.(\d+)", ut or "")
+            _CLI_VERSION[nyckel] = tuple(int(x) for x in m.groups()) if m else None
+        except Exception:                       # noqa: BLE001 — en fråga som faller får aldrig fälla anropet
+            _CLI_VERSION[nyckel] = None
+    return _CLI_VERSION[nyckel]
+
+
+def modell_och_effort(exe: str, modell: str = "") -> tuple[str, str]:
+    """Modellen och efforten ett anrop ska köra med. En utpekad modell går före
+    och får CLI:ns förval för effort. En version som inte går att läsa räknas
+    som ny nog: då är det felet från CLI:n som ska synas, inte en tyst reserv."""
+    if modell:
+        return modell, ""
+    v = _cli_version(exe)
+    if v is not None and v < _MODELL_KRAVER:
+        return MODELL_RESERV, ""
+    return MODELL, EFFORT
 
 # ── Schemat och kommandoradens tak ─────────────────────────────────────────
 # `claude` installeras på Windows som claude.CMD, och cmd.exe:s kommandorad tar
@@ -334,7 +380,8 @@ def _radlangd(argv: list[str]) -> int:
 
 
 def _argv(exe: str, *, system: str | None, schema: dict | None,
-          modell: str, verktyg: str, extra_dirs: list[str]) -> list[str]:
+          modell: str, verktyg: str, extra_dirs: list[str],
+          effort: str = "") -> list[str]:
     argv = [exe, "-p", "--safe-mode", "--no-session-persistence",
             "--output-format", "stream-json", "--include-partial-messages", "--verbose",
             "--tools", verktyg]
@@ -346,6 +393,8 @@ def _argv(exe: str, *, system: str | None, schema: dict | None,
                                              separators=(",", ":"))]
     if modell:
         argv += ["--model", modell]
+    if effort:
+        argv += ["--effort", effort]
     for d in extra_dirs:
         argv += ["--add-dir", d]
     return argv
@@ -374,8 +423,10 @@ def generate(prompt: str, *, system: str | None = None,
     if schema is not None:
         prompt = prompt + _formatsammanfattning(schema)
         schema = _minifiera(schema)
-    argv = _argv(exe, system=system, schema=schema, modell=modell or MODELL,
-                 verktyg="Read" if bilder else "", extra_dirs=mappar)
+    modell, effort = modell_och_effort(exe, modell)
+    argv = _argv(exe, system=system, schema=schema, modell=modell,
+                 verktyg="Read" if bilder else "", extra_dirs=mappar,
+                 effort=effort)
     # Taket mäts på HELA kommandoraden, inte bara schemat: en stor systemprompt
     # kan tippa över den lika tyst som ett stort schema. Det snåla taket gäller
     # BARA .CMD/.BAT-vägen (cmd.exe:s 8191) — en direktstartad binär, Mac och
@@ -385,8 +436,9 @@ def generate(prompt: str, *, system: str | None = None,
     if schema is not None and _radlangd(argv) > tak:
         prompt = prompt + _SCHEMA_I_PROMPT + json.dumps(
             schema, ensure_ascii=False, separators=(",", ":"))
-        argv = _argv(exe, system=system, schema=None, modell=modell or MODELL,
-                     verktyg="Read" if bilder else "", extra_dirs=mappar)
+        argv = _argv(exe, system=system, schema=None, modell=modell,
+                     verktyg="Read" if bilder else "", extra_dirs=mappar,
+                     effort=effort)
     if bilder:
         prompt = prompt + "\n\nBilder att läsa:\n" + "\n".join(bilder)
 

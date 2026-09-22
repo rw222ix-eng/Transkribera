@@ -11,7 +11,7 @@ tva schemalagda uppgifter, inte ett: att baka in en riktig-data-lasning i
 nattutforskaren hade suddat ut dess viktigaste grans.
 
 Kedjan: python -m tools.spar skriver veckans rapport till en arbetskatalog
-utanfor repot, och claude CLI (Opus 5, i molnet) far lasa den plus koden och
+utanfor repot, och claude CLI (Opus 5.5, i molnet) far lasa den plus koden och
 skriva forslag.md. Ingenting committas, ingenting i repot rors: agenten har
 bara Read/Glob/Grep pa repot (via --add-dir) och skriver i arbetskatalogen.
 
@@ -117,8 +117,10 @@ $promptfil = Join-Path $rapport 'prompt.txt'
 Set-Content -Path $promptfil -Value $prompt -Encoding utf8
 
 # -- Agenten ----------------------------------------------------------------
-# --model claude-opus-5: lararens uttryckliga val for just den har rutinen -
-# forslagen ar produkten, och de ska komma fran den starkaste modellen.
+# --model claude-opus-5-5 --effort high: lararens uttryckliga val for just den
+# har rutinen - forslagen ar produkten, och de ska komma fran den starkaste
+# modellen. Opus 5.5 sedan 2026-09-22; effort pinnas eftersom Opus 5.5 har
+# medium som forval (Opus 5 hade high). Kraver claude CLI 2.1.280 eller senare.
 # Verktygen ar lasande plus Write: arbetskatalogen ar cwd, sa forslag.md
 # hamnar ratt av sig sjalv, och repot nas bara via --add-dir for LASNING
 # (agenten far inga skal och ingen Edit - den kan citera kod, inte andra den).
@@ -132,7 +134,8 @@ $agenterr = Join-Path $rapport 'agent-fel.log'
 $arg = @(
     '-p',
     '--output-format', 'text',
-    '--model', 'claude-opus-5',
+    '--model', 'claude-opus-5-5',
+    '--effort', 'high',
     '--strict-mcp-config',
     '--permission-mode', 'bypassPermissions',
     '--tools', 'Read,Write,Glob,Grep,TodoWrite',

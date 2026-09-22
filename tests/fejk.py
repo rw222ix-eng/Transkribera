@@ -353,6 +353,12 @@ def skriv(h):
     sys.stdout.write(json.dumps(h, ensure_ascii=False) + "\n")
     sys.stdout.flush()
 
+# Versionen: claude_code.modell_och_effort frågar en gång per binär, och en
+# fejk som inte svarar hade läst stdin i stället för att lägga sig.
+if "--version" in sys.argv:
+    sys.stdout.write("2.1.280 (Claude Code)\n")
+    sys.exit(0)
+
 if "auth" in sys.argv:
     inloggad = LAGE != "utloggad"
     skriv({"loggedIn": inloggad, "email": "larare@example.com",

@@ -405,14 +405,15 @@ def spela_in(namn: str) -> Path:
         prompt += claude_code._formatsammanfattning(schema)
         schema = claude_code._minifiera(schema)
     # MODELLEN MED, av samma skäl som schemat: `claude_code.generate` skickar
-    # alltid `--model claude-opus-5`, och utan den raden spelas bandet in mot
+    # alltid `--model` (och `--effort`), och utan den raden spelas bandet in mot
     # CLI:ts förvalda modell i stället för appens. 2026-09-06 blev det ett
     # hårt fel: den installerade CLI:n (2.1.220) svarade «does not support this
     # model» på sin egen förvalda modell medan appens anrop gick igenom, och
     # inspelningen skrev ett band som bara innehöll felraden.
+    modell, effort = claude_code.modell_och_effort(exe)
     argv = claude_code._argv(exe, system=s["system"](), schema=schema,
-                             modell=claude_code.MODELL, verktyg="",
-                             extra_dirs=[])
+                             modell=modell, verktyg="", extra_dirs=[],
+                             effort=effort)
     print(f"Spelar in «{namn}» … (riktigt anrop, kostar några ören)")
     proc = subprocess.run(argv, input=prompt, capture_output=True,
                           text=True, encoding="utf-8", errors="replace",
