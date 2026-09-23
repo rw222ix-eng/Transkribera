@@ -524,6 +524,10 @@ INSTRUCTION = (
     # s km tar 2s minuter» bara fanns för att koppla ihop två bokstäver.
     "- SITUATIONEN SKA VARA SANN. Frågan gäller det man faktiskt vill veta i "
     "situationen: tiden i ugnen ur kycklingens vikt, aldrig vikten ur tiden. "
+    "Det någon GÖR i uppgiften ska vara något som görs på riktigt: ingen "
+    "lägger virus i rad över ett hårstrå (prov 126). Ska två storlekar "
+    "jämföras, fråga «Hur många gånger tjockare är … än …?» om två saker "
+    "som finns (ett hårstrå, en såpbubblas hinna). "
     "Verben är de man säger i verkligheten (man tillagar eller steker i "
     "ugnen, man hyr, man betalar). Två formler för samma sak står bara där "
     "två alternativ finns att välja mellan på riktigt (två hyrfirmor, två "
