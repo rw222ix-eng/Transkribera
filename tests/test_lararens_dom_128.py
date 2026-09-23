@@ -180,6 +180,24 @@ def test_lasreglerna_faller_exam_128_uppgift_for_uppgift():
     assert np_vakter.lasregelvakt(ratt) == []
 
 
+def test_spelregeln_i_egen_mening_ar_ocksa_en_villkorsmening():
+    """Generalrepetitionens uppgift 6: «Du får sätta ut ett par parenteser i
+    uttrycket.» och «Han får sätta parenteserna var han vill.»"""
+    u = _u("Uttrycket nedan har värdet $-7$.\n$6 - 2 \\cdot 5 - 3$\nDu får "
+           "sätta ut ett par parenteser i uttrycket.", [0, 0, 0], delar=[
+               _d("Hugo påstår att uttrycket aldrig kan bli mindre än $-7$. "
+                  "Han får sätta parenteserna var han vill. Avgör om Hugo har "
+                  "rätt.", [0, 0, 2])])
+    text = " | ".join(f["message"] for f in np_vakter.lasregelvakt(_prov(u)))
+    assert "«Du får sätta ut ett par parenteser i uttrycket.» är en " \
+           "villkorsmening" in text
+    assert "«Han får sätta parenteserna var han vill.» säger bara" in text
+    # En situation där någon får något är ingen spelregel.
+    assert np_vakter.lasregelvakt(_prov(_u(
+        "Du får $20$ % rabatt på en jacka.\nHur mycket betalar du?",
+        [1, 0, 0]))) == []
+
+
 def test_anvand_formeln_och_ar_en_metodforeskrift():
     """Exam 129 uppgift 10: formeln stod på raden ovanför."""
     fel = np_vakter.lasregelvakt(_prov(_u(

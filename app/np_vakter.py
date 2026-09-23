@@ -760,17 +760,24 @@ _ANVAND_FORMELN_RE = re.compile(r"\banvänd\s+formeln\s+(?:och|för\s+att)\b",
 _METASPRAK_RE = re.compile(
     r"\bstorheterna\b|den\s+enhet\s+som\s+står|som\s+står\s+i\s+uppgiften"
     r"|talen\s+i\s+uppgiften", re.IGNORECASE)
-# En mening vars enda sak är att ett tal kan vara vad som helst.
+# En mening vars enda sak är att ett tal kan vara vad som helst, eller att
+# någon får göra det hur hon vill (generalrepetitionen samma natt: «Han får
+# sätta parenteserna var han vill.»).
 _GODTYCKLIG_RE = re.compile(
-    r"\b(?:kan|får)\s+vara\s+(?:vilke[nt]|vilka)\s+(?:\w+\s+){0,2}som\s+helst",
+    r"\b(?:kan|får)\s+vara\s+(?:vilke[nt]|vilka)\s+(?:\w+\s+){0,2}som\s+helst"
+    r"|\b(?:var|hur|vad)\s+(?:han|hon|du|man|de)\s+vill\b",
     re.IGNORECASE)
-# Villkorsmeningar: en egen mening som lägger till ett villkor.
+# Villkorsmeningar: en egen mening som lägger till ett villkor. «Du får sätta
+# ut ett par parenteser i uttrycket.» är spelregeln i en egen mening; den
+# hör hemma i frågan («Var ska parenteserna stå för att …?»).
 _VILLKOR_RE = re.compile(
     r"\b(?:ska|måste)\s+vara\s+(?:ett\s+|en\s+)?(?:heltal|helt\s+tal"
     r"|hela\s+tal|positiv\w*|negativ\w*)\b"
     r"|\bär\s+ett\s+helt\s+antal\b"
     r"|^ingen\s+\w+\s+får\b"
-    r"|\b(?:får|ska)\s+inte\s+(?:kapas|delas|klippas|sågas)\b",
+    r"|\b(?:får|ska)\s+inte\s+(?:kapas|delas|klippas|sågas)\b"
+    r"|^(?:du|han|hon|man|eleven)\s+får\s+(?:bara\s+|endast\s+|inte\s+)?"
+    r"(?:sätta|flytta|välja|ändra|lägga|använda\s+bara)\b",
     re.IGNORECASE)
 # «Moms är en skatt.»: en kort mening som bara säger vad ett ord betyder.
 _ORDFORKLARING_RE = re.compile(
