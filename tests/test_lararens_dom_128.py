@@ -328,6 +328,32 @@ def test_efterkontrollens_tidsfynd_foljer_taket():
     assert "21 poäng, alltså 63 minuter" in fynd[0]["text"]
 
 
+def test_poangtaket_haller_hela_vagen():
+    """Generalrepetitionen: skelettet på 20 p, en lagning gav en uppgift en
+    E-poäng till, och pappret blev 21 p. Vakten säger till i rundorna."""
+    exam = _prov(_u("Beräkna $3 + 4$.", [1, 0, 0]),
+                 _u("Beräkna $5 \\cdot 6$.", [1, 0, 0]))
+    assert exam_gen.poangtakvakt(exam, 2) == []
+    assert exam_gen.poangtakvakt(exam, None) == []
+    fel = exam_gen.poangtakvakt(exam, 1)
+    assert _koder(fel) == ["poangtak"]
+    assert "Ta bort 1 p" in fel[0]["message"]
+    assert "Lägg inte till och ta inte bort uppgifter" in fel[0]["message"]
+    # Formbytesvakten ber inte om en poäng till på taket.
+    assert "höj INTE poängen" in np_vakter.formbytesvakt(
+        _prov(UPPG1), poang_tak=3)[0]["message"]
+
+
+def test_antaganden_i_texten_ar_inget_dolt_krav():
+    """«Skriv ut vilka antaganden du gör.» ställer kravet (generalrepetitionen
+    fälldes ändå, mönstret slutade vid «antagande»)."""
+    u = _u("Hugo påstår att svenskarna hand i hand räcker runt jorden.\n"
+           "Undersök om Hugo har rätt.\nSkriv ut vilka antaganden du gör.",
+           [0, 0, 2], typ="problem", del_="C")
+    u["bedomning"] = "+1 A rimligt antagande\n+1 A slutsats"
+    assert np_vakter.doltkravvakt(_prov(u)) == []
+
+
 def test_stegvakten_hojer_inte_poangen_pa_taket():
     """Lagningen gav uppgift 9 en fjärde C-poäng och pappret 21 p på ett
     20-poängspass."""
@@ -373,6 +399,13 @@ def test_samma_situation_fran_en_annan_klass_falls():
     klossar["tabell"]["rader"] = [["Antal klossar", "1", "3", "6"]]
     assert exam_gen.situationsvakt(_prov(klossar), tidigare) == []
     assert exam_gen.situationsvakt(_prov(u7), []) == []
+    # Vanliga långa ord är ingen situation (generalrepetitionen fick
+    # «eftersom» och «undersök» som samma situation).
+    gammal = ["Saga påstår att andelen är större, eftersom fler cyklar där. "
+              "Undersök om hon har rätt."]
+    ny = _u("Sara påstår att kunden ska betala mer, eftersom jobbet tar tid. "
+            "Undersök om Sara har räknat rätt.", [1, 0, 0])
+    assert exam_gen.situationsvakt(_prov(ny), gammal) == []
 
 
 def test_undvik_listan_namnger_sakerna_kursen_redan_haft():

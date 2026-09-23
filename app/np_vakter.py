@@ -383,9 +383,12 @@ def formbyten(text: str) -> list[str]:
     return ut
 
 
-def formbytesvakt(exam: dict) -> list[dict]:
+def formbytesvakt(exam: dict, poang_tak: int | None = None) -> list[dict]:
     """Fler formbyten än poäng i en enhet (enhetsbyte och grundpotensform
-    räknas var för sig)."""
+    räknas var för sig). På passets tak (stegvakten, exam 128) är rådet bara
+    ett byte, aldrig en poäng till."""
+    pa_taket = poang_tak is not None and sum(
+        _poang(e) for e in _enheter(exam)) >= poang_tak
     fel: list[dict] = []
     for e in _enheter(exam):
         poang = _poang(e)
@@ -398,8 +401,10 @@ def formbytesvakt(exam: dict) -> list[dict]:
             f"({' och '.join(byten)}) för {poang} p. Enhetsbyte, prefix och "
             "grundpotensform är var sitt steg, och nationella provet i Ma 1a "
             "ger en E-poäng per steg. Låt uppgiften be om ett byte («Skriv "
-            "307 km i grundpotensform.») eller dela den i två deluppgifter "
-            "med var sin poäng."))
+            "307 km i grundpotensform.»)"
+            + (". Pappret ligger på passets tak, så höj INTE poängen."
+               if pa_taket else
+               " eller dela den i två deluppgifter med var sin poäng.")))
     return fel[:FORMBYTE_MAX_FYND]
 
 
@@ -649,7 +654,11 @@ def familjvakt(exam: dict) -> list[dict]:
 DOLDA_KRAV: list[tuple[str, re.Pattern, re.Pattern]] = [
     ("ett antagande",
      re.compile(r"antagande|antar att|förutsätt", re.I),
-     re.compile(r"(?<![\wåäö])anta(?:g|r|gande)?(?![\wåäö])|förutsätt", re.I)),
+     # «antaganden», «antagandena» också: generalrepetitionen av BA26B:s
+     # test (2026-09-23 natt) skrev «Skriv ut vilka antaganden du gör.» och
+     # fälldes ändå för ett dolt krav, för ordet slutade inte där mönstret gjorde.
+     re.compile(r"(?<![\wåäö])anta(?:r|g[a-zåäö]*)?(?![\wåäö])|förutsätt",
+                re.I)),
     ("en motivering",
      re.compile(r"motiver|förklar", re.I),
      re.compile(r"motiver|förklar|varför|resoner|undersök|avgör|visa|utred"
@@ -895,7 +904,7 @@ def np_vakter(exam: dict, kurs: str = "",
     `poang_tak` är passets tak ur lärarens takt (exam_spec.poang_tak_for).
     Bara stegvakten läser det: på taket ber den om ett steg mindre i stället
     för en poäng mer. None är beteendet före taket."""
-    return (stegvakt(exam, poang_tak) + formbytesvakt(exam)
+    return (stegvakt(exam, poang_tak) + formbytesvakt(exam, poang_tak)
             + poangformvakt(exam, kurs) + metodvakt(exam)
             + parametervakt(exam, kurs) + kursvakt(exam, kurs)
             + familjvakt(exam) + doltkravvakt(exam) + lasregelvakt(exam))

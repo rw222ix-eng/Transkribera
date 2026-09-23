@@ -1318,7 +1318,7 @@ def anvanda_situationer(texter) -> list[str]:
     sedda: set[str] = set()
     kurs = _kursord()
     for t in texter or []:
-        ren = _MATTEBLOCK_RE.sub(" ", str(t or "")).casefold()
+        ren = _MATTEBLOCK_RE.sub(" ", _inledning(str(t or ""))).casefold()
         for o in re.findall(r"[a-zåäöéü]+", ren):
             s = _ordstam(o)
             if (len(o) < SITUATION_MINORD or o in _SITUATION_STOPP
@@ -8638,6 +8638,34 @@ def poangvakt(exam: dict, profil: str = "prov",
     return (ut + rader[:POANGRAD_MAX_FYND])[:POANG_MAX_FYND]
 
 
+def poangtakvakt(exam: dict, poang_tak: int | None) -> list[dict]:
+    """Bär pappret fler poäng än passet i lärarens takt?
+
+    GENERALREPETITIONEN AV BA26B:S TEST (2026-09-23 natt): skelettet byggdes
+    på taket, 20 p på 60 minuter i takt 3, och en lagningsrunda gav ändå en
+    A-kortsvarsuppgift en E-poäng till. Pappret blev 21 p, 63 minuter i
+    hennes räkning, och det enda som sa det var efterkontrollens tidsfynd när
+    pappret redan var skrivet. Vakterna som ber om poäng (poängvakten,
+    stegvakten, formbytesvakten) vet om taket, men ingenting fångade det
+    papper som ändå gick över det. Det här gör det, i samma rundor som de
+    andra räknade vakterna, och lagningen är att ta bort en poäng, aldrig
+    en uppgift. Tyst utan tak (ingen takt satt)."""
+    if poang_tak is None:
+        return []
+    total = sum(sum(e.get("poang") or (0, 0, 0))
+                for e in domarenheter(exam or {}))
+    if total <= poang_tak:
+        return []
+    return [_err(
+        "uppgifter", "poangtak",
+        f"Pappret har {total} p, och passet bär {poang_tak} p i lärarens "
+        f"takt. Ta bort {total - poang_tak} p: välj den uppgift eller "
+        "deluppgift som fått en poäng mer än den behöver, sänk "
+        "poängtrippeln med en på den nivån, stryk en bedömningsrad och låt "
+        "uppgiften be om en sak mindre. Lägg inte till och ta inte bort "
+        "uppgifter.")]
+
+
 def _slapp_poanglaset(fel: list[dict]) -> list[dict]:
     """Två fynd på samma uppgift får inte säga emot varandra.
 
@@ -8901,7 +8929,12 @@ _SITUATION_STOPP = frozenset((
     "snabbare", "långsammare", "längre", "kortare", "högre", "lägre",
     "månad", "månader", "månaderna", "veckor", "veckorna", "dagar",
     "dagarna", "timme", "sekund", "sammanlagt", "ungefärligt", "resultat",
-    "resultatet", "beräkning", "beräkningen", "påståendet", "förklaring"))
+    "resultatet", "beräkning", "beräkningen", "påståendet", "förklaring",
+    # Svenskans vanliga långa ord. Generalrepetitionen av BA26B:s test
+    # (2026-09-23 natt) fick «eftersom» och «undersök» som «samma situation».
+    "eftersom", "undersök", "undersöka", "antaganden", "antagande",
+    "använder", "behöver", "fortfarande", "samtidigt", "dessutom",
+    "därefter", "tillräckligt", "ungefär", "exempel", "procentuellt"))
 _ORDSLUT = ("orna", "erna", "arna", "orna", "na", "en", "et", "er", "ar",
             "or", "a", "n")
 
@@ -8964,13 +8997,23 @@ def _uppgiftsblock(u: dict) -> str:
     return " ".join(delar)
 
 
+def _inledning(text: str, meningar: int = 2) -> str:
+    """Uppgiftens första meningar: där står situationen («Figurerna nedan är
+    byggda av tändstickor.»), medan resten är frågan och dess vardagsord."""
+    rader = [r for r in dela_meningar(str(text or "")).split("\n") if r.strip()]
+    return " ".join(rader[:meningar])
+
+
 def situationsvakt(exam: dict, tidigare: list[str] | None) -> list[dict]:
     """Uppgifter som upprepar en situation eller en talserie ur kursens
-    tidigare papper. Tom lista utan tidigare texter (kassetteregeln)."""
+    tidigare papper. Tom lista utan tidigare texter (kassetteregeln).
+
+    Orden jämförs i uppgifternas två första meningar, där situationen står;
+    talserien i hela uppgiften, tabellen inräknad."""
     gamla = [str(t) for t in (tidigare or []) if str(t or "").strip()]
     if not gamla:
         return []
-    ord_per = [_situationsord(t) for t in gamla]
+    ord_per = [_situationsord(_inledning(t)) for t in gamla]
     # Hur vanligt ordet är i kursens papper, räknat per UPPGIFT: stammen och
     # deluppgifterna kommer efter varandra i listan (db.tidigare_uppgifts-
     # texter), så ett ord som står i texten före räknas inte en gång till.
@@ -8986,7 +9029,8 @@ def situationsvakt(exam: dict, tidigare: list[str] | None) -> list[dict]:
         if not isinstance(u, dict):
             continue
         block = _uppgiftsblock(u)
-        mina = {o for o in _situationsord(block)
+        forsta = _inledning(str(u.get("text") or "")) or _inledning(block)
+        mina = {o for o in _situationsord(forsta)
                 if df.get(o, 0) <= SITUATION_MAX_DF}
         serie = _talserie(block)
         for j, gammal in enumerate(gamla):
@@ -9057,7 +9101,9 @@ def _raknade_fynd(exam: dict, *, avsnitt: list[dict] | None, antal: int | None,
                 # kapitel (exam 128), ingen situation en annan klass redan
                 # haft (exam 129).
                 + forbudsvakt(exam, delmoment, forbjudna, avsnitt)
-                + situationsvakt(exam, tidigare))
+                + situationsvakt(exam, tidigare)
+                # Passets tak håller hela vägen, inte bara i skelettet.
+                + poangtakvakt(exam, poang_tak))
     # En mening per rad gäller alla papper eleverna läser (exam 129).
     return fel + radvakt(exam) + scenvakt(exam)
 
@@ -9799,7 +9845,7 @@ def _raknas_om(fel: dict) -> bool:
                "citackning", "citaggning", "anivavakt", "kravrad",
                "rubrikord", "likvardighet", "scenvakt",
                "forebildsvakt", "radlangd", "forbudsvakt",
-               "upprepning") + np_vakter.KODER:
+               "upprepning", "poangtak") + np_vakter.KODER:
         return True
     if kod == "delmomenttackning":
         return path == "uppgifter"
