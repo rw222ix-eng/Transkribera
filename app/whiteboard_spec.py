@@ -1093,6 +1093,63 @@ def _ankaretiketten(sections: list):
     return None
 
 
+# ÄR/INTE (lärarens dom 2026-09-23 kväll, lesson_board 8e). «Det här var
+# proportionellt, det betyder det här, och det är den här kvoten, det vill
+# säga inte den här kvoten.» Under formeln står en math-rad som ÄR begreppet
+# (\frac{80}{1} = \frac{160}{2}) och en som INTE är det (\frac{300}{2} \neq
+# \frac{500}{4}), var och en med sin etikett («Samma kvot: proportionellt.»,
+# «Olika kvot: inte proportionellt.»). Etiketterna är bildtexter till en
+# math-rad, som ankarets och randfallens, och kostar därför ingenting i
+# budgeten: annars var det de två som en budgetlapp strök först, och det är
+# de som bär definitionen.
+#
+# Igenkänningen är deterministisk och smal. INTE-raden är den FÖRSTA
+# svarta math-raden på vänstertavlan (inte i «Att tänka på», inte det röda
+# felet) som antingen bär ≠ (\frac{300}{2} \neq \frac{500}{4}) eller har en
+# etikett i formen «skäl: inte begreppet» (f(x) = -6x + 5 med «Utan x²: inte
+# andragradsfunktion.»): ett fall som inte är begreppet är inte alltid en
+# olikhet. ÄR-raden är math-raden direkt före INTE-radens math i samma
+# flöde (pilraderna hoppas över). Fria är texterna direkt under de två.
+# Taket är 36 tecken, inte randfallens 30: lärarens egen etikett «Olika
+# kvot: inte proportionellt.» är 32, och formen «skäl, kolon, begreppet»
+# bär begreppets hela namn.
+_NEQ_RE = re.compile(r"\\neq?(?![A-Za-z])|≠")
+_INTE_ETIKETT_RE = re.compile(r":\s+inte\b", re.IGNORECASE)
+_AR_INTE_MAX = 36
+
+
+def _etikett_under(sections: list, i: int):
+    nasta = sections[i + 1] if i + 1 < len(sections) else None
+    if isinstance(nasta, TextSection) and nasta.color != "red" \
+            and len(nasta.text) <= _AR_INTE_MAX:
+        return nasta
+    return None
+
+
+def _ar_inte_etiketter(sections: list) -> list:
+    """Etiketterna under ÄR/INTE-raderna på vänstertavlan, eller []."""
+    randfall = {id(s) for s in _randfallsblocket(sections)[0]}
+    for j, sec in enumerate(sections or []):
+        if isinstance(sec, (CalloutSection, RowSection, ColSection)):
+            inne = _ar_inte_etiketter(sec.children)
+            if inne:
+                return inne
+            continue
+        if not (isinstance(sec, MathSection) and sec.color != "red"
+                and id(sec) not in randfall):
+            continue
+        etikett = _etikett_under(sections, j)
+        if not (_NEQ_RE.search(sec.latex) or (
+                etikett is not None and _INTE_ETIKETT_RE.search(etikett.text))):
+            continue
+        fore = [i for i in range(j) if isinstance(sections[i], MathSection)
+                and not _ar_pilrad(sections[i].latex)]
+        rader = ([fore[-1]] if fore else []) + [j]
+        return [e for e in (_etikett_under(sections, i) for i in rader)
+                if e is not None]
+    return []
+
+
 # «Förra gången: …» (lesson_board.satt_forra) läggs i agendan EFTER
 # valideringen, ur kalendern. Modellen har aldrig sett raden när den skriver
 # tavlan, så den får inte kosta i budgeten: annars kunde en senare omskrivning
@@ -1120,6 +1177,8 @@ def _text_volym(sections: list, vanster: bool = False) -> int:
         etikett = _ankaretiketten(sections)
         if etikett is not None:
             fria.add(id(etikett))
+        # ÄR/INTE-etiketterna (2026-09-23 kväll), se _ar_inte_etiketter.
+        fria |= {id(e) for e in _ar_inte_etiketter(sections)}
     return _volym_rek(sections, fria)
 
 
@@ -1384,6 +1443,45 @@ def _byt_thickness(nod) -> None:
             _byt_thickness(v)
 
 
+# TICK-ETIKETTERNAS AVSTÅND (lärarens dom 2026-09-23 kväll över BA26B:s
+# graf: «slarvigt ritad och inte så snygg»). Motorn (app/web/ui/tavla-wb.js,
+# tick labels i WB.graph) ritar etiketten i datakoordinaten plus dx/dy, med
+# 0 som förval: utan fälten står «1» mitt på x-axeln och «80» ovanpå
+# y-axeln. Facittavlan satte dy 22 på x-axelns etiketter och dx −8, dy 6 på
+# y-axelns (ankaret end, så texten slutar strax vänster om axeln).
+#
+# Lagat HÄR och inte i motorn: frontenden är en kopia av Claude
+# Design-projektet och synkas för hand, och en ändring i tavla-wb.js måste
+# göras där först. Här är det ett förval som bara fyller i fält som
+# SAKNAS: ett dx/dy som modellen eller läraren satt står kvar, också 0.
+# normalize_board går varje modellsvar igenom (skrivning, lapp,
+# helomskrivning, omskrivning, mål-lappen), så en regel på ett ställe
+# gäller hela vägen.
+_TICK_X_DY = 22
+_TICK_Y_DX = -8
+_TICK_Y_DY = 6
+
+
+def _tickavstand(nod) -> None:
+    if isinstance(nod, dict):
+        if nod.get("kind") == "graph" and isinstance(nod.get("ticks"), list):
+            for t in nod["ticks"]:
+                if not isinstance(t, dict):
+                    continue
+                if t.get("axis") == "y":
+                    if t.get("dx") is None:
+                        t["dx"] = _TICK_Y_DX
+                    if t.get("dy") is None:
+                        t["dy"] = _TICK_Y_DY
+                elif t.get("dy") is None:
+                    t["dy"] = _TICK_X_DY
+        for v in nod.values():
+            _tickavstand(v)
+    elif isinstance(nod, list):
+        for v in nod:
+            _tickavstand(v)
+
+
 def normalize_board(data: dict) -> dict:
     """Deterministisk normalisering FÖRE validering/rendering (bench Fas 2):
 
@@ -1395,7 +1493,8 @@ def normalize_board(data: dict) -> dict:
     * arrows[].thickness döps om till strokeWidth (modellen skriver envist
       thickness — två inspelningar av tre 2026-08-21 — och en entydig synonym
       ska inte kosta en reparationsrunda; okända nycklar i övrigt fälls
-      fortfarande av extra="forbid").
+      fortfarande av extra="forbid"),
+    * tick-etiketter utan dx/dy får ett avstånd från axeln (_tickavstand).
 
     Ren dict-transform — påverkar inte listpunkter (att korta dem är ett
     innehållsbeslut som lämnas till modellen via text-lang-regeln)."""
@@ -1403,6 +1502,7 @@ def normalize_board(data: dict) -> dict:
         return data
     data = json.loads(json.dumps(data))          # djupkopia, rör ej original
     _byt_thickness(data)
+    _tickavstand(data)
     for board in data.get("boards") or []:
         if not isinstance(board, dict):
             continue

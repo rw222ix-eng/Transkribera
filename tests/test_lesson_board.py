@@ -49,12 +49,15 @@ _V2_SPALT = "boards[0].sections[6].children[1].children"
 
 
 def _broken_doc() -> dict:
-    """Giltigt schema men ett regelfel (punkt utanför range)."""
+    """Giltigt schema men ett regelfel (punkt utanför range). Grafen har en
+    märkt tick, så att grafvakten (2026-09-23 kväll) inte lägger ett andra
+    fel till det testerna mäter."""
     doc = _valid_doc()
     doc["boards"][0]["sections"] = [
         {"kind": "graph", "width": 400, "height": 300,
          "xRange": [-1, 5], "yRange": [-1, 5],
-         "points": [{"x": 99, "y": 0, "label": "A"}]},
+         "points": [{"x": 99, "y": 0, "label": "A"}],
+         "ticks": [{"axis": "x", "at": 2, "label": "2", "dy": 22}]},
     ]
     return doc
 
@@ -381,10 +384,20 @@ def _begreppsrader(doc: dict) -> list[str]:
 
     Kolon + MELLANSLAG skiljer dem från allt annat i spalten: rubrikraden är
     fet, definitionsmeningen och anatomins etiketter saknar kolon, och «2:an»
-    i en ankaretikett har inget mellanslag efter sitt kolon."""
+    i en ankaretikett har inget mellanslag efter sitt kolon.
+
+    ÄR/INTE-etiketterna (8e, lärarens dom 2026-09-23 kväll) har kolon, men
+    de är bildtexter till en math-rad och inga begreppsrader: produktionens
+    egen igenkänning (whiteboard_spec._ar_inte_etiketter) sorterar bort dem."""
+    fria = {e.text for e in _ar_inte_etiketter(doc)}
     return [s["text"] for s in _spalt1(doc)
             if s["kind"] == "text" and ": " in s["text"]
-            and s.get("weight") != 700]
+            and s.get("weight") != 700 and s["text"] not in fria]
+
+
+def _ar_inte_etiketter(doc: dict) -> list:
+    parsed, _fel = ws.validate_board_json(doc)
+    return ws._ar_inte_etiketter(parsed.boards[0].sections)
 
 
 def _ankarraden(doc: dict) -> str | None:
@@ -421,16 +434,21 @@ def _formler_i_spalten(doc: dict) -> int:
 
     Före dem står anatomins uppställningar, som inte är formler (regel 7,
     domen 2026-09-20). Ankaret räknas inte heller — det är formelns varför
-    (8d) — och inte pilraden, som bara är tråden mellan dem."""
+    (8d) — och inte pilraden, som bara är tråden mellan dem. Inte heller
+    ÄR/INTE-raderna (8e, 2026-09-23 kväll): de är fall, inga regler, och
+    känns igen på etiketten under dem."""
     ankare = _ankarraden(doc)
     rader = _spalt1(doc)
-    begrepp = [i for i, s in enumerate(rader)
-               if s["kind"] == "text" and ": " in s["text"]
-               and s.get("weight") != 700]
-    start = begrepp[-1] + 1 if begrepp else 0
-    return len([s for s in rader[start:]
-                if s["kind"] == "math" and s.get("latex") != ankare
-                and not ws._ar_pilrad(s["latex"])])
+    begrepp = set(_begreppsrader(doc))
+    index = [i for i, s in enumerate(rader)
+             if s["kind"] == "text" and s["text"] in begrepp]
+    fria = {e.text for e in _ar_inte_etiketter(doc)}
+    start = index[-1] + 1 if index else 0
+    return len([s for i, s in enumerate(rader) if i >= start
+                and s["kind"] == "math" and s.get("latex") != ankare
+                and not ws._ar_pilrad(s["latex"])
+                and not (i + 1 < len(rader)
+                         and rader[i + 1].get("text") in fria)])
 
 
 def _algebrashoten() -> dict:
@@ -513,12 +531,21 @@ def test_leden_bar_uppgiftens_tal():
     """«Varje term mot varje term säger ju inget om just det här talet»
     (2026-09-05, del 2) gällde metodstegen. Uträkningen bär uppgiftens tal av
     sig själv: varje exempel i shotarna har minst ett led med siffror, och
-    regeln i allmän form («a^2 + b^2 = c^2») står på vänstern, inte som led."""
+    regeln i allmän form («a^2 + b^2 = c^2») står på vänstern, inte som led.
+
+    ÄR-raden (8e, 2026-09-23 kväll) bär exempel 1:s tal med flit, så att
+    läraren kan peka från vänstern till exemplet; i andragrads-shoten är den
+    exemplets funktion ordagrant. Den räknas inte som en regel här."""
     provade = 0
     for uppdrag, doc in lb.FEW_SHOTS:
         if "fallgalleri" in uppdrag:
             continue                # figurerna har rubriker men är inga exempel
-        vanster = {s.get("latex") for s in _spalten(doc) if s["kind"] == "math"}
+        spalten = _spalten(doc)
+        fria = {e.text for e in _ar_inte_etiketter(doc)}
+        vanster = {s.get("latex") for i, s in enumerate(spalten)
+                   if s["kind"] == "math" and not (
+                       i + 1 < len(spalten)
+                       and spalten[i + 1].get("text") in fria)}
         exempel: list = []
         for kol in doc["boards"][1].get("columns") or []:
             lb._exempelrader(kol["sections"], "k", exempel)
@@ -551,7 +578,9 @@ def test_build_prompt_contains_conventions_and_task():
     assert "NA23" in p and "Ma3c" in p
     assert "Förra lektionen: gränsvärden." in p
     assert "Pythagoras sats" in p          # few-shot 1
-    assert "x^2 - 4*x + 3" in p            # few-shot 2 (expr-mönstret)
+    # few-shot 2 (expr-mönstret). x^2 - 4*x + 3 till 2026-09-23 kväll, då
+    # grafen på vänstern fick ticks och vändpunkten behövde luft under axeln.
+    assert "x^2 - 6*x + 5" in p
     # few-shot 3: tabellen som fylls i tillsammans med klassen
     assert "Fyller vi i tillsammans" in p
 
@@ -1596,9 +1625,12 @@ def test_prompten_bar_vansterns_skelett():
     assert "RANDFALL" in p
     # Ordningen står samlad, så att modellen ser skelettet som en helhet.
     # PILEN (6c) kom in i ordningen 2026-09-21: «lägga till kanske någon pil
-    # eller två».
-    assert ("BEGREPPSRADERNA (8c), ANKARET (8d), PILEN (6c), FORMELN (8e) i "
-            "spalt 1, RECEPTET (8f), PILEN (6c), ATT TÄNKA PÅ (8g)") in p
+    # eller två». ÄR/INTE 2026-09-23 kväll: «det här var proportionellt, det
+    # betyder det här, och det är den här kvoten, det vill säga inte den här
+    # kvoten.»
+    assert ("BEGREPPSRADERNA (8c), ANKARET (8d), PILEN (6c), FORMELN och "
+            "ÄR/INTE (8e) i spalt 1, RECEPTET (8f), PILEN (6c), ATT TÄNKA PÅ "
+            "(8g)") in p
     # …och 8b säger inte längre nej till varje tal på vänstern.
     assert "ETT undantag: ANKARET i 8d" in p
 
@@ -1628,8 +1660,12 @@ def _ar_valsvar(punkt: str) -> bool:
 
 def test_few_shotarna_bar_recept_och_att_tanka_pa():
     """En modell härmar det den ser. Skelettet står i prompten OCH i alla
-    fyra shotarna — ankaret bara i de två där formeln har ett varför, för en
-    påhittad sifferrad är fortfarande felet 8b fäller."""
+    fyra shotarna — ankaret bara där formeln har ett varför, för en
+    påhittad sifferrad är fortfarande felet 8b fäller.
+
+    Sedan lärarens dom 2026-09-23 kväll bär «Att tänka på» EN eller TVÅ
+    rader («hellre EN tydlig rad än två», 8g), och andragrads-shoten gav sitt
+    ankare åt ÄR/INTE: kvar med ankare är uttrycks-shoten."""
     med_ankare = 0
     for uppdrag, doc in lb.FEW_SHOTS:
         parsed, fel = ws.validate_board_json(doc)
@@ -1651,10 +1687,10 @@ def test_few_shotarna_bar_recept_och_att_tanka_pa():
             # och krymper hela vänstern (renderat 2026-09-23).
             assert len(punkt) <= 34, (uppdrag, punkt)
         rader = _att_tanka_pa(doc)
-        assert 2 <= len([r for r in rader if r["kind"] == "text"]) <= 3, uppdrag
+        assert 1 <= len([r for r in rader if r["kind"] == "text"]) <= 2, uppdrag
         if _ankarraden(doc) is not None:
             med_ankare += 1
-    assert med_ankare == 2, med_ankare
+    assert med_ankare == 1, med_ankare
 
 
 def test_hogern_har_inga_ordsteg_och_vakten_faller_dem():
@@ -2305,10 +2341,15 @@ def test_natfel_i_kompletteringen_behaller_tavlan_med_fynden():
 # och att varje sätt en lapp kan vara dålig på faller tillbaka på
 # helomskrivningen i stället för att lämna läraren med en sämre tavla.
 
+# Tick-etiketten står med sedan grafvakten (lärarens dom 2026-09-23 kväll):
+# en graf på vänstern med punkter men utan ticks fälls (`graf_utan_ticks`),
+# och lappens graf ska vara en RÄTTAD graf. dy står utskriven, annars
+# fyller normaliseringen i den och grafen är inte längre lika med sig själv.
 def _graf(x: float = 2) -> dict:
     return {"kind": "graph", "width": 400, "height": 300,
             "xRange": [-1, 5], "yRange": [-1, 5],
-            "points": [{"x": x, "y": 1, "label": "A"}]}
+            "points": [{"x": x, "y": 1, "label": "A"}],
+            "ticks": [{"axis": "x", "at": 2, "label": "2", "dy": 22}]}
 
 
 def _lapp(lappar=(), ta_bort=()) -> str:
@@ -3089,3 +3130,242 @@ def test_regelsamlingen_lagger_till_blocket_bara_nar_den_ar_vald():
     # Prompten med blocket ryms fortfarande under taket.
     assert len(lb.build_prompt("Ma1c", "NA26F", "Potenslagarna", form=f)) \
         < 50_000
+
+
+# ── GRAFEN, DEFINITIONEN OCH ATT TÄNKA PÅ (lärarens dom 2026-09-23 kväll) ────
+# BA26B, Matematik 1a, «Proportionalitet», Matematik 5000+ 1a s. 61–63. Tre
+# fällningar över vänstern: grafen «slarvigt ritad», punkterna «talar inte om
+# någonting»; «Proportionell: dubbla mängden, dubbla priset» var för lite
+# matematik; «Att tänka på» var «jätteotydlig», och kvotparet hörde till
+# «Vad betyder proportionellt?». Och om den handrättade tavlan: «samma
+# ordning i varje kvot, jag fattar inte vad som menas med det … Men samma
+# enhet innan du jämför, den är tydlig. […] tavlan är bra i övrigt.»
+#
+# FACIT är vänstern hon fick, spalt för spalt. Den ligger här för att
+# reglerna ska mätas mot den: grafvakten, siffervakten, budgeten och
+# skelettet ska alla släppa den.
+def _hjalplinje(a, b) -> dict:
+    return {"from": a, "to": b, "color": "black", "dashed": True,
+            "headSize": 0, "strokeWidth": 1.2}
+
+
+FACIT_GRAF_BA26B = {
+    "kind": "graph", "width": 360, "height": 230,
+    "xRange": [0, 3.8], "yRange": [0, 280], "axes": True, "grid": False,
+    "xLabel": "timmar", "yLabel": "tegel",
+    "plots": [{"expr": "80*x", "color": "blue", "thickness": 2.5}],
+    "ticks": [{"axis": "x", "at": n, "label": str(n), "size": 17, "dy": 22}
+              for n in (1, 2, 3)]
+    + [{"axis": "y", "at": n, "label": str(n), "size": 17, "dx": -8, "dy": 6}
+       for n in (80, 160, 240)],
+    "arrows": [_hjalplinje([1, 0], [1, 80]), _hjalplinje([0, 80], [1, 80]),
+               _hjalplinje([2, 0], [2, 160]), _hjalplinje([0, 160], [2, 160])],
+    "points": [{"x": 0, "y": 0, "color": "blue", "label": "origo",
+                "outward": [1, -1]},
+               {"x": 1, "y": 80, "color": "blue", "label": "(1, 80)",
+                "outward": [0.2, -1]},
+               {"x": 2, "y": 160, "color": "blue", "label": "(2, 160)",
+                "outward": [0.2, -1]}],
+    "texts": [{"x": 3.75, "y": 75, "text": "rät linje genom origo",
+               "size": 16, "anchor": "end"}],
+    "gapAfter": 8}
+
+
+def _facit_ba26b() -> dict:
+    """Lärarens tavla med facits vänster (spalt 1: grafen, y = k · x och
+    ÄR/INTE; spalt 2: receptet och EN rad under «Att tänka på»)."""
+    doc = _valid_doc()
+    vanster = doc["boards"][0]
+    vanster["sections"] = [
+        {"kind": "heading", "text": "Proportionalitet", "size": 32,
+         "align": "center", "underline": {}, "gapAfter": 14},
+        {"kind": "list", "bullet": "–", "size": 19, "align": "center",
+         "items": ["Räkna via en enhet",
+                   "Boken s. 61–63: 1386–88, 1390–92, 1394–97"],
+         "gapAfter": 12},
+        {"kind": "divider", "width": 620, "gapAfter": 14},
+        {"kind": "heading", "text": "Vad betyder proportionellt?", "size": 22,
+         "gapAfter": 14},
+        {"kind": "row", "gap": 24, "children": [
+            {"kind": "col", "width": 400, "gap": 6, "children": [
+                {"kind": "text", "text": "1. Vad är det?", "size": 18,
+                 "weight": 700, "gapAfter": 4},
+                copy.deepcopy(FACIT_GRAF_BA26B),
+                {"kind": "math", "latex": "y = k \\cdot x", "size": 26},
+                {"kind": "text", "text": "k är kvoten y/x, lika i varje punkt.",
+                 "size": 16},
+                {"kind": "math", "latex": "\\frac{80}{1} = \\frac{160}{2}",
+                 "size": 20},
+                {"kind": "text", "text": "Samma kvot: proportionellt.",
+                 "size": 16},
+                {"kind": "math",
+                 "latex": "\\frac{300}{2} \\neq \\frac{500}{4}", "size": 20},
+                {"kind": "text", "text": "Olika kvot: inte proportionellt.",
+                 "size": 16}]},
+            {"kind": "col", "width": 400, "gap": 8, "children": [
+                {"kind": "text", "text": "2. Så löser vi", "size": 18,
+                 "weight": 700},
+                {"kind": "list", "bullet": "–", "size": 17, "items": [
+                    "Vad blir det för en enhet?",
+                    "Söker jag totalen eller antalet?",
+                    "Totalen: gånger. Antalet: delat med."]},
+                {"kind": "math", "latex": "\\Downarrow", "size": 20},
+                {"kind": "text", "text": "3. Att tänka på", "size": 18,
+                 "weight": 700},
+                {"kind": "math",
+                 "latex": "1{,}2\\text{ ton} = 1\\,200\\text{ kg}", "size": 20},
+                {"kind": "text", "text": "Samma enhet innan du jämför.",
+                 "size": 16}]}]},
+    ]
+    return doc
+
+
+def test_facit_ba26b_slapps_av_alla_vakter():
+    """Lärarens tavla ska gå igenom allt som genereringen fäller på: schemat,
+    reglerna (siffervakten släpper ÄR/INTE, en likhet och ett ≠ utan
+    mellanled), grafvakten och budgeten."""
+    doc = _facit_ba26b()
+    parsed, fel = ws.validate_board_json(doc)
+    assert parsed is not None and fel == [], fel
+    assert lb.grafvakt(doc) == []
+    vanster = parsed.boards[0].sections
+    etiketter = [e.text for e in ws._ar_inte_etiketter(vanster)]
+    assert etiketter == ["Samma kvot: proportionellt.",
+                         "Olika kvot: inte proportionellt."]
+    # Etiketterna är bildtexter och kostar inget, som ankarets.
+    assert ws._text_volym(vanster, vanster=True) == \
+        ws._text_volym(vanster) - sum(len(e) for e in etiketter)
+
+
+def test_grafvakten_faller_omarkta_punkter_och_grafer_utan_ticks():
+    """«De här punkterna på den blåa linjen, de talar inte om någonting
+    egentligen.» Den genererade grafen hade två punkter utan label och inga
+    ticks; båda fälls, med var sin kod, och bara på vänstern."""
+    doc = _facit_ba26b()
+    graf = doc["boards"][0]["sections"][4]["children"][0]["children"][1]
+    del graf["points"][1]["label"]
+    graf["points"][2]["label"] = "  "
+    fynd = lb.grafvakt(doc)
+    vag = "boards[0].sections[4].children[0].children[1]"
+    assert [(f["code"], f["path"]) for f in fynd] == [
+        ("omarkt_punkt", f"{vag}.points[1]"),
+        ("omarkt_punkt", f"{vag}.points[2]")]
+    assert "punkt utan etikett" in fynd[0]["message"]
+    # Utan ticks: en graf med punkter säger inte var de ligger.
+    doc = _facit_ba26b()
+    graf = doc["boards"][0]["sections"][4]["children"][0]["children"][1]
+    graf["ticks"] = [{"axis": "x", "at": 1}]          # ingen label räknas inte
+    fynd = lb.grafvakt(doc)
+    assert [(f["code"], f["path"]) for f in fynd] == [("graf_utan_ticks", vag)]
+    assert "graf utan ticks" in fynd[0]["message"]
+    # En graf UTAN punkter behöver inga ticks för vaktens skull, en figur
+    # med axes: false är geometri (randvinkelns medelpunkt), och högerns
+    # grafer hör till ett exempel vars uträkning bär talen.
+    graf.pop("points")
+    assert lb.grafvakt(doc) == []
+    galleri = next(d for u, d in lb.FEW_SHOTS if "Randvinkel" in u)
+    assert lb.grafvakt(galleri) == []
+    doc = _valid_doc()
+    doc["boards"][1]["columns"][1]["sections"].append(
+        {"kind": "graph", "width": 300, "height": 130, "xRange": [0, 4],
+         "yRange": [0, 4], "points": [{"x": 1, "y": 1}]})
+    assert lb.grafvakt(doc) == []
+
+
+def test_generate_board_far_grafvaktens_fynd_som_fel_att_ratta():
+    """Vakten sitter i samma grind som utrakningsvakt: fyndet går till
+    reparationsrundan i samma varv, och åtgärdsrådet säger hur det rättas."""
+    trasig = _facit_ba26b()
+    graf = trasig["boards"][0]["sections"][4]["children"][0]["children"][1]
+    graf["points"] = [{"x": 1, "y": 80}]
+    graf.pop("ticks")
+    llm, calls = _stub_llm([json.dumps(trasig), json.dumps(_facit_ba26b())])
+    res = lb.generate_board("Ma1a", "BA26B", "Proportionalitet", model="m",
+                            llm=llm, doma=False)
+    assert len(calls) == 2
+    rattning = calls[1]["prompt"]
+    assert "omarkt_punkt" in rattning or "punkt utan etikett" in rattning
+    assert "'punkt utan etikett' eller 'graf utan ticks'" in rattning
+    assert not [f for f in res["errors"]
+                if f.get("code") in ("omarkt_punkt", "graf_utan_ticks")]
+
+
+def test_prompten_bar_grafen_definitionen_och_att_tanka_pa():
+    p = lb.build_prompt("Ma1a", "BA26B", "Proportionalitet")
+    # 7d: exemplets tal, märkta punkter, ticks, hjälplinjer, ingen lös pil.
+    assert "7d. GRAFEN på vänstern" in p
+    assert "exempel 1:s situation med exempel 1:s tal" in p
+    assert "VARJE punkt bär en etikett" in p and "«(1, 80)»" in p
+    assert "dashed: true, headSize: 0" in p
+    assert "«rät linje genom origo»" in p
+    # 7 säger inte längre att grafen ska vara utan tal.
+    assert "graph med bokstäver som beteckningar" not in p
+    # 8c/8e: ingen slogan, formeln, bokstavsraden och ÄR/INTE.
+    assert "«Proportionell: dubbla mängden, dubbla priset» är en slogan" in p
+    assert "DEFINITIONEN: formeln är begreppets ALLMÄNNA FORM" in p
+    assert "«k är kvoten y/x, lika i varje punkt»" in p
+    assert "\\frac{300}{2} \\neq \\frac{500}{4}" in p
+    assert ("«Samma kvot: proportionellt.» / «Olika kvot: inte "
+            "proportionellt.»") in p
+    # 8g: begriplig utan läraren, kopplad till begreppet, en rad hellre än
+    # två, och är/inte hör inte hemma där.
+    assert "som en elev förstår UTAN att läraren förklarar" in p
+    assert "«Samma enhet innan du jämför.»" in p
+    assert "«Samma ordning i varje kvot»" in p
+    assert "hellre EN tydlig rad än två" in p
+    assert "ÄR/INTE (8e) skrivs inte här" in p
+
+
+def test_domaren_provar_grafen_definitionen_och_att_tanka_pa():
+    t = lb.build_tackning_prompt({"boards": []}, "LÄRARENS URVAL: 1386–1397")
+    assert "Pröva GRAFEN på vänstern" in t
+    assert "Pröva DEFINITIONEN" in t
+    assert "Pröva ATT TÄNKA PÅ rad för rad" in t
+    assert "skulle en elev förstå raden UTAN att läraren förklarar den" in t
+    # ÄR/INTE-raderna är varken sifferexempel, formler eller begreppsrader.
+    assert "Samma för ÄR/INTE-raderna" in t
+    assert "är varken formler eller begreppsrader" in t
+    # Utan urval döms formen, och grafen och definitionen är form.
+    assert "grafen, definitionen och Att tänka på" in t
+
+
+def test_andragrads_shoten_bar_grafen_i_facits_form():
+    """Minst en shot visar begreppsgrafen som läraren fick den: exemplets
+    funktion, märkta punkter, ticks vid punkternas värden med avstånd från
+    axeln, streckade hjälplinjer utan spets, ingen lös pil."""
+    doc = next(d for u, d in lb.FEW_SHOTS if "Andragradsfunktioner" in u)
+    graf = _spalt1(doc)[1]
+    assert graf["kind"] == "graph"
+    uppgift = next(s["latex"] for kol in doc["boards"][1]["columns"]
+                   for s in kol["sections"] if s["kind"] == "math")
+    # Exemplets funktion: x^2 - 6x + 5 i uppgiften, x^2 - 6*x + 5 i plots.
+    assert graf["plots"][0]["expr"].replace("*", "") == \
+        uppgift.split("=", 1)[1].strip()
+    assert all(p.get("label") for p in graf["points"])
+    for p in graf["points"]:
+        assert any(t["axis"] == "x" and t["at"] == p["x"] for t in graf["ticks"])
+        assert any(t["axis"] == "y" and t["at"] == p["y"] for t in graf["ticks"])
+    for t in graf["ticks"]:
+        assert t.get("label") and (t.get("dy") if t["axis"] == "x"
+                                   else t.get("dx")), t
+    assert graf["arrows"] and all(a.get("dashed") and a.get("headSize") == 0
+                                  for a in graf["arrows"])
+    assert lb.grafvakt(doc) == []
+
+
+def test_shotarna_bar_ar_inte_och_att_tanka_pa_utan_ar_inte():
+    """ÄR/INTE står i två shotar, med ett fall som ÄR och ett som INTE är, och
+    ingen rad under «Att tänka på» är ett är/inte-test (8g). «Bara
+    rätvinkliga trianglar.» och «Centrum: ingen randvinkel.» stod där till
+    2026-09-23 kväll."""
+    med = [u for u, d in lb.FEW_SHOTS if len(_ar_inte_etiketter(d)) == 2]
+    assert len(med) == 2, med
+    for _u, doc in lb.FEW_SHOTS:
+        etiketter = [e.text for e in _ar_inte_etiketter(doc)]
+        if etiketter:
+            # Formen «skälet, kolon, begreppet», och bara INTE-raden nekar.
+            assert all(": " in e for e in etiketter), etiketter
+            assert "inte" in etiketter[1] and "inte" not in etiketter[0]
+        text = json.dumps(doc, ensure_ascii=False)
+        assert "Bara rätvinkliga trianglar." not in text
+        assert "Centrum: ingen randvinkel." not in text

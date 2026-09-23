@@ -722,6 +722,73 @@ def test_normalize_leaves_original_untouched():
     assert data["boards"][0]["sections"][0]["text"] == lang
 
 
+def test_tick_etiketterna_far_avstand_fran_axeln():
+    """Lärarens dom 2026-09-23 kväll: grafen var «slarvigt ritad». Motorn
+    ritar en tick-etikett i datakoordinaten plus dx/dy, med 0 som förval, så
+    «1» stod mitt på x-axeln. Normaliseringen fyller i facits avstånd där
+    fälten SAKNAS, också inne i en row/col, och rör inte det som är satt."""
+    graf = {"kind": "graph", "width": 360, "height": 230,
+            "xRange": [0, 3.8], "yRange": [0, 280],
+            "ticks": [{"axis": "x", "at": 1, "label": "1"},
+                      {"axis": "y", "at": 80, "label": "80"},
+                      {"axis": "x", "at": 2, "label": "2", "dy": 0},
+                      {"axis": "y", "at": 160, "label": "160", "dx": -12}]}
+    data = _doc(_board(sections=[
+        {"kind": "row", "children": [
+            {"kind": "col", "width": 400, "children": [graf]}]}]))
+    ut = ws.normalize_board(data)
+    ticks = ut["boards"][0]["sections"][0]["children"][0]["children"][0]["ticks"]
+    assert ticks[0] == {"axis": "x", "at": 1, "label": "1", "dy": 22}
+    assert ticks[1] == {"axis": "y", "at": 80, "label": "80", "dx": -8, "dy": 6}
+    assert ticks[2]["dy"] == 0 and "dx" not in ticks[2]
+    assert ticks[3]["dx"] == -12 and ticks[3]["dy"] == 6
+    # Originalet rörs inte, och tavlan validerar som förut.
+    assert "dy" not in graf["ticks"][0]
+    assert ws.validate_board_json(ut)[1] == []
+
+
+def test_ar_inte_etiketterna_kostar_inget_i_budgeten():
+    """ÄR/INTE (lärarens dom 2026-09-23 kväll): ett fall som ÄR begreppet och
+    ett som INTE är det, var sin math-rad med en etikett under. Etiketterna
+    är bildtexter, som ankarets, och vägs inte som prosa. INTE-raden känns
+    igen på ≠ eller på etikettens «: inte». Högerns text friar de aldrig."""
+    def spalt(*rader):
+        return _board(sections=[{"kind": "row", "children": [
+            {"kind": "col", "width": 400, "children": list(rader)}]}])
+
+    kvot = spalt(
+        {"kind": "math", "latex": "y = k \\cdot x"},
+        {"kind": "text", "text": "k är kvoten y/x, lika i varje punkt."},
+        {"kind": "math", "latex": "\\frac{80}{1} = \\frac{160}{2}"},
+        {"kind": "text", "text": "Samma kvot: proportionellt."},
+        {"kind": "math", "latex": "\\frac{300}{2} \\neq \\frac{500}{4}"},
+        {"kind": "text", "text": "Olika kvot: inte proportionellt."})
+    graf = spalt(
+        {"kind": "math", "latex": "f(x) = ax^2 + bx + c"},
+        {"kind": "math", "latex": "f(x) = x^2 - 6x + 5"},
+        {"kind": "text", "text": "Med x²: andragradsfunktion."},
+        {"kind": "math", "latex": "f(x) = -6x + 5"},
+        {"kind": "text", "text": "Utan x²: inte andragradsfunktion."})
+    for tavla, fria in ((kvot, ["Samma kvot: proportionellt.",
+                               "Olika kvot: inte proportionellt."]),
+                        (graf, ["Med x²: andragradsfunktion.",
+                                "Utan x²: inte andragradsfunktion."])):
+        sek = ws.validate_board_json(_doc(tavla))[0].boards[0].sections
+        assert [e.text for e in ws._ar_inte_etiketter(sek)] == fria
+        assert ws._text_volym(sek, vanster=True) == \
+            ws._text_volym(sek) - sum(len(t) for t in fria)
+    # Utan ≠ och utan «: inte» finns inget par, och det röda felet under
+    # «Vanligt fel:» är aldrig ett.
+    ingen = spalt(
+        {"kind": "math", "latex": "a^2 + b^2 = c^2"},
+        {"kind": "text", "text": "Katet: vid räta vinkeln"},
+        {"kind": "text", "text": "Vanligt fel:", "color": "red", "weight": 700},
+        {"kind": "math", "latex": "2^5 + 2^3 \\neq 2^8", "color": "red"},
+        {"kind": "text", "text": "Regeln gäller gånger.", "color": "red"})
+    sek = ws.validate_board_json(_doc(ingen))[0].boards[0].sections
+    assert ws._ar_inte_etiketter(sek) == []
+
+
 # --------------------------------------------------------- uttrycksparsern --
 
 @pytest.mark.parametrize("expr", [
