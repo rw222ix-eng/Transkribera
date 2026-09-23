@@ -221,6 +221,13 @@ def test_forbudsvakten_faller_ekvationen_pa_kapitel_1_testet():
     assert exam_gen.forbudsvakt(_prov(UPPG4), haft, forbjudna) == []
     # Ingen förbudslista, inget fynd (kassetteregeln).
     assert exam_gen.forbudsvakt(_prov(UPPG4), delmoment, []) == []
+    # Utan kalender: provets eget kapitel är ändå haft. Ett 2a-prov över
+    # «1.1 Uttryck, ekvationer och formler» får skriva «Lös ekvationen».
+    kapitel = [{"avsnitt": "1.1",
+                "etikett": "1.1 Uttryck, ekvationer och formler"}]
+    senare = [{"metod": "Andragradsekvationer", "sidor": "60–80"}]
+    assert exam_gen.forbudsvakt(_prov(UPPG4), [], senare, kapitel) == []
+    assert exam_gen.forbudsvakt(_prov(UPPG4), [], senare) != []
 
 
 def test_en_mening_per_rad_och_varje_mening_ryms():

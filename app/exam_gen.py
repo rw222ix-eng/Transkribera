@@ -8748,13 +8748,22 @@ _METODSTAMMAR = ("ekvation", "olikhet", "funktion", "sannolikhet",
 
 
 def forbudsvakt(exam: dict, delmoment: list[dict] | None,
-                forbjudna: list[dict] | None) -> list[dict]:
+                forbjudna: list[dict] | None,
+                avsnitt: list[dict] | None = None) -> list[dict]:
     """Uppgifter som nämner en metod klassen ännu inte haft. Tyst utan
-    förbudslista (kassetteregeln: ingen bok, ingen kalender, inget fynd)."""
+    förbudslista (kassetteregeln: ingen bok, ingen kalender, inget fynd).
+
+    Det klassen HAFT är kalenderns delmoment och provets egna avsnitt i
+    boken: en klass utan kalender har ändå haft kapitlet provet gäller, och
+    «Linjära ekvationer» i provets kapitel gör inte «Andragradsekvationer»
+    längre fram till ett förbud mot ordet ekvation."""
     if not forbjudna:
         return []
-    haft = " ".join(str(d.get("delmoment") or "")
-                    for d in (delmoment or [])).casefold()
+    haft = " ".join([str(d.get("delmoment") or "") for d in (delmoment or [])]
+                    + [" ".join(str(a.get(k) or "")
+                                for k in ("etikett", "titel", "rubrik"))
+                       for a in (avsnitt or []) if isinstance(a, dict)]
+                    ).casefold()
     forbud: dict[str, dict] = {}
     for f in forbjudna:
         namn = str(f.get("metod") or "").casefold()
@@ -8979,7 +8988,7 @@ def _raknade_fynd(exam: dict, *, avsnitt: list[dict] | None, antal: int | None,
                 # Lärarens dom 2026-09-23 kväll: ingen metod ur ett senare
                 # kapitel (exam 128), ingen situation en annan klass redan
                 # haft (exam 129).
-                + forbudsvakt(exam, delmoment, forbjudna)
+                + forbudsvakt(exam, delmoment, forbjudna, avsnitt)
                 + situationsvakt(exam, tidigare))
     # En mening per rad gäller alla papper eleverna läser (exam 129).
     return fel + radvakt(exam) + scenvakt(exam)
