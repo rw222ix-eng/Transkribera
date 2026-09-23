@@ -1142,6 +1142,20 @@ def create_router(base: Path, arbiter) -> APIRouter:
                             "valjbar": p["spar"] in platar.MATCHBARA_SPAR,
                             "finns": bool(p["fil"])} for p in rader]}
 
+    @router.post("/api/platar/meddelande")
+    async def plat_meddelande(req: Request):
+        """Det «Kopiera basprompt + scen» i canvas lägger i urklippet:
+        bildordern, basprompten för scenens spår och scenen
+        (platar.bildmeddelande). POST och inte GET, för stycket är upp till
+        1200 tecken och hör inte hemma i en URL."""
+        body = await _kropp(req)
+        scene, filnamn = body.get("scene"), body.get("filnamn")
+        if not isinstance(scene, str) or not scene.strip():
+            return JSONResponse({"error": "scen saknas"}, status_code=400)
+        filnamn = filnamn if isinstance(filnamn, str) else ""
+        return {"text": platar.bildmeddelande(scene, filnamn),
+                "spar": platar.spar_for(filnamn)}
+
     @router.get("/api/platar/{namn}")
     def plat_bild(namn: str):
         """Plåten i skärmstorlek. `namn` valideras mot plåtnamnets form i
@@ -1337,8 +1351,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # och modellen fick samma bildorder oavsett. Nu styr det om
         # arbetsbladets och gruppuppgiftens uppgifter alls ska bära en
         # bildbeställning (`scen`, exam_gen.BILD_PA/BILD_AV) — och bär de en
-        # blir platshållaren SJÄLVA bildprompten i canvas, med «Kopiera scen»
-        # och en släppyta (lärarens beställning 2026-08-25).
+        # blir platshållaren SJÄLVA bildprompten i canvas, med «Kopiera
+        # basprompt + scen» och en släppyta (lärarens beställning 2026-08-25).
         #
         # Default är PÅ: äldre klienter skickar inget fält, och provet har
         # alltid sitt bildstöd (dess form är lärarens förlaga, inte ett val).

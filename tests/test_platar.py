@@ -474,14 +474,112 @@ def test_valjaren_skriver_i_dokumentet_och_reser_med_godkannandet():
     assert "'uppg' + u.nr, u.scen.plat || ''" in js
 
 
-def test_kopieringen_tar_bara_scenstycket():
-    """Lärarens ChatGPT-projekt lägger basprompten framför själv (hennes
-    projektinstruktion, steg 4). Skickar vi med något eget runt stycket blir
-    basprompten citerad två gånger eller inte alls — och det är negationerna i
-    den som håller text, siffror och pilar borta ur bilden."""
+# ── BILDMEDDELANDET ───────────────────────────────────────────────────
+# Fynd 2026-09-23: bara SCENE-stycket gav ibland ett foto, och bifogade
+# referensbilder fick bildverktyget att avbryta. Det som gav gouache på alla
+# sex bilderna var ordern, basprompten utan meningarna om bilagor och scenen.
+
+_SCEN = ("SCENE. A wide summer meadow under a deep cobalt sky, seen from the "
+         "side.\nIntended use: kastbanan, andragradsfunktion.")
+
+
+def test_bildmeddelandet_ar_order_basprompt_och_scen():
+    text = platar.bildmeddelande(_SCEN, "a-25-hangbro")
+    order, streck, resten = text.split("\n", 2)
+    assert order == platar.BILDORDER
+    assert order.startswith("Generera bilden direkt med texten nedan, utan "
+                            "referensbilder och utan bifogade bilder.")
+    assert streck == "---"
+    # Basprompt A, med första meningen utbytt och bilagemeningen struken.
+    assert resten.startswith("PAINTING STYLE: thick painterly gouache")
+    assert "attached images" not in resten
+    assert "Replace the subject matter" not in resten
+    # Negationerna som håller text och pilar ur bilden följer med.
+    assert "ABSOLUTELY NO TEXT." in resten
+    assert "DRAWABILITY." in resten
+    # Baspromptens sista rad, en tom rad och sedan scenen, sist och orörd.
+    assert resten.endswith("height, so the sky dominates.\n\n" + _SCEN)
+
+
+def test_sparet_foljer_filnamnet_och_portrattet_far_a():
+    assert platar.spar_for("a-25-hangbro") == "a"
+    assert platar.spar_for("b-13-vektorer") == "b"
+    assert platar.spar_for(" B-13-vektorer ") == "b"
+    # Försättsbladets porträtt har inget filnamn.
+    assert platar.spar_for(None) == "a"
+    assert platar.spar_for("") == "a"
+    b = platar.bildmeddelande(_SCEN, "b-13-vektorer")
+    assert b.split("\n", 2)[2].startswith("PAINTING STYLE: The frame itself")
+    assert "THE SHEET." in b and "attached images" not in b
+    assert b.endswith("\n\n" + _SCEN)
+    with pytest.raises(ValueError):
+        platar.basprompt("../x")
+
+
+_KALLOR = {"a": "basprompt-spar-a.txt", "b": "prompt-bas-spar-b.txt"}
+
+
+@pytest.mark.parametrize("spar", ["a", "b"])
+def test_baspromptens_kopia_stammer_med_kallan(spar):
+    """Kopian i app/data/basprompt/ är källan i E:\\Bildstil med exakt de
+    ändringar filhuvudet räknar upp. Går rött när läraren ändrat sin
+    basprompt: kopiera då om texten och gör samma ändringar."""
+    import re
+    kalla = (platar.ROT_STANDARD / "chatgpt-projekt" / "projektfiler"
+             / _KALLOR[spar])
+    if not kalla.is_file():
+        pytest.skip("E:\\Bildstil finns inte på den här maskinen")
+    S = spar.upper()
+    text = re.search(rf"^=== BÖRJAN PÅ BASPROMPT {S}[^\n]*\n(.*?)\n"
+                     rf"=== SLUT PÅ BASPROMPT {S}",
+                     kalla.read_text(encoding="utf-8"), re.S | re.M).group(1)
+
+    def byt(text, gammal, ny):
+        # Källan radbryter mitt i meningarna. Ett inledande blanksteg i
+        # `gammal` tar med blanktecknet före meningen.
+        mon = (r"\s+" if gammal[0] == " " else "") + r"\s+".join(
+            re.escape(o) for o in gammal.split())
+        ut, n = re.subn(mon, ny, text)
+        assert n == 1, gammal
+        return ut
+
+    if spar == "a":
+        text = byt(text, "Use the attached images as a STYLE reference only, "
+                   "never as content. Carry over their visual language "
+                   "exactly:", "PAINTING STYLE:")
+        text = byt(text, " Replace the subject matter of the reference images "
+                   "entirely with the scene described below.", "")
+    else:
+        text = byt(text, "Use the attached images as a STYLE reference only, "
+                   "never as content — they define the painting style of one "
+                   "small inset only, described below.", "PAINTING STYLE:")
+    assert platar.basprompt(spar) == text
+
+
+def test_rutten_bygger_meddelandet(client):
+    r = client.post("/api/platar/meddelande",
+                    json={"scene": _SCEN, "filnamn": "b-13-vektorer"})
+    assert r.status_code == 200, r.text
+    assert r.json() == {"text": platar.bildmeddelande(_SCEN, "b-13-vektorer"),
+                        "spar": "b"}
+    # Porträttet skickar inget filnamn.
+    r = client.post("/api/platar/meddelande", json={"scene": _SCEN})
+    assert r.json()["spar"] == "a"
+    for kropp in ({}, {"scene": "  "}, {"scene": 5}):
+        assert client.post("/api/platar/meddelande",
+                           json=kropp).status_code == 400, kropp
+
+
+def test_knappen_sager_vad_den_kopierar_och_hamtar_meddelandet():
+    bygg = (_UI / "blad-bygg.js").read_text(encoding="utf-8")
+    assert "Kopiera scen</button>" not in bygg
+    # Uppgifternas scener och försättsbladets porträtt, samma knapp.
+    assert bygg.count('title="${KOPIERA_TITEL}">Kopiera basprompt + scen'
+                      '</button>') == 2
     js = (_UI / "plan.js").read_text(encoding="utf-8")
-    rad = next(r for r in js.splitlines() if "const text = s.scene" in r)
-    assert rad.strip() == "const text = s.scene || '';", rad
+    assert "fetch('/api/platar/meddelande'" in js
+    # Utan server (Claude Design) kopieras stycket ensamt, och toasten säger det.
+    assert "kopiera(scene, 'Bara scenen kopierad" in js
 
 
 # ── FÖRSÄTTSBLADETS PORTRÄTT ──────────────────────────────────────────

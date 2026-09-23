@@ -1,0 +1,69 @@
+BASPROMPT SPÅR B, som «Kopiera basprompt + scen» i canvasen lägger i urklippet
+när scenens filnamn börjar på b-.
+
+Källa: E:\Bildstil\chatgpt-projekt\projektfiler\prompt-bas-spar-b.txt, texten
+mellan raderna «=== BÖRJAN PÅ BASPROMPT B» och «=== SLUT PÅ BASPROMPT B»,
+kopierad 2026-09-23. Appen läser aldrig E:\Bildstil för det här.
+
+Samma ändringar som i spar-a.txt, i den mån spår B har meningarna:
+1. Första meningen «Use the attached images as a STYLE reference only, never as
+   content, they define the painting style of one small inset only, described
+   below.» är utbytt mot «PAINTING STYLE:».
+2. Meningen «Replace the subject matter …» finns inte i spår B. Inget är struket.
+«it carries the reference style at full richness» i vinjettstycket står kvar
+ordagrant, eftersom det inte är någon av de två meningarna. Spår B är inte
+provat utan bilagor. Blir vinjetten ett foto är det den raden som ska prövas
+först.
+Allt annat står teckenexakt som i källan, radbrytningarna också.
+tests/test_platar.py jämför mot källan när E:\Bildstil finns.
+
+=== BÖRJAN PÅ BASPROMPT B ===
+PAINTING STYLE: The frame itself is a
+sheet of paper.
+
+THE SHEET. A sheet of warm off-white paper fills the frame edge to edge, painted in
+gouache: visible paper grain and fibre, faint cool grey-blue paint shading along the
+edges and in the corners, a few soft painterly stains, one barely visible horizontal
+fold across the lower third. It reads as a real sheet that has been painted, not as
+a flat digital background. Slightly cooler and bluer at the very edges, warmest in
+the middle.
+
+THE TAPED PAINTING. One small rectangular gouache painting, roughly the size of a
+postcard and about a quarter of the frame wide, is taped onto the sheet, rotated a
+couple of degrees, held by two hand-painted strips of pale masking tape, with a soft
+painted shadow underneath it. That little painting is the only saturated colour in
+the whole image, and it carries the reference style at full richness: deep cobalt
+sky, cumulus lobes with cream-white sunlit crowns and grey-blue undersides, deep
+yellow-green meadow, thick visible brush strokes. Its motif is simple and readable
+at postcard size — one clear subject, seen from the side, against calm sky. Its motif
+and its position on the sheet are given below.
+
+THIS IS A BACKGROUND PLATE, NOT A FINISHED PAGE. It is one frame of a 16:9
+educational animation, and every pencil line, every axis, every curve, every digit
+and every handwritten word will be drawn on top of it later by a separate program.
+Therefore:
+
+THE SHEET IS COMPLETELY BLANK. No writing, no handwriting, no letters, no words, no
+numbers, no digits, no mathematical symbols. No pencil lines, no ruled lines, no
+grid, no squares, no coordinate axes, no curves, no arrows, no sketches, no doodles,
+no margin line, no holes, no staples, no signature, no watermark. Nothing at all is
+drawn on the paper. Only painted paper and the one taped painting.
+
+DRAWABILITY. A coordinate system, several rows of handwriting and a full calculation
+will be drawn onto the empty paper by a separate program, from coordinates measured
+in the finished image. Therefore the empty region must be genuinely usable:
+
+* At least two thirds of the sheet is one single continuous empty area, not several
+  smaller gaps separated by stains or by the vignette.
+* That area is evenly lit and even in tone. No stain, no fold, no shading gradient
+  and no tape crosses it.
+* The paper texture there is fine and low in contrast. A coarse mottled surface
+  makes thin pencil lines unreadable.
+* The vignette sits fully inside one corner with its tape, and nothing about it
+  reaches into the empty area.
+
+COMPOSITION RULES:
+- Full bleed 16:9, no border, no frame, no device mockup, no desk, no hands, no
+  pencils lying on the sheet. The sheet IS the frame; its edges are not visible.
+- The bottom centre stays clean for a step indicator.
+=== SLUT PÅ BASPROMPT B ===

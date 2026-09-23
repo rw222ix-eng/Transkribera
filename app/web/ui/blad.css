@@ -349,7 +349,7 @@
    klistrar in i sitt eget plåtprojekt. Båda ligger i samma bildplats
    (.prbild), så den bild hon sedan släpper landar där de stod.
 
-   FOTEN ÄR INTE PAPPRET. Namnet, «Byt plåt» och «Kopiera scen» är lärarens
+   FOTEN ÄR INTE PAPPRET. Namnet, «Byt plåt» och «Kopiera basprompt + scen» är lärarens
    verktyg i granskningen — de trycks aldrig (provet sätts i LaTeX, se
    app/templates/prov.tex.j2) och ska därför läsas som gränssnitt: mindre,
    gråare, tydligt skilt från uppgiftstexten ovanför. */

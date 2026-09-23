@@ -570,8 +570,28 @@ test("provets försättsblad bär avtalet — och ingen OBS-ruta upprepar det",
     await expect(portratt.locator(".prscenrub")).toContainText("Isaac Newton");
     await expect(portratt.locator(".prscentext")).toContainText("SCENE.");
     await expect(portratt.locator(".prscentext")).toContainText("Intended use:");
-    await expect(portratt.locator("[data-plat-kopiera='forsatt']"))
-      .toHaveText("Kopiera scen");
+    const kopiera = portratt.locator("[data-plat-kopiera='forsatt']");
+    await expect(kopiera).toHaveText("Kopiera basprompt + scen");
+    /* Knappen kopierar hela meddelandet och inte bara stycket (fynd
+       2026-09-23, app/platar.py bildmeddelande): ordern, strecket,
+       basprompt A och scenen sist. Porträttet har inget filnamn och får A.
+       writeText fångas i sidan: Chrome på Windows skriver annars i maskinens
+       riktiga urklipp, och sviten läste och skrev över lärarens. */
+    await page.evaluate(() => {
+      window.__urklipp = null;
+      navigator.clipboard.writeText = t => { window.__urklipp = t; return Promise.resolve(); };
+    });
+    await kopiera.click();
+    await expect(page.locator(".toast", { hasText: "Basprompt A och scen kopierade" }))
+      .toBeVisible();
+    const urklipp = await page.evaluate(() => window.__urklipp);
+    const [order, streck, bas] = urklipp.split("\n");
+    expect(order).toContain("utan referensbilder och utan bifogade bilder");
+    expect(streck).toBe("---");
+    expect(bas).toMatch(/^PAINTING STYLE: /);
+    expect(urklipp).not.toContain("attached images");
+    expect(urklipp).toMatch(/dominates\.\n\nSCENE\. A dim seventeenth-century/);
+    expect(urklipp).toMatch(/Intended use: Isaac Newton, derivata\.$/);
     // Platshållaren är borta när beställningen finns — inte båda.
     await expect(forsatt.locator(".prforsatt .gufigtext")).toHaveCount(0);
     // Rutan ÄR bildplatsen: lärarens egen släppta bild landar i samma nod

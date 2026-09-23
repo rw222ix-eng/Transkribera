@@ -346,9 +346,10 @@ window.BladBygg = (() => {
        2026-08-25: står «Plats för illustration» på ska platshållaren innehålla
        själva bildprompten, så att hon kan kopiera den till sitt
        ChatGPT-projekt, få en bild och släppa in den. Samma `scenruta` som
-       provet, inte en kopia: plåtväljaren, «Kopiera scen» och släppytan sitter
-       delegerade på `.prscen` och `[data-plat]` i plan.js, och en egen markup
-       här hade varit två system att hålla i synk för samma sak.
+       provet, inte en kopia: plåtväljaren, «Kopiera basprompt + scen» och
+       släppytan sitter delegerade på `.prscen` och `[data-plat]` i plan.js,
+       och en egen markup här hade varit två system att hålla i synk för
+       samma sak.
 
        ── EN PLATSHÅLLARE UTAN PROMPT FINNS INTE ──
        LÄRARENS DOM samma kväll, om det skarpa potensbladet: tolv av femton
@@ -701,18 +702,24 @@ window.BladBygg = (() => {
      bilden med min prenumeration.» Appen genererar alltså ingen bild. Rutan
      nedan har därför två lägen, och det är hela funktionen:
 
-       TRÄFF   — en plåt ur hennes egen katalog (E:\\Bildstil) ligger redan
-                 målad för begreppet. Den visas, och väljaren låter henne byta
-                 till en annan eller ta bort den. Hennes val vinner alltid.
-       INGEN   — SCENE-stycket står framme med «Kopiera scen» och ett
-                 filnamnsförslag. Hon klistrar in stycket i sitt eget
-                 ChatGPT-projekt (projektet lägger basprompten framför själv,
-                 så BARA stycket kopieras), och släpper sedan den färdiga
-                 bilden på rutan. Släppytan är samma väg som alla andra bilder
-                 går (plan.js valjBild → v.bilder), inte en ny.
+       TRÄFF:  en plåt ur hennes egen katalog (E:\\Bildstil) ligger redan
+               målad för begreppet. Den visas, och väljaren låter henne byta
+               till en annan eller ta bort den. Hennes val vinner alltid.
+       INGEN:  SCENE-stycket står framme med «Kopiera basprompt + scen» och
+               ett filnamnsförslag. Knappen kopierar hela meddelandet till
+               hennes ChatGPT-projekt, med basprompten framför stycket
+               (plan.js kopieraScen, app/platar.py bildmeddelande). Hon
+               släpper sedan den färdiga bilden på rutan. Släppytan är samma
+               väg som alla andra bilder går (plan.js valjBild → v.bilder),
+               inte en ny.
 
      Rutan bär `data-plat` = uppgiftens nummer. Klickarna sitter delegerade i
      plan.js; markup:en här är ren och ritas om vid varje omritning. */
+  /* Etiketten och tooltipen säger vad som hamnar i urklippet. Knappen hette
+     «Kopiera scen» när den bara kopierade stycket i rutan, och det namnet
+     hade fått läraren att tro att basprompten fortfarande saknades. */
+  const KOPIERA_TITEL = 'Kopierar hela meddelandet till ChatGPT-projektet: '
+    + 'ordern att måla utan referensbilder, basprompten och SCENE-stycket.';
   function scenruta(u) {
     const s = u.scen;
     if (!s) return '';
@@ -740,7 +747,7 @@ window.BladBygg = (() => {
       <p class="prscenrub">Bild att skapa — ${esc(s.begrepp || '')}</p>
       <pre class="prscentext">${esc(s.scene || '')}</pre>
       <div class="prplatfot"><span class="prplatnamn">${esc(s.filnamn || '')}</span>
-        <button type="button" class="prscenkopiera" data-plat-kopiera="${u.nr}">Kopiera scen</button>
+        <button type="button" class="prscenkopiera" data-plat-kopiera="${u.nr}" title="${KOPIERA_TITEL}">Kopiera basprompt + scen</button>
         <button type="button" class="prplatbyt" data-plat-byt="${u.nr}">Välj plåt</button>
       </div>
       <p class="prscenhint">Släpp bilden här när den är klar — eller klicka.</p>
@@ -755,7 +762,8 @@ window.BladBygg = (() => {
      kom på det provet handlar om … Fast en fin bild, lite dramatiskt så att de
      blir inspirerade av att klara av provet.» Dokumentet bär personen och
      stycket (exam_spec.Forsattsbild), och rutan visar dem på EXAKT samma sätt
-     som uppgifternas scener: samma .prscen-markup, samma «Kopiera scen», samma
+     som uppgifternas scener: samma .prscen-markup,
+     samma «Kopiera basprompt + scen», samma
      släppyta. Ingen egen CSS och ingen andra sorts bildruta — hade porträttet
      fått sin egen form vore det två system att hålla i synk för samma sak.
 
@@ -785,7 +793,7 @@ window.BladBygg = (() => {
       <p class="prscenrub">Bild att skapa — ${esc(f.person || '')}</p>
       <pre class="prscentext">${esc(f.scene || '')}</pre>
       <div class="prplatfot">
-        <button type="button" class="prscenkopiera" data-plat-kopiera="forsatt">Kopiera scen</button>
+        <button type="button" class="prscenkopiera" data-plat-kopiera="forsatt" title="${KOPIERA_TITEL}">Kopiera basprompt + scen</button>
       </div>
       <p class="prscenhint">Släpp bilden här när den är klar — eller klicka.</p>
     </div>${under}`;

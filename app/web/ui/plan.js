@@ -3552,8 +3552,8 @@
       /* «Plats för illustration» följer med till prompten. Står krysset på
          ber servern modellen skriva en bildbeställning per situationsuppgift
          (exam_gen.BILD_PA), och platshållaren i canvas blir då SJÄLVA
-         bildprompten med «Kopiera scen» och en släppyta. Står det av lämnas
-         `scen` tomt och bladet ser ut precis som förut. */
+         bildprompten med «Kopiera basprompt + scen» och en släppyta. Står
+         det av lämnas `scen` tomt och bladet ser ut precis som förut. */
       illustration: !!i0.illustration,
       /* «Nivå» — samma regel som provets Poängnivåer: bara icke-default. */
       ...(i0.niva && i0.niva !== 'Blandat' ? { niva: i0.niva } : {}),
@@ -5165,21 +5165,32 @@
   function kopieraScen(nyckel) {
     const s = scenFor(nyckel);
     if (!s) return;
-    /* BARA SCENE-STYCKET. Lärarens ChatGPT-projekt lägger basprompten framför
-       själv (hennes projektinstruktion, steg 4) — skickar vi med något eget
-       runt omkring blir basprompten citerad två gånger eller inte alls, och
-       det är negationerna i den som håller text och pilar borta ur bilden. */
-    const text = s.scene || '';
-    /* Filnamnsförslaget finns bara på uppgifternas scener — försättsbladets
+    /* HELA MEDDELANDET, inte bara SCENE-stycket (fynd 2026-09-23, se
+       app/platar.py bildmeddelande). Fick lärarens ChatGPT-projekt bara
+       stycket gick scenen ibland till bildverktyget utan basprompt, och
+       bilden blev ett foto. Servern bygger meddelandet: ordern att måla utan
+       bilagor, basprompten för scenens spår och stycket sist.
+       Svarar servern inte (Claude Design-projektet har ingen) kopieras
+       stycket ensamt, och toasten säger det så att läraren vet att
+       basprompten fattas. */
+    const scene = s.scene || '';
+    /* Filnamnsförslaget finns bara på uppgifternas scener. Försättsbladets
        porträtt bär person och stycke, inget filnamn (det är ETT papper och en
        bild, inte en katalogpost). Utan villkoret slutade toasten på ett naket
        «Filnamn: ». */
-    const klart = () => window.toast && window.toast(
-      'Scenen kopierad — klistra in i plåtprojektet.'
-      + (s.filnamn ? ` Filnamn: ${s.filnamn}` : ''));
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(klart, () => reservkopia(text, klart));
-    } else reservkopia(text, klart);
+    const filnamn = s.filnamn ? ` Filnamn: ${s.filnamn}` : '';
+    const kopiera = (text, besked) => {
+      const klart = () => window.toast && window.toast(besked + filnamn);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(klart, () => reservkopia(text, klart));
+      } else reservkopia(text, klart);
+    };
+    fetch('/api/platar/meddelande', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scene, filnamn: s.filnamn || '' }),
+    }).then(r => r.ok ? r.json() : Promise.reject(r)).then(
+      m => kopiera(m.text, `Basprompt ${m.spar.toUpperCase()} och scen kopierade. Klistra in i plåtprojektet.`),
+      () => kopiera(scene, 'Bara scenen kopierad, basprompten gick inte att hämta.'));
   }
   function reservkopia(text, klart) {
     const ta = document.createElement('textarea');

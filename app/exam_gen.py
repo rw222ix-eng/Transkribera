@@ -1528,8 +1528,9 @@ ORIGINALITET_UR_BOKEN = (
 # ── ILLUSTRATIONSKRYSSET, SAGT TILL MODELLEN ──────────────────────────────
 # LÄRARENS BESLUT 2026-08-25: står «Plats för illustration» på i planeringen
 # ska platshållaren på bladet innehålla SJÄLVA BILDPROMPTEN — samma SCENE-ruta
-# som provet redan har, med «Kopiera scen» och en släppyta. Hon klistrar in
-# stycket i sitt eget ChatGPT-projekt, får en bild och släpper den på rutan.
+# som provet redan har, med «Kopiera basprompt + scen» och en släppyta. Hon
+# klistrar in meddelandet i sitt eget ChatGPT-projekt, får en bild och släpper
+# den på rutan.
 #
 # Maskineriet fanns hela vägen: SCEN_REGEL står i INSTRUCTION och delas av
 # alla profiler, grammatiken tillåter `scen` på varje uppgift

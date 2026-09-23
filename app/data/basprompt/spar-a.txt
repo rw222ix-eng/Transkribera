@@ -1,0 +1,91 @@
+BASPROMPT SPÅR A, som «Kopiera basprompt + scen» i canvasen lägger i urklippet.
+
+Källa: E:\Bildstil\chatgpt-projekt\projektfiler\basprompt-spar-a.txt, texten
+mellan raderna «=== BÖRJAN PÅ BASPROMPT A» och «=== SLUT PÅ BASPROMPT A»,
+kopierad 2026-09-23. Appen läser aldrig E:\Bildstil för det här. Filen är en
+kopia i repot så att knappen fungerar på en maskin utan E:, och app/platar.py
+(bildmeddelande) läser bara texten mellan markörerna nedan.
+
+Två ändringar mot källan, båda så att bildverktyget inte väntar sig bilagor:
+1. Första meningen «Use the attached images as a STYLE reference only, never as
+   content. Carry over their visual language exactly:» är utbytt mot
+   «PAINTING STYLE:».
+2. Meningen «Replace the subject matter of the reference images entirely with
+   the scene described below.» är struken.
+Allt annat står teckenexakt som i källan, radbrytningarna också.
+tests/test_platar.py jämför mot källan när E:\Bildstil finns.
+
+=== BÖRJAN PÅ BASPROMPT A ===
+PAINTING STYLE: thick painterly gouache with visible brush strokes
+and canvas tooth, no line art, no cel shading, no outlines, no smooth digital
+gradients, no vector look. A deep cobalt-blue sky with a real tonal range, darker at
+the top edge and lighter toward the horizon. Enormous sculptural cumulus towers
+built from many rounded lobes, cool grey-blue shaded undersides and cream-white
+sunlit crowns. Ground painted with visible individual grass blades and small flower
+dabs, layered yellow-green over deep green, with strong dark cast shadows. No
+atmospheric haze and no pale distant mountains — the horizon is a simple dark band.
+Human figures are painted as people, with faces. Paint the face readably wherever a
+figure is close enough to show one.
+
+WHAT IS FIXED AND WHAT THE SCENE MAY OVERRIDE. Fixed in every plate: thick gouache
+with visible brush strokes, a real tonal range rather than flat fill, warm
+cream-white where the light lands and a cool complementary tone in shadow, no
+atmospheric haze, no pale distant mountain ranges, and no line art. Faces are
+painted. The scene below MAY override the time of day, the season and the palette —
+dusk, night, autumn, winter, rain — and when it does, that overrides the summer sky
+and the cumulus towers described above. Follow the scene.
+
+THIS IS A BACKGROUND PLATE, NOT A FINISHED FIGURE. It is one frame of a 16:9
+educational animation, and the mathematical notation will be drawn on top of it
+later by a separate program. Therefore:
+
+ABSOLUTELY NO TEXT. No letters, no words, no numbers, no digits, no mathematical
+symbols, no equations, no labels, no captions, no signature, no watermark anywhere
+in the image. No drawn measurement lines, no arrows, no dashed lines, no angle arcs,
+no coordinate axes, no grid, no circles marking points, no rulers, no annotation of
+any kind. Nothing that looks drawn on top of the painting. Only paint.
+
+DRAWABILITY. Notation — measurement arrows, angle arcs, tangents, pointers — will be
+drawn on top of this painting by a separate program, from coordinates measured in the
+finished image. The painting must therefore make its own geometry findable:
+
+* ONE clear subject. Not a group, not a cluster, not a repeated pattern, unless the
+  scene explicitly asks for a countable row.
+* The subject is shown in clean side view or straight-on, never three-quarter and
+  never at a rakish angle. A measurable object is a flat object.
+* The whole subject is inside the frame with air around it. Nothing important is
+  cropped by an edge and nothing overlaps the subject.
+* Both ends of the subject are visible and unobstructed: where it meets the ground
+  and where it ends against the sky. Do not hide the base in grass, do not hide the
+  top behind a cloud.
+* The subject's silhouette meets a CALM surface — plain sky, plain water, plain
+  field. Do not place a cloud bank, a treeline or a busy horizon directly behind the
+  subject's edges.
+* Vertical things are vertical and horizontal things are horizontal. No leaning, no
+  tilted horizon, no dutch angle.
+* The ground line under the subject is visible and continuous, not broken by bushes,
+  rocks or dips.
+* If the scene compares two things, both stand on the same visible ground line, both
+  are fully visible, and their sizes differ clearly.
+* If the scene asks for a row of repeated objects, there are at most twelve, they are
+  evenly spaced, and the four nearest are clearly separated from each other.
+* Any angle that the scene exists to show must read as between 20 and 60 degrees in
+  the finished picture. A 5-degree slope is a straight line and cannot be marked.
+* Leave one large continuous quiet region, at least a third of the frame, with no
+  clouds, no flowers and no high-contrast detail. Notation goes there.
+* The subject sits in the middle or the right half. The upper left sixth and the
+  upper right corner stay plain.
+* For a top-down or aerial scene: straight edges stay straight, corners of fields
+  and shorelines stay visible and unrounded, and no object sits on a corner that
+  will need to be measured.
+* Include a human figure next to the subject when the scene needs scale, standing
+  clear of the subject with space between them, its face painted readably.
+
+COMPOSITION RULES, they matter as much as the subject:
+- Full bleed 16:9, no border, no frame, no device mockup, no vignette darkening.
+- The upper left sixth of the frame is plain sky or plain dark paint — a handwritten
+  title will be placed there. The upper right corner and the bottom centre stay
+  equally plain, for a step indicator and a caption.
+- The horizon, when there is one, sits low, between 70 and 80 percent of the frame
+  height, so the sky dominates.
+=== SLUT PÅ BASPROMPT A ===

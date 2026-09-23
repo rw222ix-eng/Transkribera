@@ -417,7 +417,7 @@ window.Blad = (() => {
     /* Försättsbladet slutar i en halv sida tomt papper. Där hör provets bild
        hemma, och sedan dokumentet bär en beställning för den
        (exam_spec.Forsattsbild) är det ett PORTRÄTT av personen provet handlar
-       om — SCENE-stycket står framme med «Kopiera scen» precis som
+       om. SCENE-stycket står framme med «Kopiera basprompt + scen» precis som
        uppgifternas scener (blad-bygg forsattsbild). Utan fältet: platshållaren
        som förut, och bilden läggs in i canvas som vilken annan bild som helst. */
     const forsta = $('.ark[data-form="pr1"]', trav);

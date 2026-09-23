@@ -72,7 +72,7 @@
 
        `.prplatfot` och `.prscen` av EXAKT samma skäl (lärarens arbetsblad
        2026-08-25): setPointerCapture flyttar klickets mål till duken, så
-       «Byt plåt», «Ta bort» och «Kopiera scen» fick aldrig veta att någon
+       «Byt plåt», «Ta bort» och «Kopiera basprompt + scen» fick aldrig veta att någon
        tryckte — och scenrutans släppyta, som öppnar filväljaren när man
        klickar den, inte heller. Bara foten och scenrutan står här, inte hela
        plåtbilden: en plåt är ett par hundra pixlar av arket, och att dra i

@@ -9,8 +9,8 @@ alltså ALDRIG något bild-API. Den gör två saker i stället:
    läraren måla en trettiosjunde av samma äng är slöseri med hennes kväll.
 2. **SCENE-stycket.** Finns ingen plåt skriver provgeneratorn ett SCENE-stycke
    (app/exam_gen, fältet ``scen``) som läraren klistrar in i sitt eget
-   ChatGPT-projekt. Projektet lägger själv basprompten framför — därför
-   kopieras BARA scenstycket, aldrig något vi hittat på runt det.
+   ChatGPT-projekt. Knappen i canvas kopierar stycket med basprompten framför
+   och en order om att måla utan bilagor, se ``bildmeddelande`` längst ned.
 
 TVÅLAGERSPRINCIPEN (lärarens projektinstruktion) gäller åt båda hållen: plåten
 är bara målning. Ingen text, inga siffror, inga pilar, inga axlar. Det är en
@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 from pathlib import Path
 
 # Standardroten är lärarens egen disk. Den står här och inte i en inställning
@@ -529,3 +530,67 @@ def plat_bilder(exam: dict, val, ut_dir: Path, *,
         if fil:
             ut[nr] = fil
     return ut
+
+
+# ── BILDMEDDELANDET: DET «KOPIERA BASPROMPT + SCEN» LÄGGER I URKLIPPET ──
+# FYND 2026-09-23. Knappen kopierade förr bara SCENE-stycket, i tron att
+# lärarens ChatGPT-projekt («Skapa bilder till matematikvideos») alltid lade
+# basprompten framför själv. Det gjorde det inte: ibland gick scenen rakt
+# till bildverktyget utan basprompt, och bilden blev ett foto eller en
+# 3D-rendering i stället för tjock gouache. Bad man chatten bifoga projektets
+# referensbilder avbröt bildverktyget, som tolkade dem som en bild att
+# redigera. Det som gav gouache på alla sex bilderna samma kväll var ett
+# meddelande i tre delar, och det är det bildmeddelande() bygger:
+#
+#   1. BILDORDER och en rad «---»,
+#   2. basprompten ur app/data/basprompt/, där meningarna om bifogade bilder
+#      är utbytta eller strukna (filernas huvud säger exakt vad som ändrats
+#      mot originalen i E:\Bildstil),
+#   3. en tom rad och SCENE-stycket.
+#
+# Basprompten ligger i repot och läses aldrig ur E:\Bildstil vid körning.
+# Knappen ska fungera på Macen och på en maskin där E: inte finns, precis som
+# SCENE-vägen alltid har gjort.
+BILDORDER = ("Generera bilden direkt med texten nedan, utan referensbilder "
+             "och utan bifogade bilder. Skicka texten efter strecket "
+             "ordagrant till bildverktyget.")
+
+
+def _basprompt_dir() -> Path:
+    # Frozen: PyInstaller packar app/data under sys._MEIPASS (jfr course_data).
+    if getattr(sys, "frozen", False):
+        return Path(getattr(sys, "_MEIPASS", ".")) / "app" / "data" / "basprompt"
+    return Path(__file__).resolve().parent / "data" / "basprompt"
+
+
+def spar_for(filnamn: str | None) -> str:
+    """Spår B för ett filnamn i b-form (``b-13-vektorer``), annars spår A.
+
+    Uppgifternas scener är spår A per definition: SCEN_REGEL i exam_gen
+    beställer ``a-NN-slug``, och MATCHBARA_SPAR ovan säger samma sak om
+    plåtarna. Försättsbladets porträtt har inget filnamn alls och får A.
+    B-grenen finns för en scen som ändå bär ett b-namn. Ett målat papper med
+    vinjett ska inte få spår A:s ritbarhetsregler för en mätbar scen."""
+    return "b" if str(filnamn or "").strip().lower().startswith("b-") else "a"
+
+
+def basprompt(spar: str) -> str:
+    """Texten mellan markörerna i ``app/data/basprompt/spar-<spar>.txt``.
+
+    Läses vid varje anrop och cachas inte: filen är sex kilobyte, och en
+    cache hade krävt en omstart av servern efter varje ändring i den."""
+    if spar not in ("a", "b"):
+        raise ValueError(f"okänt spår: {spar!r}")
+    text = (_basprompt_dir() / f"spar-{spar}.txt").read_text(encoding="utf-8")
+    s = spar.upper()
+    m = re.search(rf"^=== BÖRJAN PÅ BASPROMPT {s} ===\n(.*?)\n"
+                  rf"=== SLUT PÅ BASPROMPT {s} ===$", text, re.S | re.M)
+    if not m:
+        raise ValueError(f"spar-{spar}.txt saknar markörerna")
+    return m.group(1)
+
+
+def bildmeddelande(scene: str, filnamn: str | None = None) -> str:
+    """Hela meddelandet läraren klistrar in i ChatGPT-projektet."""
+    return (f"{BILDORDER}\n---\n{basprompt(spar_for(filnamn))}\n\n"
+            f"{(scene or '').strip()}")
