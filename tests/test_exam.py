@@ -1204,7 +1204,7 @@ def test_render_prov_golden_markers():
     # elevens prov visar endast totalsumman — E/C/A hör till bedömningen
     assert "(9/6/5)" not in tex and "3/0/0" not in tex
     # delrubrikerna räknar från A (lärarens beslut 2026-08-20)
-    assert (r"Del A \textendash{} Digitala verktyg är inte tillåtna"
+    assert (r"Del A \textendash{} Räknare är inte tillåten"
             in tex)
     assert r"Del B \textendash{} Räknare är tillåten" in tex
     assert "Redovisa kort på pappret hur du har använt din räknare." in tex

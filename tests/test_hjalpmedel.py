@@ -181,7 +181,7 @@ def test_delrubriken_star_kvar_nar_regeln_tiger_om_delen():
     """Ett prov skrivet före valet — eller en modellmening som inte nämner
     delarna — ska se ut precis som förut."""
     tex = exam_latex.render_prov(_doc("Formelblad och linjal."))
-    assert r"Del A \textendash{} Digitala verktyg är inte tillåtna" in tex
+    assert r"Del A \textendash{} Räknare är inte tillåten" in tex
     assert r"Del B \textendash{} Digitala verktyg är tillåtna" in tex
     assert exam_latex._del_instruktion("B", True) == (
         "Del A löses utan räknare. Endast svar krävs om inget annat anges.")
@@ -198,7 +198,7 @@ def test_delen_utan_verktyg_ber_inte_eleven_redovisa_verktyget():
     den meningen en order eleven inte kan följa."""
     tex = exam_latex.render_prov(_doc(
         exam_gen.hjalpmedelsregel("Inga digitala", "Formelblad")))
-    assert r"Del B \textendash{} Digitala verktyg är inte tillåtna" in tex
+    assert r"Del B \textendash{} Räknare är inte tillåten" in tex
     assert "Visa också hur du använder ditt digitala verktyg" not in tex
     assert exam_latex._del_instruktion("C", True) == (
         "Del B löses utan räknare. Fullständig redovisning krävs.")

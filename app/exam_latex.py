@@ -1290,8 +1290,13 @@ def _build_view(doc: exam_spec.ExamDoc,
         verktyg = _verktyget_i_delen(doc.hjalpmedel, del_kod or "")
         alla_kortsvar = all(_krav(i.typ) == _KRAV_TEXT["rutin"] for i in items)
         nagot_kortsvar = any(_krav(i.typ) == _KRAV_TEXT["rutin"] for i in items)
+        # «UTAN RÄKNARE», också i rubriken (lärarens dom 2026-09-23 över prov
+        # 126: «utan räknare» i stället för «utan digitala hjälpmedel»).
+        # Rubriken på del A sa ändå «Digitala verktyg är inte tillåtna» medan
+        # instruktionsraden under den och försättsbladet sa «utan räknare».
+        # Räknaren är det eleven lämnar ifrån sig; datorn har hon aldrig i del A.
         if utan_raknare:
-            tillatet = "Digitala verktyg är inte tillåtna"
+            tillatet = "Räknare är inte tillåten"
         elif verktyg == "räknare":
             tillatet = "Räknare är tillåten"
         else:
@@ -1395,20 +1400,17 @@ def _build_view(doc: exam_spec.ExamDoc,
 
 
 _REDOVISNING_TEXT = {
+    "genomgang": "genomgång tillsammans",
     "muntligt": "muntlig redovisning",
-    "skriftligt": "skriftlig redovisning",
     "poster": "redovisas som poster",
 }
-_REDOVISNING_HUR = {
-    "muntligt": "Redovisas muntligt: två minuter per grupp, och alla i gruppen "
-                "säger något.",
-    "skriftligt": "Redovisas skriftligt: ett gemensamt svar per grupp lämnas in "
-                  "vid lektionens slut.",
-    "poster": "Redovisas som poster: skriv lösningen stort på ett blad som "
-              "sätts upp i salen.",
-}
-_GRUPPBAND = ("Läs uppgiften tillsammans innan ni börjar räkna. Bestäm vem som "
-              "skriver. Alla i gruppen ska kunna förklara lösningen efteråt.")
+# Löftet ur exam_spec (REDOVISNING_LOFTE): ingen gruppuppgift ber längre om en
+# inlämning, och förvalet är genomgången (Rickard 2026-09-23).
+_REDOVISNING_HUR = exam_spec.REDOVISNING_LOFTE
+# «Bestäm vem som skriver» är struken: ingen skriver för gruppen, för inget
+# lämnas in (samma dag). Läsa tillsammans och förklara för varandra står kvar.
+_GRUPPBAND = ("Läs uppgiften tillsammans innan ni börjar räkna. Alla i gruppen "
+              "ska kunna förklara lösningen efteråt.")
 
 
 def _grupp_vy(grupp, nyckelfraga: str | None = None,
@@ -1428,7 +1430,7 @@ def _grupp_vy(grupp, nyckelfraga: str | None = None,
     delar sedan ut ett papper där den står kvar."""
     if grupp is None:
         return None
-    red = grupp.redovisning
+    red = exam_spec.redovisningsform(grupp.redovisning)
     band = (escape_mixed(instruktion.strip()) if (instruktion or "").strip()
             else escape_latex(f"{_GRUPPBAND} {_REDOVISNING_HUR[red]}"))
     if nyckelfraga:
