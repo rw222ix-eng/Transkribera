@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 
 import pytest
 
@@ -157,9 +158,16 @@ def test_bandet_bar_vansterns_skelett(fejk_claude):
     assert "3. Att tänka på" in rubriker, rubriker
     listor = [s for s in spalt if s.get("kind") == "list"]
     assert listor and 2 <= len(listor[0]["items"]) <= 3, spalt
-    # Receptet har sitt kolon i varje punkt («VARJE punkt har sitt kolon»,
-    # efter den skarpa körningen 2026-09-20 som skrev «Låt h gå mot noll»).
-    assert all(":" in p for p in listor[0]["items"]), listor[0]["items"]
+    # Receptet är ELEVENS EGNA FRÅGOR (lärarens dom 2026-09-23, «alldeles för
+    # generellt» om «Skriv om/Avgör/Räkna: …»). Till dess mätte testet att
+    # varje punkt bar sitt kolon, formen «Verb: två–tre ord». Nu är varje
+    # punkt en fråga, och bara den sista får vara svaret på valet, «Fall: gör
+    # så. Fall: gör så.».
+    *fragor, sista = listor[0]["items"]
+    assert fragor and all(p.endswith("?") for p in fragor), fragor
+    assert sista.endswith("?") or sista.count(": ") == 2, sista
+    assert not any(re.match(r"^[A-ZÅÄÖ][a-zåäö]+( [a-zåäö]+)?: [^?]*$", p)
+                   for p in fragor), fragor
     # Och HÖGERN BÄR UTRÄKNINGEN (lärarens dom 2026-09-23). Till dess mätte
     # testet att varje receptpunkt började ett metodsteg på högern. Nu ska
     # högern inte ha en enda steglista, varje exempel ska ha minst två
