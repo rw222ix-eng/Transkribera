@@ -78,6 +78,20 @@ SCEN_REGEL = (
     "gärna ha en.\n"
     "  Låt inte två uppgifter på samma papper handla om samma sorts scen — "
     "två ängar med kastbanor blir en bild i två exemplar.\n"
+    # MÖNSTERUPPGIFTEN BEHÖVER SIN FIGUR (lärarens dom 2026-09-23, prov 126
+    # uppgift 7, tändstickornas rutnät): «när det handlar om en figur och man
+    # ska se mönster är det självklart att man behöver en bild». Hon målar den
+    # med ChatGPT som plåtarna. Undantaget från målningsregeln nedan gäller
+    # BARA den här sortens bild: den ÄR matematiken, och antalet måste stämma.
+    "  UNDANTAG, MÖNSTERUPPGIFTER: en uppgift där eleven ska se ett mönster "
+    "i figurer (figur 1, 2, 3 …) får ALLTID scen, också utan situation, och "
+    "där är bilden själva figuren och ingen målning: \"SCENE. A clean flat "
+    "diagram on a plain white background, seen straight from above.\" följt "
+    "av figur 1, 2 och 3 sida vid sida från vänster, var och en med EXAKT "
+    "antal delar utskrivet i ord (\"made of exactly 12 matchsticks\"), lika "
+    "stora delar, luft mellan figurerna, och \"There is no text, no numbers "
+    "and no other objects.\" Numren och talen står i uppgiftens tabell, "
+    "aldrig i bilden.\n"
     "  begrepp: kort svensk nyckel, ett till tre ord — \"optimering "
     "inhägnad\", \"kast\", \"exponentiell tillväxt\", \"höjdbestämning med "
     "skugga\". Den är nyckeln appen slår upp i sin bildkatalog.\n"

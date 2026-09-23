@@ -746,3 +746,14 @@ def test_ingen_np_typ_ar_ett_uttryckligt_forebildsnummer():
         {"poang": [1, 0, 0], "innehall": koder,
          "forebild": {"nr": niva_rubrik.NP_TYP_NR0, "sort": "ingen NP-typ"}}]}
     assert exam_gen.forebildsvakt(prov, "Matematik, nivå 1c", koder) == []
+
+
+def test_monsteruppgiften_far_sin_figur_i_scenregeln():
+    """Lärarens dom 2026-09-23 (prov 126 uppgift 7): en mönsteruppgift
+    behöver figuren. Bilden är då figuren själv, med exakt antal, och ingen
+    målning; undantaget står i SCEN_REGEL och bara där."""
+    r = exam_gen.SCEN_REGEL
+    assert "UNDANTAG, MÖNSTERUPPGIFTER" in r
+    assert "EXAKT antal delar utskrivet i ord" in r
+    assert "There is no text, no numbers" in r
+    assert r in exam_gen.INSTRUCTION
