@@ -230,6 +230,30 @@ def test_forbudsvakten_faller_ekvationen_pa_kapitel_1_testet():
     assert exam_gen.forbudsvakt(_prov(UPPG4), [], senare) != []
 
 
+def test_inga_bokstaver_nar_algebran_kommer_senare():
+    """Generalrepetitionen samma natt skrev «En fisk väger $m$ kg … Svara med
+    ett förenklat uttryck i $m$ och $k$» och två lönformler $L = 160t$ på
+    kapitel 1-testet. Läraren: A-formen «UTAN bokstäver, eftersom klassen
+    inte läst algebra än»."""
+    delmoment = [{"delmoment": "Enhetsbyten", "sidor": "27–30"}]
+    kapitel = [{"avsnitt": "1.3", "etikett": "1.3 Andelar och förhållanden"}]
+    forbjudna = [{"metod": "Algebraiska uttryck", "sidor": "88–91"}]
+    fisk = _u("En fisk väger $m$ kg.\nFisken innehåller $k$ mg kvicksilver.\n"
+              "Hur många procent av fiskens vikt är kvicksilver?", [0, 0, 1])
+    tal = _u("En fisk väger $2{,}5$ kg.\nHur många gram är det?", [1, 0, 0])
+    fel = exam_gen.forbudsvakt(_prov(tal, fisk), delmoment, forbjudna, kapitel)
+    assert [f["path"] for f in fel] == ["uppgift 2"]
+    assert "räknar med bokstäver ($k$, $m$)" in fel[0]["message"]
+    # Prompten säger det också, men bara när det klassen haft är känt.
+    block = exam_gen.build_forbjudet(forbjudna, delmoment, kapitel)
+    assert "Klassen har INTE räknat med bokstäver" in block
+    assert "bokstäver" not in exam_gen.build_forbjudet(forbjudna)
+    # Har klassen haft uttrycken är bokstäverna fria.
+    haft = delmoment + [{"delmoment": "Algebraiska uttryck", "sidor": "88"}]
+    assert exam_gen.forbudsvakt(_prov(fisk), haft, forbjudna) == []
+    assert "bokstäver" not in exam_gen.build_forbjudet(forbjudna, haft)
+
+
 def test_en_mening_per_rad_och_varje_mening_ryms():
     """Exam 129 uppgift 10: «Använd formeln och bestäm den högsta fart som
     ger högst 45 m / bromssträcka.» bröts mitt i."""

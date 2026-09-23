@@ -2169,16 +2169,29 @@ def forbjudna_metoder(lektioner: list[dict] | None,
     return rensa_forbjudna(samman, delmoment)
 
 
-def build_forbjudet(forbjudna: list[dict]) -> str:
+def build_forbjudet(forbjudna: list[dict],
+                    delmoment: list[dict] | None = None,
+                    avsnitt: list[dict] | None = None) -> str:
     """Förbudslistan som promptblock, eller TOM STRÄNG.
 
     Sagt som ett LÖSNINGSKRAV och inte som en ämnesförteckning, för det är så
     felet uppstår. Uppgift 11 a) i prov 81 handlade om massan hos en kub,
     ett potensuttryck ur kapitel 1 och alltså rätt ämne, men gick bara att lösa
     genom att lösa ut $s$ ur en potensekvation. Frågan modellen måste ställa
-    sig är «vad krävs för att komma i mål», inte «vad handlar den om»."""
+    sig är «vad krävs för att komma i mål», inte «vad handlar den om».
+
+    `delmoment` och `avsnitt` (det klassen haft) lägger EN mening till när
+    algebran kommer senare (algebra_forbjuden, exam 128): inga bokstäver.
+    Utan dem, eller när klassen haft algebra, är blocket som förut."""
     if not forbjudna:
         return ""
+    algebra = (algebra_forbjuden(forbjudna, delmoment, avsnitt)
+               if delmoment is not None or avsnitt is not None else None)
+    bokstav = (f"\nKlassen har INTE räknat med bokstäver än ({algebra['metod']} "
+               "kommer senare): varje uppgift skrivs med konkreta tal, också "
+               "en formel och en A-uppgift. Det generella frågas som ett "
+               "konkret fall till («Blir det samma om …? Förklara varför.»)."
+               if algebra else "")
     rader = "\n".join(f"- {f['metod']} (s. {f['sidor']})" for f in forbjudna)
     return (
         "METODER SOM INTE FÅR KRÄVAS. Det här står senare i boken än provets "
@@ -2191,7 +2204,7 @@ def build_forbjudet(forbjudna: list[dict]) -> str:
         "Fällan är uppgifter som ser rätt ut: ett uttryck ur kapitlet som "
         "ställs som en ekvation att lösa ut en obekant ur, en storhet som ska "
         "ökas med några procent, ett samband som ska gälla för ALLA värden. "
-        "Ämnet är då kapitlets, men metoden är nästa kapitels.")
+        "Ämnet är då kapitlets, men metoden är nästa kapitels." + bokstav)
 
 
 # ── DEN KRYSSADE PUNKTEN SOM DRAR ÅT MOTSATT HÅLL (2026-09-13) ────────────
@@ -8744,6 +8757,48 @@ _METODSTAMMAR = ("ekvation", "olikhet", "funktion", "sannolikhet",
                  "exponential", "förändringsfaktor", "pythagoras", "tangens",
                  "sinus", "cosinus", "vektor", "derivat", "logaritm",
                  "faktoriser", "andragrad")
+# BOKSTÄVERNA (samma dom, exam 128 uppgift 3 och generalrepetitionen samma
+# natt). Läraren valde A-formen «UTAN bokstäver, eftersom klassen inte läst
+# algebra än», och den skarpa omkörningen skrev ändå «En fisk väger m kg …
+# Svara med ett förenklat uttryck i m och k» och två lönformler L = 160t.
+# Ordet står inte i texten, bokstaven gör det. Kommer algebraiska uttryck,
+# formler eller ekvationer senare i boken och har klassen inte haft något av
+# dem, är varje bokstav i en uppgifts matte ett förbud.
+_ALGEBRASTAMMAR = ("algebra", "uttryck", "formel", "formler", "ekvation",
+                   "variabel")
+
+
+def _haft_text(delmoment: list[dict] | None,
+               avsnitt: list[dict] | None) -> str:
+    """Det klassen haft som EN text: kalenderns delmoment och provets egna
+    avsnitt i boken."""
+    return " ".join([str(d.get("delmoment") or "") for d in (delmoment or [])]
+                    + [" ".join(str(a.get(k) or "")
+                                for k in ("etikett", "titel", "rubrik"))
+                       for a in (avsnitt or []) if isinstance(a, dict)]
+                    ).casefold()
+
+
+def algebra_forbjuden(forbjudna: list[dict] | None,
+                      delmoment: list[dict] | None,
+                      avsnitt: list[dict] | None) -> dict | None:
+    """Förbudsraden som gör bokstäver förbjudna, eller None: algebra står
+    bland det som kommer senare och ingenting av det står bland det haft."""
+    haft = _haft_text(delmoment, avsnitt)
+    if any(s in haft for s in _ALGEBRASTAMMAR):
+        return None
+    return next((f for f in (forbjudna or [])
+                 if any(s in str(f.get("metod") or "").casefold()
+                        for s in _ALGEBRASTAMMAR)), None)
+
+
+def _bokstaver(text: str) -> list[str]:
+    """Bokstäverna i uppgiftens matte, utan kommandon och textkommandon."""
+    ut: set[str] = set()
+    for b in _MATTEBLOCK_RE.findall(str(text or "")):
+        s = _TEXTKOMMANDO_RE.sub(" ", b[1:-1])
+        ut |= set(re.findall(r"[a-zA-Z]", re.sub(r"\\[a-zA-Z]+", " ", s)))
+    return sorted(ut)
 
 
 def forbudsvakt(exam: dict, delmoment: list[dict] | None,
@@ -8758,24 +8813,38 @@ def forbudsvakt(exam: dict, delmoment: list[dict] | None,
     längre fram till ett förbud mot ordet ekvation."""
     if not forbjudna:
         return []
-    haft = " ".join([str(d.get("delmoment") or "") for d in (delmoment or [])]
-                    + [" ".join(str(a.get(k) or "")
-                                for k in ("etikett", "titel", "rubrik"))
-                       for a in (avsnitt or []) if isinstance(a, dict)]
-                    ).casefold()
+    haft = _haft_text(delmoment, avsnitt)
     forbud: dict[str, dict] = {}
     for f in forbjudna:
         namn = str(f.get("metod") or "").casefold()
         for s in _METODSTAMMAR:
             if s in namn and s not in haft:
                 forbud.setdefault(s, f)
-    if not forbud:
+    algebra = algebra_forbjuden(forbjudna, delmoment, avsnitt)
+    if not forbud and not algebra:
         return []
     fel: list[dict] = []
     sedda: set[tuple[int, str]] = set()
     for e in domarenheter(exam or {}):
-        text = (f"{e['kort'].get('stam', '')} "
-                f"{e['kort'].get('text', '')}").casefold()
+        ratext = f"{e['kort'].get('stam', '')} {e['kort'].get('text', '')}"
+        text = ratext.casefold()
+        # Ett fynd per uppgift: nämner den en metod ur listan säger det
+        # fyndet mer än bokstäverna gör.
+        uppg = _uppgiftsnr(e["nr"])
+        namnger = any(s in text for s in forbud)
+        bokstaver = _bokstaver(ratext) if algebra and not namnger else []
+        if bokstaver and (uppg, "bokstav") not in sedda:
+            sedda.add((uppg, "bokstav"))
+            fel.append(_err(
+                f"uppgift {e['nr']}", "forbudsvakt",
+                f"Uppgift {e['nr']} räknar med bokstäver "
+                f"({', '.join('$' + b + '$' for b in bokstaver)}), och "
+                f"{algebra.get('metod')} (s. {algebra.get('sidor')}) kommer "
+                "senare i boken: klassen har inte räknat med bokstäver när "
+                "provet skrivs. Skriv uppgiften med konkreta tal, också en "
+                "formel. Ska A-delen visa att något gäller generellt, fråga om "
+                "ett konkret fall till («Blir det samma om …? Förklara "
+                "varför.»). Samma del, samma poäng och samma förmåga."))
         for s, f in forbud.items():
             nyckel = (_uppgiftsnr(e["nr"]), s)
             if s not in text or nyckel in sedda:
@@ -10044,7 +10113,11 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # skäl som ovan: tomma listor ger TOMMA STRÄNGAR och en oförändrad prompt.
     # Förebilden är PROVETS. Gruppuppgiften bygger sin egen inne i
     # build_prompt, ur lärarens remsa.
-    forbjudetblock = build_forbjudet(forbjudna or [])
+    # Med det klassen haft, så att blocket kan säga «inga bokstäver» när
+    # algebran kommer senare (exam 128). Tom förbudslista ger fortfarande
+    # en tom sträng.
+    forbjudetblock = build_forbjudet(forbjudna or [], delmoment or [],
+                                     avsnitt or [])
     # FÖRBEHÅLLEN på de kryssade punkterna (2026-09-13, kväll). Deterministiskt
     # ur de två listor prompten redan bär — lärarens kryss och förbudet — och
     # alltså inget nytt anrop. Tom sträng när ingen punkt krockar, och då är
