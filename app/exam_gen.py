@@ -574,6 +574,20 @@ INSTRUCTION = (
     "formel för en fisk eller ett djur med ovanliga exponenter.\n"
     "  • Namnen är vanliga svenska förnamn som är lätta att läsa: Elias, "
     "Maja, Noah, Ella, Hugo, Alva, Liam, Saga, Ali, Sara, Leo, Nora.\n"
+    # Lärarens dom 2026-09-23 (prov 126 uppgift 7 och 11): «Hugo bygger …
+    # jätteonödig information, bättre att komma rakt på sak»; «otydligt
+    # vilken olikhet som ska ställas upp, nämn att det gäller tiden t
+    # minuter»; «en resa på 4 min 10 s kostar alltså lika mycket som 5
+    # minuter … förstör mer än den hjälper».
+    "  • KOM RAKT PÅ SAK. En person står bara i uppgiften när personens "
+    "påstående, val eller lösning är det eleven ska ta ställning till. En "
+    "mönsteruppgift börjar «Figurerna är …», inte «Hugo bygger …».\n"
+    "  • Ska eleven ställa upp en ekvation eller olikhet säger uppgiften "
+    "vilken variabel och vad den står för: «Låt t vara resans tid i "
+    "minuter. Ställ upp en olikhet för t som …».\n"
+    "  • Ingen förklaring av ett specialfall eleven inte behöver (påbörjad "
+    "minut, avrundningsregler). Säg svarsformen i stället: «Svara i hela "
+    "minuter.»\n"
     # Lärarens dom 2026-09-23 (prov 126 uppgift 6a, «Exempel: 0,0035 m
     # skrivs 3,5·10⁻³ m i grundpotensform»): exemplet visade exakt det
     # E-poängen prövade. «Aldrig när poängen prövar formen», som NP.

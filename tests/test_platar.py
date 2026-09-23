@@ -766,3 +766,11 @@ def test_exempel_pa_skrivformen_bara_nar_poangen_provar_annat():
     r = exam_gen.INSTRUCTION
     assert "står bara frågan, UTAN exempel" in r
     assert "visar uppgiften formen med ett exempel med andra tal" not in r
+
+
+def test_rakt_pa_sak_variabeln_och_inga_specialfall():
+    """Lärarens dom 2026-09-23 (prov 126 uppgift 7 och 11)."""
+    r = exam_gen.INSTRUCTION
+    assert "KOM RAKT PÅ SAK" in r and "«Figurerna är …», inte «Hugo bygger …»" in r
+    assert "Låt t vara resans tid i minuter" in r
+    assert "Svara i hela minuter" in r
