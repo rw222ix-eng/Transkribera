@@ -590,6 +590,45 @@ class ExamItem(_Uppgiftsbas):
         return self
 
 
+# ── GRUPPUPPGIFTEN: INGET LÄMNAS IN (Rickard 2026-09-23) ──────────────────
+# «Gruppuppgifterna görs tillsammans i klassen, ingen lämnar in något.» Nio
+# gruppuppgifter bar «Bestäm vem som skriver. Lämna in ett gemensamt svar …»
+# och fick byggas om för hand samma kväll. Förvalet är därför GENOMGÅNG, och
+# dess löfte är meningen nedan, ordagrant den som står på de nio pappren.
+#
+# «skriftligt» (ett gemensamt svar lämnas in) finns inte längre som val. Gamla
+# dokument bär ordet; det läses som genomgång (GruppUpplagg._gamla_former), så
+# ett gammalt papper validerar och trycks utan att något ber om en inlämning.
+#
+# Löftena bor HÄR och ingen annanstans i Python: exam_latex trycker dem i
+# bandets reserv, exam_gen skriver dem i prompten och klistrar dem sist i
+# bandet (stada_gruppband). Skärmens kopia står i blad.js grupphuvud (HUR) och
+# måste säga samma sak.
+GRUPP_GENOMGANG = ("Vi går igenom lösningarna tillsammans på lektionen. "
+                   "Inget lämnas in.")
+REDOVISNING_LOFTE: dict[str, str] = {
+    "genomgang": GRUPP_GENOMGANG,
+    "muntligt": ("Redovisas muntligt: två minuter per grupp, och alla i "
+                 "gruppen säger något."),
+    "poster": ("Redovisas som poster: skriv lösningen stort på ett blad som "
+               "sätts upp i salen."),
+}
+REDOVISNING_FORVAL = "genomgang"
+# Stavningar som når servern och vad de betyder. «genomgång» är väljarens
+# etikett i gemener (plan.js skickar etiketten), «skriftligt» är den gamla
+# inlämningsformen.
+_REDOVISNING_ALIAS = {"genomgång": "genomgang", "skriftligt": "genomgang",
+                      "skriftlig": "genomgang"}
+
+
+def redovisningsform(varde) -> str:
+    """Redovisningsformen som en av REDOVISNING_LOFTE:s nycklar. Okänt och tomt
+    blir förvalet, genomgång, och ALDRIG en inlämning."""
+    s = str(varde or "").strip().lower()
+    s = _REDOVISNING_ALIAS.get(s, s)
+    return s if s in REDOVISNING_LOFTE else REDOVISNING_FORVAL
+
+
 class GruppUpplagg(_Model):
     """Gruppuppgiftens egna villkor — det frontendens gruppark trycker överst
     på pappret: hur många namnrader, hur lång tid, hur det redovisas
@@ -597,7 +636,19 @@ class GruppUpplagg(_Model):
     (plan.js TYPVAL.Gruppuppgift): 2–5 elever, 10–180 minuter."""
     elever: int = Field(ge=2, le=5)
     langd_min: int = Field(ge=10, le=180)
-    redovisning: Literal["muntligt", "skriftligt", "poster"]
+    redovisning: Literal["genomgang", "muntligt", "poster"]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _gamla_former(cls, data):
+        """«skriftligt» och «genomgång» läses som genomgång (se
+        REDOVISNING_LOFTE). Bara de kända stavningarna: ett påhittat ord ska
+        fortfarande fällas av schemat, inte tyst bli förvalet."""
+        if isinstance(data, dict):
+            red = str(data.get("redovisning") or "").strip().lower()
+            if red in _REDOVISNING_ALIAS:
+                data = {**data, "redovisning": _REDOVISNING_ALIAS[red]}
+        return data
 
 
 class ExamDoc(_Model):

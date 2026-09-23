@@ -108,8 +108,10 @@ def test_orimligt_upplagg_klipps_till_granserna(client, monkeypatch):
         "kurs": "Matematik, nivå 2c", "punkter_text": ["Derivator"],
         "typ": "gruppuppgift",
         "grupp": {"elever": 99, "langd_min": 3, "redovisning": "trolleri"}}))
+    # Ett okänt ord blir FÖRVALET, och förvalet är genomgången sedan
+    # 2026-09-23 (exam_spec.redovisningsform): inget lämnas in.
     assert calls[0]["grupp"] == {"elever": 5, "langd_min": 10,
-                                 "redovisning": "muntligt"}
+                                 "redovisning": "genomgang"}
 
 
 # --------------------------------------------------------- balansprofilen --
@@ -292,12 +294,18 @@ def test_nyckelfragan_star_kvar_efter_lararens_eget_band():
 
 
 def test_prompten_ber_om_bandet_med_redovisningsloftet():
+    """Ett gammalt «skriftligt» ger genomgångens löfte, ordagrant, och prompten
+    ber aldrig om en inlämning eller om någon som skriver för gruppen
+    (Rickard 2026-09-23)."""
     p = exam_gen.build_prompt(
         "Matematik, nivå 1a", "BA26B", ["Tal"], antal=4,
         profil="gruppuppgift",
         grupp={"elever": 3, "langd_min": 45, "redovisning": "skriftligt"})
     assert '"instruktion"' in p
-    assert "lämnas in vid lektionens slut" in p
+    assert exam_spec.GRUPP_GENOMGANG in p
+    assert "lämnas in vid lektionens slut" not in p
+    assert "bestäm vem som skriver" not in p.lower().replace(
+        "«bestäm vem som skriver»", "")
 
 
 def test_omskrivningen_far_veta_att_bandet_finns():
@@ -556,9 +564,10 @@ def test_instruktionsrutan_far_momentets_minnesregel():
                                       "redovisning": "skriftligt"})
     assert "EN kort minnesregel för momentet" in p
     assert "inga tankstreck" in p          # «utan M-Dash»
-    # Bandet ska fortfarande bära arbetsregeln och redovisningslöftet.
+    # Bandet ska fortfarande bära arbetsregeln och redovisningslöftet, och
+    # löftet är genomgångens: inget lämnas in (2026-09-23).
     assert "läs uppgiften tillsammans" in p
-    assert "lämnas in vid lektionens slut" in p
+    assert exam_spec.GRUPP_GENOMGANG in p
 
 
 def test_utdragen_ur_pappret_ar_med_och_ar_giltig_json():
@@ -1401,11 +1410,16 @@ def test_genereringen_satter_markeringen_pa_pappret_lararen_far():
 
 def test_bandet_kapas_till_tva_meningar():
     """«Den inrutade texten under namnen behöver skrivas mycket, mycket
-    kortare.» Modellen skrev fyra meningar plus en metodregel."""
+    kortare.» Modellen skrev fyra meningar plus en metodregel.
+
+    Sedan 2026-09-23 är de två meningarna ARBETSREGELN, och löftet för
+    gruppens redovisningsform står efter dem (exam_gen.stada_gruppband).
+    «Bestäm vem som skriver» stryks: inget lämnas in."""
     papper = _grupppapper()
     assert exam_gen.korta_instruktion(papper, "gruppuppgift") is True
-    assert papper["instruktion"] == ("Läs uppgiften tillsammans. Bestäm vem "
-                                     "som skriver.")
+    assert papper["instruktion"] == (
+        "Läs uppgiften tillsammans. Alla i gruppen ska kunna förklara "
+        "lösningen efteråt. " + exam_spec.REDOVISNING_LOFTE["muntligt"])
     # Och en gång till ändrar ingenting — passet körs varje varv.
     assert exam_gen.korta_instruktion(papper, "gruppuppgift") is False
 
@@ -1416,7 +1430,9 @@ def test_nyckelfragan_ror_inte_bandet_och_bandet_inte_den():
     papper = _grupppapper(nyckelfraga="Vad ska räknas först?")
     exam_gen.ovningspappret_stadat(papper, "gruppuppgift")
     assert papper["nyckelfraga"] == "Vad ska räknas först?"
-    assert papper["instruktion"].count(".") == 2
+    # Två meningar arbetsregel plus löftet (se testet ovan).
+    assert papper["instruktion"].count(".") == 3
+    assert "Vad ska räknas först" not in papper["instruktion"]
 
 
 def test_provets_band_ror_vi_inte():
@@ -1551,3 +1567,158 @@ def test_en_omskrivning_utan_mal_ager_balansen_sjalv():
         max_rounds=1, llm=lambda *_a, **_kw: json.dumps(efter))
     assert {e["code"] for e in res["errors"]} == {"formagabalans",
                                                   "nivabalans"}
+
+
+# ── INGET LÄMNAS IN (Rickard 2026-09-23) ──────────────────────────────────
+# «Gruppuppgifterna görs tillsammans i klassen, ingen lämnar in något.» Nio
+# papper bar «Bestäm vem som skriver. Lämna in ett gemensamt svar …» och fick
+# byggas om för hand. Testerna låser alla vägar in i bandet: schemat, rutten,
+# prompten, bandstädningen, LaTeX-reserven och skärmens två kopior.
+
+_INLAMNING = ("lämna in", "lämnas in vid", "vem som skriver", "gemensamt svar")
+
+
+def _utan_inlamning(text: str) -> bool:
+    lag = text.lower()
+    return not any(ord_ in lag for ord_ in _INLAMNING)
+
+
+def test_skriftligt_lases_som_genomgang():
+    """Gamla dokument bär «skriftligt». De ska validera och tryckas som
+    genomgång, inte fällas och inte be om en inlämning."""
+    doc, fel = exam_spec.validate_exam_json(
+        _doc(grupp={"elever": 2, "langd_min": 20, "redovisning": "skriftligt"}),
+        "gruppuppgift")
+    assert doc is not None, fel
+    assert doc.grupp.redovisning == "genomgang"
+    band = exam_latex.render_gruppuppgift(doc).split(r"\notisruta{")[1]
+    assert exam_spec.GRUPP_GENOMGANG in band
+    assert _utan_inlamning(band.split("}")[0])
+
+
+def test_ett_pahittat_redovisningsord_falls_fortfarande():
+    """Aliaset gäller de kända stavningarna. Ett påhittat ord ska schemat
+    fälla, inte tyst göra till förvalet."""
+    _, fel = exam_spec.validate_exam_json(
+        _doc(grupp={"elever": 2, "langd_min": 20, "redovisning": "trolleri"}),
+        "gruppuppgift")
+    assert fel
+
+
+@pytest.mark.parametrize("varde,vantat", [
+    (None, "genomgang"), ("", "genomgang"), ("Genomgång", "genomgang"),
+    ("skriftligt", "genomgang"), ("Muntligt", "muntligt"),
+    ("poster", "poster"), ("trolleri", "genomgang")])
+def test_redovisningsformen_har_genomgang_som_forval(varde, vantat):
+    assert exam_spec.redovisningsform(varde) == vantat
+
+
+def test_rutten_gor_skriftligt_till_genomgang(client, monkeypatch):
+    """Webbläsarens gamla förval «Skriftligt» når servern även efter att valet
+    togs bort ur väljaren. Det blir genomgång."""
+    calls = _stub(monkeypatch)
+    _done(client.post("/api/exams/generate", json={
+        "kurs": "Matematik, nivå 1c", "punkter_text": ["Uttryck"],
+        "typ": "gruppuppgift",
+        "grupp": {"elever": 2, "langd_min": 20, "redovisning": "skriftligt"}}))
+    assert calls[0]["grupp"]["redovisning"] == "genomgang"
+
+
+def test_prompten_utan_upplagg_lovar_genomgangen():
+    p = exam_gen.build_prompt("Matematik, nivå 1c", "NA26F", ["Uttryck"],
+                              antal=4, profil="gruppuppgift")
+    assert exam_spec.GRUPP_GENOMGANG in p
+    assert 'redovisning="genomgang"' in p
+
+
+@pytest.mark.parametrize("modellens", [
+    "Läs uppgiften tillsammans. Bestäm vem som skriver. Lämna in ett "
+    "gemensamt svar per grupp.",
+    "Läs uppgifterna tillsammans och bestäm vem som skriver. Båda ska kunna "
+    "förklara lösningen. Lämna in ett gemensamt svar vid lektionens slut.",
+    "Lös uppgifterna tillsammans. Lämna in ett gemensamt svar när lektionen "
+    "slutar.",
+    "Läs uppgiften tillsammans. Välj en som skriver. Lämna in ett svar per "
+    "grupp.",
+    "Läs uppgiften tillsammans. Redovisas skriftligt: ett gemensamt svar per "
+    "grupp lämnas in vid lektionens slut.",
+])
+def test_bandet_ber_aldrig_om_inlamning(modellens):
+    """Modellens egna former från de nio pappren. Det som ber någon skriva för
+    gruppen eller lämna in stryks, läsa tillsammans och förklara står kvar,
+    och genomgångens mening står sist, en gång."""
+    papper = _grupppapper(
+        instruktion=modellens,
+        grupp={"elever": 2, "langd_min": 20, "redovisning": "skriftligt"})
+    exam_gen.ovningspappret_stadat(papper, "gruppuppgift")
+    band = papper["instruktion"]
+    assert band.endswith(exam_spec.GRUPP_GENOMGANG)
+    assert band.count(exam_spec.GRUPP_GENOMGANG) == 1
+    assert _utan_inlamning(band.replace("Inget lämnas in.", ""))
+    assert band.startswith(("Läs upp", "Lös upp"))
+    # Ett varv till ändrar ingenting.
+    assert exam_gen.stada_gruppband(papper) is False
+
+
+def test_rickards_rattade_band_star_kvar_som_de_ar():
+    """Bandet på ett av de nio rättade pappren (Andelar och procent, 23/9) är
+    redan rätt och ska gå igenom städningen orört."""
+    ratt = ("Läs uppgiften tillsammans. Alla i gruppen ska kunna förklara "
+            "lösningen efteråt. " + exam_spec.GRUPP_GENOMGANG)
+    papper = _grupppapper(
+        instruktion=ratt,
+        grupp={"elever": 2, "langd_min": 20, "redovisning": "skriftligt"})
+    assert exam_gen.stada_gruppband(papper) is False
+    assert papper["instruktion"] == ratt
+
+
+def test_tomt_band_far_reserven_utan_skrivare():
+    """Utan dokumentets band trycker mallen sin reserv, och den ber inte
+    längre någon skriva för gruppen."""
+    doc, fel = exam_spec.validate_exam_json(
+        _doc(grupp={"elever": 3, "langd_min": 45, "redovisning": "genomgang"}),
+        "gruppuppgift")
+    assert doc is not None, fel
+    band = exam_latex.render_gruppuppgift(doc).split(r"\notisruta{")[1]
+    band = band.split("}")[0]
+    assert "Alla i gruppen ska kunna förklara" in band
+    assert exam_spec.GRUPP_GENOMGANG in band
+    assert _utan_inlamning(band.replace("Inget lämnas in.", ""))
+
+
+def test_skarmens_kopior_lovar_samma_sak():
+    """Skärmen ritar bandet ur blad-bygg.js (reserven) och blad.js (löftet),
+    och PDF:en är skärmens avritning. Texterna där ska vara exam_spec:s, och
+    väljaren i planeringen ska inte erbjuda en inlämning."""
+    from pathlib import Path
+    ui = Path(exam_spec.__file__).resolve().parent / "web" / "ui"
+    blad = (ui / "blad.js").read_text(encoding="utf-8")
+    bygg = (ui / "blad-bygg.js").read_text(encoding="utf-8")
+    plan = (ui / "plan.js").read_text(encoding="utf-8")
+    hur = blad.split("const HUR = {")[1].split("};")[0]
+    assert f"'{exam_spec.GRUPP_GENOMGANG}'" in blad
+    for lofte in exam_spec.REDOVISNING_LOFTE.values():
+        assert lofte in blad
+    assert "lämnas in" not in hur
+    reserv = next(r for r in bygg.splitlines()
+                  if r.strip().startswith("Gruppuppgift: '"))
+    assert "skriver" not in reserv
+    assert "val: ['Genomgång', 'Muntligt', 'Poster']" in plan
+    assert "redovisning: 'Genomgång'" in plan
+
+
+@pytest.mark.parametrize("fore,efter", [
+    # Rickards egna rättelser av de nio pappren, 2026-09-23.
+    ("Läs uppgifterna tillsammans och bestäm vem som skriver.",
+     "Läs uppgifterna tillsammans."),
+    ("Bestäm vem som skriver, och se till att båda kan förklara lösningen "
+     "efteråt.",
+     "Se till att båda kan förklara lösningen efteråt."),
+    ("Bestäm vem som skriver.", ""),
+    ("Välj en som skriver.", ""),
+    ("Läs och bestäm vem som skriver, och räkna sedan.",
+     "Läs och räkna sedan."),
+    ("Läs uppgiften tillsammans.", "Läs uppgiften tillsammans."),
+])
+def test_ledet_om_vem_som_skriver_stryks_ur_meningen(fore, efter):
+    assert exam_gen._utan_skrivarled(fore) == efter

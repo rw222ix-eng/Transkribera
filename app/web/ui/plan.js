@@ -466,7 +466,11 @@
                 + 'vad ett A4 rymmer — resten flyttas till fler ark.' },
       { id: 'grupp', namn: 'Elever per grupp', typ: 'antal', min: 2, max: 5 },
       { id: 'langd', namn: 'Tid på lektionen', typ: 'minuter', snabb: [10, 20, 30, 45], min: 10, max: 180 },
-      { id: 'redovisning', namn: 'Redovisning', typ: 'seg', val: ['Muntligt', 'Skriftligt', 'Poster'] },
+      /* INGET LÄMNAS IN (Rickard 2026-09-23): gruppuppgiften görs tillsammans
+         på lektionen. «Skriftligt» var en inlämning och är borttaget; förvalet
+         är Genomgång, och servern läser ett gammalt «skriftligt» som den
+         (exam_spec.redovisningsform). */
+      { id: 'redovisning', namn: 'Redovisning', typ: 'seg', val: ['Genomgång', 'Muntligt', 'Poster'] },
       /* Samma kryss som arbetsbladet. Gruppuppgiften saknade det utan skäl:
          renderaren skickade redan `!!i.illustration` för båda typerna, men
          gruppuppgiftens upplägg hade inget fält att skicka, så bilden var
@@ -553,7 +557,7 @@
     Arbetsblad: { antal: 3, niva: 'Blandat', facit: 'Facit i bladet', illustration: true,
                   klassblad: true, elever: [], syfte: 'Stötta',
                   inforProv: null, inforNummer: [] },
-    Gruppuppgift: { antal: 4, grupp: 3, langd: 60, redovisning: 'Muntligt', illustration: true,
+    Gruppuppgift: { antal: 4, grupp: 3, langd: 60, redovisning: 'Genomgång', illustration: true,
                     facit: 'Separat facit' },
     Anteckningar: { onskemal: '', lektioner: [] }
   };
@@ -3070,7 +3074,7 @@
     const kalla = forslag && window.Figurer.kalla ? window.Figurer.kalla(forslag.fig) : null;
 
     const huvud = `<div class="guhuv" data-el="rubrik" data-namn="Sidhuvudet"><h4 class="gutitel">${versal(v.moment)}</h4></div>`;
-    const band = `<div class="guband" data-el="instr" data-namn="Instruktionen">Arbeta i grupp om ${i.grupp || 3}. Fyll i rutorna <b>i ordning</b> — en i taget, och alla ska kunna redovisa hela lösningen. Redovisning: ${(i.redovisning || 'Muntligt').toLowerCase()}.${(v.gy || []).length ? ` Centralt innehåll: ${v.gy.join(' · ')}.` : ''}</div>`;
+    const band = `<div class="guband" data-el="instr" data-namn="Instruktionen">Arbeta i grupp om ${i.grupp || 3}. Fyll i rutorna <b>i ordning</b> — en i taget, och alla ska kunna redovisa hela lösningen. Redovisning: ${(i.redovisning || 'Genomgång').toLowerCase()}.${(v.gy || []).length ? ` Centralt innehåll: ${v.gy.join(' · ')}.` : ''}</div>`;
 
     const kort = s.steg.map(([rubrik, stod], n) => {
       const f = stegrader(rubrik, n);
@@ -3609,7 +3613,7 @@
       grupp: {
         elever: Number(i0.grupp) || 3,
         langd_min: Number(i0.langd) || 45,
-        redovisning: String(i0.redovisning || 'Muntligt').toLowerCase(),
+        redovisning: String(i0.redovisning || 'Genomgång').toLowerCase(),
       },
     }, { signal, log })).then(kravDone).then(r => {
       if (!r.exam) throw new Error('Gruppuppgiften gick inte att skriva den här gången. Försök igen.');

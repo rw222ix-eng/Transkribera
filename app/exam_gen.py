@@ -275,9 +275,12 @@ INSTRUCTION = (
     # metaraden överst säger alla tre. Utan raden här kunde modellen inte ändra
     # dem i en omskrivning — build_refine_prompt får bara INSTRUCTION med sig —
     # och «gör grupperna om 4» blev ett svar utan verkan.
+    # «skriftligt» är struket (Rickard 2026-09-23: inget lämnas in), se
+    # exam_spec.REDOVISNING_LOFTE. Förvalet är genomgången.
     "- grupp {elever, langd_min, redovisning}: BARA gruppuppgiften har det. "
     "elever är 2–5 (det är antalet namnrader på pappret), langd_min är "
-    "10–180, redovisning är \"muntligt\", \"skriftligt\" eller \"poster\". "
+    "10–180, redovisning är \"genomgang\" (förvalet: lösningarna gås igenom "
+    "tillsammans och inget lämnas in), \"muntligt\" eller \"poster\". "
     "Raden överst på pappret läses ur dem; ändrar läraren gruppstorleken, "
     "tiden eller redovisningsformen ändras fältet.\n"
     # Bandet står i INSTRUCTION och inte bara i uppdragsblocken, och det är
@@ -288,7 +291,9 @@ INSTRUCTION = (
     "- instruktion: instruktionsbandet överst på arbetsbladet eller "
     "gruppuppgiften — den grå rutan som säger HUR eleverna ska arbeta (läsa "
     "tillsammans, skriva svaret på svarsraden, hur det redovisas), aldrig vad "
-    "uppgifterna handlar om. Två till tre korta meningar. Är fältet tomt sätter "
+    "uppgifterna handlar om. På gruppuppgiften lämnas ingenting in och ingen "
+    "skriver för gruppen: skriv aldrig «lämna in» eller «bestäm vem som "
+    "skriver». Två till tre korta meningar. Är fältet tomt sätter "
     "appen sin egen standardtext; ber läraren om en ändring i rutan skriver du "
     "HELA bandets text i fältet, med hennes ändring införd. Provet har inget "
     "band — där lämnas fältet tomt, dess motsvarighet är hjalpmedel.\n"
@@ -2672,9 +2677,14 @@ INSTRUKTION_MENINGAR = 2
 
 
 def korta_instruktion(exam: dict, profil: str) -> bool:
-    """Kapa `instruktion` till högst två meningar. Sant när något ströks."""
+    """Kapa `instruktion` till högst två meningar. Sant när något ströks.
+
+    Gruppuppgiften går genom stada_gruppband i stället: dess två meningar är
+    arbetsregeln, och redovisningslöftet står efter dem."""
     if profil not in OVNINGSPROFILER or not isinstance(exam, dict):
         return False
+    if profil == "gruppuppgift":
+        return stada_gruppband(exam)
     text = exam.get("instruktion")
     if not isinstance(text, str) or not text.strip():
         return False
@@ -2682,6 +2692,84 @@ def korta_instruktion(exam: dict, profil: str) -> bool:
     if len(bitar) <= INSTRUKTION_MENINGAR:
         return False
     exam["instruktion"] = " ".join(bitar[:INSTRUKTION_MENINGAR])
+    return True
+
+
+# ── GRUPPBANDET: INGEN SKRIVER FÖR GRUPPEN, INGET LÄMNAS IN ──────────────
+#
+# Rickard 2026-09-23: «gruppuppgifterna görs tillsammans i klassen, ingen
+# lämnar in något.» Nio papper bar «Bestäm vem som skriver. Lämna in ett
+# gemensamt svar …», för prompten bad om det. Prompten ber inte längre, men en
+# promptrad är en önskan (se kapningen ovan), och det här är raden som håller.
+#
+# Bandet blir: modellens egna meningar UTOM de som ber någon skriva för gruppen,
+# lämna in eller redovisa (högst INSTRUKTION_MENINGAR; står «bestäm vem som
+# skriver» som ett led i en mening stryks bara ledet), och sist löftet för
+# gruppens redovisningsform ur exam_spec.REDOVISNING_LOFTE, ordagrant och en
+# gång. Förvalet är genomgången: «Vi går igenom lösningarna tillsammans på
+# lektionen. Inget lämnas in.» Läsa tillsammans och förklara för varandra står
+# kvar, och nyckelfrågan har sitt eget fält och rörs inte.
+#
+# Löftet räknas INTE in i de två meningarna. Det är appens text, inte
+# modellens, och det är den mening läraren uttryckligen vill se. Bandet blir
+# därför högst fyra korta meningar, samma längd som de nio rättade pappren.
+_GRUPP_STRYK = re.compile(
+    r"lämna[sr]?\s+in|lämnas\s+in|inlämning|vem\s+som\s+skriver"
+    r"|(?:en|någon)\s+som\s+skriver|välj(?:er)?\s+en\s+(?:som\s+)?skriv"
+    r"|sekreterare|gemensamt\s+(?:skriftligt\s+)?svar|^\s*redovisas\b"
+    r"|går\s+igenom\s+lösningarna\s+tillsammans",
+    re.IGNORECASE)
+# Ledet «bestäm vem som skriver» mitt i en mening som annars ska stå kvar.
+# Rickards egna rättelser 23/9: «Läs uppgifterna tillsammans och bestäm vem som
+# skriver.» blev «Läs uppgifterna tillsammans.», och «Bestäm vem som skriver,
+# och se till att båda kan förklara …» blev «Se till att båda kan förklara …».
+_GRUPP_SKRIVARLED = re.compile(
+    r"(?:,?\s*och\s+|^\s*)(?:bestäm|välj)\s+(?:vem|en|någon)\s+som\s+skriver"
+    r"(?:\s*,\s*och\s+|\s*,\s*|\s*(?=[.!?]|$))",
+    re.IGNORECASE)
+
+
+def _utan_skrivarled(mening: str) -> str:
+    """Meningen utan ledet om vem som skriver; tom sträng när inget blev kvar.
+
+    Står ledet mitt i meningen («Läs och bestäm vem som skriver, och räkna»)
+    binds grannarna ihop med det skiljetecken som stod efter det."""
+    def ersatt(m: re.Match) -> str:
+        led = m.group(0)
+        forst = re.match(r",?\s*och\s", led, re.IGNORECASE) is not None
+        if forst and re.search(r",\s*och\s+$", led, re.IGNORECASE):
+            return " och "
+        if forst and re.search(r",\s*$", led):
+            return ", "
+        return ""
+    ren = _GRUPP_SKRIVARLED.sub(ersatt, mening).strip()
+    ren = re.sub(r"\s+([.!?,])", r"\1", ren)
+    if not re.search(r"[A-Za-zÅÄÖåäö]", ren):
+        return ""
+    return ren[0].upper() + ren[1:]
+
+
+def stada_gruppband(exam: dict) -> bool:
+    """Gruppbandet enligt blocket ovan. Sant när texten ändrades.
+
+    Idempotent: löftet stryks innan det läggs dit igen, så ett papper kan gå
+    varv efter varv utan att bandet växer. Ett tomt band lämnas tomt, för då
+    sätter renderarna appens egen reserv (exam_latex._GRUPPBAND plus löftet)."""
+    if not isinstance(exam, dict):
+        return False
+    text = exam.get("instruktion")
+    if not isinstance(text, str) or not text.strip():
+        return False
+    red = exam_spec.redovisningsform((exam.get("grupp") or {}).get("redovisning")
+                                     if isinstance(exam.get("grupp"), dict)
+                                     else None)
+    egna = [m for m in (_utan_skrivarled(b) for b in _meningar(text))
+            if m and not _GRUPP_STRYK.search(m)]
+    ny = " ".join(egna[:INSTRUKTION_MENINGAR]
+                  + [exam_spec.REDOVISNING_LOFTE[red]])
+    if ny == text:
+        return False
+    exam["instruktion"] = ny
     return True
 
 
@@ -2897,17 +2985,14 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
         block.append(yrke)
     if profil == "gruppuppgift":
         g = grupp or {}
-        REDOV = {
-            "muntligt": "Redovisas muntligt: två minuter per grupp, och alla i "
-                        "gruppen ska kunna säga något.",
-            "skriftligt": "Redovisas skriftligt: ett gemensamt svar per grupp "
-                          "lämnas in vid lektionens slut.",
-            "poster": "Redovisas som poster: lösningen skrivs stort på ett blad "
-                      "som sätts upp i salen.",
-        }
+        # Löftet är exam_spec:s (REDOVISNING_LOFTE), samma text som pappret
+        # och skärmen trycker. Förvalet är genomgången och «skriftligt» läses
+        # som den: gruppuppgiften görs tillsammans och inget lämnas in
+        # (Rickard 2026-09-23).
         n = int(g.get("elever") or 3)
         min_ = int(g.get("langd_min") or 45)
-        red = str(g.get("redovisning") or "muntligt")
+        red = exam_spec.redovisningsform(g.get("redovisning"))
+        lofte = exam_spec.REDOVISNING_LOFTE[red]
         # TEXT → EKVATION, bara när momentet handlar om ekvationer. Tom sträng
         # lämnar prompten ordagrant som den var — radbrytningen sitter INNE i
         # blocket och inte i f-strängen, av just det skälet (jfr hjalpmedel).
@@ -2916,7 +3001,7 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
         block.append(
             f"Uppdrag: skriv en GRUPPUPPGIFT för {kurs}, klass {klass}, med "
             f"EXAKT {antal} uppgifter (varken fler eller färre). {n} elever per "
-            f"grupp arbetar tillsammans i {min_} minuter. {REDOV.get(red, REDOV['muntligt'])}\n"
+            f"grupp arbetar tillsammans i {min_} minuter. {lofte}\n"
             f"{ORIGINALITET_UR_BOKEN}"
             # STEGRINGEN (Del F, lärarens första dom). Här stod förut att
             # uppgifterna är «fyra ingångar till samma sak, inte en trappa, så
@@ -2985,11 +3070,19 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             # instruktionsrutan». Rutan är det gruppen har framför sig när den
             # fastnar, och en rad om momentet där är billigare än en lärare som
             # går runt och säger samma sak fyra gånger.
+            # INGEN SKRIVER FÖR GRUPPEN och INGET LÄMNAS IN (Rickard
+            # 2026-09-23). «bestäm vem som skriver» stod i arbetsregeln här,
+            # och modellen skrev «Lämna in ett gemensamt svar» på nio papper.
+            # Löftet klistras dessutom in av appen sist i bandet
+            # (stada_gruppband), så en modell som ändå skriver en inlämning
+            # får den struken.
             "Skriv instruktionsbandet i fältet \"instruktion\": arbetsregeln "
-            "först — läs uppgiften tillsammans, bestäm vem som skriver, alla i "
-            "gruppen ska kunna förklara lösningen efteråt — sedan "
-            f"redovisningslöftet ordagrant: \"{REDOV.get(red, REDOV['muntligt'])}\" "
-            "och sist EN kort minnesregel för momentet, den lärarens egen röst "
+            "först — läs uppgiften tillsammans, alla i gruppen ska kunna "
+            "förklara lösningen efteråt — sedan "
+            f"redovisningslöftet ordagrant: \"{lofte}\" "
+            "Skriv aldrig att någon ska skriva för gruppen eller att något ska "
+            "lämnas in: gruppuppgiften görs tillsammans på lektionen. "
+            "Sist EN kort minnesregel för momentet, den lärarens egen röst "
             "skulle säga vid tavlan («Kom ihåg räkneordningen: parenteser "
             "först, sedan potenser, sedan gånger och delat, sist plus och "
             "minus.»). Korta meningar, vardagliga ord, inga tankstreck — "

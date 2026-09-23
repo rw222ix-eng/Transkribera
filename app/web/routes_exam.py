@@ -1462,12 +1462,14 @@ def create_router(base: Path, arbiter) -> APIRouter:
         grupp = None
         if typ == "gruppuppgift":
             g = body.get("grupp") or {}
+            # Redovisningsformen genom exam_spec.redovisningsform: förvalet är
+            # genomgången, och «skriftligt» (en inlämning) finns inte längre —
+            # gruppuppgiften görs tillsammans och inget lämnas in (Rickard
+            # 2026-09-23). Ett gammalt förval i webbläsaren blir genomgång.
             grupp = {
                 "elever": max(2, min(5, int(g.get("elever") or 3))),
                 "langd_min": max(10, min(180, int(g.get("langd_min") or 45))),
-                "redovisning": (str(g.get("redovisning") or "muntligt").lower()
-                                if str(g.get("redovisning") or "").lower()
-                                in ("muntligt", "skriftligt", "poster") else "muntligt"),
+                "redovisning": exam_spec.redovisningsform(g.get("redovisning")),
             }
         # Mottagaren (Etapp 4): ett arbetsblad kan höra till EN elev i stället
         # för till klassen. Då skrivs det ur hennes CI-profil — «stötta» på det

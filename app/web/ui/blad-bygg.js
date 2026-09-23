@@ -422,7 +422,9 @@ window.BladBygg = (() => {
      fanns ska se likadana ut som förut. */
   const BAND = {
     Arbetsblad: 'Skriv svaret på svarsraden där det står «Svar». De uppgifter som ska redovisas är märkta — skriv uppgiftens nummer överst på lösbladet. Visa hur du räknar, inte bara svaret.',
-    Gruppuppgift: 'Läs uppgiften tillsammans innan ni börjar räkna. Bestäm vem som skriver. Alla i gruppen ska kunna förklara lösningen efteråt.'
+    /* «Bestäm vem som skriver» struken 2026-09-23: ingen skriver för gruppen,
+       för inget lämnas in (exam_latex._GRUPPBAND säger samma sak). */
+    Gruppuppgift: 'Läs uppgiften tillsammans innan ni börjar räkna. Alla i gruppen ska kunna förklara lösningen efteråt.'
   };
 
   function ark(v, uppgifter, o) {

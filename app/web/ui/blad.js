@@ -462,9 +462,16 @@ window.Blad = (() => {
     /* Redovisningsformen är ett löfte till gruppen om hur det slutar. Står den
        bara som en etikett vet ingen vad som förväntas — så den sägs i klartext i
        instruktionsbandet också. */
+    /* INGET LÄMNAS IN (Rickard 2026-09-23): gruppuppgiften görs tillsammans,
+       och förvalet är genomgången. «Skriftligt» var en inlämning och finns inte
+       längre som val; gamla papper som bär ordet får genomgångens mening.
+       Samma texter som exam_spec.REDOVISNING_LOFTE, ordagrant. */
+    const GENOMGANG = 'Vi går igenom lösningarna tillsammans på lektionen. Inget lämnas in.';
     const HUR = {
+      'Genomgang': GENOMGANG,
+      'Genomgång': GENOMGANG,
+      'Skriftligt': GENOMGANG,
       'Muntligt': 'Redovisas muntligt: två minuter per grupp, och alla i gruppen säger något.',
-      'Skriftligt': 'Redovisas skriftligt: ett gemensamt svar per grupp lämnas in vid lektionens slut.',
       'Poster': 'Redovisas som poster: skriv lösningen stort på ett blad som sätts upp i salen.'
     };
     /* Ingen metarad på gruppuppgiften: läraren säger gruppstorlek, tid och
@@ -478,15 +485,18 @@ window.Blad = (() => {
       const topp = $('.gutopp', gu);
       const mall = topp && $('.gurad', topp);
       const band = $('.guband', gu);
-      const hur = HUR[redovisning] || HUR.Muntligt;
+      const hur = HUR[redovisning] || GENOMGANG;
       /* `data-egen` betyder att DOKUMENTET skrev bandet (exam_spec.instruktion,
          satt i blad-bygg ark) — och då klistrar vi ingenting på det. Läraren
          strök «ett gemensamt svar per grupp lämnas in vid lektionens slut» ur
          rutan; klistrades löftet på igen stod meningen där, hur rätt modellen
          än hade svarat. Vakten `/redovisas/i` nedan gäller fortfarande
          mallbandet, som inte bär löftet förrän vi lagt dit det. */
+      /* `includes(hur)` bredvid `/redovisas/i`: genomgångens mening bär inte
+         ordet, och utan vakten hade ett andra svep klistrat den två gånger. */
       if (band && !band.hasAttribute('data-egen')
-          && !/redovisas/i.test(band.textContent)) {
+          && !/redovisas/i.test(band.textContent)
+          && !band.textContent.includes(hur)) {
         band.insertAdjacentHTML('beforeend', ` ${hur}`);
       }
       if (!topp || !mall) return;
