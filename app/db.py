@@ -3979,6 +3979,39 @@ def stampla_exam_json(conn: sqlite3.Connection, exam_id: int,
     return cur.rowcount > 0
 
 
+def stampla_platval(conn: sqlite3.Connection, exam_id: int,
+                    version_id: int | None, platval) -> bool:
+    """Lärarens plåtval i canvas ({"uppg9": ""} tar bort, ett namn byter)
+    skrivs in i den version som godkändes, utan en ny version.
+
+    Valet bodde bara i dokumentet, och efterkontrollen läser provet: prov 126
+    (2026-09-23) bar fyndet «uppgift 9 bär plåten a-14-fyr-bat» kvar efter att
+    plåten tagits bort, och läraren kunde inte bli av med det. Samma regel som
+    stampla_exam_granser: en anteckning på pappret som redan trycktes.
+    Returnerar om något ändrades."""
+    if version_id is None or not isinstance(platval, dict):
+        return False
+    row = conn.execute(
+        "SELECT exam_json FROM exam_versions WHERE id = ? AND exam_id = ?",
+        (version_id, exam_id)).fetchone()
+    if row is None:
+        return False
+    data = json.loads(row["exam_json"])
+    andrat = False
+    for nr, u in enumerate(data.get("uppgifter") or [], 1):
+        scen = u.get("scen") if isinstance(u, dict) else None
+        nyckel = f"uppg{nr}"
+        if not isinstance(scen, dict) or nyckel not in platval:
+            continue
+        nytt = str(platval[nyckel] or "")
+        if str(scen.get("plat") or "") != nytt:
+            scen["plat"] = nytt
+            andrat = True
+    if andrat:
+        stampla_exam_json(conn, exam_id, version_id, data)
+    return andrat
+
+
 def set_current_exam_version(conn: sqlite3.Connection, exam_id: int,
                              version_id: int) -> dict | None:
     """Peka provet på en TIDIGARE version — det läraren ser är det som gäller.

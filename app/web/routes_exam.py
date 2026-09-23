@@ -2638,6 +2638,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     if exam.get("granser"):
                         db.stampla_exam_granser(conn, exam_id, version_id,
                                                 exam["granser"], skriv_over=True)
+                    # Lärarens plåtval in i samma varv, så att efterkontrollen
+                    # ser det hon ser (db.stampla_platval, prov 126).
+                    db.stampla_platval(conn, exam_id, version_id, platval)
                     # Godkänt MED ENBART .tex är ärligt: LaTeX:en finns och går
                     # att kompilera för hand. Godkänt UTAN någon fil alls är
                     # det inte — föll redan valideringen skrevs ingenting, och

@@ -1190,3 +1190,24 @@ def test_bok_for_kurs_slar_upp_klassens_bok(tmp_path):
     assert [a["nr"] for a in traff["avsnitt"]] == ["1.1"]
     assert db.bok_for_kurs(conn, db.get_or_create_course(conn, "Fysik 1")) is None
     assert db.bok_for_kurs(conn, None) is None
+
+
+def test_larens_platval_stamplas_i_varvet(tmp_path):
+    """Prov 126 (2026-09-23): plåten var bortvald i dokumentet, men provet bar
+    den kvar och efterkontrollen fällde uppgiften i det oändliga. Godkännandet
+    skriver valet in i varvet, utan en ny version."""
+    conn = _conn(tmp_path)
+    cid = db.get_or_create_course(conn, "Ma2b")
+    exam = _mini_exam()
+    exam["uppgifter"][1]["scen"] = {"begrepp": "hage", "scene": "SCENE. …",
+                                    "filnamn": "a-02-hage",
+                                    "plat": "a-14-fyr-bat"}
+    ex = db.create_exam(conn, exam=exam, datum="2026-10-05", course_id=cid)
+    vid = ex["current_version"]
+    assert db.stampla_platval(conn, ex["id"], vid, {"uppg2": ""})
+    ny = db.get_exam(conn, ex["id"])
+    assert ny["current_version"] == vid and len(ny["versions"]) == 1
+    assert ny["exam"]["uppgifter"][1]["scen"]["plat"] == ""
+    # Samma val en gång till ändrar ingenting, och uppgifter utan scen rörs inte.
+    assert not db.stampla_platval(conn, ex["id"], vid, {"uppg2": "", "uppg1": "x"})
+    assert "scen" not in ny["exam"]["uppgifter"][0]

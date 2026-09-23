@@ -420,7 +420,10 @@ def matcha_exam(exam: dict, *, base: Path | None = None) -> int:
              and u["scen"].get("plat")}
     for u in exam.get("uppgifter") or []:
         scen = u.get("scen") if isinstance(u, dict) else None
-        if not isinstance(scen, dict) or scen.get("plat"):
+        # "" är lärarens «ingen plåt här» och räknas som ett val: en
+        # omskrivning ska inte lägga tillbaka den hon tagit bort. Bara None
+        # (inget val alls) matchas.
+        if not isinstance(scen, dict) or scen.get("plat") is not None:
             continue
         träff = matcha(str(scen.get("begrepp") or ""),
                        str(u.get("text") or ""), poster=poster, tagna=tagna)

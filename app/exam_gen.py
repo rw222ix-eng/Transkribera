@@ -3784,7 +3784,9 @@ def build_forebild_prov(typer: list[dict] | None) -> str:
         "UNDANTAGET: har listan INGEN typ för ett undervisat innehåll på den "
         "nivå du behöver (till exempel intervall på E), ska innehållet ändå "
         "prövas. Skriv då uppgiften i nationella provets mått (räknesteg, "
-        "poäng och textlängd på den nivån) och lämna forebild tomt."
+        "poäng och textlängd på den nivån) och sätt forebild till "
+        f"{{\"nr\": {niva_rubrik.NP_TYP_NR0}, \"sort\": \"ingen NP-typ för "
+        "<innehållet>\"}, så att det syns att ingen typ fanns."
     )
 
 
@@ -6618,8 +6620,10 @@ def forebildsvakt(exam: dict, kurs: str = "",
             nr = int(fb.get("nr") or 0)
         except (TypeError, ValueError):
             nr = 0
-        if nr in nummer or not niva_rubrik.np_typ_finns(
-                typer, u.get("innehall"), _uppgiftspoang(u)):
+        # NP_TYP_NR0 är modellens uttryckliga «ingen typ fanns» (prompten ber
+        # om den när innehållet saknar typ, prov 126 uppgift 6 och 7).
+        if nr in nummer or nr == niva_rubrik.NP_TYP_NR0                 or not niva_rubrik.np_typ_finns(
+                    typer, u.get("innehall"), _uppgiftspoang(u)):
             continue
         vad = (f"pekar på {nr}, som inte är någon av nationella provets "
                "uppgiftstyper" if nr else "saknar förebild")

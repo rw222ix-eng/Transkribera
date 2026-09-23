@@ -715,3 +715,34 @@ def test_situationen_ska_vara_sann_i_instruktionen():
     assert "tiden i ugnen ur kycklingens vikt, aldrig vikten ur tiden" in r
     assert "två alternativ finns att välja mellan på riktigt" in r
     assert "Ge bara den information frågan behöver" in r
+
+
+def test_matchningen_lagger_inte_tillbaka_en_bortvald_plat():
+    """«» är lärarens «ingen plåt här». En omskrivning (matcha_exam körs efter
+    varje varv) ska inte lägga tillbaka den hon tagit bort (prov 126)."""
+    exam = {"uppgifter": [
+        {"text": "En hage byggs mot en flod.",
+         "scen": {"begrepp": "optimering inhägnad", "scene": "SCENE. …",
+                  "filnamn": "a-25-hage", "plat": ""}},
+        {"text": "En hage byggs mot en flod.",
+         "scen": {"begrepp": "optimering inhägnad", "scene": "SCENE. …",
+                  "filnamn": "a-25-hage", "plat": None}}]}
+    assert platar.matcha_exam(exam) == 1
+    assert exam["uppgifter"][0]["scen"]["plat"] == ""
+    assert exam["uppgifter"][1]["scen"]["plat"] == "a-19-hage-flod"
+
+
+def test_ingen_np_typ_ar_ett_uttryckligt_forebildsnummer():
+    """Prov 126 uppgift 6 och 7: NP saknar typ för grundpotensform med prefix
+    och för mönster på den nivån. Modellen skriver då NP_TYP_NR0, och vakten
+    tiger om det i stället för att be om en typ som inte finns."""
+    from app import niva_rubrik
+    koder = ["G25-M1C-ALG-8"]
+    typer = niva_rubrik.np_typer("Matematik, nivå 1c", koder)
+    assert f'"nr": {niva_rubrik.NP_TYP_NR0}' in exam_gen.build_forebild_prov(typer)
+    prov = {"uppgifter": [
+        {"poang": [1, 0, 0], "innehall": koder,
+         "forebild": {"nr": typer[0]["nr"], "sort": "s"}},
+        {"poang": [1, 0, 0], "innehall": koder,
+         "forebild": {"nr": niva_rubrik.NP_TYP_NR0, "sort": "ingen NP-typ"}}]}
+    assert exam_gen.forebildsvakt(prov, "Matematik, nivå 1c", koder) == []

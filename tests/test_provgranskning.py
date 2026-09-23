@@ -637,4 +637,4 @@ def test_innehall_utan_np_typ_pa_nivan_far_sta_utan_forebild():
     fel = exam_gen.forebildsvakt(_prov(uppgifter), KURS_1C, KODER_119)
     assert [f["path"] for f in fel] == ["uppgift 3"]
     p = exam_gen.build_forebild_prov(typer)
-    assert "lämna forebild tomt" in p
+    assert f"\"nr\": {niva_rubrik.NP_TYP_NR0}" in p
