@@ -758,6 +758,7 @@ def test_monsteruppgiften_far_sin_figur_i_scenregeln():
     assert "UNDANTAG, MÖNSTERUPPGIFTER" in r
     assert "EXAKT antal delar utskrivet i ord" in r
     assert "There is no text, no numbers" in r
+    assert "Texten beskriver INTE hur figurerna är byggda" in r
     assert r in exam_gen.INSTRUCTION
 
 
