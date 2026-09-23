@@ -638,3 +638,16 @@ def test_innehall_utan_np_typ_pa_nivan_far_sta_utan_forebild():
     assert [f["path"] for f in fel] == ["uppgift 3"]
     p = exam_gen.build_forebild_prov(typer)
     assert f"\"nr\": {niva_rubrik.NP_TYP_NR0}" in p
+
+
+def test_avsnitten_far_lika_manga_uppgifter_oavsett_sidantal():
+    """Lärarens dom 2026-09-23 (prov 126): «jämnt fördelat med uppgifter från
+    1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 2.4 och 2.5». Sidvikten gav 2.5 (36 sidor)
+    tre uppgifter av tolv och 2.3 (två sidor) ingen."""
+    avsnitt = [{"avsnitt": a, "etikett": a, "sidor": s} for a, s in
+               (("1.1", 5), ("1.2", 15), ("1.3", 20), ("2.1", 11),
+                ("2.2", 3), ("2.3", 2), ("2.4", 6), ("2.5", 36))]
+    mal = exam_gen.mal_per_avsnitt(avsnitt, 12)
+    assert sum(mal) == 12 and max(mal) - min(mal) <= 1
+    assert exam_gen._avsnittsvikt({"sidor": 36}) == exam_gen._avsnittsvikt(
+        {"sidor": 2})

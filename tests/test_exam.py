@@ -4337,18 +4337,19 @@ def test_spridningen_ar_tom_med_farre_an_tva_avsnitt():
     assert exam_gen.build_spridning(ett, 12) == ""
 
 
-def test_spridningens_mal_viktas_efter_sidantal():
-    """Ett avsnitt på trettio sidor är trettio sidor värt matematik. Golvet är
-    ett: ett avsnitt som är med i kapitlet ska prövas hur kort det än är."""
+def test_spridningens_mal_ar_jamna_oavsett_sidantal():
+    """Lärarens dom 2026-09-23 (prov 126): jämnt över avsnitten, inte efter
+    sidantal. Golvet är ett: ett avsnitt som är med i kapitlet ska prövas hur
+    kort det än är."""
     avsnitt = [{"avsnitt": "1.1", "etikett": "1.1 A", "sidor": 30},
                {"avsnitt": "1.2", "etikett": "1.2 B", "sidor": 15},
                {"avsnitt": "1.3", "etikett": "1.3 C", "sidor": 15}]
     mal = exam_gen.mal_per_avsnitt(avsnitt, 12)
-    assert mal == [6, 3, 3] and sum(mal) == 12
-    # Ett pyttelitet avsnitt får ändå sin uppgift, och summan hålls.
+    assert mal == [4, 4, 4] and sum(mal) == 12
+    # Ett pyttelitet avsnitt väger lika mycket, och summan hålls.
     smatt = [{"avsnitt": "1.1", "sidor": 40}, {"avsnitt": "1.2", "sidor": 1}]
     m2 = exam_gen.mal_per_avsnitt(smatt, 10)
-    assert m2 == [9, 1] and sum(m2) == 10
+    assert m2 == [5, 5] and sum(m2) == 10
     # Utan sidantal (momentraden) blir det jämnt, och resten läggs uppifrån.
     jamnt = exam_gen.mal_per_avsnitt(exam_gen.avsnitt_ur_moment(_MOMENT_KAP1),
                                      11)

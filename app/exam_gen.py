@@ -527,8 +527,10 @@ INSTRUCTION = (
     "Verben är de man säger i verkligheten (man tillagar eller steker i "
     "ugnen, man hyr, man betalar). Två formler för samma sak står bara där "
     "två alternativ finns att välja mellan på riktigt (två hyrfirmor, två "
-    "abonnemang, två pizzerior), och varje formel får en egen mening som "
-    "säger vad den räknar ut: «Firma A tar betalt enligt formeln …». Ge bara "
+    "abonnemang, två pizzerior), och varje formel står på en egen rad i "
+    "formen «Formeln $P_R$: $P_R = 0{,}12d^{2}$, ger priset i kr för en "
+    "pizza på Pizzeria Roma.», formelns namn, kolon, formeln, komma och vad "
+    "den räknar ut (lärarens form, prov 126). Ge bara "
     "den information frågan behöver: har formeln fler bokstäver än frågan "
     "handlar om, skriv formeln med de bokstäver frågan handlar om i stället "
     "för en extra mening som kopplar ihop dem.\n"
@@ -1563,10 +1565,11 @@ def avsnitt_ur_moment(moment: str) -> list[dict]:
 def mal_per_avsnitt(avsnitt: list[dict], antal: int) -> list[int]:
     """Hur många uppgifter varje avsnitt ska bära.
 
-    Viktat efter SIDANTAL när sidorna är kända (ett avsnitt på trettio sidor
-    är trettio sidor värt matematik), jämnt annars. Golvet är ETT: ett avsnitt
-    som är med i kapitlet ska prövas, hur kort det än är. Det var precis
-    nollan som gjorde prov 40 till ett andragradsprov.
+    JÄMNT över avsnitten (lärarens dom 2026-09-23, prov 126: «jämnt fördelat
+    med uppgifter från 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 2.4 och 2.5»). Förut
+    viktat efter sidantal, och 2.5:s 36 sidor tog tre uppgifter av tolv.
+    Golvet är ETT: ett avsnitt som är med i kapitlet ska prövas, hur kort det
+    än är. Det var precis nollan som gjorde prov 40 till ett andragradsprov.
 
     Summan justeras till `antal` genom att dra från det största och lägga på
     det minsta. Har kapitlet fler avsnitt än provet har uppgifter går ekvationen
@@ -1575,13 +1578,8 @@ def mal_per_avsnitt(avsnitt: list[dict], antal: int) -> list[int]:
     n = len(avsnitt)
     if n == 0 or antal <= 0:
         return []
-    sidor = [int(a.get("sidor") or 0) for a in avsnitt]
-    tot = sum(sidor)
-    if tot > 0:
-        mal = [max(1, round(antal * s / tot)) for s in sidor]
-    else:
-        mal = [max(1, antal // n + (1 if i < antal % n else 0))
-               for i in range(n)]
+    mal = [max(1, antal // n + (1 if i < antal % n else 0))
+           for i in range(n)]
     while sum(mal) > antal and any(m > 1 for m in mal):
         j = max(range(n), key=lambda i: (mal[i], -i))
         mal[j] -= 1
@@ -7151,16 +7149,15 @@ def delmomentvikt(exam: dict, delmoment: list[dict] | None) -> list[dict]:
 
 
 def _avsnittsvikt(a: dict) -> float:
-    """Kapitelramens vikt: bokens sidantal, jämnt när boken är stängd.
+    """Kapitelramens vikt: LIKA för varje avsnitt.
 
-    Fältet `sidor` betyder något annat här än i delmomentlistan, det är ett
-    ANTAL och inte ett spann (bok.avsnittslista), och avsnitt_ur_moment sätter
-    det till noll när momentraden är enda källan. Samma villkor som
-    mal_per_avsnitt redan vilar på."""
-    try:
-        return float(int(a.get("sidor") or 0)) or 1.0
-    except (TypeError, ValueError):
-        return 1.0
+    Den var bokens sidantal. Lärarens dom 2026-09-23 (prov 126): «jämnt
+    fördelat med uppgifter från 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 2.4 och 2.5»,
+    varje avsnitt svarar mot något i det centrala innehållet. Liber 1c:s 2.5
+    är 36 sidor med kapitlets blandade uppgifter och test i spannet, och
+    sidvikten gav den tre uppgifter medan 2.3 blev utan. Samma vikt i
+    mal_per_avsnitt."""
+    return 1.0
 
 
 def _avsnittsbarare(exam: dict, avsnitt: list[dict]) -> dict[str, list[int]]:

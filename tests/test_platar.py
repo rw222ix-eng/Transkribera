@@ -714,6 +714,7 @@ def test_situationen_ska_vara_sann_i_instruktionen():
     assert "SITUATIONEN SKA VARA SANN" in r
     assert "tiden i ugnen ur kycklingens vikt, aldrig vikten ur tiden" in r
     assert "två alternativ finns att välja mellan på riktigt" in r
+    assert "formelns namn, kolon, formeln, komma och vad" in r
     assert "Ge bara den information frågan behöver" in r
 
 
