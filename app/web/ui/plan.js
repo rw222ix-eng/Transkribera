@@ -5544,7 +5544,7 @@
       d.addEventListener('click', e => {
         const b = e.target.closest('[data-a]');
         const namn = dokNamn(v);
-        if (b && b.dataset.a === 'pdf') { skrivUt(b, namn, v); return; }
+        if (b && b.dataset.a === 'pdf') { skrivUt(b, pdfNamn(v), v); return; }
         if (b && b.dataset.a === 'radera') { fragaRadera(d, v); return; }
         if (b && b.dataset.a === 'syskon') { fragaSyskon(d, i); return; }
         if (b && b.dataset.a === 'ratta') { e.stopPropagation(); window.Rattning && window.Rattning.oppna(v); return; }
@@ -5568,6 +5568,16 @@
   const dokNamn = v => !v || !v.typ ? 'Dokumentet' : v.losningsblad
     ? `${v.typ === 'Prov' ? 'Bedömningsanvisning' : 'Facit'} — ${versal(v.moment)}`
     : `${v.variant === 'Omprov' ? 'Omprov' : v.typ}${v.elev ? ' · ' + v.elev : ''} — ${versal(v.moment)}`;
+  /* Namnet på filen i Hämtat. Arbetsbladet och gruppuppgiften heter som filen
+     godkännandet skrev («1.2 Potenslagarna – E-nivå», tryck.filstam), så att
+     det som laddas ner och läggs i Drive redan har Drives namn (Rickard
+     2026-09-23: «så vi slipper byta namnen i efterhand»). Utan fil, och för
+     provet, tavlan och facitbladen: dokumentets namn som förut. */
+  const pdfNamn = v => {
+    const fil = v && !v.losningsblad && (v.typ === 'Arbetsblad' || v.typ === 'Gruppuppgift')
+      ? String(v.pdf || '').split(/[\\/]/).pop().replace(/\.pdf$/i, '') : '';
+    return fil || dokNamn(v);
+  };
 
   /* Figurerna kompileras efter att pappret ligger i DOM:en. Varm kompilering tar
      4–7 ms, så rutan står streckad i ett ögonblick och fylls sedan — sättningen
@@ -6203,7 +6213,7 @@
     fhskal.addEventListener('pointerdown', e => { if (e.target === fhskal) fhStang(); });
     $('#fh-pdf').addEventListener('click', e => {
       if (fhIndex < 0 || !sparat[fhIndex]) return;
-      skrivUt(e.currentTarget, dokNamn(sparat[fhIndex]), sparat[fhIndex]);
+      skrivUt(e.currentTarget, pdfNamn(sparat[fhIndex]), sparat[fhIndex]);
     });
     $('#fh-oppna').addEventListener('click', () => {
       if (fhIndex < 0 || !sparat[fhIndex]) return;
@@ -6312,6 +6322,15 @@
                           || godkant.typ === 'Gruppuppgift')
             && (godkant.inst || {}).facit !== 'Facit i bladet',
           version: godkant.provVersion || null,
+          /* FILNAMNET (Rickard 2026-09-23). PDF:en döps efter Drives mall,
+             «1.2 Potenslagarna – E-nivå», och avsnittet och nivån bor bara
+             här i webbläsarens dokument. Servern sätter ihop namnet
+             (tryck.filstam); saknas avsnittet blir det utan nummer. */
+          namn: {
+            avsnitt: (godkant.bokuppg || {}).avsnitt || '',
+            moment: godkant.moment || '',
+            niva: (godkant.inst || {}).niva || '',
+          },
           blad,
           /* LÄRARENS EGNA BILDER. De bor bara här i webbläsarens dokument
              (valjBild skriver v.bilder) och har aldrig funnits i provets JSON.

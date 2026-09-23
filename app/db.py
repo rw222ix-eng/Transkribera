@@ -4094,6 +4094,24 @@ def set_exam_artifacts(conn: sqlite3.Connection, exam_id: int, *,
     return get_exam(conn, exam_id)
 
 
+def exams_med_artefakt(conn: sqlite3.Connection,
+                       sokvagar: list[str]) -> set[int]:
+    """Prov/blad vars versioner pekar på någon av filerna (.tex eller .pdf).
+
+    Godkännandet frågar innan det skriver: två papper som delar en fil delar
+    också dess radering (delete_exam tar bort varje versions filer), och sedan
+    filnamnet följer avsnittet och nivån (tryck.filstam) i stället för
+    modellens titel kan två olika blad få samma namn i samma katalog."""
+    rena = [str(s) for s in sokvagar if s]
+    if not rena:
+        return set()
+    platser = ",".join("?" * len(rena))
+    rader = conn.execute(
+        f"SELECT DISTINCT exam_id FROM exam_versions WHERE tex_path IN "
+        f"({platser}) OR pdf_path IN ({platser})", (*rena, *rena)).fetchall()
+    return {int(r[0]) for r in rader}
+
+
 def delete_exam(conn: sqlite3.Connection, exam_id: int) -> list[str] | None:
     """Radera ett prov/arbetsblad permanent. Returnerar versionernas
     artefaktsökvägar (.tex/.pdf) så anroparen kan ta bort filerna, eller

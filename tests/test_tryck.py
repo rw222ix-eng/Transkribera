@@ -504,3 +504,65 @@ def test_hopfogningen_lamnar_ingen_halva_i_utskriftsmappen(client, monkeypatch):
         "forst": {"exam": eid}, "png": [_png(794, 1123)]}).status_code == 200
     mapp = client.base_dir / "Transkriberingar" / "utskrift" / ".tavla"
     assert list(mapp.glob("*.pdf")) == []
+
+
+# ── FILNAMNET (Rickard 2026-09-23) ─────────────────────────────────────────
+# 37 filer döptes om för hand i Drive. Fallen nedan är de dokument som ligger
+# i appen, med de namn de fick i Drive, plus reglerna för det som saknas.
+
+@pytest.mark.parametrize("typ,titel,avsnitt,niva,vantat", [
+    # Tre nivåer i samma avsnitt får SAMMA namn, oavsett modellens titel.
+    ("arbetsblad", "Potenslagar", "1.2 Potenslagarna", "E-nivå",
+     "1.2 Potenslagarna – E-nivå"),
+    ("arbetsblad", "Potenser – C-nivå", "1.2 Potenslagarna", "C-nivå",
+     "1.2 Potenslagarna – C-nivå"),
+    ("arbetsblad", "Potensregler – A-nivå", "1.2 Potenslagarna", "A-nivå",
+     "1.2 Potenslagarna – A-nivå"),
+    # E-bladet får sin nivå (förut «Ekvationer.pdf»).
+    ("arbetsblad", "Ekvationer", "2.1 Ekvationer", "E-nivå",
+     "2.1 Ekvationer – E-nivå"),
+    ("arbetsblad", "Formler och mönster – A-nivå", "2.5 Formler och mönster",
+     "A-nivå", "2.5 Formler och mönster – A-nivå"),
+    # Ett spann inom ett kapitel är ett vanligt avsnitt.
+    ("arbetsblad", "Olikheter och intervall",
+     "2.2–2.4 Olikheter, tecken och intervall", "E-nivå",
+     "2.2–2.4 Olikheter, tecken och intervall – E-nivå"),
+    # Utan bokens avsnitt: momentet, med sin nivåsvans bortklippt.
+    ("arbetsblad", "Potenser – C-nivå", "1.2 Potenslagarna · C-nivå", "C-nivå",
+     "1.2 Potenslagarna – C-nivå"),
+    # Nivån som bokstav eller som väljarens etikett.
+    ("arbetsblad", "Ekvationer", "2.1 Ekvationer", "a",
+     "2.1 Ekvationer – A-nivå"),
+    # Det blandade bladet över två kapitel.
+    ("arbetsblad", "Repetition kapitel 1–2 – Blandat",
+     "1.1–2.5 Blandat inför provet", "Blandat", "Kap 1–2 Blandad repetition"),
+    ("arbetsblad", "Inför provet: kapitel 1",
+     "1.1 Kvadratrötter och kubikrötter · 1.2 Tal i potensform · 1.3 Uttryck",
+     "Blandat", "Kap 1 Blandad repetition"),
+    # Gruppuppgiften: avsnittets nummer och gruppuppgiftens egen titel.
+    ("gruppuppgift", "Bråk och andelar", "1.3 Andelar och förhållanden", "",
+     "1.3 Bråk och andelar – gruppuppgift"),
+    ("gruppuppgift", "Olikheter", "2.4 Olikheter", "",
+     "2.4 Olikheter – gruppuppgift"),
+    ("gruppuppgift", "Gruppuppgift: Räkneordning, parenteser och formler",
+     "1.1 Tal i olika former", "",
+     "1.1 Räkneordning, parenteser och formler – gruppuppgift"),
+    # Saknas numret gissas det inte.
+    ("arbetsblad", "Potenser – C-nivå", "", "C-nivå", "Potenser – C-nivå"),
+    ("arbetsblad", "Ekvationer", "Ekvationer", "E-nivå", "Ekvationer – E-nivå"),
+    ("gruppuppgift", "Negativa tal", "", "", "Negativa tal – gruppuppgift"),
+    # Blandat utan avsnitt: titeln, som förut. Provet: alltid titeln.
+    ("arbetsblad", "Algebraiska uttryck", "", "Blandat", "Algebraiska uttryck"),
+    ("prov", "Kapitel 1", "1.1–1.3 Kapitel 1", "", "Kapitel 1"),
+])
+def test_filstammen_foljer_drives_mall(typ, titel, avsnitt, niva, vantat):
+    assert tryck.filstam(typ, titel, avsnitt=avsnitt, niva=niva) == vantat
+
+
+def test_det_riktade_bladet_bar_elevens_namn():
+    """Två elevers blad på samma lektion får inte dela fil."""
+    a = tryck.filstam("arbetsblad", "Potenser", avsnitt="1.2 Potenslagarna",
+                      niva="E-nivå", elev="Alva")
+    b = tryck.filstam("arbetsblad", "Potenser", avsnitt="1.2 Potenslagarna",
+                      niva="E-nivå", elev="Bo")
+    assert a == "1.2 Potenslagarna – E-nivå – Alva" and a != b

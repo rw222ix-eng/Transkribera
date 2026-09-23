@@ -2233,6 +2233,46 @@ def create_router(base: Path, arbiter) -> APIRouter:
             return None
         return out
 
+    def _filstam(view: dict, doc, typ: str, namnval: dict, out_dir: Path,
+                 exam_id: int) -> str:
+        """Filens stam vid godkännandet: Drives namnmall (tryck.filstam) för
+        arbetsblad och gruppuppgift, titeln för provet som förut.
+
+        EN FIL, ETT PAPPER. Mallen är grövre än titeln var: två olika blad
+        för samma avsnitt och nivå på samma lektion får samma namn, och två
+        papper som pekar på samma fil delar också dess radering
+        (delete_exam tar bort varje versions filer). Är namnet redan ett
+        annat pappers får det här titeln i parentes, och är även det taget
+        sitt id. Ett blad som godkänns om behåller sitt namn, för filen är
+        dess egen."""
+        avsnitt = str(namnval.get("avsnitt") or namnval.get("moment") or "")
+        niva = str(namnval.get("niva") or view.get("nivaval") or "")
+        stam = _safe_component(tryck.filstam(typ, doc.titel, avsnitt=avsnitt,
+                                             niva=niva, elev=doc.elev or ""),
+                               typ)
+        if typ not in ("arbetsblad", "gruppuppgift"):
+            return stam
+        # Svansen får plats inom _safe_component:s 80 tecken genom att
+        # stammen kortas, aldrig svansen: annars blev kandidaten stammen igen.
+        def med(svans: str) -> str:
+            return _safe_component(f"{stam[:max(1, 80 - len(svans))]}{svans}",
+                                   typ)
+        kandidater = [stam]
+        titel = _safe_component(tryck.utan_nivasvans(doc.titel), "")
+        if titel and titel not in stam:
+            kandidater.append(med(f" ({titel[:40]})"))
+        kandidater.append(med(f" ({exam_id})"))
+        conn = db.connect(db_file)
+        try:
+            for k in kandidater:
+                agare = db.exams_med_artefakt(
+                    conn, [str(out_dir / f"{k}.pdf"), str(out_dir / f"{k}.tex")])
+                if not agare - {exam_id}:
+                    return k
+        finally:
+            conn.close()
+        return kandidater[-1]
+
     @router.post("/api/exams/{exam_id:int}/approve")
     async def approve(exam_id: Id64, req: Request):
         """Lås versionen och lägg pappret på disk.
@@ -2253,6 +2293,14 @@ def create_router(base: Path, arbiter) -> APIRouter:
         except Exception:
             body = {}
         separat_facit = bool(isinstance(body, dict) and body.get("separat_facit"))
+        # ── FILNAMNET (Rickard 2026-09-23, tryck.filstam) ─────────────
+        # Avsnittet och nivån bor i webbläsarens dokument (bokuppg.avsnitt,
+        # moment, inst.niva) och inte i provets JSON, så de reser med anropet
+        # som `namn`. Saknas de (API-anrop, pytest, en gammal klient) gäller
+        # regeln ändå: nivån ur provradens nivåval, och utan avsnitt blir
+        # namnet utan nummer.
+        namnval = (body.get("namn") if isinstance(body, dict)
+                   and isinstance(body.get("namn"), dict) else {})
         # ── SKÄRMEN ÄR PDF:ENS FÖRLAGA ────────────────────────────────
         # «Jag vill ha PDF-filerna exakt som de ser ut i appen.» LaTeX-mallen
         # var snarlik men aldrig identisk — brickorna satt ihop, tabellerna såg
@@ -2486,7 +2534,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                             only_facit=True)
                     else:
                         facit = None
-                    slug = _safe_component(doc.titel, typ)
+                    slug = _filstam(view, doc, typ, namnval, out_dir, exam_id)
                     out_dir.mkdir(parents=True, exist_ok=True)
                     tex_path = out_dir / f"{slug}.tex"
                     tex_path.write_text(tex, encoding="utf-8")
@@ -3111,7 +3159,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
         out_dir = _artifact_dir(view)
         pdf, varning = None, "utkatalogen gick inte att räkna ut"
         if out_dir is not None and out_dir.is_dir():
-            slug = _safe_component(doc.titel, typ)
+            # Stammen är den GODKÄNDA filens, inte titelns: sedan 2026-09-23
+            # följer gruppuppgiftens filnamn Drives mall (_filstam), och
+            # facit hittas bredvid pappret på dess stam (tryck._bredvid). Ett
+            # papper utan fil faller tillbaka på titeln, som förut.
+            godkand, _ = _artefaktvag(exam_id, "pdf")
+            slug = (godkand.stem if godkand is not None
+                    else _safe_component(doc.titel, typ))
             bilder, _egna, _forsatt = _bilder_ur_utkatalogen(view["exam"], out_dir)
             # INGA POÄNG I MARGINALEN PÅ GRUPPUPPGIFTENS FACIT. Gruppens eget
             # ark bär inga heller — «en siffra i marginalen gör uppgiften till

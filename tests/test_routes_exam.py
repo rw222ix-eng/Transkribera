@@ -2276,3 +2276,94 @@ def test_godkannandet_raknar_om_granser_nar_summan_andrats(client, monkeypatch):
         assert vy["exam"]["granser"]["total"] == total0 + 1
     finally:
         conn.close()
+# ── FILNAMNET VID GODKÄNNANDET (Rickard 2026-09-23) ──────────────────────
+# 37 filer döptes om för hand i Drive samma kväll. Regeln är tryck.filstam;
+# här prövas att rutten använder den, att avsnittet och nivån reser med
+# anropet, och att två blad aldrig delar en fil.
+
+_POTENS = {"avsnitt": "1.2 Potenslagarna", "moment": "1.2 Potenslagarna · E-nivå",
+           "niva": "E-nivå"}
+
+
+def test_arbetsbladet_heter_som_i_drive(client, monkeypatch):
+    from pathlib import Path
+    result = _arbetsblad(client, monkeypatch)
+    _bygger_varje_dokument(monkeypatch)
+    res = _done(client.post(f"/api/exams/{result['id']}/approve",
+                            json={"namn": _POTENS}))
+    pdf, tex = Path(res["pdf"]), Path(res["tex"])
+    assert pdf.name == "1.2 Potenslagarna – E-nivå.pdf"
+    assert tex.name == "1.2 Potenslagarna – E-nivå.tex"
+    # Facit bredvid, på samma stam, och rutten hittar det.
+    assert (pdf.parent / "1.2 Potenslagarna – E-nivå - facit.pdf").is_file()
+    assert client.get(f"/api/exams/{result['id']}/facit").status_code == 200
+    r = client.get(f"/api/exams/{result['id']}/pdf")
+    assert r.status_code == 200
+    assert "Potenslagarna" in r.headers["content-disposition"]
+
+
+def test_momentet_racker_nar_boken_saknas(client, monkeypatch):
+    from pathlib import Path
+    result = _arbetsblad(client, monkeypatch)
+    _bygger_varje_dokument(monkeypatch)
+    res = _done(client.post(f"/api/exams/{result['id']}/approve", json={
+        "namn": {"moment": "2.5 Formler och mönster · A-nivå",
+                 "niva": "A-nivå"}}))
+    assert Path(res["pdf"]).name == "2.5 Formler och mönster – A-nivå.pdf"
+
+
+def test_utan_avsnitt_gissas_inget_nummer(client, monkeypatch):
+    """Saknas avsnittet blir namnet «<namn> – <nivå>-nivå», och nivån tas ur
+    provradens nivåval när klienten inte skickar den."""
+    from pathlib import Path
+    result = _arbetsblad(client, monkeypatch, niva="E-nivå")
+    _bygger_varje_dokument(monkeypatch)
+    res = _done(client.post(f"/api/exams/{result['id']}/approve", json={}))
+    assert Path(res["pdf"]).name == "Prov Andragradsfunktioner – E-nivå.pdf"
+
+
+def test_tva_blad_med_samma_namn_skriver_inte_over_varandra(client, monkeypatch):
+    """Mallen är grövre än titeln var. Två olika blad för samma avsnitt och
+    nivå på samma lektion får inte dela fil: raderingen av det ena hade tagit
+    det andras PDF med sig."""
+    from pathlib import Path
+    forsta = _arbetsblad(client, monkeypatch)
+    andra = _arbetsblad(client, monkeypatch)
+    _bygger_varje_dokument(monkeypatch)
+    a = _done(client.post(f"/api/exams/{forsta['id']}/approve",
+                          json={"namn": _POTENS}))
+    b = _done(client.post(f"/api/exams/{andra['id']}/approve",
+                          json={"namn": _POTENS}))
+    assert Path(a["pdf"]).name == "1.2 Potenslagarna – E-nivå.pdf"
+    assert Path(b["pdf"]) != Path(a["pdf"])
+    assert Path(b["pdf"]).name.startswith("1.2 Potenslagarna – E-nivå (")
+    assert Path(a["pdf"]).is_file() and Path(b["pdf"]).is_file()
+    # Det första bladet godkänt igen behåller sitt namn: filen är dess egen.
+    igen = _done(client.post(f"/api/exams/{forsta['id']}/approve",
+                             json={"namn": _POTENS}))
+    assert Path(igen["pdf"]) == Path(a["pdf"])
+
+
+def test_provet_heter_som_forut(client, monkeypatch):
+    from pathlib import Path
+    result, _ = _make_exam(client, monkeypatch, datum="2026-10-05")
+    _bygger_varje_dokument(monkeypatch)
+    res = _done(client.post(f"/api/exams/{result['id']}/approve",
+                            json={"namn": _POTENS}))
+    assert Path(res["pdf"]).name == "Prov Andragradsfunktioner.pdf"
+
+
+def test_plan_js_skickar_avsnitt_och_niva_med_approve():
+    """Avsnittet och nivån bor bara i webbläsarens dokument. Utan raden i
+    plan.js får varje blad namnet utan nummer."""
+    import re
+    from pathlib import Path
+    js = (Path(routes_exam.__file__).parent / "ui" / "plan.js"
+          ).read_text(encoding="utf-8")
+    start = js.index("/api/exams/${godkant.provId}/approve")
+    kod = re.sub(r"/\*.*?\*/", "", js[start:js.index(".then(", start)],
+                 flags=re.S)
+    assert "namn:" in kod and "bokuppg" in kod and "inst" in kod, kod
+    # Och nedladdningen heter som filen (pdfNamn), inte «Arbetsblad — …».
+    assert "skrivUt(b, pdfNamn(v), v)" in js
+    assert "skrivUt(e.currentTarget, pdfNamn(sparat[fhIndex])" in js

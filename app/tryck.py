@@ -70,6 +70,126 @@ def _safe(namn: str, fallback: str = "utskrift") -> str:
     return rent[:80] or fallback
 
 
+# ── FILNAMNET PÅ ARBETSBLAD OCH GRUPPUPPGIFT (Rickard 2026-09-23) ─────────
+#
+# «Fixa så att det blir bra på en gång när vi genererar. Allt, så vi slipper
+# byta namnen i efterhand.» Samma kväll döptes 37 filer om för hand i Drive,
+# för appen döpte PDF:en efter modellens titel: tre blad i samma avsnitt hette
+# «Potenslagar», «Potenser – C-nivå» och «Potensregler – A-nivå», och E-bladet
+# fick ofta ingen nivå alls («Ekvationer.pdf»). Mallen som gäller i Drive:
+#
+#   nivåblad        <avsnitt> <namn> – E-nivå / C-nivå / A-nivå
+#                   «1.2 Potenslagarna – E-nivå.pdf»
+#   gruppuppgift    <avsnitt> <namn> – gruppuppgift
+#                   «1.3 Bråk och andelar – gruppuppgift.pdf»
+#   blandat blad    Kap <k1>–<k2> Blandad repetition
+#                   «Kap 1–2 Blandad repetition.pdf»
+#   lathund         «2.5 Formler och mönster – lathund.pdf». Appen skriver
+#                   inga lathundar (den i Transkriberingar är handskriven
+#                   LaTeX), så den regeln har ingen kod.
+#
+# VAR DELARNA KOMMER IFRÅN. Avsnittet är lärarens val i planeringen
+# (dokumentets `bokuppg.avsnitt`, annars `moment`), och plan.js skickar det
+# med godkännandet; nivån är väljarens (`inst.niva`, annars provradens
+# `nivaval`). NIVÅBLADETS namn är avsnittets namn och ALDRIG modellens titel:
+# tre blad för samma avsnitt ska heta likadant, och avsnittet är det enda de
+# tre delar. Gruppuppgiftens namn är dess titel, för en gruppuppgift är ett
+# eget moment inom avsnittet («Bråk och andelar» i 1.3 Andelar och
+# förhållanden).
+#
+# SAKNAS AVSNITTSNUMRET gissas det inte: namnet blir «<namn> – <nivå>-nivå»
+# respektive «<titel> – gruppuppgift», där namnet är avsnittets text om den
+# finns och annars titeln utan nivåsvans. Ett blandat blad utan avsnitt
+# behåller titeln, som förut. Provet rörs inte, dess namn är titeln.
+#
+# DET RIKTADE BLADET (ett blad till en elev, `elev`) får elevens namn sist.
+# Annars hade två elevers blad på samma lektion fått samma fil, och det andra
+# godkännandet hade skrivit över det första.
+_AVSNITT_RE = re.compile(
+    r"^\s*(\d+(?:\.\d+)*(?:\s*[–—-]\s*\d+(?:\.\d+)*)?)\.?\s+(.*\S)\s*$")
+# Momentets nivåsvans: «2.5 Formler och mönster · A-nivå» → avsnittet.
+_NIVASVANS_RE = re.compile(
+    r"\s*[·•|–—-]\s*(?:[ECA]-nivå|blandat|blandade nivåer)\s*$", re.IGNORECASE)
+_NIVAORD_RE = re.compile(r"^\s*([ECA])(?:-nivå)?\s*$", re.IGNORECASE)
+_GRUPPFORLED_RE = re.compile(r"^\s*gruppuppgift\s*[:–—-]\s*", re.IGNORECASE)
+
+
+def _avsnitten(avsnitt: str) -> list[tuple[str, str]]:
+    """Avsnittet som (nummer, namn)-par. «1.1 A · 1.2 B» ger två par; en del
+    utan nummer ger ("", texten). Bindestreck i ett spann blir tankstreck."""
+    text = _NIVASVANS_RE.sub("", str(avsnitt or "")).strip()
+    ut: list[tuple[str, str]] = []
+    for del_ in re.split(r"\s+[·•]\s+", text):
+        del_ = del_.strip()
+        if not del_:
+            continue
+        m = _AVSNITT_RE.match(del_)
+        if m:
+            ut.append((re.sub(r"\s*[–—-]\s*", "–", m.group(1)),
+                       m.group(2).strip()))
+        else:
+            ut.append(("", del_))
+    return ut
+
+
+def _kapitel(nummer: list[str]) -> list[int]:
+    """Kapitlen avsnittsnumren spänner över: «1.1–2.5» ger [1, 2]."""
+    kap: set[int] = set()
+    for nr in nummer:
+        for bit in nr.split("–"):
+            m = re.match(r"(\d+)", bit)
+            if m:
+                kap.add(int(m.group(1)))
+    return sorted(kap)
+
+
+def utan_nivasvans(titel: str) -> str:
+    """«Potenser – C-nivå» → «Potenser». Modellen skriver nivån ibland."""
+    return re.sub(r"\s*[·•|–—-]\s*[ECA]-nivå\s*$", "", str(titel or ""),
+                  flags=re.IGNORECASE).strip()
+
+
+def filstam(typ: str, titel: str, *, avsnitt: str = "", niva: str = "",
+            elev: str = "") -> str:
+    """Filens stam (utan «.pdf») enligt mallen ovan. Tecken som inte får stå
+    i ett filnamn tvättas av anroparen (routes_exam._safe_component)."""
+    titel = str(titel or "").strip()
+    delar = _avsnitten(avsnitt)
+    nummer = [nr for nr, _ in delar if nr]
+    ett = delar[0] if len(delar) == 1 else None
+    m = _NIVAORD_RE.match(str(niva or ""))
+    nivabokstav = m.group(1).upper() if m else ""
+    if typ == "gruppuppgift":
+        namn = utan_nivasvans(_GRUPPFORLED_RE.sub("", titel)) or titel
+        nr = ett[0] if ett else ""
+        stam = f"{nr} {namn} – gruppuppgift".strip()
+    elif typ == "arbetsblad":
+        kap = _kapitel(nummer)
+        if (len(delar) > 1 and nummer) or len(kap) > 1:
+            # Flera avsnitt, eller ett spann över flera kapitel: det blandade
+            # repetitionsbladet. Ett spann INOM ett kapitel («2.2–2.4 Olikheter,
+            # tecken och intervall») är ett vanligt avsnitt och går vidare nedan.
+            spann = f"{kap[0]}–{kap[-1]}" if len(kap) > 1 else f"{kap[0]}"
+            stam = f"Kap {spann} Blandad repetition"
+            if nivabokstav:
+                stam += f" – {nivabokstav}-nivå"
+        elif nivabokstav:
+            namn = (ett[1] if ett else "") or utan_nivasvans(titel) or titel
+            nr = ett[0] if ett else ""
+            stam = f"{nr} {namn} – {nivabokstav}-nivå".strip()
+        elif ett is not None and ett[0]:
+            # Blandade nivåer i ETT avsnitt: avsnittet självt.
+            stam = f"{ett[0]} {ett[1]}"
+        else:
+            stam = titel
+    else:
+        stam = titel
+    elev = str(elev or "").strip()
+    if elev and typ in ("arbetsblad", "gruppuppgift"):
+        stam = f"{stam} – {elev}"
+    return stam
+
+
 def _platta(bild):
     """Bilden mot vitt, i RGB. Genomskinligt blir SVART i en PDF utan
     alfakanal, och tavlans mellanrum mellan två bräden är just genomskinligt

@@ -1722,3 +1722,24 @@ def test_skarmens_kopior_lovar_samma_sak():
 ])
 def test_ledet_om_vem_som_skriver_stryks_ur_meningen(fore, efter):
     assert exam_gen._utan_skrivarled(fore) == efter
+def test_gruppuppgiften_heter_som_i_drive_och_facit_ligger_bredvid(
+        client, monkeypatch):
+    """«1.3 Bråk och andelar – gruppuppgift.pdf» (Drives mall, tryck.filstam).
+    Elevernas lösningsförslag skrivs efteråt och ska hamna bredvid DEN filen,
+    inte bredvid titeln: rutten hittar det på pappersfilens stam."""
+    from pathlib import Path
+    _fejkbygge(monkeypatch)
+    _stub(monkeypatch, exam=_doc(titel="Bråk och andelar"))
+    ex = _done(client.post("/api/exams/generate", json={
+        "kurs": "Matematik, nivå 1a", "punkter_text": ["Andelar"],
+        "typ": "gruppuppgift",
+        "grupp": {"elever": 2, "langd_min": 20, "redovisning": "genomgang"}}))
+    res = _done(client.post(f"/api/exams/{ex['id']}/approve", json={
+        "namn": {"avsnitt": "1.3 Andelar och förhållanden", "niva": ""}}))
+    assert Path(res["pdf"]).name == "1.3 Bråk och andelar – gruppuppgift.pdf"
+    _fejkat_losningspass(monkeypatch)
+    svar = client.post(f"/api/exams/{ex['id']}/losningsforslag", json={}).json()
+    assert Path(svar["pdf"]).name == (
+        "1.3 Bråk och andelar – gruppuppgift - losningsforslag.pdf")
+    r = client.get(f"/api/exams/{ex['id']}/losningsforslag")
+    assert r.status_code == 200
