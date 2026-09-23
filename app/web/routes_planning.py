@@ -1234,6 +1234,28 @@ def create_router(base: Path, arbiter) -> APIRouter:
 
     # ------------------------------------------------------- render-report --
 
+    def _ar_godkand(pid: str, st: dict) -> bool:
+        """Är tavlan godkänd? Två källor, och det räcker med den ena.
+
+        Läget: approve sätter `godkand`, refine tar bort den (en omskriven
+        tavla är ett nytt utkast tills läraren godkänner igen). En planering
+        från före flaggan bär den inte, och då räknas den som godkänd om
+        approve en gång skrev sin rad eller sin fil.
+
+        Pappret: approve-anropet går i väg efter att dokumentet redan bytt
+        status (plan.js #godkann) och tiger om det faller. Ett godkänt papper
+        vars approve aldrig kom fram är lika godkänt."""
+        if "godkand" in st:
+            if st["godkand"]:
+                return True
+        elif st.get("planned_id") or st.get("approved_path"):
+            return True
+        conn = db.connect(db_file)
+        try:
+            return db.tavla_godkand(conn, pid)
+        finally:
+            conn.close()
+
     @router.post("/api/planning/{pid}/render-report")
     async def render_report(pid: str, req: Request):
         """Klienten rapporterar motorns [WB]-varningar efter rendering.
@@ -1245,6 +1267,19 @@ def create_router(base: Path, arbiter) -> APIRouter:
         warnings = [str(w) for w in (body.get("warnings") or [])][:_MAX_WARNINGS]
         if not warnings:
             return {"ok": True, "repaired": False}
+        # EN GODKÄND TAVLA REPARERAS ALDRIG AV SIG SJÄLV. Rapporten kommer varje
+        # gång tavlan ritas, också när läraren bara laddar ner PDF:en eller
+        # öppnar lektionskortet. Fallet 2026-09-23: tavlan för BA26B 24/9
+        # (planering 512200e6e6cb, dokument 226) var godkänd och rättad för
+        # hand i pappret och i planeringsraden. PDF-knappen ritade den,
+        # klienten rapporterade «vanster: skalade ner till 93%», och jobb 702
+        # skrev om den äldre tavlan servern hade i minnet och sparade den
+        # över raden. Nästa godkännande tog sedan den gamla tavlan till
+        # planned_lessons. Varningarna står kvar på det godkända pappret. Ska
+        # de lagas går vägen genom «Fortsätt ändra» och en omskrivning, som
+        # gör tavlan till ett utkast igen (refine nollar `godkand`).
+        if _ar_godkand(pid, st):
+            return {"ok": True, "repaired": False, "godkand": True}
         if st["rounds"] >= lesson_board.MAX_ROUNDS:
             # Budgeten slut — varningarna visas ärligt i UI:t i stället.
             return {"ok": True, "repaired": False, "exhausted": True}
@@ -1389,6 +1424,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # tavlan är skriven bär första omskrivningen fältet, och alla
                 # varv efter det ärver det ur läget (tavelform_ur_laget).
                 st["inriktning"] = inriktning
+                # En omskriven tavla är inte den som godkändes. Den får
+                # renderingsreparationen igen tills nästa godkännande.
+                st["godkand"] = False
                 spara_planering(pid, st)
                 andrade = dokumentdiff.andrade_element("tavla", fore,
                                                        st["board"])
@@ -1522,6 +1560,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
 
         st["approved_path"] = str(path)
         st["planned_id"] = planned["id"]
+        st["godkand"] = True        # se render_report: repareras inte längre
         spara_planering(pid, st)
         return {"ok": True, "path": str(path), "planned_id": planned["id"]}
 

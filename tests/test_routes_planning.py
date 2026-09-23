@@ -479,6 +479,74 @@ def test_render_report_exhausted_budget_skips_llm(llm_ready, monkeypatch):
     assert r.json()["exhausted"] is True
 
 
+def _rakna_reparationer(monkeypatch) -> list:
+    anrop = []
+
+    def fake_repair(board, warnings, **kw):
+        anrop.append(warnings)
+        return {"board": board, "errors": [], "rounds": 2}
+    monkeypatch.setattr(lesson_board, "repair_board", fake_repair)
+    return anrop
+
+
+def test_godkand_tavla_repareras_inte(llm_ready, monkeypatch):
+    """Fallet 2026-09-23 (BA26B 24/9, planering 512200e6e6cb): PDF-knappen
+    ritade en godkänd tavla, rapporten startade en reparation, och den skrev
+    över tavlan läraren rättat för hand. En godkänd tavla visar sina
+    varningar och lämnas i fred. Utkastet repareras som förut."""
+    utkast = _make_planning(llm_ready, monkeypatch)
+    godkand = _make_planning(llm_ready, monkeypatch)
+    assert llm_ready.post(f"/api/planning/{godkand}/approve",
+                          json={}).status_code == 200
+    anrop = _rakna_reparationer(monkeypatch)
+
+    r = llm_ready.post(f"/api/planning/{godkand}/render-report",
+                       json={"warnings": ["[WB] vanster: skalade ner till 93%"]})
+    assert r.status_code == 200
+    assert r.json() == {"ok": True, "repaired": False, "godkand": True}
+    assert anrop == []
+
+    assert _done(llm_ready.post(f"/api/planning/{utkast}/render-report",
+                                json={"warnings": ["[WB] x"]}))["repaired"]
+    assert anrop == [["[WB] x"]]
+
+
+def test_omskriven_godkand_tavla_repareras_igen(llm_ready, monkeypatch):
+    """«Fortsätt ändra» och en omskrivning gör tavlan till ett utkast igen,
+    och då får den renderingsreparationen tillbaka."""
+    pid = _make_planning(llm_ready, monkeypatch)
+    llm_ready.post(f"/api/planning/{pid}/approve", json={})
+    monkeypatch.setattr(lesson_board, "refine_board",
+                        lambda board, instruction, **kw: {
+                            "board": board, "errors": [], "rounds": 1})
+    _done(llm_ready.post(f"/api/planning/{pid}/refine",
+                         json={"message": "kortare"}))
+    anrop = _rakna_reparationer(monkeypatch)
+    assert _done(llm_ready.post(f"/api/planning/{pid}/render-report",
+                                json={"warnings": ["[WB] x"]}))["repaired"]
+    assert len(anrop) == 1
+
+
+def test_godkant_papper_raknas_aven_utan_approve(llm_ready, monkeypatch):
+    """Approve-anropet går i väg efter att pappret bytt status och tiger om
+    det faller. Ett godkänt papper med tavlans wbId räcker för spärren, och
+    ett utkast med samma wbId gör det inte."""
+    pid = _make_planning(llm_ready, monkeypatch)
+    pappret = {"typ": "Tavla", "moment": "x", "wbId": pid}
+    dok = llm_ready.post("/api/dokument",
+                         json={"dokument": pappret, "status": "utkast"}).json()
+    anrop = _rakna_reparationer(monkeypatch)
+    assert _done(llm_ready.post(f"/api/planning/{pid}/render-report",
+                                json={"warnings": ["[WB] x"]}))["repaired"]
+    assert len(anrop) == 1
+
+    llm_ready.patch(f"/api/dokument/{dok['id']}", json={"status": "godkant"})
+    r = llm_ready.post(f"/api/planning/{pid}/render-report",
+                       json={"warnings": ["[WB] y"]})
+    assert r.json()["godkand"] is True
+    assert len(anrop) == 1
+
+
 # --------------------------------------------------------- Fas 1: refine --
 
 def test_refine_requires_message(llm_ready, monkeypatch):

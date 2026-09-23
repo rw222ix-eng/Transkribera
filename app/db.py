@@ -3135,6 +3135,33 @@ def _dokument_blob(conn: sqlite3.Connection, dokument_id: int, markor: int) -> d
     return v if isinstance(v, dict) else {}
 
 
+def tavla_godkand(conn: sqlite3.Connection, wb_id: str) -> bool:
+    """Ligger planeringen `wb_id` som tavla på ett GODKÄNT papper?
+
+    Planeringen och pappret vet inte om varandra i basen: länken är `wbId` i
+    pappret (plan.js), och den står bara i bloben. Bara varvet markören står
+    på räknas, för det är det läraren ser. `json_extract` läser ut det enda
+    fältet, så bloben når aldrig Python (jfr dokument_bild)."""
+    if not wb_id:
+        return False
+    if _har_json1(conn):
+        try:
+            rad = conn.execute(
+                "SELECT 1 FROM dokument d JOIN dokument_versioner v "
+                "ON v.dokument_id = d.id AND v.version = d.markor "
+                "WHERE d.status = 'godkant' AND d.typ = 'Tavla' "
+                "AND json_extract(v.data, '$.wbId') = ? LIMIT 1",
+                (str(wb_id),)).fetchone()
+            return rad is not None
+        except sqlite3.Error:
+            pass
+    for r in conn.execute("SELECT id, markor FROM dokument "
+                          "WHERE status = 'godkant' AND typ = 'Tavla'").fetchall():
+        if str(_dokument_blob(conn, r["id"], r["markor"]).get("wbId") or "") == str(wb_id):
+            return True
+    return False
+
+
 def stada_losningsblad(conn: sqlite3.Connection, dokument_id: int) -> list[int]:
     """Ett lösningsblad ERSÄTTER sitt tidigare syskon, det läggs inte bredvid.
 
