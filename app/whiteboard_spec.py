@@ -1106,15 +1106,16 @@ def _ankaretiketten(sections: list):
 # Igenkänningen är deterministisk och smal. INTE-raden är den FÖRSTA
 # svarta math-raden på vänstertavlan (inte i «Att tänka på», inte det röda
 # felet) som antingen bär ≠ (\frac{300}{2} \neq \frac{500}{4}) eller har en
-# etikett i formen «skäl: inte begreppet» (f(x) = -6x + 5 med «Utan x²: inte
-# andragradsfunktion.»): ett fall som inte är begreppet är inte alltid en
+# etikett med «inte» efter kolonet (f(x) = -6x + 5 med «Utan x²: inte
+# andragradsfunktion.», eller tavlabandets «Fast h: sekanten, inte
+# derivatan.»): ett fall som inte är begreppet är inte alltid en
 # olikhet. ÄR-raden är math-raden direkt före INTE-radens math i samma
 # flöde (pilraderna hoppas över). Fria är texterna direkt under de två.
 # Taket är 36 tecken, inte randfallens 30: lärarens egen etikett «Olika
 # kvot: inte proportionellt.» är 32, och formen «skäl, kolon, begreppet»
 # bär begreppets hela namn.
 _NEQ_RE = re.compile(r"\\neq?(?![A-Za-z])|≠")
-_INTE_ETIKETT_RE = re.compile(r":\s+inte\b", re.IGNORECASE)
+_INTE_ETIKETT_RE = re.compile(r":[^:]*\binte\b", re.IGNORECASE)
 _AR_INTE_MAX = 36
 
 

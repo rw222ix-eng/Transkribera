@@ -83,6 +83,16 @@ def _utan_budget(errors: list) -> list:
 # uträkningen som math-rader i stället för metodsteg i ord. Math kostar
 # ingenting i textbudgeten, och högern som låg 34 tecken över ligger nu
 # inom taket; budgettestet mäter därför att fellistan är TOM.
+#
+# OCH OM 2026-09-23 KVÄLL, med lärarens dom över BA26B:s proportionalitets-
+# tavla (grafen, definitionen, Att tänka på). Det gamla bandets graf hade två
+# punkter utan label och ticks utan avstånd, och grafvakten fällde den. Den
+# första omspelningen (0,51 USD) bar grafen och ÄR/INTE men skrev «Bestäm
+# f'(3) …» och «Bestäm f'(2) …», som upprepad_situation fäller; den andra
+# (0,64 USD) står här. Den ritar exempel 1:s x² med tangenten och sekanten
+# genom (1, 1) och (2, 4), märkta punkter, ticks och streckade hjälplinjer,
+# och bär ÄR/INTE under formeln: gränsvärdet 2 «h går mot noll: derivata.»
+# mot sekantens 3 «Fast h: sekant, inte derivata.».
 
 
 def test_tavlan_ur_kassetten_ar_giltig_wb_json(fejk_claude):
@@ -152,6 +162,15 @@ def test_bandet_bar_vansterns_skelett(fejk_claude):
     # under sig. Bandet ska bära formen, inte bara prompten.
     assert len(rad) == 2 and all(c["kind"] == "col" for c in rad), rad
     assert rad[0]["children"][0]["text"] == "1. Vad är det?", rad[0]
+    # GRAFEN OCH ÄR/INTE (lärarens dom 2026-09-23 kväll): en riktig
+    # modellrunda ska ge märkta punkter och ticks, och ett fall som ÄR
+    # begreppet och ett som INTE är det under formeln.
+    grafer = [s for s in rad[0]["children"] if s.get("kind") == "graph"]
+    assert grafer and all(p.get("label") for p in grafer[0]["points"])
+    assert grafer[0].get("ticks"), grafer[0]
+    assert lesson_board.grafvakt(board) == []
+    vanster = whiteboard_spec.validate_board_json(board)[0].boards[0].sections
+    assert len(whiteboard_spec._ar_inte_etiketter(vanster)) == 2
     spalt = rad[1]["children"]
     rubriker = [s.get("text") for s in spalt
                 if s.get("kind") == "text" and s.get("weight") == 700]
@@ -450,17 +469,20 @@ def test_mal_last_omskrivning_ror_bara_rutan_lararen_pekade_pa(fejk_claude):
         "Matematik 3c", "NA25", "Derivatans definition", model="",
         max_rounds=1)["board"]
     # Bandets form (omspelat 2026-09-20, kväll): raden är sektion 4 på
-    # vänstern, och definitionen är SISTA barnet i spalt 1 — tråden går
-    # kropp, mening, begrepp, ankare, pil, formel. Lappbandet pekar på
-    # samma väg, så byter tavlabandet form måste tavellapp.json följa med.
+    # vänstern. Definitionen var SISTA barnet i spalt 1 till omspelningen
+    # 2026-09-23 kväll; sedan dess står ÄR/INTE-raderna under formeln (8e),
+    # och formeln är den med \lim. Lappbandet pekar på samma väg, så byter
+    # tavlabandet form måste tavellapp.json följa med.
     rad = board["boards"][0]["sections"][4]
     assert rad["kind"] == "row"          # klumpen läraren inte kunde peka i
-    plats = len(rad["children"][0]["children"]) - 1
-    fore = copy.deepcopy(rad["children"][0]["children"][plats])
+    spalt = rad["children"][0]["children"]
+    plats = next(i for i, s in enumerate(spalt)
+                 if "\\lim" in s.get("latex", "") and "f'" in s["latex"])
+    fore = copy.deepcopy(spalt[plats])
 
-    # Bandet från 2026-09-23 skriver definitionen med a, och lappbandet
-    # skriver om den med x (till dess tvärtom).
-    ut = lesson_board.refine_board(board, "skriv definitionen med x i stället",
+    # Bandet från 2026-09-23 kväll skriver definitionen med x, och
+    # lappbandet skriver om den med a (bandet före det: tvärtom).
+    ut = lesson_board.refine_board(board, "skriv definitionen med a i stället",
                                    model="", max_rounds=1,
                                    mal={"el": f"tav5.0.{plats}",
                                         "namn": "Formel 1",
@@ -468,7 +490,7 @@ def test_mal_last_omskrivning_ror_bara_rutan_lararen_pekade_pa(fejk_claude):
     assert _utan_budget(ut["errors"]) == [], ut["errors"]
     assert ut["rounds"] == 1             # en lapp, inte en hel tavla
     spalt1 = ut["board"]["boards"][0]["sections"][4]["children"][0]["children"]
-    assert "f'(x)" in spalt1[plats]["latex"] and "f'(x)" not in fore["latex"]
+    assert "f'(a)" in spalt1[plats]["latex"] and "f'(a)" not in fore["latex"]
     # …och ALLT annat på båda tavlorna står kvar, byte för byte.
     kopia = copy.deepcopy(ut["board"])
     kopia["boards"][0]["sections"][4]["children"][0]["children"][plats] = fore
