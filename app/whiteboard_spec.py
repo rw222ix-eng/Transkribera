@@ -759,22 +759,28 @@ def _check_rutor(sections: list, path: str, errors: list[dict]) -> None:
             _check_rutor(sec.children, f"{path}[{si}].children", errors)
 
 
-# FACITVAKTEN (lärarens dom 2026-09-05, kväll). «Jag kommer ju göra själva
-# uträkningarna. Det räcker med en stark utgångspunkt. Massa färdiga
-# uträkningar behövs inte.» Kravet står i prompten sedan augusti, men en tavla
-# om linjära funktioner skrev ändå «260 − 200 = 60 ⇒ k = 60, m = 200» i
-# exempel 1 och «(0, 600) → (1, 500) ⇒ k = −100, m = 600» i exempel 2:
-# tabellmomentet lockar, för uppgiften ÄR att läsa av k, och då skriver
-# modellen avläsningen. Samma tavla bar dessutom «y = 4 − 5x ⇒ k = −5, m = 4»
-# på VÄNSTERN, efter Vanligt fel — ett sifferexempel på fel tavla, som regel
-# 8b förbjuder utan att någon vakt fällde det.
+# SIFFERVAKTEN (lärarens dom 2026-09-05, kväll). En tavla om linjära
+# funktioner bar «y = 4 − 5x ⇒ k = −5, m = 4» på VÄNSTERN, efter Vanligt fel:
+# ett sifferexempel på fel tavla, som regel 8b förbjuder utan att någon vakt
+# fällde det. Regeln här fäller det deterministiskt, som rutorna: en fällning
+# kostar på sin höjd en reparationsrunda, och domaren behöver då inte se det.
 #
-# Reglerna här fäller det deterministiskt, som rutorna: en fällning kostar på
-# sin höjd en reparationsrunda, och domaren behöver då inte se det.
-# KONSERVATIVA med flit — en GIVEN ekvation är inte en uträkning:
-# «x^2 + 6x - 7 = 0», «f(x) = -x^2 - 2x + 3» och «y = -100x + 600» är
-# uppgiftens egen rad och ska stå kvar. Det som fälls är ledet som RÄKNAR:
-# en pil till ett svar i tal, eller en kedja som slutar i ett rent tal.
+# FACITVAKTEN ÄR BORTA (lärarens dom 2026-09-23). Samma kväll 2026-09-05 fick
+# vakten en andra halva för HÖGERTAVLAN, koden `facit`: «Jag kommer ju göra
+# själva uträkningarna. Det räcker med en stark utgångspunkt. Massa färdiga
+# uträkningar behövs inte.» Den halvan fällde «260 − 200 = 60 ⇒ k = 60» i ett
+# exempel. Domen vändes 2026-09-23 över BA26B:s procenttavla: «Istället för
+# all den här texten så är det ju bättre att ha själva uträkningen istället.
+# Som ni har skrivit på tavlan.» Exemplen ÄR nu uträkningen, och en vakt som
+# fällde den hade strukit precis det hon beställde. Den vända vakten, som
+# fäller metodsteg i ord, ligger i lesson_board.utrakningsvakt och körs bara
+# när tavlan GENERERAS (här körs validatorn också på hennes sparade tavlor).
+#
+# Vänsterns vakt står kvar oförändrad: där står bokstäver. KONSERVATIV med
+# flit. En GIVEN ekvation är inte en uträkning: «x^2 + 6x - 7 = 0» och
+# «y = -100x + 600» är bokstavsformler eller uppställningar. Det som fälls är
+# ledet som RÄKNAR: en pil till ett svar i tal, eller en kedja som slutar i ett
+# rent tal, med tal på båda sidor om likhetstecknet.
 _PIL_RE = re.compile(r"\\(?:Rightarrow|Longrightarrow|implies|to|rightarrow|"
                      r"Leftrightarrow|leftrightarrow)\b")
 # Exponenter, index och rotindex är inte «tal» eleven räknar med: a^2 + b^2 =
@@ -956,49 +962,40 @@ def _ankaret(sections: list):
     return ut[0] if ut else None
 
 
-def _check_facit(sections: list, path: str, errors: list[dict],
-                 vanstertavlan: bool) -> None:
+def _check_siffror_vanster(sections: list, path: str,
+                           errors: list[dict]) -> None:
+    """Siffervakten på VÄNSTERTAVLAN (regel 8b). Högertavlan döms inte här
+    sedan 2026-09-23, se kommentaren ovan om facitvakten."""
     # Ankaret slås upp EN gång per flöde och bärs sedan ned genom row/col:
     # undantaget gäller tavlan, inte varje spalt för sig.
-    _facit_rek(sections, path, errors, vanstertavlan,
-               _ankaret(sections) if vanstertavlan else None)
+    _siffror_rek(sections, path, errors, _ankaret(sections))
 
 
-def _facit_rek(sections: list, path: str, errors: list[dict],
-               vanstertavlan: bool, ankare) -> None:
+def _siffror_rek(sections: list, path: str, errors: list[dict],
+                 ankare) -> None:
     undantag = _fritt_vanligt_fel(sections)
     # Randfallen slås upp per FLÖDE, som «Vanligt fel»: rubriken och raderna
     # under den står i samma col, och en rubrik i en annan spalt är en annan
     # sak. Se _randfallsblocket.
-    randfall = _randfallsblocket(sections)[0] if vanstertavlan else []
+    randfall = _randfallsblocket(sections)[0]
     for si, sec in enumerate(sections or []):
         spath = f"{path}[{si}]"
         if isinstance(sec, MathSection):
             if sec is undantag or (ankare is not None and sec is ankare) \
                     or any(sec is r for r in randfall):
                 continue
-            if vanstertavlan:
-                # Regel 8b: på vänstern står bokstäver. En rad som RÄKNAR med
-                # tal är ett exempel, och exempel bor på högertavlan — utom
-                # ankaret ovan, som är beställt.
-                if _ar_utrakning(sec.latex) and _tal_pa_bada_sidor(sec.latex):
-                    errors.append(_err(spath, "siffror_vanster",
-                                       f"'{sec.latex[:60]}' är ett uträknat "
-                                       "sifferexempel på vänstertavlan — där "
-                                       "står bokstäver. Stryk raden, eller "
-                                       "flytta den till det exempel den hör "
-                                       "till."))
-            elif _ar_utrakning(sec.latex):
-                errors.append(_err(spath, "facit",
-                                   f"'{sec.latex[:60]}' är en färdig uträkning "
-                                   "— exemplet är en utgångspunkt, inte ett "
-                                   "facit. Skriv steget i ord i stället "
-                                   "(«Avläs k: skillnaden mellan två rader»), "
-                                   "eller stryk raden. Läraren räknar på "
-                                   "plats."))
+            # Regel 8b: på vänstern står bokstäver. En rad som RÄKNAR med
+            # tal är ett exempel, och exempel bor på högertavlan, utom
+            # ankaret ovan, som är beställt.
+            if _ar_utrakning(sec.latex) and _tal_pa_bada_sidor(sec.latex):
+                errors.append(_err(spath, "siffror_vanster",
+                                   f"'{sec.latex[:60]}' är ett uträknat "
+                                   "sifferexempel på vänstertavlan, där "
+                                   "står bokstäver. Stryk raden, eller "
+                                   "flytta den till det exempel den hör "
+                                   "till."))
         elif isinstance(sec, (CalloutSection, RowSection, ColSection)):
-            _facit_rek(sec.children, f"{spath}.children", errors,
-                       vanstertavlan, ankare)
+            _siffror_rek(sec.children, f"{spath}.children", errors, ankare)
 
 
 # TANKSTRECKSVAKTEN (spåret 2026-09-06: «skriv kortare utan em dash», sex
@@ -1233,12 +1230,14 @@ def validate_rules(doc: BoardDoc) -> list[dict]:
             _check_rutor(sections, path, errors)
             _check_tankstreck(sections, path, errors)
             # `vanster` friar ankarets etikett, och ankaret finns bara på
-            # boards[0] — samma gräns som facitvakten drar.
+            # boards[0], samma gräns som siffervakten drar.
             volym += _text_volym(sections, vanster=(bi == 0))
-            # Facitvakten (2026-09-05, kväll). Vänstertavlan är boards[0] —
-            # där fälls sifferexemplet; exempeltavlorna är resten, och där
-            # fälls den färdiga uträkningen. Se _check_facit.
-            _check_facit(sections, path, errors, bi == 0)
+            # Siffervakten (2026-09-05, kväll). Vänstertavlan är boards[0],
+            # och där fälls sifferexemplet. Exempeltavlorna döms inte längre:
+            # sedan lärarens dom 2026-09-23 ÄR exemplen uträkningen. Se
+            # _check_siffror_vanster.
+            if bi == 0:
+                _check_siffror_vanster(sections, path, errors)
             for g, col_w, gpath in _iter_graphs(sections, width, path):
                 _validate_graph(g, col_w, gpath, errors)
         # Kolumntavlan bär flera exempelspalter — taket skalar per spalt

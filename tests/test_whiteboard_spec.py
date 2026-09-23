@@ -404,12 +404,15 @@ def test_rutor_falls_deterministiskt():
     assert ws.validate_board_json(_doc(_board(sections=[djup])))[1] == []
 
 
-# ------------------------------------------------------------ facitvakten --
-# Lärarens dom (2026-08-20, upprepad 2026-09-05 när en tavla om linjära
-# funktioner skrev ut hela avläsningen): «Jag kommer ju göra själva
-# uträkningarna. Det räcker med en stark utgångspunkt. Massa färdiga
-# uträkningar behövs inte.» Vakten är KONSERVATIV: en given ekvation är inte
-# en uträkning, och tavlans egen fallgrop under «Vanligt fel:» är beställd.
+# ---------------------------------------------- facitvakten och siffrorna --
+# Facitvakten (2026-09-05, koden `facit`) fällde uträkningar i exemplen på
+# högertavlan: «Massa färdiga uträkningar behövs inte.» Lärarens dom
+# 2026-09-23 vände det: «Istället för all den här texten så är det ju bättre
+# att ha själva uträkningen istället.» Högertavlan döms därför inte längre
+# här (den vända vakten, lesson_board.utrakningsvakt, körs vid genereringen).
+# Siffervakten på VÄNSTERN står kvar: den är KONSERVATIV, en given ekvation
+# är inte en uträkning, och tavlans egen fallgrop under «Vanligt fel:» är
+# beställd.
 #
 # LaTeX skrivs med BS + kommandonamn i stället för dubbla backslashar: de
 # blir oläsliga i en testfil full av dem, och det är exakt de raderna som
@@ -454,11 +457,21 @@ GIVNA = [
 
 
 @pytest.mark.parametrize("latex", UTRAKNINGAR)
-def test_fardig_utrakning_i_ett_exempel_falls(latex):
+def test_utrakningen_i_ett_exempel_star_kvar(latex):
+    """Samma rader som facitvakten fällde till 2026-09-23. Nu är de
+    exemplets uträkning, och validatorn har inget att säga om dem."""
     _d, fel = ws.validate_board_json(_hoger([
         {"kind": "heading", "text": "Exempel 1"},
         {"kind": "math", "latex": _tex(latex)}]))
-    assert [e["code"] for e in fel] == ["facit"], (latex, fel)
+    assert fel == [], (latex, fel)
+
+
+@pytest.mark.parametrize("latex", UTRAKNINGAR)
+def test_samma_rader_pa_vanstern_falls_fortfarande(latex):
+    """Vänstern bär bokstäver (regel 8b), och den domen rördes inte."""
+    vanster = _board(sections=[{"kind": "math", "latex": _tex(latex)}])
+    fel = ws.validate_board_json(_doc(vanster))[1]
+    assert [e["code"] for e in fel] == ["siffror_vanster"], (latex, fel)
 
 
 @pytest.mark.parametrize("latex", GIVNA)
@@ -471,18 +484,20 @@ def test_uppgiftens_egen_rad_star_kvar(latex):
 
 
 def test_det_felaktiga_ledet_under_vanligt_fel_ar_bestallt():
-    """Regel 9 BER om det felaktiga ledet i en math-sektion. Vakten får inte
-    fälla tavlans egen fallgrop — men bara den FÖRSTA math-raden efter
-    rubriken undantas: det var raden EFTER förklaringen som var facit."""
+    """Regel 9 BER om det felaktiga ledet i en math-sektion. Siffervakten får
+    inte fälla tavlans egen fallgrop, men bara den FÖRSTA math-raden efter
+    rubriken undantas: det var raden EFTER förklaringen som var sifferexemplet.
+    (Prövades på högertavlan till 2026-09-23, då facitvakten ströks.)"""
     rader = [
-        {"kind": "heading", "text": "Exempel 1"},
+        {"kind": "heading", "text": "Linjära funktioner"},
         {"kind": "text", "text": "Vanligt fel:"},
         {"kind": "underline"},
         {"kind": "math", "latex": _tex("2x = 10 RR x = 5")},
         {"kind": "text", "text": "Saldot minskar."}]
-    assert ws.validate_board_json(_hoger(rader))[1] == []
+    assert ws.validate_board_json(_doc(_board(sections=rader)))[1] == []
     dalig = rader + [{"kind": "math", "latex": _tex("y = 60x RR k = 60,SS m = 0")}]
-    assert [e["code"] for e in ws.validate_board_json(_hoger(dalig))[1]] == ["facit"]
+    fel = ws.validate_board_json(_doc(_board(sections=dalig)))[1]
+    assert [e["code"] for e in fel] == ["siffror_vanster"], fel
 
 
 def test_sifferexempel_pa_vanstern_falls():

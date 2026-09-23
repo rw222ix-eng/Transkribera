@@ -222,17 +222,20 @@ def test_den_godkanda_tavlan_gar_genom_alla_vakter():
     assert lb.formupprepning(doc) == []
 
 
-def test_brytpunkten_som_kedja_falls_men_som_egna_rader_slapps():
+def test_brytpunkten_star_som_egna_rader():
     """Regeln säger «EN rad i taget»: ekvationen, sedan svaret. Kedjan med ⇒
-    är fortfarande facit, och det är rätt — den skrivs om till två rader."""
+    fälldes av facitvakten till 2026-09-23; sedan lärarens dom den dagen
+    bär exemplen uträkningen och validatorn dömer inte högertavlan. «Ett
+    led per rad» står kvar i prompten och i reparationsrådet, och de egna
+    raderna går fortfarande igenom."""
     kedja = {"title": "t", "boards": [_vanster([{"kind": "text", "text": "a"}]), _hoger([
         {"kind": "math", "latex": "60x = 30x + 450 \\Rightarrow x = 15"}])]}
-    _p, fel = ws.validate_board_json(kedja)
-    assert [f["code"] for f in fel] == ["facit"], fel
+    assert ws.validate_board_json(kedja)[1] == []
     rader = {"title": "t", "boards": [_vanster([{"kind": "text", "text": "a"}]), _hoger([
         {"kind": "math", "latex": "60x = 30x + 450"},
         {"kind": "math", "latex": "x = 15"}])]}
     assert ws.validate_board_json(rader)[1] == []
+    assert "Varje led på EGEN rad" in lb.REPAIR_HINTS
 
 
 def test_modelltavlan_kanns_igen_pa_formeln_med_tal():
@@ -304,7 +307,7 @@ def test_domaren_provar_modellerna():
     assert "Pröva MODELLERNA" in t
     assert "INTE står på sidorna (y = kx + m, k, m" in t
     assert "decimalt tak där x räknar saker (7,5 besök)" in t
-    assert "INGEN färdig uträkning" in t
+    assert "var och en på EGEN rad" in t
     assert "utan raden för x = 0" in t
     assert "påhittade företagsnamn" in t
     # Kryssets textersättning gäller fortfarande ordagrant.
@@ -315,5 +318,8 @@ def test_reparationsraden_bar_de_nya_koderna():
     h = lb.REPAIR_HINTS
     assert "'stödord med frågetecken'" in h
     assert "'hänvisar till något som inte står på tavlan'" in h
-    assert "Undantaget är jämförelsens brytpunkt" in h
+    # «Undantaget är jämförelsens brytpunkt» stod här till 2026-09-23: då
+    # var brytpunkten den enda uträkning ett exempel fick bära. Nu bär alla
+    # exempel sin, och brytpunkten följer samma regel som varje led.
+    assert "också jämförelsens brytpunkt" in h
     assert "aldrig som en kedja med ⇒" in h

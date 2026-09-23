@@ -30,15 +30,16 @@ from pydantic import BaseModel, ConfigDict
 
 from app import dokumentdiff
 from app import llm_client
+from app import rakneverk
 from app import whiteboard_spec as ws
 
 MAX_ROUNDS = 3          # totalt antal LLM-rundor inkl. första genereringen
 # Koder som en OMSKRIVNING redovisar i stället för att reparera bort — se
 # kommentaren vid _repair_until_valid (lärarens önskemål vinner över budgeten).
-# `facit` sedan 2026-09-17 kväll: läraren bad om «lösningarna under varje
-# exempel» på NA26F:s mönstertavla, och facitvakten hade strukit precis dem i
-# reparationsrundan. Genereringen fäller fortfarande uträkningar; en
-# omskrivning där hon uttryckligen ber om dem får behålla dem.
+# `facit` stod här 2026-09-17 till 2026-09-23: läraren bad om «lösningarna
+# under varje exempel» på NA26F:s mönstertavla, och facitvakten strök dem.
+# Vakten finns inte längre (lärarens dom 2026-09-23: exemplen ÄR
+# uträkningen), så koden ströks härifrån med den.
 #
 # `siffror_vanster` sedan 2026-09-20, av exakt samma skäl: hon bad om
 # ankaret x^2 = 64 ⇒ x = ±8 på rottavlan, och lappen strök raden (jobb 480,
@@ -46,7 +47,7 @@ MAX_ROUNDS = 3          # totalt antal LLM-rundor inkl. första genereringen
 # (whiteboard_spec._ankaret), och det löser det vanliga fallet — men ber hon
 # om en sifferrad som INTE har formeln under sig är det fortfarande hennes
 # tavla och hennes beslut. Genereringen fäller raden som förut.
-REFINE_BEHALL: tuple[str, ...] = ("textbudget", "facit", "siffror_vanster")
+REFINE_BEHALL: tuple[str, ...] = ("textbudget", "siffror_vanster")
 # Bench Fas 2: en tabelltung tavla trunkerades vid 6k tokens → ogiltig JSON.
 BOARD_MAX_TOKENS = 9_000
 
@@ -64,7 +65,10 @@ INSTRUCTION = (
     "tavlor: vänster 900×780 för teori/disposition, höger 1800×780 med två "
     "\"columns\" för exempel).\n"
     "Regler:\n"
-    "- Decimalkomma i all läsbar text och LaTeX (skriv 4{,}58 — aldrig 4.58).\n"
+    # Tusentalen kom med uträkningarna (2026-09-23): «8 000 kg» i uppgiften
+    # och «8000» i ledet under den är två skrivsätt för samma tal.
+    "- Decimalkomma i all läsbar text och LaTeX (skriv 4{,}58, aldrig 4.58), "
+    "tusental med mellanrum (8 000, i LaTeX 8\\,000).\n"
     # Spåret 2026-09-06: läraren bad «utan em dash» sex gånger på fyra papper.
     # Vakten (app/textvakt via whiteboard_spec) fäller strecken deterministiskt;
     # raden här gör att modellen slipper reparationsrundan. Lades in när
@@ -111,7 +115,7 @@ INSTRUCTION = (
     "används bara på två ställen: (1) rött för det som varnar — \"Vanligt "
     "fel:\" och det felaktiga ledet, (2) inuti grafer och figurer för att "
     "skilja kurvor, linjer och vinklar åt. Rubriker, formler, exempel, "
-    "metodsteg och svar är svarta.\n"
+    "uträkningar och svar är svarta.\n"
     "- Grafkurvor skrivs som uttryckssträngar i plots[].expr, t.ex. "
     "\"x^2 - 2*x + 1\" eller \"sin(x)\" (tillåtet: tal, x, + - * / ^, "
     "parenteser, sin cos tan sqrt log ln exp abs, pi, e). Decimalpunkt är ok "
@@ -438,13 +442,14 @@ INSTRUCTION = (
     "ensam», «Dra "
     # Den skarpa körningen 2026-09-20 (kassetten) skrev två punkter med kolon
     # och en tredje som en ren uppmaning, «Låt h gå mot noll». Kolonet är inte
-    # pynt: det är ordet högerns metodsteg ska börja i, och domaren läser det.
+    # pynt: verbet är det läraren säger när hon pekar på ledet till höger.
+    # «Högerns metodsteg BÖRJAR med receptets verb» stod här till 2026-09-23;
+    # högern har inga metodsteg längre (se UTRÄKNINGEN), men dess led går
+    # igenom receptet i samma ordning, och det är den kopplingen som står kvar.
     "roten: glöm inte minus»). VARJE punkt har sitt kolon. Receptet är "
-    "momentets METOD — det eleven "
-    "följer när hon räknar i boken. Högerns metodsteg BÖRJAR med receptets "
-    "verb, och ett steg vars verb varken står i receptet eller bland "
-    "begreppsraderna måste vara ett förkunskapsverb; annars saknas raden på "
-    "vänstern. Förkunskapsverb blir aldrig egna receptpunkter (8c gäller), "
+    "momentets METOD, det eleven följer när hon räknar i boken, och "
+    "exemplens uträkning går igenom dess punkter i samma ordning. "
+    "Förkunskapsverb blir aldrig egna receptpunkter (8c gäller), "
     # SPRÅKET. Kontrolltavlan skrev «Dela: bort talet framför» — telegramsvenska
     # som inte går att läsa högt. Punkten är kort, men den ska gå att säga.
     # …och ingen matematik i punkten. Motorn renderar ingen LaTeX i en
@@ -496,11 +501,17 @@ INSTRUCTION = (
     "klassiska och det urvalet självt avslöjar (uppgiften som frågar vilket "
     "fel en elev har gjort).\n"
     "Skriv INTE någon lektionstid på tavlan — den lägger systemet dit.\n"
+    # FÖRRA GÅNGEN (2026-09-23, commit 1ff9106): agendans första punkt är
+    # «Förra gången: <kalenderns rubrik>», och satt_forra lägger den dit ur
+    # kalendern efter att modellen skrivit tavlan. En egen punkt om förra
+    # lektionen blev därför en dubblett, eller en gissning som sa emot kalendern.
+    "Skriv INTE heller någon agendapunkt om förra lektionen: «Förra gången: "
+    "…» lägger systemet dit ur kalendern.\n"
     "Högertavlan är antingen EXEMPEL (huvudregeln) eller ett FALLGALLERI:\n"
-    # Antalet och facitförbudet stod här också; strukna 2026-09-05 (kväll) för
-    # att betala kolumnregeln nedan. Båda står kvar i exempelavsnittet.
+    # Antalet stod här också; struket 2026-09-05 (kväll) för att betala
+    # kolumnregeln nedan. Det står kvar i exempelavsnittet.
     "- Exempel: namngivna (\"Exempel 1\", \"Exempel 2\"), uppgiftsraden högst "
-    "två rader och därunder metodstegen. "
+    "två rader och därunder uträkningen. "
     "Exempel hör hemma här — aldrig på vänstertavlan.\n"
     "- Fallgalleri (när momentet är en sats med klassiska fall, t.ex. "
     "randvinkelsatsen): 3–4 färdiga figurer, var och en med fallets namn och "
@@ -525,7 +536,7 @@ INSTRUCTION = (
     "- Exemplen väljs ur URVALETS uppgiftstyper. Står lärarens urval i "
     "bokblocket är det urvalets typer som får exempel — aldrig bokens "
     "förklaringstext, aldrig en nivå läraren valde bort. ETT exempel per NY "
-    "metodtyp i urvalet, högst tre steg var; en typ som vänsterns formel "
+    "metodtyp i urvalet; en typ som vänsterns formel "
     "redan täcker utan nytt handgrepp behöver inget exempel, den pratar "
     "läraren om. Saknas urval gäller sidornas typer. Pröva valet mot "
     "täckningen baklänges (nedan).\n"
@@ -547,45 +558,31 @@ INSTRUCTION = (
     "skrivs två exempel. Vilka typerna ÄR avgörs ur urvalets uppgifter, "
     "aldrig ur en färdig lista: momentet bestämmer vad grundform och "
     "förarbete betyder.\n"
-    # BEGREPPEN I EXEMPLEN. Samma dom (2026-09-05): «Sen exemplen: jaha, nu
-    # ska man utveckla det här uttrycket. Då trycker man på vad utveckla
-    # betyder. Så trycker man på begreppen samtidigt som man visar med
-    # exemplen.» Ett steg som bara säger vad handen gör lär ut en handrörelse.
-    # Ett steg som börjar med ordet lär ut begreppet, och läraren kan peka
-    # från steget tillbaka till raden där ordet står.
-    # STEGET ÄR EN STÖDREPLIK. Domen 2026-09-05 (kväll): «högern blandar det
-    # hon skriver med det hon säger». Stegen stod som text att skriva av fast
-    # de är repliker läraren har i huvudet medan hon räknar.
-    "- Varje metodsteg BÖRJAR med verbet eller begreppet från vänstertavlan, "
-    "sedan kolon och HÖGST FYRA ORD om vad det betyder i just det här talet: "
-    "«Utveckla: multiplicera in 3:an», «Derivera: produktregeln, u och v», "
-    "«Avrunda: två värdesiffror», «Konstruera: mittpunktsnormalen till AB». "
-    "Steget är en STÖDREPLIK åt läraren och ska "
-    "rymmas i huvudet, inte skrivas av. HÖGST TVÅ steg per exempel, tre bara "
-    "när urvalets typ kräver det. Momentet ger sina egna ord. Ett steg får "
-    "gärna börja med ett "
-    "FÖRKUNSKAPSVERB (multiplicera, förenkla, sätt in) utan att det verbet "
-    "har en rad på vänstern — bara momentets EGNA verb kräver sin rad där "
-    "(se 8c). Går ett steg inte att namnge alls hör det inte hemma på "
-    "tavlan.\n"
-    # STEGET ÄR UPPGIFTENS. Samma dom (2026-09-05, del 2): tavlans tre steg
-    # var vänsterns regler skrivna en gång till. «Varje term mot varje term
-    # säger ju inget om just det här talet.» Regeln står på vänstern; steget
-    # ska säga vad den gör HÄR, så att läraren kan peka på siffran.
-    "- Resten av steget är UPPGIFTENS, inte regelns: det säger vad verbet gör "
-    "i just de här talen («3:an in i första parentesen», «minuset gäller "
-    "alla tre termerna»), aldrig regeln i allmänhet («varje term mot varje "
-    "term»). Ett steg som bara återger en vänsterrad eller en formel stryks. "
-    # RECEPTET STYR STEGEN (2026-09-20). Fanns som krav på VERBET (8f); det
-    # som saknades var att stegen ska gå IGENOM receptet i dess ordning, så
-    # att eleven ser samma metod på båda tavlorna.
-    "Exemplets steg går genom RECEPTETS punkter i receptets ordning — de "
-    "punkter uppgiften behöver, med UPPGIFTENS egna tal i varje steg; en typ "
-    "som hoppar över en receptpunkt hoppar över den, aldrig mer. "
-    # Mätt på kontrollkörningen 2026-09-05: kravet på uppgiftens tal drog med
-    # sig färdiga uträkningar in i exemplen. Talen hör till steget, ledet
-    # inte — läraren räknar på plats.
-    "Steget säger vad man GÖR, aldrig vad det BLIR.\n"
+    # UTRÄKNINGEN (lärarens dom 2026-09-23, BA26B, «Beräkningar när vi vet
+    # procentsatsen», Liber Ma 1a s. 58–60). Exempel 1 bar «30 % av vikten är
+    # betong» och därunder «Skriv om: 30 % blir 0,30», «Räkna: 0,30 gånger
+    # 8 000 kg». Hennes ord: «Istället för all den här texten så är det ju
+    # bättre, tycker jag, att ha själva uträkningen istället. Som ni har
+    # skrivit på tavlan. Så kan jag berätta muntligt för eleverna och
+    # eventuellt skriva extra anteckningar med svenska ord, om det skulle
+    # behövas.» Och: «Det ska bara funka på en gång.»
+    #
+    # Domen VÄNDER tre äldre regler, som alla ströks här: metodstegen i formen
+    # «Verb: högst fyra ord» (2026-09-05, «BÖRJAR med verbet från
+    # vänstertavlan»), STEGET ÄR EN STÖDREPLIK (2026-09-05, kväll) och
+    # «Steget säger vad man GÖR, aldrig vad det BLIR» (kontrollkörningen
+    # 2026-09-05). Kvar ur dem är det som gäller uträkningen också: leden går
+    # genom RECEPTET i dess ordning (2026-09-20), och talen är uppgiftens.
+    # Verbet säger läraren när hon pekar på ledet; ordet står kvar på
+    # vänstern, och det är dit hon pekar tillbaka.
+    "- UTRÄKNINGEN: under uppgiften står uträkningen som math-rader, ETT led "
+    "per rad, uppifrån och ned, som läraren hade skrivit den på tavlan, och "
+    "kedjan slutar i SVARET med enhet («0{,}25 \\cdot 640 = 160», sedan "
+    "«\\text{Svar: } 160\\text{ kr}»). INGA metodsteg i ord och ingen "
+    "punktlista: orden säger läraren. Leden går igenom RECEPTETS punkter i "
+    "receptets ordning, utan orden, och en omskrivning receptet har (25 % "
+    "blir 0,25) är ett eget led. Normalt 2–4 led. RÄKNA EFTER VARJE LED: ett "
+    "räknefel på tavlan är värre än inget exempel.\n"
     # LÄSRIKTNINGEN. Lärarens dom (2026-08-20), på en tavla med två figurer
     # och «Hel area: A = 2·18   A = 50/2» i samma rad: «man får kolla korsvis
     # med ögonen för att hänga med. Onödigt komplicerat. Och arean finns i en
@@ -607,10 +604,12 @@ INSTRUCTION = (
     "delar aldrig kolumn: spalten krymper då och all text med den.\n"
     # Kravet stod förut två gånger — här och som en egen punkt längre ned om
     # bokens flera vägar. Slogs ihop 2026-09-05 för att korta prompten.
+    # Sedan 2026-09-23 bär varje väg sin egen uträkning under namnet (se
+    # UTRÄKNINGEN ovan); namnet är fortfarande ett par ord, inget metodsteg.
     "- Finns flera vägar till svaret (som i boken) visas TVÅ: \"Väg 1\" och "
-    "\"Väg 2\" under varandra, ett par ord var om vad vägen går ut på, som "
-    "två egna rader — aldrig ihopklämda på en rad med «resp.», aldrig en "
-    "punktlista som väver ihop båda. Eleverna löser olika.\n"
+    "\"Väg 2\" under varandra, ett par ord var om vad vägen går ut på och "
+    "vägens egen uträkning under, aldrig ihopklämda på en rad med «resp.», "
+    "aldrig en punktlista som väver ihop båda. Eleverna löser olika.\n"
     # RÖDA TRÅDEN. Lärarens dom (2026-08-20): «exemplen måste bygga på
     # varandra, så att det blir en röd tråd … exempel 2 bygger på exempel 1,
     # exempel 3 på exempel 2.» Trådens föredöme, i hennes egna ord
@@ -662,33 +661,31 @@ INSTRUCTION = (
     # vi behöver inte 2 = √4 och 5 = √25», och «bryt ut kvadratfaktorn — då
     # måste man förklara vad kvadratfaktorn menas med».
     "- En stödomskrivning ($3 = \\sqrt{9}$) visas EN gång, med exakt det tal "
-    "steget använder, aldrig en serie med olika tal.\n"
+    "ledet använder, aldrig en serie med olika tal.\n"
     "- Bokens ord importeras inte oöversatta: en term eleverna möter först i "
     "boken («kvadratfaktor») skrivs om till ord tavlan redan gett dem.\n"
-    # Lärarens tredje dom: «Jag kommer ju göra själva uträkningarna. Det räcker
-    # med en stark utgångspunkt jag kan utgå ifrån, och sen kan det bara stå
-    # rent generellt vad jag ska göra. Massa färdiga uträkningar behövs inte.»
-    "- Ett exempel är en UTGÅNGSPUNKT, inte en färdig lösning. Skriv "
-    "uppgiften (konkret, med tal) och därefter vad man GÖR — korta metodsteg i "
-    "allmänna ord eller allmänna formler. Räkna INTE ut svaret på tavlan: det "
-    "gör läraren tillsammans med klassen, och en färdig uträkning tar bort "
-    "själva genomgången. Ingen kedja av uträknade led, inget facit.\n"
+    # UTGÅNGSPUNKT, INTE FACIT stod här från 2026-08-20 («Jag kommer ju göra
+    # själva uträkningarna. Det räcker med en stark utgångspunkt … Massa
+    # färdiga uträkningar behövs inte.») och bekräftades 2026-09-05. Regeln
+    # är UPPHÄVD 2026-09-23 för exemplen på högertavlan: «Istället för all den
+    # här texten så är det ju bättre att ha själva uträkningen.» Se
+    # UTRÄKNINGEN ovan, som ersätter den.
     # FÖR UPPENBART FÖR TAVLAN. Lärarens dom (2026-08-21): «att arean är
     # rektangelns delat på tre — det är uppenbart, för enkelt. Och triangelns
     # area är A delat på två — det ska de kunna innan; det kan jag säga till
-    # dem. Vi behöver inte skriva det på tavlan.»
-    "- Metodstegen är BARA de som bär momentet: steg klassen behärskar sedan "
-    "förr (arean delat på antalet lika delar, triangelns area som halva) sägs "
-    "av läraren och skrivs inte.\n"
+    # dem. Vi behöver inte skriva det på tavlan.» Gällde metodstegen; sedan
+    # 2026-09-23 gäller den leden: räkningen görs, men inte som ett eget led.
+    "- Uträkningen visar BARA de led som bär momentet: det klassen behärskar "
+    "sedan förr (arean delat på antalet lika delar, triangelns area som "
+    "halva) räknas i samma led, aldrig som ett eget.\n"
     # OVIDKOMMANDE STORHETER. Samma dom: «egentligen hjälper inte triangeln
     # någonting här — vi ska fokusera på kvadratrötter och kubikrötter, inte
     # något annat.»
     "- Varje storhet uppgiften frågar efter ska ÖVA momentet. En delfråga som "
     "övar något annat (den skuggade triangelns area på en rotlektion) stryks "
     "ur uppgiften.\n"
-    "- Välj ändå talen så att uträkningen GÅR JÄMNT UT när läraren räknar den "
-    "på plats — heltal eller enkla decimaltal. Eleven ska se metoden, inte "
-    "fastna i aritmetiken.\n"
+    "- Välj talen så att uträkningen GÅR JÄMNT UT: heltal eller enkla "
+    "decimaltal. Eleven ska se metoden, inte fastna i aritmetiken.\n"
     # RÄKNAREN. Lärarens dom 2026-09-09 över potensekvationstavlan: «bara två
     # uppgifter på sidorna görs med räknare, resten utan — bättre
     # potensekvationer man löser i huvudet, med enklare tal.» Tavlan hade
@@ -732,12 +729,12 @@ INSTRUCTION = (
     # där teorin används; en metod som dyker upp först i exemplet har ingen
     # rad att peka tillbaka på, och då hänger genomgången inte ihop.
     "- Exemplet får bara VILA på det som står på vänstertavlan: varje formel, "
-    "metodsteg och KROPP exemplet använder ska finnas bland vänsterns formler, "
+    "metod och KROPP exemplet använder ska finnas bland vänsterns formler, "
     "metoder och figurer («kvadraten, nu med arean 108 cm²», en liten kopia "
     "med bara måttet), så att läraren kan peka tillbaka. Kräver exemplet något som "
     "inte står där — komplettera vänstern först, eller välj ett annat "
     "exempel. Men förankringen får "
-    "ALDRIG bli fler rader: kräver ett steg bara ett förkunskapsverb säger "
+    "ALDRIG bli fler rader: kräver ett led bara en förkunskap säger "
     "läraren det, och vänstern lämnas som den är.\n"
     # FALLGROPEN KOMMER UR URVALET (2026-09-05, del 2): det är den svåraste
     # valda typen eleverna går bet på, inte den typ som råkade bli exempel 1.
@@ -772,7 +769,7 @@ INSTRUCTION = (
     "tillräcklig för att eleven ska klara SAMTLIGA uppgifter på just de "
     "sidorna. Pröva det BAKLÄNGES, uppgift för uppgift genom det VALDA "
     "urvalet (uppgiftsraden, inte bara sidorna): «står det den här uppgiften "
-    "kräver på tavlan — en formel, ett metodsteg eller ett exempel?». Saknas "
+    "kräver på tavlan: en formel, en receptpunkt eller ett exempel?». Saknas "
     "något är genomgången för tunn; står det som inte behövs för de "
     # TÄCKNINGEN PRÖVAS BAKLÄNGES. Samma dom, andra halvan: «målet är att
     # eleverna efter genomgången ska kunna klara av alla uppgifter på de
@@ -850,9 +847,11 @@ INSTRUCTION = (
     "- En JÄMFÖRELSE slutar i en TOLKNING som exemplets sista steg: "
     "ekvationen (60x = 30x + 450), brytpunkten (x = 15, båda 900 kr) och vad "
     "som gäller på var sida om den (färre besök: enstaka billigast; fler: "
-    "kortet). Mellansteget som leder till svaret står, inte bara svaret. Det "
-    "är den enda uträkning exemplet får bära, EN rad i taget: ekvationen, "
-    "sedan svaret, sedan tolkningen i ord.\n"
+    # «Det är den enda uträkning exemplet får bära» stod här till 2026-09-23;
+    # sedan dess bär varje exempel sin uträkning. Tolkningen i ord är kvar:
+    # den är svaret på jämförelsens fråga, inget metodsteg.
+    "kortet). Mellansteget som leder till svaret står, inte bara svaret, EN "
+    "rad i taget: ekvationen, sedan svaret, sedan tolkningen i ord.\n"
     "- En tabell klassen ska LÄSA AV bär raden för x = 0 när formeln har ett "
     "startvärde; ordningen är avläs (60 kr per besök), teckna (börjar på "
     "450), formel.\n"
@@ -897,12 +896,11 @@ INSTRUCTION = (
     "fler: stryk, slå ihop, korta. Aldrig krympa texten.\n"
     # Kedjans pris, uppmätt när röda tråden kom: uppföljarnas «Samma kurva,
     # men nu …»-rader och en avslutande kontrollrad sprängde budgeten två
-    # inspelningar i rad (473 och 445 tecken mot taket ~400).
+    # inspelningar i rad (473 och 445 tecken mot taket ~400). Meningen om att
+    # bara skriva det NYA metodsteget ströks 2026-09-23 med metodstegen.
     "- I en exempelkedja är uppföljarens uppgiftsrad KORT («Samma kurva, nu "
-    "x = 3») — förgångaren bär kontexten. Skriv bara det NYA metodsteget; "
-    "steg som redan står i ett tidigare exempel skrivs inte om, läraren "
-    "pekar bakåt. Ingen kontroll- eller jämförelserad: den sägs, inte "
-    "skrivs.\n"
+    "x = 3»), förgångaren bär kontexten. Ingen kontroll- eller "
+    "jämförelserad: den sägs, inte skrivs.\n"
     "- Flera fall som ska jämföras samlas i EN table-sektion, en rad per "
     "fall, korta celler (~25 tecken), fylls i med klassen; sätt INTE cellW, "
     "motorn ger kolumnbredden ur innehållet.\n"
@@ -977,12 +975,14 @@ REPAIR_HINTS = (
     "Ankaret med sin etikett, receptet, pilarna och raderna "
     "under «Att tänka på» rörs ALDRIG — de är beställda, och matematiken i "
     "dem kostar ändå ingenting i budgeten.\n"
-    # FACITVAKTEN (2026-09-05, kväll) — se whiteboard_spec._check_facit.
-    "- 'är en färdig uträkning': skriv steget i ORD i stället, det som säger "
-    "vad man GÖR («Avläs k: skillnaden mellan två rader»), eller stryk raden "
-    "helt. Räkna aldrig ut svaret — läraren gör det med klassen. Undantaget "
-    "är jämförelsens brytpunkt: den skrivs som EGNA rader, ekvationen, sedan "
-    "svaret, sedan tolkningen i ord — aldrig som en kedja med ⇒.\n"
+    # UTRÄKNINGSVAKTEN (lärarens dom 2026-09-23), se utrakningsvakt(). Rådet
+    # för facitvakten stod här 2026-09-05 till 2026-09-23 och sa motsatsen:
+    # «skriv steget i ORD i stället … Räkna aldrig ut svaret».
+    "- 'metodsteg i ord' eller 'saknar uträkningen': skriv exemplets "
+    "uträkning som math-rader, ETT led per rad i receptets ordning, sist "
+    "svaret med enhet, och stryk ordstegen; orden säger läraren. Varje led på "
+    "EGEN rad, också jämförelsens brytpunkt: ekvationen, sedan svaret, sedan "
+    "tolkningen i ord, aldrig som en kedja med ⇒. Räkna efter varje led.\n"
     # STÖDORDEN OCH HÄNVISNINGEN (2026-09-17), se stodordsfragor() och
     # hanvisningar(). Båda är lärarens fällningar på tavlan om linjära samband.
     "- 'stödord med frågetecken': skriv varje fråga som en hel fråga i en "
@@ -1192,9 +1192,11 @@ def inriktningsrad(inriktning: str) -> str:
         "hon strök: «En halv meter list, 5 lika bitar. Vad visar märket?» "
         "Samma räkning, men ingen situation eleven känner igen och inget att "
         "kontrollera svaret mot.\n"
+        # «svaret räknas inte ut på tavlan» stod i uppräkningen till
+        # 2026-09-23, då läraren vände regeln (se UTRÄKNINGEN i INSTRUCTION).
         "Allt annat står kvar: exemplen är fortfarande EGNA och aldrig bokens, "
         "talen väljs fortfarande så att uträkningen går jämnt ut i huvudet, "
-        "svaret räknas inte ut på tavlan, och exempelkedjan håller ihop. "
+        "och exempelkedjan håller ihop. "
         "Yrket är den gemensamma världen, men vändningen är fortfarande ett "
         "nytt verb eller en ny metodtyp, aldrig bara nya tal.\n"
     )
@@ -1290,10 +1292,14 @@ REGELSAMLING_BLOCK = (
     "negativ exponent blir ett bråk, exponent "
     "i bråkform är en rot). Vanligt fel är FÖRVÄXLINGEN med den regel den "
     "liknar (2^5 + 2^3 \\neq 2^8: regeln gäller gånger, inte plus).\n"
-    "- Högertavlan: varje exempels FÖRSTA steg namnger regeln med nummer "
-    "(«Regel ①: samma bas, addera exponenterna»), så att klassen svarar på "
-    "«vilken regel?» innan den räknar. Ett exempel per regel-TYP i urvalet; "
-    "det sista kombinerar två regler i samma tal och namnger båda.\n"
+    # Till 2026-09-23 namngav exemplets FÖRSTA STEG regeln i ord («Regel ①:
+    # samma bas, addera exponenterna»). Exemplen bär sedan dess uträkningen
+    # (lärarens dom 2026-09-23), så numret flyttade in i första ledet.
+    "- Högertavlan: varje exempels FÖRSTA led bär regelns nummer först på "
+    "raden (\"latex\": \"\\\\text{①}\\\\; 2^3 \\\\cdot 2^4 = 2^{3+4}\"), så att "
+    "klassen svarar på «vilken regel?» innan den räknar. Ett exempel per "
+    "regel-TYP i urvalet; det sista kombinerar två regler i samma tal och "
+    "bär båda numren.\n"
 )
 
 REGELSAMLING_HINT = (
@@ -1305,8 +1311,8 @@ REGELSAMLING_HINT = (
 REGELSAMLING_DOMARRAD = (
     "\nREGELSAMLING: tavlan är ett numrerat formelblad (regler \\text{①} … "
     "på vänstern). Reglerna är kontraktet: fäll en regel som urvalets "
-    "uppgifter kräver men som saknas, och ett exempel vars första steg inte "
-    "namnger en regel med nummer. De numrerade regelraderna i bokstäver är "
+    "uppgifter kräver men som saknas, och ett exempel vars första led inte "
+    "bär en regels nummer. De numrerade regelraderna i bokstäver är "
     "formler, inte sifferrader, och taket på två formler gäller inte; "
     "ankaret får bära utskrivningen 2 \\cdot 2 \\cdot 2 som sitt enda "
     "mellanled.\n"
@@ -1401,9 +1407,15 @@ def _cirkel(cx: float, cy: float, r: float, n: int = 48) -> list[list[float]]:
 # RECEPTET → ATT TÄNKA PÅ → vanligt fel.
 # Begreppsraderna kom med domen 2026-09-05, och de står i alla fyra av ett
 # skäl: formen bär utan algebra. Pythagoras har «Sätt in» och «Lös ut» där
-# uttrycken har «Utveckla» och «Faktorisera», och exemplens metodsteg
-# börjar med sitt eget moments verb. Prompttext utan few-shot-stöd följs
-# dåligt; det är shotarna som lär ut dramaturgin.
+# uttrycken har «Utveckla» och «Faktorisera». Prompttext utan few-shot-stöd
+# följs dåligt; det är shotarna som lär ut dramaturgin.
+#
+# HÖGERNS EXEMPEL ÄR UTRÄKNINGAR sedan lärarens dom 2026-09-23: «Istället
+# för all den här texten så är det ju bättre att ha själva uträkningen.»
+# Shot 1–3 bar till dess metodsteg i ord («Sätt in: 3 och 4») och ingen
+# uträkning; nu bär de uträkningen led för led, i receptets ordning, och
+# kedjan slutar i svaret. Varje led är efterräknat (en tidigare shot hade
+# ett räknefel, se exempel 3 i uttrycks-shoten).
 #
 # RECEPTET OCH ATT TÄNKA PÅ kom med domen 2026-09-20 («rätt men för lite och
 # för spretigt; eleverna får inte det som gör att de kan börja i boken») och
@@ -1504,7 +1516,7 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                                  "size": 20, "gapAfter": 6},
                                 # INGET ANKARE: satsen har inget varför ett
                                 # tal gör synligt. «3² + 4² = 5²» hade dessutom
-                                # varit exempel 1:s facit.
+                                # varit exempel 1:s uträkning en gång till.
                                 # EN FORMEL (2026-09-05). c = √(a² + b²) stod
                                 # här som andra rad och ströks: det är satsen
                                 # en gång till, löst åt ett annat håll. Norm är
@@ -1576,10 +1588,12 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                     "padding": {"top": 30, "right": 30, "bottom": 30, "left": 30},
                     "chrome": "aluminium", "tray": True, "name": "hoger",
                     "columns": [
-                        # EXEMPLEN ÄR UTGÅNGSPUNKTER, inte lösningar: uppgiften
-                        # och vad man GÖR. Uträkningen gör läraren tillsammans
-                        # med klassen — en färdig lösning tar bort genomgången.
-                        # Talen är ändå valda så att det går jämnt ut på plats.
+                        # UTRÄKNINGEN (lärarens dom 2026-09-23): uppgiften,
+                        # figuren och därunder leden, ett per rad, i receptets
+                        # ordning (sätt in, lös ut) och sist svaret med enhet.
+                        # Inga ord i leden: «Namnge», «Sätt in» och «Lös ut»
+                        # står i receptet till vänster, och läraren säger dem.
+                        # Efterräknat: 3² + 4² = 9 + 16 = 25, √25 = 5.
                         {"weight": 1, "sections": [
                             {"kind": "heading", "text": "Exempel 1", "size": 28,
                              "underline": {}, "gapAfter": 14},
@@ -1590,36 +1604,41 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                              "width": 240, "height": 175,
                              "labels": {"left": "3", "bottom": "4", "right": "c"},
                              "gapAfter": 16},
-                            # STEGET ÄR EN STÖDREPLIK: verb + högst fyra ord
-                            # (2026-09-05). «Det är svårt att hinna innan
-                            # lektionen att rita och skriva allt». Steget ska
-                            # rymmas i lärarens huvud, inte skrivas av.
-                            {"kind": "list", "bullet": "–", "size": 19, "gap": 6,
-                             "items": [
-                                 "Sätt in: 3 och 4",
-                                 "Lös ut: roten ur c²"]},
+                            {"kind": "math", "latex": "c^2 = 3^2 + 4^2",
+                             "size": 22, "gapAfter": 8},
+                            {"kind": "math", "latex": "c^2 = 9 + 16 = 25",
+                             "size": 22, "gapAfter": 8},
+                            {"kind": "math", "latex": "c = \\sqrt{25} = 5",
+                             "size": 22, "gapAfter": 8},
+                            {"kind": "math", "latex": "\\text{Svar: } 5\\text{ cm}",
+                             "size": 22},
                         ]},
                         # KEDJANS UPPFÖLJARE (domen 2026-08-21): samma triangel
-                        # som exempel 1 — c är redan framräknad till 5 — och en
-                        # KORT uppgiftsrad, ingen ny figur, bara det NYA steget.
-                        # Steg som redan står i exempel 1 pekas på, skrivs inte
-                        # om: det är så tavlan håller textbudgeten.
+                        # som exempel 1, c är redan framräknad till 5, och en
+                        # KORT uppgiftsrad utan ny figur. Handgreppet är nytt
+                        # (satsen löst för en katet), och svaret 4 går att
+                        # kontrollera i figuren ovan. Efterräknat: 5² − 3² =
+                        # 25 − 9 = 16, √16 = 4. Det röda ledet är felet att
+                        # subtrahera sidorna rakt av: 5 − 3 = 2, inte 4.
                         {"weight": 1, "sections": [
                             {"kind": "heading", "text": "Exempel 2", "size": 28,
                              "underline": {}, "gapAfter": 14},
                             {"kind": "text",
-                             "text": "Samma triangel: c = 5. Hur lång är kateten?",
+                             "text": "Samma triangel: c = 5 och a = 3. Hur lång är b?",
                              "size": 20, "gapAfter": 14},
-                            {"kind": "list", "bullet": "–", "size": 19, "gap": 6,
-                             "items": [
-                                 "Lös ut: skriv om satsen",
-                                 "Sätt in: 5 och 3"],
-                             "gapAfter": 18},
+                            {"kind": "math", "latex": "b^2 = 5^2 - 3^2",
+                             "size": 22, "gapAfter": 8},
+                            {"kind": "math", "latex": "b^2 = 25 - 9 = 16",
+                             "size": 22, "gapAfter": 8},
+                            {"kind": "math", "latex": "b = \\sqrt{16} = 4",
+                             "size": 22, "gapAfter": 8},
+                            {"kind": "math", "latex": "\\text{Svar: } 4\\text{ cm}",
+                             "size": 22, "gapAfter": 18},
                             {"kind": "text", "text": "Vanligt fel:", "size": 19,
                              "color": "red", "weight": 700, "gapAfter": 2},
                             {"kind": "underline", "width": 120, "color": "red",
                              "gapAfter": 8},
-                            {"kind": "math", "latex": "a = 5 - 4",
+                            {"kind": "math", "latex": "b = 5 - 3",
                              "size": 20, "color": "red", "gapAfter": 6},
                             {"kind": "text",
                              "text": "Sidor subtraheras inte rakt av.",
@@ -1791,33 +1810,43 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                             {"kind": "math", "latex": "f(x) = x^2 - 4x + 3",
                              "size": 26, "gapAfter": 18},
                             # TVÅ VÄGAR till samma svar — eleverna löser olika,
-                            # och boken har båda metoderna. Vägarna säger vad
-                            # man gör; själva räknandet sker på lektionen.
+                            # och boken har båda metoderna. Sedan lärarens dom
+                            # 2026-09-23 bär varje väg sin EGEN uträkning under
+                            # namnet; namnet är ett par ord, inget metodsteg.
+                            # Efterräknat: x = −(−4)/(2·1) = 2, f(2) = 4 − 8 +
+                            # 3 = −1, och (x − 2)² = x² − 4x + 4, så
+                            # x² − 4x + 3 = (x − 2)² − 4 + 3 = (x − 2)² − 1.
+                            # Båda vägarna ger (2, −1), samma punkt som det
+                            # röda ledet på vänstern förväxlar med x.
                             {"kind": "text", "text": "Väg 1: symmetrilinjen",
                              "size": 19, "weight": 700, "gapAfter": 6},
-                            {"kind": "list", "bullet": "–", "size": 19, "gap": 6,
-                             # Steget bär uppgiftens tal, inte formeln en gång
-                             # till (domen 2026-09-05, del 2): koefficienterna
-                             # står i f(x) ovanför, och det är dem läraren
-                             # pekar på när hon räknar symmetrilinjen.
-                             "items": ["Bestäm: koefficienterna i f(x)"],
-                             "gapAfter": 14},
+                            {"kind": "math",
+                             "latex": "x = -\\frac{-4}{2 \\cdot 1} = 2",
+                             "size": 22, "gapAfter": 6},
+                            {"kind": "math",
+                             "latex": "f(2) = 2^2 - 4 \\cdot 2 + 3 = -1",
+                             "size": 22, "gapAfter": 14},
                             {"kind": "text", "text": "Väg 2: kvadratkomplettering",
                              "size": 19, "weight": 700, "gapAfter": 6},
-                            {"kind": "math", "latex": "f(x) = (x - p)^2 + q",
+                            {"kind": "math", "latex": "f(x) = (x - 2)^2 - 4 + 3",
                              "size": 22, "gapAfter": 6},
-                            {"kind": "list", "bullet": "–", "size": 19, "gap": 6,
-                             "items": ["Avläs: vändpunkten i (p, q)"]},
+                            {"kind": "math", "latex": "f(x) = (x - 2)^2 - 1",
+                             "size": 22, "gapAfter": 14},
+                            {"kind": "math",
+                             "latex": "\\text{Svar: } (2,\\ -1)",
+                             "size": 22},
                         ]},
                         {"weight": 1, "sections": [
-                            # Grafen är utgångspunkten att peka i — punkten
-                            # märker läraren ut tillsammans med klassen.
+                            # Grafen är figuren att peka i: nollställena 1 och
+                            # 3 på x-axeln, och minimipunkten som uträkningen
+                            # till vänster ger.
                             {"kind": "graph", "width": 520, "height": 380,
                              "xRange": [-1, 5], "yRange": [-2, 4],
                              "grid": True, "axes": True, "gridStep": 1,
                              "xLabel": "x", "yLabel": "y",
                              "plots": [{"expr": "x^2 - 4*x + 3", "color": "red",
                                         "thickness": 2}],
+                             "points": [{"x": 2, "y": -1}],
                              "ticks": [{"axis": "x", "at": 1, "label": "1"},
                                        {"axis": "x", "at": 3, "label": "3"}]},
                         ]},
@@ -1996,10 +2025,13 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                     "padding": {"top": 30, "right": 30, "bottom": 30, "left": 30},
                     "chrome": "aluminium", "tray": True, "name": "hoger",
                     "columns": [
-                        # Varje metodsteg BÖRJAR med verbet från vänstern och
-                        # säger vad det betyder i just det här talet. Då kan
-                        # läraren peka från steget tillbaka till raden där ordet
-                        # står, och begreppet får sitt innehåll av exemplet.
+                        # Uträkningen led för led (lärarens dom 2026-09-23).
+                        # Uppgiftens uttryck står först, och varje led under
+                        # det börjar med = : det är så läraren skriver en
+                        # förenkling på tavlan. Verbet (utveckla, förenkla)
+                        # säger hon när hon pekar på ledet; ordet står på
+                        # vänstern. Efterräknat: 4(x + 3) = 4x + 12, och
+                        # 4x + 2x = 6x.
                         {"weight": 1, "sections": [
                             {"kind": "heading", "text": "Exempel 1", "size": 28,
                              "underline": {}, "gapAfter": 12},
@@ -2007,28 +2039,27 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                              "text": "Utveckla och förenkla uttrycket.",
                              "size": 20, "gapAfter": 10},
                             {"kind": "math", "latex": "4(x + 3) + 2x",
-                             "size": 26, "gapAfter": 16},
-                            {"kind": "list", "bullet": "–", "size": 19, "gap": 6,
-                             "items": [
-                                 "Utveckla: multiplicera in 4:an",
-                                 "Förenkla: dra ihop x-termerna"],
-                             "gapAfter": 22},
+                             "size": 26, "gapAfter": 8},
+                            {"kind": "math", "latex": "= 4x + 12 + 2x",
+                             "size": 22, "gapAfter": 6},
+                            {"kind": "math", "latex": "= 6x + 12",
+                             "size": 22, "gapAfter": 22},
                             # «Och nu ska vi faktorisera samma uttryck igen. Då
                             # går vi tillbaka.» Samma tal, andra hållet: det är
                             # där eleven ser att verben är varandras motsatser.
+                            # Efterräknat: 6 · 2 = 12, alltså 6x + 12 =
+                            # 6(x + 2). Ingen kontrollrad (utveckla tillbaka):
+                            # den sägs, den skrivs inte.
                             {"kind": "heading",
                              "text": "Exempel 2: samma uttryck baklänges",
                              "size": 26, "underline": {}, "gapAfter": 12},
                             {"kind": "math", "latex": "6x + 12", "size": 26,
-                             "gapAfter": 16},
-                            # STEGET ÄR UPPGIFTENS, inte regelns (domen
-                            # 2026-09-05, del 2): «bryt ut den gemensamma
-                            # faktorn» är vänsterraden en gång till. Steget
-                            # ska säga vad handen gör i just 6x + 12.
-                            {"kind": "list", "bullet": "–", "size": 19, "gap": 6,
-                             "items": [
-                                 "Faktorisera: 6 finns i båda",
-                                 "Utveckla: multiplicera tillbaka 6:an"]},
+                             "gapAfter": 8},
+                            {"kind": "math",
+                             "latex": "= 6 \\cdot x + 6 \\cdot 2",
+                             "size": 22, "gapAfter": 6},
+                            {"kind": "math", "latex": "= 6(x + 2)",
+                             "size": 22},
                         ]},
                         {"weight": 1, "sections": [
                             # «Nu ska vi ha ett bråk i stället. Vad händer då?»
@@ -2040,21 +2071,25 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                             # versionen hade x/6 som andra bråk: täljaren blev
                             # 3x + 4, och där finns ingen 3:a att bryta ut. En shot
                             # med räknefel lär ut räknefel; räkna efter varje tal.
+                            # Sedan 2026-09-23 står de fyra leden på tavlan, i
+                            # receptets ordning: förlänga (2(x + 2)/6), samla
+                            # täljaren (2x + 4 + x + 2 = 3x + 6), faktorisera
+                            # (3(x + 2)) och förenkla (3/6 = 1/2).
                             {"kind": "heading",
                              "text": "Exempel 3: uttrycket i ett bråk",
                              "size": 26, "underline": {}, "gapAfter": 12},
                             {"kind": "math",
                              "latex": "\\frac{x + 2}{3} + \\frac{x + 2}{6}",
-                             "size": 26, "gapAfter": 16},
-                            {"kind": "list", "bullet": "–", "size": 19, "gap": 6,
-                             # TRE steg, inte fler: två är huvudregeln och
-                             # tre bara när urvalets typ kräver det. Här är
-                             # bråket tre handgrepp, inte två.
-                             "items": [
-                                 "Förlänga: första bråket med 2",
-                                 "Faktorisera: bryt ut 3:an",
-                                 "Förenkla: stryk 3:an mot 6:an"],
-                             "gapAfter": 22},
+                             "size": 26, "gapAfter": 8},
+                            {"kind": "math",
+                             "latex": "= \\frac{2(x + 2)}{6} + \\frac{x + 2}{6}",
+                             "size": 22, "gapAfter": 6},
+                            {"kind": "math", "latex": "= \\frac{3x + 6}{6}",
+                             "size": 22, "gapAfter": 6},
+                            {"kind": "math", "latex": "= \\frac{3(x + 2)}{6}",
+                             "size": 22, "gapAfter": 6},
+                            {"kind": "math", "latex": "= \\frac{x + 2}{2}",
+                             "size": 22, "gapAfter": 22},
                             # SAMLINGSPUNKTEN: en rad per uttryck, där första
                             # raden visar formen och resten fylls i tillsammans
                             # med klassen. Korta celler, ingen cellW: motorn ger
@@ -2168,7 +2203,7 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                                 {"kind": "math", "latex": "u = 2v",
                                  "size": 26}]},
                             # Receptet är vad ögat gör i en cirkelfigur:
-                            # högertavlan är ett fallgalleri utan metodsteg,
+                            # högertavlan är ett fallgalleri utan uträkningar,
                             # och då är receptet det enda som säger hur eleven
                             # angriper uppgiften.
                             {"kind": "col", "width": 400, "gap": 6,
@@ -2585,13 +2620,14 @@ LAPP_INSTRUKTION = (
     "rakt av, ingenting ärvs.\n"
     "- \"efter\" SÄTTER IN ett nytt element direkt efter elementet på vägen.\n"
     "- \"ta_bort\" tar bort elementen på vägarna.\n"
-    # Ett helt exempel är flera sektioner i rad (rubrik, uppgiftsrad, math,
-    # metodsteg). Domaren får sedan 2026-09-05 föreslå att BYTA UT ett exempel
-    # som ligger utanför lärarens urval, och då måste lappvägen bära bytet —
-    # annars faller svaret tillbaka på en helomskrivning av tavlan.
+    # Ett helt exempel är flera sektioner i rad (rubrik, uppgiftsrad och
+    # uträkningens math-rader sedan 2026-09-23). Domaren får sedan 2026-09-05
+    # föreslå att BYTA UT ett exempel som ligger utanför lärarens urval, och
+    # då måste lappvägen bära bytet, annars faller svaret tillbaka på en
+    # helomskrivning av tavlan.
     "- Ett HELT exempel byts genom att lappa var och en av dess sektioner "
-    "(rubriken, uppgiftsraden, stegen) och ta bort dem som blir över — flera "
-    "nycklar i samma svar. Grannkolumnens nycklar rörs inte.\n"
+    "(rubriken, uppgiftsraden, uträkningens rader) och ta bort dem som blir "
+    "över, flera nycklar i samma svar. Grannkolumnens nycklar rörs inte.\n"
     "- Skicka BARA det du ändrar. Allt du inte nämner står kvar orört — skriv "
     "aldrig ut oförändrade element.\n"
     # SKELETTET ÄR INTE FÖRHANDLINGSBART (jobb 481, seq 13). Lappen strök
@@ -3554,9 +3590,10 @@ def bokkopior(board: dict | None, bok: str) -> list[dict]:
 # math-raden efter varje exempelrubrik på högertavlan — med talen utbytta mot
 # #. Två rader som blir samma skelett är ett exempel skrivet två gånger.
 #
-# BARA UPPGIFTSRADEN, aldrig metodstegen: ett steg SKA få likna ett tidigare
-# ('x = \sqrt[4]{81}' och 'x = \sqrt[3]{27}' är samma metod, och det är
-# meningen). Och bara när exemplen går att skilja åt på sina rubriker: utan
+# BARA UPPGIFTSRADEN, aldrig ett enskilt led: ett led SKA få likna ett
+# tidigare ('x = \sqrt[4]{81}' och 'x = \sqrt[3]{27}' är samma metod, och det
+# är meningen). Först när HELA kedjan har samma form är det samma exempel
+# (2026-09-23). Och bara när exemplen går att skilja åt på sina rubriker: utan
 # rubriker vet vakten inte var ett exempel slutar och nästa börjar, och då
 # tiger den hellre än fäller fel rad (fail-open, som alla vakter här).
 #
@@ -3567,8 +3604,9 @@ def bokkopior(board: dict | None, bok: str) -> list[dict]:
 # och exempel 2, '5t^2 = 100', fick därför stå kvar fast det var samma tal en
 # gång till. Uppgiftsraderna är numera ALLA math-rader FÖRE exemplets
 # metodsteg (den första list-sektionen), också de som ligger i en row/col.
-# Saknar exemplet steglista faller vakten tillbaka på första raden: utan lista
-# finns ingen gräns mellan uppgift och steg, och då fäller den hellre för lite.
+# Saknar exemplet steglista föll vakten tillbaka på första raden. Sedan
+# 2026-09-23 saknar varje exempel steglista (uträkningen står som math-rader),
+# och gränsen dras vid talen i stället, se UTRÄKNINGEN SOM KEDJA nedan.
 _FORM_TAL = re.compile(r"\d+([,.]\d+)?")
 # Kortare skelett än så säger ingenting: 'x=#' är varje ekvation som finns.
 _FORM_MINSTA = 4
@@ -3608,18 +3646,32 @@ def _platta_rader(sections: list, path: str, ut: list) -> None:
             ut.append((p, sec.get("kind"), sec))
 
 
-def _exempelrader(sections: list, path: str, ut: list) -> None:
-    """Ett exempel per rubrik i spalten: {math, text, steg}.
+# UTRÄKNINGEN SOM KEDJA (lärarens dom 2026-09-23). Exemplen bär sedan dess
+# ingen steglista utan uträkningen som math-rader, och då finns ingen lista att
+# dra gränsen vid. Gränsen dras i stället vid TALEN: bär uppgiftens text dem
+# («Kateterna är 3 cm och 4 cm») är första math-raden redan ett led, och
+# uppgiften är bara texten; är texten en uppmaning utan tal («Lös
+# ekvationen.») är första math-raden uppgiften. Resten är kedjan. Utan den
+# gränsen hade vakten fällt två exempel som båda börjar med omskrivningen
+# 30 % = 0,30, och den raden SKA stå i varje procentexempel.
+_HAR_TAL_RE = re.compile(r"\d")
 
-    `math` och `text` är raderna FÖRE steglistan, `steg` säger om exemplet
-    har en sådan lista alls."""
+
+def _exempelrader(sections: list, path: str, ut: list) -> None:
+    """Ett exempel per rubrik i spalten: {math, text, steg, kedja}.
+
+    `math` och `text` är UPPGIFTSRADERNA, `steg` säger om exemplet har en
+    steglista (tavlor skrivna före 2026-09-23), och `kedja` är uträkningens
+    svarta math-rader i läsordning (tavlor skrivna efter). Med steglista är
+    uppgiften raderna FÖRE listan, som förut, och kedjan tom."""
     aktuellt: dict | None = None
+    nya: list = []
     platt: list = []
     _platta_rader(sections, path, platt)
     for p, kind, sec in platt:
         if kind == "heading":
-            aktuellt = {"math": [], "text": [], "steg": False}
-            ut.append(aktuellt)
+            aktuellt = {"math": [], "text": [], "steg": False, "fore": []}
+            nya.append(aktuellt)
         elif aktuellt is None:
             continue
         elif kind == "list":
@@ -3627,9 +3679,23 @@ def _exempelrader(sections: list, path: str, ut: list) -> None:
         elif aktuellt["steg"]:
             continue            # allt efter stegen hör till lösningen
         elif kind == "math":
-            aktuellt["math"].append((p, str(sec.get("latex") or "")))
+            # Det röda ledet är fallgropen, inte en del av räkningen.
+            if sec.get("color") != "red":
+                aktuellt["math"].append((p, str(sec.get("latex") or "")))
         elif kind == "text":
             aktuellt["text"].append((p, str(sec.get("text") or "")))
+            if not aktuellt["math"]:
+                aktuellt["fore"].append((p, str(sec.get("text") or "")))
+    for ex in nya:
+        fore = ex.pop("fore")
+        if ex["steg"]:
+            ex["kedja"] = []
+            continue
+        ex["kedja"] = ex["math"]
+        ex["text"] = fore
+        talen_i_texten = any(_HAR_TAL_RE.search(t) for _p, t in fore)
+        ex["math"] = [] if talen_i_texten else ex["kedja"][:1]
+    ut.extend(nya)
 
 
 def formupprepning(board: dict | None) -> list[dict]:
@@ -3655,9 +3721,11 @@ def formupprepning(board: dict | None) -> list[dict]:
         # uppgiften och dess uppställning, aldrig en dubblett av varandra.
         sedda: dict[str, str] = {}
         sedd_text: dict[str, str] = {}
+        sedd_kedja: dict[str, str] = {}
         for ex in exempel:
             nya: dict[str, str] = {}
-            for vag, latex in (ex["math"] if ex["steg"] else ex["math"][:1]):
+            fore = len(ut)
+            for vag, latex in ex["math"]:
                 nyckel = _formnyckel(latex)
                 if len(nyckel) < _FORM_MINSTA:
                     continue
@@ -3675,8 +3743,27 @@ def formupprepning(board: dict | None) -> list[dict]:
                         "flytta, kvadrater i båda leden, en parentes att "
                         "multiplicera in) eller stryk exemplet."})
             sedda.update(nya)
+            # HELA KEDJAN MED NYA TAL (2026-09-23). Två uträkningar vars alla
+            # led har samma form är samma handgrepp med nya siffror, också när
+            # uppgiften bara står i ord och ingen uppgiftsrad finns att
+            # jämföra. Ett exempel som redan fällts ovan fälls inte två gånger.
+            if len(ex["kedja"]) >= 2 and len(ut) == fore:
+                nyckel = "|".join(_formnyckel(x) for _v, x in ex["kedja"])
+                forra = sedd_kedja.get(nyckel)
+                if forra is None:
+                    sedd_kedja[nyckel] = ex["kedja"][0][1]
+                else:
+                    vag, latex = ex["kedja"][0]
+                    ut.append({
+                        "path": vag, "code": "upprepad_form",
+                        "message":
+                            f"Uträkningen från '{latex[:40]}' har samma form "
+                            f"led för led som den från '{forra[:40]}'. Bara "
+                            "talen skiljer. Det är ETT exempel skrivet två "
+                            "gånger. Byt uppgiften mot en annan METODTYP ur "
+                            "urvalet eller stryk exemplet."})
             ny_text: dict[str, str] = {}
-            for vag, text in (ex["text"] if ex["steg"] else []):
+            for vag, text in ex["text"]:
                 nyckel = _situationsnyckel(text)
                 if len(nyckel) < _SITUATION_MINSTA:
                     continue
@@ -3694,6 +3781,123 @@ def formupprepning(board: dict | None) -> list[dict]:
                         "en metodtyp urvalet har men tavlan saknar."})
             sedd_text.update(ny_text)
     return ut
+
+
+# ── Uträkningsvakten ────────────────────────────────────────────────────────
+# Lärarens dom 2026-09-23 över BA26B:s procenttavla: «Istället för all den här
+# texten så är det ju bättre att ha själva uträkningen istället. Som ni har
+# skrivit på tavlan.» Och: «När jag genererar en tavla nästa gång ska jag
+# slippa göra de här ändringarna. Det ska bara funka på en gång.»
+#
+# Vakten är facitvakten VÄND. Den stod i whiteboard_spec (_check_facit) från
+# 2026-09-05 och fällde uträkningar i exemplen med koden `facit`; nu fäller
+# den här det motsatta, steglistan i ord (`ordsteg`) och exemplet utan en
+# enda uträknad rad (`utrakning_saknas`). Den ligger HÄR och inte i
+# validate_rules med flit: validatorn körs också på lärarens sparade tavlor,
+# i omskrivningen och i renderingsreparationen, och där är en steglista
+# hennes egen text, inte ett fel att reparera bort. Samma grind som
+# formupprepning: genereringen, och domarens komplettering.
+#
+# Konservativ, fail-open som de andra: bara exempel under en rubrik som
+# börjar med «Exempel» eller «Ex.», bara listor och bara helt uträkningslösa
+# exempel. Fallgalleriet har inga exempelrubriker och döms aldrig. En tabell
+# räknas som uträkning: en värdetabell som fylls i ÄR räkningen.
+_EXEMPELRUBRIK_RE = re.compile(r"^\s*ex(?:empel\b|\.)", re.IGNORECASE)
+
+
+def utrakningsvakt(board: dict | None) -> list[dict]:
+    """Exempel på högertavlan med metodsteg i ord (en list-sektion) eller
+    utan någon uträkning alls. Koderna `ordsteg` och `utrakning_saknas`."""
+    if not isinstance(board, dict):
+        return []
+    ut: list[dict] = []
+    for bi, tavla in enumerate(board.get("boards") or []):
+        if bi == 0 or not isinstance(tavla, dict):
+            continue        # vänstern bär receptet, och det ÄR en lista
+        floden = [((kol or {}).get("sections"),
+                   f"boards[{bi}].columns[{ci}].sections")
+                  for ci, kol in enumerate(tavla.get("columns") or [])]
+        floden.append((tavla.get("sections"), f"boards[{bi}].sections"))
+        for sektioner, vag in floden:
+            platt: list = []
+            _platta_rader(sektioner, vag, platt)
+            aktuellt: dict | None = None
+            exempel: list[dict] = []
+            for p, kind, sec in platt:
+                if kind == "heading":
+                    aktuellt = None
+                    if _EXEMPELRUBRIK_RE.match(str(sec.get("text") or "")):
+                        aktuellt = {"vag": p, "rakning": 0}
+                        exempel.append(aktuellt)
+                elif aktuellt is None:
+                    continue
+                elif kind == "list":
+                    ut.append({
+                        "path": p, "code": "ordsteg",
+                        "message": "exemplet bär metodsteg i ord, men läraren "
+                                   "vill ha uträkningen. Skriv den som "
+                                   "math-rader, ETT led per rad i receptets "
+                                   "ordning, sist svaret med enhet, och "
+                                   "stryk listan: orden säger hon själv."})
+                elif (kind == "math" and sec.get("color") != "red") \
+                        or kind == "table":
+                    aktuellt["rakning"] += 1
+            ut += [{"path": ex["vag"], "code": "utrakning_saknas",
+                    "message": "exemplet saknar uträkningen. Skriv den under "
+                               "uppgiften som math-rader, ETT led per rad, "
+                               "sist svaret med enhet."}
+                   for ex in exempel if not ex["rakning"]]
+    return ut
+
+
+# ── Räknevakten ─────────────────────────────────────────────────────────────
+# Uträkningen på tavlan är det läraren skriver av och pekar på framför
+# klassen, och ett felräknat led där är värre än inget exempel alls. Förut
+# fanns inga led att räkna fel i (facitvakten strök dem); sedan lärarens dom
+# 2026-09-23 finns de i varje exempel, och en few-shot har redan en gång haft
+# ett räknefel (uttrycks-shotens exempel 3). Täckningsdomaren ombeds räkna
+# efter, men den är en modell. Den här vakten räknar på riktigt, med samma
+# räkneverk som prövar provens facit (app/rakneverk.py): bara led där båda
+# sidor är SLUTNA TAL prövas, allt annat är tyst (fail-open). En rad som
+# börjar med «=» fortsätter raden ovanför, och då prövas skarven också:
+# «0{,}30 \cdot 8\,000» på en rad och «= 2\,500» på nästa är samma fel som
+# på en rad. Det röda ledet är fallgropen och är fel med flit.
+_RAD_FORTSATTER_RE = re.compile(r"^\s*=")
+
+
+def raknevakt(board: dict | None) -> list[dict]:
+    """Led på högertavlan där två slutna tal påstås vara lika men inte är
+    det. Koden `raknefel`, samma som räkneverkets."""
+    if not isinstance(board, dict):
+        return []
+    ut: list[dict] = []
+    for bi, tavla in enumerate(board.get("boards") or []):
+        if bi == 0 or not isinstance(tavla, dict):
+            continue
+        floden = [((kol or {}).get("sections"),
+                   f"boards[{bi}].columns[{ci}].sections")
+                  for ci, kol in enumerate(tavla.get("columns") or [])]
+        floden.append((tavla.get("sections"), f"boards[{bi}].sections"))
+        for sektioner, vag in floden:
+            platt: list = []
+            _platta_rader(sektioner, vag, platt)
+            forra = ""
+            for p, kind, sec in platt:
+                if kind != "math" or sec.get("color") == "red":
+                    forra = ""          # kedjan bryts av allt som inte är ett led
+                    continue
+                latex = str(sec.get("latex") or "")
+                rad = (f"{forra} {latex}" if forra
+                       and _RAD_FORTSATTER_RE.match(latex) else latex)
+                for a, b in rakneverk.felaktiga_led(rad)[:1]:
+                    ut.append({
+                        "path": p, "code": "raknefel",
+                        "message": f"'{latex[:60]}' räknar fel: «{a[:40]} = "
+                                   f"{b[:40]}» stämmer inte. Räkna om ledet "
+                                   "och följ felet nedåt i kedjan; går talen "
+                                   "inte jämnt ut, byt uppgiftens tal."})
+                forra = re.split(r"(?<![<>=!:])=(?!=)", rad)[-1].strip()
+    return ut[:6]
 
 
 # ── Stödorden och hänvisningen ───────────────────────────────────────────────
@@ -3894,6 +4098,24 @@ def _exemplens_matte(board: dict) -> list[tuple[str, str]]:
     return ut
 
 
+def _kedjeleden(board: dict) -> set[str]:
+    """Vägarna till uträkningarnas LED på högertavlan, uppgiftsraden
+    undantagen (se _exempelrader)."""
+    ut: set[str] = set()
+    for bi, tavla in enumerate(board.get("boards") or []):
+        if bi == 0 or not isinstance(tavla, dict):
+            continue
+        exempel: list = []
+        for ci, kol in enumerate(tavla.get("columns") or []):
+            _exempelrader((kol or {}).get("sections"),
+                          f"boards[{bi}].columns[{ci}].sections", exempel)
+        _exempelrader(tavla.get("sections"), f"boards[{bi}].sections", exempel)
+        for ex in exempel:
+            uppgift = {v for v, _x in ex["math"]}
+            ut |= {v for v, _x in ex["kedja"] if v not in uppgift}
+    return ut
+
+
 def symbolvakt(board: dict | None, bok: str) -> list[dict]:
     """Exempel med en symbolklass sidorna inte har, och urvalstyper utan
     exempel. Går till reparationsrundan som bokkopior och formupprepning."""
@@ -3904,9 +4126,18 @@ def symbolvakt(board: dict | None, bok: str) -> list[dict]:
         return []
     sidornas = set().union(*(_klasser(x) for x in alla))
     ex = _exemplens_matte(board)
+    kedja = _kedjeleden(board)
     ut: list[dict] = []
     for vag, latex in ex:
-        for klass in sorted(_klasser(latex) - sidornas):
+        klasser = _klasser(latex) - sidornas
+        # DIVISIONEN I KEDJAN (2026-09-23). Sedan exemplen bär uträkningen
+        # står det bråkstreck i leden som inte är någon uppgiftstyp, bara en
+        # division (600 / 0,25 när det hela söks). Bråk utanför sidorna fälls
+        # därför bara i uppgiftsraden; olikheten och de andra klasserna fälls
+        # var de än står, för dem skriver ingen uträkning av en slump.
+        if vag in kedja:
+            klasser.discard("bråk")
+        for klass in sorted(klasser):
             ut.append({"path": vag, "code": "utanfor_sidorna",
                        "message": f"'{latex[:50]}' bär {klass}, som inte "
                                   "finns på bokens sidor: det är en annan "
@@ -4065,8 +4296,9 @@ def rott_led_ostruket(board: dict | None) -> list[dict]:
 #
 # Sedan 2026-09-05 (kväll) grindar raden inte längre om passet KÖRS, bara vad
 # det dömer: domaren läser efter markören i sin egen prompt och hoppar över
-# täckningen och urvalsfrågorna när den saknas. Formfelen — färdiga
-# uträkningar, siffror på vänstern, för tjock vänster — gäller utan bok.
+# täckningen och urvalsfrågorna när den saknas. Formfelen gäller utan bok:
+# metodsteg i ord (färdiga uträkningar till 2026-09-23), siffror på
+# vänstern, för tjock vänster.
 URVALSMARKOR = "LÄRARENS URVAL"
 
 # Domarens EGNA rundor: kompletteringen + en rättning om den bröt schemat.
@@ -4078,7 +4310,7 @@ TACKNING_INSTRUKTION = (
     "bokens uppslagna sidor med lärarens VALDA uppgifter, och därefter "
     "tavlan som JSON. Gå uppgift för uppgift genom urvalet och fråga: kan "
     "en elev PÅBÖRJA den här uppgiften med det som står på tavlan — "
-    "begreppen, formlerna, metodstegen eller ett exempel av samma slag? "
+    "begreppen, formlerna, receptet eller ett exempel av samma slag? "
     "Läraren pratar och räknar också: kravet är att metoden STÅR på tavlan, "
     "inte att varje uppgift har ett eget exempel. Döm på innehåll som "
     "saknas helt (en regel, ett begrepp, en metodtyp — t.ex. roten ur ett "
@@ -4088,14 +4320,16 @@ TACKNING_INSTRUKTION = (
     "en diagonal») — en halvering som inte är hälften, ett led skrivet åt "
     "fel håll, ett svar som inte stämmer. Ett räknefel på en genomgångstavla "
     "är alltid ett fynd, aldrig en detalj.\n"
-    # UTAN URVAL DÖMS BARA FORMEN. Domen 2026-09-05 (kväll): färdiga
-    # uträkningar och siffror på vänstern är FORMFEL, och de gäller lika
-    # mycket på en tavla som skrivits ur minnet, en förlaga eller ett fritt
-    # uppdrag. Därför körs passet numera för varje tavla (se _tackning_pass),
-    # och det är prompten som stänger av det som kräver ett urval.
+    # UTAN URVAL DÖMS BARA FORMEN. Domen 2026-09-05 (kväll): exemplens form
+    # och siffror på vänstern är FORMFEL, och de gäller lika mycket på en
+    # tavla som skrivits ur minnet, en förlaga eller ett fritt uppdrag.
+    # Därför körs passet numera för varje tavla (se _tackning_pass), och det
+    # är prompten som stänger av det som kräver ett urval. Formfelet i
+    # exemplen var «färdiga uträkningar» till 2026-09-23; sedan dess är det
+    # motsatsen, metodsteg i ord (se METODSTEG I ORD nedan).
     "Står ingen rad «LÄRARENS URVAL» nedan finns inget kontrakt att döma "
     "täckningen mot: hoppa då över täckningen och alla urvalsfrågor helt, "
-    "och döm bara formen — räknefel, färdiga uträkningar, siffror på "
+    "och döm bara formen: räknefel, METODSTEG I ORD, siffror på "
     "vänstern och begreppskopplingen.\n"
     # CENTRALT INNEHÅLL SOM ANDRAHANDSKONTRAKT. Lärarens ord (2026-09-05,
     # kväll): «i andra hand luta sig på det centrala innehållet.» Utan bok
@@ -4109,18 +4343,19 @@ TACKNING_INSTRUKTION = (
     "föreslå aldrig att tavlan byter moment eller rubrik. Fynd får tom "
     "nummerlista. Urvalsfrågorna om uppgiftstyper gäller inte här, för det "
     "finns inga uppgifter att jämföra med.\n"
-    # FÄRDIGA URÄKNINGAR. Lärarens dom (2026-08-20, upprepad 2026-09-05 när
-    # en tavla om linjära funktioner skrev ut hela avläsningen): «Jag kommer
-    # ju göra själva uträkningarna. Det räcker med en stark utgångspunkt.
-    # Massa färdiga uträkningar behövs inte.» Tabellmomentet lockar — när
-    # uppgiften ÄR att läsa av k skriver modellen avläsningen.
-    "Fäll FÄRDIGA URÄKNINGAR i exemplen: en math-rad på högertavlan som "
-    "räknar ut något — tal på båda sidor om = eller ⇒ där högerledet är "
-    "svaret («260 − 200 = 60 ⇒ k = 60, m = 200»), eller en kedja av led. "
-    "Uppgiftens EGEN rad — ekvationen som ges, tabellen, figuren — är ingen "
-    "uträkning och står kvar. Säg vilket exempel och vilken rad det gäller, "
-    "och forslag är att byta raden mot ett steg i ORD som säger vad man GÖR "
-    "(«Avläs k: skillnaden mellan två rader») eller att stryka den.\n"
+    # METODSTEG I ORD (lärarens dom 2026-09-23): «Istället för all den här
+    # texten så är det ju bättre att ha själva uträkningen istället. Som ni
+    # har skrivit på tavlan.» Här stod till dess den motsatta grinden, FÄRDIGA
+    # URÄKNINGAR (2026-08-20, upprepad 2026-09-05: «Massa färdiga uträkningar
+    # behövs inte»). Den domen är upphävd för exemplen; domaren ber nu om
+    # det den förut strök. Utskrivna led är också det räknefelet lever i,
+    # därför står efterräkningen i samma mening.
+    "Fäll METODSTEG I ORD i exemplen: ett exempel på högertavlan ska bära "
+    "UTRÄKNINGEN som math-rader, ETT led per rad i receptets ordning, och "
+    "sluta i svaret med enhet. En punktlista med steg i ord («Sätt in: 3 och "
+    "4») eller ett exempel utan uträkning är ett fynd; säg vilket exempel "
+    "det gäller, och forslag är uträkningen, leden skrivna färdiga. Räkna "
+    "efter varje led.\n"
     # SIFFROR PÅ VÄNSTERN. Samma tavla bar «y = 4 − 5x ⇒ k = −5, m = 4» på
     # vänstern, efter Vanligt fel: ett exempel på fel tavla. Regel 8b förbjöd
     # det redan, men ingen grind fällde det.
@@ -4152,11 +4387,11 @@ TACKNING_INSTRUKTION = (
     "Pröva sedan EXEMPLEN åt andra hållet, ett i taget: motsvarar det här "
     "exemplets metodtyp någon VALD uppgift? Ett exempel vars typ ingen vald "
     "uppgift har (att beräkna uttryckets värde när urvalet bara utvecklar "
+    # «Pröva också stegen: ett metodsteg som bara återger en vänsterrad …»
+    # stod här till 2026-09-23. Exemplen har inga metodsteg längre; leden bär
+    # uppgiftens egna tal av sig själva.
     "parenteser) är ett fynd, och forslag är att BYTA UT hela exemplet mot "
-    "en av urvalets saknade typer — skriv då uppgiften och stegen. Pröva "
-    "också stegen: ett metodsteg som bara återger en vänsterrad eller en "
-    "formel («Multiplicera: varje term mot varje term») är ett fynd, och "
-    "forslag är att skriva om steget med uppgiftens egna tal.\n"
+    "en av urvalets saknade typer, skriv då uppgiften och uträkningen.\n"
     # DUBBLETTERNA. IndA-tavlan 2026-09-20 (jobb 481): exempel 1 och 2 var
     # samma fallande sten med bytt sträcka, och domaren såg luckan («få x²
     # ensamt först saknas») utan att se att den fanns ett exempel över. Den
@@ -4168,7 +4403,7 @@ TACKNING_INSTRUKTION = (
     "det andra av de två, aldrig det enda exemplet av sin typ — mot en "
     "metodtyp urvalet har men tavlan saknar, och du SÄGER vilken uppgift i "
     "urvalet typen kommer från («uppg. 1310 har kvadrater i båda leden»). "
-    "Skriv uppgiften och stegen färdiga. Tre exempel ska vara tre typer i "
+    "Skriv uppgiften och uträkningen färdiga. Tre exempel ska vara tre typer i "
     "stigande svårighet: grundform, sedan en som måste ordnas först "
     "(konstantled, termer i båda leden, en parentes att multiplicera in), "
     "sedan urvalets svåraste.\n"
@@ -4197,7 +4432,7 @@ TACKNING_INSTRUKTION = (
     # och en dom som spränger det gör tavlan sämre än luckan gjorde.
     "Tavlan får ha HÖGST TRE exempel. Står det redan tre och en typ ändå "
     "saknas är forslag att BYTA UT det exempel som ligger längst från "
-    "urvalet, eller att lägga saknaden som ett steg eller en vändning i ett "
+    "urvalet, eller att lägga saknaden som en vändning i ett "
     "av de tre — aldrig att lägga till ett fjärde exempel. Ryms det som "
     # Samma tak åt det nya hållet (2026-09-20): domaren fick två grindar som
     # BER om rader på vänstern, och utan ett tak skriver kompletteringen dit
@@ -4225,8 +4460,8 @@ TACKNING_INSTRUKTION = (
     "eller ett decimalt tak där x räknar saker (7,5 besök) — heltalen ska "
     "stå; (4) en jämförelse utan brytpunkt och tolkning på båda sidor om "
     "den, eller utan mellansteget som leder till svaret — de raderna "
-    "(ekvationen, x = 15, tolkningen i ord) är beställda och INGEN färdig "
-    "uträkning; (5) en tabell som ska avläsas utan raden för x = 0 när "
+    "(ekvationen, x = 15, tolkningen i ord) är beställda, var och en på EGEN "
+    "rad; (5) en tabell som ska avläsas utan raden för x = 0 när "
     "formeln har ett startvärde; (6) tavlan gör avsnittet smalare än "
     "sidorna (säger «rät linje» när sidorna också har andragrads- eller "
     "exponentialformler); (7) bokens påhittade företagsnamn i stället för A "
@@ -4242,7 +4477,7 @@ TACKNING_INSTRUKTION = (
     "Pröva sist BEGREPPSKOPPLINGEN, som går ÅT BÅDA HÅLL. Momentets EGNA nya "
     "begrepp och det verb momentet LÄR UT ska ha sin rad på vänstertavlan i "
     "formen «Ord: vad det är»; saknas den är det ett fynd, och forslag är "
-    "raden som ska in. Ett metodsteg som bara använder ett förkunskapsverb "
+    "raden som ska in. Ett led som bara använder ett förkunskapsverb "
     "(multiplicera, förenkla, sätt in, lös ut) kräver INGEN rad — kräv aldrig "
     "en. Fäll i stället en FÖR TJOCK vänster, och forslag är då att STRYKA "
     # ANATOMIN ÄR INGEN FORMEL (2026-09-20, andra rundan). Domaren räknade
@@ -4266,12 +4501,13 @@ TACKNING_INSTRUKTION = (
     # begrepp. Ett recept som saknas är den vanligaste tunnheten av alla.
     "Pröva RECEPTET (vänsterns metodlista, 8f): finns det en rubrikrad med "
     "momentets verb eller «Så här» och under den 2–3 punkter i formen «Verb: "
+    # Åt andra hållet prövades till 2026-09-23 att varje METODSTEG började
+    # med ett receptverb. Nu är det leden som går igenom receptet.
     "högst fyra ord»? Saknas receptet är det ett fynd, och forslag är "
-    "punkterna, konkret skrivna. Pröva sedan åt andra hållet: börjar varje "
-    "metodsteg på högern med ett verb som står i receptet eller i en "
-    "begreppsrad? Ett förkunskapsverb (multiplicera, förenkla, sätt in, lös "
-    "ut) får stå utan rad; ett av MOMENTETS verb som bara finns i exemplet "
-    "är ett fynd, och forslag är receptpunkten som ska in.\n"
+    "punkterna, konkret skrivna. Pröva sedan åt andra hållet: går varje "
+    "exempels uträkning igenom receptets punkter i receptets ordning? Ett "
+    "handgrepp i leden som hör till MOMENTET men saknas i receptet är ett "
+    "fynd, och forslag är receptpunkten som ska in.\n"
     # RANDFALLEN. Samma dom. Rottavlans urval bar fyra randfall — negativt
     # högerled (1302 d, 1308 b), exakt mot närmevärde (1308, 1310), noll
     # (1302 c) och parentesen i kvadrat (1312, 1313) — och inget av dem stod
@@ -4327,7 +4563,8 @@ TACKNING_INSTRUKTION = (
     "ett tal, alltid positivt», aldrig «Kvadratrot ur a: positiva talet vars "
     "kvadrat är a»), en receptpunkt är «Verb: två–tre ord», en rad under "
     "«Att tänka på» är en math-rad plus en etikett på högst fyra ord, och ett "
-    "metodsteg är «Verb: högst fyra ord». Föreslår du att en rad BYTS ut "
+    "exempel är uppgiftsraden och uträkningen, ett led per math-rad. "
+    "Föreslår du att en rad BYTS ut "
     "skriver du den nya raden färdig, i den formen.\n"
     "Svara med enbart JSON: {\"saknas\": [{\"uppgifter\": [nummer, …], "
     "\"vad\": \"det som saknas eller är felräknat, kort\", \"forslag\": "
@@ -4496,6 +4733,15 @@ def _tackning_pass(board: dict, errors: list, *, model: str, llm, bok: str,
     if kandidat is None:
         return {"board": board, "errors": errors + fynd, "rounds": rundor}
     _doc, fel = ws.validate_board_json(kandidat)
+    # Kompletteringen skriver exempel, och domarens förslag kan ha kommit i
+    # den gamla formen eller med ett felräknat led. Sådant ska rättas i samma
+    # runda som ett schemafel (lärarens dom 2026-09-23: «det ska bara funka
+    # på en gång»), inte gå ut som varning. Bara de fynd som är NYA mot
+    # tavlan före domaren: det domaren inte rörde är inte kompletteringens sak.
+    fore_vakt = {(f["path"], f["code"])
+                 for f in utrakningsvakt(board) + raknevakt(board)}
+    fel = fel + [f for f in utrakningsvakt(kandidat) + raknevakt(kandidat)
+                 if (f["path"], f["code"]) not in fore_vakt]
     try:
         res = _repair_until_valid(kandidat, fel, model=model, llm=llm,
                                   rounds_used=rundor, max_rounds=budget,
@@ -4552,8 +4798,8 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     `doma=False` stänger av täckningsdomaren. Den kostar ett modellanrop och
     körs annars för VARJE tavla (2026-09-05, kväll). Grinden satt förut på
     LÄRARENS URVAL i bokblocket, därför att täckningen inte går att döma utan
-    ett urval att döma mot — men färdiga uträkningar, siffror på vänstern och
-    en för tjock vänster är FORMFEL som gäller lika mycket på en tavla ur
+    ett urval att döma mot, men metodsteg i ord (färdiga uträkningar till
+    2026-09-23), siffror på vänstern och en för tjock vänster är FORMFEL som gäller lika mycket på en tavla ur
     minnet, en förlaga eller ett fritt uppdrag. Grinden flyttade därför in i
     domarens prompt: står ingen urvalsrad i blocket hoppar domaren över
     täckningen och urvalsfrågorna och dömer bara formen. Kravet på just
@@ -4617,7 +4863,8 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     errors = (errors + bokkopior(board, bok) + formupprepning(board)
               + vanligtfel_kvar(board, form) + stodordsfragor(board)
               + hanvisningar(board) + symbolvakt(board, bok)
-              + rott_led_ostruket(board))
+              + rott_led_ostruket(board) + utrakningsvakt(board)
+              + raknevakt(board))
     res = _repair_until_valid(board, errors, model=model, llm=llm,
                               rounds_used=rounds, max_rounds=max_rounds,
                               log_cb=log, token_cb=token_cb, form=form)
@@ -4634,6 +4881,7 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
             + vanligtfel_kvar(res["board"], form)
             + stodordsfragor(res["board"]) + hanvisningar(res["board"])
             + symbolvakt(res["board"], bok) + rott_led_ostruket(res["board"])
+            + utrakningsvakt(res["board"]) + raknevakt(res["board"])
             if (f["path"], f["code"]) not in sedda]
     if doma and res.get("board") is not None:
         dom = _tackning_pass(res["board"], res["errors"], model=model, llm=llm,

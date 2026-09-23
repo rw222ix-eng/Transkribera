@@ -395,6 +395,23 @@ def granska_kedjor(nr: str, losning: str) -> tuple[list[dict], dict]:
     return fynd, stat
 
 
+def felaktiga_led(latex: str) -> list[tuple[str, str]]:
+    """Paren (vänster, höger) i EN likhetskedja där båda leden är slutna tal
+    och talen inte är lika. Samma regler som granska_kedjor, men för en rad
+    utan dollartecken och utan statistik: lektionstavlans uträkningar står
+    som math-rader, inte i löptext (lesson_board.raknevakt, lärarens dom
+    2026-09-23 om att exemplen ska bära uträkningen). Otolkbart är tyst."""
+    led = led_i_kedjan(normalisera(latex))
+    ut: list[tuple[str, str]] = []
+    for vanster, hoger in zip(led, led[1:]):
+        a, b = tolka(vanster), tolka(hoger)
+        if not (_slutet_tal(a) and _slutet_tal(b)):
+            continue
+        if lika_tal(a, b, _tolerans(vanster, hoger)) is False:
+            ut.append((vanster, hoger))
+    return ut
+
+
 # Uppgiften måste SÄGA att den handlar om en ekvation. Utan den grinden blir
 # varenda likhet i en uppgiftstext en ekvation att pröva facit mot, och en
 # uppgiftstext är full av likheter som är något annat: givna värden, formler,

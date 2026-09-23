@@ -211,13 +211,76 @@ def test_few_shotarna_ar_svarta_utom_dar_fargen_betyder_nagot():
                 assert strecket.get("color") in (None, "red"), (uppdrag, sek)
 
 
-def test_exemplen_ar_utgangspunkter_inte_losningar():
-    """«Jag kommer ju göra själva uträkningarna. Det räcker med en stark
-    utgångspunkt jag kan utgå ifrån, och sen kan det bara stå rent generellt
-    vad jag ska göra.» Alltså: ingen färdig lösning, inget facit på tavlan."""
+def test_exemplen_ar_utrakningar_inte_metodsteg():
+    """Lärarens dom 2026-09-23: «Istället för all den här texten så är det ju
+    bättre att ha själva uträkningen istället. Som ni har skrivit på
+    tavlan.» Testet stod till dess åt andra hållet (inget «Svar», ingen
+    uträkning: «det räcker med en stark utgångspunkt»). Nu bär varje exempel
+    i shotarna uträkningen som math-rader och ingen steglista, och
+    uträkningsvakten har ingenting att säga om dem."""
+    med_exempel = 0
     for uppdrag, doc in lb.FEW_SHOTS:
-        texter = [s.get("text", "") for s in _alla_sektioner(doc)]
-        assert not [t for t in texter if t.startswith("Svar")], uppdrag
+        assert lb.utrakningsvakt(doc) == [], uppdrag
+        hogern = [s for kol in doc["boards"][1].get("columns") or []
+                  for s in kol["sections"]]
+        assert not [s for s in hogern if s["kind"] == "list"], uppdrag
+        exempel: list = []
+        for kol in doc["boards"][1].get("columns") or []:
+            lb._exempelrader(kol["sections"], "k", exempel)
+        rubriker = [s for s in hogern if s["kind"] == "heading"
+                    and s["text"].startswith("Exempel")]
+        if not rubriker:
+            continue                    # fallgalleriet har inga exempel
+        med_exempel += 1
+        # Varje rubrik öppnar en post, också «Fyller vi i tillsammans» över
+        # tabellen; den har ingen kedja och är inget exempel.
+        for ex in [e for e in exempel if e["kedja"]]:
+            led = [x for v, x in ex["kedja"]
+                   if v not in {w for w, _ in ex["math"]}]
+            # Normalt 2–4 led; två vägar till samma svar får var sina två.
+            assert 2 <= len(led) <= 5, (uppdrag, led)
+    assert med_exempel == 3, med_exempel
+
+
+def test_uppgifter_i_ord_slutar_i_svaret_med_enhet():
+    """«Kedjan slutar i svaret med enhet.» En uppgift som står i ord och bär
+    sina tal i texten (Pythagoras) slutar med en svarsrad och sin enhet."""
+    pyt = next(d for u, d in lb.FEW_SHOTS if "Pythagoras" in u)
+    exempel: list = []
+    for kol in pyt["boards"][1]["columns"]:
+        lb._exempelrader(kol["sections"], "k", exempel)
+    assert len(exempel) == 2
+    for ex in exempel:
+        assert ex["math"] == [], ex          # talen står i texten
+        sista = ex["kedja"][-1][1]
+        assert "\\text{Svar" in sista and "\\text{ cm}" in sista, sista
+
+
+def test_shotarnas_uttrakningar_raknar_ratt():
+    """«RÄKNA EFTER VARJE LED.» En tidigare shot hade ett räknefel (uttrycks-
+    shotens exempel 3), och en shot med räknefel lär ut räknefel. Räkneverket
+    prövar varje led där båda sidor är slutna tal."""
+    for uppdrag, doc in lb.FEW_SHOTS:
+        assert lb.raknevakt(doc) == [], uppdrag
+    # …och vakten biter: ett felräknat led i Pythagoras fälls, också när det
+    # står på en egen rad som börjar med «=».
+    doc = _valid_doc()
+    kol = doc["boards"][1]["columns"][0]["sections"]
+    kol[4]["latex"] = "c^2 = 9 + 16 = 24"
+    fynd = lb.raknevakt(doc)
+    assert [f["code"] for f in fynd] == ["raknefel"], fynd
+    assert fynd[0]["path"] == "boards[1].columns[0].sections[4]"
+    doc = _valid_doc()
+    doc["boards"][1]["columns"][0]["sections"] += [
+        {"kind": "math", "latex": "0{,}30 \\cdot 8\\,000"},
+        {"kind": "math", "latex": "= 2\\,500"}]
+    assert [f["path"] for f in lb.raknevakt(doc)] == \
+        ["boards[1].columns[0].sections[8]"]
+    # Det röda ledet är fel med flit och prövas aldrig.
+    doc = _valid_doc()
+    doc["boards"][1]["columns"][1]["sections"].append(
+        {"kind": "math", "latex": "3 + 4 = 8", "color": "red"})
+    assert lb.raknevakt(doc) == []
 
 
 def test_few_shotarna_haller_exempeltaket():
@@ -370,7 +433,9 @@ def _algebrashoten() -> dict:
 
 
 def _metodsteg(doc: dict) -> list[str]:
-    """Högertavlans listpunkter — exemplens metodsteg."""
+    """Högertavlans listpunkter. Till 2026-09-23 var de exemplens metodsteg;
+    sedan lärarens dom den dagen bär exemplen uträkningen och listan ska
+    vara tom (utrakningsvakt fäller den)."""
     return [i for kol in doc["boards"][1].get("columns") or []
             for sek in kol["sections"] if sek["kind"] == "list"
             for i in sek["items"]]
@@ -407,34 +472,25 @@ def _prefix(doc: dict) -> set:
     return {r.split(":")[0].strip().lower() for r in _begreppsrader(doc)}
 
 
-def test_exempelstegen_pekar_pa_vanstern():
+def test_orden_star_pa_vanstern_och_leden_pa_hogern():
     """«Nu ska man utveckla det här uttrycket. Då trycker man på vad utveckla
-    betyder.» Steget börjar i ordet — men bara MOMENTETS EGNA ord kräver en
-    rad på vänstern. Kravet stod förut åt andra hållet, och det var det som
-    fyllde vänstern: «multiplicera varje term med varje term, term gånger
-    term, tal för sig, x för sig — det är vedertagna regler som vi kommer
-    prata om» (2026-09-05). Ett förkunskapsverb sägs, det skrivs inte."""
-    med_steg = 0
+    betyder» (2026-09-05). Till 2026-09-23 bar högerns metodsteg ordet
+    («Utveckla: multiplicera in 4:an»). Sedan lärarens dom den dagen står
+    orden BARA på vänstern, i begreppsraderna och receptet, och högern bär
+    uträkningen: «så kan jag berätta muntligt för eleverna». Läraren pekar
+    från ledet tillbaka till ordet."""
     for uppdrag, doc in lb.FEW_SHOTS:
-        punkter = _metodsteg(doc)
-        if punkter:
-            med_steg += 1
-        for punkt in punkter:
-            ord_, _, resten = punkt.partition(":")
-            assert ord_.strip() and resten.strip(), (uppdrag, punkt)
-    # Fallgalleriet har inga metodsteg alls (läraren pratar och pekar) — men
-    # tre av fyra ska ha dem, annars kan testet gå tomt utan att någon märker.
-    assert med_steg >= 3, med_steg
-    # Momentets EGNA verb står som rad OCH används av ett steg: det är den
-    # kopplingen läraren pekar längs.
+        assert _metodsteg(doc) == [], uppdrag
     algebra = _algebrashoten()
-    anvanda = {p.split(":")[0].strip().lower() for p in _metodsteg(algebra)}
-    assert {"utveckla", "faktorisera"} <= (_prefix(algebra) & anvanda)
-    # Och förkunskapsverbet får börja ett steg utan att ha en rad: Pythagoras
-    # sätter in och löser ut utan att de orden står på vänstern.
+    vanstern = " ".join(_begreppsrader(algebra)
+                        + _receptpunkter(algebra)).lower()
+    assert {"utveckla", "faktorisera"} <= _prefix(algebra)
+    assert "förlänga" in vanstern
+    # Förkunskapsverbet får fortfarande stå i receptet utan en begreppsrad:
+    # Pythagoras sätter in och löser ut, och leden på högern gör just det.
     pyt = next(d for u, d in lb.FEW_SHOTS if "Pythagoras" in u)
     assert "sätt in" not in _prefix(pyt)
-    assert any(p.lower().startswith("sätt in:") for p in _metodsteg(pyt))
+    assert any(p.lower().startswith("sätt in:") for p in _receptpunkter(pyt))
 
 
 # Förkunskaperna: klassen kan dem sedan tidigare kurser, och läraren säger
@@ -445,60 +501,25 @@ FORKUNSKAPSORD = {"multiplicera", "förenkla", "beräkna", "beräkna värdet",
                   "bestäm", "bestämma", "avläs", "avläsa", "förkorta"}
 
 
-def _exempelgrupper(doc: dict) -> list[tuple[str, list[str]]]:
-    """(uppgiftens text och matte, dess metodsteg) per exempel på högern.
-    Ett exempel börjar i sin «Exempel»-rubrik och räcker till nästa."""
-    ut: list[list] = []
-    for kol in doc["boards"][1].get("columns") or []:
-        aktuellt = None
-        for sek in kol["sections"]:
-            if (sek["kind"] == "heading"
-                    and sek.get("text", "").startswith("Exempel")):
-                aktuellt = ["", []]
-                ut.append(aktuellt)
-            elif aktuellt is None:
-                continue
-            elif sek["kind"] in ("text", "math"):
-                aktuellt[0] += " " + (sek.get("text") or sek.get("latex") or "")
-            elif sek["kind"] == "list":
-                aktuellt[1].extend(sek["items"])
-    return [(u, steg) for u, steg in ut if steg]
-
-
-# «i» och «o» är svenska småord, inte algebra — resten av gemenerna som står
-# ensamma i uppgiften är dess egna bokstäver (c, x, p, q, f).
-_SYMBOL_RE = re.compile(r"(?<![^\W\d_])([a-zA-Z])(?![^\W\d_])")
-
-
-def test_exempelstegen_bar_uppgiftens_tal():
-    """«Varje term mot varje term säger ju inget om just det här talet.»
-    (2026-09-05, del 2.) Regeln står på vänstern; steget ska säga vad den
-    gör HÄR. Minst ett steg per exempel måste därför bära uppgiftens egna
-    tal eller bokstäver — annars är det bara vänsterraden en gång till."""
+def test_leden_bar_uppgiftens_tal():
+    """«Varje term mot varje term säger ju inget om just det här talet»
+    (2026-09-05, del 2) gällde metodstegen. Uträkningen bär uppgiftens tal av
+    sig själv: varje exempel i shotarna har minst ett led med siffror, och
+    regeln i allmän form («a^2 + b^2 = c^2») står på vänstern, inte som led."""
     provade = 0
     for uppdrag, doc in lb.FEW_SHOTS:
-        for uppgift, steg in _exempelgrupper(doc):
+        if "fallgalleri" in uppdrag:
+            continue                # figurerna har rubriker men är inga exempel
+        vanster = {s.get("latex") for s in _spalten(doc) if s["kind"] == "math"}
+        exempel: list = []
+        for kol in doc["boards"][1].get("columns") or []:
+            lb._exempelrader(kol["sections"], "k", exempel)
+        for ex in [e for e in exempel if e["kedja"]]:
             provade += 1
-            symboler = {s for s in _SYMBOL_RE.findall(uppgift)
-                        if s not in ("i", "o")}
-            konkret = [
-                p for p in steg
-                if any(t.isdigit() for t in p)
-                or symboler & {s for s in _SYMBOL_RE.findall(p)}]
-            assert konkret, (uppdrag, uppgift, steg)
-    assert provade >= 4, provade      # shotarna får inte tappa sina exempel
-
-
-def test_stegen_ar_stodrepliker_inte_meningar():
-    """«Högern blandar det hon skriver med det hon säger» (2026-09-05, kväll).
-    Steget är en stödreplik läraren har i huvudet: verb, kolon, högst FYRA
-    ord — och högst tre steg per exempel."""
-    for uppdrag, doc in lb.FEW_SHOTS:
-        for _uppgift, steg in _exempelgrupper(doc):
-            assert len(steg) <= 3, (uppdrag, steg)
-            for punkt in steg:
-                _ord, _, resten = punkt.partition(":")
-                assert len(resten.split()) <= 4, (uppdrag, punkt)
+            led = [x for _v, x in ex["kedja"]]
+            assert any(re.search(r"\d", x) for x in led), (uppdrag, led)
+            assert not (set(led) & vanster), (uppdrag, led)
+    assert provade >= 5, provade      # shotarna får inte tappa sina exempel
 
 
 def test_en_regel_star_en_gang():
@@ -555,13 +576,13 @@ def test_prompten_satter_begreppen_forst():
     # (6c) — kravet bärs av «i varje moment och ur varje källa» i samma regel.
     assert "i varje moment och ur varje källa" in p
     # Orden i prompten kommer ur olika områden. De stod förut i en uppräkning
-    # inne i 8c; den ströks 2026-09-05 (uppräkningen lockade till fler rader,
-    # och prompten skulle kortas), så nu bärs de av metodstegens exempel —
-    # «Derivera: …», «Avrunda: …», «Konstruera: …».
-    for verb in ("derivera", "avrunda", "konstruera"):
+    # inne i 8c; den ströks 2026-09-05, och metodstegens exempel («Derivera:
+    # …», «Avrunda: …», «Konstruera: …») som bar dem ströks 2026-09-23 med
+    # metodstegen. Kvar är verben i 8c och receptets exempel.
+    for verb in ("derivera", "faktorisera", "kvadratkomplettera"):
         assert verb in p.lower(), verb
-    # Och i exemplen: steget börjar i ordet från vänstern.
-    assert "BÖRJAR med verbet eller begreppet" in p
+    # Och i exemplen: leden går genom receptet, orden säger läraren.
+    assert "BÖRJAR med verbet eller begreppet" not in p
     assert "BEGREPPSDRIVEN" in p
 
 
@@ -583,7 +604,9 @@ def test_prompten_forbjuder_areamodellen_och_taket():
     assert "EN regel står EN gång, som FORMEL" in p
     # Förkunskaperna skrivs aldrig, hur ofta exemplen än använder dem.
     assert "Förkunskaper klassen redan har" in p
-    assert "FÖRKUNSKAPSVERB" in p
+    # «Ett steg får gärna börja med ett FÖRKUNSKAPSVERB» ströks 2026-09-23
+    # med metodstegen; receptets regel om dem står kvar.
+    assert "Förkunskapsverb blir aldrig egna receptpunkter" in p
     # Kroppen hör till geometrin; algebran får anatomin i figurens plats.
     assert "area- eller volymmodell" in p
     assert "GEOMETRIMOMENT" in p
@@ -620,9 +643,15 @@ def test_prompten_bar_exempelkraven():
     assert "Byt SITUATION" in p
     assert "det felaktiga ledet i rött bredvid det rätta" in p
     assert "Väg 1" in p and "Väg 2" in p
-    # Utgångspunkt, inte facit — läraren räknar på plats.
-    assert "UTGÅNGSPUNKT, inte en färdig lösning" in p
-    assert "Räkna INTE ut svaret" in p
+    # UTRÄKNINGEN (lärarens dom 2026-09-23) i stället för «UTGÅNGSPUNKT, inte
+    # en färdig lösning … Räkna INTE ut svaret», som stod här till dess.
+    assert "UTGÅNGSPUNKT, inte en färdig lösning" not in p
+    assert "Räkna INTE ut svaret" not in p
+    assert "- UTRÄKNINGEN: under uppgiften står uträkningen som math-rader" in p
+    assert "ETT led per rad" in p and "kedjan slutar i SVARET med enhet" in p
+    assert "INGA metodsteg i ord och ingen punktlista" in p
+    assert "Leden går igenom RECEPTETS punkter i receptets ordning" in p
+    assert "Normalt 2–4 led" in p and "RÄKNA EFTER VARJE LED" in p
     # Och när boken är källan: tavlan ska räcka för sidornas alla uppgifter.
     assert "SAMTLIGA uppgifter på just de" in p
 
@@ -640,9 +669,9 @@ def test_prompten_valjer_exemplen_ur_urvalet():
     # Tråden är underordnad urvalet: vändningen får inte köpa ett exempel
     # utanför det.
     assert "Vändningen MÅSTE vara en metodtyp som finns i urvalet" in p
-    # Steget är uppgiftens, inte regelns.
-    assert "Resten av steget är UPPGIFTENS, inte regelns" in p
-    assert "återger en vänsterrad eller en formel stryks" in p
+    # «Resten av steget är UPPGIFTENS, inte regelns» stod här till
+    # 2026-09-23. Utan metodsteg är det leden som bär uppgiftens tal.
+    assert "Resten av steget är UPPGIFTENS" not in p
     # Och tillämpningarna hör till högern, som uppgifter.
     assert "Tillämpningar (area, volym, pengar) står på HÖGERN" in p
     assert "Fallgropen väljs ur urvalets SVÅRASTE typ" in p
@@ -688,10 +717,10 @@ def test_prompten_bar_de_korta_namnen():
     assert "EN rad på högst FEM ORD" in p
     assert "EN definitionsmening på högst SEX ORD" in p
     assert "skrivs ingen mening alls, och det är normalfallet" in p
-    # Begreppsraden och steget.
+    # Begreppsraden. Stegets tak («kolon och HÖGST FYRA ORD», «HÖGST TVÅ
+    # steg per exempel») ströks 2026-09-23 med metodstegen.
     assert "ord, kolon, HÖGST FEM ORD" in p
-    assert "kolon och HÖGST FYRA ORD" in p
-    assert "HÖGST TVÅ steg per exempel" in p
+    assert "HÖGST TVÅ steg per exempel" not in p
     # Anatomin: en uppställning, tre etiketter på ett ord var.
     assert "högst TRE etiketter på ETT ord var" in p
     assert "En ANDRA uppställning bara när momentet har två former" in p
@@ -998,10 +1027,12 @@ def test_nedskalningen_far_sitt_atgardsrad():
     assert "aldrig två figurer" in calls[0]["prompt"].lower()
 
 
-def test_reparationsraden_bar_facitvaktens_koder():
-    """Vakten fäller deterministiskt (whiteboard_spec._check_facit); rådet
-    säger hur raden ska skrivas om i stället för att bara strykas."""
-    assert "skriv steget i ORD" in lb.REPAIR_HINTS
+def test_reparationsraden_bar_utrakningsvaktens_koder():
+    """Facitvaktens råd («skriv steget i ORD») stod här till 2026-09-23 och
+    sa motsatsen till lärarens dom den dagen. Nu säger rådet hur ordstegen
+    blir uträkning; siffervaktens råd på vänstern står kvar."""
+    assert "skriv steget i ORD" not in lb.REPAIR_HINTS
+    assert "'metodsteg i ord' eller 'saknar uträkningen'" in lb.REPAIR_HINTS
     assert "uträknat sifferexempel på vänstertavlan" in lb.REPAIR_HINTS
 
 
@@ -1560,16 +1591,50 @@ def test_few_shotarna_bar_recept_och_att_tanka_pa():
     assert med_ankare == 2, med_ankare
 
 
-def test_hogerns_metodsteg_borjar_i_nagot_som_star_pa_vanstern():
-    """Receptets verb är det högern använder (8f). Ett förkunskapsverb får
-    stå utan rad — men momentets egna verb ska gå att peka tillbaka på."""
-    forkunskap = {"sätt in", "lös ut", "multiplicera", "förenkla", "beräkna",
-                  "avläs", "bestäm", "rita", "namnge"}
-    for uppdrag, doc in lb.FEW_SHOTS:
-        vanstern = " ".join(_begreppsrader(doc) + _receptpunkter(doc)).lower()
-        for punkt in _metodsteg(doc):
-            verb = punkt.partition(":")[0].strip().lower()
-            assert verb in vanstern or verb in forkunskap, (uppdrag, punkt)
+def test_hogern_har_inga_ordsteg_och_vakten_faller_dem():
+    """Receptets verb var till 2026-09-23 det högerns metodsteg började med
+    (8f). Nu står verben bara i receptet, och högerns uträkning går igenom
+    dess punkter utan orden. En steglista i ett exempel fälls
+    deterministiskt (utrakningsvakt, koden `ordsteg`), och ett exempel utan
+    en enda uträknad rad likaså (`utrakning_saknas`)."""
+    doc = _valid_doc()
+    kol = doc["boards"][1]["columns"][0]["sections"]
+    kol.append({"kind": "heading", "text": "Exempel 3"})
+    kol.append({"kind": "text", "text": "En kvadrat har arean 36 cm². Sidan?"})
+    kol.append({"kind": "list", "items": ["Dra roten: ur arean"]})
+    fynd = lb.utrakningsvakt(doc)
+    assert [f["code"] for f in fynd] == ["ordsteg", "utrakning_saknas"], fynd
+    assert fynd[0]["path"] == "boards[1].columns[0].sections[9]"
+    assert fynd[1]["path"] == "boards[1].columns[0].sections[7]"
+    assert "metodsteg i ord" in fynd[0]["message"]
+    assert "saknar uträkningen" in fynd[1]["message"]
+    # Fallgalleriet har inga exempelrubriker och döms aldrig, och en rubrik
+    # som «Fyller vi i tillsammans» öppnar inget exempel.
+    galleri = next(d for u, d in lb.FEW_SHOTS if "Randvinkel" in u)
+    assert lb.utrakningsvakt(galleri) == []
+    # Vänstern bär receptet, och det ÄR en lista.
+    assert lb.utrakningsvakt({"boards": [{"sections": [
+        {"kind": "heading", "text": "Exempel"},
+        {"kind": "list", "items": ["Lös: x"]}]}]}) == []
+    assert lb.utrakningsvakt(None) == []
+
+
+def test_generate_board_far_ordstegen_som_fel_att_ratta():
+    """«Det ska bara funka på en gång» (2026-09-23): ett exempel i den gamla
+    formen rättas i reparationsrundan, som bokkopiorna, och rådet står i
+    reparationsprompten."""
+    doc = _valid_doc()
+    kol = doc["boards"][1]["columns"][0]["sections"]
+    kol[3:] = [{"kind": "list", "items": ["Sätt in: 3 och 4",
+                                          "Lös ut: roten ur c²"]}]
+    llm, calls = _stub_llm([json.dumps(doc), json.dumps(_valid_doc())])
+    res = lb.generate_board("Ma1b", "9A", "pythagoras sats", model="",
+                            doma=False, llm=llm)
+    assert len(calls) == 2, len(calls)
+    assert "'metodsteg i ord' eller 'saknar uträkningen'" in calls[1]["prompt"]
+    assert "exemplet bär metodsteg i ord" in calls[1]["prompt"]
+    assert res["errors"] == [], res["errors"]
+    assert _metodsteg(res["board"]) == []
 
 
 def test_domaren_provar_receptet_och_randfallen():
@@ -1850,13 +1915,14 @@ def test_domaren_provar_exemplen_mot_urvalet():
     """Domen 2026-09-05 (del 2): domaren letade bara LUCKOR, och därför fick
     ett «beräkna värdet»-exempel stå kvar fast ingen vald uppgift bad om det.
     Nu döms också åt andra hållet — ett exempel utanför urvalet byts ut, och
-    ett metodsteg som bara återger vänstern skrivs om med uppgiftens tal."""
+    bytet skrivs med uträkningen (2026-09-23; till dess «uppgiften och
+    stegen», och en egen prövning av metodstegen som ströks med dem)."""
     t = lb.build_tackning_prompt({"boards": []}, "LÄRARENS URVAL: 1218–1227")
     assert "Pröva sedan EXEMPLEN åt andra hållet" in t
     assert "ingen vald uppgift har" in t
     assert "BYTA UT hela exemplet" in t
-    assert "bara återger en vänsterrad eller en formel" in t
-    assert "uppgiftens egna tal" in t
+    assert "skriv då uppgiften och uträkningen" in t
+    assert "bara återger en vänsterrad eller en formel" not in t
     # Och domen får inte spränga exempeltaket: kontrollkörningen 2026-09-05
     # fick ett fjärde exempel av kompletteringen, inte av skrivrundan.
     assert "HÖGST TRE exempel" in t
@@ -1866,15 +1932,18 @@ def test_domaren_provar_exemplen_mot_urvalet():
     assert "Ett HELT exempel byts" in lapp
 
 
-def test_domaren_faller_facit_och_siffror_pa_vanstern():
-    """Kvällens dom (2026-09-05) på en tavla om linjära funktioner: högern bar
-    «260 − 200 = 60 ⇒ k = 60, m = 200» och vänstern «y = 4 − 5x ⇒ k = −5,
-    m = 4». «Jag kommer ju göra själva uträkningarna. Det räcker med en stark
-    utgångspunkt.»"""
+def test_domaren_faller_ordsteg_och_siffror_pa_vanstern():
+    """Kvällens dom (2026-09-05) på en tavla om linjära funktioner: vänstern
+    bar «y = 4 − 5x ⇒ k = −5, m = 4», och det fälls fortfarande. Högerns
+    halva, FÄRDIGA URÄKNINGAR, vändes 2026-09-23: «Istället för all den här
+    texten så är det ju bättre att ha själva uträkningen istället.» Domaren
+    fäller nu metodstegen i ord och räknar efter leden."""
     t = lb.build_tackning_prompt({"boards": []}, "LÄRARENS URVAL: 3204–3208")
-    assert "FÄRDIGA URÄKNINGAR" in t
-    assert "Uppgiftens EGEN rad" in t          # den ges, den är ingen uträkning
-    assert "steg i ORD som säger vad man GÖR" in t
+    assert "FÄRDIGA URÄKNINGAR" not in t
+    assert "steg i ORD som säger vad man GÖR" not in t
+    assert "Fäll METODSTEG I ORD i exemplen" in t
+    assert "ETT led per rad i receptets ordning" in t
+    assert "Räkna efter varje led" in t
     assert "SIFFROR PÅ VÄNSTERN" in t
     assert "på vänstern står bokstäver" in t
     # Det felaktiga ledet under Vanligt fel är beställt (regel 9) och undantas
@@ -1890,7 +1959,7 @@ def test_domaren_hoppar_over_urvalsfragorna_utan_urval():
     assert "Står ingen rad «LÄRARENS URVAL» nedan" in t
     assert "hoppa då över täckningen och alla urvalsfrågor helt" in t
     # …och formfelen står kvar att döma på.
-    assert "FÄRDIGA URÄKNINGAR" in t and "SIFFROR PÅ VÄNSTERN" in t
+    assert "METODSTEG I ORD" in t and "SIFFROR PÅ VÄNSTERN" in t
 
 
 def test_domaren_provar_roda_traden_och_egna_uppgifter():
@@ -2187,8 +2256,9 @@ def test_lappen_satter_in_efter_och_tar_bort():
 def test_lappen_byter_ut_ett_helt_exempel_i_en_kolumn():
     """Domaren får sedan 2026-09-05 föreslå att BYTA UT ett exempel som ligger
     utanför lärarens urval. Ett exempel är flera sektioner i rad (rubrik,
-    uppgiftsrad, figur, steg), så bytet blir flera nycklar i samma lapp plus
-    en borttagning — och grannkolumnen får inte röras av det."""
+    uppgiftsrad, figur och uträkningens led sedan 2026-09-23), så bytet blir
+    flera nycklar i samma lapp plus borttagningar, och grannkolumnen får
+    inte röras av det."""
     doc = _valid_doc()
     granne = copy.deepcopy(doc["boards"][1]["columns"][1]["sections"])
     ut = lb.applicera_lappar(
@@ -2199,7 +2269,7 @@ def test_lappen_byter_ut_ett_helt_exempel_i_en_kolumn():
           "element": {"kind": "text", "text": "Minus framför en produkt."}},
          {"nyckel": "boards[1].columns[0].sections[2]",
           "element": {"kind": "math", "latex": "x^2 - (x + 2)(x + 4)"}}],
-        ["boards[1].columns[0].sections[3]"])
+        [f"boards[1].columns[0].sections[{i}]" for i in range(3, 7)])
     kol = ut["boards"][1]["columns"][0]["sections"]
     assert [s["kind"] for s in kol] == ["heading", "text", "math"]
     assert kol[2]["latex"] == "x^2 - (x + 2)(x + 4)"
@@ -2592,9 +2662,9 @@ def test_prompten_kraver_tre_metodtyper_i_stigande_svarighet():
     assert "aldrig ur en färdig lista" in p
     # Uppföljaren bara när metodtypen byter.
     assert "skrivs bara när METODTYPEN byter" in p
-    # Och stegen går genom receptet med uppgiftens tal.
-    assert "går genom RECEPTETS punkter i receptets ordning" in p
-    assert "med UPPGIFTENS egna tal i varje steg" in p
+    # Och leden går genom receptet (2026-09-23; till dess «stegen», med
+    # uppgiftens tal i varje steg).
+    assert "Leden går igenom RECEPTETS punkter i receptets ordning" in p
 
 
 def test_generate_board_far_formupprepningen_som_fel_att_ratta():
