@@ -3,6 +3,11 @@ klienten gör efter en generering (plan.js franProv + utkastfälten). Mallen är
 befintligt dokument av samma typ; exam-fälten skrivs över.
 
 Användning: python aterskapa_dokument.py <exam_id> <mall_dokument_id> <json-med-overrides>
+
+OMPROV: exam-raden vet inte att den är ett omprov, det är dokumentets `variant`
+som bär det (plan.js sätter «Omprov»). Skicka {"variant": "Omprov"} bland
+overrides. Omprov 87 återskapades 2026-09-19 utan den, och lektionskortet i
+veckan stod som ett vanligt «Prov» tills läraren såg det 2026-09-23.
 """
 import json, sqlite3, sys, urllib.request
 from pathlib import Path
@@ -76,7 +81,9 @@ def main(exam_id, mall_id, overrides):
     ver = c.execute("select id, version, exam_json from exam_versions where exam_id=? order by version desc limit 1", (exam_id,)).fetchone()
     exam = json.loads(ver["exam_json"])
     mall = json.loads(c.execute("select data from dokument_versioner where dokument_id=? order by version desc limit 1", (mall_id,)).fetchone()[0])
-    for k in ("id", "pdf", "tex", "losningsblad", "bilder", "andradVid"):
+    # `variant` följer inte med ur mallen: ett omprov som mall hade gjort ett
+    # vanligt prov till omprov, och tvärtom. Den sätts med overrides.
+    for k in ("id", "pdf", "tex", "losningsblad", "bilder", "andradVid", "variant"):
         mall.pop(k, None)
     doc, fel = exam_spec.validate_exam_json(exam, ex["typ"] or "prov")
     v = dict(mall)
