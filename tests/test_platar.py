@@ -558,13 +558,64 @@ def test_bildtexten_star_i_grammatiken_och_i_regeln():
     assert "bildtext" not in schema["$defs"]["Forsattsbild"].get("required", [])
     r = exam_gen.FORSATTSBILD_REGEL
     assert "bildtext" in r
-    # Lärarens «kort», men tre meningar och inte en: vad man ser, vem hen är
-    # och vad hen kom på, och hur det hör ihop med provet.
-    assert "TVÅ till TRE korta meningar" in r
-    assert "45 ord" in r
-    assert "TOLV ord" not in r
+    # Lärarens dom över prov 119 (2026-09-23): bara vem hen är och vad hen
+    # kom på. Bildbeskrivningen och provkopplingen är borta.
+    assert "EN till TVÅ korta meningar" in r
+    assert "30 ord" in r
+    assert "Beskriv INTE vad man ser på bilden" in r
+    assert "knyt INTE ihop det med provet" in r
+    assert "på det här provet.\"" not in r
     assert "CENTRERAD UNDER BILDEN" in r
     assert "Inga tankstreck" in r
+
+
+def test_bildtexten_rensas_fran_bildbeskrivning_och_provkoppling():
+    """Prov 119:s bildtext, ordagrant. Läraren: den första meningen och den
+    sista ska bort, «resten behåller vi», och det gäller alla prov."""
+    person = ("René Descartes (1596–1650), fransmannen som införde "
+              "skrivsättet med upphöjda exponenter.")
+    text = ("En man sitter vid ett skrivbord i ett holländskt rum en "
+            "vintermorgon. René Descartes levde på 1600-talet och började "
+            "skriva potenser med en liten upphöjd siffra. Det skrivsättet "
+            "använder du i nästan varje uppgift på det här provet.")
+    assert exam_gen.rensa_bildtext(text, person) == (
+        "René Descartes levde på 1600-talet och började skriva potenser med "
+        "en liten upphöjd siffra.")
+    # Prov 118: namnet med prefix och bindestreck, och «Samma metod möter du».
+    alk = ("Muhammad ibn Musa al-Khwarizmi (ca 780–850), lärd i Bagdad.")
+    text = ("En lärd man sitter i morgonljuset i ett valv i Bagdad. "
+            "Al-Khwarizmi levde på 800-talet och beskrev hur man löser "
+            "andragradsekvationer. Samma metod möter du på det här provet.")
+    assert exam_gen.rensa_bildtext(text, alk) == (
+        "Al-Khwarizmi levde på 800-talet och beskrev hur man löser "
+        "andragradsekvationer.")
+    # En andra mening om personen står kvar, och «f.Kr. i» bryter ingen mening.
+    text = ("Euklides levde omkring 300 f.Kr. i Alexandria. Han samlade "
+            "geometrin i en bok.")
+    assert exam_gen.rensa_bildtext(text, "Euklides (ca 300 f.Kr.)") == text
+    # Står namnet ingenstans blir ingenting kvar, och utan person rörs
+    # början inte alls.
+    assert exam_gen.rensa_bildtext("Han skrev algebran.", "Viète") == ""
+    assert exam_gen.rensa_bildtext("Han skrev algebran.") == \
+        "Han skrev algebran."
+
+
+def test_modellens_bildtext_rensas_innan_den_valideras():
+    """Rensningen sitter i _parse_exam: varje runda, också omskrivningen i
+    canvasen, lämnar bildtexten utan de två meningarna. Blir ingenting kvar
+    är fältet tomt, och då ber forsattsignaler om en ny."""
+    import json
+    fb = {"person": "John Napier (1550–1617), logaritmernas man.",
+          "scene": "SCENE. A dim study.",
+          "bildtext": "En man sitter vid ett ljus. John Napier räknade fram "
+                      "de första logaritmtabellerna. Du använder dem på provet."}
+    ut = exam_gen._parse_exam(json.dumps({"forsattsbild": fb}))
+    assert ut["forsattsbild"]["bildtext"] == \
+        "John Napier räknade fram de första logaritmtabellerna."
+    fb["bildtext"] = "En man sitter vid ett ljus. Det hör till provet."
+    ut = exam_gen._parse_exam(json.dumps({"forsattsbild": fb}))
+    assert ut["forsattsbild"]["bildtext"] is None
+    assert exam_gen.forsattsignaler(ut, "prov")[0]["code"] == "bildtext"
 
 
 def test_forsattsbilden_sitter_pa_dokumentet_aldrig_pa_en_uppgift():

@@ -197,24 +197,26 @@ FORSATTSBILD_REGEL = (
     # meningar. Det är roligt för eleven att veta lite grann. Men det
     # ska vara kort och utan em dash.»
     #
-    # TRE MENINGAR alltså, inte en, och 45 ord är taket. Det är mätt mot
-    # ytan under bilden och inte gissat: 45 ord blir fyra rader i
-    # parboxen på försättsbladet, och de ryms innanför satsytan med
-    # bilden sänkt till 50 mm (höjdbudgeten står i prov.tex.j2).
-    # Den förra regeln bad om EN mening på tolv ord, och eleven fick då
-    # bildbeskrivningen men aldrig varför personen står där eller vad hon
-    # har med provet att göra.
-    "  bildtext: TVÅ till TRE korta meningar på SVENSKA, högst 45 ord "
+    # DEN MITTERSTA MENINGEN ÄR DEN ENDA SOM FICK STÅ KVAR (lärarens dom
+    # över prov 119, 2026-09-23): «En man sitter vid ett skrivbord i ett
+    # holländskt rum en vintermorgon» ska bort, och «Det skrivsättet
+    # använder du i nästan varje uppgift på det här provet» ska bort.
+    # «Resten behåller vi. Detta ska gälla för alla prov.» Hon bad om
+    # samma sak redan 2026-09-06 om prov 44 («ta bort texten "En man
+    # sitter vid brasan…"»). Bildbeskrivningen och provkopplingen rensas
+    # också bort deterministiskt (rensa_bildtext) när modellen ändå
+    # skriver dem.
+    "  bildtext: EN till TVÅ korta meningar på SVENSKA, högst 30 ord "
     "sammanlagt, som står CENTRERAD UNDER BILDEN på försättsbladet och "
-    "som eleven läser. Mening 1: vad man ser på bilden. Mening 2: vem "
-    "personen är och vad hen kom på (årtal får stå). Mening 3: hur det "
-    "hör ihop med det här provets innehåll. Inga tankstreck, ingen "
+    "som eleven läser. BARA vem personen är och vad hen kom på (årtal "
+    "får stå), och första meningen börjar med personens namn. Beskriv "
+    "INTE vad man ser på bilden, och knyt INTE ihop det med provet: "
+    "inget «på det här provet», inget «du». Inga tankstreck, ingen "
     "punktlista, ingen matematik och inga formler. Ett exempel, och det "
-    "är formen: \"En man sitter böjd över ett räknebord i ett ljust rum "
-    "i Bagdad. Al-Khwarizmi levde på 800-talet och skrev boken som gav "
-    "algebran dess namn och dess första metod att lösa andragrads"
-    "ekvationer. Det är samma sorts ekvationer du löser på det här "
-    "provet.\" Skriv den ALLTID när du fyller forsattsbild.\n"
+    "är formen: \"Al-Khwarizmi levde på 800-talet i Bagdad och skrev "
+    "boken som gav algebran dess namn och dess första metod att lösa "
+    "andragradsekvationer.\" Skriv den ALLTID när du fyller "
+    "forsattsbild.\n"
 )
 
 INSTRUCTION = (
@@ -3732,6 +3734,25 @@ def build_forebild_prov(bokuppgifter: list[dict] | None) -> str:
         "Läraren om provet som inte gick att känna igen: «hur kan det ens "
         "hända att provet genererar uppgifter som inte är ur kapitel ett "
         "alls?»\n"
+        # LAGRET OVANPÅ (lärarens dom över prov 119, 2026-09-23). Tre
+        # uppgifter pekade på en lätt bokuppgift och byggde sina C- och
+        # A-poäng på ett steg som inte står någonstans i kapitlet: uppgift 5
+        # «Bestäm a så att ekvation (1) och (2) har samma lösning» med
+        # förebilden 2118 ($15/y = 3/2$), uppgift 7 ett generellt bevis som
+        # eleven skulle bygga ur fem meningars räkneexempel, och 12b ett
+        # intervall $]k, 2k]$ där båda gränserna rör sig. Läraren: «det är
+        # inte något vi har gått igenom på lektionen», «den känns krånglig»,
+        # «väldigt knepig för att vara Matte 1c».
+        "FÖREBILDEN GÄLLER HELA UPPGIFTEN, också C- och A-delen. Uppgiften "
+        "gör det förebilden gör och inget mer. Svårighet på C och A hämtar "
+        "du ur kapitlets egna svårare uppgifter (bokens högre nivåer), "
+        "aldrig genom att lägga ett steg ovanpå en lätt bokuppgift. Tre "
+        "former läraren fällde för att de inte står i kapitlet: två "
+        "ekvationer som kedjas ihop (lös den ena och sätt in svaret i den "
+        "andra), ett intervall där båda gränserna rör sig med en konstant, "
+        "och ett generellt bevis som eleven själv ska bygga ur en berättelse "
+        "med räkneexempel. Ber boken eleven visa att något alltid gäller, "
+        "står påståendet färdigt i EN mening, och då gör provet likadant.\n"
         "Originalitetskravet står kvar: förebilden är en pekning, inte en "
         "förlaga. En uppgift eleven känner igen ur boken är fel skriven, och "
         "en uppgift med bokens egna tal är avskrift."
@@ -4281,7 +4302,15 @@ def build_relevans_prompt(kort: list[dict], bokuppgifter: list[dict],
            "ett steg som ingen av bokens uppgifter i kapitlet kräver är den "
            "\"annan sort\", hur väl ämnet än stämmer. En ren räkneuppgift i "
            "flera steg utan någon motsvarighet i kapitlet är också \"annan "
-           "sort\".\n" if prov else "")
+           "sort\".\n"
+           # Prov 119 (2026-09-23): uppgift 5, 7 och 12b passerade med en
+           # förebild som bara bar första steget. Se build_forebild_prov.
+           "Döm VARJE deluppgift för sig. En deluppgift som lägger ett steg "
+           "ovanpå sin förebild är \"annan sort\": två ekvationer som kedjas "
+           "ihop, ett intervall där båda gränserna rör sig med en konstant, "
+           "ett generellt bevis som eleven ska bygga ur en berättelse. Står "
+           "formen inte i kapitlet hjälper det inte att första steget gör "
+           "det.\n" if prov else "")
         + "Döm bara på SORTEN. Om uppgiften är för svår, för lång eller dåligt "
         "skriven är någon annans sak. Svara med enbart JSON."
     )
@@ -5840,7 +5869,8 @@ def _json_objekt(raw: str):
 
 def _parse_exam(raw: str) -> dict | None:
     data = _json_objekt(raw)
-    return _rensa_toppnycklar(data) if data is not None else None
+    return (_rensa_forsattsbild(_rensa_toppnycklar(data))
+            if data is not None else None)
 
 
 def _validate(exam: dict, profil: str, koder: list[str] | None = None,
@@ -6275,17 +6305,68 @@ def forsattsignaler(exam: dict, profil: str) -> list[dict]:
         return [_err("forsattsbild", "forsatt",
                      "provet saknar forsattsbild. Fyll person (namn, årtal, "
                      "vad hen gjorde, en svensk mening), scene (SCENE-stycket "
-                     "på engelska) och bildtext (två till tre korta meningar "
+                     "på engelska) och bildtext (en till två korta meningar "
                      "på svenska som eleven läser under bilden) med den som "
                      "hör till provets innehåll.")]
     if not (fb.get("bildtext") or "").strip():
         return [_err("forsattsbild.bildtext", "bildtext",
-                     "porträttet saknar bildtext. Skriv bildtext: två till "
-                     "tre korta meningar på svenska, högst 45 ord, som står "
-                     "under bilden och som eleven läser. Vad man ser, vem "
-                     "personen är och vad hen kom på, och hur det hör ihop "
-                     "med provets innehåll. Inga tankstreck.")]
+                     "porträttet saknar bildtext. Skriv bildtext: en till "
+                     "två korta meningar på svenska, högst 30 ord, som står "
+                     "under bilden och som eleven läser. Bara vem personen "
+                     "är och vad hen kom på, och första meningen börjar med "
+                     "namnet. Ingen bildbeskrivning, ingen koppling till "
+                     "provet. Inga tankstreck.")]
     return []
+
+
+# ── BILDTEXTENS TVÅ MENINGAR SOM INTE FÅR STÅ ────────────────────────────
+# Lärarens dom över prov 119 (2026-09-23), och samma önskan om prov 44
+# 2026-09-06: bildbeskrivningen först («En man sitter vid ett skrivbord …»)
+# och provkopplingen sist («Det skrivsättet använder du … på det här
+# provet») ska bort. Regeln i FORSATTSBILD_REGEL ber om det, och det här är
+# golvet när modellen ändå skriver dem: meningar före den första som nämner
+# personen stryks, och meningar som talar till eleven eller om provet
+# stryks. Blir ingenting kvar är fältet tomt, och då ber forsattsignaler om
+# en ny bildtext.
+_BILDTEXT_PROVKOPPLING = re.compile(
+    r"\b(?:provet|proven|provets|du|dig|din|ditt|dina)\b", re.IGNORECASE)
+# Meningsgränsen kräver versal efter punkten, så «f.Kr. i Alexandria» och
+# «ca 780» står kvar i sin mening.
+_BILDTEXT_MENING = re.compile(r"(?<=[.!?])\s+(?=[A-ZÅÄÖÉ])")
+
+
+def _personens_namn(person: str) -> list[str]:
+    """Namnorden ur `person` («René Descartes (1596–1650), fransmannen …»):
+    allt före första parentesen eller kommat, ord om minst tre bokstäver."""
+    namn = re.split(r"[(,]", person or "", maxsplit=1)[0]
+    return [o.casefold() for o in re.findall(r"[\wÀ-ÿ'-]{3,}", namn)]
+
+
+def rensa_bildtext(bildtext: str, person: str = "") -> str:
+    """Bildtexten utan bildbeskrivning och utan provkoppling."""
+    meningar = [m.strip() for m in _BILDTEXT_MENING.split(bildtext or "")
+                if m.strip()]
+    namn = _personens_namn(person)
+    if namn:
+        # Nämner ingen mening personen är ingenting kvar: en bildtext som
+        # aldrig säger vem det är har missat det enda den ska säga.
+        forsta = next((i for i, m in enumerate(meningar)
+                       if any(re.search(rf"(?<![\w-]){re.escape(o)}(?![\w-])",
+                                        m.casefold()) for o in namn)),
+                      len(meningar))
+        meningar = meningar[forsta:]
+    return " ".join(m for m in meningar
+                    if not _BILDTEXT_PROVKOPPLING.search(m))
+
+
+def _rensa_forsattsbild(exam: dict | None) -> dict | None:
+    """rensa_bildtext på modellens dokument, före valideringen."""
+    fb = exam.get("forsattsbild") if isinstance(exam, dict) else None
+    if isinstance(fb, dict) and isinstance(fb.get("bildtext"), str):
+        ren = rensa_bildtext(fb["bildtext"], str(fb.get("person") or ""))
+        if ren != fb["bildtext"]:
+            exam = {**exam, "forsattsbild": {**fb, "bildtext": ren or None}}
+    return exam
 
 
 # Signalernas koder, i samma ordning som _signaler räknar dem. Slutgrinden
@@ -6392,6 +6473,51 @@ def _forebildssida(u: dict, sida_for: dict[int, int]) -> int | None:
     except (TypeError, ValueError):
         return None
     return sida_for.get(nr) if nr else None
+
+
+def forebildsvakt(exam: dict, bokuppgifter: list[dict] | None) -> list[dict]:
+    """Provets uppgift utan förebild i kapitlet.
+
+    Prompten ber om en förebild för VARJE uppgift (build_forebild_prov), men
+    fältet är valfritt i grammatiken och relevansdomaren körs bara i första
+    rundan. Prov 119 (2026-09-23) levererades med uppgift 5 och 7 utan
+    avsnitt, uppgift 7 dessutom utan förebild, efter tre rundor som bytte ut
+    uppgifter efter domen. Läraren fällde båda: «det är inte något vi har gått
+    igenom på lektionen». Vakten är räknad, så slutgrinden räknar om den på
+    det papper som faktiskt levereras.
+
+    Tyst utan bokuppgifter: ett prov utan bokdörr har ingen förebild att
+    pröva (samma villkor som relevansdomaren). Tyst också när INGEN uppgift
+    bär fältet: taket i to_response_format kan ha knuffat ut det ur
+    grammatiken, och då kunde modellen inte fylla det (samma fail-open som
+    delmomenttackning)."""
+    nummer: set[int] = set()
+    for r in (bokuppgifter or []):
+        try:
+            nummer.add(int(r.get("nr")))
+        except (TypeError, ValueError):
+            continue
+    uppgifter = [u for u in ((exam or {}).get("uppgifter") or [])
+                 if isinstance(u, dict)]
+    if not nummer or not any(u.get("forebild") for u in uppgifter):
+        return []
+    ut = []
+    for i, u in enumerate(uppgifter, 1):
+        fb = u.get("forebild") if isinstance(u.get("forebild"), dict) else {}
+        try:
+            nr = int(fb.get("nr") or 0)
+        except (TypeError, ValueError):
+            nr = 0
+        if nr in nummer:
+            continue
+        vad = (f"pekar på bokuppgift {nr}, som inte står i kapitlet" if nr
+               else "saknar förebild i kapitlet")
+        ut.append(_err(
+            f"uppgift {i}", "forebildsvakt",
+            f"Uppgift {i} {vad}. Byt ut den mot en uppgift av samma sort "
+            "som en av kapitlets uppgifter, och sätt forebild till den "
+            "uppgiftens nummer. Samma del, samma poäng och samma förmåga."))
+    return ut
 
 
 def delmomenttackning(exam: dict, delmoment: list[dict],
@@ -8096,7 +8222,9 @@ def _raknade_fynd(exam: dict, *, avsnitt: list[dict] | None, antal: int | None,
                 # NP-formen (2026-09-22, prov 88): steg per poäng, poängform,
                 # metodföreskrift, parametrar, kursgräns, modellfamilj, dolt
                 # krav. Mätningen och reglerna står i app/np_vakter.py.
-                + np_vakter.np_vakter(exam, kurs))
+                + np_vakter.np_vakter(exam, kurs)
+                # Varje uppgift har sin förebild i kapitlet (prov 119).
+                + forebildsvakt(exam, bokuppgifter))
     return fel + scenvakt(exam)
 
 
@@ -8247,7 +8375,9 @@ def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                      ("likvardighet", "Omprovet: {n} uppgift(er) är inte "
                                       "likvärdiga originalets …"),
                      ("scenvakt", "Bilden: {n} bildbeställning(ar) hör till en "
-                                  "annan uppgift …")):
+                                  "annan uppgift …"),
+                     ("forebildsvakt", "Boken: {n} uppgift(er) saknar "
+                                       "förebild i kapitlet, byter ut …")):
         n = len([f for f in fel if f["code"] == kod])
         if n:
             log(rad.format(n=n))
@@ -8828,7 +8958,8 @@ def _raknas_om(fel: dict) -> bool:
     if kod in ("avsnittstackning", "poangvakt", "avsnittsniva", "avsnittsvikt",
                "avsnittsmarkning", "delmomentvikt", "delmomentmarkning",
                "citackning", "citaggning", "anivavakt", "kravrad",
-               "rubrikord", "likvardighet", "scenvakt") + np_vakter.KODER:
+               "rubrikord", "likvardighet", "scenvakt",
+               "forebildsvakt") + np_vakter.KODER:
         return True
     if kod == "delmomenttackning":
         return path == "uppgifter"

@@ -195,7 +195,8 @@ def _balansfynd(doc, typ: str, nivaval: dict | None) -> list[dict]:
             for f in fel]
 
 
-def _bokfynd(doc, bok: dict | None, sidor: dict[int, int]) -> list[dict]:
+def _bokfynd(doc, bok: dict | None, sidor: dict[int, int],
+             typ: str = "prov") -> list[dict]:
     """Avsnittet, förebilden och delmomentsetiketten mot BOKEN.
 
     Tre frågor, alla med samma svarskälla (bokens register och dess lästa
@@ -212,7 +213,15 @@ def _bokfynd(doc, bok: dict | None, sidor: dict[int, int]) -> list[dict]:
       avsnitt är samma felmärkning en gång till.
 
     Etiketten får bära TVÅ rubriker (semikolonet i prompten), då räcker det
-    att en av dem rör avsnittet."""
+    att en av dem rör avsnittet.
+
+    En fjärde fråga på PROVET: har uppgiften en förebild alls? Prov 119
+    (2026-09-23) bar uppgift 5 och 7 utan avsnitt, och 7 utan förebild. De
+    tre frågorna ovan tiger utan avsnitt, så de gick igenom, och läraren
+    fällde båda («inte något vi har gått igenom på lektionen»). Syskon till
+    exam_gen.forebildsvakt, som fäller samma sak medan provet skrivs. Tyst
+    när INGEN uppgift har en förebild: då skrevs pappret utan fältet i
+    grammatiken, och det är inte uppgifterna som är fel."""
     if not bok:
         return []
     register = {str(a.get("nr") or "").strip(): (int(a["fran"]), int(a["till"]))
@@ -220,10 +229,17 @@ def _bokfynd(doc, bok: dict | None, sidor: dict[int, int]) -> list[dict]:
     if not register:
         return []
     ut: list[dict] = []
+    med_forebild = any(it.forebild for it in doc.uppgifter)
     for i, it in enumerate(doc.uppgifter):
         nr = i + 1
         avs = (it.avsnitt or "").strip()
         sp = register.get(avs)
+        if typ == "prov" and med_forebild and not it.forebild:
+            ut.append(_fynd(
+                "utanbok", f"Uppgift {nr} saknar förebild i {bok['namn']}"
+                + ("" if avs else " och är inte märkt med något avsnitt")
+                + ". Klassen har inte övat den sortens uppgift i kapitlet.",
+                nr))
         if avs and sp is None:
             ut.append(_fynd(
                 "avsnitt", f"Uppgift {nr} är märkt med avsnitt {avs}, som inte "
@@ -490,7 +506,7 @@ def efterkontroll(view: dict, doc, summor: dict | None, *,
     nivaval = exam_spec.nivaval(typ, view.get("nivaval"))
     ut: list[dict] = []
     ut += _balansfynd(doc, typ, nivaval)
-    ut += _bokfynd(doc, bok, sidor or {})
+    ut += _bokfynd(doc, bok, sidor or {}, typ)
     if typ == "prov":
         ut += _delfynd(doc)
     ut += _tidfynd(doc, summor, typ)
@@ -529,6 +545,10 @@ def efterkontroll(view: dict, doc, summor: dict | None, *,
 # lagas genom att läraren sätter fler minuter eller tar bort poäng, och båda
 # valen är hennes. En modell som «lagar» provtiden skulle stryka uppgifter.
 _ATGARD = {
+    "utanbok": "Byt ut uppgiften mot en uppgift av samma sort som en av "
+               "kapitlets uppgifter, med förebild och avsnitt. Förebilden "
+               "gäller hela uppgiften, också C- och A-delen. Samma del, samma "
+               "poäng och samma förmåga.",
     "forebild": "Byt förebild till en bokuppgift som står på avsnittets sidor, "
                 "eller sätt det avsnitt uppgiften faktiskt prövar. Uppgiftens "
                 "text, tal och poäng står kvar.",

@@ -529,3 +529,43 @@ def test_poangvakten_hojer_inte_poangen_pa_taket():
     tva = {"titel": "t", "kurs": "Matematik 2a", "uppgifter": [u, u2]}
     fynd = exam_gen.poangvakt(tva, "prov", poang_tak=3)
     assert [("Höj INTE" in f["message"]) for f in fynd] == [False, True]
+
+
+# ── FÖREBILDSVAKTEN: varje provuppgift har sin förebild i kapitlet ──────
+
+def test_provuppgift_utan_forebild_i_kapitlet_falls():
+    """Prov 119 (2026-09-23): uppgift 7 levererades utan förebild efter tre
+    rundor som bytte ut uppgifter efter relevansdomen. Läraren: «det är inte
+    något vi har gått igenom på lektionen»."""
+    bok = [{"nr": 2118, "sida": 47}, {"nr": 2305, "sida": 56}]
+    uppgifter = [_u(forebild={"nr": 2118, "sort": "samma sort"}),
+                 _u(),
+                 _u(forebild={"nr": 9999, "sort": "samma sort"})]
+    fel = exam_gen.forebildsvakt(_prov(uppgifter), bok)
+    assert [(f["code"], f["path"]) for f in fel] == [
+        ("forebildsvakt", "uppgift 2"), ("forebildsvakt", "uppgift 3")]
+    assert "saknar förebild i kapitlet" in fel[0]["message"]
+    assert "bokuppgift 9999, som inte står i kapitlet" in fel[1]["message"]
+    # Räknad vakt: slutgrinden räknar om den på det levererade pappret.
+    assert exam_gen._raknas_om(fel[0])
+
+
+def test_forebildsvakten_ar_fail_open():
+    """Utan bok, och när ingen uppgift bär fältet (grammatikens tak)."""
+    assert exam_gen.forebildsvakt(_prov([_u()]), []) == []
+    assert exam_gen.forebildsvakt(_prov([_u(), _u()]),
+                                  [{"nr": 2118, "sida": 47}]) == []
+
+
+def test_forebilden_galler_hela_uppgiften_i_prompten_och_hos_domaren():
+    """Lagret ovanpå: uppgift 5, 7 och 12b i prov 119 byggde C- och A-poäng
+    på ett steg som inte står i kapitlet."""
+    p = exam_gen.build_forebild_prov([{"nr": 2118, "sida": 47, "text": "x"}])
+    assert "FÖREBILDEN GÄLLER HELA UPPGIFTEN" in p
+    assert "två ekvationer som kedjas ihop" in p
+    d = exam_gen.build_relevans_prompt([], [{"nr": 2118, "text": "x"}],
+                                       profil="prov")
+    assert "Döm VARJE deluppgift för sig" in d
+    # Gruppuppgiftens domarprompt är orörd (kassetterna).
+    assert "Döm VARJE deluppgift" not in exam_gen.build_relevans_prompt(
+        [], [{"nr": 2118, "text": "x"}])

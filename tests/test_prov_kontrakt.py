@@ -297,6 +297,17 @@ def _kontroll(exam, **kw):
     return routes_exam.efterkontroll(_vy(exam), doc, summor, **kw)
 
 
+def _ovriga_med_forebild(exam):
+    """Förebild på alla uppgifter utom den första, som testet självt sätter.
+    Utan den fäller förebildsvakten (kod «utanbok») de andra uppgifterna så
+    fort den första får en förebild. Numren är olika och okända för boken:
+    samma sort överallt är en modellfamilj (familjvakten), och ett känt
+    nummer utan avsnitt säger ingenting mer."""
+    for i, u in enumerate(exam["uppgifter"][1:], 1):
+        u["forebild"] = {"nr": 5000 + i, "sort": f"sort nummer {i}"}
+    return exam
+
+
 def _koder(fynd):
     return sorted({f["kod"] for f in fynd})
 
@@ -355,7 +366,7 @@ def test_efterkontrollen_faller_forebild_utanfor_avsnittets_sidspann():
     """Prov 86:s uppgift 3: märkt 2.5 (s. 64–99), bygger på bokuppgift 1253
     som står på s. 14. Antingen är etiketten fel eller förebilden, och
     täckningen räknar på etiketten, så felet döljer en lucka."""
-    exam = copy.deepcopy(_exam_doc())
+    exam = _ovriga_med_forebild(copy.deepcopy(_exam_doc()))
     exam["uppgifter"][0]["avsnitt"] = "2.5"
     exam["uppgifter"][0]["forebild"] = {"nr": 1253, "sort": "samma sort: rötter"}
     fynd = _kontroll(exam, bok=_BOK, sidor=_SIDOR)
@@ -373,7 +384,7 @@ def test_efterkontrollen_godtar_forebild_i_den_andra_rubrikens_spann():
     rubrik «Faktorisering och förkortning (s. 31–34)» och förebild 1338 på
     s. 14 i testboken. Uppgiften prövar båda med flit, så förebilden får
     ligga i vilket som helst av etikettens spann."""
-    exam = copy.deepcopy(_exam_doc())
+    exam = _ovriga_med_forebild(copy.deepcopy(_exam_doc()))
     exam["uppgifter"][0]["avsnitt"] = "2.5"
     exam["uppgifter"][0]["forebild"] = {"nr": 1253, "sort": "samma sort: rötter"}
     exam["uppgifter"][0]["delmoment"] = ("Formler (s. 64–68); "
@@ -386,12 +397,39 @@ def test_efterkontrollen_tiger_om_forebild_ur_blandade_uppgifter():
     kapitel. Prov 86:s uppgift 5 pekade på «34», som finns på flera sidor i
     samma bok. Ett tal under 100 säger inget om avsnittet och ska inte
     larma."""
-    exam = copy.deepcopy(_exam_doc())
+    exam = _ovriga_med_forebild(copy.deepcopy(_exam_doc()))
     exam["uppgifter"][0]["avsnitt"] = "2.5"
     exam["uppgifter"][0]["forebild"] = {"nr": 34, "sort": "samma sort"}
     sidor = dict(_SIDOR)
     sidor[34] = 14
     assert _kontroll(exam, bok=_BOK, sidor=sidor) == []
+
+
+def test_efterkontrollen_faller_provuppgift_utan_forebild():
+    """Prov 119 (2026-09-23): uppgift 5 och 7 stod utan avsnitt, 7 utan
+    förebild, och de andra frågorna tiger utan avsnitt. Läraren fällde båda:
+    «det är inte något vi har gått igenom på lektionen»."""
+    exam = _ovriga_med_forebild(copy.deepcopy(_exam_doc()))
+    fynd = _kontroll(exam, bok=_BOK, sidor=_SIDOR)
+    assert [f["kod"] for f in fynd] == ["utanbok"]
+    assert fynd[0]["nr"] == 1
+    assert "saknar förebild i Liber Ma 1c" in fynd[0]["text"]
+    assert "inte märkt med något avsnitt" in fynd[0]["text"]
+    # Laga-knappen byter ut uppgiften, den tänjer inte förebilden.
+    from app.web import routes_exam
+    assert "Byt ut uppgiften" in routes_exam.efterkontroll_instruktion(fynd)
+    # Med förebild: tyst.
+    exam["uppgifter"][0]["forebild"] = {"nr": 2601, "sort": "samma sort"}
+    assert _kontroll(exam, bok=_BOK, sidor=_SIDOR) == []
+    # Ett papper där INGEN uppgift har förebild skrevs utan fältet: tyst.
+    assert _kontroll(copy.deepcopy(_exam_doc()), bok=_BOK, sidor=_SIDOR) == []
+    # Arbetsbladet har ingen sådan regel.
+    from app import exam_spec as es
+    blad = copy.deepcopy(_exam_doc())
+    blad["uppgifter"][1]["forebild"] = {"nr": 2601, "sort": "samma sort"}
+    doc, _ = es.validate_exam_json(copy.deepcopy(blad))
+    assert not [f for f in routes_exam._bokfynd(doc, _BOK, _SIDOR, "arbetsblad")
+                if f["kod"] == "utanbok"]
 
 
 def test_efterkontrollen_faller_tryckta_tips():
