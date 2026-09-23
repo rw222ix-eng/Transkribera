@@ -45,7 +45,10 @@ def test_ett_band_gar_genom_bryggan_ord_for_ord(fejk_claude):
     bitar = []
     svar = claude_code.generate("vad som helst", token_cb=bitar.append)
     assert len(bitar) > 1, "svaret kom inte som en ström"
-    assert json.loads(svar)["title"] == "Derivatans definition"
+    # Bandet från 2026-09-23 lindar JSON:en i ```json-staket (inspelningen går
+    # utan grammatik, se tools/spela_in_kassett). Appen läser det genom
+    # lesson_board._parse_board, och det är den vägen som prövas här.
+    assert lesson_board._parse_board(svar)["title"] == "Derivatans definition"
     assert claude_code.SENASTE["kostnad"] > 0
 
 
@@ -71,9 +74,14 @@ def _utan_budget(errors: list) -> list:
 #
 # OCH OM 2026-09-21, när läraren sänkte vänstertaket 30 % och bad om pilarna
 # (lesson_board 6c): prompten ändrades, och ett band är inspelat mot en
-# prompt. Det nya bandet håller vänstern på 205 av 270 men ligger 34 tecken
+# prompt. Det nya bandet höll vänstern på 205 av 270 men låg 34 tecken
 # över på högern, vars tak inte rördes — därför behövs `_utan_budget` igen i
-# testerna nedan, och därför mäter budgettestet PLATSEN för fyndet.
+# testerna nedan.
+#
+# OCH OM 2026-09-23, med lärarens dom om uträkningarna: exemplen bär
+# uträkningen som math-rader i stället för metodsteg i ord. Math kostar
+# ingenting i textbudgeten, och högern som låg 34 tecken över ligger nu
+# inom taket; budgettestet mäter därför att fellistan är TOM.
 
 
 def test_tavlan_ur_kassetten_ar_giltig_wb_json(fejk_claude):
@@ -105,19 +113,19 @@ def test_bandet_haller_vansterns_textbudget(fejk_claude):
     bet på en riktig inspelning. Omspelningen 2026-09-12 gav en tavla INOM
     budgeten — samma prompt, tystare svar.
 
-    OMSPELNINGEN 2026-09-21 är mot det 30 % lägre vänstertaket (390 → 270,
-    lärarens egen procent). Det som mäts här är att en RIKTIG modellrunda
-    håller det på första försöket — bandet skriver 205 tecken på vänstern,
-    utan definitionsmening, med två agendapunkter, två begreppsrader och två
-    randfall. HÖGERN, vars tak inte rördes, kom in på 374 av 340 och får sin
-    reparationsrunda; det är taket som gör sitt jobb, inte kedjan som är
-    trasig, och därför mäts felets PLATS och inte bara dess frånvaro."""
+    OMSPELNINGEN 2026-09-21 var mot det 30 % lägre vänstertaket (390 → 270,
+    lärarens egen procent), och högern kom in på 374 av 340.
+
+    OMSPELNINGEN 2026-09-23 är mot lärarens dom om uträkningarna. Exemplen
+    bär math-rader i stället för metodsteg i ord, och math kostar ingenting
+    i budgeten: HELA tavlan håller taken på första försöket, och det är vad
+    som mäts. Vänstern mäts för sig, som förut."""
     fejk_claude(kassett="tavla")
     res = lesson_board.generate_board(
         "Matematik 3c", "NA25", "Derivatans definition", model="",
         max_rounds=1)
     assert res["rounds"] == 1
-    assert [e["path"] for e in res["errors"]] == ["boards[1]"], res["errors"]
+    assert res["errors"] == [], res["errors"]
     vanster = whiteboard_spec.validate_board_json(
         res["board"])[0].boards[0].sections
     volym = whiteboard_spec._text_volym(vanster, vanster=True)
@@ -149,19 +157,24 @@ def test_bandet_bar_vansterns_skelett(fejk_claude):
     assert "3. Att tänka på" in rubriker, rubriker
     listor = [s for s in spalt if s.get("kind") == "list"]
     assert listor and 2 <= len(listor[0]["items"]) <= 3, spalt
-    # Och receptet BÄR högern: varje punkt ska gå att känna igen som början
-    # på ett metodsteg, för det är den kopplingen som gör raden värd sin
-    # plats. Formen «Verb: ≤4 ord» följdes i två punkter av tre i den skarpa
-    # körningen — den tredje, «Låt h gå mot noll», är ett verb och fyra ord
-    # utan kolon. Prompten fick raden «VARJE punkt har sitt kolon»; testet
-    # mäter kopplingen, som höll hela vägen.
-    steg = [i for kol in board["boards"][1]["columns"]
-            for s in kol["sections"] if s.get("kind") == "list"
-            for i in s["items"]]
-    assert steg, board["boards"][1]
-    for punkt in listor[0]["items"]:
-        ord_ = punkt.partition(":")[0].strip().lower()
-        assert any(s.lower().startswith(ord_) for s in steg), punkt
+    # Receptet har sitt kolon i varje punkt («VARJE punkt har sitt kolon»,
+    # efter den skarpa körningen 2026-09-20 som skrev «Låt h gå mot noll»).
+    assert all(":" in p for p in listor[0]["items"]), listor[0]["items"]
+    # Och HÖGERN BÄR UTRÄKNINGEN (lärarens dom 2026-09-23). Till dess mätte
+    # testet att varje receptpunkt började ett metodsteg på högern. Nu ska
+    # högern inte ha en enda steglista, varje exempel ska ha minst två
+    # uträknade led, och varje led som går att räkna ska stämma.
+    hogern = board["boards"][1]
+    assert not [s for kol in hogern["columns"] for s in kol["sections"]
+                if s.get("kind") == "list"], hogern
+    assert lesson_board.utrakningsvakt(board) == []
+    assert lesson_board.raknevakt(board) == []
+    exempel: list = []
+    for kol in hogern["columns"]:
+        lesson_board._exempelrader(kol["sections"], "k", exempel)
+    assert len(exempel) >= 2, exempel
+    for ex in exempel:
+        assert len(ex["kedja"]) >= 2, ex
 
 
 def test_en_trasig_tavla_repareras_i_nasta_runda(fejk_claude):
@@ -437,7 +450,9 @@ def test_mal_last_omskrivning_ror_bara_rutan_lararen_pekade_pa(fejk_claude):
     plats = len(rad["children"][0]["children"]) - 1
     fore = copy.deepcopy(rad["children"][0]["children"][plats])
 
-    ut = lesson_board.refine_board(board, "skriv definitionen med a i stället",
+    # Bandet från 2026-09-23 skriver definitionen med a, och lappbandet
+    # skriver om den med x (till dess tvärtom).
+    ut = lesson_board.refine_board(board, "skriv definitionen med x i stället",
                                    model="", max_rounds=1,
                                    mal={"el": f"tav5.0.{plats}",
                                         "namn": "Formel 1",
@@ -445,7 +460,7 @@ def test_mal_last_omskrivning_ror_bara_rutan_lararen_pekade_pa(fejk_claude):
     assert _utan_budget(ut["errors"]) == [], ut["errors"]
     assert ut["rounds"] == 1             # en lapp, inte en hel tavla
     spalt1 = ut["board"]["boards"][0]["sections"][4]["children"][0]["children"]
-    assert "f'(a)" in spalt1[plats]["latex"] and "f'(a)" not in fore["latex"]
+    assert "f'(x)" in spalt1[plats]["latex"] and "f'(x)" not in fore["latex"]
     # …och ALLT annat på båda tavlorna står kvar, byte för byte.
     kopia = copy.deepcopy(ut["board"])
     kopia["boards"][0]["sections"][4]["children"][0]["children"][plats] = fore
