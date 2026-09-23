@@ -89,10 +89,12 @@ def _utan_budget(errors: list) -> list:
 # punkter utan label och ticks utan avstånd, och grafvakten fällde den. Den
 # första omspelningen (0,51 USD) bar grafen och ÄR/INTE men skrev «Bestäm
 # f'(3) …» och «Bestäm f'(2) …», som upprepad_situation fäller; den andra
-# (0,64 USD) står här. Den ritar exempel 1:s x² med tangenten och sekanten
+# (0,64 USD) var ren men spelades in före promptens två sista tillägg
+# (etiketternas plats i 7d, «Samma enhet som kvoten» i 8g). Den tredje
+# (0,61 USD) står här. Den ritar exempel 1:s x² med tangenten och sekanten
 # genom (1, 1) och (2, 4), märkta punkter, ticks och streckade hjälplinjer,
-# och bär ÄR/INTE under formeln: gränsvärdet 2 «h går mot noll: derivata.»
-# mot sekantens 3 «Fast h: sekant, inte derivata.».
+# och bär ÄR/INTE under formeln: gränsvärdet 2 «Tangentens lutning:
+# derivatan.» mot sekantens 3 «Sekantens lutning: inte derivatan.».
 
 
 def test_tavlan_ur_kassetten_ar_giltig_wb_json(fejk_claude):
@@ -480,9 +482,10 @@ def test_mal_last_omskrivning_ror_bara_rutan_lararen_pekade_pa(fejk_claude):
                  if "\\lim" in s.get("latex", "") and "f'" in s["latex"])
     fore = copy.deepcopy(spalt[plats])
 
-    # Bandet från 2026-09-23 kväll skriver definitionen med x, och
-    # lappbandet skriver om den med a (bandet före det: tvärtom).
-    ut = lesson_board.refine_board(board, "skriv definitionen med a i stället",
+    # Bandet från 2026-09-23 kväll skriver definitionen med a, och
+    # lappbandet skriver om den med x. Vilken bokstav bandet väljer skiftar
+    # mellan omspelningarna; lappen skriver alltid den andra.
+    ut = lesson_board.refine_board(board, "skriv definitionen med x i stället",
                                    model="", max_rounds=1,
                                    mal={"el": f"tav5.0.{plats}",
                                         "namn": "Formel 1",
@@ -490,7 +493,7 @@ def test_mal_last_omskrivning_ror_bara_rutan_lararen_pekade_pa(fejk_claude):
     assert _utan_budget(ut["errors"]) == [], ut["errors"]
     assert ut["rounds"] == 1             # en lapp, inte en hel tavla
     spalt1 = ut["board"]["boards"][0]["sections"][4]["children"][0]["children"]
-    assert "f'(a)" in spalt1[plats]["latex"] and "f'(a)" not in fore["latex"]
+    assert "f'(x)" in spalt1[plats]["latex"] and "f'(x)" not in fore["latex"]
     # …och ALLT annat på båda tavlorna står kvar, byte för byte.
     kopia = copy.deepcopy(ut["board"])
     kopia["boards"][0]["sections"][4]["children"][0]["children"][plats] = fore

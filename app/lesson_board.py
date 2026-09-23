@@ -350,8 +350,11 @@ INSTRUCTION = (
     "ritar exempel 1:s situation med exempel 1:s tal (80 tegel i timmen: "
     "plot 80*x), så att läraren pekar från "
     "grafen till exemplet. VARJE punkt bär en etikett som säger något, "
+    # «Etiketten står där …» kom efter den skarpa kontrolltavlan (jobb 485):
+    # outward lade «(6, 15)» och «(12, 30)» ovanpå de streckade linjerna.
     "koordinaten eller namnet («origo», «(1, 80)»); en omärkt punkt ritas "
-    "inte. Ticks med etiketter vid punkternas värden på båda axlarna, och "
+    "inte. Etiketten står där varken kurvan eller en hjälplinje går. "
+    "Ticks med etiketter vid punkternas värden på båda axlarna, och "
     "streckade hjälplinjer från varje märkt punkt till axlarna (arrows med "
     "dashed: true, headSize: 0). Ingen pil mot en text; EN kort text i "
     "grafen får säga vad kurvan ÄR («rät linje genom origo»).\n"
@@ -491,7 +494,7 @@ INSTRUCTION = (
     "direkt under den står EN rad om vad bokstaven ÄR («k är kvoten y/x, "
     "lika i varje punkt»). Sedan ÄR/INTE: en math-rad med exempel 1:s tal "
     "som ÄR begreppet (\\frac{80}{1} = \\frac{160}{2}) och en som INTE är "
-    "det (\\frac{300}{2} \\neq \\frac{500}{4}), utan mellanled, var och en "
+    "det (\\frac{300}{2} \\neq \\frac{500}{4}), var och en "
     "med sin etikett: skälet, kolon, begreppet («Samma kvot: "
     "proportionellt.» / «Olika kvot: inte proportionellt.»). Så i varje "
     "moment: det som definierar begreppet, ett fall som är, ett som inte "
@@ -588,9 +591,13 @@ INSTRUCTION = (
     "på vardagssvenska som en elev förstår UTAN att läraren förklarar: "
     "«x^2 = -20: aldrig negativ», «x^2 = 0: en enda rot». Etiketten säger "
     "vad raden betyder för BEGREPPET: under 1{,}2\\text{ ton} = "
-    "1\\,200\\text{ kg} står «Samma enhet innan du jämför.». Ett självklart "
-    "faktum utan den kopplingen, en abstrakt regel («Samma ordning i varje "
-    "kvot») och ÄR/INTE (8e) skrivs inte här; hellre EN tydlig rad än två. "
+    # «Samma enhet som kvoten» står som motexempel sedan den skarpa
+    # kontrolltavlan samma kväll (jobb 485), som skrev exakt den raden igen
+    # under «45 min = 0,75 h» fast regeln visade den rätta.
+    "1\\,200\\text{ kg} står «Samma enhet innan du jämför.». Ett faktum "
+    "utan den kopplingen («Samma enhet som kvoten»), en abstrakt regel "
+    "(«Samma ordning i varje kvot») och ÄR/INTE (8e) skrivs inte här; "
+    "hellre EN tydlig rad än två. "
     "ALDRIG en fråga («Exakt svar eller avrundat?») och aldrig bara vad som "
     "händer («saknar lösning»). Går det inte med ett tal: EN text-rad. Sist "
     "Vanligt fel.\n"
@@ -1600,7 +1607,7 @@ def _cirkel(cx: float, cy: float, r: float, n: int = 48) -> list[list[float]]:
 # som ÄR begreppet och ett som INTE är det, med exempel 1:s tal. Shot 3 och
 # 4 bär det inte: uttrycks-shoten har paret faktor/term och randvinkeln har
 # paret randvinkel/medelpunktsvinkel som begreppsrader, och prompten låg
-# 240 tecken under taket. «Att tänka på» bär EN rad i shot 1, 2 och 4 (8g:
+# 181 tecken under taket (regelsamlingsvarianten). «Att tänka på» bär EN rad i shot 1, 2 och 4 (8g:
 # hellre en tydlig rad än två), och ingen av dem är ett är/inte-test.
 FEW_SHOTS: list[tuple[str, dict]] = [
     (
@@ -4930,7 +4937,8 @@ TACKNING_INSTRUKTION = (
     "Pröva ATT TÄNKA PÅ rad för rad: skulle en elev förstå raden UTAN att "
     "läraren förklarar den, och säger etiketten vad raden betyder för "
     "momentets begrepp («Samma enhet innan du jämför»)? Ett självklart "
-    "faktum utan koppling («1,2 ton = 1 200 kg» ensam), en abstrakt regel "
+    "faktum utan koppling («1,2 ton = 1 200 kg» ensam, «Samma enhet som "
+    "kvoten»), en abstrakt regel "
     "(«Samma ordning i varje kvot») och ett ÄR/INTE-test (det hör till «1. "
     "Vad är det?») är fynd; forslag är en tydlig rad eller att stryka "
     "raden. Hellre EN tydlig rad än två.\n"

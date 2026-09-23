@@ -794,7 +794,14 @@ def test_prompten_ar_inte_orimligt_lang():
 
     46 000 → 50 000 samma kväll, med lärarens tre formdomar: regel 6 blev
     ett JSON-exempel på de två spalterna (~1,1 kB), och shotarna växte med
-    sina numrerade rubriker. Båda höjningarna är mätta mot vad de köpte."""
+    sina numrerade rubriker. Båda höjningarna är mätta mot vad de köpte.
+
+    INGEN HÖJNING 2026-09-23 kväll, när grafen (7d), ÄR/INTE (8e) och den
+    nya 8g kom (~1,4 kB regler, ~0,5 kB i shotarna). De betalades med
+    kortningar av det de ersätter eller upprepar: radens JSON-form och
+    pilens (shotarna visar dem), 6b, cirklarnas tredje decimal och några
+    exempel i parentes. Standardprompten 47 776 → 47 897, regelsamlingens
+    49 736 → 49 819."""
     assert len(lb.build_prompt("Ma1b", "9A", "procent")) < 50_000
 
 
@@ -3312,6 +3319,10 @@ def test_prompten_bar_grafen_definitionen_och_att_tanka_pa():
     assert "som en elev förstår UTAN att läraren förklarar" in p
     assert "«Samma enhet innan du jämför.»" in p
     assert "«Samma ordning i varje kvot»" in p
+    # Motexemplen efter den skarpa kontrolltavlan (jobb 485), som skrev
+    # «Samma enhet som kvoten» igen och lade etiketterna på hjälplinjerna.
+    assert "(«Samma enhet som kvoten»)" in p
+    assert "Etiketten står där varken kurvan eller en hjälplinje går" in p
     assert "hellre EN tydlig rad än två" in p
     assert "ÄR/INTE (8e) skrivs inte här" in p
 
@@ -3322,6 +3333,7 @@ def test_domaren_provar_grafen_definitionen_och_att_tanka_pa():
     assert "Pröva DEFINITIONEN" in t
     assert "Pröva ATT TÄNKA PÅ rad för rad" in t
     assert "skulle en elev förstå raden UTAN att läraren förklarar den" in t
+    assert "«Samma enhet som kvoten»" in t
     # ÄR/INTE-raderna är varken sifferexempel, formler eller begreppsrader.
     assert "Samma för ÄR/INTE-raderna" in t
     assert "är varken formler eller begreppsrader" in t
