@@ -3374,7 +3374,7 @@ def satt_tid(board: dict | None, starttid: str | None,
 # modellens, precis som tiden: kalendern vet vad klassen gjorde sist
 # (lektionsinnehall.rubrik), en modell hade fått gissa. Den står FÖRST i
 # agendan, så att tavlan läses uppifrån: förra gången, sedan i dag.
-FORRA_PREFIX = "Förra gången: "
+FORRA_PREFIX = ws.FORRA_PREFIX      # kostar inte i textbudgeten, se där
 # Rubriken kortas till sin första sats. Kalendern skriver «Andelen i procent,
 # forts» och «Repetition kap 1 – Testa dig själv 1»; tankstrecket hade
 # dessutom fällts av textvakten i whiteboard_spec.

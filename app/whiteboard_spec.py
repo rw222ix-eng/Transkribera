@@ -1088,6 +1088,13 @@ def _ankaretiketten(sections: list):
     return None
 
 
+# «Förra gången: …» (lesson_board.satt_forra) läggs i agendan EFTER
+# valideringen, ur kalendern. Modellen har aldrig sett raden när den skriver
+# tavlan, så den får inte kosta i budgeten: annars kunde en senare omskrivning
+# eller reparation stryka modellens egna rader för att betala lärarens.
+FORRA_PREFIX = "Förra gången: "
+
+
 def _text_volym(sections: list, vanster: bool = False) -> int:
     """Summan av läsbar text i ett sektionsflöde — text och listpunkter, ned
     genom callout/row/col. Rubriker och matte räknas inte: se _MAX_BOARD_TEXT.
@@ -1138,7 +1145,8 @@ def _volym_rek(sections: list, fria: set[int]) -> int:
                 continue
             summa += len(sec.text)
         elif isinstance(sec, ListSection):
-            summa += sum(len(i) for i in sec.items)
+            summa += sum(len(i) for i in sec.items
+                         if not i.startswith(FORRA_PREFIX))
         elif isinstance(sec, (CalloutSection, RowSection, ColSection)):
             summa += _volym_rek(sec.children, fria)
     return summa

@@ -914,6 +914,16 @@ def test_forra_rubriken_kortas_till_forsta_satsen():
     assert lb.forra_rubrik(None) == ""
 
 
+def test_forra_gangen_kostar_inget_i_textbudgeten():
+    """Raden läggs dit efter valideringen; modellen har aldrig kunnat betala
+    den, och en senare reparation ska inte stryka modellens rader för den."""
+    doc = _valid_doc()
+    fore = ws._text_volym(ws.validate_board_json(doc)[0].boards[0].sections)
+    ut = lb.satt_forra(doc, "Ekvationer med parenteser och bråk")
+    efter = ws._text_volym(ws.validate_board_json(ut)[0].boards[0].sections)
+    assert efter == fore
+
+
 def test_forra_gangen_utan_agenda_far_en_egen_lista():
     doc = _valid_doc()
     doc["boards"][0]["sections"].pop(1)
