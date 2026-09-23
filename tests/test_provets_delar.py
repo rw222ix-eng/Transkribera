@@ -18,6 +18,7 @@ där NP-kalibreringen redan står.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -99,13 +100,15 @@ def test_enheten_som_ar_ett_led_renderas_ocksa():
 
 
 def test_facitets_enhet_renderas_med():
-    """Samma fält, samma regel, andra pappret: lösningsförslagets svarsrad."""
+    """Samma fält, samma regel, andra pappret: bedömningsanvisningens svar.
+    Svaret står i fetstil, så enhetens matematik får KaTeX \\pmb som resten
+    av svaret (lärarens form 2026-09-23)."""
     html = _kor_bladbygg(
         "bb.losning({typ:'Prov'}, "
         + json.dumps([_uppg(f="$12$", enhet="cm$^2$")], ensure_ascii=False)
         + ", 1).join('')")
     assert "cm$^2$" not in html
-    assert '<span class="mat" data-tex="^2"' in html
+    assert '</span> cm<span class="mat" data-tex="\\pmb{^2}"' in html
 
 
 def test_latexmallen_satter_enheten_i_matteläge():
@@ -488,6 +491,11 @@ def test_latexvyn_slapper_svarsfaltet_pa_en_redovisningsuppgift():
 # enheten stod två gånger, poängtrappan syntes inte, elevlösningarna hoppade
 # över steg och saknade kommentarens etikett, och graderna var omvända.
 # Renderingen prövas i node — det är den HTML läraren faktiskt fick.
+#
+# Sedan lärarens dom 2026-09-23 är formen nationella provets: svaret först
+# och i fetstil, en rad per poäng med märket «+E», «+C», «+A», trippeln sist,
+# och de bedömda elevlösningarna på ett eget ark sist. Testerna nedan låser
+# den formen; PDF:ens spegel står i tests/test_exam.py.
 
 def _losark(uppgifter: list[dict], delB: int = 99) -> str:
     return _kor_bladbygg(
@@ -500,37 +508,48 @@ def test_deluppgifternas_svar_star_pa_kortsvarsfacit():
     """«Skriv uttrycken som en enda potens» hade en TOM Svar-rad: föräldern bär
     ingen egen losning när deluppgifter finns (exam_spec), så `f` var tom
     sträng — och raden ritades ändå. Svaren ligger i `vag`, ett per
-    deluppgift, och facitet ritade dem inte alls på kortsvarsarket."""
+    deluppgift, och står nu som varsin svarsrad med bokstaven framför (NP:s
+    «21. b)», lärarens dom 2026-09-23)."""
     html = _losark([_uppg(f="", p=2,
                           vag=[["a) $3^{5}$", "1 p"], ["b) $2^{-1}$", "1 p"]])])
     assert "losetikett" not in html, "en tom Svar-rad ritades ändå"
-    assert 'data-tex="3^{5}"' in html and 'data-tex="2^{-1}"' in html
+    assert '<b class="lobeddel">a)</b>' in html and '<b class="lobeddel">b)</b>' in html
+    assert 'data-tex="\\pmb{3^{5}}"' in html and 'data-tex="\\pmb{2^{-1}}"' in html
+    # Bokstaven står i namnet och inte en gång till i svaret.
+    assert "a) " not in html.split('<b class="lobedsvar">', 1)[1].split("</b>", 1)[0]
 
 
 def test_enheten_star_en_gang_i_facit():
     """«$T(8) = 25{,}6$ mm.» följt av ett kursivt «mm» — facittexten bar
-    enheten OCH fältet sattes ut efter den."""
+    enheten OCH fältet sattes ut efter den. Enheten följer svaret när svaret
+    är ett tal som saknar den, aldrig två gånger (spegel av
+    exam_latex._svaret)."""
     dubbel = _losark([_uppg(f="$T(8) = 25{,}6$ mm.", enhet="mm")])
-    assert "<em>mm</em>" not in dubbel, "enheten trycktes två gånger"
-    # Fältet står kvar när facittexten INTE bär enheten — då behövs det.
+    assert dubbel.count("mm") == 1, "enheten trycktes två gånger"
     enkel = _losark([_uppg(f="$25{,}6$", enhet="mm")])
-    assert "<em>mm</em>" in enkel
+    assert ('<b class="lobedsvar"><span class="mat" data-tex="\\pmb{25{,}6}">'
+            '</span> mm</b>') in enkel
+    # Efter en mening hör ingen enhet hemma.
+    ord_ = _losark([_uppg(f="Ja, hon har rätt.", enhet="kr")])
+    assert '<b class="lobedsvar">Ja, hon har rätt.</b>' in ord_
 
 
-def test_poangtrappan_syns_pa_facit():
-    """En rad per poäng, med nivån (nationella provets form). Trappan gick
-    aldrig till skärmen — bara uppgiftens totala värde stod i marginalen, och
-    läraren såg därför inte vad varje poäng ges för."""
+def test_poangraderna_syns_pa_facit():
+    """En rad per poäng, med NP:s märke «+E», «+C», «+A» i en egen spalt och
+    kravet som en mening: versal först, punkt sist (lärarens dom
+    2026-09-23). Lärarens dom 2026-08-23 står kvar: «på fleruppgifter
+    framgår inte vad varje poäng ges för.»"""
     html = _losark([_uppg(p=2, f="$x = 4$",
                           bed="+1 E tecknar ekvationen\n+1 C löser ut $x$")])
-    assert "lotrappa" in html
-    assert "+1 E</i>" in html and "+1 C</i>" in html
-    assert "tecknar ekvationen" in html
+    assert ('<td class="lobedkrav">Tecknar ekvationen.</td>'
+            '<td><b class="lobedniva">+E</b></td>') in html
+    assert '<b class="lobedniva">+C</b>' in html
+    assert "+1 E" not in html and "+1 C" not in html
 
 
 def test_trappan_tar_ocksa_de_gamla_dokumentens_enradare():
     """Proven i basen skrev hela trappan på en rad med komman. De skrivs ut i
-    morgon och ska visa samma trappa (spegel av exam_spec.bedomningsrader).
+    morgon och ska visa samma rader (spegel av exam_spec.bedomningsrader).
 
     Notraden trycks INTE. Läraren om prov 40 (2026-09-06): «detta med vanliga
     fel kan vi ta bort helt och hållet så att vi sparar plats». Parsern läser
@@ -540,67 +559,122 @@ def test_trappan_tar_ocksa_de_gamla_dokumentens_enradare():
     html = _losark([_uppg(p=2, f="$x = 4$",
                           bed="+1 C tecknar ekvationen, +1 C löser ut $x$; "
                               "vanligt fel: minskningen delas med 5")])
-    assert html.count("+1 C</i>") == 2
-    assert "tecknar ekvationen" in html
+    assert html.count('<b class="lobedniva">+C</b>') == 2
+    assert "Tecknar ekvationen." in html
     assert "data-not" not in html
     assert "Vanligt fel" not in html and "vanligt fel" not in html
 
 
-def test_deluppgifternas_trappor_far_var_sin_facitrad():
+def test_deluppgifterna_far_var_sitt_svar_sina_rader_och_sin_trippel():
     """Uppgiften har ingen egen bedömning när deluppgifter finns — poängen
-    ligger på a), b), c). Varje deluppgift som bär poäng får därför sin EGEN
-    facitrad i bedömningstabellen, med sin lösning till vänster och sin trappa
-    till höger (lärarens beställning 2026-08-23)."""
-    html = _losark([_uppg(p=2, f="",
-                          vag=[["a) $3^{5}$", "1 p"], ["b) $2^{-1}$", "1 p"]],
+    ligger på a), b), c). Varje deluppgift får därför sitt eget svar, sina
+    egna poängrader och sin egen trippel, i den ordningen."""
+    html = _losark([_uppg(p=3, f="",
+                          vag=[["a) $3^{5}$", "1 p"], ["b) $2^{-1}$", "2 p"]],
                           beddel=["+1 E korrekt svar i a)",
-                                  "+1 E korrekt svar i b)"])])
-    assert "Facit a) · full pott" in html and "Facit b) · full pott" in html
-    assert html.count("+1 E</i>") == 2
-    assert "korrekt svar i a)" in html and "korrekt svar i b)" in html
-    # Bokstaven står i etiketten och i lösningen — inte en tredje gång framför
-    # kravet. Trappan med a)-prefix hör till ELEVRADERNA, som gäller hela
-    # uppgiften och därför måste säga vilken deluppgift raden kom från.
+                                  "+1 C tecknar\n+1 A korrekt svar i b)"],
+                          delpeca=[[1, 0, 0], [0, 1, 1]])])
+    a = html.index('<b class="lobeddel">a)</b>')
+    b = html.index('<b class="lobeddel">b)</b>')
+    assert a < html.index("Korrekt svar i a).") < html.index("(1/0/0)") < b
+    assert b < html.index("Tecknar.") < html.index("Korrekt svar i b).") \
+        < html.index("(0/1/1)")
+    # Bokstaven står en gång, framför svaret, och inte framför kravet.
     assert "a) korrekt svar i a)" not in html
 
 
-def test_nollpoangsraden_sager_inga_poang_och_varfor():
-    """Lärarens beställning 2026-08-23: «0-poängsraden: inga poäng + varför.»
-    Skälet står i högerspalten, bredvid elevens papper — aldrig under det."""
-    html = _losark([_uppg(p=3, f="$x = 4$", ut="rakna",
-                          bed="+1 E tecknar\n+1 C löser ut $x$\n+1 C svarar",
-                          elever=[{"etikett": "0 p",
-                                   "partier": [{"rader": ["$2x = 8$"],
-                                                "poang": [0, 0, 0],
-                                                "dom": "ingen ansats"}]}])],
-                   delB=0)
-    # Etiketten säger vad raden är (prov 82, uppgift 6: «1 p» ensamt lästes
-    # som ett avrundat lösningsförslag).
-    assert '<b class="lobedsteg">Elevexempel · 0 p</b>' in html
-    assert '<p class="lobedinga">Inga poäng</p>' in html
-    # Versalen: kommentaren fortsatte förut efter «Inga poäng.» och det
-    # ledet ströks (blad-bygg.js UTAN_POANG).
-    assert '<p class="lobedvarfor">Ingen ansats</p>' in html
-    # Nollraden får inga trappsteg — den fick inga poäng.
-    assert html.count("lotrappa") == 1        # bara facitradens
+def test_svaret_ar_forsta_raden_i_losningen():
+    """NP:s svarsrad är bara svaret. `losning` är «svaret först, ett par
+    räkneled» (exam_spec), och räkneleden står i lösningsförslaget."""
+    html = _losark([_uppg(p=2, f="$a = 3{,}5$\n(1): $5(x+1) - 2(x-2) = 30$ ger $x = 7$",
+                          bed="+1 C löser (1)\n+1 C sätter in")])
+    assert 'data-tex="\\pmb{a = 3{,}5}"' in html
+    assert "(1):" not in html and "x = 7" not in html
 
 
-def test_elevraden_far_de_trappsteg_den_faktiskt_fick():
-    """Höger om elevens papper står de poäng den fick, inte hela trappan.
-    Stegen RÄKNAS ur poängtrippeln (blad-bygg.js fickrader) — trappan är
-    stigande och har en rad per poäng, så «en E-poäng» är dess första E-rad."""
-    html = _losark([_uppg(p=3, f="$x = 4$", ut="rakna",
+def test_flervalets_bokstav_star_forst_i_svaret():
+    """Rätt alternativ är facit som bor i strukturen, inte i texten. Det står
+    först på svarsraden, som på PDF:en (exam_latex._svarsrad)."""
+    html = _losark([_uppg(p=1, f="$64^{1/3}$", alt=["$64^3$", "$64^{1/3}$"],
+                          ratt=1, bed="+1 E rätt alternativ")])
+    assert ('<b class="lobedsvar">B, <span class="mat" '
+            'data-tex="\\pmb{64^{1/3}}"></span></b>') in html
+    # Kravraden upprepar inte svaret: NP:s «Korrekt alternativ.»
+    assert '<td class="lobedkrav">Korrekt alternativ.</td>' in html
+
+
+def test_kravraden_som_upprepar_svaret_blir_korrekt_svar():
+    """Lärarens dom 2026-09-23: NP skriver «Korrekt svar.» när poängen ges
+    för svaret. Samma tabell som PDF:ens (tests/test_exam.py KRAVRADER), så
+    skärm och papper säger samma sak om samma rad."""
+    from tests.test_exam import KRAVRADER
+    # Rätt bokstav är alltid B i tabellen: alternativ nummer två.
+    assert {b for _k, _s, b, _v in KRAVRADER} <= {None, "B"}
+    fall = [{"u": _uppg(p=1, f=svar, bed=f"+1 E {krav}",
+                        **({"alt": ["$0$", "$1$"], "ratt": 1} if bokstav else {})),
+             "v": vantat}
+            for krav, svar, bokstav, vantat in KRAVRADER]
+    ut = json.loads(_kor_bladbygg(
+        "JSON.stringify(" + json.dumps(fall, ensure_ascii=False)
+        + ".map(c => [bb.losning({typ:'Prov', losningsblad:true}, [c.u], 99)"
+        ".join(''), bb.mat(c.v)]))"))
+    for (html, vantat), (krav, *_r) in zip(ut, KRAVRADER):
+        rad = re.search(r'<td class="lobedkrav">(.*?)</td>', html).group(1)
+        assert rad == vantat, krav
+
+
+def test_trippeln_star_sist_och_ur_dokumentets_poang():
+    """«(0/2/0)» sist, dämpad. Dokumentets egen poäng (`peca`) när den finns,
+    annars räknad ur raderna; utan båda ingen trippel alls."""
+    html = _losark([_uppg(p=2, f="$x = 4$", peca=[0, 2, 0],
+                          bed="+1 C tecknar\n+1 C löser")])
+    assert '<tr data-trippel><td><span class="lobedtrippel">(0/2/0)</span>' in html
+    assert html.index("Löser.") < html.index("(0/2/0)")
+    raknad = _losark([_uppg(p=2, f="$x = 4$", bed="+1 E tecknar\n+1 A löser")])
+    assert "(1/0/1)" in raknad
+    utan = _losark([_uppg(p=2, f="$x = 4$")])
+    assert "lobedtrippel" not in utan
+
+
+def test_elevexemplen_star_pa_eget_ark_sist():
+    """Lärarens dom 2026-09-23 (NP:s form): de bedömda elevlösningarna står
+    inte under varje uppgift utan på ett eget ark sist, «Bedömda
+    elevlösningar». Att de finns sägs EN gång, under första arkets rubrik,
+    inte under varje uppgift."""
+    elever = [{"etikett": "0 p", "partier": [{"rader": ["$2x = 8$"],
+                                              "poang": [0, 0, 0],
+                                              "dom": "ingen ansats"}]},
+              {"etikett": "1 p", "partier": [{"rader": ["$x = 4$"],
+                                              "poang": [1, 0, 0],
+                                              "dom": "tecknar men stannar"}]}]
+    html = _losark([_uppg(nr=1, p=2, f="$x = 4$", bed="+1 E a\n+1 C b"),
+                    _uppg(nr=2, p=3, f="$x = 5$", ut="rakna",
                           bed="+1 E tecknar\n+1 C löser ut $x$\n+1 C svarar",
-                          elever=[{"etikett": "1 p",
-                                   "partier": [{"rader": ["$2x = 8$"],
-                                                "poang": [1, 0, 0],
-                                                "dom": "tecknar men stannar"}]}])],
-                   delB=0)
-    facit, elev = html.split('<b class="lobedsteg">Elevexempel · 1 p</b>')
-    assert facit.count("+1 E</i>") == 1 and facit.count("+1 C</i>") == 2
-    assert elev.count("+1 E</i>") == 1 and elev.count("+1 C</i>") == 0
-    # Kommentaren versaliseras (blad-bygg.js utanStegen).
-    assert '<p class="lobedvarfor">Tecknar men stannar</p>' in elev
+                          elever=elever)], delB=1)
+    arken = html.split('<div class="ark"')
+    assert [a.split('"', 2)[1] for a in arken[1:]] == ["lo-b", "lo-c", "lo-elev"]
+    elevark = arken[3]
+    assert "<b>Bedömningsanvisning · elevlösningar</b><span>Uppgift 2</span>" in elevark
+    assert '<h1 class="lotitel">Bedömda elevlösningar</h1>' in elevark
+    # Inledningen på FÖRSTA arket, direkt under rubriken, och bara där.
+    assert ('<h1 class="lotitel">Endast svar krävs</h1><p class="lolede">'
+            'Bedömda elevlösningar står sist i häftet.</p>') in arken[1]
+    assert html.count("står sist i häftet") == 1
+    # Inga elevpapper i tabellen.
+    assert "loskann" not in arken[1] + arken[2]
+    # På elevarket: numret, elevens rader i handskriften, trippeln och skälet.
+    assert '<span class="prnr">2.</span>' in elevark
+    assert elevark.count('<div class="loskann">') == 2
+    assert '<b class="lobedelevpoang">0/0/0</b>' in elevark
+    assert '<b class="lobedelevpoang">1/0/0</b>' in elevark
+    # Kommentaren versaliseras (blad-bygg.js UTAN_POANG och utanStegen).
+    assert '<p class="lobedvarfor">Ingen ansats</p>' in elevark
+    assert '<p class="lobedvarfor">Tecknar men stannar</p>' in elevark
+    # Nollraden är utmärkt: rött gav inte.
+    assert elevark.count("<tr data-utan>") == 1
+    # Elevexemplet bär trippeln, inte raderna det fick: poängraderna står EN
+    # gång, i tabellen.
+    assert html.count('<b class="lobedniva">+E</b>') == 2
 
 
 def test_elevens_harledning_delas_vid_likhetstecknen():
@@ -630,24 +704,31 @@ def test_elevens_harledning_delas_vid_likhetstecknen():
     assert "<wbr>" not in kort
 
 
-def test_bedomningens_facitrad_bryter_ocksa():
-    """Samma cell, samma spalt: facitraden överst i bedömningstabellen bar
-    också hela lösningen i ett dollarpar, och den är lika oböjlig som elevens.
-    Deluppgifternas väg (`vag`) går genom samma delning."""
+def test_svaret_bryter_ocksa():
+    """Samma spalt, samma lådor: ett svar med hela härledningen i ett
+    dollarpar är lika oböjligt som elevens. Varje led får sin egen \\pmb."""
     html = _losark([_uppg(p=2, f="", vag=[
         ["a) $A(15) = 120 - 4 \\cdot 15 = 120 - 60 = 60$", "2 p"]])])
-    facit = html.split('<div class="lobedfacit">')[1].split("</div>")[0]
-    assert facit.count("<wbr>") == 3
+    svar = html.split('<b class="lobedsvar">')[1].split("</b>")[0]
+    assert svar.count("<wbr>") == 3
+    assert svar.count("\\pmb{") == 4
 
 
-def test_facitraden_star_ensam_nar_elevexempel_saknas():
-    """Fail-open: föll bedömningspassets anrop (eller är pappret gammalt) ska
-    bara facitraden stå. Ingen tom rad — en rad utan innehåll läses som ett
-    fel i pappret, inte som en lucka i underlaget."""
+def test_utan_elevexempel_inget_elevark():
+    """Fail-open: föll bedömningspassets anrop (eller är pappret gammalt) står
+    bara tabellen. Inget tomt ark och ingen inledningsrad som pekar på
+    ingenting."""
     html = _losark([_uppg(p=2, f="$x = 4$", bed="+1 E tecknar\n+1 C svarar")])
-    assert html.count("<tr") == 1
-    assert "Facit · full pott" in html
-    assert "lobedinga" not in html and "lobedvarfor" not in html
+    assert html.count("<tr") == 4          # svaret, två poängrader, trippeln
+    assert "lo-elev" not in html and "står sist i häftet" not in html
+    assert "lobedvarfor" not in html
+    # Finns bara en lösningsdel (inga kortsvar) står inledningen på den.
+    elever = [{"etikett": "0 p", "partier": [{"rader": ["x"], "poang": [0, 0, 0],
+                                              "dom": "d"}]}]
+    bara_c = _losark([_uppg(p=2, f="$x = 4$", bed="+1 E a\n+1 C b",
+                            elever=elever)], delB=0)
+    assert ('<h1 class="lotitel">Hela lösningen krävs</h1><p class="lolede">'
+            'Bedömda elevlösningar står sist i häftet.</p>') in bara_c
 
 
 def test_provets_facitark_heter_bedomningsanvisning():
@@ -692,18 +773,18 @@ def test_arbetsbladets_facit_heter_fortfarande_losningsforslag():
     assert "Lösningsförslag · boken" in bygg
 
 
-def test_nollraden_upprepar_inte_rubriken_pa_skarmen():
-    """Spegel av app/exam_latex._utan_rubriken: «Inga poäng» står en gång, som
-    rubrik. Kommentaren säger varför."""
+def test_nollraden_upprepar_inte_beskedet_pa_skarmen():
+    """Spegel av app/exam_latex._utan_rubriken: «0/0/0» säger redan att
+    lösningen inte gav något, och kommentaren säger bara varför."""
     html = _losark([_uppg(p=2, f="$x = 4$", bed="+1 E a\n+1 C b",
                           elever=[{"etikett": "0 p",
                                    "partier": [{"rader": ["fel"],
                                                 "poang": [0, 0, 0],
                                                 "dom": "Inga poäng. Eleven "
                                                        "deriverar aldrig."}]}])])
-    assert html.count("Inga poäng") == 1
+    assert "Inga poäng" not in html
     assert '<p class="lobedvarfor">Eleven deriverar aldrig.</p>' in html
-    # Var kommentaren BARA rubriken blir det ingen rad alls under den.
+    # Var kommentaren BARA beskedet blir det ingen rad alls under poängen.
     tom = _losark([_uppg(p=2, f="$x = 4$", bed="+1 E a\n+1 C b",
                          elever=[{"etikett": "0 p",
                                   "partier": [{"rader": ["fel"],
@@ -712,15 +793,19 @@ def test_nollraden_upprepar_inte_rubriken_pa_skarmen():
     assert "lobedvarfor" not in tom
 
 
-def test_trappstegets_niva_har_en_egen_spalt_pa_skarmen():
-    """Nivåmärket ska stå på samma plats hur långt kriteriet än är — annars går
-    trappan inte att läsa av som en trappa. Griden ger den en egen spalt, och
-    kriteriet bryts inuti sin."""
+def test_poangmarket_har_en_egen_spalt_pa_skarmen():
+    """Märket ska stå på samma plats hur långt kravet än är: en smal,
+    högerställd spalt, som poängspalten i NP:s tabell och \\bedkrav på
+    PDF:en. Kravet bryts inuti sin egen cell."""
     css = (UI / "losning.css").read_text(encoding="utf-8")
-    assert ".lotrappa>li{display:grid;grid-template-columns:calc(" in css
+    assert (".lobed td:last-child{width:calc(58px * var(--fsk, 1));"
+            "padding-left:12px;text-align:right;white-space:nowrap}") in css
+    assert ".lobedsvar{font-weight:700" in css
     html = _losark([_uppg(p=1, f="$x = 4$",
                           bed="+1 E deriverar och får $A\'(10) = 10$ "
                               "m$^2$/dygn samt tolkar det som hur snabbt "
                               "algarean växer efter 10 dygn")])
-    # Nivån är ett eget element FÖRE kriteriet, inte en svans på texten.
-    assert "<i>+1 E</i><span>deriverar och får" in html
+    # Märket är en egen cell EFTER kravet, inte en svans på texten.
+    assert ('<td class="lobedkrav">Deriverar och får <span class="mat" '
+            'data-tex="A\'(10) = 10"></span>') in html
+    assert "dygn.</td><td><b class=\"lobedniva\">+E</b></td>" in html

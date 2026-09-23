@@ -105,8 +105,9 @@
     Gäller alla papper som delar preamblen.
 
     MINIPAGES MED. Varje minipage nollställer högermarginalen
-    (\@parboxrestore), och det är där spalterna är smalast: bedömnings-
-    tabellens högerspalt är 41 % av satsytan. Utan avstavning OCH med rak
+    (\@parboxrestore), och det är där spalterna är smalast: kommentaren till
+    en bedömd elevlösning står i 36 % av satsytan (\bedelev, sedan
+    2026-09-23; förut trappan i 41 %). Utan avstavning OCH med rak
     kant hade ett långt ord där stuckit ut över spaltkanten. \raggedright
     läggs därför också i \@minipagerestore, som minipage kör efter
     nollställningen. INTE med \g@addto@macro: kärnan har \let makrot till
@@ -494,29 +495,52 @@
   {\end{list}}
 ((* endif *))
 
-((# Ett steg i bedömningstrappan (bedomning.tex.j2): NIVÅN FÖRST, i en egen
-    smal spalt, och kriteriet i resten av bredden med hängande indrag.
+((# ══════════ BEDÖMNINGSANVISNINGEN I NATIONELLA PROVETS FORM ══════════
+    Lärarens dom 2026-09-23: «Hela bedömningsanvisningen skulle vi kunna bygga
+    mycket tydligare … lik det som finns på nationella proven.» Tre spalter
+    per uppgift, som i PRIM-gruppens häften: numret (uppgift-miljön), svaret
+    och kraven, och poängen. Makrona används bara av bedomning.tex.j2.
 
-    Formen var först kriteriet till vänster och nivån via \hfill i
-    högermarginalen — nationella provets egen sättning, där anvisningen har
-    hela sidbredden till kriteriet. Sedan 2026-08-23 står trappan i
-    bedömningstabellens HÖGERSPALT, som är 41 % av satsytan, och där räcker
-    raden inte till: «deriverar och får $A'(10) = 10$ m$^2$/dygn samt tolkar
-    det som hur snabbt algarean växer efter 10 dygn» bröts över fyra rader och
-    \hfill sköt «+1 E» till slutet av den sista — mitt inne i textflödet, inte
-    i någon marginal. Läraren kunde inte längre läsa av trappan som en trappa.
+    \bedsvar är svaret, fett och i grundgraden, så att det är det första ögat
+    hittar. Matematiken i det kommer som \(\pmb{…}\) ur exam_latex
+    (escape_mixed med fet=True): riktig fet matematik kräver typsnitt (cmmib,
+    cmbsy) som inte ligger i den seedade Tectonic-cachen, och ett papper som
+    inte kompilerar offline är värre. \pmb (amsbsy, laddas av amsmath)
+    trycker samma glyf tre gånger förskjutet och behöver inga nya typsnitt.
+    Utan den blev «2,5 km» ett magert tal och en fet enhet. Skärmen gör
+    samma sak med KaTeX egen \pmb (blad-bygg.js matBryt).
 
-    Nivån står därför FÖRST och på en fast position, precis som på skärmen
-    (app/web/ui/losning.css, .lotrappa: en grid med nivån i första spalten).
-    \hangindent + \hangafter=1 drar in rad två och framåt lika mycket som
-    \makebox är bred, så kriteriet bildar ett eget block bredvid märket hur
-    långt det än är. \mbox skyddar «+1 E» från att brytas. #))
-\newlength{\bednivabredd}
-\setlength{\bednivabredd}{12.5mm}
-\newcommand{\bedsteg}[2]{%
-  \par\noindent{\small
-    \hangindent=\bednivabredd \hangafter=1
-    \makebox[\bednivabredd][l]{\mbox{\textbf{#2}}}#1\par}}
+    \bedkrav är en rad per poäng: kravet i textspalten och märket («+C») i
+    poängspalten längst till höger, i lod för alla rader. Kravet står i en
+    minipage så att en lång rad bryts i sin egen spalt och aldrig in under
+    märket; [t] lägger märket på kravets FÖRSTA rad.
+
+    \bedtrippel är enhetens poäng, «(0/2/0)», dämpad och sist.
+
+    EN ENHET BRYTS INTE ÖVER EN SIDA. \nopagebreak efter svaret och varje
+    krav håller ihop dem med trippeln; sidan får brytas efter trippeln, alltså
+    mellan två deluppgifter eller två uppgifter. Första renderingen av exam
+    119 lade svaret och första kravet på uppgift 10 sist på en sida och resten
+    överst på nästa. #))
+\newlength{\bedpoangspalt}
+\setlength{\bedpoangspalt}{16mm}
+\newcommand{\bedsvar}[1]{\par\noindent{\bfseries #1}\par\nopagebreak}
+\newcommand{\bedkrav}[2]{%
+  \par\noindent
+  \begin{minipage}[t]{\dimexpr\linewidth-\bedpoangspalt\relax}\small #1\end{minipage}%
+  \makebox[\bedpoangspalt][r]{\small\bfseries #2}\par\nopagebreak}
+\newcommand{\bedtrippel}[1]{\par\noindent{\small\textcolor{ink500}{#1}}\par}
+((# Linjen mellan två uppgifter, som i NP:s tabell. Den står utanför
+    uppgift-miljön och går därför över hela satsytan. Den hör till uppgiften
+    OVANFÖR sig: \nopagebreak håller kvar den under trippeln, och sidan bryts
+    efter den. Hörde den till uppgiften under hamnade den överst på nästa
+    sida, tätt under sidhuvudets eget streck, och två linjer i rad läses som
+    ett fel. \pfbehov efter linjen bryter sidan redan där när en kort uppgift
+    inte ryms. #))
+\newcommand{\bedlinje}{%
+  \par\nopagebreak\vspace{2.5mm}%
+  \noindent\textcolor{ink200}{\rule{\linewidth}{0.15mm}}\par
+  \pfbehov{24mm}}
 
 ((# Kvadratisk kryssruta för flerval — tom ruta, inget typsnittsberoende
     (bygger på \fbox + \rule, alltid tillgängligt). #))
@@ -575,31 +599,39 @@
     bråk», 2026-09-21). Sätts av _former.tex.j2 bara i celler som bär frac. #))
 \newcommand{\bråkstrut}{\rule[-2.4ex]{0pt}{5.6ex}}
 
-((# ══════════ BEDÖMNINGSTABELLENS RAD ══════════
-    Lärarens beställning 2026-08-23: vänster lösningen (facit överst, elevernas
-    papper därunder), höger poängen och skälet — på SAMMA rad. Läraren läser
-    radvis: «så här ser 1 p ut, så här ser 2 p ut», och den jämförelsen är hela
-    anvisningens syfte.
+((# ══════════ EN BEDÖMD ELEVLÖSNING ══════════
+    Avsnittet «Bedömda elevlösningar» sist i bedömningsanvisningen (lärarens
+    dom 2026-09-23, NP:s form): elevens papper till vänster, poängen det ges
+    («0/1/0») och kommentaren till höger, på SAMMA rad. Läraren läser radvis,
+    «så här ser 1 p ut, så här ser 2 p ut», och det syns bara när papper och
+    poäng står bredvid varandra (beställningen 2026-08-23).
 
     TVÅ MINIPAGES OCH INTE TABULAR. Innehållet är löptext med \par, matte och
     ibland flera rader; en tabellcell hade krävt att varje & och \\ i
     innehållet var oskadliggjort, och det som når hit kommer ur modellen.
-    minipage tar vad som helst. Priset är att en rad inte kan brytas över en
-    sidbrytning — och det är rätt pris: en halv elevlösning på nästa sida är
-    värre än en tom halvsida.
+    minipage tar vad som helst. Priset är att en elevlösning inte kan brytas
+    över en sidbrytning, och det är rätt pris: en halv elevlösning på nästa
+    sida är värre än en tom halvsida.
 
-    \newcommand är \long som standard, så argumenten får innehålla \par. #))
-\newcommand{\bedrad}[3]{%
-  \par\vspace{1.5mm}%
-  \noindent{\small\bfseries\textcolor{ink700}{#1}}\par\vspace{0.8mm}%
-  \noindent\begin{minipage}[t]{0.55\linewidth}#2\end{minipage}%
-  \hfill\begin{minipage}[t]{0.41\linewidth}#3\end{minipage}%
-  \par\vspace{1mm}}
+    \newcommand är \long som standard, så argumenten får innehålla \par.
 
-((# Skiljelinjen mellan två rader. Står FÖRE varje elevrad och aldrig efter
-    den sista — en linje under tabellen hade sett ut som en avstämning. #))
+    \lineskiplimit och \lineskip i elevens spalt: raden «$a = \dfrac{x}{2}$»
+    under «$2x = 4a$» fick täljaren inklämd mot raden ovanför (exam 119,
+    uppgift 5, 2026-09-23). Ett bråk är högre än radavståndet räknar med, och
+    med gränsen får raden luft i stället. #))
+\newcommand{\bedelev}[3]{%
+  \par\noindent\begin{minipage}[t]{0.6\linewidth}%
+    \setlength{\lineskiplimit}{3pt}\setlength{\lineskip}{3pt}#1\end{minipage}%
+  \hfill\begin{minipage}[t]{0.36\linewidth}{\bfseries #2}\par
+    \vspace{0.8mm}{\small #3}\end{minipage}%
+  \par}
+
+((# Skiljelinjen mellan två elevlösningar på samma uppgift. Står FÖRE varje
+    lösning utom den första och aldrig efter den sista: en linje under hade
+    sett ut som en avstämning. \nopagebreak först: bryts sidan här ska linjen
+    stanna under lösningen ovanför, inte hamna ensam överst på nästa sida. #))
 \newcommand{\bedskilj}{%
-  \par\vspace{1.5mm}\noindent\textcolor{ink200}{\rule{\linewidth}{0.15mm}}%
+  \par\nopagebreak\vspace{1.5mm}\noindent\textcolor{ink200}{\rule{\linewidth}{0.15mm}}%
   \par\vspace{1.5mm}}
 
 ((# Elevlösningens parti — den gamla inramade formen. Används inte längre av

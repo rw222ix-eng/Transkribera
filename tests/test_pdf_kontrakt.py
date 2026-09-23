@@ -128,8 +128,10 @@ def test_bedomningsanvisningen_ar_lararens_eget_papper(dokument, tmp_path):
                                      tmp_path, "bedomning", epoch=EPOK)
     assert bed is not None, logg
     text = text_ur(bed)
-    # Bedömningen bär BÅDE uppgiften och hur den poängsätts.
-    assert "E för" in text or "+1" in text or "+2" in text or "+3" in text
+    # Bedömningen bär svaret och hur det poängsätts, i NP:s form (lärarens
+    # dom 2026-09-23): ett märke per poäng, «+E», «+C» eller «+A».
+    assert any(m in text for m in ("+E", "+C", "+A")), text[:400]
+    assert "+1 E" not in text
     assert sidor(bed) >= 1
 
 

@@ -119,10 +119,14 @@ def escape_latex(text: str) -> str:
     return "".join(out)
 
 
-def escape_mixed(text: str) -> str:
+def escape_mixed(text: str, *, fet: bool = False) -> str:
     """Escapa text med inline-matte: allt utanför ``$…$`` escapas, matten
     bevaras oförändrad som ``\\( … \\)`` (modellen skriver LaTeX-matte där,
-    aldrig i löptexten)."""
+    aldrig i löptexten).
+
+    `fet` lindar varje formel i ``\\pmb{…}``: bedömningsanvisningens svar står
+    i fetstil, och cachen har inga feta mattetypsnitt (se \\bedsvar i
+    _preamble.tex.j2)."""
     text = _CONTROL_RE.sub("", str(text or ""))
     parts: list[str] = []
     pos = 0
@@ -133,7 +137,8 @@ def escape_mixed(text: str) -> str:
         return _HARD_PROCENT_RE.sub(r"\1~\2", escape_latex(s))
     for m in _MATH_SPLIT_RE.finditer(text):
         parts.append(_esc_text(text[pos:m.start()]))
-        parts.append(r"\(" + m.group(1) + r"\)")
+        formel = r"\pmb{" + m.group(1) + "}" if fet else m.group(1)
+        parts.append(r"\(" + formel + r"\)")
         pos = m.end()
     parts.append(_esc_text(text[pos:]))
     return "".join(parts)
@@ -485,64 +490,181 @@ def _ar_led(enhet) -> bool:
     return str(enhet or "").strip().rstrip("$ ").endswith("=")
 
 
-# ── BEDÖMNINGSTRAPPAN PÅ PAPPRET ───────────────────────────────────────
-# Nationella provets bedömningsanvisning sätter kriteriet till vänster och
-# nivån i högermarginalen, en rad per poäng (se exam_spec.bedomningsrader).
-# Trappan byggs HÄR och inte i mallen: raderna måste delas innan de escapas,
-# annars blir radbrytningen ett «\n» i löptexten.
-def _bedomning_rader(bedomning) -> list[dict]:
+# ── BEDÖMNINGSANVISNINGEN I NATIONELLA PROVETS FORM ──────────────────────
+# Lärarens dom 2026-09-23: «Hela bedömningsanvisningen skulle vi kunna bygga
+# mycket tydligare … lik det som finns på nationella proven. För just nu känns
+# det som att det är väldigt mycket text och det är svårt för mig att rätta
+# snabbt.» Formen hon valde är PRIM-gruppens häften (NP 1c vt22), uppgift för
+# uppgift och deluppgift för deluppgift:
+#
+#   20.  x = 6
+#        Förenklar vänsterled genom att multiplicera parenteserna.     +C
+#        Lösning med korrekt svar.                                     +C
+#        (0/2/0)
+#
+# Svaret först och i fetstil, sedan en rad per poäng med märket i
+# poängspalten, sist enhetens poäng. Uppgiftstexten, lösningsgången och
+# elevexemplen står inte i tabellen. Texten har hon på provet bredvid sig, hela
+# lösningen står i lösningsförslaget (render_losningsforslag), och de bedömda
+# elevlösningarna har ett eget avsnitt sist (bedomning.tex.j2).
+#
+# Raderna byggs HÄR och inte i mallen: de måste delas innan de escapas, annars
+# blir radbrytningen ett «\n» i löptexten. Skärmen bygger samma rader
+# (app/web/ui/blad-bygg.js: svaret, kravrad, marke). Ändras den ena ska den
+# andra ändras, annars säger skärm och PDF olika saker om samma poäng.
+def _kravmening(krav: str) -> str:
+    """«löser ekvation (1), $x = 7$» blir «Löser ekvation (1), $x = 7$.».
+    NP skriver varje krav som en mening, versal först och punkt sist. En rad
+    som börjar med matematik behåller sin början."""
+    s = str(krav or "").strip()
+    if not s:
+        return ""
+    if s[0].isalpha():
+        s = s[0].upper() + s[1:]
+    return s if s[-1] in ".!?…" else s + "."
+
+
+# «KORREKT SVAR.» OCH INGET MER, som NP skriver när poängen ges för svaret
+# (lärarens dom 2026-09-23). Raderna upprepade annars svaret som står i
+# fetstil precis ovanför: «Rätt svar 3.», «Korrekt svar x⁸/2.». Bara när
+# resten av raden ÄR svaret (eller ingenting) kortas den; «Korrekt förenkling
+# till a⁶» och «Sätter in t = 7,5, svarar 2,5 km» säger något mer och står
+# kvar. Samma sak för flervalet: «Korrekt alternativ.».
+#
+# Jämförelsen tål formen: dollartecken, mellanrum, {,} och en inledande
+# variabel («d = 30 cm» mot svaret «30 cm»). Spegel av blad-bygg.js kravrad.
+_KORREKT_RE = re.compile(
+    r"^(?:för\s+)?(?:rätt|korrekt)\s+(svar|alternativ)\b[\s,:;–-]*(.*?)[\s.]*$",
+    re.I | re.S)
+_LEDPREFIX_RE = re.compile(r"^[a-zåäö][a-z0-9_']*(?:\([^()]*\))?=$")
+
+
+def _jamforbar(s: str) -> str:
+    s = str(s or "").lower().replace("{,}", ",")
+    return re.sub(r"\\[,;: ]|~|\$|\s", "", s).rstrip(".")
+
+
+def _samma_svar(rest: str, svar: str) -> bool:
+    a, b = _jamforbar(rest), _jamforbar(svar)
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    kort, lang = (a, b) if len(a) <= len(b) else (b, a)
+    return (lang.endswith(kort)
+            and bool(_LEDPREFIX_RE.match(lang[:len(lang) - len(kort)])))
+
+
+def _kravrad(krav: str, jamfor: tuple = ()) -> str:
+    """Kravet som NP skriver det. `jamfor` är det raden kan upprepa: svaret
+    (med och utan enhet) och på ett flerval den rätta bokstaven. Rå text."""
+    m = _KORREKT_RE.match(str(krav or "").strip())
+    if m:
+        rest = m.group(2)
+        if not rest.strip() or any(_samma_svar(rest, k) for k in jamfor if k):
+            return ("Korrekt alternativ." if m.group(1).lower() == "alternativ"
+                    else "Korrekt svar.")
+    return _kravmening(krav)
+
+
+def _marke(poang: int, niva: str) -> str:
+    """NP:s poängmärke: «+C», ett per poäng. «+1 C» var appens egen form, och
+    ettan säger ingenting när varje rad är en poäng. En rad som delar ut två
+    (gamla dokument) blir «+C +C», så att summan fortfarande syns."""
+    return " ".join([f"+{niva}"] * max(int(poang or 0), 0))
+
+
+def _bedomning_rader(bedomning, jamfor: tuple = ()) -> list[dict]:
     # NOTRADEN TRYCKS INTE. Anvisningen fick länge bära en avslutande
     # «Vanligt fel: …» efter poängtrappan, och läraren tog bort den vid
     # granskningen av prov 40 (2026-09-06): «detta med vanliga fel kan vi
     # ta bort helt och hållet så att vi sparar plats». Raden är inte en
-    # poäng, den stod i högerspalten och åt den plats trappan behöver.
+    # poäng, och NP:s form har bara rader som ger poäng.
     #
     # Filtret sitter HÄR och inte i parsern: exam_spec.bedomningsrader
     # läser det som STÅR i dokumentet, och proven som redan ligger i basen
-    # bär raden. Den ska fortsätta gå att läsa (och syns på skärmen), den
-    # ska bara inte sättas på pappret.
-    return [{"niva": (f"+{r['poang']} {r['niva']}" if r["niva"] else None),
-             "krav": escape_mixed(r["krav"])}
+    # bär raden. Den ska fortsätta gå att läsa, den ska bara inte sättas.
+    return [{"marke": _marke(r["poang"], r["niva"]),
+             "krav": escape_mixed(_kravrad(r["krav"], jamfor))}
             for r in exam_spec.bedomningsrader(bedomning)
-            if r["krav"] and not r["not"]]
+            if not r["not"] and (r["krav"] or r["poang"])]
 
 
-def _trapprader_uppgift(it) -> list[dict]:
-    """Hela uppgiftens trappa, som elevraderna mäts mot: lövets egen, eller
-    deluppgifternas i ordning med sin bokstav framför. Spegel av
-    app/web/ui/blad-bygg.js `trapprader` — skärm och papper ska visa samma
-    trappa, och elevlösningen ska få samma rader tilldelade på båda."""
-    delar = it.deluppgifter or []
-    if not delar:
-        return _bedomning_rader(it.bedomning)
-    ut: list[dict] = []
-    for k, d in enumerate(delar):
-        bokstav = _BOKSTAV[k] if k < len(_BOKSTAV) else str(k + 1)
-        for r in _bedomning_rader(d.bedomning):
-            ut.append({**r, "krav": f"{bokstav}) {r['krav']}"})
-    return ut
+# SVARET ÄR FÖRSTA RADEN I `losning`. Fältet är med flit kort, «svaret först,
+# ett par räkneled» (exam_spec._Uppgiftsbas), och räkneleden hör till
+# lösningsförslaget. NP:s svarsrad är bara svaret: «a = 3,5», «Sant,
+# (−3)² = 9».
+#
+# ENHETEN följer med när svaret är ett tal. `losning` bär den ofta inte (fältet
+# `enhet` gör det, se exam_gen.INSTRUCTION), och «2,5» utan «km» är ett annat
+# svar. Slutar raden på ord («Ja, hon har rätt.») hör ingen enhet dit, och
+# står den redan sist sätts den inte ut en gång till (samma prov som
+# blad-bygg.js ENHET_SLUT). Ett LED («$f'(x) =$») står före svaret, men bara
+# när svaret inte redan är en likhet.
+_SVAR_TAL_RE = re.compile(r"(\$|\d)\s*\.?$")
 
 
-def _fickrader(rader: list[dict], poang) -> list[dict]:
-    """Trappstegen en elevlösning fick. Trappan är stigande och har en rad per
-    poäng (exam_spec.bedomningsrader), så «två C-poäng» ÄR dess två första
-    C-rader — det går att RÄKNA ut och ska inte skrivas av modellen en gång
-    till. Spegel av blad-bygg.js `fickrader`."""
-    kvar = {"E": poang[0], "C": poang[1], "A": poang[2]}
-    ut = []
-    for r in rader:
-        n = (r["niva"] or "")[-1:] if r["niva"] else ""
-        if n in kvar and kvar[n]:
-            kvar[n] -= 1
-            ut.append(r)
-    return ut
+def _enhet_slut(svar: str, enhet: str) -> bool:
+    e = str(enhet or "").replace("$", "").strip()
+    s = re.sub(r"[.\s]+$", "", str(svar or "").replace("$", ""))
+    return bool(e) and s.lower().endswith(e.lower())
 
 
-# NOLLRADEN SÄGER «INGA POÄNG» EN GÅNG. Rubriken i högerspalten står redan
-# där (bedomning.tex.j2, elevrad), och modellen skriver ofta kommentaren som en
-# hel mening som börjar likadant: «Inga poäng» / «Inga poäng. Svaret är rätt,
-# men eleven använder deriveringsreglerna …». På pappret blev det två rader
-# efter varandra som båda började med samma två ord.
+def _svaret(losning: str | None, enhet: str | None = None) -> str:
+    """Svaret ur `losning`, med enhet eller led. Rå text, inte escapad."""
+    forsta = next((r.strip() for r in str(losning or "").splitlines()
+                   if r.strip()), "")
+    e = str(enhet or "").strip()
+    if not forsta or not e:
+        return forsta
+    if _ar_led(e):
+        return forsta if "=" in forsta else f"{e} {forsta}"
+    if not _SVAR_TAL_RE.search(forsta) or _enhet_slut(forsta, e):
+        return forsta
+    m = re.match(r"^(.*?)(\.?)$", forsta, re.S)
+    return f"{m.group(1)} {e}{m.group(2)}"
+
+
+def _jamfor(losning: str | None, enhet: str | None = None,
+            bokstav: str | None = None) -> tuple:
+    """Det en kravrad kan upprepa (se _kravrad): svaret med och utan enhet,
+    och den rätta bokstaven på ett flerval."""
+    ut = (_svaret(losning, enhet), _svaret(losning))
+    return ut + ((bokstav, f"({bokstav})") if bokstav else ())
+
+
+def _svarsrad(losning: str | None, enhet: str | None = None, *,
+              bokstav: str | None = None, rutor: str | None = None,
+              forsta_fel: int | None = None) -> str:
+    """Bedömningsanvisningens svarsrad, escapad och klar att sätta i fetstil.
+
+    Facit som bor i STRUKTUREN och inte i texten står först: rätt alternativ
+    på ett flerval, rätt ruta på en kryssruterad och steget där felet sitter
+    i en stegtabell. De stod förr under uppgiftstexten (_former.tex.j2 kropp i
+    facitläge), och uppgiftstexten står inte längre i anvisningen. Skärmen
+    har bara flervalets bokstav: rutornas och stegtabellens facit följer
+    aldrig med till skärmarket (plan.js franProv)."""
+    forsta = _svaret(losning, enhet)
+    delar = []
+    if bokstav and forsta.strip(" .") != bokstav:
+        delar.append(bokstav)
+    if rutor and rutor not in forsta:
+        delar.append(rutor)
+    if forsta_fel:
+        delar.append(f"första felet i steg {forsta_fel}")
+    if forsta:
+        delar.append(forsta)
+    text = ", ".join(delar)
+    if text and text[0].isalpha():
+        text = text[0].upper() + text[1:]
+    return escape_mixed(text, fet=True)
+
+
+# NOLLRADEN SÄGER «INGA POÄNG» EN GÅNG. Poängen står redan bredvid elevens
+# papper, som «0/0/0» (bedomning.tex.j2, \bedelev), och modellen skriver ofta
+# kommentaren som en hel mening som börjar likadant: «Inga poäng. Svaret är
+# rätt, men eleven använder deriveringsreglerna …». På pappret blev det två
+# rader efter varandra som sa samma sak.
 #
 # Prompten ber om det också (exam_gen.build_bedomning_prompt), men prompten är
 # ett önskemål och renderaren en regel — och alla papper som redan ligger i
@@ -551,8 +673,8 @@ def _fickrader(rader: list[dict], poang) -> list[dict]:
 _UTAN_POANG_RE = re.compile(r"^\s*inga\s+po[äa]ng\s*[.:;,—–-]*\s*", re.I)
 
 
-# KOMMENTAREN FÅR INTE RÄKNA POÄNG EN GÅNG TILL. Trappstegen lösningen fick
-# står redan i högerspalten (_fickrader), och modellen skrev kommentaren som
+# KOMMENTAREN FÅR INTE RÄKNA POÄNG EN GÅNG TILL. Poängen lösningen fick
+# står redan bredvid den, och modellen skrev kommentaren som
 # «+1 E för 27, men i b testas bara ett exempel.» — så «+1 E» stod två gånger
 # under varandra på lärarens papper (prov 81, uppgift 12, 2026-09-16), och hon
 # räknade dem: «till höger står det +1 E två gånger, men till vänster står det
@@ -575,7 +697,7 @@ _LEDET_RE = re.compile(
 
 
 def _utan_stegen(dom: str) -> str:
-    """Kommentaren utan poängmärkena — trappan bär dem redan."""
+    """Kommentaren utan poängmärkena. Poängen står redan bredvid den."""
     text = dom or ""
     klippt = _LEDET_RE.sub("", text, count=1)
     if klippt == text:
@@ -588,9 +710,9 @@ def _utan_stegen(dom: str) -> str:
 
 
 def _utan_rubriken(dom: str) -> str:
-    """Kommentaren utan den inledande «Inga poäng» — rubriken bär den redan."""
+    """Kommentaren utan den inledande «Inga poäng». «0/0/0» säger det redan."""
     kvar = _UTAN_POANG_RE.sub("", dom or "").strip()
-    # Blev det ingenting kvar VAR kommentaren bara rubriken, och då är tomt
+    # Blev det ingenting kvar VAR kommentaren bara beskedet, och då är tomt
     # rätt svar. Annars versaliseras första bokstaven: meningen fortsatte i
     # gemener efter punkten som togs bort.
     return (kvar[0].upper() + kvar[1:]) if kvar else ""
@@ -611,13 +733,18 @@ def _losningsstycken(utforlig: str | None) -> list[dict]:
     return ut
 
 
-def _elevrader(it, trappa: list[dict]) -> list[dict]:
-    """Elevlösningarna som rader i bedömningstabellen: etikett («0 p», «1 p»),
-    elevens egna rader, de trappsteg lösningen fick, och kommentaren.
+def _elevexempel(it) -> list[dict]:
+    """De bedömda elevlösningarna till avsnittet sist i häftet: elevens rader,
+    poängen de ges som trippel («0/1/0») och kommentaren.
 
-    Partierna summeras. Pappret läraren bad om är EN rad per poängsteg, men
-    gamla dokument (och förlagans lo4) delar lösningen i flera partier med var
-    sin dom — de läggs ihop till en rad, i ordning."""
+    EGET AVSNITT, INTE UNDER VARJE UPPGIFT (lärarens dom 2026-09-23). NP:s
+    häften samlar dem sist under «Bedömda elevlösningar», och där stod de
+    förut mitt i tabellen, en rad per lägre poängsteg, så att varje uppgift
+    blev en halv sida att läsa förbi när hon bara ville se vad som ger poäng.
+
+    Partierna summeras. Gamla dokument (och förlagans lo4) delar lösningen i
+    flera partier med var sin dom, och de läggs ihop till ett papper, i
+    ordning. Spegel av app/web/ui/blad-bygg.js elevRad."""
     ut = []
     for e in (it.elevlosningar or []):
         poang = [0, 0, 0]
@@ -627,18 +754,8 @@ def _elevrader(it, trappa: list[dict]) -> list[dict]:
         total = sum(poang)
         dom = " ".join(pa.dom for pa in e.partier if pa.dom)
         ut.append({
-            # ETIKETTEN SÄGER VAD RADEN ÄR. «1 p» ensamt lästes som ett
-            # lösningsförslag: läraren såg «O ≈ 8,9 dm» på en elevrad under
-            # en uppgift som sa «Svara exakt» och trodde att facit var
-            # avrundat (prov 82, uppgift 6). Raden är ett påhittat elevpapper
-            # som INTE nådde ända fram, och det ska stå. Samma form som
-            # «Facit · full pott» ovanför; mittpunkten i \normalfont av samma
-            # skäl som där (TS1 saknar den i fetstil).
-            "etikett": (r"Elevexempel {\normalfont\textperiodcentered} "
-                        f"{total} p"),
-            "utan": total == 0,
             "rader": [escape_mixed(r) for pa in e.partier for r in pa.rader],
-            "trappa": _fickrader(trappa, poang) if total else [],
+            "trippel": f"{poang[0]}/{poang[1]}/{poang[2]}",
             "kommentar": escape_mixed(_utan_rubriken(dom) if total == 0
                                       else _utan_stegen(dom)),
         })
@@ -693,7 +810,22 @@ def _enhet_vy(*, poang, typ, formaga, text, losning, bedomning,
         "text": escape_mixed(text),
         "losning": escape_mixed(losning),
         "bedomning": escape_mixed(bedomning),
-        "bedomning_rader": _bedomning_rader(bedomning),
+        # Bedömningsanvisningens tre rader (NP:s form, se _svarsrad ovan).
+        # Strukturens facit bara på lärarens papper, alltså bara med facit.
+        "svar": _svarsrad(
+            losning, enhet,
+            bokstav=ratt_bokstav if facit else None,
+            rutor=(svarsrutor.val[svarsrutor.ratt]
+                   if facit and svarsrutor is not None
+                   and svarsrutor.ratt is not None else None),
+            forsta_fel=(stegtabell.forsta_fel + 1
+                        if facit and stegtabell is not None else None)),
+        "bedomning_rader": _bedomning_rader(
+            bedomning, _jamfor(losning, enhet,
+                               ratt_bokstav if facit else None)),
+        # Byggd i Python: en parentes intill Jinja-avgränsaren ((( går inte
+        # att skriva i mallen (se poang_rad nedan).
+        "trippel": f"({poang[0]}/{poang[1]}/{poang[2]})",
         "formaga_namn": exam_spec.FORMAGA_NAMN.get(formaga, formaga),
         "bild_fil": bild_fil,
     }
@@ -997,6 +1129,17 @@ def _build_view(doc: exam_spec.ExamDoc,
                         ev["ratt_bokstav"] = None
                         ev["svarsrutor"] = None
                         ev["endast_svar"] = True
+                        # Rutorna och alternativen trycks inte, och då ska
+                        # anvisningens svar inte heller hänvisa till dem.
+                        ev["svar"] = _svarsrad(
+                            d.losning, d.enhet,
+                            forsta_fel=(d.stegtabell.forsta_fel + 1
+                                        if facit and d.stegtabell is not None
+                                        else None))
+                        ev["bedomning_rader"] = _bedomning_rader(
+                            d.bedomning, _jamfor(d.losning, d.enhet))
+                    # «a)» framför svaret i anvisningen, som i NP:s «21. b)».
+                    ev["delnamn"] = f"{ev['bokstav']})"
                     # Figuren där den frågas om: förlagans 1(a) har grafen inne
                     # i deluppgiften medan b)–e) är rena räknefrågor. Rå TikZ,
                     # oescapad — samma regel som på uppgiften nedan.
@@ -1035,6 +1178,10 @@ def _build_view(doc: exam_spec.ExamDoc,
                     "losning": escape_mixed(it.losning),
                     "bedomning": escape_mixed(it.bedomning),
                     "bedomning_rader": _bedomning_rader(it.bedomning),
+                    # Anvisningen sätter svaret och trippeln per deluppgift;
+                    # nycklarna finns här av samma skäl som losning ovan.
+                    "svar": _svarsrad(it.losning, it.enhet),
+                    "trippel": f"({agg[0]}/{agg[1]}/{agg[2]})",
                     "bild_fil": bild_fil,
                     "formaga_namn": exam_spec.FORMAGA_NAMN.get(it.formaga, it.formaga),
                     "deluppgifter": deluppg,
@@ -1056,12 +1203,11 @@ def _build_view(doc: exam_spec.ExamDoc,
                               "poang": sum(pa.poang),
                               "dom": escape_mixed(pa.dom)} for pa in e.partier]}
                 for e in (it.elevlosningar or [])] if facit else []
-            # BEDÖMNINGSTABELLENS elevrader (lärarens beställning 2026-08-23):
-            # en rad per LÄGRE poängsteg, med de trappsteg lösningen faktiskt
-            # fick i högerspalten. Räknas här och inte i mallen — Jinja kan
-            # inte dela ut poäng, och skärmen räknar likadant (blad-bygg.js).
-            item_vy["elevrader"] = (_elevrader(it, _trapprader_uppgift(it))
-                                    if facit else [])
+            # De bedömda elevlösningarna, till anvisningens eget avsnitt sist
+            # (lärarens dom 2026-09-23, se _elevexempel). Summeras här och
+            # inte i mallen: Jinja kan inte räkna poäng, och skärmen räknar
+            # likadant (blad-bygg.js).
+            item_vy["elevexempel"] = _elevexempel(it) if facit else []
             item_vy["nummer"] = nummer
             # Elevernas utförliga lösning (losningsforslag.tex.j2); tom lista
             # på ett papper som inte fått passet, och då faller mallen
@@ -1280,10 +1426,16 @@ def render_prov(doc: exam_spec.ExamDoc,
 
 def render_bedomning(doc: exam_spec.ExamDoc,
                      bilder: dict[int, str] | None = None) -> str:
+    # facit=True: bedömningen är lärarens papper, och bara där får det stå
+    # vilket kryss som är rätt och vilket steg som brister.
+    vy = _build_view(doc, bilder, facit=True)
+    # «Bedömda elevlösningar» sist i häftet: bara de uppgifter som har några,
+    # i provets ordning. Listan byggs här därför att mallen annars måste
+    # fråga två nästlade slingor om det finns något alls att sätta.
+    elevavsnitt = [u for d in vy["delar"] for u in d["uppgifter"]
+                   if u["elevexempel"]]
     return _environment().get_template("bedomning.tex.j2").render(
-        # facit=True: bedömningen är lärarens papper, och bara där får det stå
-        # vilket kryss som är rätt och vilket steg som brister.
-        **_build_view(doc, bilder, facit=True))
+        elevavsnitt=elevavsnitt, **vy)
 
 
 def render_losningsforslag(doc: exam_spec.ExamDoc,

@@ -159,15 +159,19 @@ def test_arbetsbladet_bar_sitt_facit_provet_inte():
     losning = re.sub(r"\$([^$]*)\$", r"\\(\1\\)", doc.uppgifter[0].losning).strip()
     assert losning in ark, "arbetsbladet ska bära sitt facit"
     assert losning not in prov, "provet får aldrig innehålla lösningarna"
-    assert losning in bedomning, "bedömningsanvisningen bär provets lösningar"
+    # Bedömningsanvisningen bär svaret fett, med formlerna i \pmb (NP:s form,
+    # lärarens dom 2026-09-23; cachen har ingen fet matematik).
+    fet = re.sub(r"\$([^$]*)\$", r"\\(\\pmb{\1}\\)", doc.uppgifter[0].losning).strip()
+    assert f"\\bedsvar{{{fet}}}" in bedomning, \
+        "bedömningsanvisningen bär provets lösningar"
     # Och bedömningsanvisningen — lärarens eget papper — hör inte till eleven.
-    # Anvisningen står som en TRAPPA på pappret (ett \bedsteg per poäng, se
-    # exam_spec.bedomningsrader), inte som fältets råa sträng: därför jämförs
-    # kriterierna rad för rad.
+    # Anvisningen står som en rad per poäng på pappret (ett \bedkrav per
+    # poäng, se exam_spec.bedomningsrader), inte som fältets råa sträng: därför
+    # jämförs kriterierna rad för rad, som meningar med NP:s märke.
     for rad in exam_spec.bedomningsrader(doc.uppgifter[0].bedomning):
         assert rad["krav"] not in ark
-        assert f"\\bedsteg{{{rad['krav']}}}{{+{rad['poang']} {rad['niva']}}}" \
-            in bedomning
+        mening = rad["krav"][0].upper() + rad["krav"][1:] + "."
+        assert f"\\bedkrav{{{mening}}}{{+{rad['niva']}}}" in bedomning
     # «Separat facit»: elevbladet släcker bandet, lösningarna finns då bara på
     # lärarens separata blad (only_facit). Utan flaggan fick eleverna dem
     # dubbelt — en gång i bladet, en gång i facit-PDF:en.
