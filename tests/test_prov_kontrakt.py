@@ -413,11 +413,13 @@ def test_efterkontrollen_faller_provuppgift_utan_forebild():
     fynd = _kontroll(exam, bok=_BOK, sidor=_SIDOR)
     assert [f["kod"] for f in fynd] == ["utanbok"]
     assert fynd[0]["nr"] == 1
-    assert "saknar förebild i Liber Ma 1c" in fynd[0]["text"]
+    assert "Uppgift 1 saknar förebild" in fynd[0]["text"]
+    assert "nationella provets uppgiftstyper" in fynd[0]["text"]
     assert "inte märkt med något avsnitt" in fynd[0]["text"]
     # Laga-knappen byter ut uppgiften, den tänjer inte förebilden.
     from app.web import routes_exam
-    assert "Byt ut uppgiften" in routes_exam.efterkontroll_instruktion(fynd)
+    assert "nationella provets uppgiftstyper för kursen" in \
+        routes_exam.efterkontroll_instruktion(fynd)
     # Med förebild: tyst.
     exam["uppgifter"][0]["forebild"] = {"nr": 2601, "sort": "samma sort"}
     assert _kontroll(exam, bok=_BOK, sidor=_SIDOR) == []

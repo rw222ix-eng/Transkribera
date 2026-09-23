@@ -531,69 +531,92 @@ def test_poangvakten_hojer_inte_poangen_pa_taket():
     assert [("Höj INTE" in f["message"]) for f in fynd] == [False, True]
 
 
-# ── FÖREBILDSVAKTEN: varje provuppgift har sin förebild i kapitlet ──────
+# ── FÖREBILDSVAKTEN: varje provuppgift pekar ut en NP-typ ───────────────
 
-def test_provuppgift_utan_forebild_i_kapitlet_falls():
+KURS_1C = "Matematik, nivå 1c"
+KODER_119 = ["G25-M1C-ALG-1", "G25-M1C-ALG-5", "G25-M1C-ALG-6",
+             "G25-M1C-ALG-8", "G25-M1C-PRO-1"]
+
+
+def test_provuppgift_utan_np_typ_falls():
     """Prov 119 (2026-09-23): uppgift 7 levererades utan förebild efter tre
-    rundor som bytte ut uppgifter efter relevansdomen. Läraren: «det är inte
-    något vi har gått igenom på lektionen»."""
-    bok = [{"nr": 2118, "sida": 47}, {"nr": 2305, "sida": 56}]
-    uppgifter = [_u(forebild={"nr": 2118, "sort": "samma sort"}),
+    rundor som bytte ut uppgifter efter relevansdomen. Förebilden är en
+    NP-typ sedan samma kväll, och vakten frågar samma lista som prompten."""
+    typ = niva_rubrik.np_typer(KURS_1C, KODER_119)[0]["nr"]
+    uppgifter = [_u(forebild={"nr": typ, "sort": "samma sort"}),
                  _u(),
-                 _u(forebild={"nr": 9999, "sort": "samma sort"})]
-    fel = exam_gen.forebildsvakt(_prov(uppgifter), bok)
+                 _u(forebild={"nr": 2118, "sort": "bokens uppgift"})]
+    fel = exam_gen.forebildsvakt(_prov(uppgifter), KURS_1C, KODER_119)
     assert [(f["code"], f["path"]) for f in fel] == [
         ("forebildsvakt", "uppgift 2"), ("forebildsvakt", "uppgift 3")]
-    assert "saknar förebild i kapitlet" in fel[0]["message"]
-    assert "bokuppgift 9999, som inte står i kapitlet" in fel[1]["message"]
+    assert "saknar förebild" in fel[0]["message"]
+    assert "2118, som inte är någon av nationella provets" in fel[1]["message"]
     # Räknad vakt: slutgrinden räknar om den på det levererade pappret.
     assert exam_gen._raknas_om(fel[0])
 
 
 def test_forebildsvakten_ar_fail_open():
-    """Utan bok, och när ingen uppgift bär fältet (grammatikens tak)."""
-    assert exam_gen.forebildsvakt(_prov([_u()]), []) == []
-    assert exam_gen.forebildsvakt(_prov([_u(), _u()]),
-                                  [{"nr": 2118, "sida": 47}]) == []
+    """Omätt kurs, inga punkter, och ett papper där ingen uppgift bär fältet
+    (grammatikens tak)."""
+    assert exam_gen.forebildsvakt(_prov([_u(forebild={"nr": 1})]),
+                                  "Matematik, nivå 3c", ["G25-M1C-ALG-5"]) == []
+    assert exam_gen.forebildsvakt(_prov([_u(forebild={"nr": 1})]),
+                                  KURS_1C, []) == []
+    assert exam_gen.forebildsvakt(_prov([_u(), _u()]), KURS_1C,
+                                  KODER_119) == []
 
 
 def test_forebilden_galler_hela_uppgiften_i_prompten_och_hos_domaren():
     """Lagret ovanpå: uppgift 5, 7 och 12b i prov 119 byggde C- och A-poäng
-    på ett steg som inte står i kapitlet."""
-    p = exam_gen.build_forebild_prov([{"nr": 2118, "sida": 47, "text": "x"}])
+    på ett steg som varken stod i kapitlet eller i NP."""
+    typer = niva_rubrik.np_typer(KURS_1C, KODER_119)
+    p = exam_gen.build_forebild_prov(typer)
     assert "FÖREBILDEN GÄLLER HELA UPPGIFTEN" in p
     assert "två ekvationer som kedjas ihop" in p
-    d = exam_gen.build_relevans_prompt([], [{"nr": 2118, "text": "x"}],
-                                       profil="prov")
+    d = exam_gen.build_relevans_prompt([], typer, profil="prov")
+    assert "relevansdomare" in d                 # fejk-CLI:ts markör
+    assert "NATIONELLA PROVETS UPPGIFTSTYPER" in d
     assert "Döm VARJE deluppgift för sig" in d
-    # Gruppuppgiftens domarprompt är orörd (kassetterna).
-    assert "Döm VARJE deluppgift" not in exam_gen.build_relevans_prompt(
-        [], [{"nr": 2118, "text": "x"}])
+    assert "BOKENS UPPGIFTER" not in d
+    # Med bokens uppgifter (omätt kurs) är det bokens domare som förut, och
+    # gruppuppgiftens prompt är orörd (kassetterna).
+    bok = [{"nr": 2118, "text": "x"}]
+    assert "BOKENS UPPGIFTER" in exam_gen.build_relevans_prompt(
+        [], bok, profil="prov")
+    assert "Döm VARJE deluppgift" not in exam_gen.build_relevans_prompt([], bok)
 
 
-# ── NP:S UPPGIFTSTYPER SOM FÖRLAGA FÖR FORMEN ─────────────────────────────
+def test_relevansfyndet_mot_np_ber_om_en_typ():
+    kort = [{"nr": "5"}]
+    domar = {"5": {"dom": "annan sort", "battre": "90003", "skal": "",
+                   "kraver": ""}}
+    fel = exam_gen.relevansfynd(kort, domar, np=True)
+    assert "nationella provets uppgiftstyper" in fel[0]["message"]
+    assert "Typ 90003 är förebilden" in fel[0]["message"]
+    assert "bokens" not in fel[0]["message"]
+
+
+# ── NP:S UPPGIFTSTYPER ───────────────────────────────────────────────────
 
 def test_np_typerna_foljer_provets_innehall():
     """Lärarens dom 2026-09-23: «kolla på vilka typer av uppgifter det finns
     på nationella provet istället som inspiration». Prov 119:s punkter når
     algebra, ekvationer, olikheter och potenser, och bara de."""
-    koder = ["G25-M1C-ALG-1", "G25-M1C-ALG-5", "G25-M1C-ALG-6",
-             "G25-M1C-ALG-8", "G25-M1C-PRO-1"]
-    block = niva_rubrik.build_np_typer("Matematik, nivå 1c", koder)
-    assert block.startswith("NATIONELLA PROVETS UPPGIFTSTYPER I KURS 1c")
-    assert "INNEHÅLLET och METODEN hämtar du ur kapitlet" in block
+    typer = niva_rubrik.np_typer(KURS_1C, KODER_119)
+    texter = " ".join(t["text"] for t in typer)
     assert "bestäm parameter i olikhet så att lösningsmängden blir given" \
-        in block
-    # Andra kapitels innehåll kommer inte med, och inte heller NP:s
-    # matrisbedömda helheter på nio poäng.
-    assert "sannolikhet" not in block.split("\n", 1)[0]
-    assert "(3/2/4)" not in block
-    assert len(block.splitlines()) <= niva_rubrik.NP_TYPER_TAK + 1
+        in texter
+    assert "sannolikhet" not in texter
+    # NP:s matrisbedömda helheter på nio poäng kommer inte med.
+    assert "(3/2/4)" not in texter
+    assert len(typer) <= niva_rubrik.NP_TYPER_TAK
+    # Numren ligger i ett spann ingen bok har, och A-typerna finns med.
+    assert all(t["nr"] > niva_rubrik.NP_TYP_NR0 for t in typer)
+    assert any(t["niva"] == "A" for t in typer)
 
 
 def test_np_typerna_ar_tomma_utan_matt_kurs_eller_kategori():
-    assert niva_rubrik.build_np_typer("Matematik, nivå 3c",
-                                      ["G25-M1C-ALG-5"]) == ""
-    assert niva_rubrik.build_np_typer("Matematik, nivå 1c",
-                                      ["G25-M1C-PRO-2"]) == ""
-    assert niva_rubrik.build_np_typer("Matematik, nivå 1c", []) == ""
+    assert niva_rubrik.np_typer("Matematik, nivå 3c", ["G25-M1C-ALG-5"]) == []
+    assert niva_rubrik.np_typer(KURS_1C, ["G25-M1C-PRO-2"]) == []
+    assert niva_rubrik.np_typer(KURS_1C, []) == []
+    assert exam_gen.build_forebild_prov([]) == ""

@@ -3701,61 +3701,63 @@ def build_forebild(bokuppgifter: list[dict] | None) -> str:
 # olika nummer i olika uppgifter, och provets urval är av en annan sort (se
 # bok.provuppgifter). Att grena en text i två profiler hade gjort båda otydliga
 # och satt gruppuppgiftens kassetter på spel.
+#
+# 2026-09-23 BYTTE FÖREBILDEN KÄLLA: nationella provets uppgiftstyper i
+# stället för kapitlets uppgifter (se docstringen). Kapitlets innehåll vaktas
+# fortfarande av förbudslistan, delmomenten ur kalendern och delmomentsdomaren.
 
 
-def build_forebild_prov(bokuppgifter: list[dict] | None) -> str:
-    """Kapitlets bokuppgifter som förebilder, eller TOM STRÄNG.
+def build_forebild_prov(typer: list[dict] | None) -> str:
+    """NP:s uppgiftstyper som provets förebilder, eller TOM STRÄNG.
 
-    Tomt utan bokuppgifter, alltså INTE den FOREBILD_UTAN_BOK
-    gruppuppgiften får.
-    Ett prov utan bokdörr ska ha ordagrant den prompt det hade innan
-    förebilden fanns (kassetteregeln), och gruppuppgiftens rad om att lämna
-    fältet tomt hör till en profil som alltid har blocket."""
-    rader = [r for r in (bokuppgifter or []) if r.get("nr")]
+    LÄRARENS DOM 2026-09-23, kväll: «vi ska inte kolla på hur uppgifterna är
+    ställda i boken överhuvudtaget … för då finns risken att vi gör uppgifter
+    som är alldeles för lika de uppgifter som finns i boken … nationella
+    provet som inspiration.» Blocket bar förut kapitlets egna uppgiftstexter,
+    och modellen skrev av formen. Nu bär det kursens NP-typer för provets
+    innehåll (niva_rubrik.np_typer), och bokens uppgifter når inte
+    skrivningen alls. Vad som prövas bestämmer kalendern och kapitlets teori
+    (delmomenten, bokblocket); hur uppgiften ställs och på vilken nivå
+    bestämmer NP.
+
+    Tomt utan typer (kursen är inte mätt, eller inga punkter når en
+    kategori): då står prompten som den stod innan förebilden fanns, samma
+    kassetteregel som förut."""
+    rader = [t for t in (typer or []) if t.get("nr")]
     if not rader:
         return ""
-    kort = [{"nr": r["nr"],
-             **({"sida": r["sida"]} if r.get("sida") is not None else {}),
-             **({"niva": r["niva"]} if r.get("niva") is not None else {}),
-             "text": _kort(r.get("text") or "", 160)} for r in rader]
+    kort = [{"nr": t["nr"], "niva": t.get("niva"), "text": t.get("text") or ""}
+            for t in rader]
     return (
-        "KAPITLETS EGNA UPPGIFTER, ur boken klassen räknar i (\"niva\" är "
-        "bokens nivåmärkning, \"sida\" behövs eftersom de blandade "
-        "uppgifterna och kapiteltestet numrerar om från 1):\n"
+        "NATIONELLA PROVETS UPPGIFTSTYPER för kursen och provets innehåll, en "
+        "per bedömd form med poängen E/C/A:\n"
         f"{json.dumps(kort, ensure_ascii=False)}\n"
-        "VARJE uppgift du skriver ska ha en FÖREBILD bland dem: en uppgift "
-        "som prövar samma sak med samma metod. Fyll fältet \"forebild\" med "
-        "{\"nr\": boknumret, \"sort\": en mening om vad som är samma sort}. "
-        "Sorten är vad eleven GÖR: samma förenkling, samma sorts "
-        "omvandling, samma sorts resonemang. Inte samma sammanhang och "
-        "aldrig samma tal.\n"
-        "Hittar du ingen uppgift i kapitlet av den sort du tänkt skriva är "
-        "det DIN uppgift som ska bytas, inte förebilden som ska tänjas. "
-        "Läraren om provet som inte gick att känna igen: «hur kan det ens "
-        "hända att provet genererar uppgifter som inte är ur kapitel ett "
-        "alls?»\n"
+        "VARJE uppgift du skriver ska ha en av dem som FÖREBILD: samma sorts "
+        "fråga, samma svarsform (kortsvar eller lösning) och samma poäng på "
+        "samma nivå. Fyll fältet \"forebild\" med {\"nr\": typens nummer, "
+        "\"sort\": en mening om vad eleven gör}. Samma typ högst en gång per "
+        "prov, som i nationella provet.\n"
+        "INNEHÅLLET och METODEN hämtar du ur lektionerna och kapitlets teori "
+        "ovan, aldrig ur bokens uppgifter: läraren vill inte att provets "
+        "uppgifter liknar bokens. Talen och sammanhanget är dina egna.\n"
         # LAGRET OVANPÅ (lärarens dom över prov 119, 2026-09-23). Tre
-        # uppgifter pekade på en lätt bokuppgift och byggde sina C- och
-        # A-poäng på ett steg som inte står någonstans i kapitlet: uppgift 5
-        # «Bestäm a så att ekvation (1) och (2) har samma lösning» med
-        # förebilden 2118 ($15/y = 3/2$), uppgift 7 ett generellt bevis som
-        # eleven skulle bygga ur fem meningars räkneexempel, och 12b ett
-        # intervall $]k, 2k]$ där båda gränserna rör sig. Läraren: «det är
+        # uppgifter byggde sina C- och A-poäng på ett steg som varken stod i
+        # kapitlet eller i NP på den nivån: uppgift 5 «Bestäm a så att
+        # ekvation (1) och (2) har samma lösning», uppgift 7 ett generellt
+        # bevis som eleven skulle bygga ur fem meningars räkneexempel, och 12b
+        # ett intervall $]k, 2k]$ där båda gränserna rör sig. Läraren: «det är
         # inte något vi har gått igenom på lektionen», «den känns krånglig»,
         # «väldigt knepig för att vara Matte 1c».
         "FÖREBILDEN GÄLLER HELA UPPGIFTEN, också C- och A-delen. Uppgiften "
-        "gör det förebilden gör och inget mer. Svårighet på C och A hämtar "
-        "du ur kapitlets egna svårare uppgifter (bokens högre nivåer), "
-        "aldrig genom att lägga ett steg ovanpå en lätt bokuppgift. Tre "
-        "former läraren fällde för att de inte står i kapitlet: två "
+        "gör det typen gör och inget mer, med en metod klassen har övat. "
+        "Lägg aldrig ett steg ovanpå typen. Tre former läraren fällde: två "
         "ekvationer som kedjas ihop (lös den ena och sätt in svaret i den "
         "andra), ett intervall där båda gränserna rör sig med en konstant, "
         "och ett generellt bevis som eleven själv ska bygga ur en berättelse "
-        "med räkneexempel. Ber boken eleven visa att något alltid gäller, "
-        "står påståendet färdigt i EN mening, och då gör provet likadant.\n"
-        "Originalitetskravet står kvar: förebilden är en pekning, inte en "
-        "förlaga. En uppgift eleven känner igen ur boken är fel skriven, och "
-        "en uppgift med bokens egna tal är avskrift."
+        "med räkneexempel. Ska eleven visa att något alltid gäller, står "
+        "påståendet färdigt i EN mening.\n"
+        "Hittar du ingen typ som passar det du tänkt pröva är det DIN uppgift "
+        "som ska bytas, inte typen som ska tänjas."
     )
 
 
@@ -4252,6 +4254,8 @@ def build_relevans_prompt(kort: list[dict], bokuppgifter: list[dict],
     skrivna för alla klasser. Ett papper vars uppgifter handlar om färgburkar
     mot en bok som skriver $9/2 \\div 3/4$ ska dömas på FÄRDIGHETEN, aldrig på
     att situationen skiljer sig. Tom sträng ger byte-identisk domarprompt."""
+    if profil == "prov" and _ar_np_typer(bokuppgifter):
+        return _build_relevans_prompt_np(kort, bokuppgifter, punkter)
     bok = [{"nr": r["nr"],
             **({"niva": r["niva"]} if r.get("niva") is not None else {}),
             "text": _kort(r.get("text") or "", 160)}
@@ -4316,6 +4320,63 @@ def build_relevans_prompt(kort: list[dict], bokuppgifter: list[dict],
     )
 
 
+def _ar_np_typer(lista: list[dict] | None) -> bool:
+    """Är jämförelselistan NP:s uppgiftstyper (niva_rubrik.np_typer) och
+    inte bokens uppgifter? Numren avgör: NP-typerna ligger i ett spann ingen
+    bok har."""
+    try:
+        return bool(lista) and all(int(r.get("nr") or 0) > niva_rubrik.NP_TYP_NR0
+                                   for r in lista)
+    except (TypeError, ValueError):
+        return False
+
+
+def _build_relevans_prompt_np(kort: list[dict], typer: list[dict],
+                              punkter: list[str] | None) -> str:
+    """Relevansdomaren på PROVET sedan 2026-09-23: formen och nivån mot
+    nationella provets uppgiftstyper, inte mot bokens uppgifter. Läraren:
+    «vi ska inte kolla på hur uppgifterna är ställda i boken överhuvudtaget
+    … nationella provet som inspiration.» Innehållet mot lektionerna dömer
+    delmomentsdomaren (doma_delmoment), inte den här."""
+    lista = [{"nr": t["nr"], "niva": t.get("niva"), "text": t.get("text") or ""}
+             for t in typer if t.get("nr")]
+    rad = ("Provets centrala innehåll: " + "; ".join(punkter) + "\n"
+           if punkter else "")
+    return (
+        "Du är relevansdomare för ett prov i matematik. Läraren vill att "
+        "provets uppgifter ställs som i nationella provet för kursen: samma "
+        "sorts fråga, samma svarsform och samma nivå.\n"
+        f"{rad}"
+        "NATIONELLA PROVETS UPPGIFTSTYPER för kursen och provets innehåll, "
+        "med poängen E/C/A:\n"
+        f"{json.dumps(lista, ensure_ascii=False)}\n\n"
+        "PAPPRETS UPPGIFTER. Fältet forebild är papprets egen pekning: vilken "
+        "av typerna den säger sig följa.\n"
+        f"{json.dumps(kort, ensure_ascii=False)}\n\n"
+        "Skriv för varje uppgift först KORT vad den kräver av eleven i fältet "
+        "kraver: vilken färdighet och vilken svarsform, inte vilken "
+        "situation. Döm sedan:\n"
+        "- dom \"samma sort\" när uppgiften har formen och nivån hos någon av "
+        "typerna. Att sammanhanget och talen är andra är RÄTT.\n"
+        "- dom \"annan sort\" när innehållet hör till provet men ingen typ har "
+        "den formen på den nivån. Skriv då numret på den typ uppgiften BORDE "
+        "ha följt i fältet battre.\n"
+        "- dom \"annat moment\" när uppgiften prövar något utanför provets "
+        "innehåll.\n"
+        "- dom \"oklart\" när du inte kan avgöra det. «oklart» är ett riktigt "
+        "svar och bättre än en gissning; det fäller ingenting.\n"
+        "Räkna igenom lösningen i huvudet innan du dömer. Döm VARJE "
+        "deluppgift för sig. En deluppgift som lägger ett steg ovanpå sin typ "
+        "är \"annan sort\": två ekvationer som kedjas ihop, ett intervall där "
+        "båda gränserna rör sig med en konstant, ett generellt bevis som "
+        "eleven ska bygga ur en berättelse. Ger uppgiften fler poäng på en "
+        "nivå än typen, eller kräver den fler steg per poäng, är den också "
+        "\"annan sort\".\n"
+        "Döm bara på SORTEN. Om uppgiften är dåligt skriven är någon annans "
+        "sak. Svara med enbart JSON."
+    )
+
+
 _RELEVANS_DOM = {"samma sort", "annan sort", "annat moment", "oklart"}
 
 
@@ -4341,13 +4402,30 @@ def _parse_relevans(raw: str) -> dict[str, dict]:
     return ut
 
 
-def relevansfynd(kort: list[dict], domar: dict[str, dict]) -> list[dict]:
-    """Domen mot boken. Bara «annan sort» och «annat moment» fäller — tystnad
-    och «oklart» passerar, precis som i nivådomen och räknedomen."""
+def relevansfynd(kort: list[dict], domar: dict[str, dict],
+                 np: bool = False) -> list[dict]:
+    """Domen mot boken, eller mot NP-typerna när `np` är sant (provet sedan
+    2026-09-23). Bara «annan sort» och «annat moment» fäller — tystnad och
+    «oklart» passerar, precis som i nivådomen och räknedomen."""
     ut = []
     for k in kort:
         dom = domar.get(k["nr"])
         if not dom or dom["dom"] not in ("annan sort", "annat moment"):
+            continue
+        if np:
+            vad = ("prövar något utanför provets innehåll"
+                   if dom["dom"] == "annat moment"
+                   else "är inte ställd som någon av nationella provets "
+                        "uppgiftstyper")
+            text = (f"uppgift {k['nr']} {vad}. Byt ut den mot en uppgift som "
+                     "följer en av typerna, och sätt forebild till typens "
+                     "nummer.")
+            if dom["battre"]:
+                text += f" Typ {_kort(dom['battre'], 40)} är förebilden."
+            if dom["skal"]:
+                text += f" Relevansdomarens skäl: {_kort(dom['skal'], 160)}"
+            ut.append(_err(f"uppgift {k['nr']}", "relevans",
+                           text + BEHALL_PLANEN))
             continue
         vad = ("prövar ett annat moment än sidorna"
                if dom["dom"] == "annat moment"
@@ -4394,7 +4472,8 @@ def doma_relevans(exam: dict, bokuppgifter: list[dict] | None, *, model: str,
     except Exception as e:                          # noqa: BLE001
         log(f"Bokjämförelsen kunde inte köras ({e}) — pappret levereras ändå.")
         return []
-    return relevansfynd(kort, _parse_relevans(raw))
+    return relevansfynd(kort, _parse_relevans(raw),
+                        np=profil == "prov" and _ar_np_typer(bokuppgifter))
 
 
 # ── BEGRIPLIGHETSDOMAREN ──────────────────────────────────────────────────
@@ -6475,8 +6554,9 @@ def _forebildssida(u: dict, sida_for: dict[int, int]) -> int | None:
     return sida_for.get(nr) if nr else None
 
 
-def forebildsvakt(exam: dict, bokuppgifter: list[dict] | None) -> list[dict]:
-    """Provets uppgift utan förebild i kapitlet.
+def forebildsvakt(exam: dict, kurs: str = "",
+                  koder: list[str] | None = None) -> list[dict]:
+    """Provets uppgift utan förebild bland nationella provets uppgiftstyper.
 
     Prompten ber om en förebild för VARJE uppgift (build_forebild_prov), men
     fältet är valfritt i grammatiken och relevansdomaren körs bara i första
@@ -6486,17 +6566,13 @@ def forebildsvakt(exam: dict, bokuppgifter: list[dict] | None) -> list[dict]:
     igenom på lektionen». Vakten är räknad, så slutgrinden räknar om den på
     det papper som faktiskt levereras.
 
-    Tyst utan bokuppgifter: ett prov utan bokdörr har ingen förebild att
-    pröva (samma villkor som relevansdomaren). Tyst också när INGEN uppgift
-    bär fältet: taket i to_response_format kan ha knuffat ut det ur
+    Förebilden är en NP-typ sedan samma kväll (niva_rubrik.np_typer), och
+    vakten frågar samma lista som prompten fick. Tyst utan typer: kursen är
+    inte mätt och prompten bad inte om någon förebild. Tyst också när INGEN
+    uppgift bär fältet: taket i to_response_format kan ha knuffat ut det ur
     grammatiken, och då kunde modellen inte fylla det (samma fail-open som
     delmomenttackning)."""
-    nummer: set[int] = set()
-    for r in (bokuppgifter or []):
-        try:
-            nummer.add(int(r.get("nr")))
-        except (TypeError, ValueError):
-            continue
+    nummer = {t["nr"] for t in niva_rubrik.np_typer(kurs, koder)}
     uppgifter = [u for u in ((exam or {}).get("uppgifter") or [])
                  if isinstance(u, dict)]
     if not nummer or not any(u.get("forebild") for u in uppgifter):
@@ -6510,13 +6586,13 @@ def forebildsvakt(exam: dict, bokuppgifter: list[dict] | None) -> list[dict]:
             nr = 0
         if nr in nummer:
             continue
-        vad = (f"pekar på bokuppgift {nr}, som inte står i kapitlet" if nr
-               else "saknar förebild i kapitlet")
+        vad = (f"pekar på {nr}, som inte är någon av nationella provets "
+               "uppgiftstyper" if nr else "saknar förebild")
         ut.append(_err(
             f"uppgift {i}", "forebildsvakt",
-            f"Uppgift {i} {vad}. Byt ut den mot en uppgift av samma sort "
-            "som en av kapitlets uppgifter, och sätt forebild till den "
-            "uppgiftens nummer. Samma del, samma poäng och samma förmåga."))
+            f"Uppgift {i} {vad}. Byt ut den mot en uppgift som följer en av "
+            "nationella provets uppgiftstyper i listan, och sätt forebild till "
+            "typens nummer. Samma del, samma poäng och samma förmåga."))
     return ut
 
 
@@ -8224,7 +8300,7 @@ def _raknade_fynd(exam: dict, *, avsnitt: list[dict] | None, antal: int | None,
                 # krav. Mätningen och reglerna står i app/np_vakter.py.
                 + np_vakter.np_vakter(exam, kurs)
                 # Varje uppgift har sin förebild i kapitlet (prov 119).
-                + forebildsvakt(exam, bokuppgifter))
+                + forebildsvakt(exam, kurs, koder))
     return fel + scenvakt(exam)
 
 
@@ -8310,7 +8386,11 @@ def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
     if profil == "prov" and bokuppgifter:
         fel = fel + begriplighetssignaler(exam, profil)
         if doma:
-            fel = fel + doma_relevans(exam, bokuppgifter, model=model,
+            # Formen mot NP:s uppgiftstyper (2026-09-23), boken bara när
+            # kursen inte är mätt och typerna saknas.
+            fel = fel + doma_relevans(exam,
+                                      niva_rubrik.np_typer(kurs, koder)
+                                      or bokuppgifter, model=model,
                                       punkter=punkter, inriktning=inriktning,
                                       profil=profil, llm=llm, log_cb=log_cb)
             # Elevläsaren (app/elevlasare.py, 2026-09-22) ersatte provets
@@ -8343,8 +8423,8 @@ def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
             "justerar poängen …")
     # Loggen namnger vad som fälldes, inte hur många fynd det blev: läraren
     # ska kunna läsa efteråt VARFÖR en uppgift byttes ut.
-    for kod, rad in (("relevans", "Boken: {n} uppgift(er) utan förebild i "
-                                  "kapitlet, byter ut …"),
+    for kod, rad in (("relevans", "Formen: {n} uppgift(er) utan förebild, "
+                                  "byter ut …"),
                      ("begriplighet", "Texten: {n} uppgift(er) är otydligt "
                                       "skrivna, skriver om …"),
                      ("elevlasare", "Elevläsaren: {n} uppgift(er) läses inte "
@@ -8376,8 +8456,8 @@ def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                                       "likvärdiga originalets …"),
                      ("scenvakt", "Bilden: {n} bildbeställning(ar) hör till en "
                                   "annan uppgift …"),
-                     ("forebildsvakt", "Boken: {n} uppgift(er) saknar "
-                                       "förebild i kapitlet, byter ut …")):
+                     ("forebildsvakt", "Formen: {n} uppgift(er) pekar inte "
+                                       "ut någon NP-typ, byter ut …")):
         n = len([f for f in fel if f["code"] == kod])
         if n:
             log(rad.format(n=n))
@@ -9275,17 +9355,11 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # alltså inget nytt anrop. Tom sträng när ingen punkt krockar, och då är
     # prompten byte för byte den som gick i väg förut.
     forbehallblock = build_ci_forbehall(punkter, forbjudna or [])
-    forebildblock = (build_forebild_prov(bokuppgifter)
+    # Provets förebilder är NP:s uppgiftstyper, inte bokens uppgifter
+    # (lärarens dom 2026-09-23, build_forebild_prov). Tom sträng utan mätt
+    # kurs eller utan punkter som når en kategori.
+    forebildblock = (build_forebild_prov(niva_rubrik.np_typer(kurs, koder))
                      if profil == "prov" else "")
-    # NP:s uppgiftstyper som förlaga för formen (lärarens dom 2026-09-23,
-    # niva_rubrik.build_np_typer). Står bredvid bokens förebilder: kapitlet
-    # ger innehållet, NP formen och nivån. Tom sträng utan mätt kurs eller
-    # utan punkter som når en kategori.
-    if profil == "prov":
-        forebildblock = "\n\n".join(
-            b for b in (forebildblock,
-                        niva_rubrik.build_np_typer(kurs, koder or punkter))
-            if b)
     # OMPROVET (2026-09-19). Samma villkor och samma skäl som blocken ovan:
     # utan referens en TOM STRÄNG och en oförändrad prompt.
     omprovblock = build_omprov(referensprov)

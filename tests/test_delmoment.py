@@ -750,12 +750,22 @@ def _bokuppgifter():
             {"nr": 34, "sida": 38, "niva": 2, "text": "Bestäm två heltal …"}]
 
 
-def test_provet_far_kapitlets_uppgifter_som_forebilder():
-    r = exam_gen.build_forebild_prov(_bokuppgifter())
-    assert "1112" in r and '"sida"' in r      # numren krockar utan sidan
+def _np_typer():
+    from app import niva_rubrik
+    return niva_rubrik.np_typer("Matematik, nivå 1c",
+                                ["G25-M1C-ALG-5", "G25-M1C-ALG-8"])
+
+
+def test_provet_far_nationella_provets_typer_som_forebilder():
+    """Lärarens dom 2026-09-23: «vi ska inte kolla på hur uppgifterna är
+    ställda i boken överhuvudtaget». Förebilderna är NP:s uppgiftstyper, och
+    bokens uppgiftstexter når inte skrivningen."""
+    typer = _np_typer()
+    r = exam_gen.build_forebild_prov(typer)
+    assert str(typer[0]["nr"]) in r and typer[0]["text"] in r
     assert "FÖREBILD" in r and "forebild" in r
-    # Provets block är inte gruppuppgiftens: ingen rad om lärarens remsa, och
-    # ingen FOREBILD_UTAN_BOK när listan är tom.
+    assert "aldrig ur bokens uppgifter" in r
+    # Provets block är inte gruppuppgiftens: ingen rad om lärarens remsa.
     assert "remsa" not in r
 
 
@@ -765,7 +775,7 @@ def test_forebildsfaltet_star_i_grammatiken_nar_prompten_ber_om_det():
     redan bär
     en (reparation, omskrivning, latexfix)."""
     assert exam_gen._forebild_i_grammatiken(
-        exam_gen.build_forebild_prov(_bokuppgifter()), "prov")
+        exam_gen.build_forebild_prov(_np_typer()), "prov")
     assert not exam_gen._forebild_i_grammatiken("skriv ett prov", "prov")
     assert exam_gen._forebild_i_grammatiken("skriv ett prov", "gruppuppgift")
     # Reparationsprompten bäddar in dokumentet: bär det en förebild ska

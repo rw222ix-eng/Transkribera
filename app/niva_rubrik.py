@@ -1251,6 +1251,12 @@ def _ankarrader(valda: list[dict]) -> str:
 # 7 och 12b i prov 119 hade en form som varken stod i kapitlet eller i NP på
 # den nivån.
 #
+# SAMMA KVÄLL, ETT STEG TILL: «vi ska inte kolla på hur uppgifterna är ställda
+# i boken överhuvudtaget … för då finns risken att vi gör uppgifter som är
+# alldeles för lika bokens.» NP-typerna ERSÄTTER därför bokens uppgifter som
+# provets förebilder (exam_gen.build_forebild_prov). Boken och kalendern
+# bestämmer vad som prövas, NP hur.
+#
 # Kategorierna är profilens `innehall`, och de nås ur Gy25-punktens rubrik.
 # Alla mönster som träffar räknas: «Potensfunktioner» är både potenser och
 # funktioner. Problemlösningspunkterna (PRO) och de digitala (DIG) har ingen
@@ -1300,51 +1306,50 @@ def np_kategorier(koder: list[str] | None) -> list[str]:
     return ut
 
 
-def build_np_typer(kurs: str, koder: list[str] | None) -> str:
-    """«NATIONELLA PROVETS UPPGIFTSTYPER», eller tom sträng när kursen inte
-    är mätt, filen saknas eller inga punkter når en kategori."""
+# NP-typernas nummer. De står i uppgiftens `forebild.nr` på provet, och
+# vakterna som slår upp bokens sidor (delmomenttackning, avsnittsniva,
+# efterkontrollens förebildsfråga) tiger om nummer boken inte känner. Därför
+# ett spann som ingen bok har: bokens nummer är 1–99 (blandade) och fyrsiffriga
+# kapitelnummer (1101, 2118).
+NP_TYP_NR0 = 90000
+
+
+def np_typer(kurs: str, koder: list[str] | None) -> list[dict]:
+    """Kursens NP-enheter för provets innehåll, en per form: {nr, niva,
+    poang, svar, text}. Tom lista när kursen inte är mätt, filen saknas eller
+    inga punkter når en kategori.
+
+    Samma form står bara en gång. Matrisbedömda helheter (3/2/4 på en rad) är
+    ingen enhet appen kan skriva, NP går aldrig över 4 p per enhet utanför
+    dem. Taket delas lika per nivå, så att A-typerna inte faller bort när
+    E-typerna är många."""
     nyckel = kursnyckel(kurs) or kurs
     enheter = ((_las_np_profil().get("kurser") or {}).get(nyckel) or {}) \
         .get("uppgifter") or []
     kategorier = np_kategorier(koder)
     if not enheter or not kategorier:
-        return ""
+        return []
     sedda: set[str] = set()
-    per_niva: dict[str, list[str]] = {n: [] for n in NIVAER}
+    per_niva: dict[str, list[dict]] = {n: [] for n in NIVAER}
     for u in enheter:
         form = " ".join(str(u.get("form_parafras") or "").split())
-        # Svarsformen står redan på raden («kortsvar:»), parafrasen upprepar
-        # den ofta sist.
+        # Svarsformen står redan på raden, parafrasen upprepar den ofta sist.
         form = re.sub(r",\s*kortsvar$", "", form)
-        p = u.get("poang") or [0, 0, 0]
-        # Matrisbedömda helheter (3/2/4 på en rad) är ingen enhet appen kan
-        # skriva: NP går aldrig över 4 p per enhet utanför dem.
+        p = [int(x or 0) for x in (u.get("poang") or [0, 0, 0])[:3]]
         if (u.get("innehall") not in kategorier or not form
                 or form in sedda or u.get("niva") not in per_niva
-                or sum(int(x or 0) for x in p[:3]) > 4):
+                or sum(p) > 4):
             continue
         sedda.add(form)
         svar = "kortsvar" if u.get("kortsvar") else "lösning"
         per_niva[u["niva"]].append(
-            f"- ({'/'.join(str(int(x or 0)) for x in p[:3])}) {svar}: {form}")
-    rader: list[str] = []
-    for n in NIVAER:
-        if per_niva[n]:
-            rader.append(f"{n}:")
-            rader += per_niva[n]
-    rader = rader[:NP_TYPER_TAK]
-    if not rader:
-        return ""
-    return (
-        f"NATIONELLA PROVETS UPPGIFTSTYPER I KURS {nyckel} för provets "
-        f"innehåll ({', '.join(kategorier)}), en rad per bedömd enhet med "
-        "poängen E/C/A. Läraren: «vilka typer av uppgifter det finns på "
-        "nationella provet … som inspiration». Hämta varje uppgifts FORM och "
-        "NIVÅ härifrån: samma sorts fråga, samma svarsform och ungefär samma "
-        "poäng på samma nivå. INNEHÅLLET och METODEN hämtar du ur kapitlet och "
-        "lektionerna, och talen och sammanhanget är dina egna, aldrig bokens. "
-        "En form som varken står här eller i kapitlet hör inte hemma på "
-        "provet.\n" + "\n".join(rader))
+            {"niva": u["niva"], "poang": p, "svar": svar,
+             "text": f"({'/'.join(map(str, p))}) {svar}: {form}"})
+    tak = max(1, NP_TYPER_TAK // len(NIVAER))
+    ut = [t for n in NIVAER for t in per_niva[n][:tak]]
+    for i, t in enumerate(ut, 1):
+        t["nr"] = NP_TYP_NR0 + i
+    return ut
 
 
 def _krav_rader(rubrik: dict[str, dict[str, str]],

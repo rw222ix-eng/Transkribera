@@ -236,9 +236,9 @@ def _bokfynd(doc, bok: dict | None, sidor: dict[int, int],
         sp = register.get(avs)
         if typ == "prov" and med_forebild and not it.forebild:
             ut.append(_fynd(
-                "utanbok", f"Uppgift {nr} saknar förebild i {bok['namn']}"
+                "utanbok", f"Uppgift {nr} saknar förebild"
                 + ("" if avs else " och är inte märkt med något avsnitt")
-                + ". Klassen har inte övat den sortens uppgift i kapitlet.",
+                + ". Den följer ingen av nationella provets uppgiftstyper.",
                 nr))
         if avs and sp is None:
             ut.append(_fynd(
@@ -545,8 +545,9 @@ def efterkontroll(view: dict, doc, summor: dict | None, *,
 # lagas genom att läraren sätter fler minuter eller tar bort poäng, och båda
 # valen är hennes. En modell som «lagar» provtiden skulle stryka uppgifter.
 _ATGARD = {
-    "utanbok": "Byt ut uppgiften mot en uppgift av samma sort som en av "
-               "kapitlets uppgifter, med förebild och avsnitt. Förebilden "
+    "utanbok": "Byt ut uppgiften mot en uppgift som följer en av nationella "
+               "provets uppgiftstyper för kursen, med innehåll klassen har "
+               "övat på lektionerna, och sätt förebild och avsnitt. Förebilden "
                "gäller hela uppgiften, också C- och A-delen. Samma del, samma "
                "poäng och samma förmåga.",
     "forebild": "Byt förebild till en bokuppgift som står på avsnittets sidor, "
@@ -1684,6 +1685,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # variabel, inget uttryck. Nu ska varje uppgift kunna peka på
                 # en syskonuppgift i boken, och relevansdomaren prövar
                 # pekningen (bok.provuppgifter, exam_gen.build_forebild_prov).
+                # SEDAN 2026-09-23 är provets förebilder NP:s uppgiftstyper
+                # (lärarens dom: «inte kolla på hur uppgifterna är ställda i
+                # boken»). Bokens uppgifter går fortfarande med, men bara till
+                # vakterna som slår upp sidor och till relevansdomaren när
+                # kursen saknar NP-mätning.
                 #
                 # Arbetsbladet får dem fortfarande INTE: det drillar ett
                 # moment, och dess prompt är oförändrad.
