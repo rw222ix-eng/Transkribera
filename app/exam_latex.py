@@ -610,10 +610,38 @@ def _enhet_slut(svar: str, enhet: str) -> bool:
     return bool(e) and s.lower().endswith(e.lower())
 
 
+def _forsta_meningen(rad: str) -> str:
+    """Raden fram till första meningsslutet UTANFÖR matematiken, när nästa
+    mening börjar med versal, siffra eller en formel.
+
+    Prov 124 (2026-09-23): modellen skrev svar och uträkning på samma rad,
+    «3. $T = 0{,}2\\sqrt{225} = 3$ s.», och hela raden stod fet som svar.
+    Bara när resten är en uträkning (ett likhetstecken följer): ett svar i
+    två meningar utan räkning står kvar helt. Förkortningar klipps inte
+    («t.ex. $x = -3$»), och punkter inne i $…$ räknas inte. Spegel av
+    blad-bygg.js forstaMeningen."""
+    i_mat = False
+    for i, t in enumerate(rad):
+        if t == "$" and (i == 0 or rad[i - 1] != "\\"):
+            i_mat = not i_mat
+        elif (t == "." and not i_mat
+              and re.match(r"\s+[A-ZÅÄÖ0-9$]", rad[i + 1:])
+              and not _FORKORTNING.search(rad[:i])
+              and "=" in rad[i + 1:]):
+            return rad[:i].rstrip()
+    return rad
+
+
+# «t.ex. $x = -3$» är ingen meningsgräns fast en formel följer.
+_FORKORTNING = re.compile(
+    r"(?:^|\s)(?:t\.ex|bl\.a|s\.k|d\.v\.s|dvs|osv|m\.m|ca|jfr|resp|kl|nr|obs)$",
+    re.IGNORECASE)
+
+
 def _svaret(losning: str | None, enhet: str | None = None) -> str:
     """Svaret ur `losning`, med enhet eller led. Rå text, inte escapad."""
-    forsta = next((r.strip() for r in str(losning or "").splitlines()
-                   if r.strip()), "")
+    forsta = _forsta_meningen(next(
+        (r.strip() for r in str(losning or "").splitlines() if r.strip()), ""))
     e = str(enhet or "").strip()
     if not forsta or not e:
         return forsta

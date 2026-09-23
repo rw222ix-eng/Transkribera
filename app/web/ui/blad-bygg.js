@@ -1048,7 +1048,24 @@ window.BladBygg = (() => {
      lösningsförslaget. Enheten följer med när svaret är ett tal och inte
      redan bär den; ett led står före svaret när svaret inte redan är en
      likhet. Spegel av exam_latex._svaret. */
-  const forstaRad = s => String(s || '').split('\n').map(r => r.trim()).find(Boolean) || '';
+  /* Raden fram till första meningsslutet utanför matematiken, när nästa
+     mening börjar med versal, siffra eller en formel och är en uträkning (ett
+     likhetstecken följer). Prov 124 (2026-09-23) hade svar och uträkning på
+     samma rad, och hela raden stod fet. Spegel av exam_latex._forsta_meningen. */
+  const FORKORTNING = /(?:^|\s)(?:t\.ex|bl\.a|s\.k|d\.v\.s|dvs|osv|m\.m|ca|jfr|resp|kl|nr|obs)$/i;
+  function forstaMeningen(rad) {
+    let iMat = false;
+    for (let i = 0; i < rad.length; i++) {
+      if (rad[i] === '$' && (i === 0 || rad[i - 1] !== '\\')) iMat = !iMat;
+      else if (rad[i] === '.' && !iMat && /^\s+[A-ZÅÄÖ0-9$]/.test(rad.slice(i + 1))
+               && !FORKORTNING.test(rad.slice(0, i)) && rad.slice(i + 1).includes('=')) {
+        return rad.slice(0, i).trimEnd();
+      }
+    }
+    return rad;
+  }
+  const forstaRad = s => forstaMeningen(
+    String(s || '').split('\n').map(r => r.trim()).find(Boolean) || '');
   const arLed = e => String(e || '').trim().replace(/[$\s]+$/, '').endsWith('=');
   const SVAR_TAL = /(\$|\d)\s*\.?$/;
   function svaret(losning, enhet) {

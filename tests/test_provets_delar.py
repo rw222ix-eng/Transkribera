@@ -592,6 +592,30 @@ def test_svaret_ar_forsta_raden_i_losningen():
     assert "(1):" not in html and "x = 7" not in html
 
 
+SVARSRADER = [
+    # Prov 124 (2026-09-23): svar och uträkning på samma rad.
+    (r"$\frac{2}{3}$. $\sqrt[3]{a^2} = a^{2/3}$.", r"$\frac{2}{3}$"),
+    (r"3. $T = 0{,}2\sqrt{225} = 3$ s.", "3"),
+    # Förkortningen är ingen meningsgräns, och utan uträkning står raden kvar.
+    (r"Falskt, t.ex. $x = -3$.", r"Falskt, t.ex. $x = -3$."),
+    ("Ja. Hon har rätt.", "Ja. Hon har rätt."),
+    ("Bea betalar 20 000 kr. Arvid 26 000 kr.",
+     "Bea betalar 20 000 kr. Arvid 26 000 kr."),
+    (r"$a = 3{,}5$", r"$a = 3{,}5$"),
+]
+
+
+def test_svarsraden_slutar_dar_utrakningen_borjar():
+    """Samma tabell på skärmen och i PDF:en (exam_latex._forsta_meningen,
+    blad-bygg.js forstaMeningen)."""
+    from app import exam_latex
+    for rad, svar in SVARSRADER:
+        assert exam_latex._forsta_meningen(rad) == svar, rad
+    html = _losark([_uppg(p=1, f=SVARSRADER[1][0], bed="+1 E rätt svar")])
+    assert 'data-tex="\\pmb{T = 0{,}2' not in html
+    assert '<b class="lobedsvar">3' in html
+
+
 def test_flervalets_bokstav_star_forst_i_svaret():
     """Rätt alternativ är facit som bor i strukturen, inte i texten. Det står
     först på svarsraden, som på PDF:en (exam_latex._svarsrad)."""
