@@ -987,6 +987,11 @@ def _siffror_rek(sections: list, path: str, errors: list[dict],
             # Regel 8b: på vänstern står bokstäver. En rad som RÄKNAR med
             # tal är ett exempel, och exempel bor på högertavlan, utom
             # ankaret ovan, som är beställt.
+            # EN LIKHET MED TAL STÅR KVAR. «25 % av 800 kr = 200 kr» som
+            # anatomi under «1. Vad är det?» (BA26B, 2026-09-23) passerar,
+            # eftersom _ar_utrakning kräver en pil eller minst två likhetstecken.
+            # Luckan är lärarens beslut: «Låt den stå, den är konkret.» Täpp
+            # inte till den.
             if _ar_utrakning(sec.latex) and _tal_pa_bada_sidor(sec.latex):
                 errors.append(_err(spath, "siffror_vanster",
                                    f"'{sec.latex[:60]}' är ett uträknat "

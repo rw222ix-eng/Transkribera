@@ -914,6 +914,19 @@ def test_forra_rubriken_kortas_till_forsta_satsen():
     assert lb.forra_rubrik(None) == ""
 
 
+def test_konkret_likhet_far_sta_pa_vanstern():
+    """«Låt den stå, den är konkret.» (Läraren 2026-09-23 om anatomiraden
+    «25 % av 800 kr = 200 kr» på BA26B:s procenttavla.) En enda likhet med
+    tal är ingen uträkning, och siffervakten ska inte fälla den."""
+    doc = _valid_doc()
+    spalt = doc["boards"][0]["sections"][4]["children"][0]["children"]
+    spalt.insert(1, {"kind": "math",
+                     "latex": "25\\,\\% \\text{ av } 800\\text{ kr} = 200\\text{ kr}",
+                     "size": 20})
+    koder = {f["code"] for f in ws.validate_board_json(doc)[1]}
+    assert "siffror_vanster" not in koder
+
+
 def test_forra_gangen_kostar_inget_i_textbudgeten():
     """Raden läggs dit efter valideringen; modellen har aldrig kunnat betala
     den, och en senare reparation ska inte stryka modellens rader för den."""
