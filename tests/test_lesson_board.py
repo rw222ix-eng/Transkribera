@@ -846,6 +846,47 @@ def test_satt_tid_taler_trasig_tavla():
     assert lb.satt_tid({"boards": []}, "08:15") == {"boards": []}
 
 
+# -------------------------------------------------------------- satt_forra --
+
+def test_forra_gangen_ar_agendans_forsta_punkt():
+    ut = lb.satt_forra(_valid_doc(), "Andelen i procent, forts")
+    agendan = ut["boards"][0]["sections"][1]
+    assert agendan["items"] == ["Förra gången: Andelen i procent",
+                                "Vad satsen betyder",
+                                "Boken s. 88–90, uppg. 3110–3118"]
+    assert ws.validate_board_json(ut)[1] == []
+
+
+def test_forra_gangen_ar_idempotent_och_kan_tas_bort():
+    ut = lb.satt_forra(lb.satt_forra(_valid_doc(), "Formler"), "Proportionalitet")
+    punkter = ut["boards"][0]["sections"][1]["items"]
+    assert punkter[0] == "Förra gången: Proportionalitet"
+    assert len(punkter) == 3
+    assert lb.satt_forra(ut, "") == _valid_doc()
+
+
+def test_forra_rubriken_kortas_till_forsta_satsen():
+    assert lb.forra_rubrik("Repetition kap 1 – Testa dig själv 1") \
+        == "Repetition kap 1"
+    assert lb.forra_rubrik("Tecken i matematiska utsagor och intervall. "
+                           "Olikheter") \
+        == "Tecken i matematiska utsagor och intervall"
+    assert lb.forra_rubrik("1.3 Andragradsekvationer") == "Andragradsekvationer"
+    assert lb.forra_rubrik("pq-formeln") == "pq-formeln"
+    assert lb.forra_rubrik(None) == ""
+
+
+def test_forra_gangen_utan_agenda_far_en_egen_lista():
+    doc = _valid_doc()
+    doc["boards"][0]["sections"].pop(1)
+    ut = lb.satt_forra(lb.satt_tid(doc, "08:15"), "Formler")
+    sektioner = ut["boards"][0]["sections"]
+    assert [s["kind"] for s in sektioner[:3]] == ["text", "heading", "list"]
+    assert sektioner[2]["items"] == ["Förra gången: Formler"]
+    assert lb.satt_forra(ut, None)["boards"][0]["sections"][2]["kind"] \
+        == "divider"
+
+
 # ---------------------------------------------------------- generate_board --
 
 def test_generate_valid_first_try():

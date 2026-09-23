@@ -3243,6 +3243,73 @@ def satt_tid(board: dict | None, starttid: str | None,
     return board
 
 
+# FÖRRA GÅNGEN. Lärarens dom 2026-09-23 över BA26B:s procenttavla: «Jag saknar
+# en koppling till föregående lektion, så att man kan binda ihop lektionerna
+# med varandra. Så att eleverna ser ett sammanhang.» Raden är lärarens, inte
+# modellens, precis som tiden: kalendern vet vad klassen gjorde sist
+# (lektionsinnehall.rubrik), en modell hade fått gissa. Den står FÖRST i
+# agendan, så att tavlan läses uppifrån: förra gången, sedan i dag.
+FORRA_PREFIX = "Förra gången: "
+# Rubriken kortas till sin första sats. Kalendern skriver «Andelen i procent,
+# forts» och «Repetition kap 1 – Testa dig själv 1»; tankstrecket hade
+# dessutom fällts av textvakten i whiteboard_spec.
+_SATSGRANS_RE = re.compile(r"\s+[–—·-]\s+|[.,;:]\s+")
+_AVSNITTSNUMMER_RE = re.compile(r"^\d+(?:\.\d+)*\s+")
+
+
+def forra_rubrik(rubrik: str | None) -> str:
+    """'Andelen i procent, forts' → 'Andelen i procent'. Tom in, tom ut."""
+    r = " ".join(str(rubrik or "").split())
+    r = _AVSNITTSNUMMER_RE.sub("", r)
+    return _SATSGRANS_RE.split(r, maxsplit=1)[0].strip(" .,;:")
+
+
+def _agendan(flode: list) -> int | None:
+    """Index för agendan: den första list-sektionen före strecket."""
+    for i, sek in enumerate(flode):
+        if not isinstance(sek, dict):
+            continue
+        if sek.get("kind") == "divider":
+            return None
+        if sek.get("kind") == "list" and isinstance(sek.get("items"), list):
+            return i
+    return None
+
+
+def satt_forra(board: dict | None, rubrik: str | None) -> dict | None:
+    """Lägg «Förra gången: …» som agendans första punkt.
+
+    Idempotent som satt_tid: en rad som redan står där byts ut, och tom
+    rubrik tar bort den. Saknar tavlan agenda läggs en ny lista direkt under
+    rubriken, i few-shotarnas form."""
+    if not isinstance(board, dict):
+        return board
+    board = copy.deepcopy(board)
+    flode = _tidsflode(board)
+    if flode is None:
+        return board
+    rad = FORRA_PREFIX + forra_rubrik(rubrik) if forra_rubrik(rubrik) else ""
+    i = _agendan(flode)
+    if i is not None:
+        punkter = [p for p in flode[i]["items"]
+                   if not str(p).startswith(FORRA_PREFIX)]
+        if rad:
+            punkter.insert(0, rad)
+        if punkter:
+            flode[i]["items"] = punkter
+        else:
+            flode.pop(i)
+        return board
+    if rad:
+        rubriken = next((j for j, s in enumerate(flode) if isinstance(s, dict)
+                         and s.get("kind") == "heading"), -1)
+        flode.insert(rubriken + 1,
+                     {"kind": "list", "bullet": "–", "size": 19, "gap": 4,
+                      "indent": 22, "align": "center", "items": [rad],
+                      "gapAfter": 12})
+    return board
+
+
 def _rensa_toppnycklar(board: dict | None) -> dict | None:
     """Samma städning som i exam_gen: toppnycklar utanför dokumentet slängs.
     Grammatiktvånget är tillbaka på lärarens maskin (claude_code minifierar

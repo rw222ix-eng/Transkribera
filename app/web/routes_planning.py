@@ -325,6 +325,43 @@ def lektionens_delar(db_file: Path, body: dict) -> list[dict]:
     return delar if isinstance(delar, list) and len(delar) > 1 else []
 
 
+def forra_lektionen(db_file: Path, body: dict, group: str | None = None) -> str:
+    """Kalenderns rubrik för klassens FÖRRA lektion i samma kurs, eller "".
+
+    Tavlans «Förra gången»-rad (lesson_board.satt_forra). Samma rader och
+    samma integritetsgräns som lektionens_delar: bara rubriken läses. Den
+    senaste raden före lektionen gäller, också när den saknar rubrik: då
+    blir raden tom hellre än att en äldre lektion utges för förra gången.
+    Samma dag räknas en tidigare timme, när starttiden är känd."""
+    datum = (body.get("datum") or "").strip()
+    klass = (body.get("klass") or group or "").strip()
+    if not datum or not klass:
+        return ""
+    kurs = (body.get("kurs") or "").strip()
+
+    def minut(t) -> int:
+        m = re.match(r"\s*(\d{1,2})[:.](\d{2})", str(t or ""))
+        return int(m.group(1)) * 60 + int(m.group(2)) if m else -1
+
+    start = minut(body.get("starttid"))
+    try:
+        conn = db.connect(db_file)
+        try:
+            rader = db.list_lektionsinnehall(conn)
+        finally:
+            conn.close()
+    except Exception:
+        return ""
+    fore = [r for r in rader if r.get("klass") == klass
+            and (not kurs or not r.get("kurs") or r["kurs"] == kurs)
+            and (r.get("datum", "") < datum
+                 or (r.get("datum") == datum and 0 <= minut(r.get("tid")) < start))]
+    if not fore:
+        return ""
+    sist = max(fore, key=lambda r: (r["datum"], minut(r.get("tid"))))
+    return str(sist.get("rubrik") or "")
+
+
 def bok_las_text(base: Path, db_file: Path, body: dict, emit=None) -> str:
     """Samma block som `bok_text`, men läser först de sidor som saknar något.
 
@@ -1098,6 +1135,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # den sätts deterministiskt EFTER valideringen, ur den
                 # starttid som redan följer med planeringen + schemats sluttid.
                 board = lesson_board.satt_tid(res["board"], starttid, sluttid)
+                # «Förra gången» likaså: kalenderns rubrik, inte modellens.
+                forra = forra_lektionen(db_file, body, group)
+                board = lesson_board.satt_forra(board, forra)
                 steg.na("sparar")
                 pid = uuid.uuid4().hex[:12]
                 spara_planering(pid, {
@@ -1105,6 +1145,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     "moment": moment, "group": group, "course": course,
                     "group_id": group_id, "course_id": course_id,
                     "datum": datum, "starttid": starttid, "sluttid": sluttid,
+                    "forra": forra,
                     "vanligt_fel": vanligt_fel, "niva": niva,
                     "inriktning": inriktning, "regelsamling": regelsamling,
                 })
@@ -1237,6 +1278,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 st["board"] = lesson_board.satt_tid(res["board"] or st["board"],
                                                     st.get("starttid"),
                                                     st.get("sluttid"))
+                # Förra gången följer samma väg. Omskrivningen (refine) rör
+                # den inte: där är tavlan lärarens, och stryker hon raden ska
+                # den inte komma tillbaka.
+                if st.get("forra"):
+                    st["board"] = lesson_board.satt_forra(st["board"],
+                                                          st["forra"])
                 st["rounds"] = res["rounds"]
                 steg.na("sparar")
                 spara_planering(pid, st)

@@ -326,6 +326,80 @@ def test_delarna_valjs_pa_timmen_nar_klassen_har_tva_lektioner(llm_ready,
     assert "Förmiddagen" not in calls[0]["delar"]
 
 
+# ── FÖRRA GÅNGEN ──────────────────────────────────────────
+# «Jag saknar en koppling till föregående lektion.» (Lärarens dom 2026-09-23.)
+# Rubriken slås upp i kalendern och läggs först i agendan efter genereringen.
+
+def _forra_lektioner(client, rader):
+    from app import db
+    conn = db.connect(client.base_dir / "transkribera.db")
+    try:
+        db.replace_lektionsinnehall(conn, [
+            {"klass": "BA26B", "kurs": "Matematik, nivå 1a", **r} for r in rader])
+    finally:
+        conn.close()
+
+
+def _procenttavla(llm_ready, **extra):
+    return _done(llm_ready.post("/api/planning/generate", json={
+        "moment": "Beräkningar när vi vet procentsatsen",
+        "klass": "BA26B", "kurs": "Matematik, nivå 1a",
+        "datum": "2026-09-23", "starttid": "13:10", **extra}))
+
+
+def _agendapunkter(board):
+    return next(s["items"] for s in board["boards"][0]["sections"]
+                if s.get("kind") == "list")
+
+
+def test_forra_gangen_star_forst_i_agendan(llm_ready, monkeypatch):
+    _forra_lektioner(llm_ready, [
+        {"datum": "2026-09-17", "tid": "10:00–11:00", "fran": 54, "till": 56,
+         "rubrik": "Beräkning av andelen i procent"},
+        {"datum": "2026-09-22", "tid": "08:40–09:40", "fran": 56, "till": 57,
+         "rubrik": "Andelen i procent, forts"},
+        {"datum": "2026-09-24", "tid": "10:00–11:00", "fran": 61, "till": 63,
+         "rubrik": "Proportionalitet"},
+    ])
+    _stub_generate(monkeypatch,
+                   {"board": _valid_board(), "errors": [], "rounds": 1})
+    res = _procenttavla(llm_ready)
+    punkter = _agendapunkter(res["board"])
+    assert punkter[0] == "Förra gången: Andelen i procent"
+    assert punkter[1:] == _agendapunkter(_valid_board())
+    assert lesson_board.ws.validate_board_json(res["board"])[1] == []
+
+
+def test_forra_gangen_samma_dag_tidigare_timme(llm_ready, monkeypatch):
+    _forra_lektioner(llm_ready, [
+        {"datum": "2026-09-22", "tid": "08:40–09:40", "fran": 56, "till": 57,
+         "rubrik": "Igår"},
+        {"datum": "2026-09-23", "tid": "08:10–09:10", "fran": 57, "till": 57,
+         "rubrik": "I morse"},
+    ])
+    _stub_generate(monkeypatch,
+                   {"board": _valid_board(), "errors": [], "rounds": 1})
+    assert _agendapunkter(_procenttavla(llm_ready)["board"])[0] \
+        == "Förra gången: I morse"
+
+
+def test_ingen_forra_lektion_ger_agendan_orord(llm_ready, monkeypatch):
+    """Annan klass, eller ingen rad alls före lektionen: agendan är modellens."""
+    from app import db
+    conn = db.connect(llm_ready.base_dir / "transkribera.db")
+    try:
+        db.replace_lektionsinnehall(conn, [
+            {"datum": "2026-09-22", "tid": "08:40–09:40", "klass": "TE26A",
+             "kurs": "Matematik, nivå 1c", "fran": 48, "till": 49,
+             "rubrik": "Ekvationer"}])
+    finally:
+        conn.close()
+    _stub_generate(monkeypatch,
+                   {"board": _valid_board(), "errors": [], "rounds": 1})
+    assert _agendapunkter(_procenttavla(llm_ready)["board"]) \
+        == _agendapunkter(_valid_board())
+
+
 def test_generate_409_when_over_taket(llm_ready, monkeypatch):
     monkeypatch.setattr(llm_ready.app.state.arbiter, "try_acquire_llm",
                         lambda: None)
