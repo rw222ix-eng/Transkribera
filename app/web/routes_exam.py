@@ -27,9 +27,9 @@ from pathlib import Path
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 
-from app import (ci_profil, course_data, db, dokumentdiff, exam_gen,
-                 exam_latex, exam_pdf, exam_spec, gpu_arbiter, llm_client,
-                 niva_rubrik, np_vakter, platar, spar, tryck)
+from app import (ci_profil, ci_utanfor, course_data, db, dokumentdiff,
+                 exam_gen, exam_latex, exam_pdf, exam_spec, gpu_arbiter,
+                 llm_client, niva_rubrik, np_vakter, platar, spar, tryck)
 # Egen rad och eget namn: modulen heter `kalibrering` och rutten som svarar med
 # den heter också det. Utan omdöpningen skuggar funktionen modulen inne i
 # create_router, och anropet blir ett rekursivt HTTP-lager djupt.
@@ -534,6 +534,19 @@ def _radfynd(exam: dict) -> list[dict]:
             for f in fel]
 
 
+def _cifynd(exam: dict) -> list[dict]:
+    """Det som står UTANFÖR kursens centrala innehåll (app/ci_utanfor.py,
+    Rickards princip 2026-09-17), på alla tre dokumenttyperna och efter varje
+    svar: en omskrivning i canvas kan skriva tillbaka en talföljd som
+    genereringen tog bort, och det ska synas före godkännandet."""
+    try:
+        fel = ci_utanfor.ci_vakt(exam, str((exam or {}).get("kurs") or ""))
+    except Exception:                       # pragma: no cover
+        return []
+    return [_fynd(f["code"], f["message"], _uppgiftsnr(f.get("path", "")))
+            for f in fel]
+
+
 def _nptypfynd(doc, typ: str) -> list[dict]:
     """Noll NP-typer i en mätt kurs (niva_rubrik.np_typer_saknas).
 
@@ -627,6 +640,7 @@ def efterkontroll(view: dict, doc, summor: dict | None, *,
     ut += _npfynd(view.get("exam") or {}, typ)
     ut += _radfynd(view.get("exam") or {})
     ut += _nptypfynd(doc, typ)
+    ut += _cifynd(view.get("exam") or {})
     # Kopieringsvakten sist bland fynden, och bara när anroparen pekat ut
     # provet (se _kopiefynd). Den tiger på varje annat papper i appen.
     ut += _kopiefynd(view.get("exam") or {}, infor)
@@ -714,6 +728,10 @@ _ATGARD = {
                 "deluppgifter med var sin poäng. Övriga uppgifter står kvar.",
     "radlangd": "Dela meningen i två eller korta den, en mening per rad. "
                 "Samma matematik, samma tal, samma poäng.",
+    # Utanför kursens centrala innehåll (app/ci_utanfor.py).
+    "utanforci": "Byt ut uppgiften mot en inom kursens centrala innehåll, "
+                 "samma del, samma poäng och samma förmåga. Orden får inte "
+                 "stå kvar i text, lösning eller bedömning.",
 }
 
 

@@ -19,7 +19,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
 
-from app import (course_data, exam_spec, kursdomare, llm_client,
+from app import (ci_utanfor, course_data, exam_spec, kursdomare, llm_client,
                  niva_rubrik, np_vakter, rakneverk)
 
 _LOG = logging.getLogger(__name__)
@@ -2882,6 +2882,15 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
     # arbetsbladet och gruppuppgiften har inga delar och läser därför
     # utan-räknare-halvan.
     block.append(TALREGLER)
+    # UTANFÖR KURSEN (Rickards princip 2026-09-17, app/ci_utanfor.py) står
+    # intill innehållet, fallgroparna och talen: det är den andra halvan av
+    # samma besked, vad pappret INTE får pröva. Den behövs för att boken
+    # rymmer det som ströks (talföljderna ligger mitt i 1c:s kapitel 2), och
+    # bokblocken längre ned läses annars som en order. Tom sträng för en kurs
+    # utan strykningar, och prompten är då byte för byte den som gick i väg.
+    utanfor = ci_utanfor.build_utanfor(kurs)
+    if utanfor:
+        block.append(utanfor)
     # Lärarens egna ord om vad klassen hade svårt för står FÖRE minnet och
     # utfallet: de säger samma sak sett utifrån — vad klassen gick igenom, vad
     # den föll på — medan det här är hon som var i rummet. Blocket finns bara
@@ -6184,6 +6193,12 @@ def build_refine_prompt(exam: dict, instruction: str,
     # regeln är densamma för dem alla, bara ingången skiljer (build_yrke).
     yrke = build_yrke(inriktning)
     yrket = f"{yrke.strip()}\n\n" if yrke else ""
+    # Strykningarna ur kursens centrala innehåll (app/ci_utanfor.py) följer
+    # med omskrivningen av samma skäl som yrket: ett varv som skriver om en
+    # uppgift utan regeln kan skriva tillbaka talföljden läraren nyss fick
+    # bort. Tom sträng utan strykningar, och prompten är då som förut.
+    utanfor = ci_utanfor.build_utanfor(str((exam or {}).get("kurs") or ""))
+    yrket += f"{utanfor}\n\n" if utanfor else ""
     return (
         f"{INSTRUCTION}\n"
         f"{yrket}{kallor}"
@@ -9182,7 +9197,11 @@ def _raknade_fynd(exam: dict, *, avsnitt: list[dict] | None, antal: int | None,
            + avsnittsniva(exam, avsnitt or [], bokuppgifter, koder)
            + delmomentvikt(exam, delmoment or [])
            + delmomentmarkning(exam, delmoment or [])
-           + ci_tackning(exam, koder) + ci_taggning(exam, koder))
+           + ci_tackning(exam, koder) + ci_taggning(exam, koder)
+           # Det som står UTANFÖR kursens centrala innehåll, på alla tre
+           # profilerna: ett arbetsblad med en talföljd i 1c är lika fel som
+           # ett prov med den (app/ci_utanfor.py, Rickard 2026-09-17).
+           + ci_utanfor.ci_vakt(exam, kurs))
     if profil == "prov":
         fel += (a_nivavakt(exam) + kravradsvakt(exam)
                 + rubrikordsvakt(exam, kurs)
@@ -9942,7 +9961,7 @@ def _raknas_om(fel: dict) -> bool:
                "citackning", "citaggning", "anivavakt", "kravrad",
                "rubrikord", "likvardighet", "scenvakt",
                "forebildsvakt", "radlangd", "forbudsvakt",
-               "upprepning", "poangtak") + np_vakter.KODER:
+               "upprepning", "poangtak", ci_utanfor.KOD) + np_vakter.KODER:
         return True
     if kod == "delmomenttackning":
         return path == "uppgifter"
@@ -10443,6 +10462,18 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
         # räknare.» hör till uppgiftens första rad och ska inte bli en egen.
         mening_per_rad(r.get("exam"))
         ovningspappret_stadat(r.get("exam"), profil)
+        # ── UTANFÖR KURSEN, SIST AV ALLT (app/ci_utanfor.py) ─────────────
+        # Fixrundan och slutgrinden kör vakten bara när de körs alls (en
+        # kapitelram, lektioner eller profilen prov), och ett arbetsblad utan
+        # ram går förbi båda. Här räknas den därför om på det papper som
+        # faktiskt lämnar genereringen, på alla tre profilerna, och det som
+        # står kvar blir lärarens varning i `errors`. Gamla kopior rensas
+        # först: en uppgift som lagats ska inte bära larmet vidare.
+        larm = ci_utanfor.ci_vakt(r.get("exam"), kurs)
+        r["errors"] = [e for e in (r.get("errors") or [])
+                       if e.get("code") != ci_utanfor.KOD] + larm
+        for f in larm:
+            log(f["message"])
         return r
 
     def slut(r: dict, rundor: int) -> dict:
