@@ -269,9 +269,8 @@ INSTRUCTION = (
     "- tid_min: skrivtiden i minuter, ett heltal.\n"
     "- hjalpmedel: hjälpmedelsregeln i klartext, EN mening för hela provet — "
     "den står i provtabellen och i OBS-rutan över uppgifterna. Ber läraren om "
-    "en ändring av vad som är tillåtet är det HÄR den skrivs. Högst 60 tecken: "
-    "raden ska rymmas på EN rad i provtabellen («Formelblad på hela provet, "
-    "digitala verktyg bara på del B.»), inte brytas.\n"
+    "en ändring av vad som är tillåtet är det HÄR den skrivs. Högst 60 tecken, "
+    "så att den ryms på EN rad i provtabellen.\n"
     # Gruppuppgiftens upplägg ÄR pappersformen: namnraderna räknas ur `elever`,
     # metaraden överst säger alla tre. Utan raden här kunde modellen inte ändra
     # dem i en omskrivning — build_refine_prompt får bara INSTRUCTION med sig —
@@ -692,7 +691,7 @@ INSTRUCTION = (
     "('Bestäm med hjälp av tabellen ovan …').\n"
     "- svarsrutor {etikett, val, ratt}: ETT objekt (aldrig en lista) — en "
     "ifyllnadsrad där eleven kryssar i "
-    "stället för att skriva — 'Sats: ☐ Randvinkelsatsen ☐ Kordasatsen', "
+    "stället för att skriva — "
     "'Alltid? ☐ Ja ☐ Nej ☐ Bara ibland'. Två till fem val. `ratt` är 0-baserat "
     "index och visas bara för läraren; utelämna det när flera svar duger. "
     "Skilt från alternativ: det här är en RAD på svarsplatsen, inte en "
