@@ -55,6 +55,9 @@
    uppgift blev bara ett extra streck bland skrivlinjerna. */
 .gukort{margin:34px 0 0;padding:0}
 .gubricka{display:inline-block;align-self:flex-start;min-width:28px;padding:3px 9px;border-radius:3px;background:#000;color:#fff;font-size:13px;font-weight:700;text-align:center;letter-spacing:.02em}
+/* Räknarbeskedet bredvid numret (blad-bygg.js RAKNARMARKE), i .gumetas versaler. */
+.guraknarrad{display:flex;align-items:center;align-self:flex-start}
+.guraknare{display:inline-block;margin-left:10px;vertical-align:middle;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#000}
 /* pre-line: modellen radbryter i uppgiftstexten med flit — «A: …» och «B: …»
    på var sin rad när uttrycken annars står för tätt. Utan pre-line kollapsade
    radbrytningarna till mellanslag, och lärarens «öka avståndet mellan dem»

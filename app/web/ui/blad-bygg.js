@@ -162,7 +162,7 @@ window.BladBygg = (() => {
   /* Facitets uppgiftsrad: brickan bär numret, referensen bär matematiken.
      Tomraderna kollapsas först — .prtext bär pre-line även här, och ett facit
      där varje referens drar med sig tre tomrader fyller bladet med ingenting. */
-  const ref = (t, tak) => mat(kortref(luft(t), tak));
+  const ref = (t, tak) => mat(kortref(luft(utanRaknarmarke(t)), tak));
 
   /* ── DE FEM FORMERNA ──────────────────────────────
      Datatabellen, kryssruteraden och stegtabellen är samma former som i
@@ -297,8 +297,21 @@ window.BladBygg = (() => {
      Serien tog dessutom slut: BOKSTAV har åtta poster, och det skarpa bladet
      hade femton uppgifter — brickorna löd A…H och sedan 9, 10, 11. Halva
      bladet numrerade redan i siffror. */
+  /* ── RÄKNARBESKEDET ÄR EN ETIKETT, INTE EN MENING ─────────────
+     exam_gen.satt_raknarmarkering skriver «Utan räknare.» eller «Räknare
+     tillåten.» först i varje uppgiftstext på övningspappret. LÄRARENS BESKED
+     2026-09-23: beskedet ska stå som etikett bredvid numret, «UTAN RÄKNARE»
+     eller «MED RÄKNARE», som på repetitionsbladen i Drive — inte som första
+     mening i frågan. Markeringen lyfts därför ur texten här och i facits
+     kortreferens (ref nedan). Samma sil som exam_gen._RAKNARMARKE. */
+  const RAKNARMARKE = /^\s*(Räknare tillåten|Utan räknare)\.\s*/;
+  const utanRaknarmarke = t => String(t == null ? '' : t).replace(RAKNARMARKE, '');
   function kort(u, i) {
     const bricka = String(i + 1);
+    const marke = RAKNARMARKE.exec(String(u.t || ''));
+    const fraga = marke ? utanRaknarmarke(u.t) : u.t;
+    const raknare = marke
+      ? `<span class="guraknare">${marke[1] === 'Utan räknare' ? 'Utan räknare' : 'Med räknare'}</span>` : '';
     const alt = u.alt
       ? `<ul class="gudel guval">${u.alt.map((a, k) => `<li><i>${BOKSTAV[k]}.</i> ${mat(a)}</li>`).join('')}</ul>` : '';
     /* Deluppgiften bär numera sin egen kropp — formerna, ledtråden och de
@@ -383,11 +396,13 @@ window.BladBygg = (() => {
        sätter former.kropp(u) FÖRE \begin{deluppgift}. */
     const former = tabell(u.tabell, 'gutab') + stegtabell(u.stegtabell);
     const kropp = egen
-      ? `<div class="gutva"><div><p class="gufraga">${brodtext(u.t)}</p>${alt}${former}${del}${notis}${svarsyta(u)}</div>`
+      ? `<div class="gutva"><div><p class="gufraga">${brodtext(fraga)}</p>${alt}${former}${del}${notis}${svarsyta(u)}</div>`
         + `<div>${egen}</div></div>`
-      : `<p class="gufraga">${brodtext(u.t)}</p>${alt}${former}${del}${fig}${notis}${svarsyta(u)}`;
+      : `<p class="gufraga">${brodtext(fraga)}</p>${alt}${former}${del}${fig}${notis}${svarsyta(u)}`;
     return `<div class="gukort" data-ut="${u.ut || 'rakna'}">
-      <span class="gubricka">${bricka}</span>
+      ${raknare
+        ? `<div class="guraknarrad"><span class="gubricka">${bricka}</span>${raknare}</div>`
+        : `<span class="gubricka">${bricka}</span>`}
       ${forebild}${kropp}
     </div>`;
   }
