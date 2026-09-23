@@ -651,3 +651,56 @@ def test_avsnitten_far_lika_manga_uppgifter_oavsett_sidantal():
     assert sum(mal) == 12 and max(mal) - min(mal) <= 1
     assert exam_gen._avsnittsvikt({"sidor": 36}) == exam_gen._avsnittsvikt(
         {"sidor": 2})
+
+
+# ── INNEHÅLLSPUNKTERNA STYR FÖRDELNINGEN ─────────────────────────────────
+
+AVSNITT_1C = [{"avsnitt": n, "etikett": e, "fran": f, "till": t,
+               "sidor": t - f + 1} for n, e, f, t in (
+    ("1.1", "1.1 Kvadratrötter och kubikrötter", 2, 6),
+    ("1.2", "1.2 Tal i potensform", 7, 21), ("1.3", "1.3 Uttryck", 22, 41),
+    ("2.1", "2.1 Ekvationer", 42, 52),
+    ("2.2", "2.2 Tecken i matematiska utsagor", 53, 55),
+    ("2.3", "2.3 Intervall", 56, 57), ("2.4", "2.4 Olikheter", 58, 63),
+    ("2.5", "2.5 Formler och mönster", 64, 99))]
+KODER_1C = KODER_119 + ["G25-M1C-PRO-2", "G25-M1C-PRO-3"]
+
+
+def test_avsnitten_grupperas_under_innehallspunkterna():
+    """Lärarens dom 2026-09-23 (prov 126): «bara en massa olikheter och
+    intervall». Tecken, intervall och olikheter är EN punkt (linjära
+    olikheter) och delar på dess uppgifter; tolv uppgifter blir tre per punkt."""
+    grupper, karta = exam_gen.innehallsgrupper(AVSNITT_1C, KODER_1C)
+    assert karta["2.2"] == karta["2.3"] == karta["2.4"] == "2.2"
+    assert karta["1.1"] == karta["1.2"] and karta["1.3"] == karta["2.5"]
+    assert karta["2.1"] == "2.1"
+    assert exam_gen.mal_per_avsnitt(grupper, 12) == [3, 3, 3, 3]
+    block = exam_gen.build_spridning(AVSNITT_1C, 12, KODER_1C)
+    assert "fördelat JÄMNT över innehållspunkterna" in block
+    assert "2.2 Tecken i matematiska utsagor, 2.3 Intervall, 2.4 Olikheter " \
+           "(Linjära olikheter): 3 uppgifter" in block
+    # Utan punkter som samlar något står den gamla ramen kvar, ordagrant.
+    assert "fördelat JÄMNT" not in exam_gen.build_spridning(AVSNITT_1C, 12)
+
+
+def test_en_uppgift_far_prova_flera_avsnitt_i_samma_grupp():
+    """Två olikhetsuppgifter som tillsammans rör 2.2, 2.3 och 2.4 räcker;
+    ett avsnitt som inte prövas alls fälls ändå."""
+    def u(avs, dm):
+        return _u(avsnitt=avs, delmoment=dm)
+    uppgifter = [u("1.1", "Kvadratrötter (s. 2–6)"), u("1.2", "Potenser (s. 7–11)"),
+                 u("1.2", "Grundpotensform (s. 12–15)"),
+                 u("1.3", "Uttryck (s. 22–27)"), u("1.3", "Faktorisering (s. 31–34)"),
+                 u("2.5", "Formler (s. 64–68)"),
+                 u("2.1", "Ekvationer (s. 42–46)"), u("2.1", "Bråk (s. 47–49)"),
+                 u("2.1", "Potensekvationer (s. 50–52)"),
+                 u("2.2", "Tecken i matematiska utsagor och intervall (s. 53–57)"),
+                 u("2.4", "Olikheter (s. 58–63)"), u("2.4", "Olikheter (s. 58–63)")]
+    fel = exam_gen.avsnittstackning(_prov(uppgifter), AVSNITT_1C, 12, KODER_1C)
+    assert fel == []
+    # Utan tecken-och-intervall-uppgiften saknas 2.2 och 2.3.
+    utan = [x for x in uppgifter if x["avsnitt"] != "2.2"] + [
+        u("2.4", "Olikheter (s. 58–63)")]
+    fel = exam_gen.avsnittstackning(_prov(utan), AVSNITT_1C, 12, KODER_1C)
+    texter = " ".join(f["message"] for f in fel)
+    assert "2.2 Tecken" in texter and "2.3 Intervall" in texter

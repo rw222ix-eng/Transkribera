@@ -1589,7 +1589,91 @@ def mal_per_avsnitt(avsnitt: list[dict], antal: int) -> list[int]:
     return mal
 
 
-def build_spridning(avsnitt: list[dict], antal: int) -> str:
+# ── AVSNITTEN GRUPPERADE UNDER INNEHÅLLSPUNKTERNA (2026-09-23) ────────────
+# Lärarens dom över prov 126: «nu är det bara en massa olikheter och
+# intervall». Jämn fördelning över AVSNITTEN gav 2.2 Tecken, 2.3 Intervall och
+# 2.4 Olikheter var sin uppgift, alltså fyra uppgifter om samma sak, medan
+# linjära ekvationer fick en. Hennes idé: det vi gått igenom kopplas till det
+# centrala innehållet, och uppgifterna fördelas jämnt över innehållet. «Om man
+# har en eller två uppgifter kan man få med alla de tre utan problem.»
+#
+# Kopplingen är avsnittets rubrik mot punktens text i kursplanen, med en
+# ordlista för de rubriker som inte säger punktens ord själva (rötter är
+# potenser, tecken i utsagor är olikheter). Ett avsnitt som inte når någon
+# punkt blir sin egen grupp, som förut. Problemlösning, digitala verktyg och
+# yrkesdelarna är sätt att arbeta, inget eget innehåll, och får inga avsnitt.
+_GRUPPORD: tuple[tuple[str, str], ...] = (
+    ("rötter", "potens"), ("rot ", "potens"), ("potens", "potens"),
+    ("prefix", "potens"), ("exponent", "potens"),
+    ("utsag", "olikhet"), ("intervall", "olikhet"), ("olikhet", "olikhet"),
+    ("uttryck", "uttryck"), ("faktoriser", "uttryck"), ("parentes", "uttryck"),
+    ("formler", "formler"), ("formel", "formler"),
+    ("kvadrering", "kvadrering"), ("konjugat", "kvadrering"),
+    ("andragradsekvation", "andragradsekvation"),
+    ("ekvationssystem", "ekvationssystem"), ("ekvation", "ekvation"),
+    ("mönster", "samband"), ("procent", "procent"),
+    ("förändringsfaktor", "förändringsfaktor"), ("funktion", "funktion"),
+    ("sannolikhet", "sannolikhet"), ("statistik", "statisti"),
+    ("trigonometri", "trigonometri"), ("vektor", "vektor"),
+)
+
+
+def innehallsgrupper(avsnitt: list[dict], koder: list[str] | None
+                     ) -> tuple[list[dict], dict[str, str]]:
+    """(grupper, karta): avsnitten sammanslagna per innehållspunkt.
+
+    Varje grupp har samma form som ett avsnitt (avsnitt, etikett, fran, till,
+    sidor) så att fördelningen och vakterna kan räkna på den, plus `kod` och
+    `medlemmar`. `karta` går från avsnittsnummer till gruppens nummer (det
+    första avsnittet i gruppen). Utan punkter som når något är varje avsnitt
+    sin egen grupp och allt är som förut."""
+    texter = course_data.kodtexter()
+    innehall = [k for k in (koder or [])
+                if not re.search(r"-(PRO|DIG|YRK)-\d", k)]
+    grupper: dict[str, dict] = {}
+    karta: dict[str, str] = {}
+    for a in avsnitt or []:
+        nr = str(a.get("avsnitt") or "").strip()
+        titel = f"{a.get('etikett') or nr} ".casefold()
+        kod = None
+        for stam, mal in _GRUPPORD:
+            if stam in titel:
+                kod = next((k for k in innehall
+                            if mal in texter.get(k, "").casefold()), None)
+                if kod:
+                    break
+        nyckel = kod or f"avsnitt {nr}"
+        g = grupper.get(nyckel)
+        if g is None:
+            rubrik = (course_data_rubrik(texter.get(kod, "")) if kod else "")
+            g = grupper[nyckel] = {"avsnitt": nr, "kod": kod, "rubrik": rubrik,
+                                   "medlemmar": [], "etiketter": [],
+                                   "fran": a.get("fran") or 0,
+                                   "till": a.get("till") or 0, "sidor": 0}
+        g["medlemmar"].append(nr)
+        g["etiketter"].append(a.get("etikett") or nr)
+        if len(g["medlemmar"]) > 1:
+            # En grupp är inget sidspann (2.5 hör till samma punkt som 1.3):
+            # noll som hos avsnitt_ur_moment, så att ingen sidfråga ställs.
+            g["fran"] = g["till"] = 0
+        g["sidor"] += int(a.get("sidor") or 0)
+        karta[nr] = g["avsnitt"]
+    ut = []
+    for g in grupper.values():
+        namn = ", ".join(g["etiketter"])
+        g["etikett"] = (f"{namn} ({g['rubrik']})" if g["kod"] and
+                        len(g["medlemmar"]) > 1 else namn)
+        ut.append(g)
+    return ut, karta
+
+
+def course_data_rubrik(text: str) -> str:
+    """Punktens rubrik ur kodtexten («Linjära olikheter Begreppen …»)."""
+    return niva_rubrik._ci_rubrik(text)
+
+
+def build_spridning(avsnitt: list[dict], antal: int,
+                    koder: list[str] | None = None) -> str:
     """Kapitelramen som promptblock, eller TOM STRÄNG.
 
     Tomt vid färre än två avsnitt, och det är kassetteregeln och inte en
@@ -1599,6 +1683,24 @@ def build_spridning(avsnitt: list[dict], antal: int) -> str:
     ingen spridning, för då finns inget att fördela över."""
     if len(avsnitt or []) < 2:
         return ""
+    grupper, _karta = innehallsgrupper(avsnitt, koder)
+    if len(grupper) < len(avsnitt) and len(grupper) >= 2:
+        # Avsnitt under samma innehållspunkt delar på punktens uppgifter
+        # (lärarens dom 2026-09-23, se innehallsgrupper).
+        mal = mal_per_avsnitt(grupper, antal)
+        rader = "\n".join(
+            f"- {g['etikett']}: {m} uppgift" + ("er" if m != 1 else "")
+            for g, m in zip(grupper, mal))
+        return (
+            "PROVET SPÄNNER ÖVER HELA KAPITLET, fördelat JÄMNT över "
+            "innehållspunkterna. Avsnitt som hör till samma punkt står på "
+            "samma rad och delar på radens uppgifter. Fördela de "
+            f"{antal} uppgifterna så här:\n{rader}\n"
+            "Varje avsnitt ska prövas, men en uppgift får pröva flera avsnitt "
+            "på samma rad (en uppgift kan pröva tecken, intervall och olikhet "
+            "på en gång). Skriv i uppgiftens fält \"avsnitt\" det avsnitt den "
+            "mest prövar, t.ex. \"2.4\", och alla delmoment den prövar i "
+            "fältet \"delmoment\".")
     mal = mal_per_avsnitt(avsnitt, antal)
     rader = [f"- {a.get('etikett') or a.get('avsnitt')}: {m} uppgift"
              + ("er" if m != 1 else "")
@@ -1793,6 +1895,14 @@ def build_delmoment(delmoment: list[dict], antal: int) -> str:
         "prövar, med rubriken ORDAGRANT som den står i listan. Täcker "
         "uppgiften två delmoment skriver du båda med semikolon emellan. "
         "Fältet är appens räkning av täckningen, inte en text eleven ser.\n"
+        # Lärarens dom 2026-09-23 (prov 126 uppgift 6, märkt «Grundpotensform
+        # och prefix»): «uppgift 6 handlar ju bara om tiopotenser. Det står
+        # ingenting om grundpotensform.» Etiketten räcker inte.
+        "Uppgiften ska BE eleven göra det delmomentet handlar om, med "
+        "delmomentets ord: en uppgift om grundpotensform säger «Skriv … i "
+        "grundpotensform», en om faktorisering «Faktorisera …», en om "
+        "intervall «Skriv … som ett intervall». Att matematiken finns i "
+        "facit räcker inte.\n"
         "INGEN uppgift får kräva en metod som ligger UTANFÖR listan för att gå "
         "att lösa: inga olikheter, ingen ekvationslösning, ingen procenträkning "
         "eller förändringsfaktor, ingen geometri och inga funktioner om de inte "
@@ -6503,7 +6613,62 @@ def _signaler(exam: dict) -> list[dict]:
     return nivasignaler(exam) + talsignaler(exam) + bedomningssignaler(exam)
 
 
-def avsnittstackning(exam: dict, avsnitt: list[dict], antal: int) -> list[dict]:
+def _grupperat_papper(exam: dict, karta: dict[str, str]) -> dict:
+    """Pappret med varje uppgifts avsnitt utbytt mot sin grupps nummer."""
+    ut = dict(exam or {})
+    ut["uppgifter"] = [
+        dict(u, avsnitt=karta.get(str(u.get("avsnitt") or "").strip(),
+                                  u.get("avsnitt")))
+        if isinstance(u, dict) else u
+        for u in (exam or {}).get("uppgifter") or []]
+    return ut
+
+
+def _delmomentsidor(u: dict) -> list[tuple[int, int]]:
+    """Sidspannen i uppgiftens delmomentetikett («Olikheter (s. 58–63)»)."""
+    ut = []
+    for m in re.finditer(r"s\.\s*(\d+)\s*(?:[–-]\s*(\d+))?",
+                         str((u or {}).get("delmoment") or "")):
+        a = int(m.group(1))
+        ut.append((a, int(m.group(2) or a)))
+    return ut
+
+
+def avsnittstackning(exam: dict, avsnitt: list[dict], antal: int,
+                     koder: list[str] | None = None) -> list[dict]:
+    """Avsnittstäckningen, grupperad under innehållspunkterna när punkterna
+    samlar flera avsnitt (innehallsgrupper, lärarens dom 2026-09-23).
+
+    Gruppen ska få sina uppgifter; varje avsnitt i gruppen ska ändå prövas,
+    antingen som uppgiftens avsnitt eller genom ett delmoment vars sidor
+    ligger i avsnittet. Så kan en uppgift pröva tecken, intervall och olikhet
+    på en gång, i stället för tre uppgifter om samma sak."""
+    grupper, karta = innehallsgrupper(avsnitt, koder)
+    if len(grupper) >= len(avsnitt or []) or len(grupper) < 2:
+        return _avsnittstackning_ram(exam, avsnitt, antal)
+    fel = _avsnittstackning_ram(_grupperat_papper(exam, karta), grupper, antal)
+    uppgifter = [u for u in (exam or {}).get("uppgifter") or []
+                 if isinstance(u, dict)]
+    if not any(str(u.get("avsnitt") or "").strip() for u in uppgifter):
+        return fel
+    for a in avsnitt:
+        nr = str(a.get("avsnitt") or "").strip()
+        fran, till = int(a.get("fran") or 0), int(a.get("till") or 0)
+        provat = any(str(u.get("avsnitt") or "").strip() == nr
+                     or (fran and any(x <= till and y >= fran
+                                      for x, y in _delmomentsidor(u)))
+                     for u in uppgifter)
+        if not provat:
+            fel.append(_err(
+                "uppgifter", "avsnittstackning",
+                f"Inget ur avsnitt {a.get('etikett') or nr}. Pröva det i en "
+                "av uppgifterna om samma innehåll (samma rad i fördelningen), "
+                "och skriv dess delmoment i uppgiftens fält delmoment."))
+    return fel
+
+
+def _avsnittstackning_ram(exam: dict, avsnitt: list[dict],
+                          antal: int) -> list[dict]:
     """Fick varje avsnitt i kapitlet sina uppgifter? Deterministiskt, ingen
     modell, ingen kostnad.
 
@@ -7178,7 +7343,8 @@ def _avsnittsbarare(exam: dict, avsnitt: list[dict]) -> dict[str, list[int]]:
 
 
 def avsnittsniva(exam: dict, avsnitt: list[dict],
-                 bokuppgifter: list[dict] | None = None) -> list[dict]:
+                 bokuppgifter: list[dict] | None = None,
+                 koder: list[str] | None = None) -> list[dict]:
     """Kapitelramen mätt på NIVÅ, VIKT och MÄRKNING i stället för på antal.
 
     Tre fynd, alla ur prov 86:
@@ -7258,6 +7424,15 @@ def avsnittsniva(exam: dict, avsnitt: list[dict],
     # på fyra uppgifter fördelade över fem avsnitt. Se TACKNING_MINSTA_PAPPER.
     if len(uppgifter) < TACKNING_MINSTA_PAPPER:
         return fel[:VIKT_MAX_FYND]
+    # E-poängen och vikten räknas per INNEHÅLLSPUNKT när punkterna samlar
+    # flera avsnitt (innehallsgrupper): tecken, intervall och olikheter bär
+    # en E-poäng tillsammans, inte var för sig.
+    grupper, karta = innehallsgrupper(avsnitt, koder)
+    if 2 <= len(grupper) < len(avsnitt):
+        exam, avsnitt = _grupperat_papper(exam, karta), grupper
+        uppgifter = [u for u in (exam.get("uppgifter") or [])
+                     if isinstance(u, dict)]
+        namn = {str(g["avsnitt"]): g["etikett"] for g in grupper}
     barare = _avsnittsbarare(exam, avsnitt)
     poang: dict[str, float] = {}
     epoang: dict[str, float] = {}
@@ -7294,8 +7469,7 @@ def avsnittsniva(exam: dict, avsnitt: list[dict],
             fel.append(_err(
                 "uppgifter", "avsnittsvikt",
                 f"Avsnitt {namn.get(k, k)} bär {poang[k]:.0f} av provets "
-                f"{total:.0f} poäng men är {_avsnittsvikt(a):.0f} av kapitlets "
-                f"{sum(_avsnittsvikt(x) for x in avsnitt):.0f} sidor, det "
+                f"{total:.0f} poäng, men innehållet ska väga lika och det "
                 f"borde bära ungefär {vantat.get(k, 0.0):.0f} poäng. Flytta "
                 "poäng till ett avsnitt som bär för lite, eller byt ut en av "
                 "uppgifterna här mot en ur ett magrare avsnitt."))
@@ -8334,10 +8508,10 @@ def _raknade_fynd(exam: dict, *, avsnitt: list[dict] | None, antal: int | None,
     PROVETS EGNA vakter (A-nivån, kravraden, kursens frågeform,
     likvärdigheten) körs bara på profilen «prov». Ett arbetsblad har ingen
     A-poäng att skydda och ingen kravrad att motsäga."""
-    fel = (avsnittstackning(exam, avsnitt or [], antal or 0)
+    fel = (avsnittstackning(exam, avsnitt or [], antal or 0, koder)
            + delmomenttackning(exam, delmoment or [], bokuppgifter)
            + poangvakt(exam, profil, poang_tak)
-           + avsnittsniva(exam, avsnitt or [], bokuppgifter)
+           + avsnittsniva(exam, avsnitt or [], bokuppgifter, koder)
            + delmomentvikt(exam, delmoment or [])
            + delmomentmarkning(exam, delmoment or [])
            + ci_tackning(exam, koder) + ci_taggning(exam, koder))
@@ -9391,7 +9565,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # Kapitelramen (2026-09-06). Tom lista, None, eller ett enda avsnitt ger en
     # TOM STRÄNG och därmed en oförändrad prompt: samma kassetteregel som
     # variationen ovan.
-    spridning = build_spridning(avsnitt or [], antal)
+    spridning = build_spridning(avsnitt or [], antal, koder)
     # Delmomenten (2026-09-13). Samma villkor och samma skäl som ovan: tom
     # lista ger en TOM STRÄNG och en oförändrad prompt.
     delmomentblock = build_delmoment(delmoment or [], antal)

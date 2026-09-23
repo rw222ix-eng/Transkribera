@@ -1358,3 +1358,11 @@ def test_facitjusteringen_far_samma_las():
     reparationer = [a["prompt"] for a in anrop
                     if "Problem att åtgärda" in a["prompt"]]
     assert reparationer and "BEHÅLL DELMOMENTEN" in reparationer[0]
+
+
+def test_uppgiften_ber_om_delmomentet_med_dess_ord():
+    """Lärarens dom 2026-09-23 (prov 126 uppgift 6): märkt grundpotensform,
+    men uppgiften bad aldrig om grundpotensform."""
+    r = exam_gen.build_delmoment(_delmoment(), 12)
+    assert "Uppgiften ska BE eleven göra det delmomentet handlar om" in r
+    assert "Skriv … i grundpotensform" in r
