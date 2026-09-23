@@ -315,6 +315,11 @@ test("bedömningsanvisningen · nationella provets form, elevlösningarna sist",
     expect(former).toEqual(["lo-b", "lo-c", "lo-elev"]);
     await expect(page.locator("#formprov [data-form='lo-b'] .lohuvud b"))
       .toHaveText("Bedömningsanvisning · kortsvar");
+    // Att elevlösningarna finns sägs EN gång, under första arkets rubrik.
+    await expect(page.locator("#formprov .lolede"))
+      .toHaveText(["Bedömda elevlösningar står sist i häftet."]);
+    await expect(page.locator("#formprov [data-form='lo-b'] .lotitel + .lolede"))
+      .toHaveCount(1);
 
     // Uppgift 1: svaret först (bara första raden, med enheten), fett.
     const kort = page.locator("#formprov [data-form='lo-b'] .lobed tr");
@@ -338,10 +343,10 @@ test("bedömningsanvisningen · nationella provets form, elevlösningarna sist",
     await expect(lang.locator(".lobedsvar")).toHaveText(["Derivera", "Motivera"]);
     await expect(lang.locator(".lobedniva")).toHaveText(["+E", "+C", "+C", "+A"]);
     await expect(lang.locator(".lobedtrippel")).toHaveText(["(1/0/0)", "(0/2/1)"]);
-    // Elevlösningarna står inte i tabellen, bara notisen om var de står.
+    // Elevlösningarna står inte i tabellen, och ingen notis per uppgift.
     await expect(page.locator("#formprov [data-form='lo-c'] .loskann")).toHaveCount(0);
-    await expect(page.locator("#formprov [data-form='lo-c'] .lobednotis"))
-      .toHaveText("Bedömda elevlösningar, sist i häftet");
+    await expect(page.locator("#formprov [data-form='lo-c']"))
+      .not.toContainText("står sist i häftet");
 
     // Sista arket: uppgiftens nummer, elevens papper, trippeln och skälet.
     const elev = page.locator("#formprov [data-form='lo-elev']");
@@ -381,7 +386,7 @@ test("bedömningsanvisningen ur serverns prov · paginerad, satt och pekbar",
             { poang: [1, 0, 0], text: "Sträckan.", losning: "$2{,}5$",
               enhet: "km", bedomning: "+1 E svarar 2,5 km" },
             { poang: [0, 1, 0], text: "Kvoten.", losning: "$\\dfrac{x^{8}}{2}$",
-              bedomning: "+1 C korrekt svar" }] },
+              bedomning: "+1 C korrekt svar $\\dfrac{x^{8}}{2}$" }] },
         { del: "C", formaga: "P", typ: "redovisning", poang: [0, 2, 0],
           text: "Lös systemet.",
           losning: "$a = 3{,}5$\n(1): $5(x+1) - 2(x-2) = 30$ ger $x = 7$",
@@ -435,6 +440,14 @@ test("bedömningsanvisningen ur serverns prov · paginerad, satt och pekbar",
     await expect(b.locator(".lobedsvar").first()).toContainText("B,");
     await expect(b.locator(".lobedsvar").nth(1)).toContainText("km");
     await expect(b.locator(".lobedtrippel")).toHaveText(["(1/0/0)", "(1/0/0)", "(0/1/0)"]);
+    // Rader som bara upprepar svaret ovanför blir NP:s korta form; raden som
+    // säger något mer står kvar (lärarens dom 2026-09-23).
+    await expect(b.locator(".lobedkrav"))
+      .toHaveText(["Korrekt alternativ.", "Svarar 2,5 km.", "Korrekt svar."]);
+    // Och inledningen, en gång, under första arkets rubrik.
+    await expect(page.locator("#fh-ark .lolede"))
+      .toHaveText(["Bedömda elevlösningar står sist i häftet."]);
+    await expect(b.locator(".lotitel + .lolede")).toHaveCount(1);
     const c = page.locator("#fh-ark [data-form='lo-c']");
     await expect(c.locator(".lobedniva")).toHaveText(["+C", "+C"]);
     await expect(c.locator(".lobedkrav").first()).toContainText("Löser ekvation (1),");

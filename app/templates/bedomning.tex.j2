@@ -74,6 +74,13 @@ C minst ((( granser.C.minst )))((* endif *))((* if 'A' in granser.get('betyg', [
 A minst ((( granser.A.minst )))((* endif *))
  \textemdash{}
 av totalt ((( granser.total ))) poäng.}
+((# EN GÅNG, i inledningen (lärarens dom 2026-09-23). Notisen stod förut
+    under varje uppgift som hade elevexempel, alltså under nästan alla, och
+    det var just den sortens upprepade text hon ville bort ifrån. Bara när
+    det finns ett avsnitt att hänvisa till. #))
+((* if elevavsnitt *))
+\par{\small Bedömda elevlösningar står sist i häftet.}
+((* endif *))
 
 \vspace{2mm}
 ((# Linjen står FÖRE varje uppgift utom den första: en linje efter den
@@ -96,9 +103,6 @@ av totalt ((( granser.total ))) poäng.}
 ((* endfor *))
 ((* else *))
 ((( enhet(u, '') )))
-((* endif *))
-((* if u.elevexempel *))
-\bednotis{Bedömda elevlösningar, sist i häftet}
 ((* endif *))
 \end{uppgift}
 ((* endfor *))

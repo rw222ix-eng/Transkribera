@@ -510,7 +510,7 @@ def _ar_led(enhet) -> bool:
 #
 # Raderna byggs HÄR och inte i mallen: de måste delas innan de escapas, annars
 # blir radbrytningen ett «\n» i löptexten. Skärmen bygger samma rader
-# (app/web/ui/blad-bygg.js: svaret, kravmening, marke). Ändras den ena ska den
+# (app/web/ui/blad-bygg.js: svaret, kravrad, marke). Ändras den ena ska den
 # andra ändras, annars säger skärm och PDF olika saker om samma poäng.
 def _kravmening(krav: str) -> str:
     """«löser ekvation (1), $x = 7$» blir «Löser ekvation (1), $x = 7$.».
@@ -524,6 +524,49 @@ def _kravmening(krav: str) -> str:
     return s if s[-1] in ".!?…" else s + "."
 
 
+# «KORREKT SVAR.» OCH INGET MER, som NP skriver när poängen ges för svaret
+# (lärarens dom 2026-09-23). Raderna upprepade annars svaret som står i
+# fetstil precis ovanför: «Rätt svar 3.», «Korrekt svar x⁸/2.». Bara när
+# resten av raden ÄR svaret (eller ingenting) kortas den; «Korrekt förenkling
+# till a⁶» och «Sätter in t = 7,5, svarar 2,5 km» säger något mer och står
+# kvar. Samma sak för flervalet: «Korrekt alternativ.».
+#
+# Jämförelsen tål formen: dollartecken, mellanrum, {,} och en inledande
+# variabel («d = 30 cm» mot svaret «30 cm»). Spegel av blad-bygg.js kravrad.
+_KORREKT_RE = re.compile(
+    r"^(?:för\s+)?(?:rätt|korrekt)\s+(svar|alternativ)\b[\s,:;–-]*(.*?)[\s.]*$",
+    re.I | re.S)
+_LEDPREFIX_RE = re.compile(r"^[a-zåäö][a-z0-9_']*(?:\([^()]*\))?=$")
+
+
+def _jamforbar(s: str) -> str:
+    s = str(s or "").lower().replace("{,}", ",")
+    return re.sub(r"\\[,;: ]|~|\$|\s", "", s).rstrip(".")
+
+
+def _samma_svar(rest: str, svar: str) -> bool:
+    a, b = _jamforbar(rest), _jamforbar(svar)
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    kort, lang = (a, b) if len(a) <= len(b) else (b, a)
+    return (lang.endswith(kort)
+            and bool(_LEDPREFIX_RE.match(lang[:len(lang) - len(kort)])))
+
+
+def _kravrad(krav: str, jamfor: tuple = ()) -> str:
+    """Kravet som NP skriver det. `jamfor` är det raden kan upprepa: svaret
+    (med och utan enhet) och på ett flerval den rätta bokstaven. Rå text."""
+    m = _KORREKT_RE.match(str(krav or "").strip())
+    if m:
+        rest = m.group(2)
+        if not rest.strip() or any(_samma_svar(rest, k) for k in jamfor if k):
+            return ("Korrekt alternativ." if m.group(1).lower() == "alternativ"
+                    else "Korrekt svar.")
+    return _kravmening(krav)
+
+
 def _marke(poang: int, niva: str) -> str:
     """NP:s poängmärke: «+C», ett per poäng. «+1 C» var appens egen form, och
     ettan säger ingenting när varje rad är en poäng. En rad som delar ut två
@@ -531,7 +574,7 @@ def _marke(poang: int, niva: str) -> str:
     return " ".join([f"+{niva}"] * max(int(poang or 0), 0))
 
 
-def _bedomning_rader(bedomning) -> list[dict]:
+def _bedomning_rader(bedomning, jamfor: tuple = ()) -> list[dict]:
     # NOTRADEN TRYCKS INTE. Anvisningen fick länge bära en avslutande
     # «Vanligt fel: …» efter poängtrappan, och läraren tog bort den vid
     # granskningen av prov 40 (2026-09-06): «detta med vanliga fel kan vi
@@ -542,7 +585,7 @@ def _bedomning_rader(bedomning) -> list[dict]:
     # läser det som STÅR i dokumentet, och proven som redan ligger i basen
     # bär raden. Den ska fortsätta gå att läsa, den ska bara inte sättas.
     return [{"marke": _marke(r["poang"], r["niva"]),
-             "krav": escape_mixed(_kravmening(r["krav"]))}
+             "krav": escape_mixed(_kravrad(r["krav"], jamfor))}
             for r in exam_spec.bedomningsrader(bedomning)
             if not r["not"] and (r["krav"] or r["poang"])]
 
@@ -580,6 +623,14 @@ def _svaret(losning: str | None, enhet: str | None = None) -> str:
         return forsta
     m = re.match(r"^(.*?)(\.?)$", forsta, re.S)
     return f"{m.group(1)} {e}{m.group(2)}"
+
+
+def _jamfor(losning: str | None, enhet: str | None = None,
+            bokstav: str | None = None) -> tuple:
+    """Det en kravrad kan upprepa (se _kravrad): svaret med och utan enhet,
+    och den rätta bokstaven på ett flerval."""
+    ut = (_svaret(losning, enhet), _svaret(losning))
+    return ut + ((bokstav, f"({bokstav})") if bokstav else ())
 
 
 def _svarsrad(losning: str | None, enhet: str | None = None, *,
@@ -769,7 +820,9 @@ def _enhet_vy(*, poang, typ, formaga, text, losning, bedomning,
                    and svarsrutor.ratt is not None else None),
             forsta_fel=(stegtabell.forsta_fel + 1
                         if facit and stegtabell is not None else None)),
-        "bedomning_rader": _bedomning_rader(bedomning),
+        "bedomning_rader": _bedomning_rader(
+            bedomning, _jamfor(losning, enhet,
+                               ratt_bokstav if facit else None)),
         # Byggd i Python: en parentes intill Jinja-avgränsaren ((( går inte
         # att skriva i mallen (se poang_rad nedan).
         "trippel": f"({poang[0]}/{poang[1]}/{poang[2]})",
@@ -1083,6 +1136,8 @@ def _build_view(doc: exam_spec.ExamDoc,
                             forsta_fel=(d.stegtabell.forsta_fel + 1
                                         if facit and d.stegtabell is not None
                                         else None))
+                        ev["bedomning_rader"] = _bedomning_rader(
+                            d.bedomning, _jamfor(d.losning, d.enhet))
                     # «a)» framför svaret i anvisningen, som i NP:s «21. b)».
                     ev["delnamn"] = f"{ev['bokstav']})"
                     # Figuren där den frågas om: förlagans 1(a) har grafen inne

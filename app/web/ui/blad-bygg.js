@@ -999,7 +999,7 @@ window.BladBygg = (() => {
      se elevark). Tabellen förut, facit överst och ett elevpapper per lägre
      poängsteg under, gjorde varje uppgift till en halv sida att läsa förbi.
 
-     Spegel av app/exam_latex (_svaret, _svarsrad, _kravmening, _marke,
+     Spegel av app/exam_latex (_svaret, _svarsrad, _kravrad, _marke,
      _elevexempel) och app/templates/bedomning.tex.j2. Ändras den ena ska den
      andra ändras, annars säger skärm och PDF olika saker om samma poäng. */
 
@@ -1011,6 +1011,33 @@ window.BladBygg = (() => {
     if (!s) return '';
     const v = /^\p{L}/u.test(s) ? s[0].toUpperCase() + s.slice(1) : s;
     return /[.!?…]$/.test(v) ? v : v + '.';
+  }
+  /* «KORREKT SVAR.» OCH INGET MER, som NP skriver när poängen ges för svaret
+     (lärarens dom 2026-09-23). Raderna upprepade annars svaret som står i
+     fetstil precis ovanför: «Rätt svar 3.», «Korrekt svar x⁸/2.». Bara när
+     resten av raden ÄR svaret (eller ingenting) kortas den; «Korrekt
+     förenkling till a⁶» säger något mer och står kvar. Flervalet får
+     «Korrekt alternativ.». Jämförelsen tål dollartecken, mellanrum, {,} och
+     en inledande variabel («d = 30 cm» mot svaret «30 cm»). `jamfor` är det
+     raden kan upprepa: svaret med och utan enhet, flervalets bokstav. Spegel
+     av exam_latex._kravrad. */
+  const KORREKT = /^(?:för\s+)?(?:rätt|korrekt)\s+(svar|alternativ)\b[\s,:;–-]*([\s\S]*?)[\s.]*$/i;
+  const LEDPREFIX = /^[a-zåäö][a-z0-9_']*(?:\([^()]*\))?=$/;
+  const jamforbar = s => String(s || '').toLowerCase().replace(/\{,\}/g, ',')
+    .replace(/\\[,;: ]|~|\$|\s/g, '').replace(/\.+$/, '');
+  function sammaSvar(rest, svar) {
+    const a = jamforbar(rest), b = jamforbar(svar);
+    if (!a || !b) return false;
+    if (a === b) return true;
+    const [kort, lang] = a.length <= b.length ? [a, b] : [b, a];
+    return lang.endsWith(kort) && LEDPREFIX.test(lang.slice(0, lang.length - kort.length));
+  }
+  function kravrad(krav, jamfor) {
+    const m = String(krav || '').trim().match(KORREKT);
+    if (m && (!m[2].trim() || (jamfor || []).some(k => k && sammaSvar(m[2], k)))) {
+      return m[1].toLowerCase() === 'alternativ' ? 'Korrekt alternativ.' : 'Korrekt svar.';
+    }
+    return kravmening(krav);
   }
   /* NP:s märke, «+C», ett per poäng. «+1 C» var appens egen form, och ettan
      säger ingenting när varje rad är en poäng. */
@@ -1060,7 +1087,7 @@ window.BladBygg = (() => {
      trippeln. Svaret i fetstil, och matematiken i det med KaTeX egen \pmb:
      KaTeX ignorerar font-weight, och utan den blev «2,5 km» ett magert tal
      och en fet enhet. PDF:en gör samma sak (exam_latex.escape_mixed fet). */
-  function enhetRader(namn, svar, bed, poang) {
+  function enhetRader(namn, svar, bed, poang, jamfor) {
     /* NOTRADEN TRYCKS INTE. «Vanligt fel»-raden bär ingen poäng, och
        läraren om prov 40 (2026-09-06): «detta med vanliga fel kan vi ta bort
        helt och hållet så att vi sparar plats». Parsern läser den fortfarande
@@ -1071,7 +1098,7 @@ window.BladBygg = (() => {
       ut.push(`<tr data-svar><td>${namn ? `<b class="lobeddel">${esc(namn)}</b>` : ''}${
         svar ? `<b class="lobedsvar">${matBryt(svar, true)}</b>` : ''}</td><td></td></tr>`);
     }
-    rader.forEach(r => ut.push(`<tr><td class="lobedkrav">${mat(kravmening(r.krav))}</td><td><b class="lobedniva">${
+    rader.forEach(r => ut.push(`<tr><td class="lobedkrav">${mat(kravrad(r.krav, jamfor))}</td><td><b class="lobedniva">${
       esc(marke(r))}</b></td></tr>`));
     const tr = trippel(poang, rader);
     if (tr) ut.push(`<tr data-trippel><td><span class="lobedtrippel">${esc(tr)}</span></td><td></td></tr>`);
@@ -1091,12 +1118,18 @@ window.BladBygg = (() => {
     const antal = Math.max(beddel.length, u.f ? 0 : vag.length);
     const utanBokstav = s => String(s || '').replace(/^\s*[a-l]\)\s*/, '');
     const kropp = antal
-      ? Array.from({ length: antal }, (_, k) => enhetRader(
-        `${BOKSTAVER[k] || k + 1})`,
-        svaret(utanBokstav((vag[k] || [])[0]), (u.delenhet || [])[k]),
-        beddel[k], (u.delpeca || [])[k])).join('')
-      : enhetRader('', bedsvar(u.alt && u.ratt != null ? BOKSTAV[u.ratt] || '' : '',
-                               svaret(u.f, u.enhet)), u.bed, u.peca);
+      ? Array.from({ length: antal }, (_, k) => {
+        const los = utanBokstav((vag[k] || [])[0]);
+        const svar = svaret(los, (u.delenhet || [])[k]);
+        return enhetRader(`${BOKSTAVER[k] || k + 1})`, svar, beddel[k],
+                          (u.delpeca || [])[k], [svar, svaret(los)]);
+      }).join('')
+      : (() => {
+        const bokstav = u.alt && u.ratt != null ? BOKSTAV[u.ratt] || '' : '';
+        const svar = svaret(u.f, u.enhet);
+        return enhetRader('', bedsvar(bokstav, svar), u.bed, u.peca,
+                          [svar, svaret(u.f)].concat(bokstav ? [bokstav, `(${bokstav})`] : []));
+      })();
     return `<table class="lobed"><tbody>${kropp}</tbody></table>`;
   }
 
@@ -1105,15 +1138,11 @@ window.BladBygg = (() => {
      «gäller varje uppgift i provet» var beställningens fjärde punkt.
 
      Numret står ensamt i spalten. «2 p» under det sa samma sak som trippeln
-     under raderna, och NP har bara numret. Notisen säger att uppgiften har
-     bedömda elevlösningar och var de står; utan den vet läraren inte att de
-     finns. */
+     under raderna, och NP har bara numret. */
   function losRad(u) {
-    const elever = (u.elever || []).length;
     return `<div class="pruppg">
       <span class="prnr">${u.nr}.</span>
-      <div>${bedtabell(u)}${elever
-        ? '<p class="lobednotis">Bedömda elevlösningar, sist i häftet</p>' : ''}</div></div>`;
+      <div>${bedtabell(u)}</div></div>`;
   }
 
   /* ══════════ BEDÖMDA ELEVLÖSNINGAR ══════════
@@ -1211,13 +1240,20 @@ window.BladBygg = (() => {
        att rätta efter. Namnet står likadant på fliken, i PDF:ens titel, i
        tryckpaketet och i kvittot — arbetsbladets och gruppuppgiftens facit
        heter fortfarande «Lösningsförslag» respektive «Facit». */
+    /* EN GÅNG, under första arkets rubrik (lärarens dom 2026-09-23).
+       Notisen stod förut under varje uppgift som hade elevexempel, alltså
+       under nästan alla, och det var just den sortens upprepade text hon
+       ville bort ifrån. Bara när det finns ett ark att hänvisa till. PDF:en
+       säger samma sak efter kravgränsraden (bedomning.tex.j2). */
+    const inledning = uppgifter.some(u => (u.elever || []).length)
+      ? '<p class="lolede">Bedömda elevlösningar står sist i häftet.</p>' : '';
     if (b.length) ut.push(`<div class="ark" data-form="lo-b" data-brytbar="">
       <div class="lohuvud"><b>Bedömningsanvisning · kortsvar</b><span>${delB >= uppgifter.length ? versal(spann(b)) : DELNAMN.B + ' · ' + spann(b)}</span></div>
-      <h1 class="lotitel">Endast svar krävs</h1>
+      <h1 class="lotitel">Endast svar krävs</h1>${inledning}
       ${b.map(losRad).join('')}</div>`);
     if (c.length) ut.push(`<div class="ark" data-form="lo-c" data-brytbar="">
       <div class="lohuvud"><b>Bedömningsanvisning · ${DELNAMN.C.toLowerCase()}</b><span>${DELNAMN.C} · ${spann(c)}</span></div>
-      <h1 class="lotitel">Hela lösningen krävs</h1>
+      <h1 class="lotitel">Hela lösningen krävs</h1>${b.length ? '' : inledning}
       ${c.map(losRad).join('')}</div>`);
     const elever = elevark(uppgifter);
     if (elever) ut.push(elever);

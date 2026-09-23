@@ -177,7 +177,9 @@
    en uppgift är mindre än mellan två, så att det syns var en uppgift slutar
    utan att räkna rader. */
 [data-form="lo-b"] .pruppg,[data-form="lo-c"] .pruppg,[data-form="lo-elev"] .pruppg{margin-top:0;padding:calc(12px * var(--fsk, 1)) 0 calc(10px * var(--fsk, 1));border-top:1px solid #E2DFD8}
-[data-form="lo-b"] .lotitel+.pruppg,[data-form="lo-c"] .lotitel+.pruppg,[data-form="lo-elev"] .lotitel+.pruppg{border-top:0}
+/* Ingen linje över första uppgiften: rubriken, eller inledningsraden
+   under den (blad-bygg.js losning), är arkets början. */
+[data-form="lo-b"] .lotitel+.pruppg,[data-form="lo-c"] .lotitel+.pruppg,[data-form="lo-elev"] .lotitel+.pruppg,[data-form="lo-b"] .lolede+.pruppg,[data-form="lo-c"] .lolede+.pruppg{border-top:0}
 
 /* `table` och inte grid, med flit: raderna ska kunna brytas mellan sidor när
    paginera delar en uppgift som är högre än arket (blad.js delaUppgift), och
@@ -208,9 +210,6 @@
 .lobedkrav{font-size:calc(13.5px * var(--fsk, 1));line-height:1.42}
 .lobedniva{font-weight:700;font-size:calc(13.5px * var(--fsk, 1));letter-spacing:.02em}
 .lobedtrippel{font-size:calc(12.5px * var(--fsk, 1));color:#6B6862;font-variant-numeric:tabular-nums}
-/* Notisen på en uppgift som har bedömda elevlösningar: de står på sista
-   arket, och utan raden vet läraren inte att de finns. */
-.lobednotis{margin:4px 0 0;font-style:italic;font-size:calc(12px * var(--fsk, 1));color:#6B6862}
 
 /* ── De bedömda elevlösningarna (lo-elev) ──
    Elevens papper till vänster i handskriften, poängen och kommentaren till

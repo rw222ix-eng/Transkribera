@@ -18,6 +18,7 @@ där NP-kalibreringen redan står.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -598,6 +599,28 @@ def test_flervalets_bokstav_star_forst_i_svaret():
                           ratt=1, bed="+1 E rätt alternativ")])
     assert ('<b class="lobedsvar">B, <span class="mat" '
             'data-tex="\\pmb{64^{1/3}}"></span></b>') in html
+    # Kravraden upprepar inte svaret: NP:s «Korrekt alternativ.»
+    assert '<td class="lobedkrav">Korrekt alternativ.</td>' in html
+
+
+def test_kravraden_som_upprepar_svaret_blir_korrekt_svar():
+    """Lärarens dom 2026-09-23: NP skriver «Korrekt svar.» när poängen ges
+    för svaret. Samma tabell som PDF:ens (tests/test_exam.py KRAVRADER), så
+    skärm och papper säger samma sak om samma rad."""
+    from tests.test_exam import KRAVRADER
+    # Rätt bokstav är alltid B i tabellen: alternativ nummer två.
+    assert {b for _k, _s, b, _v in KRAVRADER} <= {None, "B"}
+    fall = [{"u": _uppg(p=1, f=svar, bed=f"+1 E {krav}",
+                        **({"alt": ["$0$", "$1$"], "ratt": 1} if bokstav else {})),
+             "v": vantat}
+            for krav, svar, bokstav, vantat in KRAVRADER]
+    ut = json.loads(_kor_bladbygg(
+        "JSON.stringify(" + json.dumps(fall, ensure_ascii=False)
+        + ".map(c => [bb.losning({typ:'Prov', losningsblad:true}, [c.u], 99)"
+        ".join(''), bb.mat(c.v)]))"))
+    for (html, vantat), (krav, *_r) in zip(ut, KRAVRADER):
+        rad = re.search(r'<td class="lobedkrav">(.*?)</td>', html).group(1)
+        assert rad == vantat, krav
 
 
 def test_trippeln_star_sist_och_ur_dokumentets_poang():
@@ -616,7 +639,8 @@ def test_trippeln_star_sist_och_ur_dokumentets_poang():
 def test_elevexemplen_star_pa_eget_ark_sist():
     """Lärarens dom 2026-09-23 (NP:s form): de bedömda elevlösningarna står
     inte under varje uppgift utan på ett eget ark sist, «Bedömda
-    elevlösningar». I tabellen får uppgiften en dämpad notis om var de står."""
+    elevlösningar». Att de finns sägs EN gång, under första arkets rubrik,
+    inte under varje uppgift."""
     elever = [{"etikett": "0 p", "partier": [{"rader": ["$2x = 8$"],
                                               "poang": [0, 0, 0],
                                               "dom": "ingen ansats"}]},
@@ -632,10 +656,12 @@ def test_elevexemplen_star_pa_eget_ark_sist():
     elevark = arken[3]
     assert "<b>Bedömningsanvisning · elevlösningar</b><span>Uppgift 2</span>" in elevark
     assert '<h1 class="lotitel">Bedömda elevlösningar</h1>' in elevark
-    # Uppgiften i tabellen: notisen, men inga elevpapper.
-    assert '<p class="lobednotis">Bedömda elevlösningar, sist i häftet</p>' in arken[2]
+    # Inledningen på FÖRSTA arket, direkt under rubriken, och bara där.
+    assert ('<h1 class="lotitel">Endast svar krävs</h1><p class="lolede">'
+            'Bedömda elevlösningar står sist i häftet.</p>') in arken[1]
+    assert html.count("står sist i häftet") == 1
+    # Inga elevpapper i tabellen.
     assert "loskann" not in arken[1] + arken[2]
-    assert "lobednotis" not in arken[1]
     # På elevarket: numret, elevens rader i handskriften, trippeln och skälet.
     assert '<span class="prnr">2.</span>' in elevark
     assert elevark.count('<div class="loskann">') == 2
@@ -690,11 +716,19 @@ def test_svaret_bryter_ocksa():
 
 def test_utan_elevexempel_inget_elevark():
     """Fail-open: föll bedömningspassets anrop (eller är pappret gammalt) står
-    bara tabellen. Inget tomt ark och ingen notis som pekar på ingenting."""
+    bara tabellen. Inget tomt ark och ingen inledningsrad som pekar på
+    ingenting."""
     html = _losark([_uppg(p=2, f="$x = 4$", bed="+1 E tecknar\n+1 C svarar")])
     assert html.count("<tr") == 4          # svaret, två poängrader, trippeln
-    assert "lo-elev" not in html and "lobednotis" not in html
+    assert "lo-elev" not in html and "står sist i häftet" not in html
     assert "lobedvarfor" not in html
+    # Finns bara en lösningsdel (inga kortsvar) står inledningen på den.
+    elever = [{"etikett": "0 p", "partier": [{"rader": ["x"], "poang": [0, 0, 0],
+                                              "dom": "d"}]}]
+    bara_c = _losark([_uppg(p=2, f="$x = 4$", bed="+1 E a\n+1 C b",
+                            elever=elever)], delB=0)
+    assert ('<h1 class="lotitel">Hela lösningen krävs</h1><p class="lolede">'
+            'Bedömda elevlösningar står sist i häftet.</p>') in bara_c
 
 
 def test_provets_facitark_heter_bedomningsanvisning():

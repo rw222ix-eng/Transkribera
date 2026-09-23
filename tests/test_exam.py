@@ -1444,6 +1444,9 @@ def test_bedomning_visar_flervalsfacit():
     doc, _ = exam_spec.validate_exam_json(_exam_med_flerval())
     tex = exam_latex.render_bedomning(doc)
     assert r"\bedsvar{B, \(\pmb{x = 1}\) ger \(\pmb{f(1) = 0}\).}" in tex
+    # «rätt alternativ (B)» upprepar svaret ovanför: NP:s «Korrekt alternativ.»
+    assert r"\bedkrav{Korrekt alternativ.}{+E}" in tex
+    assert r"\bedkrav{Motiverat val.}{+E}" in tex
 
 
 def test_arbetsblad_facit_har_deluppgifternas_losningar():
@@ -3800,7 +3803,9 @@ def test_elevexemplen_star_i_eget_avsnitt_sist():
     """Lärarens dom 2026-09-23 (NP:s form): de bedömda elevlösningarna står
     inte under varje uppgift utan i ett eget avsnitt sist, «Bedömda
     elevlösningar». Per uppgift: elevens rader, poängen som trippel och
-    kommentaren. I tabellen får uppgiften bara en dämpad notis."""
+    kommentaren. Att de finns sägs EN gång, i inledningen, inte under varje
+    uppgift (lärarens dom samma dag: upprepad text var det hon ville bort
+    ifrån)."""
     exam = _exam()
     exam["uppgifter"][2]["elevlosningar"] = [
         {"etikett": "0 p",
@@ -3816,11 +3821,13 @@ def test_elevexemplen_star_i_eget_avsnitt_sist():
     # Avsnittet börjar på egen sida, efter hela tabellen.
     assert tabell.rstrip().endswith(r"\clearpage")
     assert r"\bedelev" not in tabell.split(r"\begin{document}", 1)[1]
-    # Notisen står på uppgift 3, och bara där.
-    assert tabell.count(r"\bednotis{Bedömda elevlösningar, sist i häftet}") == 1
-    notis = tabell.index(r"\bednotis{")
-    assert tabell.rindex(r"\begin{uppgift}{3}{}", 0, notis) > tabell.rindex(
-        r"\begin{uppgift}{2}{}", 0, notis)
+    # Inledningen säger det en gång, efter kravgränsraden och före första
+    # uppgiften. Ingen notis per uppgift.
+    rad = r"{\small Bedömda elevlösningar står sist i häftet.}"
+    assert tex.count("står sist i häftet") == 1
+    assert (tabell.index("Kravgränser:") < tabell.index(rad)
+            < tabell.index(r"\begin{uppgift}{1}{}"))
+    assert "bednotis" not in tex
     # Uppgiftens nummer, elevens rader, trippeln och kommentaren. Kommentaren
     # versaliseras: nollradens «Inga poäng.»-led stryks (_utan_rubriken) och
     # den poängsatta radens märken (_utan_stegen).
@@ -3835,11 +3842,59 @@ def test_elevexemplen_star_i_eget_avsnitt_sist():
 
 def test_utan_elevexempel_inget_avsnitt():
     """Fail-open: bedömningspasset kan ha fallit, och ett gammalt papper har
-    inga elevexempel. Då står varken avsnittet eller någon notis."""
+    inga elevexempel. Då står varken avsnittet eller inledningens rad om det."""
     doc, _fel = exam_spec.validate_exam_json(_exam())
     tex = exam_latex.render_bedomning(doc)
     assert "Bedömda elevlösningar" not in tex
+    assert "står sist i häftet" not in tex
     assert r"\clearpage" not in tex.split(r"\begin{document}", 1)[1]
+
+
+# Kravrader som upprepar svaret ovanför (lärarens dom 2026-09-23). Samma
+# tabell prövas mot skärmens spegel i tests/test_provets_delar.py.
+KRAVRADER = [
+    # (krav, svaret i fetstil, flervalets bokstav, väntat)
+    ("rätt svar $3$", "$3$", None, "Korrekt svar."),
+    ("korrekt svar $\\dfrac{x^{8}}{2}$", "$\\dfrac{x^{8}}{2}$", None,
+     "Korrekt svar."),
+    ("rätt svar", "$3$", None, "Korrekt svar."),
+    ("rätt svar $d = 30$ cm", "$30$ cm", None, "Korrekt svar."),
+    ("korrekt svar: $7{,}5 \\cdot 10^{1}$", "$7{,}5 \\cdot 10^{1}$", None,
+     "Korrekt svar."),
+    ("rätt alternativ, $64^{1/3}$", "$64^{1/3}$", "B", "Korrekt alternativ."),
+    ("rätt alternativ (B)", "$x = 1$ ger $f(1) = 0$.", "B", "Korrekt alternativ."),
+    ("för rätt alternativ", "", "B", "Korrekt alternativ."),
+    # Något mer än svaret: raden står kvar, som mening.
+    ("korrekt svar med båda nollställena", "$x = 1$ och $x = -3$.", None,
+     "Korrekt svar med båda nollställena."),
+    ("korrekt förenkling till $a^{6}$", "$a^{6}$", None,
+     "Korrekt förenkling till $a^{6}$."),
+    ("sätter in $t = 7{,}5$, svarar 2,5 km", "$2{,}5$ km", None,
+     "Sätter in $t = 7{,}5$, svarar 2,5 km."),
+    ("rätt svar $4$", "$3$", None, "Rätt svar $4$."),
+    ("rätt alternativ med motivering", "$64$", "B",
+     "Rätt alternativ med motivering."),
+]
+
+
+def test_kravraden_som_upprepar_svaret_blir_korrekt_svar():
+    """NP skriver «Korrekt svar.» när poängen ges för svaret. Raderna
+    upprepade svaret som står i fetstil ovanför: «Rätt svar 3.», «Korrekt
+    svar x⁸/2.». Står det något mer i raden står den kvar."""
+    for krav, svar, bokstav, vantat in KRAVRADER:
+        jamfor = (svar,) + ((bokstav, f"({bokstav})") if bokstav else ())
+        assert exam_latex._kravrad(krav, jamfor) == vantat, krav
+    # Hela vägen på pappret: flervalet, ett tal med enhet och en deluppgift.
+    data = _exam_med_flerval()
+    data["uppgifter"][0]["bedomning"] = (
+        "+1 E rätt svar $x = 1$ och $x = -3$\n+1 E anger det andra\n"
+        "+1 E korrekt svar")
+    doc, fel = exam_spec.validate_exam_json(data)
+    assert doc is not None, fel
+    tex = exam_latex.render_bedomning(doc)
+    assert r"\bedkrav{Korrekt alternativ.}{+E}" in tex
+    assert tex.count(r"\bedkrav{Korrekt svar.}{+E}") == 2
+    assert r"\bedkrav{Anger det andra.}{+E}" in tex
 
 
 # ══════════════════════════════════════════════════════════════════════
