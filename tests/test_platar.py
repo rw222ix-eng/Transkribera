@@ -758,3 +758,11 @@ def test_monsteruppgiften_far_sin_figur_i_scenregeln():
     assert "EXAKT antal delar utskrivet i ord" in r
     assert "There is no text, no numbers" in r
     assert r in exam_gen.INSTRUCTION
+
+
+def test_exempel_pa_skrivformen_bara_nar_poangen_provar_annat():
+    """Lärarens dom 2026-09-23 (prov 126 uppgift 6a): exemplet visade exakt
+    det E-poängen prövade. «Aldrig när poängen prövar formen.»"""
+    r = exam_gen.INSTRUCTION
+    assert "står bara frågan, UTAN exempel" in r
+    assert "visar uppgiften formen med ett exempel med andra tal" not in r

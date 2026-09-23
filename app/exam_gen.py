@@ -574,9 +574,14 @@ INSTRUCTION = (
     "formel för en fisk eller ett djur med ovanliga exponenter.\n"
     "  • Namnen är vanliga svenska förnamn som är lätta att läsa: Elias, "
     "Maja, Noah, Ella, Hugo, Alva, Liam, Saga, Ali, Sara, Leo, Nora.\n"
-    "  • Ber uppgiften om en skrivform (intervall med hakparenteser, "
-    "grundpotensform) visar uppgiften formen med ett exempel med andra tal: "
-    "«Exempel: alla tal större än 1 och högst 4 skrivs ]1, 4].»\n"
+    # Lärarens dom 2026-09-23 (prov 126 uppgift 6a, «Exempel: 0,0035 m
+    # skrivs 3,5·10⁻³ m i grundpotensform»): exemplet visade exakt det
+    # E-poängen prövade. «Aldrig när poängen prövar formen», som NP.
+    "  • Är skrivformen det poängen prövar (skriv i grundpotensform, skriv "
+    "intervallet med hakparenteser) står bara frågan, UTAN exempel: «Svara "
+    "i grundpotensform.» Ett exempel på formen får bara stå när formen är ett "
+    "svarsformat i en uppgift som prövar något annat: «Svara med ett "
+    "intervall. Exempel: alla tal större än 1 och högst 4 skrivs ]1, 4].»\n"
     "  • Ska eleven redovisa verktyget står det «Redovisa kort på pappret "
     "hur du har använt din räknare.» eller «Redovisa kort på pappret hur du "
     "har använt GeoGebra på datorn.», aldrig «visa hur du använder ditt "
