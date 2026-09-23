@@ -4,6 +4,13 @@ befintligt dokument av samma typ; exam-fälten skrivs över.
 
 Användning: python aterskapa_dokument.py <exam_id> <mall_dokument_id> <json-med-overrides>
 
+--godkant (sist på raden) skapar dokumentet GODKÄNT i stället för som utkast.
+Använd den alltid när någon annan kan ha ett utkast framme: servern håller ETT
+utkast i taget och RADERAR alla andra utkast när ett nytt skapas (server.py,
+POST /api/dokument). 2026-09-23 försvann dokument 223 så, och lärarens eller en
+annan sessions öppna utkast hade gått samma väg. Kör sedan dokument_godkann.py
+för PDF:en.
+
 OMPROV: exam-raden vet inte att den är ett omprov, det är dokumentets `variant`
 som bär det (plan.js sätter «Omprov»). Skicka {"variant": "Omprov"} bland
 overrides. Omprov 87 återskapades 2026-09-19 utan den, och lektionskortet i
@@ -75,7 +82,7 @@ def fran_prov(exam):
         ut.append(r)
     return ut
 
-def main(exam_id, mall_id, overrides):
+def main(exam_id, mall_id, overrides, status="utkast"):
     c = sqlite3.connect(DB); c.row_factory = sqlite3.Row
     ex = c.execute("select * from exams where id=?", (exam_id,)).fetchone()
     ver = c.execute("select id, version, exam_json from exam_versions where exam_id=? order by version desc limit 1", (exam_id,)).fetchone()
@@ -103,11 +110,13 @@ def main(exam_id, mall_id, overrides):
     })
     v.update(overrides)
     if fel: print("validate_exam_json fel:", fel[:3])
-    req = urllib.request.Request(f"{API}/api/dokument", data=json.dumps({"dokument": v, "status": "utkast"}, ensure_ascii=False).encode("utf-8"),
+    req = urllib.request.Request(f"{API}/api/dokument", data=json.dumps({"dokument": v, "status": status}, ensure_ascii=False).encode("utf-8"),
                                  headers={"Content-Type": "application/json"}, method="POST")
     with urllib.request.urlopen(req, timeout=120) as r:
         svar = json.loads(r.read().decode("utf-8"))
     print("skapade dokument", svar.get("id"), "för exam", exam_id, "|", v["typ"], v.get("moment"), v.get("klass"), v.get("datum"), v.get("tid"), "| uppg", len(v["uppgifter"]), "| summor", v["summor"], "| betyg", (v["granser"] or {}).get("betyg"))
 
 if __name__ == "__main__":
-    main(int(sys.argv[1]), int(sys.argv[2]), json.loads(sys.argv[3]) if len(sys.argv) > 3 else {})
+    args = [a for a in sys.argv[1:] if a != "--godkant"]
+    main(int(args[0]), int(args[1]), json.loads(args[2]) if len(args) > 2 else {},
+         status="godkant" if "--godkant" in sys.argv else "utkast")
