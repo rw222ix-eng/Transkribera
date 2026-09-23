@@ -254,6 +254,26 @@ def test_omskrivningsrutten_skickar_yrket_vidare(llm_ready, monkeypatch):
     assert sett["inriktning"] == YRKE
 
 
+def test_omskrivningsrutten_skickar_np_typerna_vidare(llm_ready, monkeypatch):
+    """Provets förebilder är NP-typer (2026-09-23). «Laga fynden» på «saknar
+    förebild» behöver listan i varvet, annars finns inga nummer att välja
+    (prov 124). Samma väg som yrket: med i bokblocket."""
+    from app import niva_rubrik
+    _prompter, res = _generera(llm_ready, monkeypatch)
+    sett = {}
+
+    def fake_refine(exam, message, **kw):
+        sett.update(kw)
+        return {"exam": exam, "errors": [], "rounds": 1}
+    monkeypatch.setattr(exam_gen, "refine_exam", fake_refine)
+    monkeypatch.setattr(niva_rubrik, "np_typer", lambda kurs, koder: [
+        {"nr": 90001, "niva": "E", "text": "(1/0/0) kortsvar: lös ekvation"}])
+    _done(llm_ready.post(f"/api/exams/{res['id']}/refine",
+                         json={"message": "laga fynden"}))
+    assert "NATIONELLA PROVETS UPPGIFTSTYPER" in sett["bok"]
+    assert "90001" in sett["bok"]
+
+
 def test_omskrivningsrutten_utan_faltet_ar_som_forut(llm_ready, monkeypatch):
     _prompter, res = _generera(llm_ready, monkeypatch)
     eid = res["id"]

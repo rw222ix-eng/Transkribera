@@ -1971,6 +1971,21 @@ def create_router(base: Path, arbiter) -> APIRouter:
         bok_block = (routes_planning.bok_urval_text(db_file, body)
                      if (view.get("typ") or "prov") == "prov"
                      else routes_planning.bok_text(db_file, body))
+        # NP-TYPERNA RESER MED VARVET (2026-09-23). Provets förebilder är
+        # nationella provets uppgiftstyper (exam_gen.build_forebild_prov), och
+        # «Laga fynden» på «saknar förebild» ber modellen sätta typens nummer.
+        # Utan listan i varvet fanns inga nummer att välja, och fyndet stod
+        # kvar varv efter varv (prov 124). Punkterna läses ur pappret självt,
+        # som skrivningen fick dem. Tom sträng när kursen inte är mätt.
+        if (view.get("typ") or "prov") == "prov":
+            ex = view.get("exam") or {}
+            npblock = exam_gen.build_forebild_prov(niva_rubrik.np_typer(
+                ex.get("kurs") or "",
+                sorted({k for u in ex.get("uppgifter") or []
+                        if isinstance(u, dict)
+                        for k in (u.get("innehall") or [])})))
+            if npblock:
+                bok_block = "\n\n".join(b for b in (bok_block, npblock) if b)
         # Yrket reser med varvet av samma skäl som boken: varvet SKRIVER OM
         # uppgifter, och utan regeln skriver det tillbaka färgburkarna till x
         # (lärarens fynd 2026-09-12). Det kommer ur klassprofilen i klienten
