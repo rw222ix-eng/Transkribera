@@ -229,7 +229,7 @@ test("skärmens provtabell bär planeringens hjälpmedel när dokumentet tiger",
     await L.vantaPapper(page);
 
     await expect(delcell(page, "Del A"))
-      .toContainText("Formelbladet är tillåtet, inga digitala hjälpmedel.");
+      .toContainText("Formelbladet är tillåtet, ingen räknare.");
     await expect(delcell(page, "Del B"))
       .toContainText("Räknare och formelblad tillåtna.");
   });
@@ -244,7 +244,7 @@ test("förvalet ritar precis de fraser pappret alltid burit", async ({ page }) =
   await expect.poll(() => anrop.length).toBe(1);
   await L.vantaPapper(page);
 
-  await expect(delcell(page, "Del A")).toContainText("Utan digitala hjälpmedel.");
+  await expect(delcell(page, "Del A")).toContainText("Utan räknare.");
   await expect(delcell(page, "Del B"))
     .toContainText("Räknare tillåten.");
 });

@@ -289,6 +289,52 @@ def _bokfynd(doc, bok: dict | None, sidor: dict[int, int],
     return ut
 
 
+def _kapitelspann(doc, bok: dict | None) -> tuple[int, int] | None:
+    """Sidorna för de KAPITEL provets uppgifter hör till, hela kapitlen.
+
+    Inte uppgifternas egna avsnitt: har en omskrivning tagit bort det sista
+    avsnittets enda uppgift hade spannet krympt med den, och luckan hade
+    aldrig synts. Kapitlet är «1» i «1.3»."""
+    register = [(str(a.get("nr") or ""), int(a["fran"]), int(a["till"]))
+                for a in ((bok or {}).get("avsnitt") or [])
+                if a.get("fran") and a.get("till")]
+    kapitel = {str(it.avsnitt or "").split(".")[0] for it in doc.uppgifter
+               if (it.avsnitt or "").strip()}
+    sidor = [(f, t) for nr, f, t in register if nr.split(".")[0] in kapitel]
+    if not sidor:
+        return None
+    return min(f for f, _ in sidor), max(t for _, t in sidor)
+
+
+def _lektionsfynd(view: dict, doc, bok: dict | None, db_file: Path) -> list[dict]:
+    """Varje delmoment klassen haft enligt kalendern ska ha en uppgift.
+
+    Prov 126 (NA26F, 2026-09-23): skrivningen täckte alla femton delmoment,
+    men två lagningsrundor bytte ut mönsteruppgiften och ingen räknade om.
+    Läraren såg det själv: «vi har ingen mönsteruppgift, inga
+    grundpotensform». Genereringen har vakten (exam_gen.delmomenttackning),
+    omskrivningen har den inte, så efterkontrollen frågar på varje papper, och
+    «Laga fynden» byter ut en uppgift. Samma källa som genereringen
+    (routes_planning.undervisade_delmoment): kalenderns lektioner före
+    provdagen, inom kapitlens sidor. Tyst utan klass, bok eller lektioner."""
+    if (view.get("typ") or "prov") != "prov" or not bok \
+            or not view.get("group_id") or not view.get("course_id"):
+        return []
+    spann = _kapitelspann(doc, bok)
+    if spann is None:
+        return []
+    try:
+        delmoment = routes_planning.undervisade_delmoment(
+            db_file, {"bok": {"id": bok["id"], "fran": spann[0],
+                              "till": spann[1]},
+                      "datum": view.get("datum") or ""},
+            group_id=view["group_id"], course_id=view["course_id"])
+    except Exception:                       # pragma: no cover, trasig bas
+        return []
+    fel = exam_gen.delmomenttackning(view.get("exam") or {}, delmoment)
+    return [_fynd("lektion", f["message"]) for f in fel]
+
+
 def _delfynd(doc) -> list[dict]:
     """«Endast svar krävs» mot uppgifternas typ.
 
@@ -508,7 +554,8 @@ def _utan_granser(exam: dict | None) -> dict:
 def efterkontroll(view: dict, doc, summor: dict | None, *,
                   bok: dict | None = None, sidor: dict[int, int] | None = None,
                   base: Path | None = None,
-                  infor: dict | None = None) -> list[dict]:
+                  infor: dict | None = None,
+                  db_file: Path | None = None) -> list[dict]:
     """Alla deterministiska fynd på ETT papper, i läsordning.
 
     `doc` är den validerade ExamDoc, är den None gick pappret inte att
@@ -520,6 +567,10 @@ def efterkontroll(view: dict, doc, summor: dict | None, *,
     ut: list[dict] = []
     ut += _balansfynd(doc, typ, nivaval)
     ut += _bokfynd(doc, bok, sidor or {}, typ)
+    # Kalenderns delmoment, bara när anroparen har basen (appen har den,
+    # testernas rena funktionsanrop inte).
+    if db_file is not None:
+        ut += _lektionsfynd(view, doc, bok, db_file)
     if typ == "prov":
         ut += _delfynd(doc)
     ut += _tidfynd(doc, summor, typ)
@@ -892,7 +943,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
         summor = exam_spec.poangsummor(doc) if doc else None
         bok, boksidor = _bokunderlag(view) if doc else (None, {})
         fynd = efterkontroll(view, doc, summor, bok=bok, sidor=boksidor,
-                             base=base, infor=_inforunderlag(infor_prov_id))
+                             base=base, infor=_inforunderlag(infor_prov_id),
+                             db_file=db_file)
         return {
             # ── EFTERKONTROLLEN (2026-09-19) ─────────────────────
             # De deterministiska fynden på pappret SOM DET LIGGER NU, räknade

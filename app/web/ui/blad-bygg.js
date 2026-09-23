@@ -835,8 +835,15 @@ window.BladBygg = (() => {
      exam_latex._delnamn_visning — samma regel, annars säger skärm och PDF
      olika saker om samma prov. */
   const DELNAMN_REDAN = /\b[Dd]el\s+A\b/;
+  /* «utan digitala hjälpmedel» heter «utan räknare» (lärarens dom
+     2026-09-23), också på prov som redan bär den gamla meningen. Spegel av
+     exam_latex._HJALPMEDELSORD. */
+  const hjalpmedelsord = t => String(t || '')
+    .replace(/\butan digitala hjälpmedel\b/g, 'utan räknare')
+    .replace(/\bUtan digitala hjälpmedel\b/g, 'Utan räknare')
+    .replace(/\binga digitala hjälpmedel\b/g, 'ingen räknare');
   const delnamnVisning = t => {
-    const s = String(t || '');
+    const s = hjalpmedelsord(t);
     return DELNAMN_REDAN.test(s) ? s : s
       .replace(/\b([Dd]el)\s+B\b/g, '$1 A')
       .replace(/\b([Dd]el)\s+C\b/g, '$1 B')
@@ -852,9 +859,11 @@ window.BladBygg = (() => {
      dokumentets `hjalpmedel` och därmed på PDF:ens försättsblad. Säger de två
      listorna olika saker säger skärmen och pappret olika saker om samma prov
      — det är hela skälet till att regeln bara får stå EN gång (se nedan). */
+  /* Del A heter «utan räknare», inte «utan digitala hjälpmedel» (lärarens
+     dom 2026-09-23). Nycklarna står kvar: de är sparade i planeringarna. */
   const HJALPMEDELSFRAS = {
-    'Inga digitala': 'Utan digitala hjälpmedel.',
-    'Formelblad': 'Formelbladet är tillåtet, inga digitala hjälpmedel.',
+    'Inga digitala': 'Utan räknare.',
+    'Formelblad': 'Formelbladet är tillåtet, ingen räknare.',
     /* «Räknare» och inget mer — «digitala hjälpmedel» var för vagt (lärarens
        dom 2026-09-18); datorn skriver hon själv när en uppgift kräver den. */
     'Räknare': 'Räknare tillåten.',
@@ -862,10 +871,10 @@ window.BladBygg = (() => {
     /* Datorn med GeoGebra, aldrig räknaren (lärarens dom 2026-09-22). */
     'Digitala verktyg och formelblad': 'GeoGebra på datorn och formelblad tillåtna.'
   };
-  /* Kortformen i delens sidhuvud («Del A · utan digitala hjälpmedel»). */
+  /* Kortformen i delens sidhuvud («Del A · utan räknare»). */
   const HJALPMEDELSETIKETT = {
-    'Inga digitala': 'utan digitala hjälpmedel',
-    'Formelblad': 'formelblad, utan digitala hjälpmedel',
+    'Inga digitala': 'utan räknare',
+    'Formelblad': 'formelblad, utan räknare',
     'Räknare': 'räknare',
     'Räknare och formelblad': 'räknare och formelblad',
     'Digitala verktyg och formelblad': 'GeoGebra på datorn och formelblad'

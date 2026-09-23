@@ -623,3 +623,36 @@ def test_instruktionen_samlar_uppgiftsnumren():
     assert "uppgift 3." in routes_exam.efterkontroll_instruktion(fynd[1:2])
     assert "De gäller" not in routes_exam.efterkontroll_instruktion(
         [_fynd("balans", None, "Balansen mot kursens mål stämmer inte.")])
+
+
+def test_efterkontrollen_saknar_delmoment_ur_kalendern(monkeypatch, tmp_path):
+    """Prov 126 (NA26F, 2026-09-23): lagningsrundorna bytte ut
+    mönsteruppgiften, och omskrivningen har ingen täckningsvakt. Läraren såg
+    det själv. Efterkontrollen frågar nu kalenderns delmoment på varje papper.
+    Spannet är hela KAPITLEN provets uppgifter hör till, så ett avsnitt vars
+    sista uppgift försvann (2.5 här) räknas ändå."""
+    from app.web import routes_exam, routes_planning
+    exam = _ovriga_med_forebild(copy.deepcopy(_exam_doc()))
+    for u in exam["uppgifter"]:
+        u["avsnitt"] = "1.1"
+        u["delmoment"] = "Kvadratrötter (s. 2–6)"
+    sett = {}
+
+    def fake(db_file, body, *, group_id, course_id):
+        sett.update(body["bok"])
+        return [{"delmoment": "Kvadratrötter", "sidor": "2–6", "lektioner": 1},
+                {"delmoment": "Grundpotensform", "sidor": "12–15",
+                 "lektioner": 1}]
+    monkeypatch.setattr(routes_planning, "undervisade_delmoment", fake)
+    doc, _ = exam_spec.validate_exam_json(copy.deepcopy(exam))
+    vy = _vy(exam, group_id=1, course_id=2, datum="2026-10-01")
+    fynd = routes_exam._lektionsfynd(vy, doc, dict(_BOK, id=5), tmp_path / "x.db")
+    assert [f["kod"] for f in fynd] == ["lektion"]
+    assert "Grundpotensform (s. 12–15)" in fynd[0]["text"]
+    # Kapitel 1 i testboken: 1.1 och 1.2 (s. 2–21), inte 2.x.
+    assert (sett["fran"], sett["till"]) == (2, 21)
+    # Arbetsbladet och ett papper utan klass tiger.
+    assert routes_exam._lektionsfynd(dict(vy, typ="arbetsblad"), doc,
+                                     dict(_BOK, id=5), tmp_path / "x.db") == []
+    assert routes_exam._lektionsfynd(dict(vy, group_id=None), doc,
+                                     dict(_BOK, id=5), tmp_path / "x.db") == []

@@ -108,7 +108,7 @@ def test_avvikelsen_lagger_raden_i_uppdraget():
         exam_gen.hjalpmedelsregel("Formelblad", "Räknare och formelblad"))
     text = _prov(hjalpmedel=block)
     assert "HJÄLPMEDLEN ÄR LÄRARENS VAL" in text
-    assert "Del B utan digitala hjälpmedel, formelbladet är tillåtet." in text
+    assert "Del B utan räknare, formelbladet är tillåtet." in text
     # Raden står i UPPDRAGET, intill delningen den ändrar — inte som ett löst
     # block långt ovanför, där modellen redan glömt att provet har delar.
     assert text.index("HJÄLPMEDLEN ÄR LÄRARENS VAL") > text.rindex("Uppdrag:")
@@ -304,3 +304,17 @@ def test_arbetsbladet_far_ingen_regel_ens_om_falten_skickas(llm_ready,
     # 2026-09-21). Provet ovan behåller sina två meningar, en per del.
     assert res["exam"]["hjalpmedel"] == "Del B utan räknare."
     assert "formelblad" not in res["exam"]["hjalpmedel"].lower()
+
+
+def test_utan_digitala_hjalpmedel_heter_utan_raknare_pa_pappret():
+    """Lärarens dom 2026-09-23 på prov 126:s provtabell: «bättre att skriva
+    utan räknare». Nya prov får ordet ur klausulen; prov som redan bär den
+    gamla meningen får det vid visningen (skärmen speglar samma byte)."""
+    from app import exam_latex
+    assert exam_gen.HJALPMEDEL_KLAUSUL["Formelblad"] == \
+        "utan räknare, formelbladet är tillåtet"
+    gammal = ("Del B utan digitala hjälpmedel, formelbladet är tillåtet. "
+              "Del C med räknare och formelblad.")
+    assert exam_latex._delnamn_visning(gammal) == (
+        "Del A utan räknare, formelbladet är tillåtet. "
+        "Del B med räknare och formelblad.")

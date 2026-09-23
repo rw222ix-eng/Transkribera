@@ -502,6 +502,22 @@ INSTRUCTION = (
     "varje bokstav står för. Välj hellre en enkel vardaglig situation än en "
     "ovanlig: det är matematiken som ska vara svår, aldrig att förstå vad "
     "som händer.\n"
+    # SITUATIONEN SKA VARA SANN (lärarens dom 2026-09-23 över prov 126):
+    # «Maja steker en kyckling i ugnen … Bestäm kycklingens vikt» (ingen
+    # räknar ut vikten ur tiden i ugnen, och i ugnen steker man inte), «Två
+    # modeller, A och B, ger priset för en studsmatta» («oftast är det inte så
+    # här i verkligheten»), och taxin där «Taxin kör i 30 km/h, så en resa på
+    # s km tar 2s minuter» bara fanns för att koppla ihop två bokstäver.
+    "- SITUATIONEN SKA VARA SANN. Frågan gäller det man faktiskt vill veta i "
+    "situationen: tiden i ugnen ur kycklingens vikt, aldrig vikten ur tiden. "
+    "Verben är de man säger i verkligheten (man tillagar eller steker i "
+    "ugnen, man hyr, man betalar). Två formler för samma sak står bara där "
+    "två alternativ finns att välja mellan på riktigt (två hyrfirmor, två "
+    "abonnemang, två pizzerior), och varje formel får en egen mening som "
+    "säger vad den räknar ut: «Firma A tar betalt enligt formeln …». Ge bara "
+    "den information frågan behöver: har formeln fler bokstäver än frågan "
+    "handlar om, skriv formeln med de bokstäver frågan handlar om i stället "
+    "för en extra mening som kopplar ihop dem.\n"
     # EN ALLMÄNT STÄLLD UPPGIFT SÄGER VAD SOM SÖKS (samma dom, uppgift 12):
     # «Bestäm med algebraisk metod det minsta värde som uttrycket kan anta.»
     # Nationella provet frågar ibland så, och läraren vill inte hjälpa
@@ -2101,8 +2117,12 @@ def build_ci_forbehall(punkter: list[str], forbjudna: list[dict]) -> str:
 # HJALPMEDELSFRAS). Ändras en lista ska den andra ändras i samma commit —
 # annars säger förhandsvisningen och PDF:en olika saker om samma prov.
 HJALPMEDEL_KLAUSUL = {
-    "Inga digitala": "utan digitala hjälpmedel",
-    "Formelblad": "utan digitala hjälpmedel, formelbladet är tillåtet",
+    # «Utan räknare», inte «utan digitala hjälpmedel» (lärarens dom
+    # 2026-09-23 på prov 126). Nycklarna står kvar, de är sparade i
+    # planeringarna. Redan skrivna prov byts vid visningen
+    # (exam_latex._HJALPMEDELSORD, blad-bygg.js hjalpmedelsord).
+    "Inga digitala": "utan räknare",
+    "Formelblad": "utan räknare, formelbladet är tillåtet",
     # «Räknare» och inget mer. Klausulen sa «räknare och digitala hjälpmedel»,
     # och lärarens dom (2026-09-18): «digitala verktyg är för vagt, för
     # generellt» — datorn hör bara hemma på en grafritande uppgift, och då

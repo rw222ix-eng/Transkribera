@@ -310,13 +310,27 @@ def _delnamn_visning(text: str) -> str:
     «Del A» är den entydiga markören för att arbetet redan är gjort, för den
     bokstaven finns inte i det interna namnrummet. Samma regel i skärmens
     spegel (blad-bygg.js delnamnVisning) — glider de isär säger PDF och skärm
-    olika saker om samma prov."""
+    olika saker om samma prov.
+
+    Samma väg byter ORDET: «utan digitala hjälpmedel» blir «utan räknare»
+    (lärarens dom 2026-09-23 på prov 126:s provtabell: «bättre att skriva
+    utan räknare»). Bytet sker här och inte bara i HJALPMEDEL_KLAUSUL, så att
+    de prov som redan bär den gamla meningen får den nya på pappret."""
     ut = str(text or "")
+    for monster, ersatt in _HJALPMEDELSORD:
+        ut = monster.sub(ersatt, ut)
     if _DELNAMN_REDAN_RE.search(ut):
         return ut
     for monster, ersatt in _DELNAMN_RE:
         ut = monster.sub(ersatt, ut)
     return ut
+
+
+_HJALPMEDELSORD = (
+    (re.compile(r"\butan digitala hjälpmedel\b"), "utan räknare"),
+    (re.compile(r"\bUtan digitala hjälpmedel\b"), "Utan räknare"),
+    (re.compile(r"\binga digitala hjälpmedel\b"), "ingen räknare"),
+)
 
 
 def _utrymme_mm(poang: tuple[int, int, int], typ: str) -> int:

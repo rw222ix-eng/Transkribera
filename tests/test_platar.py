@@ -705,3 +705,13 @@ def test_canvas_visar_forsattsbildens_scen_som_uppgifternas():
     assert "v.forsattsbild = res.exam.forsattsbild || v.forsattsbild || null;" in plan
     # Porträttet hör till DOKUMENTET, inte till en uppgift.
     assert "if (nyckel === 'forsatt') return v.forsattsbild || null;" in plan
+
+
+def test_situationen_ska_vara_sann_i_instruktionen():
+    """Lärarens dom 2026-09-23 över prov 126: kycklingens vikt ur tiden i
+    ugnen, två «modeller» för en studsmatta, taxins kopplingsmening."""
+    r = exam_gen.INSTRUCTION
+    assert "SITUATIONEN SKA VARA SANN" in r
+    assert "tiden i ugnen ur kycklingens vikt, aldrig vikten ur tiden" in r
+    assert "två alternativ finns att välja mellan på riktigt" in r
+    assert "Ge bara den information frågan behöver" in r
