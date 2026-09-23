@@ -315,7 +315,12 @@ def test_budgettaken_ar_matta_och_shotarna_haller_dem():
     ligger över taket lär ut det taket förbjuder. Alla fyra kortades samma
     dag, också med 30 %: 260/235/250/258 blev 180/162/171/172. Att den GAMLA
     skarpa tavlan nu faller mäts i test_whiteboard_spec
-    (test_gamla_kontrolltavlan_faller_pa_det_nya_taket)."""
+    (test_gamla_kontrolltavlan_faller_pa_det_nya_taket).
+
+    RECEPTET BLEV ELEVENS FRÅGOR 2026-09-23, och frågor är längre än «Verb:
+    två ord»: 193/173/186/192. Taket rördes inte. Det var frågornas längd
+    som fick ge (högst sex ord, två punkter i uttrycks-shoten), och shotarna
+    ligger fortfarande under 72 %."""
     assert (ws._MAX_BOARD_TEXT, ws._MAX_COLUMN_TEXT) == (270, 170)
     assert (ws._MAX_TEXT_CHARS, ws._MAX_ITEM_CHARS) == (60, 50)
     vanstrar = [ws._text_volym(
@@ -458,9 +463,11 @@ def test_vanstern_borjar_i_begreppen():
     # begreppsrader: «Förlänga» är ett handgrepp i bråkmetoden och flyttade
     # ned i receptet (8f). Kravet är att steget på högern har något att peka
     # tillbaka på, och receptet är lika mycket vänstern som raden ovanför.
+    # Sedan 2026-09-23 är receptet elevens frågor, och verbet står i svaret
+    # på dem: «Nej: förläng.» Stammen räcker.
     shoten = _algebrashoten()
     vanstern = " ".join(_begreppsrader(shoten) + _receptpunkter(shoten)).lower()
-    for verb in ("utveckla", "faktorisera", "förlänga"):
+    for verb in ("utveckla", "faktorisera", "förläng"):
         assert verb in vanstern, verb
     # Och orden kommer ur MOMENTET, inte ur en fast lista: Pythagoras och
     # uttrycken delar inte ett enda begrepp.
@@ -485,12 +492,13 @@ def test_orden_star_pa_vanstern_och_leden_pa_hogern():
     vanstern = " ".join(_begreppsrader(algebra)
                         + _receptpunkter(algebra)).lower()
     assert {"utveckla", "faktorisera"} <= _prefix(algebra)
-    assert "förlänga" in vanstern
-    # Förkunskapsverbet får fortfarande stå i receptet utan en begreppsrad:
-    # Pythagoras sätter in och löser ut, och leden på högern gör just det.
+    assert "förläng" in vanstern
+    # Förkunskapsverbet får ingen begreppsrad. Till 2026-09-23 stod det i
+    # receptet («Sätt in: kända sidor»); sedan dess är receptet elevens egna
+    # frågor, och Pythagoras frågar efter den längsta sidan i stället.
     pyt = next(d for u, d in lb.FEW_SHOTS if "Pythagoras" in u)
     assert "sätt in" not in _prefix(pyt)
-    assert any(p.lower().startswith("sätt in:") for p in _receptpunkter(pyt))
+    assert "Vilken sida är längst?" in _receptpunkter(pyt)
 
 
 # Förkunskaperna: klassen kan dem sedan tidigare kurser, och läraren säger
@@ -605,8 +613,9 @@ def test_prompten_forbjuder_areamodellen_och_taket():
     # Förkunskaperna skrivs aldrig, hur ofta exemplen än använder dem.
     assert "Förkunskaper klassen redan har" in p
     # «Ett steg får gärna börja med ett FÖRKUNSKAPSVERB» ströks 2026-09-23
-    # med metodstegen; receptets regel om dem står kvar.
-    assert "Förkunskapsverb blir aldrig egna receptpunkter" in p
+    # med metodstegen, och receptets regel om dem samma dag: lärarens egen
+    # första fråga, «Vad är procenten i decimalform?», är en förkunskap.
+    assert "Förkunskapsverb blir aldrig egna receptpunkter" not in p
     # Kroppen hör till geometrin; algebran får anatomin i figurens plats.
     assert "area- eller volymmodell" in p
     assert "GEOMETRIMOMENT" in p
@@ -1571,6 +1580,29 @@ def test_prompten_bar_vansterns_skelett():
     assert "ETT undantag: ANKARET i 8d" in p
 
 
+# Den form läraren fällde 2026-09-23 («alldeles för generellt»): ett abstrakt
+# verb, kolon och ett par ord. Listan är verben ur BA26B:s tavla och ur de
+# fyra shotarnas gamla recept.
+_GENERELLT_RECEPT = re.compile(
+    r"^(Skriv om|Avgör|Räkna|Sätt in|Lös ut|Namnge|Bestäm|Avläs|Hitta|"
+    r"Jämför|Förlänga|Förenkla|Samla|Dela|Välj|Titta):", re.IGNORECASE)
+
+
+def _ar_elevfraga(punkt: str) -> bool:
+    """En hel fråga på högst sex ord, utan kolon: «Söker jag en bit eller
+    allt?»."""
+    return (punkt.endswith("?") and ":" not in punkt
+            and 3 <= len(punkt.split()) <= 6)
+
+
+def _ar_valsvar(punkt: str) -> bool:
+    """«En bit: gånger. Allt: delat med.» Två fall, vart och ett en kort
+    mening med sitt kolon, högst åtta ord sammanlagt."""
+    fall = [f for f in punkt.split(". ") if f.strip()]
+    return (len(fall) == 2 and all(": " in f for f in fall)
+            and punkt.endswith(".") and len(punkt.split()) <= 8)
+
+
 def test_few_shotarna_bar_recept_och_att_tanka_pa():
     """En modell härmar det den ser. Skelettet står i prompten OCH i alla
     fyra shotarna — ankaret bara i de två där formeln har ett varför, för en
@@ -1581,9 +1613,20 @@ def test_few_shotarna_bar_recept_och_att_tanka_pa():
         assert parsed is not None and fel == [], (uppdrag, fel)
         punkter = _receptpunkter(doc)
         assert 2 <= len(punkter) <= 3, (uppdrag, punkter)
+        # ELEVENS EGNA FRÅGOR (lärarens dom 2026-09-23). Formen «Verb: två–tre
+        # ord» mättes här till dess. Nu är varje punkt en hel fråga på högst
+        # sex ord, och bara den sista får vara svaret på valet, «Fall: gör
+        # så. Fall: gör så.».
+        *fragor, sista = punkter
+        for punkt in fragor:
+            assert _ar_elevfraga(punkt), (uppdrag, punkt)
+        assert _ar_elevfraga(sista) or _ar_valsvar(sista), (uppdrag, sista)
         for punkt in punkter:
-            verb, _, resten = punkt.partition(":")
-            assert verb.strip() and 1 <= len(resten.split()) <= 4, (uppdrag, punkt)
+            assert not _GENERELLT_RECEPT.match(punkt), (uppdrag, punkt)
+            assert not re.search(r"[\d^\\$]", punkt), (uppdrag, punkt)
+            # Motorn radbryter ingen listpunkt: 36–37 tecken spiller ur spalten
+            # och krymper hela vänstern (renderat 2026-09-23).
+            assert len(punkt) <= 34, (uppdrag, punkt)
         rader = _att_tanka_pa(doc)
         assert 2 <= len([r for r in rader if r["kind"] == "text"]) <= 3, uppdrag
         if _ankarraden(doc) is not None:
@@ -1644,6 +1687,12 @@ def test_domaren_provar_receptet_och_randfallen():
     t = lb.build_tackning_prompt({"boards": []}, "LÄRARENS URVAL: 1301–1315")
     assert "Pröva RECEPTET" in t
     assert "Saknas receptet är det ett fynd" in t
+    # Och den gamla formen fälls (lärarens dom 2026-09-23, «alldeles för
+    # generellt»): domaren beställde förut just den.
+    assert "Ett GENERELLT recept är också ett fynd" in t
+    assert "«Skriv om: andelen i decimalform»" in t
+    assert "ELEVENS EGNA FRÅGOR" in t
+    assert "«Verb: högst fyra ord»" not in t
     assert "Pröva RANDFALLEN" in t
     assert "Räkna typer, inte uppgifter" in t
     # Tjockleksgränserna följde med skelettet, och sänktes 2026-09-21 med
@@ -1739,17 +1788,31 @@ def test_prompten_skiljer_anatomin_fran_formlerna():
     assert "uppställningen i anatomin och ankaret räknas INTE som formler" in t
 
 
-def test_prompten_kraver_hel_svenska_i_receptet():
-    """«Dela: bort talet framför» går inte att läsa högt. Punkten är kort —
-    två–tre ord sedan 2026-09-21 — men den ska gå att säga."""
+def test_prompten_kraver_elevens_egna_fragor_i_receptet():
+    """Lärarens dom 2026-09-23 över BA26B:s procenttavla: «Detta är alldeles
+    för generellt. På tavlan. Det borde ju vara bättre att ha något mer
+    konkret som eleverna faktiskt fattar.» Hon valde elevens egna frågor.
+
+    Testet hette test_prompten_kraver_hel_svenska_i_receptet och mätte
+    formen «Verb: TVÅ–TRE ord» (2026-09-21) med kolonet i varje punkt. Den
+    formen är upphävd; kvar är att punkten ska gå att säga, och att den
+    inte bär matematik."""
     p = lb.build_prompt("Ma2a", "IndA", "andragradsekvationer")
-    assert "formen «Verb: TVÅ–TRE ord»" in p
-    assert "Orden efter kolonet ska gå att läsa högt" in p
-    assert "aldrig «Dela: bort talet framför»" in p
-    assert "«Dela: med talet framför»" in p
+    assert "formen «Verb: TVÅ–TRE ord»" not in p
+    assert "VARJE punkt har sitt kolon" not in p
+    assert "de FRÅGOR eleven ställer sig när hon slår upp en uppgift" in p
+    assert "Hela frågor på högst SEX ORD och ~32 tecken" in p
+    assert "konkreta ord («bit», «allt») före abstrakta verb" in p
+    # Lärarens egen förhandsvisning står ordagrant, med svaret på valet sist.
+    assert ("«Vad är procenten i decimalform?», «Söker jag en bit eller "
+            "allt?», «En bit: gånger. Allt: delat med.»") in p
+    assert "Sista punkten FÅR vara svaret på valet" in p
+    # Kopplingen till högern står kvar, läst mot frågorna.
+    assert "exemplens första led svarar på första frågan" in p
     # …och ingen matematik i listpunkten: motorn renderar ingen
     # LaTeX i text, så «x^2» hade stått kvar som x^2 på tavlan.
     assert "skriv «kvadraten», aldrig «x^2»" in p
+    assert "Inga tal och ingen matematik i punkterna" in p
 
 
 def test_domaren_undantar_randfallen_fran_siffervakten():
@@ -1877,7 +1940,10 @@ def test_domarens_forslag_skrivs_i_radens_egen_form():
     t = lb.build_tackning_prompt({"boards": []}, "LÄRARENS URVAL: 1301–1315")
     assert "FORSLAGET SKRIVS I DEN FORM RADEN SKA HA" in t
     assert "aldrig «Kvadratrot ur a: positiva talet vars kvadrat är a»" in t
-    assert "en receptpunkt är «Verb: två–tre ord»" in t
+    # «en receptpunkt är «Verb: två–tre ord»» till 2026-09-23.
+    assert "en receptpunkt är «Verb: två–tre ord»" not in t
+    assert ("en receptpunkt är en hel fråga på högst sex ord eller sist "
+            "svaret «Fall: gör så. Fall: gör så.»") in t
     assert "en etikett på högst fyra ord" in t
 
 
@@ -1885,7 +1951,7 @@ def test_skelettets_ord_hittar_ratt_vansterrad():
     """«Lägg till receptet» och «en rad under att tänka på» kände ingenting
     igen (jobb 480), och varvet gick som helomskrivning. Nu binder orden."""
     doc = _algebrashoten()
-    for mening, vantad in (("lägg till en punkt i receptet", "Förlänga"),
+    for mening, vantad in (("lägg till en punkt i receptet", "förläng"),
                            ("en rad till under att tänka på", "Minuset"),
                            ("stryk ankaret", "2(3 + 5)")):
         gissning = lb.las_maltyper(mening)
@@ -2853,6 +2919,32 @@ def test_yrket_foljer_med_till_varje_prompt_och_till_domaren():
     domare = form.domarinstruktion()
     assert "aldrig ett fynd i sig" in domare
     assert "Den gemensamma tråden får vara yrket." in domare
+
+
+def test_uppgiftstexten_forstas_vid_forsta_lasningen():
+    """Lärarens dom 2026-09-23 över BA26B:s exempel 1, «Golvet är 40 m².
+    Beställ 15 % extra laminat för spill. Hur mycket extra laminat blir
+    det?»: «Det här är lite för komplicerat för eleverna att fatta vad jag
+    ens pratar om, trots att de går bygg- och anläggningsprogrammet.»
+    Regeln gäller alla tavlor; yrkesraden och domaren får den också.
+    Svårigheten rörs inte: exempel 3 är fortfarande urvalets svåraste."""
+    p = lb.build_prompt("Ma1a", "BA26B", "procent")
+    assert "UPPGIFTSTEXTEN FÖRSTÅS VID FÖRSTA LÄSNINGEN" in p
+    assert "EN fråga som säger rakt ut vad som söks" in p
+    assert "«beställ 15 % extra för spill»" in p
+    assert "det svåra i räkningen, aldrig i frågan" in p
+    # De tre metodtyperna i stigande svårighet står kvar orörda.
+    assert "(3) URVALETS SVÅRASTE" in p
+    rad = lb.inriktningsrad("Bygg och anläggning")
+    assert "UTAN FÖRKLARING: ett föremål, ett faktum, en fråga" in rad
+    assert "Aldrig yrkets planeringslogik" in rad
+    domare = lb.tavelform(True, "", "Bygg och anläggning").domarinstruktion()
+    assert "Pröva UPPGIFTSTEXTEN" in domare
+    assert "SAMMA metodtyp och samma svårighet i enklare ord" in domare
+    assert "Fäll däremot yrkets PLANERINGSLOGIK" in domare
+    # Utan urval döms formen ändå, och uppgiftstexten är form.
+    t = lb.build_tackning_prompt({"boards": []}, "")
+    assert "en uppgiftstext som kräver förklaring" in t
 
 
 def test_nivan_och_krysset_foljer_med_till_varje_prompt():
