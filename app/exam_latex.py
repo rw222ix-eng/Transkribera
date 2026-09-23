@@ -1400,17 +1400,20 @@ def _build_view(doc: exam_spec.ExamDoc,
 
 
 _REDOVISNING_TEXT = {
-    "genomgang": "genomgång tillsammans",
     "muntligt": "muntlig redovisning",
+    "skriftligt": "skriftlig redovisning",
     "poster": "redovisas som poster",
 }
-# Löftet ur exam_spec (REDOVISNING_LOFTE): ingen gruppuppgift ber längre om en
-# inlämning, och förvalet är genomgången (Rickard 2026-09-23).
-_REDOVISNING_HUR = exam_spec.REDOVISNING_LOFTE
-# «Bestäm vem som skriver» är struken: ingen skriver för gruppen, för inget
-# lämnas in (samma dag). Läsa tillsammans och förklara för varandra står kvar.
-_GRUPPBAND = ("Läs uppgiften tillsammans innan ni börjar räkna. Alla i gruppen "
-              "ska kunna förklara lösningen efteråt.")
+_REDOVISNING_HUR = {
+    "muntligt": "Redovisas muntligt: två minuter per grupp, och alla i gruppen "
+                "säger något.",
+    "skriftligt": "Redovisas skriftligt: ett gemensamt svar per grupp lämnas in "
+                  "vid lektionens slut.",
+    "poster": "Redovisas som poster: skriv lösningen stort på ett blad som "
+              "sätts upp i salen.",
+}
+_GRUPPBAND = ("Läs uppgiften tillsammans innan ni börjar räkna. Bestäm vem som "
+              "skriver. Alla i gruppen ska kunna förklara lösningen efteråt.")
 
 
 def _grupp_vy(grupp, nyckelfraga: str | None = None,
@@ -1430,7 +1433,7 @@ def _grupp_vy(grupp, nyckelfraga: str | None = None,
     delar sedan ut ett papper där den står kvar."""
     if grupp is None:
         return None
-    red = exam_spec.redovisningsform(grupp.redovisning)
+    red = grupp.redovisning
     band = (escape_mixed(instruktion.strip()) if (instruktion or "").strip()
             else escape_latex(f"{_GRUPPBAND} {_REDOVISNING_HUR[red]}"))
     if nyckelfraga:
