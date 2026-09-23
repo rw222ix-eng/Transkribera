@@ -1241,6 +1241,112 @@ def _ankarrader(valda: list[dict]) -> str:
         f"{a['varfor']}" for a in valda)
 
 
+# ── NATIONELLA PROVETS UPPGIFTSTYPER SOM FÖRLAGA (2026-09-23) ─────────────
+# Lärarens dom över prov 119: uppgifterna får likna bokens men aldrig vara
+# kopior, «då är det mycket bättre att kolla på vilka typer av uppgifter det
+# finns på nationella provet istället som inspiration». Måttblocket ovan ger
+# nivån i siffror; det här ger FORMERNA, en rad per bedömd enhet i kursens
+# NP (profilens egna parafraser, ingen provtext), filtrerade på provets
+# innehåll. Innehållet och metoden kommer fortfarande ur kapitlet. Uppgift 5,
+# 7 och 12b i prov 119 hade en form som varken stod i kapitlet eller i NP på
+# den nivån.
+#
+# Kategorierna är profilens `innehall`, och de nås ur Gy25-punktens rubrik.
+# Alla mönster som träffar räknas: «Potensfunktioner» är både potenser och
+# funktioner. Problemlösningspunkterna (PRO) och de digitala (DIG) har ingen
+# egen kategori; de är sätt att arbeta, inte innehåll.
+_NP_KATEGORI_MONSTER: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (r"ekvationssystem", ("ekvationssystem",)),
+    (r"andragradsekvation", ("andragradsekvationer",)),
+    (r"andragradsfunktion", ("andragradsfunktioner",)),
+    (r"potens", ("potenser", "potensekvationer")),
+    (r"exponential", ("exponentialfunktioner", "funktioner")),
+    (r"räta linjen|linjära funktion", ("linjära funktioner", "funktioner")),
+    (r"funktion", ("funktioner",)),
+    (r"linjära ekvationer", ("ekvationer",)),
+    (r"olikhet", ("olikheter",)),
+    (r"uttryck|formler|kvadreringsregl|generella samband", ("algebra",)),
+    (r"förändringsfaktor|procent", ("procent",)),
+    (r"trigonometri", ("trigonometri",)),
+    (r"vektor", ("vektorer",)),
+    (r"sannolikhet", ("sannolikhet",)),
+    (r"statisti|lägesmått|normalfördelning", ("statistik",)),
+    (r"pythagoras|geometri", ("geometri",)),
+)
+NP_TYPER_TAK = 40          # rader; fler är en katalog, inte en förlaga
+
+
+def _ci_rubrik(text: str) -> str:
+    """Punktens rubrik ur course_data.kodtexter: orden fram till det andra
+    ordet med versal («Linjära olikheter Begreppen intervall …» → «Linjära
+    olikheter»)."""
+    ord_ = str(text or "").split()
+    for i, o in enumerate(ord_[1:], 1):
+        if o[:1].isupper():
+            return " ".join(ord_[:i])
+    return " ".join(ord_)
+
+
+def np_kategorier(koder: list[str] | None) -> list[str]:
+    """Profilens innehållskategorier för provets Gy25-punkter, i
+    mönsterordning och utan dubbletter."""
+    from app import course_data
+    texter = course_data.kodtexter()
+    rubriker = [_ci_rubrik(texter.get(k, "")).casefold() for k in (koder or [])]
+    ut: list[str] = []
+    for monster, kategorier in _NP_KATEGORI_MONSTER:
+        if any(re.search(monster, r) for r in rubriker):
+            ut += [k for k in kategorier if k not in ut]
+    return ut
+
+
+def build_np_typer(kurs: str, koder: list[str] | None) -> str:
+    """«NATIONELLA PROVETS UPPGIFTSTYPER», eller tom sträng när kursen inte
+    är mätt, filen saknas eller inga punkter når en kategori."""
+    nyckel = kursnyckel(kurs) or kurs
+    enheter = ((_las_np_profil().get("kurser") or {}).get(nyckel) or {}) \
+        .get("uppgifter") or []
+    kategorier = np_kategorier(koder)
+    if not enheter or not kategorier:
+        return ""
+    sedda: set[str] = set()
+    per_niva: dict[str, list[str]] = {n: [] for n in NIVAER}
+    for u in enheter:
+        form = " ".join(str(u.get("form_parafras") or "").split())
+        # Svarsformen står redan på raden («kortsvar:»), parafrasen upprepar
+        # den ofta sist.
+        form = re.sub(r",\s*kortsvar$", "", form)
+        p = u.get("poang") or [0, 0, 0]
+        # Matrisbedömda helheter (3/2/4 på en rad) är ingen enhet appen kan
+        # skriva: NP går aldrig över 4 p per enhet utanför dem.
+        if (u.get("innehall") not in kategorier or not form
+                or form in sedda or u.get("niva") not in per_niva
+                or sum(int(x or 0) for x in p[:3]) > 4):
+            continue
+        sedda.add(form)
+        svar = "kortsvar" if u.get("kortsvar") else "lösning"
+        per_niva[u["niva"]].append(
+            f"- ({'/'.join(str(int(x or 0)) for x in p[:3])}) {svar}: {form}")
+    rader: list[str] = []
+    for n in NIVAER:
+        if per_niva[n]:
+            rader.append(f"{n}:")
+            rader += per_niva[n]
+    rader = rader[:NP_TYPER_TAK]
+    if not rader:
+        return ""
+    return (
+        f"NATIONELLA PROVETS UPPGIFTSTYPER I KURS {nyckel} för provets "
+        f"innehåll ({', '.join(kategorier)}), en rad per bedömd enhet med "
+        "poängen E/C/A. Läraren: «vilka typer av uppgifter det finns på "
+        "nationella provet … som inspiration». Hämta varje uppgifts FORM och "
+        "NIVÅ härifrån: samma sorts fråga, samma svarsform och ungefär samma "
+        "poäng på samma nivå. INNEHÅLLET och METODEN hämtar du ur kapitlet och "
+        "lektionerna, och talen och sammanhanget är dina egna, aldrig bokens. "
+        "En form som varken står här eller i kapitlet hör inte hemma på "
+        "provet.\n" + "\n".join(rader))
+
+
 def _krav_rader(rubrik: dict[str, dict[str, str]],
                 nycklar: list[str] | None) -> list[str]:
     rader = []

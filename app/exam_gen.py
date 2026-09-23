@@ -9277,6 +9277,15 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     forbehallblock = build_ci_forbehall(punkter, forbjudna or [])
     forebildblock = (build_forebild_prov(bokuppgifter)
                      if profil == "prov" else "")
+    # NP:s uppgiftstyper som förlaga för formen (lärarens dom 2026-09-23,
+    # niva_rubrik.build_np_typer). Står bredvid bokens förebilder: kapitlet
+    # ger innehållet, NP formen och nivån. Tom sträng utan mätt kurs eller
+    # utan punkter som når en kategori.
+    if profil == "prov":
+        forebildblock = "\n\n".join(
+            b for b in (forebildblock,
+                        niva_rubrik.build_np_typer(kurs, koder or punkter))
+            if b)
     # OMPROVET (2026-09-19). Samma villkor och samma skäl som blocken ovan:
     # utan referens en TOM STRÄNG och en oförändrad prompt.
     omprovblock = build_omprov(referensprov)

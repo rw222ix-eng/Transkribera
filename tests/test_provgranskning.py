@@ -569,3 +569,31 @@ def test_forebilden_galler_hela_uppgiften_i_prompten_och_hos_domaren():
     # Gruppuppgiftens domarprompt är orörd (kassetterna).
     assert "Döm VARJE deluppgift" not in exam_gen.build_relevans_prompt(
         [], [{"nr": 2118, "text": "x"}])
+
+
+# ── NP:S UPPGIFTSTYPER SOM FÖRLAGA FÖR FORMEN ─────────────────────────────
+
+def test_np_typerna_foljer_provets_innehall():
+    """Lärarens dom 2026-09-23: «kolla på vilka typer av uppgifter det finns
+    på nationella provet istället som inspiration». Prov 119:s punkter når
+    algebra, ekvationer, olikheter och potenser, och bara de."""
+    koder = ["G25-M1C-ALG-1", "G25-M1C-ALG-5", "G25-M1C-ALG-6",
+             "G25-M1C-ALG-8", "G25-M1C-PRO-1"]
+    block = niva_rubrik.build_np_typer("Matematik, nivå 1c", koder)
+    assert block.startswith("NATIONELLA PROVETS UPPGIFTSTYPER I KURS 1c")
+    assert "INNEHÅLLET och METODEN hämtar du ur kapitlet" in block
+    assert "bestäm parameter i olikhet så att lösningsmängden blir given" \
+        in block
+    # Andra kapitels innehåll kommer inte med, och inte heller NP:s
+    # matrisbedömda helheter på nio poäng.
+    assert "sannolikhet" not in block.split("\n", 1)[0]
+    assert "(3/2/4)" not in block
+    assert len(block.splitlines()) <= niva_rubrik.NP_TYPER_TAK + 1
+
+
+def test_np_typerna_ar_tomma_utan_matt_kurs_eller_kategori():
+    assert niva_rubrik.build_np_typer("Matematik, nivå 3c",
+                                      ["G25-M1C-ALG-5"]) == ""
+    assert niva_rubrik.build_np_typer("Matematik, nivå 1c",
+                                      ["G25-M1C-PRO-2"]) == ""
+    assert niva_rubrik.build_np_typer("Matematik, nivå 1c", []) == ""
