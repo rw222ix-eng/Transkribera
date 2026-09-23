@@ -620,3 +620,21 @@ def test_np_typerna_ar_tomma_utan_matt_kurs_eller_kategori():
     assert niva_rubrik.np_typer(KURS_1C, ["G25-M1C-PRO-2"]) == []
     assert niva_rubrik.np_typer(KURS_1C, []) == []
     assert exam_gen.build_forebild_prov([]) == ""
+
+
+def test_innehall_utan_np_typ_pa_nivan_far_sta_utan_forebild():
+    """Prov 123 (2026-09-23): NP 1c har bara en A-uppgift om intervall, och
+    avsnitt 2.3 föll bort när varje uppgift måste följa en typ. En E-uppgift
+    om intervall får stå utan typ; en E-uppgift om ekvationer får det inte."""
+    typer = niva_rubrik.np_typer(KURS_1C, KODER_119)
+    assert not niva_rubrik.np_typ_finns(typer, ["G25-M1C-ALG-6"], [1, 0, 0])
+    assert niva_rubrik.np_typ_finns(typer, ["G25-M1C-ALG-6"], [0, 0, 1])
+    assert niva_rubrik.np_typ_finns(typer, ["G25-M1C-ALG-5"], [1, 0, 0])
+    typ = typer[0]["nr"]
+    uppgifter = [_u(forebild={"nr": typ, "sort": "s"}),
+                 _u(innehall=["G25-M1C-ALG-6"]),
+                 _u(innehall=["G25-M1C-ALG-5"])]
+    fel = exam_gen.forebildsvakt(_prov(uppgifter), KURS_1C, KODER_119)
+    assert [f["path"] for f in fel] == ["uppgift 3"]
+    p = exam_gen.build_forebild_prov(typer)
+    assert "lämna forebild tomt" in p

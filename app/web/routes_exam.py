@@ -230,11 +230,24 @@ def _bokfynd(doc, bok: dict | None, sidor: dict[int, int],
         return []
     ut: list[dict] = []
     med_forebild = any(it.forebild for it in doc.uppgifter)
+    # Samma undantag som exam_gen.forebildsvakt: saknar NP en typ för
+    # uppgiftens innehåll på dess nivå får den stå utan förebild.
+    typer = niva_rubrik.np_typer(doc.kurs or "", sorted(
+        {k for it in doc.uppgifter for k in (it.innehall or [])}))
+
+    def typ_fanns(it) -> bool:
+        if not typer:
+            return True
+        poang = [sum(x) for x in zip(list(it.poang or [0, 0, 0])[:3], *[
+            list(d.poang or [0, 0, 0])[:3] for d in (it.deluppgifter or [])])]
+        return niva_rubrik.np_typ_finns(typer, list(it.innehall or []), poang)
+
     for i, it in enumerate(doc.uppgifter):
         nr = i + 1
         avs = (it.avsnitt or "").strip()
         sp = register.get(avs)
-        if typ == "prov" and med_forebild and not it.forebild:
+        if typ == "prov" and med_forebild and not it.forebild \
+                and typ_fanns(it):
             ut.append(_fynd(
                 "utanbok", f"Uppgift {nr} saknar förebild"
                 + ("" if avs else " och är inte märkt med något avsnitt")

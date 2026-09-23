@@ -3757,7 +3757,14 @@ def build_forebild_prov(typer: list[dict] | None) -> str:
         "med räkneexempel. Ska eleven visa att något alltid gäller, står "
         "påståendet färdigt i EN mening.\n"
         "Hittar du ingen typ som passar det du tänkt pröva är det DIN uppgift "
-        "som ska bytas, inte typen som ska tänjas."
+        "som ska bytas, inte typen som ska tänjas.\n"
+        # Prov 123 (2026-09-23): NP 1c har en enda uppgift om intervall och
+        # olikheter, på A, och avsnitt 2.3 föll bort ur provet när varje
+        # uppgift måste följa en typ. Se niva_rubrik.np_typ_finns.
+        "UNDANTAGET: har listan INGEN typ för ett undervisat innehåll på den "
+        "nivå du behöver (till exempel intervall på E), ska innehållet ändå "
+        "prövas. Skriv då uppgiften i nationella provets mått (räknesteg, "
+        "poäng och textlängd på den nivån) och lämna forebild tomt."
     )
 
 
@@ -4363,8 +4370,10 @@ def _build_relevans_prompt_np(kort: list[dict], typer: list[dict],
         "ha följt i fältet battre.\n"
         "- dom \"annat moment\" när uppgiften prövar något utanför provets "
         "innehåll.\n"
-        "- dom \"oklart\" när du inte kan avgöra det. «oklart» är ett riktigt "
-        "svar och bättre än en gissning; det fäller ingenting.\n"
+        "- dom \"oklart\" när du inte kan avgöra det, och när listan inte har "
+        "någon typ alls för uppgiftens innehåll på den nivån (då får "
+        "uppgiften skrivas utan typ). «oklart» är ett riktigt svar och "
+        "bättre än en gissning; det fäller ingenting.\n"
         "Räkna igenom lösningen i huvudet innan du dömer. Döm VARJE "
         "deluppgift för sig. En deluppgift som lägger ett steg ovanpå sin typ "
         "är \"annan sort\": två ekvationer som kedjas ihop, ett intervall där "
@@ -6571,8 +6580,13 @@ def forebildsvakt(exam: dict, kurs: str = "",
     inte mätt och prompten bad inte om någon förebild. Tyst också när INGEN
     uppgift bär fältet: taket i to_response_format kan ha knuffat ut det ur
     grammatiken, och då kunde modellen inte fylla det (samma fail-open som
-    delmomenttackning)."""
-    nummer = {t["nr"] for t in niva_rubrik.np_typer(kurs, koder)}
+    delmomenttackning).
+
+    Och tyst om en uppgift vars innehåll NP inte har någon typ för på dess
+    nivå (niva_rubrik.np_typ_finns): den ska skrivas i NP:s mått utan typ,
+    annars faller ett undervisat avsnitt bort ur provet."""
+    typer = niva_rubrik.np_typer(kurs, koder)
+    nummer = {t["nr"] for t in typer}
     uppgifter = [u for u in ((exam or {}).get("uppgifter") or [])
                  if isinstance(u, dict)]
     if not nummer or not any(u.get("forebild") for u in uppgifter):
@@ -6584,7 +6598,8 @@ def forebildsvakt(exam: dict, kurs: str = "",
             nr = int(fb.get("nr") or 0)
         except (TypeError, ValueError):
             nr = 0
-        if nr in nummer:
+        if nr in nummer or not niva_rubrik.np_typ_finns(
+                typer, u.get("innehall"), _uppgiftspoang(u)):
             continue
         vad = (f"pekar på {nr}, som inte är någon av nationella provets "
                "uppgiftstyper" if nr else "saknar förebild")

@@ -1344,12 +1344,33 @@ def np_typer(kurs: str, koder: list[str] | None) -> list[dict]:
         svar = "kortsvar" if u.get("kortsvar") else "lösning"
         per_niva[u["niva"]].append(
             {"niva": u["niva"], "poang": p, "svar": svar,
+             "kategori": u.get("innehall"),
              "text": f"({'/'.join(map(str, p))}) {svar}: {form}"})
     tak = max(1, NP_TYPER_TAK // len(NIVAER))
     ut = [t for n in NIVAER for t in per_niva[n][:tak]]
     for i, t in enumerate(ut, 1):
         t["nr"] = NP_TYP_NR0 + i
     return ut
+
+
+def np_typ_finns(typer: list[dict], koder: list[str] | None,
+                 poang: list[int] | tuple[int, ...] | None) -> bool:
+    """Har NP någon typ för uppgiftens innehåll på någon av dess nivåer?
+
+    Prov 123 (2026-09-23, första körningen med NP-förebilder): NP 1c har en
+    enda uppgift om olikheter och intervall, på A. Med kravet att varje
+    uppgift ska följa en NP-typ fanns ingen väg att pröva avsnitt 2.3
+    Intervall på E, och avsnittet föll bort ur provet. Uppgiften vars
+    innehåll saknar typ på sin nivå skrivs därför i NP:s mått utan typ, och
+    vakterna kräver bara en typ där det fanns en att följa.
+
+    `koder` är uppgiftens egna Gy25-punkter (fältet innehall). Utan punkter
+    räknas alla provets kategorier, alltså kravet står kvar."""
+    nivaer = {n for n, x in zip(NIVAER, poang or []) if x}
+    kategorier = set(np_kategorier(koder)) if koder else None
+    return any(t.get("niva") in nivaer
+               and (kategorier is None or t.get("kategori") in kategorier)
+               for t in typer or [])
 
 
 def _krav_rader(rubrik: dict[str, dict[str, str]],
