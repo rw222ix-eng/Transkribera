@@ -4149,7 +4149,11 @@ def exam_themes_for_prompt(conn: sqlite3.Connection, course_id: int,
 # `dokument`/`dokument_versioner` (högen läraren ser). Samma papper kan stå i
 # båda; dubbletterna faller bort på fingeravtrycket i exam_gen och inte här.
 _VARIATION_DOKUMENT = 12
-_VARIATION_TEXTER = 60
+# Sextio texter räckte till fem papper. Kursen har fler än så under ett
+# läsår, i flera klasser, och en uppgift som föll utanför taket fanns inte
+# (exam 129, se tidigare_uppgiftstexter). Prompten visar ändå bara
+# exam_gen.MAX_AVTRYCK avtryck; resten läser situationsvakten gratis.
+_VARIATION_TEXTER = 400
 
 
 def tidigare_uppgiftstexter(conn: sqlite3.Connection, course_id: int, *,
@@ -4157,43 +4161,46 @@ def tidigare_uppgiftstexter(conn: sqlite3.Connection, course_id: int, *,
                             koder: list[str] | None = None,
                             max_dokument: int = _VARIATION_DOKUMENT,
                             max_texter: int = _VARIATION_TEXTER) -> list[str]:
-    """Uppgiftstexterna kursen redan sett, nyast först.
+    """Uppgiftstexterna kursen redan sett, i ALLA klasser, nyast först.
 
-    `koder` smalnar av till de papper som taggats med minst en av lärarens
-    valda innehållspunkter, alltså «samma område», med kursplanens egen identitet i
-    stället för en gissning ur texten. Finns ingen sådan koppling (ett papper
-    som skrevs innan taggningen fanns) faller urvalet tillbaka på hela kursen:
-    ett tomt underlag är samma sak som ingen variationsvakt alls, och då är
-    bredden bättre än tystnaden."""
+    `koder` sätter de papper som taggats med minst en av lärarens valda
+    innehållspunkter, alltså «samma område», FÖRST i listan: det är dem
+    prompten visar när taket klipper. Resten av kursen kommer efter.
+
+    Förut smalnade `koder` av till bara de taggade pappren, och kursens
+    övriga papper lästes bara när inget taggat fanns. Lärarens dom
+    2026-09-23 kväll (exam 129): TE26A:s prov 14/10 fick tändstickorna ur
+    NA26F:s prov 1/10 (exam 126), samma kurs, samma figurmönster. «Den här har
+    ju nästan identisk uppgift med provet som min naturklass ska ha.» 126 var
+    taggat med andra punkter än 129:s beställning och låg dessutom under
+    taket. Ett prov upprepar ingen uppgift från ett annat papper i samma
+    kurs, oavsett klass och område, så hela kursen läses."""
     cid = int(course_id)
     ut: list[str] = []
+    sett: set[str] = set()
 
     def lagg(text) -> None:
         t = " ".join(str(text or "").split())
-        if t and len(ut) < max_texter:
+        if t and t not in sett and len(ut) < max_texter:
+            sett.add(t)
             ut.append(t)
 
     # ── Generatorns bokföring ───────────────────────────────────────
-    villkor, params = "e.course_id = ?", [cid]
     rena = [str(k).strip() for k in (koder or []) if str(k).strip()]
+    fraga = ("SELECT i.text FROM exam_items i JOIN exams e ON e.id = i.exam_id "
+             "WHERE e.course_id = ?{extra} "
+             "ORDER BY COALESCE(e.datum, e.created_at) DESC, i.id LIMIT ?")
     if rena:
-        villkor += (" AND e.id IN (SELECT t.exam_id FROM content_tags t "
-                    "JOIN course_content c ON c.id = t.content_id "
-                    f"WHERE t.exam_id IS NOT NULL AND c.kod IN "
-                    f"({','.join('?' * len(rena))}))")
-        params += rena
-    rader = conn.execute(
-        "SELECT i.text FROM exam_items i JOIN exams e ON e.id = i.exam_id "
-        f"WHERE {villkor} "
-        "ORDER BY COALESCE(e.datum, e.created_at) DESC, i.id LIMIT ?",
-        (*params, max_texter)).fetchall()
-    if not rader and rena:                    # inga taggade papper, ta kursen
-        rader = conn.execute(
-            "SELECT i.text FROM exam_items i JOIN exams e ON e.id = i.exam_id "
-            "WHERE e.course_id = ? "
-            "ORDER BY COALESCE(e.datum, e.created_at) DESC, i.id LIMIT ?",
-            (cid, max_texter)).fetchall()
-    for r in rader:
+        taggade = conn.execute(
+            fraga.format(extra=(
+                " AND e.id IN (SELECT t.exam_id FROM content_tags t "
+                "JOIN course_content c ON c.id = t.content_id "
+                "WHERE t.exam_id IS NOT NULL AND c.kod IN "
+                f"({','.join('?' * len(rena))}))")),
+            (cid, *rena, max_texter)).fetchall()
+        for r in taggade:
+            lagg(r["text"])
+    for r in conn.execute(fraga.format(extra=""), (cid, max_texter)).fetchall():
         lagg(r["text"])
 
     # ── Högen läraren ser ───────────────────────────────────────────

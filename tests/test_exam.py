@@ -90,16 +90,20 @@ def _exam() -> dict:
              "losning": "$1{,}05^t = 2$ ger $t \\approx 14{,}2$ år.",
              "bedomning": "+1 E tecknar ekvationen\n"
                           "+1 A korrekt tolkning av modellen"},
+            # En mening per rad och högst exam_gen.MENING_RAD_TAK tecken
+            # (lärarens dom 2026-09-23 kväll, exam_gen.radvakt): fixturen är
+            # den kanoniskt giltiga, och en mening på 81 tecken är det inte
+            # längre.
             {"del": "C", "formaga": "R", "typ": "resonemang", "poang": [1, 1, 1],
-             "text": "Avgör om påståendet stämmer: en andragradsfunktion med "
-                     "$a < 0$ saknar minsta värde. Motivera.",
+             "text": "En andragradsfunktion har $a < 0$.\nSaknar den ett "
+                     "minsta värde? Motivera.",
              "innehall": ["andragradsfunktioner"],
              "losning": "Sant, grafen är en nedåtriktad parabel.",
              "bedomning": "+1 E ställningstagande\n+1 C motivering\n"
                           "+1 A stringent resonemang"},
             {"del": "C", "formaga": "K", "typ": "redovisning", "poang": [0, 3, 1],
-             "text": "Förklara med graf och ord hur symmetrilinjen bestäms "
-                     "för $f(x) = x^2 - 6x + 5$.",
+             "text": "Funktionen är $f(x) = x^2 - 6x + 5$.\nFörklara med graf "
+                     "och ord hur symmetrilinjen bestäms.",
              "innehall": ["symmetrilinje"],
              "losning": "$x = 3$ via $-b/(2a)$ eller nollställenas mittpunkt.",
              "bedomning": "+1 C anger symmetrilinjen\n+1 C förklarar metoden\n"

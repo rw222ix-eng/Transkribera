@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
@@ -21,7 +22,9 @@ from typing import Callable
 from app import (course_data, exam_spec, kursdomare, llm_client,
                  niva_rubrik, np_vakter, rakneverk)
 
-MAX_ROUNDS = 3          # generering + balansreparation (delad budget)
+_LOG = logging.getLogger(__name__)
+
+MAX_ROUNDS = 3         # generering + balansreparation (delad budget)
 MAX_LATEX_ROUNDS = 2    # kompileringsfel → korrigering
 EXAM_MAX_TOKENS = 12_000
 
@@ -237,6 +240,12 @@ FORSATTSBILD_REGEL = (
     "forsattsbild.\n"
 )
 
+# Tecken en mening i uppgiftstexten får ha, räknade som de syns (radvakt,
+# _synlig_langd). Skärmens uppgiftsspalt är 62ch (prov.css .prtext) och bröt
+# exam 129:s «Använd formeln och bestäm den högsta fart som ger högst 45 m /
+# bromssträcka.» efter drygt 60; pappret rymmer drygt 80. Det smalare vinner.
+MENING_RAD_TAK = 60
+
 INSTRUCTION = (
     "Skriv ett matteprov som JSON enligt schemat. Dokumentets egna fält är "
     # Fältet HETER tid_min. Här stod «tid_minuter», och det är inget fält i
@@ -257,8 +266,7 @@ INSTRUCTION = (
     "(\"Kapitel 2\", \"Derivata\", \"Andragradsfunktioner\"). Skriv INTE "
     "\"Prov\", \"Prov:\" eller kursens namn i titeln: pappret sätter själv "
     "«Prov <titel> – <kurs>» i sidhuvudet och på försättsbladet.\n"
-    "- tid_min: skrivtiden i minuter som ett heltal. Står på försättsbladet "
-    "och i förhandsvisningens provtabell.\n"
+    "- tid_min: skrivtiden i minuter, ett heltal.\n"
     "- hjalpmedel: hjälpmedelsregeln i klartext, EN mening för hela provet — "
     "den står i provtabellen och i OBS-rutan över uppgifterna. Ber läraren om "
     "en ändring av vad som är tillåtet är det HÄR den skrivs. Högst 60 tecken: "
@@ -316,8 +324,7 @@ INSTRUCTION = (
     # prompt får bara INSTRUCTION med sig).
     "  LÄNGD OCH SPRÅK: uppgiftstexten är HÖGST tre rader — ungefär 40 ord. "
     "Skriv korta huvudsatser, en tanke per mening, och aldrig två bisatser i "
-    "rad. Använd vardagliga ord där de duger; facktermen ska stå kvar men "
-    "resten av meningen ska vara enkel svenska. Stryk allt som inte behövs "
+    "rad. Stryk allt som inte behövs "
     "för att lösa uppgiften: stämningsmålning, upprepade villkor och "
     "förklaringar av vad eleven ska göra sedan. En berättelseuppgift har ett "
     "till tre raders scenario och sedan EN tydlig fråga.\n"
@@ -326,30 +333,27 @@ INSTRUCTION = (
     # varandra följande heltal», «kvadrera varje tal och summera», «produkten
     # av talen». Regeln står i INSTRUCTION så att den följer med i
     # omskrivningen; det räknebara i den mäts av sprakvakt.
-    "  RÄKNINGEN SKRIVS SOM VERB, INTE SOM RÄKNEORD INUTI VARANDRA. Läraren "
-    "efter prov 81: klassen förstod inte «Teckna ett uttryck för summan av de "
-    "tre talens kvadrater» eller «produkten av de tre talen ökas med "
-    "$k^{2}n$». Skriv vad eleven ska GÖRA, ett steg per mening och i den "
-    "ordning stegen tas: «Kvadrera vart och ett av talen. Lägg ihop de tre "
-    "kvadraterna. Skriv summan som ett uttryck i $n$ och förenkla.» Högst ETT "
-    "räkneord (summa, produkt, kvot, differens, kvadrat) per mening, och "
-    "aldrig ett inuti ett annat. Skriv ut det som går att skriva ut: «$n-1$, "
-    "$n$ och $n+1$» i stället för «tre på varandra följande heltal». "
-    "Facktermen får stå kvar när den ÄR uppgiften (förenkla, faktorisera, "
-    "potens) — det är kedjorna av dem som fäller eleven. AKTIVA VERB: «Lägg "
-    "till $k^{2}n$», «Multiplicera talet med 3», aldrig «ökas med», "
-    "«multipliceras med», «tecknas». En mening är HÖGST 24 ord. Och inga "
-    "kursplaneord: skriv «alla» (inte «samtliga»), «var och en» (inte "
-    "«vardera»), «vilket som helst» (inte «godtyckligt»), «blir» (inte "
-    "«erhålls»), och skriv ut vad som hör till vad i stället för "
-    "«respektive». UPPMANINGEN ÄR KORT — högst 16 ord, EN prestation per "
-    "mening — och ber uppgiften om två saker blir de a) och b) med var sin "
-    "poäng, aldrig «… och beräkna sedan …» eller «Jämför sedan …» i samma "
-    "enhet. Läraren fällde «Teckna ett uttryck för hur mycket kaféet sparar "
-    "per år med flergångsmuggar och beräkna besparingen då $x = 50\\,000$» "
-    "(17 ord, två prestationer) och «Förklara vad talen betyder. Jämför "
-    "sedan priset per kWh vid $20$ kWh med priset per kWh vid $60$ kWh» — "
-    "eleverna visste inte vad de skulle göra.\n"
+    # Lärarens två citat («summan av de tre talens kvadrater», «produkten av
+    # de tre talen ökas med k²n») och de två uppmaningar hon fällde («Teckna
+    # ett uttryck för hur mycket kaféet sparar per år med flergångsmuggar och
+    # beräkna besparingen då x = 50 000», «Förklara vad talen betyder. Jämför
+    # sedan priset per kWh …») stod ordagrant i prompten till 2026-09-23 och
+    # ströks där för att betala TEXTENS FORM; regeln står kvar.
+    "  RÄKNINGEN SKRIVS SOM VERB, INTE SOM RÄKNEORD INUTI VARANDRA. Skriv "
+    "vad eleven ska GÖRA, ett steg per mening och i den ordning stegen tas: "
+    "«Kvadrera vart och ett av talen. Lägg ihop de tre kvadraterna. Skriv "
+    "summan som ett uttryck i $n$ och förenkla.» Högst ETT räkneord (summa, "
+    "produkt, kvot, differens, kvadrat) per mening, och aldrig ett inuti ett "
+    "annat. Skriv ut det som går att skriva ut: «$n-1$, $n$ och $n+1$» i "
+    "stället för «tre på varandra följande heltal». Facktermen får stå kvar "
+    "när den ÄR uppgiften (förenkla, faktorisera, potens). AKTIVA VERB: «Lägg "
+    "till $k^{2}n$», aldrig «ökas med», «multipliceras med», «tecknas». En "
+    "mening är HÖGST 24 ord. Inga kursplaneord: «alla» (inte «samtliga»), "
+    "«var och en» (inte «vardera»), «blir» (inte «erhålls»), och skriv ut "
+    "vad som hör till vad i stället för «respektive». UPPMANINGEN ÄR KORT, "
+    "högst 16 ord och EN prestation per mening, och ber uppgiften om två "
+    "saker blir de a) och b) med var sin poäng, aldrig «… och beräkna sedan "
+    "…» eller «Jämför sedan …» i samma enhet.\n"
     # Papprets krav-etikett skrivs av mallen (app/templates/prov.tex.j2,
     # \pfkrav) på varje uppgift, i kursiv, direkt efter numret — precis som i
     # lärarens förlaga. Står frasen dessutom i texten trycks den två gånger på
@@ -364,8 +368,7 @@ INSTRUCTION = (
     # displayformel — förlagans «$h(t) = -5t^2 + 20t + 700$» på egen rad.
     "  EN FORMEL SOM UPPGIFTEN BYGGER PÅ skrivs på EGEN RAD i text (radbryt "
     "med \\n), ensam inom $…$ och utan ord omkring: då sätts den centrerad "
-    "på pappret, som i ett riktigt prov. Bryt också raden där berättelsen "
-    "byter tanke — varje rad blir ett eget stycke.\n"
+    "på pappret, som i ett riktigt prov.\n"
     # Facit ska gå att läsa på en armlängds avstånd, och det gör det bara om
     # texten är kort. Modellen skrev annars resonerande meningar om vad ett led
     # betyder («Täljaren är en summa av termerna … Bråkstrecket håller ihop …»)
@@ -373,9 +376,8 @@ INSTRUCTION = (
     # sedan tavlans egna rader, och inte ett ord till.
     "- losning: facittexten, och den ska vara KORT: svaret först, sedan högst "
     "ett par räkneled — de rader en lärare skriver på tavlan när hon går "
-    "igenom uppgiften. Skriv aldrig resonerande prosa om vad ett led betyder "
-    "eller varför notationen ser ut som den gör, och upprepa aldrig "
-    "uppgiftstexten: facit läses BREDVID uppgiften, inte i stället för den. En "
+    "igenom uppgiften. Ingen prosa om vad ett led betyder, och aldrig "
+    "uppgiftstexten en gång till. En "
     "rutinuppgift klarar sig på svaret ensamt. Har uppgiften deluppgifter bär "
     "DE lösningsgången — förälderns losning lämnas då tom eller är en enda "
     "sammanfattande rad, aldrig samma text en gång till. Samma $-regel som "
@@ -419,10 +421,10 @@ INSTRUCTION = (
     "- deluppgifter: dela EN uppgift i a/b/c när den naturligt har flera steg "
     "eller frågor. DELUPPGIFTERNA HÖR ALLTID TILL SAMMA SAK — samma figur, "
     "samma funktion, samma ekvationstyp, samma situation — och stammen i "
-    "uppgiftens text säger vad det är. Nationella provets form: «Figuren visar "
-    "grafen till andragradsfunktionen $f$. a) Bestäm funktionens nollställen. "
-    "b) Bestäm funktionens största värde.» eller «Lös ekvationerna och svara "
-    "exakt. a) … b) …». Två frågor som handlar om olika saker är TVÅ "
+    "uppgiftens text säger vad det är. Nationella provets form: «Figuren "
+    "visar grafen till andragradsfunktionen $f$. a) Bestäm funktionens "
+    "nollställen. b) Bestäm funktionens största värde.» Två frågor som "
+    "handlar om olika saker är TVÅ "
     "numrerade uppgifter, aldrig a) och b) under samma nummer. "
     "Föräldern bär då stammen i text och poang [0, 0, 0] — "
     "ALLTID [0, 0, 0], summera aldrig deluppgifternas poäng dit; varje "
@@ -482,8 +484,7 @@ INSTRUCTION = (
     "det som prövas. Ett prov med «Tips:» avvisas. På arbetsblad och "
     "gruppuppgift: EN kort ledtråd till uppgiften eller deluppgiften, satt i "
     "kursiv på egen rad under frågan: 'Tips: Gör en skiss och kalla bredden "
-    "för $x$ cm.', 'Bestäm först vid vilken tidpunkt $t$ raketen når sin "
-    "högsta punkt.' Den ska ge vägen in, aldrig svaret, och står bara på de "
+    "för $x$ cm.' Den ska ge vägen in, aldrig svaret, och står bara på de "
     "flerstegsuppgifter där en elev annars fastnar redan på första steget, "
     "aldrig på fler än ungefär var tredje uppgift.\n"
     # METODEN FÖRESKRIVS ALDRIG PÅ PROVET (samma dom, samma dag). NP-profilen
@@ -494,13 +495,15 @@ INSTRUCTION = (
     # och «Bestäm med pq-formeln». Här står det som en regel i det block
     # som följer med i VARJE runda, också reparationerna (np_vakter.metodvakt
     # fäller det som ändå slinker igenom).
+    # «Använd formeln» ströks ur de tillåtna 2026-09-23 kväll (exam 129
+    # uppgift 10: «Använd formeln och bestäm den högsta fart …» där formeln
+    # redan stod på raden ovanför). Står formeln i uppgiften är frågan nog.
     "- METODEN FÖRESKRIVS ALDRIG PÅ PROVET: skriv inte «med pq-formeln», "
-    "«med kvadreringsregeln», «använd konjugatregeln», «med "
-    "nollproduktmetoden», «genom faktorisering» i en uppgiftstext. Eleven "
-    "väljer metoden, det är det som prövas. Tillåtet är bara «med algebraisk "
-    "metod», «använd formeln», «bryt ut» och «med hjälp av grafen». På "
-    "arbetsblad och gruppuppgift får metoden stå i notisen, aldrig i "
-    "frågan.\n"
+    "«med kvadreringsregeln», «använd konjugatregeln», «använd formeln och», "
+    "«genom faktorisering» i en uppgiftstext. Eleven väljer metoden, det är "
+    "det som prövas. Tillåtet är bara «med algebraisk metod», «bryt ut» och "
+    "«med hjälp av grafen». På arbetsblad och gruppuppgift får metoden stå "
+    "i notisen, aldrig i frågan.\n"
     # SAMMANHANGET SKA GÅ ATT SE FRAMFÖR SIG (lärarens dom 2026-09-22, exam
     # 118 uppgift 10): «En robotcell målar detaljer. […] En körning avbryts
     # efter 600 minuter.» Hennes ord: jätteoklart, inte ens jag fattar det.
@@ -548,13 +551,16 @@ INSTRUCTION = (
     # eleven med metoden, men frågan ska gå att förstå. Förtydligandet är
     # hennes egen form (fortydligande-fraser-star-kvar): en mening till som
     # säger vad som räknas som svar, aldrig ett tips och aldrig metoden.
+    # Exemplet började förut med «Talet x kan vara vilket tal som helst.»,
+    # och det är just den sortens mening läraren fällde 2026-09-23 kväll
+    # («Timpriset kan vara vilket belopp som helst», exam 128). Förtydligandet
+    # står EFTER frågan och säger vad som räknas som svar; se TEXTENS FORM.
     "- EN UPPGIFT UTAN SITUATION SOM FRÅGAR ALLMÄNT («det minsta värde som "
     "uttrycket kan anta», «det största möjliga», «med algebraisk metod») får en "
-    "mening till som säger med vanliga ord vad eleven ska ta fram och vad "
-    "som räknas som svar. Exempel: «Talet x kan vara vilket tal som helst. "
-    "Vilket är det minsta värde som x² + 6x kan få? Visa med en uträkning "
-    "att inget värde är mindre.» Meningen säger VAD som söks, aldrig hur: "
-    "den är varken ett tips eller en metod.\n"
+    "mening till, efter frågan, som säger med vanliga ord vad som räknas som "
+    "svar: «Vilket är det minsta värde som x² + 6x kan få? Visa med en "
+    "uträkning att inget värde är mindre.» Den säger VAD som söks, aldrig "
+    "hur.\n"
     # LÄSREGLERNA (lärarens dom 2026-09-22 kväll, exam 118 och 119). Varje
     # rad är en uppgift eleverna skulle ha läst fel. np_vakter.lasregelvakt
     # fäller det som går att se i texten; resten fångar elevläsaren.
@@ -608,6 +614,50 @@ INSTRUCTION = (
     "hur du har använt din räknare.» eller «Redovisa kort på pappret hur du "
     "har använt GeoGebra på datorn.», aldrig «visa hur du använder ditt "
     "digitala verktyg». Räknaren är inte ett digitalt verktyg.\n"
+    # ── TEXTENS FORM (lärarens dom 2026-09-23 kväll, exam 128 och 129) ──
+    # Exam 128 uppgift 1: «Skriv storheterna i den enhet som står i
+    # uppgiften. Svara i grundpotensform.» Läraren: «Det är väl bättre att
+    # skriva direkt … Egentligen behöver de göra två saker, dels skriva om
+    # till meter och sen i grundpotensform, fast de får bara ett E-poäng.»
+    # (NP 1a: 12 av 22 E-enheter på 1 p är ett steg; den enda enhetsuppgiften
+    # ger 2 E-poäng för 2 steg.) Uppgift 3: «Moms är en skatt. Timpriset kan
+    # vara vilket belopp som helst.»: «otroligt svårt för eleverna att förstå
+    # den här texten». Hon valde konkreta tal och A-formen som ett konkret
+    # fall till, UTAN bokstäver, för klassen har inte läst algebra; samma dag
+    # sa hon «Behåll NP:s A-former», alltså formen står kvar i begriplig
+    # svenska. Uppgift 5b: «Täljaren ska vara ett heltal.»: «förstör mer än
+    # vad det hjälper». Uppgift 6: «Vad då kvadratiska plattor? … Typ att Ali
+    # ska lägga kvadratiska klinkerplattor på ett golv.» Uppgift 4 och 6b
+    # (en konstant ur en given lösning, gemensamma delare) låg utanför
+    # kapitlet och utanför Ma 1a. Exam 129 uppgift 10: «Det är mycket text
+    # för en uppgift. Då krävs det att meningarna inte bryts mitt i … Det
+    # borde vara målet.» Raden på skärmen bröt efter ungefär 60 tecken
+    # (prov.css .prtext 62ch), pappret rymmer drygt 80, och det smalare
+    # vinner. np_vakter.lasregelvakt, formbytesvakt och radvakt fäller det
+    # som går att se i texten; hur regeln om villkorsmeningar går ihop med
+    # domen om förtydliganden står i np_vakter vid LASREGEL_MAX_FYND.
+    "- TEXTENS FORM, så att eleven förstår vid första läsningen:\n"
+    "  • Säg saken DIREKT: «Skriv 307 km i grundpotensform.» Aldrig ord om "
+    "uppgiften («storheterna», «i den enhet som står i uppgiften»).\n"
+    f"  • EN MENING PER RAD, varje mening högst {MENING_RAD_TAK} tecken som "
+    "den syns: radbryt (\\n) efter varje mening, dela en längre i två.\n"
+    "  • Ingen mening som eleven måste bära med sig till frågan: ingen "
+    "förklaring av ett ord hon kan («Moms är en skatt.»), ingen mening om att "
+    "ett tal kan vara vad som helst, ingen villkorsmening («Täljaren ska vara "
+    "ett heltal.», «Ingen platta får kapas.»). Ett självklart villkor stryks, "
+    "ett som behövs byggs in i frågan: «Finns det ett bråk med nämnaren 12 "
+    "som ligger mellan 2/3 och 3/4?»\n"
+    "  • ETT FORMBYTE PER E-POÄNG: enhetsbyte, prefix och grundpotensform är "
+    "var sitt steg. Aldrig «skriv i meter och i grundpotensform» på 1 p.\n"
+    "  • A-formerna står kvar, på klassens nivå. Utan algebra frågas det "
+    "generella som ett konkret fall till: «En elektriker tar 400 kr i timmen. "
+    "Med 25 % moms blir det 500 kr. En kund får rabatt och betalar 400 kr. "
+    "a) Hur många procent rabatt får kunden? b) Blir det samma procent om "
+    "timpriset är 600 kr? Förklara varför.»\n"
+    "  • Sakerna heter det de heter: «kvadratiska klinkerplattor», "
+    "«gipsskivor», «reglar», aldrig «kvadratiska plattor». En yrkesklass får "
+    "yrkets ord.\n"
+    "  • Bara det klassen har haft, bara kursens innehåll.\n"
     "- figur: lägg en matematisk figur på en uppgift genom att välja typ och "
     "sätta talen (aldrig fri kod): linjar {k, m}, andragrad {a, b, c}, "
     "exponential {C, bas}, normalfordelning {mu, sigma}, triangel {a, b, c}, "
@@ -1257,18 +1307,50 @@ def uppgiftstexter(exam: dict | None) -> list[str]:
     return ut
 
 
+SITUATIONER_TAK = 40
+
+
+def anvanda_situationer(texter) -> list[str]:
+    """Sakerna kursens papper redan handlat om, ett ord per sak i den form
+    det stod: «tändstickor», «elsparkcykel». Samma urval som situationsvakt
+    (ovanliga ord, inte kursplanens), i listans ordning, högst
+    SITUATIONER_TAK."""
+    ut: list[str] = []
+    sedda: set[str] = set()
+    kurs = _kursord()
+    for t in texter or []:
+        ren = _MATTEBLOCK_RE.sub(" ", str(t or "")).casefold()
+        for o in re.findall(r"[a-zåäöéü]+", ren):
+            s = _ordstam(o)
+            if (len(o) < SITUATION_MINORD or o in _SITUATION_STOPP
+                    or s in _SITUATION_STOPP or s in kurs or s in sedda):
+                continue
+            sedda.add(s)
+            ut.append(o)
+    return ut[:SITUATIONER_TAK]
+
+
 def build_variation(texter) -> str:
-    """Undvik-listan som FORM. Tom lista → tom sträng → orörd prompt."""
+    """Undvik-listan som FORM. Tom lista → tom sträng → orörd prompt.
+
+    SITUATIONERNA står sist sedan 2026-09-23 kväll (exam 129: tändstickorna
+    från NA26F:s prov kom tillbaka på TE26A:s, se situationsvakt). Avtrycken
+    fångar samma text med nya tal; raden med sakerna fångar samma situation
+    med ny text, och den gäller hela kursen, alla klasser."""
     avtryck = _avtrycken(texter)[:MAX_AVTRYCK]
     if not avtryck:
         return ""
+    saker = anvanda_situationer(texter)
     return ("Uppgifter som redan skrivits till den här kursen, med varje tal "
             "utbytt mot #. Listan säger alltså inte vilka SIFFROR som är "
             "förbrukade utan vilka UPPGIFTER som är det: skriv inte en uppgift "
             "som blir en av raderna nedan när dess tal byts ut. Nya siffror i "
             "samma uppgift är en upprepning, inte en variation. Byt "
             "sammanhang, byt fråga eller byt vad som är givet och vad som "
-            "söks.\n- " + "\n- ".join(avtryck))
+            "söks.\n- " + "\n- ".join(avtryck)
+            + ("\nSAKER som kursens papper redan har handlat om, i alla "
+               "klasser: " + ", ".join(saker) + ". Välj en annan situation "
+               "än dem, inte bara andra tal." if saker else ""))
 
 
 def variationsflaggor(exam: dict, texter) -> list[dict]:
@@ -6133,6 +6215,57 @@ def _parse_exam(raw: str) -> dict | None:
             if data is not None else None)
 
 
+# ── EN MENING PER RAD (lärarens dom 2026-09-23 kväll, exam 129) ──────────
+# «Det är mycket text för en uppgift. Då krävs det att meningarna inte bryts
+# mitt i, så att vi får plats med en mening på en och samma rad, så att inte
+# meningen delas upp på två olika rader. Det borde vara målet.» Två meningar
+# på samma rad bryter den andra mitt i så snart de tillsammans är längre än
+# raden, hur korta de än är var för sig. Därför läggs varje mening på egen
+# rad på det NYA pappret, sist i generate_exam (flagga), och båda renderarna
+# följer med utan egen kod: exam_latex._stycken gör varje rad till ett
+# stycke, och skärmen sätter .prtext med pre-line. Omskrivningen rör det
+# inte: där får bara uppgiften läraren pekade på ändras (mål-låset), och en
+# omskriven uppgift med två meningar på en rad fälls av efterkontrollens
+# radvakt i stället. Att meningen i sig ryms mäter radvakt (MENING_RAD_TAK).
+#
+# Gränsen är punkt, fråge- eller utropstecken följt av blanksteg och versal
+# (eller «, eller ett matteblock). Matten skyddas: «0,02. Bestäm» delas, men
+# ingenting inuti $…$.
+_MATTEBLOCK_RE = re.compile(r"\$[^$]*\$")
+_MENINGSGRANS_RE = re.compile(r"(?<=[.!?])[ \t]+(?=[A-ZÅÄÖ«\x00])")
+_PLATSHALLARE_RE = re.compile(r"\x00(\d+)\x00")
+
+
+def dela_meningar(text):
+    """Texten med varje mening på egen rad. Annat än en sträng passerar."""
+    if not isinstance(text, str) or not text:
+        return text
+    block: list[str] = []
+
+    def ers(m: re.Match) -> str:
+        block.append(m.group(0))
+        return f"\x00{len(block) - 1}\x00"
+
+    t = _MENINGSGRANS_RE.sub("\n", _MATTEBLOCK_RE.sub(ers, text))
+    return _PLATSHALLARE_RE.sub(lambda m: block[int(m.group(1))], t)
+
+
+def mening_per_rad(exam: dict | None) -> dict | None:
+    """Uppgifternas och deluppgifternas `text` med en mening per rad. Facit,
+    bedömning och allt annat står orört: där är raden inte elevens."""
+    if not isinstance(exam, dict):
+        return exam
+    uppgifter = exam.get("uppgifter")
+    for u in uppgifter if isinstance(uppgifter, list) else []:
+        if not isinstance(u, dict):
+            continue
+        delar = u.get("deluppgifter")
+        for x in [u] + (delar if isinstance(delar, list) else []):
+            if isinstance(x, dict) and isinstance(x.get("text"), str):
+                x["text"] = dela_meningar(x["text"])
+    return exam
+
+
 def _validate(exam: dict, profil: str, koder: list[str] | None = None,
               niva_mal: dict | None = None):
     """validate_exam_json + variationskontroll (BARA prov) + CI-taggningen.
@@ -8513,12 +8646,301 @@ def _slapp_poanglaset(fel: list[dict]) -> list[dict]:
             for f in fel]
 
 
+# ── RADVAKTEN (lärarens dom 2026-09-23 kväll, exam 129 uppgift 10) ───────
+# «… så att vi får plats med en mening på en och samma rad, så att inte
+# meningen delas upp på två olika rader. Det borde vara målet.» Varje mening
+# står redan på egen rad (mening_per_rad); här mäts att den också RYMS på en
+# rad, MENING_RAD_TAK tecken som den syns. Matematiken räknas som den
+# sätts, inte som den skrivs: «$\dfrac{x}{0{,}05}$» är fyra tecken brett på
+# pappret, inte tjugo.
+RADVAKT_MAX_FYND = 4
+_BRAK_RE = re.compile(r"\\[dt]?frac\{([^{}]*)\}\{([^{}]*)\}")
+_ROT_RE = re.compile(r"\\sqrt\{([^{}]*)\}")
+_TEXTKOMMANDO_RE = re.compile(
+    r"\\(?:text|mathrm|operatorname|mbox|textbf|mathbf)\{([^{}]*)\}")
+
+
+def _synlig_matte(m: str) -> int:
+    """Ungefär hur många tecken ett matteblock tar på raden."""
+    s = str(m or "").replace("{,}", ",")
+    for _ in range(4):                    # nästlade bråk, inifrån och ut
+        ny = _BRAK_RE.sub(lambda f: "#" * (max(_synlig_matte(f.group(1)),
+                                                _synlig_matte(f.group(2))) + 1),
+                          s)
+        ny = _ROT_RE.sub(lambda r: "#" * (_synlig_matte(r.group(1)) + 1), ny)
+        if ny == s:
+            break
+        s = ny
+    s = _TEXTKOMMANDO_RE.sub(r"\1", s).replace("{,}", ",")
+    s = re.sub(r"\\[,;:! ]|\\(?:left|right|displaystyle)", "", s)
+    s = re.sub(r"\\[a-zA-Z]+", "#", s)
+    return len(re.sub(r"[{}^_$]", "", s))
+
+
+def _synlig_langd(text: str) -> int:
+    """Meningens längd i tecken som den syns på pappret."""
+    t = str(text or "")
+    matte = sum(_synlig_matte(m.group(0)[1:-1])
+                for m in _MATTEBLOCK_RE.finditer(t))
+    return len(_MATTEBLOCK_RE.sub("", t).strip()) + matte
+
+
+def radvakt(exam: dict, delad: bool = True) -> list[dict]:
+    """Rader i uppgiftstexten som inte ryms på en rad.
+
+    `delad=True` mäter varje MENING för sig: det nya pappret får en mening
+    per rad sist i generate_exam, så två korta meningar på samma rad är inget
+    fel där. Efterkontrollen mäter likadant; en omskriven uppgift delas inte
+    om, men omskrivningen får INSTRUCTION:s regel med sig. `delad=False`
+    mäter raderna som de står."""
+    fel: list[dict] = []
+    sedda: set[str] = set()
+    for u_nr, u in enumerate((exam or {}).get("uppgifter") or [], 1):
+        if not isinstance(u, dict):
+            continue
+        delar = [(str(u_nr), u)] + [
+            (f"{u_nr}{chr(ord('a') + j)}", d)
+            for j, d in enumerate(u.get("deluppgifter") or [])
+            if isinstance(d, dict)]
+        for nr, x in delar:
+            text = str(x.get("text") or "")
+            for rad in (dela_meningar(text) if delad else text).split("\n"):
+                rad = rad.strip()
+                # En formel på egen rad är en displayformel, den står
+                # centrerad och bryts inte som text.
+                if not rad or re.fullmatch(r"\$[^$]*\$", rad) or rad in sedda:
+                    continue
+                langd = _synlig_langd(rad)
+                if langd <= MENING_RAD_TAK:
+                    continue
+                sedda.add(rad)
+                flera = "\n" in dela_meningar(rad)
+                fel.append(_err(
+                    f"uppgift {nr}", "radlangd",
+                    f"Uppgift {nr}: " + (
+                        f"raden «{_kort(rad, 120)}» bär flera meningar och "
+                        f"är ungefär {langd} tecken (högst {MENING_RAD_TAK}). "
+                        "Radbryt efter varje mening"
+                        if flera else
+                        f"meningen «{_kort(rad, 120)}» är ungefär {langd} "
+                        f"tecken och ryms inte på en rad (högst "
+                        f"{MENING_RAD_TAK}). Dela meningen i två eller korta "
+                        "den") + ", så att varje mening står på en egen rad. "
+                    "Samma matematik, samma tal, samma poäng."))
+    return fel[:RADVAKT_MAX_FYND]
+
+
+# ── FÖRBUDSVAKTEN (lärarens dom 2026-09-23 kväll, exam 128 uppgift 4) ─────
+# «Ekvationen nedan har lösningen x = 0,02. … Bestäm konstanten k.» på
+# BA26B:s test över kapitel 1, där ekvationer är kapitel 2 (lektionen
+# «Linjära ekvationer» 15/10, en vecka efter provet). Förbudslistan stod i
+# prompten och delmomentsdomaren fick den, och uppgiften gick ändå igenom:
+# domaren läste den som insättning och decimalräkning. Här räknas det i
+# stället. En metod vars namn står i förbudslistan men inte bland de
+# undervisade delmomenten får inte stå i en uppgiftstext. Stammarna är de
+# metoder som hör till ett eget kapitel i kursböckerna; ett ord som
+# «uttryck» eller «formel» står i vart kapitel och fäller ingenting.
+FORBUD_MAX_FYND = 4
+_METODSTAMMAR = ("ekvation", "olikhet", "funktion", "sannolikhet",
+                 "exponential", "förändringsfaktor", "pythagoras", "tangens",
+                 "sinus", "cosinus", "vektor", "derivat", "logaritm",
+                 "faktoriser", "andragrad")
+
+
+def forbudsvakt(exam: dict, delmoment: list[dict] | None,
+                forbjudna: list[dict] | None) -> list[dict]:
+    """Uppgifter som nämner en metod klassen ännu inte haft. Tyst utan
+    förbudslista (kassetteregeln: ingen bok, ingen kalender, inget fynd)."""
+    if not forbjudna:
+        return []
+    haft = " ".join(str(d.get("delmoment") or "")
+                    for d in (delmoment or [])).casefold()
+    forbud: dict[str, dict] = {}
+    for f in forbjudna:
+        namn = str(f.get("metod") or "").casefold()
+        for s in _METODSTAMMAR:
+            if s in namn and s not in haft:
+                forbud.setdefault(s, f)
+    if not forbud:
+        return []
+    fel: list[dict] = []
+    sedda: set[tuple[int, str]] = set()
+    for e in domarenheter(exam or {}):
+        text = (f"{e['kort'].get('stam', '')} "
+                f"{e['kort'].get('text', '')}").casefold()
+        for s, f in forbud.items():
+            nyckel = (_uppgiftsnr(e["nr"]), s)
+            if s not in text or nyckel in sedda:
+                continue
+            sedda.add(nyckel)
+            fel.append(_err(
+                f"uppgift {e['nr']}", "forbudsvakt",
+                f"Uppgift {e['nr']} handlar om «{s}…», och {f.get('metod')} "
+                f"(s. {f.get('sidor')}) kommer senare i boken än provets "
+                "kapitel: klassen har inte haft det när provet skrivs. Byt UT "
+                "uppgiften mot en som går att lösa med delmomenten, samma "
+                "del, samma poäng och samma förmåga."))
+    return fel[:FORBUD_MAX_FYND]
+
+
+# ── SITUATIONSVAKTEN (lärarens dom 2026-09-23 kväll, exam 129 uppgift 7) ──
+# «Figurerna nedan är byggda av tändstickor. Tabellen visar antalet
+# tändstickor i de tre första figurerna (4, 12, 24).» på TE26A:s prov 14/10,
+# och NA26F:s prov 1/10 (exam 126 uppgift 7) hade tändstickor i rutnät med
+# samma tal. Läraren: «Den här har ju nästan identisk uppgift med provet som
+# min naturklass ska ha. Man skulle kunna byta ut tändstickor mot typ att de
+# bygger ett torn med kvadrater gjorda av trä, eller trianglar med prickar
+# i, eller något sånt annat.» Regeln: ett prov upprepar inte en uppgift
+# (samma situation, samma tal eller samma figurmönster) från ett annat
+# papper i samma kurs, oavsett klass. Variationsvaktens fingeravtryck
+# (fingeravtryck) fångar bara samma text med nya tal, och 126:s uppgift
+# fanns inte ens bland de 24 avtryck prompten visar. Här jämförs SAKERNA:
+# ett ovanligt ord (sju bokstäver eller fler, inte kursens egna ord och inte
+# vanligt i kursens papper) som en ny uppgift delar med en gammal är samma
+# situation. Lika sträng mot talen: tre av samma tal i samma ordning (utom
+# 0–2) är samma figurmönster.
+SITUATION_MAX_FYND = 4
+SITUATION_MINORD = 7
+# Ett ord som står i så många olika tidigare uppgifter är kursens vardag,
+# inte en situation.
+SITUATION_MAX_DF = 2
+_SITUATION_STOPP = frozenset((
+    "tabellen", "tabell", "figurer", "figuren", "figurerna", "uttrycket",
+    "uttryck", "beräkna", "bestäm", "procent", "kronor", "antalet", "minuter",
+    "timmar", "sekunder", "centimeter", "millimeter", "kilometer",
+    "deciliter", "kilogram", "svaret", "lösningen", "lösningarna",
+    "ekvationen", "ekvationerna", "olikheten", "funktionen", "grafen",
+    "diagrammet", "förklara", "motivera", "förenkla", "uppgiften",
+    "skriven", "räknare", "räknaren", "ungefär", "avrunda", "heltal",
+    "decimaler", "varandra", "följande", "tillsammans", "kostar", "betalar",
+    "priset", "hälften", "dubbelt", "gånger", "mellan", "större", "mindre",
+    "första", "vilket", "vilken", "påstår", "stämmer", "redovisa", "pappret",
+    "använt", "använd", "formeln", "formel", "intervall", "intervallet",
+    "exponent", "exponenten", "potensen", "potenser", "grundpotensform",
+    "förändringsfaktorn", "procentenheter", "sannolikheten", "medelvärde",
+    "medelvärdet", "situation", "samtliga", "positivt", "negativt",
+    # Räkningens och tidens vardagsord: de står i vilken situation som helst.
+    "konstant", "konstanten", "variabeln", "värdena", "billigare", "dyrare",
+    "snabbare", "långsammare", "längre", "kortare", "högre", "lägre",
+    "månad", "månader", "månaderna", "veckor", "veckorna", "dagar",
+    "dagarna", "timme", "sekund", "sammanlagt", "ungefärligt", "resultat",
+    "resultatet", "beräkning", "beräkningen", "påståendet", "förklaring"))
+_ORDSLUT = ("orna", "erna", "arna", "orna", "na", "en", "et", "er", "ar",
+            "or", "a", "n")
+
+
+def _ordstam(o: str) -> str:
+    for s in _ORDSLUT:
+        if o.endswith(s) and len(o) - len(s) >= SITUATION_MINORD - 2:
+            return o[:-len(s)]
+    return o
+
+
+_KURSORD: set[str] | None = None
+
+
+def _kursord() -> set[str]:
+    """Kursplanens egna ord (Gy25-punkternas texter): matematiken, inte
+    situationen. En uppgift om «potenser» är ingen upprepad situation."""
+    global _KURSORD
+    if _KURSORD is None:
+        try:
+            texter = " ".join(course_data.kodtexter().values()).casefold()
+        except Exception:                           # noqa: BLE001
+            texter = ""
+        _KURSORD = {_ordstam(o) for o in re.findall(r"[a-zåäöéü]+", texter)
+                    if len(o) >= SITUATION_MINORD}
+    return _KURSORD
+
+
+def _situationsord(text: str) -> set[str]:
+    t = _MATTEBLOCK_RE.sub(" ", str(text or "")).casefold()
+    kurs = _kursord()
+    return {s for o in re.findall(r"[a-zåäöéü]+", t)
+            if len(o) >= SITUATION_MINORD and o not in _SITUATION_STOPP
+            for s in [_ordstam(o)] if s not in kurs
+            and s not in _SITUATION_STOPP}
+
+
+_TALSERIE_RE = re.compile(r"\d+(?:[.,]\d+)?")
+
+
+def _talserie(text: str) -> list[str]:
+    return [t for t in _TALSERIE_RE.findall(str(text or ""))
+            if t not in ("0", "1", "2")]
+
+
+def _delar_serie(a: list[str], b: list[str], n: int = 3) -> bool:
+    serier = {tuple(b[i:i + n]) for i in range(len(b) - n + 1)}
+    return any(tuple(a[i:i + n]) in serier for i in range(len(a) - n + 1))
+
+
+def _uppgiftsblock(u: dict) -> str:
+    """Hela uppgiften som EN text: stam, deluppgifter och tabellens celler
+    (figurmönstrets tal står ofta bara i tabellen)."""
+    delar = [str(u.get("text") or "")]
+    delar += [str(d.get("text") or "") for d in (u.get("deluppgifter") or [])
+              if isinstance(d, dict)]
+    tab = u.get("tabell") if isinstance(u.get("tabell"), dict) else {}
+    for rad in [tab.get("rubriker") or []] + list(tab.get("rader") or []):
+        delar += [str(c) for c in (rad if isinstance(rad, list) else [])]
+    return " ".join(delar)
+
+
+def situationsvakt(exam: dict, tidigare: list[str] | None) -> list[dict]:
+    """Uppgifter som upprepar en situation eller en talserie ur kursens
+    tidigare papper. Tom lista utan tidigare texter (kassetteregeln)."""
+    gamla = [str(t) for t in (tidigare or []) if str(t or "").strip()]
+    if not gamla:
+        return []
+    ord_per = [_situationsord(t) for t in gamla]
+    # Hur vanligt ordet är i kursens papper, räknat per UPPGIFT: stammen och
+    # deluppgifterna kommer efter varandra i listan (db.tidigare_uppgifts-
+    # texter), så ett ord som står i texten före räknas inte en gång till.
+    # Annars blev tändstickorna i 126:s uppgift 7 «vanliga» av att stammen,
+    # a) och b) alla nämner dem.
+    df: dict[str, int] = {}
+    for j, s in enumerate(ord_per):
+        for o in s - (ord_per[j - 1] if j else set()):
+            df[o] = df.get(o, 0) + 1
+    serier = [_talserie(t) for t in gamla]
+    fel: list[dict] = []
+    for i, u in enumerate((exam or {}).get("uppgifter") or [], 1):
+        if not isinstance(u, dict):
+            continue
+        block = _uppgiftsblock(u)
+        mina = {o for o in _situationsord(block)
+                if df.get(o, 0) <= SITUATION_MAX_DF}
+        serie = _talserie(block)
+        for j, gammal in enumerate(gamla):
+            gemensamt = sorted(mina & ord_per[j])
+            if gemensamt:
+                skal = f"samma situation («{gemensamt[0]}…»)"
+            elif _delar_serie(serie, serier[j]):
+                skal = "samma tal i samma ordning"
+            else:
+                continue
+            fel.append(_err(
+                f"uppgift {i}", "upprepning",
+                f"Uppgift {i} har {skal} som en uppgift kursen redan haft på "
+                f"ett annat papper: «{_kort(gammal, 90)}». Ett prov upprepar "
+                "aldrig en uppgift från en annan klass i samma kurs. Byt "
+                "situationen, "
+                "inte bara talen (tändstickor kan bli ett torn av träklossar "
+                "eller trianglar med prickar), och välj nya tal. Samma "
+                "matematik, samma del, samma poäng och samma förmåga."))
+            break
+    return fel[:SITUATION_MAX_FYND]
+
+
 def _raknade_fynd(exam: dict, *, avsnitt: list[dict] | None, antal: int | None,
                   delmoment: list[dict] | None, profil: str,
                   bokuppgifter: list[dict] | None = None,
                   koder: list[str] | None = None, kurs: str = "",
                   referensprov: dict | None = None,
-                  poang_tak: int | None = None) -> list[dict]:
+                  poang_tak: int | None = None,
+                  forbjudna: list[dict] | None = None,
+                  tidigare: list[str] | None = None) -> list[dict]:
     """ALLA de RÄKNADE vakterna i en och samma ordning, på ett ställe.
 
     Ordningen är prompten läraren annars läser i loggen, och den ska vara
@@ -8549,11 +8971,18 @@ def _raknade_fynd(exam: dict, *, avsnitt: list[dict] | None, antal: int | None,
                 + likvardighetsvakt(exam, referensprov)
                 # NP-formen (2026-09-22, prov 88): steg per poäng, poängform,
                 # metodföreskrift, parametrar, kursgräns, modellfamilj, dolt
-                # krav. Mätningen och reglerna står i app/np_vakter.py.
-                + np_vakter.np_vakter(exam, kurs)
+                # krav. Mätningen och reglerna står i app/np_vakter.py. Taket
+                # följer med sedan exam 128 (stegvakten höjde över det).
+                + np_vakter.np_vakter(exam, kurs, poang_tak)
                 # Varje uppgift har sin förebild i kapitlet (prov 119).
-                + forebildsvakt(exam, kurs, koder))
-    return fel + scenvakt(exam)
+                + forebildsvakt(exam, kurs, koder)
+                # Lärarens dom 2026-09-23 kväll: ingen metod ur ett senare
+                # kapitel (exam 128), ingen situation en annan klass redan
+                # haft (exam 129).
+                + forbudsvakt(exam, delmoment, forbjudna)
+                + situationsvakt(exam, tidigare))
+    # En mening per rad gäller alla papper eleverna läser (exam 129).
+    return fel + radvakt(exam) + scenvakt(exam)
 
 
 def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
@@ -8567,7 +8996,7 @@ def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                    bokuppgifter: list[dict] | None = None,
                    punkter: list[str] | None = None, inriktning: str = "",
                    kurs: str = "", referensprov: dict | None = None,
-                   doma: bool = True,
+                   doma: bool = True, tidigare: list[str] | None = None,
                    log_cb: Callable[[str], None] | None = None) -> dict:
     """Kapitelramens kontroll, med SAMMA kontrakt som _rakneverk_pass: högst EN
     reparationsrunda, samma budget, samma «rent före, trasigt efter»-grind, och
@@ -8602,7 +9031,8 @@ def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
     fel = _raknade_fynd(exam, avsnitt=avsnitt, antal=antal,
                         delmoment=delmoment, profil=profil,
                         bokuppgifter=bokuppgifter, koder=koder, kurs=kurs,
-                        referensprov=referensprov, poang_tak=poang_tak)
+                        referensprov=referensprov, poang_tak=poang_tak,
+                        forbjudna=forbjudna, tidigare=tidigare)
     # Loggraden namnger avsnitten, inte antalet fynd: «Täckningen: 1.1 saknar
     # uppgifter» säger vad som är fel, «1 problem» säger ingenting. Filtret på
     # koden finns för att de andra vakternas meddelanden har en annan
@@ -9291,7 +9721,8 @@ def _raknas_om(fel: dict) -> bool:
                "avsnittsmarkning", "delmomentvikt", "delmomentmarkning",
                "citackning", "citaggning", "anivavakt", "kravrad",
                "rubrikord", "likvardighet", "scenvakt",
-               "forebildsvakt") + np_vakter.KODER:
+               "forebildsvakt", "radlangd", "forbudsvakt",
+               "upprepning") + np_vakter.KODER:
         return True
     if kod == "delmomenttackning":
         return path == "uppgifter"
@@ -9303,7 +9734,7 @@ def _raknas_om(fel: dict) -> bool:
 
 def _slutfynd(exam: dict, *, avsnitt, antal, delmoment, profil,
               bokuppgifter, koder=None, kurs="", referensprov=None,
-              poang_tak=None) -> list[dict]:
+              poang_tak=None, forbjudna=None, tidigare=None) -> list[dict]:
     """Allt slutgrinden kan avgöra själv: de räknade vakterna plus
     ordvakten.
 
@@ -9315,7 +9746,8 @@ def _slutfynd(exam: dict, *, avsnitt, antal, delmoment, profil,
     fel = _raknade_fynd(exam, avsnitt=avsnitt, antal=antal,
                         delmoment=delmoment, profil=profil,
                         bokuppgifter=bokuppgifter, koder=koder, kurs=kurs,
-                        referensprov=referensprov, poang_tak=poang_tak)
+                        referensprov=referensprov, poang_tak=poang_tak,
+                        forbjudna=forbjudna, tidigare=tidigare)
     if profil == "prov" and bokuppgifter:
         fel = fel + begriplighetssignaler(exam, profil)
     return _slapp_poanglaset(fel)
@@ -9329,6 +9761,8 @@ def _slutgrind(res: dict, *, model: str, llm, profil: str,
                kurs: str = "", referensprov: dict | None = None,
                max_rounds: int = SLUTRUNDOR, signaler: bool = False,
                poang_tak: int | None = None,
+               forbjudna: list[dict] | None = None,
+               tidigare: list[str] | None = None,
                log_cb: Callable[[str], None] | None = None) -> dict:
     """Sista ordet före exemplen. Se blocket ovan.
 
@@ -9355,7 +9789,8 @@ def _slutgrind(res: dict, *, model: str, llm, profil: str,
 
     matt = dict(avsnitt=avsnitt, antal=antal, delmoment=delmoment,
                 profil=profil, bokuppgifter=bokuppgifter, koder=koder,
-                kurs=kurs, referensprov=referensprov, poang_tak=poang_tak)
+                kurs=kurs, referensprov=referensprov, poang_tak=poang_tak,
+                forbjudna=forbjudna, tidigare=tidigare)
     fel = _slutfynd(exam, **matt)
     if not fel:
         # RENT PAPPER, NOLL ANROP. Gamla kopior av samma fynd rensas ändå:
@@ -9612,6 +10047,16 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # kurs eller utan punkter som når en kategori.
     forebildblock = (build_forebild_prov(niva_rubrik.np_typer(kurs, koder))
                      if profil == "prov" else "")
+    # NOLL TYPER I EN MÄTT KURS SÄGS HÖGT (exam 128, 2026-09-23 kväll):
+    # BA26B:s yrkespunkter nådde ingen kategori, och provet skrevs utan
+    # förebild på alla tio uppgifter utan att någon rad sa det. Raden går i
+    # jobbets logg och i serverns; efterkontrollen säger samma sak på pappret
+    # (routes_exam._nptypfynd).
+    if profil == "prov" and not forebildblock:
+        saknas = niva_rubrik.np_typer_saknas(kurs, koder)
+        if saknas:
+            log(saknas)
+            _LOG.warning("generate_exam: %s", saknas)
     # OMPROVET (2026-09-19). Samma villkor och samma skäl som blocken ovan:
     # utan referens en TOM STRÄNG och en oförändrad prompt.
     omprovblock = build_omprov(referensprov)
@@ -9693,7 +10138,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                              else None,
                              punkter=punkter, inriktning=inriktning,
                              kurs=kurs, referensprov=referensprov,
-                             doma=doma,
+                             doma=doma, tidigare=tidigare,
                              rounds_used=res["rounds"], max_rounds=max_rounds,
                              log_cb=log_cb)
     # ── «INFÖR PROVET»-TÄCKNINGEN (2026-09-19) ───────────────────────
@@ -9769,6 +10214,10 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
         # varje uppgift (ovningspappret_stadat). Ligger passet tidigare mäter
         # begriplighetsvakten en mening appen själv lagt dit, och
         # variationsvakten jämför uppgifter som alla börjar likadant.
+        # En mening per rad på det nya pappret (lärarens dom 2026-09-23
+        # kväll, exam 129), se mening_per_rad. FÖRE räknarbeskedet: «Utan
+        # räknare.» hör till uppgiftens första rad och ska inte bli en egen.
+        mening_per_rad(r.get("exam"))
         ovningspappret_stadat(r.get("exam"), profil)
         return r
 
@@ -9787,7 +10236,8 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                           else None,
                           kurs=kurs, referensprov=referensprov,
                           max_rounds=rundor, signaler=doma,
-                          poang_tak=poang_tak, log_cb=log_cb)
+                          poang_tak=poang_tak, forbjudna=forbjudna or [],
+                          tidigare=tidigare, log_cb=log_cb)
 
     if not doma or res["exam"] is None:
         # `doma=False` betyder «inga extra modellanrop», och en efterrunda är

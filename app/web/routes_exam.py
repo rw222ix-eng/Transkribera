@@ -386,11 +386,24 @@ def _tidfynd(doc, summor: dict | None, typ: str) -> list[dict]:
     if not summor or not doc.tid_min:
         return []
     # PAPPRETS EGEN TAKT om det bär en (exam_spec.ExamDoc.takt): provet skrevs
-    # mot lärarens minuter per poäng, och då ska det mätas mot dem. Saknas
-    # fältet gäller husets takt, som för varje papper skrivet före fältet.
-    beraknad = exam_spec.tidsatgang(summor, len(doc.uppgifter),
-                                    takt=(exam_spec.spard_takt(doc.takt)
-                                          or exam_spec.takt_for(typ)))
+    # mot lärarens minuter per poäng, och då mäts det med HENNES räkning,
+    # poäng gånger takt, samma som taket (exam_spec.papperstid, exam 128:
+    # 20 poäng på 60 minuter i takt 3 «räknades till 70»). Hennes räkning är
+    # exakt, så ingen slack: 21 poäng är tre minuter för mycket.
+    takt = exam_spec.spard_takt(doc.takt)
+    if takt is not None:
+        tak = exam_spec.poang_tak_for(doc.tid_min, takt)
+        poang = int(summor.get("total") or 0)
+        if tak is None or poang <= tak:
+            return []
+        return [_fynd(
+            "tid", f"Pappret är satt till {doc.tid_min} minuter, och i din "
+            f"takt {takt:g} min/p rymmer det {tak} poäng. Uppgifterna ger "
+            f"{poang} poäng, alltså {exam_spec.papperstid(summor, 0, takt)} "
+            "minuter. Lägg till tid, eller ta bort poäng.")]
+    # Saknas fältet gäller husets takt, som för varje papper skrivet före
+    # fältet.
+    beraknad = exam_spec.papperstid(summor, len(doc.uppgifter), None, typ)
     if not beraknad or beraknad <= round(doc.tid_min * 1.12):
         return []
     return [_fynd(
@@ -498,11 +511,45 @@ def _npfynd(exam: dict, typ: str) -> list[dict]:
     if typ != "prov":
         return []
     try:
-        fel = np_vakter.np_vakter(exam, kurs=str(exam.get("kurs") or ""))
+        # Passets tak ur pappret självt, så att stegvakten inte ber om en
+        # poäng till på ett papper som redan ligger på taket (exam 128).
+        tak = exam_spec.poang_tak_for(exam.get("tid_min"), exam.get("takt"))
+        fel = np_vakter.np_vakter(exam, kurs=str(exam.get("kurs") or ""),
+                                  poang_tak=tak)
     except Exception:                       # pragma: no cover
         return []
     return [_fynd(f["code"], f["message"], _uppgiftsnr(f.get("path", "")))
             for f in fel]
+
+
+def _radfynd(exam: dict) -> list[dict]:
+    """En mening per rad, och den ryms (exam_gen.radvakt, lärarens dom
+    2026-09-23 kväll över exam 129). På varje papper eleverna läser: en
+    omskrivning kan lägga tillbaka en lång mening."""
+    try:
+        fel = exam_gen.radvakt(exam or {})
+    except Exception:                       # pragma: no cover
+        return []
+    return [_fynd(f["code"], f["message"], _uppgiftsnr(f.get("path", "")))
+            for f in fel]
+
+
+def _nptypfynd(doc, typ: str) -> list[dict]:
+    """Noll NP-typer i en mätt kurs (niva_rubrik.np_typer_saknas).
+
+    Exam 128 (BA26B Ma 1a, 2026-09-23 kväll) fick förebild None på alla tio
+    uppgifter, och efterkontrollen teg: förebildsfrågan i _bokfynd tiger när
+    INGEN uppgift har en förebild. Fyndet säger det rakt ut. Det lagas inte
+    av en omskrivning (punkterna är beställningens), så det står utanför
+    «Laga fynden» precis som tiden."""
+    if typ != "prov":
+        return []
+    koder = sorted({k for it in doc.uppgifter for k in (it.innehall or [])
+                    if str(k).startswith("G25-")})
+    if not koder:
+        return []
+    text = niva_rubrik.np_typer_saknas(doc.kurs or "", koder)
+    return [_fynd("nptyper", text)] if text else []
 
 
 def _kopiefynd(exam: dict, infor: dict | None) -> list[dict]:
@@ -578,6 +625,8 @@ def efterkontroll(view: dict, doc, summor: dict | None, *,
     ut += _sprakfynd(view.get("exam") or {}, typ)
     ut += _tipsfynd(view.get("exam") or {}, typ)
     ut += _npfynd(view.get("exam") or {}, typ)
+    ut += _radfynd(view.get("exam") or {})
+    ut += _nptypfynd(doc, typ)
     # Kopieringsvakten sist bland fynden, och bara när anroparen pekat ut
     # provet (se _kopiefynd). Den tiger på varje annat papper i appen.
     ut += _kopiefynd(view.get("exam") or {}, infor)
@@ -608,6 +657,8 @@ def efterkontroll(view: dict, doc, summor: dict | None, *,
 # `tid` är inte med. Provtiden lagas inte genom att skriva om pappret. Den
 # lagas genom att läraren sätter fler minuter eller tar bort poäng, och båda
 # valen är hennes. En modell som «lagar» provtiden skulle stryka uppgifter.
+# `nptyper` inte heller: punkterna är beställningens, inte pappret.
+_OLAGBARA = frozenset({"tid", "nptyper"})
 _ATGARD = {
     "utanbok": "Byt ut uppgiften mot en uppgift som följer en av nationella "
                "provets uppgiftstyper för kursen, med innehåll klassen har "
@@ -639,9 +690,10 @@ _ATGARD = {
                "krävs.",
     # NP-formens sju (app/np_vakter.py). Fyndets egen mening säger redan vad
     # som ska göras; raden här säger vad som får RÖRAS, som för de andra.
-    "stegvakt": "Höj poängen (en rad per poäng i bedömningen, kravgränserna "
-                "räknas om) eller ta bort ett räknesteg ur uppgiften. Nivån, "
-                "förmågan och platsen står kvar.",
+    "stegvakt": "Gör som fyndet säger: ta bort ett räknesteg ur uppgiften, "
+                "eller höj poängen (en rad per poäng i bedömningen) när "
+                "pappret inte ligger på passets tak. Nivån, förmågan och "
+                "platsen står kvar.",
     "poangform": "Ändra poängen och bedömningsraderna på den uppgiften, eller "
                  "dess typ, så som fyndet säger. Övriga uppgifter står kvar.",
     "metodvakt": "Stryk metodangivelsen ur uppgiftstexten. Samma uppgift i "
@@ -657,6 +709,11 @@ _ATGARD = {
                   "modellfamilj: samma del, samma poäng, samma förmåga.",
     "doltkrav": "Skriv kravet i uppgiftstexten eller stryk det ur "
                 "bedömningsraden. Poängen står kvar.",
+    # Lärarens dom 2026-09-23 kväll (exam 128 och 129).
+    "formbyte": "Låt uppgiften be om ett formbyte per poäng, eller dela den i "
+                "deluppgifter med var sin poäng. Övriga uppgifter står kvar.",
+    "radlangd": "Dela meningen i två eller korta den, en mening per rad. "
+                "Samma matematik, samma tal, samma poäng.",
 }
 
 
@@ -669,7 +726,7 @@ def efterkontroll_nummer(fynd: list[dict] | None) -> list[int]:
     en uppgift hade gjort det omöjligt att laga."""
     ut: list[int] = []
     for f in fynd or []:
-        if not isinstance(f, dict) or f.get("kod") == "tid":
+        if not isinstance(f, dict) or f.get("kod") in _OLAGBARA:
             continue
         try:
             nr = int(f.get("nr"))
@@ -688,7 +745,7 @@ def efterkontroll_instruktion(fynd: list[dict] | None) -> str:
     följer. Ramen omkring säger det enda som inte står i raderna: att resten av
     pappret ska stå still."""
     rader = [f for f in (fynd or [])
-             if isinstance(f, dict) and f.get("kod") != "tid"
+             if isinstance(f, dict) and f.get("kod") not in _OLAGBARA
              and str(f.get("text") or "").strip()]
     if not rader:
         return ""
@@ -1008,12 +1065,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
             # det. Takten är PAPPRETS egen när det bär en (ExamDoc.takt, satt
             # ur planeringens taktfält), annars exam_spec.takt_for (lärarens
             # kapiteltakt, 3,5 min/poäng), samma val som plan.js gör på
-            # skärmen, och samma tal som pappret beställdes med.
-            "tid": (exam_spec.tidsatgang(
-                summor, len(doc.uppgifter),
-                takt=(exam_spec.spard_takt(doc.takt)
-                      or exam_spec.takt_for(view.get("typ") or "prov")))
-                if doc else None),
+            # skärmen, och samma tal som pappret beställdes med. Bär pappret
+            # hennes takt är tiden HENNES räkning, poäng gånger takt, samma
+            # linjal som taket och tidsfyndet (exam_spec.papperstid, exam 128).
+            "tid": (exam_spec.papperstid(
+                summor, len(doc.uppgifter), doc.takt,
+                view.get("typ") or "prov") if doc else None),
             # Takten med i svaret av samma skäl som nivåvalet: skärmen ska
             # kunna visa vad pappret skrevs mot, och testerna se att den
             # överlevde.

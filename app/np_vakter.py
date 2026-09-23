@@ -27,6 +27,10 @@ MÄTNINGEN VARJE REGEL BYGGER PÅ (kurs → siffra ur profilens `mall`):
    ett A-kortsvar i kurs 2 ger 1 p för 3 steg (2a A_kortsvar: median 3,0) och
    är NP:s svåraste poäng per ord, med flit. Räknestegen räknas ur `losning`
    med heuristiken i rakna_steg (dokumenterad där).
+1b. formbytesvakt — formbyten per poäng ur uppgiftstexten (enhetsbyte och
+   grundpotensform var för sig). NP 1a: 12 av 22 E-enheter på 1 p är ett
+   steg, den enda enhetsuppgiften ger 2 E för 2 steg. Lärarens dom
+   2026-09-23 kväll, exam 128 uppgift 1.
 2. poangformvakt — poäng per enhet. E-LÖSNINGAR: max 2 i alla fyra kurserna
    (2a: 45 av 55 E-enheter ger 1 p; ett E-kortsvar om 3 p är a/b/c-formen
    och skelettets egen, validate_stam vaktar den). A-lösningar: min 2 i 1a,
@@ -137,8 +141,23 @@ KURSINNEHALL: dict[str, list[tuple[str, re.Pattern]]] = {
             r"definitionsmängd|värdemängd", re.I)),
         ("potenslagar", re.compile(r"potenslag", re.I)),
         ("bevis", re.compile(r"(?<![\wåäö])bevis", re.I)),
-        ("talsystem", re.compile(
-            r"binär|primtal|talsystem|tvåsystem|basen två", re.I)),
+        # Lärarens dom 2026-09-23 kväll över exam 128. Uppgift 4 «Ekvationen
+        # nedan har lösningen x = 0,02. … Bestäm konstanten k.»: «Kommer vi
+        # ens gå igenom det här i matte 1a? Det känns som att man har det här
+        # i matte 1c-kursen.» NP 1a har ingen «bestäm konstanten»-typ, NP 1c
+        # har en (parameter på A). Uppgift 6b, sidan på en platta som går
+        # jämnt upp i båda golvmåtten: «Ingår det här verkligen i matte 1?»
+        # Gemensamma delare och delbarhet står inte i Gy25 Ma 1a:s centrala
+        # innehåll. Mönstren tar orden; kursdomaren (app/kursdomare.py) tar
+        # samma innehåll när det är klätt som problemlösning utan orden.
+        ("en ekvation med en okänd konstant", re.compile(
+            r"(?:har\s+(?:lösningen|lösningarna|roten)|är\s+en\s+lösning)"
+            r"[^?]{0,200}?(?:bestäm|beräkna|ta\s+reda\s+på)\s+"
+            r"(?:konstanten|värdet\s+(?:på|av)\s+(?:konstanten\s+)?\$?"
+            r"[a-zA-Z]\$?)", re.I | re.S)),
+        ("talsystem och delbarhet", re.compile(
+            r"binär|primtal|talsystem|tvåsystem|basen två|delbar"
+            r"|gemensamm?a?\s+delare|(?<![\wåäö])delare\s+till", re.I)),
     ],
     # 1c och 2c är de tyngre spåren: ingenting i grannkursen ligger utanför.
     "1c": [],
@@ -267,8 +286,17 @@ def rakna_steg(losning: str) -> int:
     return steg
 
 
-def stegvakt(exam: dict) -> list[dict]:
-    """Fler räknesteg än poängen betalar för, på lösningsuppgifter."""
+def stegvakt(exam: dict, poang_tak: int | None = None) -> list[dict]:
+    """Fler räknesteg än poängen betalar för, på lösningsuppgifter.
+
+    PÅ TAKET HÖJS INGET (exam 128, 2026-09-23 kväll). Pappret skrevs på
+    passets tak, 20 p på 60 minuter i takt 3, och vaktens enda råd var «Höj
+    poängen»: lagningen gav uppgift 9 en fjärde C-poäng och pappret blev 21 p,
+    63 minuter i hennes takt. Poängvakten (exam_gen.poangvakt) hade redan
+    samma regel; här saknades den. Ligger pappret på taket ska ett steg bort
+    ur uppgiften i stället."""
+    pa_taket = poang_tak is not None and sum(
+        _poang(e) for e in _enheter(exam)) >= poang_tak
     fel: list[dict] = []
     for e in _enheter(exam):
         if (e.get("typ") or "") == "rutin":
@@ -279,15 +307,100 @@ def stegvakt(exam: dict) -> list[dict]:
         steg = rakna_steg(e["kort"].get("losning", ""))
         if steg / poang <= STEG_PER_POANG_TAK:
             continue
+        atgard = (f"Pappret ligger på passets tak {poang_tak} p, så höj INTE "
+                  "poängen: ta bort ett steg ur uppgiften."
+                  if pa_taket else
+                  "Höj poängen till "
+                  f"{math.ceil(steg / STEG_PER_POANG_TAK)} (en rad per poäng "
+                  "i bedömningen) eller ta bort ett steg ur uppgiften.")
         fel.append(_err(
             f"uppgift {e['nr']}", "stegvakt",
             f"Uppgift {e['nr']} ger {poang} p men lösningen har {steg} "
             "räknesteg. Nationella provet betalar högst två steg per poäng på "
-            "en lösningsuppgift, på alla nivåer. Höj poängen till "
-            f"{math.ceil(steg / STEG_PER_POANG_TAK)} (en rad per poäng i "
-            "bedömningen) eller ta bort ett steg ur uppgiften. Nivån och "
+            f"en lösningsuppgift, på alla nivåer. {atgard} Nivån och "
             "förmågan står kvar."))
     return fel[:STEG_MAX_FYND]
+
+
+# ── 1b. FORMBYTESVAKTEN (lärarens dom 2026-09-23 kväll, exam 128) ────────
+# Uppgift 1 i exam 128: «Skriv storheterna i den enhet som står i uppgiften.
+# Svara i grundpotensform.» med a) 307 km i meter, b) 6 mg i gram, c) 5·10²
+# nm i meter, 1 E-poäng var. Läraren: «Egentligen behöver de göra två saker,
+# dels skriva om till meter och sen i grundpotensform, fast de får bara ett
+# E-poäng. Det känns lite orimligt.» NP 1a (app/data/np_uppgiftsprofil.json):
+# av 22 E-enheter på 1 p är 12 ett steg, och den enda enhetsuppgiften
+# (nederbörd i mm till liter) ger 2 E-poäng för 2 steg. Ingen 1a-enhet
+# kombinerar enhetsbyte och grundpotensform.
+#
+# Stegvakten ovan räknar likhetstecken i facit, och ett enhetsbyte skrivs
+# ofta utan: «307 km = 3,07·10⁵ m» är ETT led med två formbyten i. Därför en
+# egen räkning ur uppgiftstexten: ett enhetsbyte (ett givet mått i en enhet,
+# svaret i en annan enhet av samma sort) och grundpotensform är var sitt
+# byte. Fler byten än poäng är ett fynd. Area och volym ur längder räknas
+# inte som enhetsbyte, det är en beräkning och inte ett byte.
+FORMBYTE_MAX_FYND = 4
+_ENHETER: dict[str, tuple[str, str]] = {}
+for _sort, _namn in (
+        ("längd", ("km:km kilometer:km m:m meter:m dm:dm decimeter:dm cm:cm "
+                   "centimeter:cm mm:mm millimeter:mm µm:µm μm:µm "
+                   "mikrometer:µm nm:nm nanometer:nm")),
+        ("massa", ("ton:ton kg:kg kilogram:kg hg:hg g:g gram:g mg:mg "
+                   "milligram:mg µg:µg μg:µg mikrogram:µg")),
+        ("volym", ("l:l liter:l dl:dl deciliter:dl cl:cl centiliter:cl "
+                   "ml:ml milliliter:ml")),
+        ("tid", ("h:h timme:h timmar:h min:min minut:min minuter:min "
+                 "s:s sekund:s sekunder:s"))):
+    for _par in _namn.split():
+        _ord, _kanon = _par.split(":")
+        _ENHETER[_ord] = (_sort, _kanon)
+_ENHET_ALT = "|".join(sorted((re.escape(o) for o in _ENHETER), key=len,
+                             reverse=True))
+# Ett givet mått: talet (med eller utan $…$, också «5 \cdot 10^{2}$ nm») och
+# enheten direkt efter. En enhet med exponent (m$^2$, cm³) är area eller
+# volym ur längder och räknas inte.
+_EFTER_ENHET = r"(?![\wåäö²³]|\$?\^)"
+_MATT_RE = re.compile(r"\d\}*\s*\$?\s*(?:\\,|\\ )?\s*(" + _ENHET_ALT + r")"
+                      + _EFTER_ENHET)
+# Svarets enhet: «i meter», «skriven i gram», «till cm».
+_MAL_RE = re.compile(r"(?<![\wåäö])(?:i|till)\s+(?:enheten\s+)?(" + _ENHET_ALT
+                     + r")" + _EFTER_ENHET)
+_GRUNDPOTENS_RE = re.compile(r"grundpotensform", re.I)
+
+
+def formbyten(text: str) -> list[str]:
+    """Formbytena en uppgiftstext ber om: «km → m», «grundpotensform»."""
+    t = str(text or "")
+    givna = [_ENHETER[m.group(1)] for m in _MATT_RE.finditer(t)]
+    ut: list[str] = []
+    for m in _MAL_RE.finditer(t):
+        sort, mal = _ENHETER[m.group(1)]
+        fran = next((k for s, k in givna if s == sort and k != mal), None)
+        if fran:
+            ut.append(f"{fran} → {mal}")
+            break
+    if _GRUNDPOTENS_RE.search(t):
+        ut.append("grundpotensform")
+    return ut
+
+
+def formbytesvakt(exam: dict) -> list[dict]:
+    """Fler formbyten än poäng i en enhet (enhetsbyte och grundpotensform
+    räknas var för sig)."""
+    fel: list[dict] = []
+    for e in _enheter(exam):
+        poang = _poang(e)
+        byten = formbyten(_text(e))
+        if poang <= 0 or len(byten) <= poang:
+            continue
+        fel.append(_err(
+            f"uppgift {e['nr']}", "formbyte",
+            f"Uppgift {e['nr']} ber om {len(byten)} formbyten "
+            f"({' och '.join(byten)}) för {poang} p. Enhetsbyte, prefix och "
+            "grundpotensform är var sitt steg, och nationella provet i Ma 1a "
+            "ger en E-poäng per steg. Låt uppgiften be om ett byte («Skriv "
+            "307 km i grundpotensform.») eller dela den i två deluppgifter "
+            "med var sin poäng."))
+    return fel[:FORMBYTE_MAX_FYND]
 
 
 # ── 2. POÄNGFORMEN ───────────────────────────────────────────────────────
@@ -358,8 +471,8 @@ def metodvakt(exam: dict) -> list[dict]:
             f"uppgift {e['nr']}", "metodvakt",
             f"Uppgift {e['nr']} föreskriver metoden («{m.group(0)}»). "
             "Nationella provet föreskriver aldrig metod i den räknarfria "
-            "delen; det som förekommer är «med algebraisk metod», «använd "
-            "formeln», «bryt ut» och «med hjälp av grafen». Stryk "
+            "delen; det som förekommer är «med algebraisk metod», «bryt ut» "
+            "och «med hjälp av grafen». Stryk "
             "metodangivelsen och låt eleven välja. Samma uppgift i övrigt, "
             "samma poäng."))
     return fel[:METOD_MAX_FYND]
@@ -600,7 +713,68 @@ def doltkravvakt(exam: dict) -> list[dict]:
 #   Hakparenteser: eleven har hört vad det är men ser det inte, visa formen.
 #   Räknaren är inte ett digitalt verktyg: en räknardel talar om räknaren.
 # Ordval i övrigt fälls aldrig (fortydligande-fraser-star-kvar).
-LASREGEL_MAX_FYND = 5
+#
+# LÄRARENS DOM 2026-09-23 KVÄLL, exam 128 (BA26B Ma 1a), fem regler till:
+#   «Skriv storheterna i den enhet som står i uppgiften.»: «Är inte detta
+#     lite för svårt för eleverna att förstå? … Det är väl bättre att skriva
+#     direkt. Exempelvis: Sträckan 307 km skriven i grundpotensform bara.
+#     Punkt slut.» Uppmaningen gäller saken, aldrig uppgiften själv.
+#   «Moms är en skatt. Timpriset kan vara vilket belopp som helst.»:
+#     «otroligt svårt för eleverna att förstå den här texten». En mening som
+#     förklarar ett ord eleven kan, och en som bara säger att ett tal är
+#     godtyckligt, gör texten svårare. A-formens generalitet frågas som ett
+#     konkret fall till («Blir det samma om timpriset är 600 kr?»).
+#   «Täljaren ska vara ett heltal.»: «Det förstör mer än vad det hjälper,
+#     tror jag.» En villkorsmening som eleven måste hålla i huvudet medan hon
+#     läser vidare. Är villkoret självklart stryks det, behövs det byggs det
+#     in i frågan («Finns det ett bråk med nämnaren 12 som ligger mellan …?»).
+#     Samma form i 6b: «Ingen platta får kapas. Plattans sida är ett helt
+#     antal centimeter och minst 10 cm.»
+#   «Ali ska lägga kvadratiska plattor»: «Vad då kvadratiska plattor? … Typ
+#     att Ali ska lägga kvadratiska klinkerplattor på ett golv. Det är mer
+#     konkret.» Sakerna heter det de heter i verkligheten; formen får stå som
+#     adjektiv till namnet.
+# HUR DET GÅR IHOP MED DOMEN 2026-09-22 (förtydliganden står kvar, «allmänna
+# frågor får en förtydligande mening»): förtydligandet ska göra frågan
+# LÄTTARE att förstå, och det gör en mening som säger vad som söks eller vad
+# som räknas som svar. En villkors- eller ordförklaringsmening före frågan
+# gör det inte: eleven måste bära den med sig till frågan. Den byggs in i
+# frågan eller stryks. Vakterna nedan mäter alltså fortfarande begriplighet,
+# aldrig NP-likt ordval.
+#   Exam 129 uppgift 10 (TE26A Ma 1c): «Använd formeln och bestäm den högsta
+#     fart som ger högst 45 m bromssträcka.» Formeln står redan på raden
+#     ovanför; «Använd formeln och» är en metodföreskrift (lärarens dom
+#     2026-09-22 gäller: ingen metod på provet) och en halv rad text till.
+LASREGEL_MAX_FYND = 8
+_ANVAND_FORMELN_RE = re.compile(r"\banvänd\s+formeln\s+(?:och|för\s+att)\b",
+                                re.IGNORECASE)
+_METASPRAK_RE = re.compile(
+    r"\bstorheterna\b|den\s+enhet\s+som\s+står|som\s+står\s+i\s+uppgiften"
+    r"|talen\s+i\s+uppgiften", re.IGNORECASE)
+# En mening vars enda sak är att ett tal kan vara vad som helst.
+_GODTYCKLIG_RE = re.compile(
+    r"\b(?:kan|får)\s+vara\s+(?:vilke[nt]|vilka)\s+(?:\w+\s+){0,2}som\s+helst",
+    re.IGNORECASE)
+# Villkorsmeningar: en egen mening som lägger till ett villkor.
+_VILLKOR_RE = re.compile(
+    r"\b(?:ska|måste)\s+vara\s+(?:ett\s+|en\s+)?(?:heltal|helt\s+tal"
+    r"|hela\s+tal|positiv\w*|negativ\w*)\b"
+    r"|\bär\s+ett\s+helt\s+antal\b"
+    r"|^ingen\s+\w+\s+får\b"
+    r"|\b(?:får|ska)\s+inte\s+(?:kapas|delas|klippas|sågas)\b",
+    re.IGNORECASE)
+# «Moms är en skatt.»: en kort mening som bara säger vad ett ord betyder.
+_ORDFORKLARING_RE = re.compile(
+    r"^([A-ZÅÄÖ][a-zåäö]+)\s+är\s+(?:en|ett)\s+[a-zåäö]+(?:\s+[a-zåäö]+){0,3}"
+    r"\s*\.?$")
+_INTE_ORD = {"figuren", "grafen", "tabellen", "bilden", "diagrammet", "det",
+             "detta", "svaret", "talet", "han", "hon", "den", "här", "där"}
+_FORM_UTAN_NAMN_RE = re.compile(
+    r"\b(kvadratiska|rektangulära|runda|cirkelformade|cirkulära|triangulära"
+    r"|kubformade|sexkantiga)\s+(plattor(?:na)?|plattan|platta|skivor(?:na)?"
+    r"|skivan|skiva|bitar(?:na)?|biten|bit|brickor(?:na)?|klossar(?:na)?"
+    r"|lådor(?:na)?|föremål(?:en)?)\b", re.IGNORECASE)
+_MENINGAR_RE = re.compile(r"(?<=[.!?])\s+|\n+")
 _VISA_VERKTYG_RE = re.compile(
     r"\bvisa\s+hur\s+du\s+(?:har\s+)?använ\w*\s+(?:ditt|din|dina|ett|en)\s+"
     r"(?:digital\w*|räknare|miniräknare)", re.IGNORECASE)
@@ -662,18 +836,66 @@ def lasregelvakt(exam: dict) -> list[dict]:
             fynd(nr, "raknare", "delen tillåter räknare, inte dator, och "
                  "räknaren är inte ett digitalt verktyg. Skriv «räknare» och "
                  "låt uppgiften gå att lösa med räknaren.")
+        # Domen 2026-09-23 kväll (exam 128 och 129), se blocket ovan.
+        m = _ANVAND_FORMELN_RE.search(t)
+        if m:
+            fynd(nr, "metod", f"«{m.group(0)}» säger hur eleven ska göra, och "
+                 "formeln står redan i uppgiften. Stryk det och börja med "
+                 "frågan: «Bestäm den högsta fart som …»")
+        m = _METASPRAK_RE.search(t)
+        if m:
+            fynd(nr, "metasprak", f"«{m.group(0)}» är ord om uppgiften, inte "
+                 "om saken. Skriv uppmaningen direkt om det eleven ska göra: "
+                 "«Skriv 307 km i grundpotensform.»")
+        m = _FORM_UTAN_NAMN_RE.search(t)
+        if m:
+            fynd(nr, "foremal", f"«{m.group(0)}» beskriver formen i stället "
+                 "för saken. Skriv vad sakerna heter i verkligheten, med "
+                 "formen som adjektiv: «kvadratiska klinkerplattor», "
+                 "«gipsskivor», «betongplattor». På ett yrkesprogram "
+                 "yrkets eget ord.")
+        for mening in _MENINGAR_RE.split(_MATH_RE.sub("x", t)):
+            mening = mening.strip()
+            if not mening or "?" in mening:
+                continue
+            if _GODTYCKLIG_RE.search(mening):
+                fynd(nr, "godtycklig", f"«{mening}» säger bara att ett tal kan "
+                     "vara vad som helst. Stryk meningen. Ska uppgiften visa "
+                     "att något gäller generellt, fråga om ett konkret fall "
+                     "till: «Blir det samma procent om timpriset är 600 kr? "
+                     "Förklara varför.»")
+            elif _VILLKOR_RE.search(mening):
+                fynd(nr, "villkor", f"«{mening}» är en villkorsmening som "
+                     "eleven måste hålla i huvudet medan hon läser vidare. Är "
+                     "villkoret självklart för eleven (en täljare är ett "
+                     "heltal), stryk meningen. Behövs det, bygg in det i "
+                     "frågan med vardagsord: «Finns det ett bråk med nämnaren "
+                     "12 som ligger mellan 2/3 och 3/4?»")
+            else:
+                mf = _ORDFORKLARING_RE.match(mening)
+                if mf and mf.group(1).casefold() not in _INTE_ORD \
+                        and not re.search(r"\d", mening):
+                    fynd(nr, "ordforklaring", f"«{mening}» förklarar ett ord "
+                         "inne i uppgiften. Stryk meningen om eleven kan "
+                         "ordet, annars byt ordet mot vardagsordet.")
     return fel[:LASREGEL_MAX_FYND]
 
 
-# ── ALLA ÅTTA, i läsordning ──────────────────────────────────────────────
-KODER = ("stegvakt", "poangform", "metodvakt", "parametervakt", "kursvakt",
-         "familjvakt", "doltkrav", "lasregel")
+# ── ALLA NIO, i läsordning ───────────────────────────────────────────────
+KODER = ("stegvakt", "formbyte", "poangform", "metodvakt", "parametervakt",
+         "kursvakt", "familjvakt", "doltkrav", "lasregel")
 
 
-def np_vakter(exam: dict, kurs: str = "") -> list[dict]:
-    """De åtta vakterna på ett prov, i den ordning läraren läser dem. Körs på
+def np_vakter(exam: dict, kurs: str = "",
+              poang_tak: int | None = None) -> list[dict]:
+    """De nio vakterna på ett prov, i den ordning läraren läser dem. Körs på
     profilen «prov» i exam_gen._raknade_fynd (fixrundan och slutgrinden) och i
-    routes_exam.efterkontroll (canvasen och Laga-knappen)."""
-    return (stegvakt(exam) + poangformvakt(exam, kurs) + metodvakt(exam)
+    routes_exam.efterkontroll (canvasen och Laga-knappen).
+
+    `poang_tak` är passets tak ur lärarens takt (exam_spec.poang_tak_for).
+    Bara stegvakten läser det: på taket ber den om ett steg mindre i stället
+    för en poäng mer. None är beteendet före taket."""
+    return (stegvakt(exam, poang_tak) + formbytesvakt(exam)
+            + poangformvakt(exam, kurs) + metodvakt(exam)
             + parametervakt(exam, kurs) + kursvakt(exam, kurs)
             + familjvakt(exam) + doltkravvakt(exam) + lasregelvakt(exam))

@@ -1278,8 +1278,43 @@ _NP_KATEGORI_MONSTER: tuple[tuple[str, tuple[str, ...]], ...] = (
     (r"sannolikhet", ("sannolikhet",)),
     (r"statisti|lägesmått|normalfördelning", ("statistik",)),
     (r"pythagoras|geometri", ("geometri",)),
+    # 2c:s egna (2026-09-23 kväll, samma vakt som yrkespunkterna nedan
+    # avslöjade dem): logaritmer, rotekvationer, implikation, bevis och
+    # regression nådde ingen kategori, och 2c-profilens sammansatta
+    # kategorier («statistik/normalfördelning») matchade aldrig den enkla.
+    # Sammansättningen läses nu del för del (_kategori_traffar).
+    (r"logaritm", ("logaritmer",)),
+    (r"rotekvation", ("potenser",)),
+    (r"implikation|ekvivalens", ("logik",)),
+    (r"bevis", ("bevis",)),
+    (r"regression", ("regression",)),
 )
 NP_TYPER_TAK = 40          # rader; fler är en katalog, inte en förlaga
+
+# YRKESPROGRAMMENS PUNKTER (exam 128, BA26B Ma 1a, 2026-09-23 kväll). Deras
+# rubriker säger inget om innehållet: «Yrkesnära begrepp», «Beräkningsmetoder
+# i yrket», «Storheter och enheter». Mönstren ovan läser bara rubriken, så en
+# 1a-beställning med YRK-1, YRK-2, YRK-4 och PRO-2 fick NOLL kategorier, noll
+# NP-typer och förebild None på alla tio uppgifter, utan att något sa till.
+# Innehållet står i punktens exempelord («till exempel proportionalitet,
+# skala, … procent och andelar», «uppskattningar, … överslagsräkning,
+# avrundning», «enhetsbyten, … kostnadsberäkningar»), och det är dem mönstren
+# här läser, i hela punktens text. Kategorierna är 1a-profilens: enheten med
+# nederbörd i mm till liter står under geometri, måttabellen i dl under
+# aritmetik, och prefixen är tiopotenser (potenser).
+_NP_EXEMPELORD_MONSTER: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (r"procent|andelar|indexmått|vinstmarginal|kostnadsberäkning",
+     ("procent",)),
+    (r"proportionalitet|skala", ("proportionalitet",)),
+    (r"likformighet|vinkl|pythagoras|symmetri|förbrukningsmaterial",
+     ("geometri",)),
+    (r"uppskattning|överslag|avrundning|kontrollberäkning|svinn|mätfel"
+     r"|enhetsbyte|kostnadsberäkning", ("aritmetik",)),
+    (r"enhetsbyte", ("geometri", "potenser")),
+    (r"kalkylprogram", ("kalkylblad",)),
+    (r"trigonometri", ("trigonometri",)),
+    (r"vektor", ("vektorer",)),
+)
 
 
 def _ci_rubrik(text: str) -> str:
@@ -1293,15 +1328,29 @@ def _ci_rubrik(text: str) -> str:
     return " ".join(ord_)
 
 
+def _kategori_traffar(innehall, kategorier) -> bool:
+    """Hör NP-enhetens kategori till provets? 2c-profilen skriver sammansatta
+    kategorier («statistik/normalfördelning», «geometri/likformighet»), och
+    det räcker att en av delarna är provets."""
+    return any(d.strip() in kategorier
+               for d in str(innehall or "").split("/") if d.strip())
+
+
 def np_kategorier(koder: list[str] | None) -> list[str]:
     """Profilens innehållskategorier för provets Gy25-punkter, i
     mönsterordning och utan dubbletter."""
     from app import course_data
     texter = course_data.kodtexter()
     rubriker = [_ci_rubrik(texter.get(k, "")).casefold() for k in (koder or [])]
+    # Yrkespunkternas HELA text, för exempelorden (se _NP_EXEMPELORD_MONSTER).
+    yrke = [str(texter.get(k, "")).casefold() for k in (koder or [])
+            if "-YRK-" in str(k)]
     ut: list[str] = []
     for monster, kategorier in _NP_KATEGORI_MONSTER:
         if any(re.search(monster, r) for r in rubriker):
+            ut += [k for k in kategorier if k not in ut]
+    for monster, kategorier in _NP_EXEMPELORD_MONSTER:
+        if any(re.search(monster, t) for t in yrke):
             ut += [k for k in kategorier if k not in ut]
     return ut
 
@@ -1327,6 +1376,13 @@ def np_typer(kurs: str, koder: list[str] | None) -> list[dict]:
     enheter = ((_las_np_profil().get("kurser") or {}).get(nyckel) or {}) \
         .get("uppgifter") or []
     kategorier = np_kategorier(koder)
+    # En yrkespunkt UTAN exempelord (2a:s «Yrkesnära fördjupning: breddning
+    # eller fördjupning av matematiska begrepp och metoder», «Hjälpmedel och
+    # verktyg») är en fördjupning av kursens eget innehåll. Står den ensam
+    # får den hela kursens NP som förlaga hellre än ingen alls (exam 128).
+    if not kategorier and any("-YRK-" in str(k) for k in (koder or [])):
+        kategorier = sorted({str(u.get("innehall")) for u in enheter
+                             if u.get("innehall")})
     if not enheter or not kategorier:
         return []
     sedda: set[str] = set()
@@ -1336,7 +1392,7 @@ def np_typer(kurs: str, koder: list[str] | None) -> list[dict]:
         # Svarsformen står redan på raden, parafrasen upprepar den ofta sist.
         form = re.sub(r",\s*kortsvar$", "", form)
         p = [int(x or 0) for x in (u.get("poang") or [0, 0, 0])[:3]]
-        if (u.get("innehall") not in kategorier or not form
+        if (not _kategori_traffar(u.get("innehall"), kategorier) or not form
                 or form in sedda or u.get("niva") not in per_niva
                 or sum(p) > 4):
             continue
@@ -1351,6 +1407,34 @@ def np_typer(kurs: str, koder: list[str] | None) -> list[dict]:
     for i, t in enumerate(ut, 1):
         t["nr"] = NP_TYP_NR0 + i
     return ut
+
+
+def np_matt(kurs: str) -> bool:
+    """Har kursen en NP-profil (1a, 1c, 2a, 2c)? Då ska ett prov i den ha
+    NP-typer, och noll typer är ett fel och ingen tystnad (np_typer_saknas)."""
+    nyckel = kursnyckel(kurs or "") or kurs
+    return bool(((_las_np_profil().get("kurser") or {}).get(nyckel) or {})
+                .get("uppgifter"))
+
+
+def np_typer_saknas(kurs: str, koder: list[str] | None) -> str:
+    """Meningen som säger till när ett prov i en mätt kurs får NOLL NP-typer,
+    eller TOM STRÄNG.
+
+    Exam 128 (BA26B Ma 1a, 2026-09-23 kväll) skrevs med förebild None på alla
+    tio uppgifter, och ingenting i loggen, i efterkontrollen eller på pappret
+    sa det: förebildsvakten och efterkontrollens «utanbok» tiger båda när
+    ingen typ finns att följa, med rätta för en omätt kurs och fel för en
+    mätt. Läraren märkte det på uppgifterna, inte i appen. Meningen går till
+    genereringens logg (exam_gen.generate_exam) och till efterkontrollen
+    (routes_exam._nptypfynd), så att det aldrig blir tyst igen."""
+    if not np_matt(kurs) or np_typer(kurs, koder):
+        return ""
+    punkter = ", ".join(str(k) for k in (koder or [])) or "inga punkter"
+    return (f"Inga av nationella provets uppgiftstyper nådde provet: "
+            f"innehållspunkterna ({punkter}) leder inte till någon kategori "
+            f"i kursens NP-profil. Uppgifterna skrevs utan NP-förebild, och "
+            "nivå och form är inte prövade mot nationella provet.")
 
 
 def np_typ_finns(typer: list[dict], koder: list[str] | None,
@@ -1369,7 +1453,8 @@ def np_typ_finns(typer: list[dict], koder: list[str] | None,
     nivaer = {n for n, x in zip(NIVAER, poang or []) if x}
     kategorier = set(np_kategorier(koder)) if koder else None
     return any(t.get("niva") in nivaer
-               and (kategorier is None or t.get("kategori") in kategorier)
+               and (kategorier is None
+                    or _kategori_traffar(t.get("kategori"), kategorier))
                for t in typer or [])
 
 

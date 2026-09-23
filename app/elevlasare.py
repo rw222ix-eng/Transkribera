@@ -156,7 +156,8 @@ def build_elevlasare_prompt(enheter: list[dict], inriktning: str = "") -> str:
         "lägga till i uppgiften så att eleven läser den som facit: ett "
         "tillägg, ett exempel på vad som menas, eller en delning i a) och "
         "b). Förtydligandet LÄGGER TILL text. Det stryker aldrig, kortar "
-        "aldrig, och byter aldrig ord som redan står där.\n"
+        "aldrig, och byter aldrig ord som redan står där, utom en "
+        "villkorsmening som byggs in i frågan (se nedan).\n"
         "- forstar \"oklart\" när du inte kan avgöra det, till exempel när "
         "uppgiften hänvisar till en figur du inte ser; oklart fäller "
         "ingenting.\n"
@@ -176,9 +177,23 @@ def build_elevlasare_prompt(enheter: list[dict], inriktning: str = "") -> str:
         "- en uppgift utan situation som frågar allmänt («Bestäm med "
         "algebraisk metod det minsta värde som uttrycket kan anta») utan att "
         "säga med vanliga ord vad eleven ska ta fram och vad som räknas som "
-        "svar. Förtydligandet är då en mening som säger det: «Talet x kan "
-        "vara vilket tal som helst. Vilket är det minsta värde som x² + 6x "
-        "kan få?» Den säger VAD som söks, aldrig hur.\n"
+        "svar. Förtydligandet är då en mening efter frågan som säger det: "
+        "«Vilket är det minsta värde som x² + 6x kan få? Visa med en "
+        "uträkning att inget värde är mindre.» Den säger VAD som söks, "
+        "aldrig hur.\n"
+        # Lärarens dom 2026-09-23 kväll över exam 128: «Moms är en skatt.
+        # Timpriset kan vara vilket belopp som helst.» («otroligt svårt för
+        # eleverna att förstå») och «Täljaren ska vara ett heltal.» («förstör
+        # mer än vad det hjälper»). Förtydligandet ska göra frågan LÄTTARE,
+        # och en mening eleven måste bära med sig till frågan gör det inte.
+        # Den byggs in i frågan; «lägg till, stryk inte» nedan gäller allt
+        # annat. Se np_vakter vid LASREGEL_MAX_FYND.
+        "- en egen mening före frågan som eleven måste hålla i huvudet: ett "
+        "villkor («Täljaren ska vara ett heltal.»), en förklaring av ett ord "
+        "hon kan («Moms är en skatt.») eller att ett tal kan vara vad som "
+        "helst. Förtydligandet är då FRÅGAN omskriven med villkoret inbyggt "
+        "i vardagsord: «Finns det ett bråk med nämnaren 12 som ligger mellan "
+        "2/3 och 3/4?»\n"
         "- en deluppgift där eleven inte ser vad hon ska svara utan att leta "
         "i stammen, eller där det deluppgiften behöver står någon annanstans\n"
         "- en likhet eller ett påstående som är fel men står som om det "

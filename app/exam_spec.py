@@ -2920,6 +2920,30 @@ def poang_tak_for(tid_min: int | None, takt: float | None) -> int | None:
     return max(1, int(tid // t))
 
 
+def papperstid(summor: dict, antal: int, takt_pa_pappret: float | None,
+               profil: str = "prov") -> int:
+    """Minuterna ett FÄRDIGT papper tar, med samma linjal som taket.
+
+    EXAM 128 (BA26B, 2026-09-23 kväll): skelettet byggdes på passets tak,
+    floor(60 / 3) = 20 poäng, pappret fick 20 poäng, och efterkontrollen sa
+    ändå «Pappret är satt till 60 minuter men uppgifterna räknas till 70».
+    Två linjaler: taket är LÄRARENS räkning (poang_tak_for, minuterna delat
+    med takten), men mätningen var tidsatgang, som lägger 1,1 minut per
+    uppgift och åtta minuters start och slut ovanpå och väger poängen med
+    NP:s nivåvikter. Ett papper exakt på hennes tak kom alltid ut tio
+    minuter för långt, och ett fynd som alltid tänds är ett fynd hon slutar
+    läsa.
+
+    Bär pappret hennes takt mäts det därför med hennes räkning, poäng gånger
+    takt, samma räkning som byggde skelettet. Utan takt på pappret gäller
+    tidsatgang med husets takt, precis som förut."""
+    t = spard_takt(takt_pa_pappret)
+    if t is not None:
+        return math.ceil(int(summor.get("total") or sum(
+            int(summor.get(n) or 0) for n in ("e", "c", "a"))) * t - 1e-9)
+    return tidsatgang(summor, antal, takt=takt_for(profil))
+
+
 def tidsatgang(summor: dict, antal: int, takt: float | None = None) -> int:
     """Minuter ett papper med de här poängsummorna och det här antalet
     uppgifter tar, avrundat till närmaste fem. Samma modell som plan.js
@@ -3108,6 +3132,11 @@ def tidsvakt(antal: int, tid_min: int, profil: str = "prov",
                      f"många uppgifter är {plan['poang']} poäng (ungefär "
                      f"{plan['tid']} minuter). Antalet är ditt eget och står "
                      "kvar, men provet är längre än passet.")]
+    # TAKET HÖLL, och då är saken avgjord med hennes linjal (papperstid, exam
+    # 128): tidsmodellens uppgiftsterm och åtta minuters overhead ovanpå
+    # hennes räkning hade fällt varje papper på taket.
+    if tak is not None:
+        return []
     if plan["tid"] <= tid_min + TID_MARGINAL_MIN:
         return []
     ryms = foreslag_antal(tid_min, profil, takt=takt, niva_mal=niva_mal,

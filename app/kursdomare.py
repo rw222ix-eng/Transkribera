@@ -262,9 +262,20 @@ KURSGRANS: dict[str, dict] = {
             "formell funktionslära: definitionsmängd, värdemängd, nollställe som "
             "villkor, område mellan två grafer, sammansättning med parameter",
             "olikhet med parameter så att lösningsmängden blir given",
+            # Lärarens dom 2026-09-23 kväll över exam 128 (BA26B Ma 1a).
+            # Uppgift 4 «Ekvationen nedan har lösningen x = 0,02. … Bestäm
+            # konstanten k.»: «Det känns som att man har det här i matte
+            # 1c-kursen.» Uppgift 6b, sidan på en platta som går jämnt upp i
+            # båda golvmåtten: «Ingår det här verkligen i matte 1?»
+            "ekvation med en okänd konstant som ska bestämmas ur en given "
+            "lösning («Ekvationen har lösningen x = 0,02. Bestäm konstanten "
+            "k.»)",
             "bevisbegreppet: avgöra om givna argument är bevis, undersöka om ett "
             "geometriskt påstående alltid gäller (generell härledning)",
-            "talsystem och delbarhet (binärt, primtal)",
+            "talsystem och delbarhet (binärt, primtal, gemensamma delare), "
+            "också klädd som problemlösning: vilka hela mått som går jämnt "
+            "upp i två längder («ingen platta får kapas, sidan är ett helt "
+            "antal cm»)",
         ],
         "extralager": [
             "svaret ska vara ett exakt uttryck med rot eller pi, ett uttryck i en "
@@ -291,6 +302,7 @@ KURSGRANS: dict[str, dict] = {
             "formell funktionslära: definitionsmängd, värdemängd, område mellan "
             "grafer, sammansättning",
             "olikhet med parameter, exakta algebraiska svar (area i r, uttryck i a)",
+            "ekvation med en okänd konstant som bestäms ur en given lösning",
             "bevisbegreppet och generell härledning i geometri",
             "talsystem och delbarhet",
         ],
@@ -369,6 +381,11 @@ def build_kurs_prompt(enheter: list[dict], grans: dict) -> str:
         "inte finns i nationella provet i någon av kurserna.\n"
         "- hemma \"oklart\" när listorna inte avgör det. «oklart» är ett "
         "riktigt svar och bättre än en gissning.\n"
+        # Exam 128 uppgift 6b (2026-09-23 kväll): delbarhet klädd som
+        # plattsättning passerade, för texten nämnde varken delare eller
+        # delbarhet.
+        "Döm på det uppgiften KRÄVER, också när den är klädd som "
+        "problemlösning i en vardagssituation.\n"
         "Skriv skälet FÖRST i fältet skal: peka på den rad i listorna du "
         "tillämpar, kort.\n"
         "Döm BARA innehåll och form mot listorna. Döm ALDRIG svårighet, "

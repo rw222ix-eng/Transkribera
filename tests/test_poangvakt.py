@@ -271,7 +271,11 @@ def test_en_poangandring_som_spracker_balansen_kastas_utan_loop():
     assert len(anrop) == 1                    # inte två, inte fyra
     assert res["rounds"] == 2
     assert res["exam"] is trasigt
-    assert [f["code"] for f in res["errors"]] == ["poangvakt"]
+    # Uppgift 8 står ordagrant som i prov 81, och dess två långa meningar
+    # fälls sedan 2026-09-23 också av radvakten (en mening per rad). Här
+    # prövas poängvakten.
+    assert [f["code"] for f in res["errors"]
+            if f["code"] != "radlangd"] == ["poangvakt"]
 
 
 def test_behall_planen_slapps_bara_pa_den_fallda_uppgiften():
