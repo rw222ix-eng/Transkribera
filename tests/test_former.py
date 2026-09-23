@@ -230,17 +230,28 @@ def test_formerna_satts_i_latex():
                _uppgift(poang=[0, 1, 1], typ="resonemang", formaga="R",
                         stegtabell=STEG))
     tex = _alla_tex(doc)
-    for namn, t in tex.items():
+    for namn in ("prov", "arbetsblad"):
+        t = tex[namn]
         assert "\\begin{tabular}" in t, f"{namn} saknar datatabellen"
         assert "\\begin{tabularx}" in t, f"{namn} saknar stegtabellen"
         assert "\\svarsrutor{" in t, f"{namn} saknar kryssruteraden"
         assert "Randvinkelsatsen" in t and "Kordasatsen" in t
+    # Bedömningsanvisningen i NP:s form (lärarens dom 2026-09-23) trycker inte
+    # uppgiften och alltså inte formerna. Formernas FACIT står i svaret: rätt
+    # ruta och steget där felet sitter.
+    kropp = tex["bedomning"].split("\\begin{document}", 1)[1]
+    assert "\\begin{tabular" not in kropp and "\\svarsrutor{" not in kropp
+    assert "\\bedsvar{Randvinkelsatsen, 42}" in kropp
+    assert "\\bedsvar{Första felet i steg 2, 42}" in kropp
+    assert "Kordasatsen" not in kropp
     # Enheten hör till SVARSRADEN, och svarsraden finns bara på elevens ark.
     # (`\svarsradmed` står i preamblen överallt — det är ANROPET som räknas.)
     for namn in ("prov", "arbetsblad"):
         assert "\\svarsradmed{}{" in tex[namn], f"{namn} saknar enheten"
     assert "\\svarsradmed{}{" not in tex["bedomning"], \
         "bedömningen har ingen svarsrad — den har lösningen"
+    # …men enheten följer med svaret, som är ett tal.
+    assert "\\bedsvar{42 kr}" in kropp
 
 
 def test_facit_stannar_pa_lararens_papper():
@@ -258,12 +269,18 @@ def test_facit_stannar_pa_lararens_papper():
             f"{namn} bär elevlösningarna — de är lärarens"
         assert "\\textbf{\\svarsruteval" not in tex[namn], \
             f"{namn} markerar det rätta krysset"
-    assert "Första felet står i steg 2" in tex["bedomning"]
-    # Elevlösningarna står som rader i bedömningstabellen: etiketten är
-    # poängsteget («Elevexempel · 0 p»), och kommentaren är skälet.
-    assert r"\bedrad{Elevexempel {\normalfont\textperiodcentered} 0 p}" in tex["bedomning"]
-    assert "Derivatan är fel" in tex["bedomning"]
-    assert "\\textbf{\\svarsruteval" in tex["bedomning"]
+    for namn in ("prov", "arbetsblad"):
+        assert "Första felet i steg" not in tex[namn]
+    # På lärarens papper står facit i svaret (NP:s form, 2026-09-23): steget
+    # där felet sitter och den rätta rutan.
+    assert "\\bedsvar{Första felet i steg 2, 42}" in tex["bedomning"]
+    assert "\\bedsvar{Randvinkelsatsen, 42}" in tex["bedomning"]
+    # Elevlösningarna står i avsnittet sist: poängen som trippel och
+    # kommentaren som skäl. Partierna summeras till ett papper.
+    assert r"\bedelev{\(f'(x) = 3x^2\)\par }{0/0/0}{Derivatan är fel.}" \
+        in tex["bedomning"]
+    assert "}{1/1/0}{Godtagbar ansats. Godtagbart resonemang.}" \
+        in tex["bedomning"]
 
 
 ELEVER_ORD = [
@@ -290,11 +307,10 @@ def test_en_elevlosning_som_borjar_med_ord_klistras_inte_fast_i_par():
     tex = exam_latex.render_bedomning(doc)
     assert "\\parTanken" not in tex
     # Bara elevraderna: preamblen har \parindent och \parskip, som är egna
-    # kommandon och inte ett \par med ett ord fastklistrat. Raderna ligger
-    # mellan \bedskilj och nästa \bedskilj (bedomning.tex.j2, elevrad).
-    partier = re.findall(r"\\bedskilj(.*?)(?=\\bedskilj|\\end\{uppgift\})",
-                         tex, re.S)
-    assert partier
+    # kommandon och inte ett \par med ett ord fastklistrat. Raderna är
+    # \bedelev:s första argument (bedomning.tex.j2, avsnittet sist).
+    partier = re.findall(r"\\bedelev\{(.*?)\}\{\d+/\d+/\d+\}", tex, re.S)
+    assert len(partier) == 2
     for p in partier:
         assert re.search(r"\\par[A-Za-zÅÄÖåäö]", p) is None, \
             "\\par klistrat mot ett ord — kommandonamnet blir odefinierat"
@@ -427,12 +443,16 @@ def test_formerna_kompilerar_och_star_i_pdfen(tmp_path):
         assert pdf is not None, f"{namn} gick inte att kompilera:\n{logg[-800:]}"
         text = "".join(pypdfium2.PdfDocument(str(pdf))[i].get_textpage().get_text_range()
                        for i in range(len(pypdfium2.PdfDocument(str(pdf)))))
-        assert "12 600" in text, f"{namn}: datatabellens siffror saknas"
         assert "Randvinkelsatsen" in text, f"{namn}: kryssrutornas val saknas"
         if namn == "bedomning":
+            # NP:s form (2026-09-23): uppgiften och dess tabell står på
+            # provet, facit i svaret och elevlösningarna i avsnittet sist.
+            assert "12 600" not in text
             assert "Derivatan" in text
             assert "steg 2" in text
+            assert "Bedömda elevlösningar" in text
         else:
+            assert "12 600" in text, f"{namn}: datatabellens siffror saknas"
             # Enheten står på svarsraden — och svarsraden finns bara här.
             assert "laddpunkter" in text, f"{namn}: enheten saknas"
             assert "Elevlösning" not in text, f"{namn} tryckte lärarens papper"

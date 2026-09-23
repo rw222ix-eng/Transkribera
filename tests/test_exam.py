@@ -1333,27 +1333,25 @@ def test_render_bedomning_contains_solutions():
     doc, _ = exam_spec.validate_exam_json(_exam())
     tex = exam_latex.render_bedomning(doc)
     assert "Bedömningsanvisning" in tex
-    # Facit står i bedömningstabellens översta rad (\bedrad), inte längre
-    # under rubriken «Lösningsförslag:» — pappret heter numera hela vägen
-    # Bedömningsanvisning.
-    assert r"\bedrad{Facit {\normalfont\textperiodcentered} full pott}" in tex
-    assert "Problemlösning" in tex          # förmågenamn
-    assert r"\(x = 1\)" in tex or "x = 1" in tex
-    # lärardokumentet behåller E/C/A-poängen (elevens prov visar bara
-    # totalen). Uppgiftsloopen anropar numera den delade uppgift-miljön
-    # (\begin{uppgift}{n}{e/c/a}) i stället för att skriva \poang{...}
-    # direkt i mallen, så \poang{1/1/1} som RÅ SUBSTRÄNG förekommer aldrig
-    # i den Python-renderade .tex-källan (bara efter att LaTeX expanderat
-    # miljön vid kompilering) — jfr test_prov_anvander_layoutmakron.
-    assert r"\begin{uppgift}{3}{1/1/1}" in tex
+    # NP:s form (lärarens dom 2026-09-23): svaret först och i fetstil, med
+    # matematiken som \pmb eftersom cachen saknar fet matematik.
+    assert r"\bedsvar{\(\pmb{(x+3)^2 = 16}\) ger \(\pmb{x = 1}\)" in tex
+    # Uppgiftstexten och förmågans namn står inte i anvisningen längre: texten
+    # har läraren på provet bredvid sig, och det var text hon läste förbi.
+    assert "Problemlösning" not in tex
+    assert "Lös ekvationen" not in tex
+    # Uppgiftens poäng står som trippel under raderna, och uppgift-miljön
+    # bär ingen markör: högermarginalen hör till märkena (+E, +C, +A).
+    assert r"\begin{uppgift}{3}{}" in tex
+    assert r"\bedtrippel{(1/1/1)}" in tex
 
 
 def test_bedomning_behaller_eca_och_far_makron():
     """Lärarens dokument visar E/C/A — det är dess syfte. Elevens gör det inte."""
     doc, _ = exam_spec.validate_exam_json(_exam())
     tex = exam_latex.render_bedomning(doc)
-    assert r"\begin{uppgift}{1}{3/0/0}" in tex
-    assert r"\bedrad{Facit" in tex and r"\bedsteg{" in tex
+    assert r"\bedtrippel{(3/0/0)}" in tex
+    assert r"\bedsvar{" in tex and r"\bedkrav{" in tex
     # kontrollera motsatsen på elevens prov
     prov = exam_latex.render_prov(doc)
     assert "3/0/0" not in prov
@@ -1424,20 +1422,28 @@ def test_deluppgifts_notis_renderas_i_prov_och_arbetsblad():
 
 
 def test_bedomning_visar_deluppgifternas_facit():
+    """Varje deluppgift som bär poäng får sitt EGET svar, sina egna rader och
+    sin egen trippel, med bokstaven framför svaret som i NP:s «21. b)»."""
     doc, _ = exam_spec.validate_exam_json(_exam_med_deluppgifter())
     tex = exam_latex.render_bedomning(doc)
-    assert r"\begin{deluppgift}{a}{0/2/0}" in tex   # per-deluppgift E/C/A
-    assert "symmetrilinjens ekvation" in tex        # deluppgiftstext
-    # Varje deluppgift som bär poäng får sin EGEN facitrad med sin egen trappa
-    # bredvid (lärarens beställning 2026-08-23).
-    assert r"\bedrad{Facit a) {\normalfont\textperiodcentered} full pott}" in tex
-    assert r"\bedrad{Facit b) {\normalfont\textperiodcentered} full pott}" in tex
+    # Svaret är första raden i losning, och bara den.
+    assert r"\bedsvar{a)\enspace \(\pmb{x = 3}\) via \(\pmb{-b/(2a)}\).}" in tex
+    assert (r"\bedsvar{b)\enspace Mittpunkt mellan nollställena; "
+            r"grafen är symmetrisk.}") in tex
+    assert r"\bedtrippel{(0/2/0)}" in tex and r"\bedtrippel{(0/1/1)}" in tex
+    assert r"\bedkrav{Korrekt linje.}{+C}" in tex
+    assert r"\bedkrav{Flera representationer.}{+A}" in tex
+    # Deluppgiftens text står på provet, inte här.
+    assert "symmetrilinjens ekvation" not in tex
+    assert r"\begin{deluppgift}" not in tex.split(r"\begin{document}", 1)[1]
 
 
 def test_bedomning_visar_flervalsfacit():
+    """Rätt alternativ står först på svarsraden: det är facit som bor i
+    strukturen och inte i texten, och det hör hemma HÄR."""
     doc, _ = exam_spec.validate_exam_json(_exam_med_flerval())
     tex = exam_latex.render_bedomning(doc)
-    assert "Rätt: B" in tex                          # facit hör hemma HÄR
+    assert r"\bedsvar{B, \(\pmb{x = 1}\) ger \(\pmb{f(1) = 0}\).}" in tex
 
 
 def test_arbetsblad_facit_har_deluppgifternas_losningar():
@@ -1530,7 +1536,9 @@ def test_malslaset_galler_gruppuppgiften_ocksa():
 def test_bedomning_platt_oforandrad():
     doc, _ = exam_spec.validate_exam_json(_exam())
     tex = exam_latex.render_bedomning(doc)
-    assert r"\begin{uppgift}{1}{3/0/0}" in tex       # löv oförändrat
+    # Lövet: numret utan markör, poängen som trippel sist (NP:s form).
+    assert r"\begin{uppgift}{1}{}" in tex
+    assert r"\bedtrippel{(3/0/0)}" in tex
 
 
 # ------------------------------------------------------ skyddsnät: \par ----
@@ -1585,7 +1593,9 @@ def test_par_avslutar_poangraden_dar_markor_renderas():
                 "arbetsblad (visa_poang=True)")
     kontrollera(exam_latex.render_arbetsblad(doc, visa_poang=False),
                 "arbetsblad (visa_poang=False)")
-    # bedömningsanvisningen visar alltid (E/C/A) — alltid en markör.
+    # Bedömningsanvisningen sätter poängen som trippel under raderna sedan
+    # 2026-09-23 (NP:s form). Uppgiftsraden bär ingen markör, alltså inget
+    # \par, och kontrollen ovan kräver just det.
     kontrollera(exam_latex.render_bedomning(doc), "bedomning")
 
     # Samma disciplin för deluppgifts-miljön — exakt den nya riskytan. Alla
@@ -1693,13 +1703,24 @@ def test_compile_pdf_real_engine_produces_all_three_documents(tmp_path):
         assert pdf.stat().st_size > 0
         # bildvägen ska verkligen ha kompilerats, inte bara renderats i
         # minnet — bildfilens namn måste finnas i den genererade .tex-källan.
-        assert bild_fil in (tmp_path / f"{jobname}.tex").read_text(encoding="utf-8")
+        # Bedömningsanvisningen bär ingen uppgiftstext och därmed ingen bild
+        # sedan lärarens dom 2026-09-23 (NP:s form): den ska bara kompilera.
+        kalla = (tmp_path / f"{jobname}.tex").read_text(encoding="utf-8")
+        if jobname == "bedomning":
+            assert bild_fil not in kalla
+        else:
+            assert bild_fil in kalla
 
 
 @pytest.mark.tectonic
 def test_compile_pdf_real_engine_bedomning_med_djupt_nastlad_matte(tmp_path):
-    """Fältet text renderas som {\\small\\itshape …} i bedomning.tex.j2.
-    Matte som nästlar ner i script- och scriptscript-storlek hämtar då
+    """Sedan 2026-09-23 (NP:s form) sätter bedomning.tex.j2 matten i två
+    lägen: svaret fett i grundgraden (\\pmb) och kraven i \\small. Därför står
+    den djupa matten i BÅDA fälten nedan, inte i uppgiftstexten, som
+    anvisningen inte längre trycker.
+
+    Historien: matte som nästlar ner i script- och scriptscript-storlek hämtar
+    då
     symbolfonten och matte-kursiven i 7 pt och 5 pt (ntxsy7/ntxsy5/ntxmi5).
     Cachen hade bara metrikfilerna (.tfm) för dem — aldrig de virtuella
     fonterna — eftersom sonden aldrig SATT en glyf i de storlekarna: TeX
@@ -1722,16 +1743,19 @@ def test_compile_pdf_real_engine_bedomning_med_djupt_nastlad_matte(tmp_path):
     # \frac i en exponent → täljare/nämnare i scriptscript (ntxmi5/ntxsy5).
     # \sum/\int → familj 3 (ntxexx) direkt. \left(...\right) och en stor
     # \sqrt över ett bråk → familj 3 via delimiter-/rotteckningens charlist.
-    data["uppgifter"][0]["text"] = (
-        "Förenkla $x^{a \\cdot \\sqrt{b}}$ och bestäm sedan "
-        "$y^{\\frac{c \\cdot d}{e}}$ då $b = 4$. Beräkna även "
-        "$\\sum_{i=1}^{n} i^2$ och $\\int_0^1 f(x)\\,dx$ samt förenkla "
-        "$\\left(\\frac{n(n+1)}{2}\\right)$ och $\\sqrt{\\frac{x}{2}}$.")
+    djup = ("$x^{a \\cdot \\sqrt{b}}$ och $y^{\\frac{c \\cdot d}{e}}$, "
+            "$\\sum_{i=1}^{n} i^2$ och $\\int_0^1 f(x)\\,dx$ samt "
+            "$\\left(\\frac{n(n+1)}{2}\\right)$ och $\\sqrt{\\frac{x}{2}}$")
+    data["uppgifter"][0]["losning"] = djup
+    data["uppgifter"][0]["bedomning"] = (
+        f"+1 E {djup}\n+1 E anger det andra\n+1 E korrekt svar")
     doc, errors = exam_spec.validate_exam_json(data)
     assert doc is not None and errors == []
 
-    pdf, logg = exam_pdf.compile_pdf(
-        exam_latex.render_bedomning(doc), tmp_path, "bedomning")
+    tex = exam_latex.render_bedomning(doc)
+    assert r"\pmb{\sum_{i=1}^{n} i^2}" in tex          # svaret, fett
+    assert r"\bedkrav{\(x^{a \cdot \sqrt{b}}\)" in tex  # kravet, \small
+    pdf, logg = exam_pdf.compile_pdf(tex, tmp_path, "bedomning")
     assert pdf is not None and pdf.exists(), f"bedömningen misslyckades: {logg}"
     assert pdf.stat().st_size > 0
 
@@ -1772,7 +1796,11 @@ def test_compile_pdf_real_engine_compiles_deluppgifter_och_flerval(tmp_path):
 def test_compile_pdf_real_engine_figur_pa_foralder_med_deluppgifter(tmp_path):
     """Figuren ligger på uppgiftsnivå; en FÖRÄLDER med deluppgifter kan alltså
     bära figur_tex. Just den kombinationen är StrictUndefined-risken — kompilera
-    den genom alla tre mallar med riktiga motorn (inte bara stubbad)."""
+    den genom alla tre mallar med riktiga motorn (inte bara stubbad).
+
+    Bedömningsanvisningen trycker ingen figur sedan 2026-09-23 (NP:s form:
+    uppgiften och dess figur står på provet) och laddar därför inte tikz. Den
+    ska ändå kompilera med en figur i dokumentet."""
     data = _exam_med_deluppgifter()
     data["uppgifter"][6]["figur"] = {"typ": "andragrad", "a": 1, "b": -4, "c": 3}
     doc, errors = exam_spec.validate_exam_json(data)
@@ -1782,7 +1810,11 @@ def test_compile_pdf_real_engine_figur_pa_foralder_med_deluppgifter(tmp_path):
                          ("bedomning", exam_latex.render_bedomning(doc))):
         # figuren måste faktiskt landa i .tex:en (inte bara "kompilerar utan
         # StrictUndefined") — annars kunde en förälder tappa figuren tyst
-        assert r"\begin{tikzpicture}" in tex, f"{jobname}: figuren saknas i .tex:en"
+        if jobname == "bedomning":
+            assert r"\begin{tikzpicture}" not in tex
+            assert r"\usepackage{tikz}" not in tex
+        else:
+            assert r"\begin{tikzpicture}" in tex, f"{jobname}: figuren saknas i .tex:en"
         pdf, logg = exam_pdf.compile_pdf(tex, tmp_path / jobname, jobname)
         assert pdf is not None and pdf.exists(), f"{jobname}: {logg}"
 
@@ -3558,7 +3590,7 @@ def test_bedomningsanvisningen_trycker_inte_notraden():
     assert len(exam_spec.bedomningsrader(trappa)) == 3
     # … pappret ser två.
     rader = exam_latex._bedomning_rader(trappa)
-    assert [r["niva"] for r in rader] == ["+1 E", "+1 C"]
+    assert [r["marke"] for r in rader] == ["+E", "+C"]
     assert not any("Vanligt fel" in r["krav"] for r in rader)
 
     data = copy.deepcopy(_exam())
@@ -3680,28 +3712,77 @@ def test_bedomningssignalen_kostar_aldrig_en_runda():
     assert [e["code"] for e in res["errors"]] == ["bedomningssignal"]
 
 
-def test_bedomningen_pa_pappret_ar_en_trappa():
-    """PDF:en (bedomning.tex.j2) sätter kriteriet till vänster och nivån i
-    högermarginalen, en rad per poäng — nationella provets egen form."""
+def test_bedomningen_pa_pappret_ar_en_rad_per_poang_med_np_marke():
+    """Lärarens dom 2026-09-23 (NP:s form): en rad per poäng, kravet som en
+    mening (versal först, punkt sist) och märket «+E», «+C», «+A» i
+    poängspalten. «+1 E» var appens egen form; ettan säger ingenting när
+    varje rad är en poäng."""
     doc, _fel = exam_spec.validate_exam_json(_exam())
     tex = exam_latex.render_bedomning(doc)
-    assert tex.count(r"\bedsteg{") == exam_spec.poangsummor(doc)["total"]
-    assert r"\bedsteg{anger det ena nollstället}{+1 E}" in tex
+    assert tex.count(r"\bedkrav{") == exam_spec.poangsummor(doc)["total"]
+    assert r"\bedkrav{Anger det ena nollstället.}{+E}" in tex
+    assert r"\bedkrav{Korrekt kvadratkomplettering.}{+C}" in tex
+    assert r"\bedkrav{Generell metod.}{+A}" in tex
+    assert "+1 E" not in tex.split(r"\begin{document}", 1)[1]
 
 
-def test_facitets_typografi_ar_fragan_storre_och_svaret_mindre():
-    """Lärarens dom 2026-08-23: uppgiftstexten kursiv och något större,
-    lösningen mindre i rak stil. Skärmen (losning.css) och pappret ska säga
-    samma sak — PDF:en är skärmtrogen."""
+def test_bedomningens_rader_i_np_ordning():
+    """Svaret FÖRST, sedan raderna, sist trippeln, för varje enhet. Det är
+    ordningen läraren läser i: vad är rätt, vad ger poäng, hur mycket."""
     doc, _fel = exam_spec.validate_exam_json(_exam())
     tex = exam_latex.render_bedomning(doc)
-    assert r"{\itshape Ange nollställena" in tex
-    assert r"{\small\itshape Ange nollställena" not in tex
-    # Lösningen ligger i bedömningstabellens vänsterspalt och sätts i \small.
-    assert r"{\small \(x = 1\) och \(x = -3\).}" in tex
+    kropp = tex.split(r"\begin{uppgift}{1}{}", 1)[1].split(r"\end{uppgift}", 1)[0]
+    svar = kropp.index(r"\bedsvar{\(\pmb{x = 1}\) och \(\pmb{x = -3}\).}")
+    krav = [kropp.index(r"\bedkrav{Anger det ena nollstället.}{+E}"),
+            kropp.index(r"\bedkrav{Anger det andra nollstället.}{+E}"),
+            kropp.index(r"\bedkrav{Korrekt svar med båda nollställena.}{+E}")]
+    trippel = kropp.index(r"\bedtrippel{(3/0/0)}")
+    assert svar < krav[0] < krav[1] < krav[2] < trippel
+
+
+def test_svaret_ar_forsta_raden_och_bar_enheten():
+    """Svaret är bara svaret: första raden i `losning`, inte räkneleden under
+    den (de står i lösningsförslaget). Enheten följer med när svaret är ett
+    tal som saknar den, aldrig efter en mening och aldrig två gånger. Ett led
+    står före svaret. Spegel av blad-bygg.js svaret, se tests/
+    test_provets_delar.py."""
+    s = exam_latex._svaret
+    assert s("$a = 3{,}5$\n(1): $5(x+1) = 30$ ger $x = 7$") == "$a = 3{,}5$"
+    assert s("$2{,}5$\n$s = 7{,}5/3$", "km") == "$2{,}5$ km"
+    assert s("$25{,}6$ mm.", "mm") == "$25{,}6$ mm."
+    assert s("Ja, hon har rätt.", "kr") == "Ja, hon har rätt."
+    assert s("Svaret är $12$.", "kr") == "Svaret är $12$ kr."
+    assert s("$6x^2$", "$f'(x) =$") == "$f'(x) =$ $6x^2$"
+    assert s("$f'(x) = 6x^2$", "$f'(x) =$") == "$f'(x) = 6x^2$"
+    assert s("", "kr") == ""
+    # Kraven blir meningar; en rad som börjar med matematik behåller början.
+    k = exam_latex._kravmening
+    assert k("löser ekvation (1), $x = 7$") == "Löser ekvation (1), $x = 7$."
+    assert k("$x = 7$ med motivering") == "$x = 7$ med motivering."
+    assert k("Korrekt svar.") == "Korrekt svar."
+    # Ett märke per poäng, också på en gammal rad som delar ut två.
+    assert exam_latex._marke(1, "C") == "+C"
+    assert exam_latex._marke(2, "E") == "+E +E"
+
+
+def test_svaret_star_fett_och_skarmen_gor_likadant():
+    """Svaret i fetstil (lärarens form 2026-09-23). Cachen har inga feta
+    mattetypsnitt, så formlerna i svaret sätts med \\pmb; kraven står i mager
+    stil. Skärmen (losning.css) och pappret ska säga samma sak."""
+    doc, _fel = exam_spec.validate_exam_json(_exam())
+    tex = exam_latex.render_bedomning(doc)
+    assert r"\bedsvar{\(\pmb{x = 1}\) och \(\pmb{x = -3}\).}" in tex
+    assert r"\pmb" not in tex.split(r"\bedsvar{", 1)[0].split(r"\begin{document}")[1]
+    assert r"\bedkrav{Anger det ena nollstället.}{+E}" in tex
+    huvud = tex.split(r"\begin{document}", 1)[0]
+    assert r"\newcommand{\bedsvar}[1]{\par\noindent{\bfseries #1}" in huvud
     css = (Path(__file__).resolve().parent.parent / "app" / "web" / "ui"
            / "losning.css").read_text(encoding="utf-8")
-    assert '[data-form="lo-b"] .prtext' in css and "font-style:italic" in css
+    assert ".lobedsvar{font-weight:700" in css
+    # Uppgiftstexten står inte längre i anvisningen, och dess kursiva regel
+    # för skärmens facitark gick med den.
+    assert '[data-form="lo-b"] .prtext' not in css
+    assert "Ange nollställena" not in tex
 
 
 def test_bedomningens_sidhuvud_bar_riktiga_tecken():
@@ -3715,10 +3796,11 @@ def test_bedomningens_sidhuvud_bar_riktiga_tecken():
     assert r"\textperiodcentered{} Bedömningsanvisning" in tex
 
 
-def test_elevraderna_bar_steg_poang_och_skal_i_pdfen():
-    """Lärarens beställning 2026-08-23: en rad per lägre poängsteg, med de
-    trappsteg lösningen FICK i högerspalten och det korta skälet under dem.
-    Nollpoängsraden säger «Inga poäng» och sedan varför."""
+def test_elevexemplen_star_i_eget_avsnitt_sist():
+    """Lärarens dom 2026-09-23 (NP:s form): de bedömda elevlösningarna står
+    inte under varje uppgift utan i ett eget avsnitt sist, «Bedömda
+    elevlösningar». Per uppgift: elevens rader, poängen som trippel och
+    kommentaren. I tabellen får uppgiften bara en dämpad notis."""
     exam = _exam()
     exam["uppgifter"][2]["elevlosningar"] = [
         {"etikett": "0 p",
@@ -3730,22 +3812,34 @@ def test_elevraderna_bar_steg_poang_och_skal_i_pdfen():
     ]
     doc, _fel = exam_spec.validate_exam_json(exam)
     tex = exam_latex.render_bedomning(doc)
-    # Etiketten säger vad raden ÄR — «1 p» ensamt lästes som ett
-    # lösningsförslag med avrundat svar (prov 82, uppgift 6).
-    assert r"\bedrad{Elevexempel {\normalfont\textperiodcentered} 0 p}" in tex
-    assert r"\bedrad{Elevexempel {\normalfont\textperiodcentered} 1 p}" in tex
-    assert r"{\small\bfseries Inga poäng}" in tex
-    # Nollradens kommentar versaliseras: den fortsatte förut efter «Inga
-    # poäng.», och det ledet ströks (exam_latex._utan_rubriken).
-    # Den poängsatta radens kommentar versaliseras också (_utan_stegen).
-    assert "Ingen ansats" in tex and "Tecknar men löser inte" in tex
-    # Ettpoängsraden fick uppgiftens FÖRSTA E-rad — det räknas ur trappan
-    # (exam_latex._fickrader), aldrig av modellen en gång till. E-raden står
-    # alltså två gånger på uppgiften: hel i facitraden, och en gång till i
-    # 1 p-radens högerspalt. C- och A-raderna bara en gång, i facit.
-    assert tex.count(r"\bedsteg{ansats}{+1 E}") == 2
-    assert tex.count(r"\bedsteg{korrekt kvadratkomplettering}{+1 C}") == 1
-    assert tex.count(r"\bedsteg{generell metod}{+1 A}") == 1
+    tabell, avsnitt = tex.split(r"{\large\bfseries Bedömda elevlösningar}", 1)
+    # Avsnittet börjar på egen sida, efter hela tabellen.
+    assert tabell.rstrip().endswith(r"\clearpage")
+    assert r"\bedelev" not in tabell.split(r"\begin{document}", 1)[1]
+    # Notisen står på uppgift 3, och bara där.
+    assert tabell.count(r"\bednotis{Bedömda elevlösningar, sist i häftet}") == 1
+    notis = tabell.index(r"\bednotis{")
+    assert tabell.rindex(r"\begin{uppgift}{3}{}", 0, notis) > tabell.rindex(
+        r"\begin{uppgift}{2}{}", 0, notis)
+    # Uppgiftens nummer, elevens rader, trippeln och kommentaren. Kommentaren
+    # versaliseras: nollradens «Inga poäng.»-led stryks (_utan_rubriken) och
+    # den poängsatta radens märken (_utan_stegen).
+    assert r"\begin{uppgift}{3}{}" in avsnitt
+    assert r"\bedelev{fel\par }{0/0/0}{Ingen ansats}" in avsnitt
+    assert r"\bedelev{ansats\par }{1/0/0}{Tecknar men löser inte}" in avsnitt
+    assert avsnitt.count(r"\bedskilj") == 1          # mellan de två, inte efter
+    # Trappan står EN gång, i tabellen. Elevexemplet bär trippeln och inte
+    # raderna den fick.
+    assert tex.count(r"\bedkrav{Ansats.}{+E}") == 1
+
+
+def test_utan_elevexempel_inget_avsnitt():
+    """Fail-open: bedömningspasset kan ha fallit, och ett gammalt papper har
+    inga elevexempel. Då står varken avsnittet eller någon notis."""
+    doc, _fel = exam_spec.validate_exam_json(_exam())
+    tex = exam_latex.render_bedomning(doc)
+    assert "Bedömda elevlösningar" not in tex
+    assert r"\clearpage" not in tex.split(r"\begin{document}", 1)[1]
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -3965,13 +4059,17 @@ def test_ts1_tecknen_satts_alltid_magert_och_uppratt():
     annan kodning anropar sig själva en gång till efter \\UseTextSymbol) och
     sprängde TeX:s save stack mitt i seedningen."""
     exam = _exam()
-    exam["uppgifter"][0]["text"] = "Kaffet håller 50 °C ± 2 °C. Bestäm tiden."
+    exam["uppgifter"][0]["losning"] = "Kaffet håller 50 °C ± 2 °C."
+    exam["uppgifter"][0]["bedomning"] = (
+        "+1 E anger 50 °C\n+1 E anger ± 2 °C\n+1 E korrekt svar")
     doc, fel = exam_spec.validate_exam_json(exam)
     assert doc is not None and fel == []
     tex = exam_latex.render_bedomning(doc)
-    # Uppgiftstexten sätts KURSIVT i anvisningen — gradtecknet ska ändå be om
-    # ts1-lmr och inte ts1-lmri.
-    assert r"\itshape Kaffet håller 50 {\normalfont\textdegree}C" in tex
+    # Svaret sätts FETT och kraven i \small (NP:s form, 2026-09-23), och
+    # gradtecknet ska ändå be om ts1-lmr och inte ts1-lmbx eller en annan grad.
+    assert (r"\bedsvar{Kaffet håller 50 {\normalfont\textdegree}C "
+            r"{\normalfont\textpm} 2 {\normalfont\textdegree}C.}") in tex
+    assert r"\bedkrav{Anger 50 {\normalfont\textdegree}C.}{+E}" in tex
     # Modellens och lärarens egna tecken går ALLTID genom escapningen, och
     # där sitter vakten — oavsett var på pappret texten sedan hamnar.
     for tecken, kommando in (("°", r"\textdegree"), ("±", r"\textpm"),
@@ -3981,17 +4079,16 @@ def test_ts1_tecknen_satts_alltid_magert_och_uppratt():
             "x {\\normalfont" + kommando + "} y"
     # MALLENS EGNA tecken står i känd kontext och behöver ingen vakt: två
     # \textperiodcentered står i sidhuvudet och i rubriken, båda i mager
-    # upprätt stil. Bedömningstabellens etikett är däremot FET och bär vakten
-    # själv — den fällde ts1-lmbx10 första gången.
-    assert tex.count(r"\textperiodcentered") == 2 + tex.count(
-        r"{\normalfont\textperiodcentered} full pott")
+    # upprätt stil. Den feta etiketten som bar vakten själv («Facit · full
+    # pott», den fällde ts1-lmbx10 första gången) finns inte i NP:s form.
+    assert tex.count(r"\textperiodcentered") == 2
 
 
 def test_nollraden_upprepar_inte_rubriken_i_pdfen():
     """«Inga poäng» stod två gånger på lärarens papper: en gång som rubrik i
     högerspalten och en gång till som kommentarens första två ord, för det är
-    så modellen skriver en hel mening. Rubriken bär den, kommentaren säger
-    varför."""
+    så modellen skriver en hel mening. Sedan 2026-09-23 säger trippeln
+    «0/0/0» det, och kommentaren säger bara varför."""
     exam = _exam()
     exam["uppgifter"][2]["elevlosningar"] = [
         {"etikett": "0 p",
@@ -4003,8 +4100,8 @@ def test_nollraden_upprepar_inte_rubriken_i_pdfen():
     ]
     doc, _fel = exam_spec.validate_exam_json(exam)
     tex = exam_latex.render_bedomning(doc)
-    assert tex.count("Inga poäng") == 1
-    assert "Svaret är rätt av fel skäl." in tex
+    assert "Inga poäng" not in tex
+    assert r"\bedelev{fel\par }{0/0/0}{Svaret är rätt av fel skäl.}" in tex
     # En kommentar som inte BÖRJAR med ett poängmärke får bara märket
     # struket — ledet står kvar som det skrevs.
     assert "Får , men stannar där." not in tex
@@ -4043,10 +4140,11 @@ def test_losningspasset_skriver_elevernas_utforliga_losning():
     assert "Lösningsförslag" in tex
     assert "Kvadratkomplettera vänsterledet" in tex
     assert r"\textbf{Svar:} \(x = 3\)" in tex
-    # Inga trappsteg, inga elevexempel, inga kravgränser — det är elevens papper.
-    # (\bedsteg DEFINIERAS i den delade preamblen — det är anropen som ska
-    # saknas.)
-    assert r"\bedsteg{" not in tex and "Elevexempel" not in tex
+    # Inga poängrader, inga elevexempel, inga kravgränser: det är elevens
+    # papper. (\bedkrav och \bedelev DEFINIERAS i den delade preamblen, så det
+    # är anropen som ska saknas.)
+    kropp = tex.split(r"\begin{document}", 1)[1]
+    assert r"\bedkrav{" not in kropp and r"\bedelev{" not in kropp
     assert "Kravgränser" not in tex
     # En uppgift utan utförlig lösning faller tillbaka på facit.
     assert exam_latex.escape_mixed(
@@ -4106,15 +4204,15 @@ def test_kommentaren_raknar_inte_poangen_en_gang_till():
     ]
     doc, _fel = exam_spec.validate_exam_json(exam)
     tex = exam_latex.render_bedomning(doc)
-    assert "I b testas bara ett exempel." in tex
+    assert r"\bedelev{a) 27\par }{1/0/0}{I b testas bara ett exempel.}" in tex
     assert "+1 E för 27" not in tex
-    # Trappsteget står EN gång i elevraden (och en gång i facitraden).
-    assert tex.count(r"\bedsteg{ansats}{+1 E}") == 2
+    # Poängraden står EN gång, i tabellen; elevexemplet bär trippeln.
+    assert tex.count(r"\bedkrav{Ansats.}{+E}") == 1
 
 
 def test_nollraden_utan_egen_kommentar_far_ingen_tom_rad():
-    """Skrev modellen bara «Inga poäng» är hela kommentaren rubriken, och då
-    ska ingenting stå under den."""
+    """Skrev modellen bara «Inga poäng» är hela kommentaren beskedet, och
+    «0/0/0» säger det redan. Då ska ingenting stå under poängen."""
     exam = _exam()
     exam["uppgifter"][2]["elevlosningar"] = [
         {"etikett": "0 p",
@@ -4122,31 +4220,29 @@ def test_nollraden_utan_egen_kommentar_far_ingen_tom_rad():
                       "dom": "Inga poäng."}]}]
     doc, _fel = exam_spec.validate_exam_json(exam)
     tex = exam_latex.render_bedomning(doc)
-    assert tex.count("Inga poäng") == 1
-    assert r"{\small\bfseries Inga poäng}\par " in tex
+    assert "Inga poäng" not in tex
+    assert r"\bedelev{fel\par }{0/0/0}{}" in tex
 
 
-def test_trappstegets_niva_star_forst_pa_fast_position():
-    """Nivåmärket låg förut sist på raden via \\hfill — nationella provets egen
-    sättning, som fungerar när kriteriet har hela sidbredden. I
-    bedömningstabellens högerspalt (41 % av satsytan) bröts ett långt kriterium
-    över fyra rader och «+1 E» hamnade mitt inne i textflödet på den sista.
-
-    Nu står nivån FÖRST i en egen smal spalt med hängande indrag, precis som på
-    skärmen (losning.css .lotrappa är en grid med nivån i första spalten)."""
+def test_poangmarket_star_i_egen_spalt_i_lod():
+    """Märket («+C») står i en egen smal spalt längst till höger, i lod för
+    alla rader, och ett långt krav bryts i sin egen spalt och aldrig in under
+    märket. Förr flöt nivån med texten via \\hfill och hamnade mitt i
+    textflödet när kriteriet bröts över flera rader."""
     preamble = (Path(__file__).resolve().parent.parent / "app" / "templates"
                 / "_preamble.tex.j2").read_text(encoding="utf-8")
-    bit = preamble[preamble.index(r"\newcommand{\bedsteg}"):]
-    bit = bit[:bit.index("\n\n")]
-    assert r"\makebox[\bednivabredd]" in bit and r"\hangindent" in bit
-    assert r"\hfill" not in bit, "nivån flyter fortfarande med texten"
-    # Argumentordningen är oförändrad: \bedsteg{kriterium}{nivå}.
+    bit = preamble[preamble.index(r"\newcommand{\bedkrav}"):]
+    bit = bit[:bit.index(r"\newcommand{\bedtrippel}")]
+    assert r"\begin{minipage}[t]{\dimexpr\linewidth-\bedpoangspalt\relax}" in bit
+    assert r"\makebox[\bedpoangspalt][r]" in bit
+    assert r"\hfill" not in bit, "märket flyter fortfarande med texten"
+    # En enhet bryts inte över en sida: raderna håller ihop med trippeln.
+    assert r"\nopagebreak" in bit
+    # Argumentordningen: \bedkrav{krav}{märke}, en rad per poäng.
     doc, _fel = exam_spec.validate_exam_json(_exam())
     tex = exam_latex.render_bedomning(doc)
-    assert r"\bedsteg{anger det ena nollstället}{+1 E}" in tex
-    # En rad per poäng även när kriterierna är långa — raderna är egna stycken
-    # och bryts som löptext inne i sin spalt.
-    assert tex.count(r"\bedsteg{") == exam_spec.poangsummor(doc)["total"]
+    assert r"\bedkrav{Anger det ena nollstället.}{+E}" in tex
+    assert tex.count(r"\bedkrav{") == exam_spec.poangsummor(doc)["total"]
 
 
 # ── Kapitelramen (2026-09-06) ─────────────────────────────────────────────

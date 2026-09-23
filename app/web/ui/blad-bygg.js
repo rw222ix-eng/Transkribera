@@ -45,10 +45,12 @@ window.BladBygg = (() => {
     ut.push(tex.slice(start));
     return ut.filter(b => b.trim());
   }
-  const matBryt = s => String(s == null ? '' : s).split('$').map((bit, i) => {
+  /* `fet` lindar varje led i KaTeX \pmb: bedömningsanvisningens svar står i
+     fetstil, och KaTeX bryr sig inte om font-weight (se enhetRader). */
+  const matBryt = (s, fet) => String(s == null ? '' : s).split('$').map((bit, i) => {
     if (!(i % 2)) return esc(bit);
     const led = bit.length > MATBRYT_MIN ? texled(bit) : [bit];
-    return led.map(b => `<span class="mat" data-tex="${attr(b)}"></span>`).join('<wbr>');
+    return led.map(b => `<span class="mat" data-tex="${attr(fet ? `\\pmb{${b}}` : b)}"></span>`).join('<wbr>');
   }).join('');
   /* ── Tomraderna ──
      Modellens radbrytningar SKA synas: läraren bad om «A:» och «B:» på var sin
@@ -946,9 +948,9 @@ window.BladBygg = (() => {
   };
   function losvar(u) {
     if (!u.f) return '';
-    /* matBryt och inte mat: svaret står också i bedömningsanvisningens
-       facitrad, i en 60-procentsspalt, och en hel härledning i ett dollarpar
-       gav den en scrollbar (se matBryt ovan). */
+    /* matBryt och inte mat: en hel härledning i ett dollarpar är en enda
+       oböjlig låda, och i en smal spalt gav den en scrollbar (se matBryt
+       ovan). */
     return `<div class="losvar"><b class="losetikett">Svar</b><span>${matBryt(u.f)}</span>${
       u.enhet && !ENHET_SLUT(u.f, u.enhet) ? `<em>${enhetHtml(u.enhet)}</em>` : ''}</div>`;
   }
@@ -973,75 +975,161 @@ window.BladBygg = (() => {
       .map(s => s.trim()).filter(Boolean)
       .map(s => {
         const m = s.match(BEDSTEG);
-        if (m) return { niva: `+${m[1]} ${m[2]}`, krav: m[3].trim() };
-        return { niva: '', krav: BEDNOT.test(s) ? s[0].toUpperCase() + s.slice(1) : s };
+        if (m) return { niva: m[2], poang: Number(m[1]), krav: m[3].trim() };
+        return { niva: '', poang: 0, krav: BEDNOT.test(s) ? s[0].toUpperCase() + s.slice(1) : s };
       });
   }
-  /* En trappa för hela uppgiften: förälderns egen, eller deluppgifternas i
-     ordning med sin bokstav framför (en uppgift med deluppgifter har ingen
-     egen bedömning — poängen ligger på a), b), c)). */
-  function trapprader(u) {
-    const rader = [];
-    (u.beddel || []).forEach((b, k) => trappsteg(b).forEach(
-      r => rader.push({ ...r, krav: `${BOKSTAVER[k] || k + 1}) ${r.krav}` })));
-    if (!rader.length) trappsteg(u.bed).forEach(r => rader.push(r));
-    return rader;
-  }
-  /* ── NOTRADEN TRYCKS INTE ──
-     «Vanligt fel»-raden bär ingen poäng, och läraren om prov 40 (2026-09-06):
-     «detta med vanliga fel kan vi ta bort helt och hållet så att vi sparar
-     plats». Bedömningsanvisningen ska visa vad som GER poäng, en rad per
-     poäng, och notraden tog en rad till utan att svara på den frågan.
-
-     Filtreringen görs HÄR och inte i trappsteg: parsern läser fortfarande
-     kommaformen som de gamla dokumenten i basen bär, och de raderna finns kvar
-     i JSON:en. Det är sättningen som väljer bort dem, alltså går det att ta
-     tillbaka utan att röra ett enda papper. */
-  const trappaHtml = rader0 => {
-    const rader = rader0.filter(r => r.niva);
-    return rader.length
-      ? `<ul class="lotrappa">${rader.map(r => `<li><i>${esc(r.niva)}</i><span>${
-        mat(r.krav)}</span></li>`).join('')}</ul>`
-      : '';
-  };
   const BOKSTAVER = 'abcdefghijkl';
 
-  /* ══════════ BEDÖMNINGSTABELLEN ══════════
-     Lärarens beställning 2026-08-23, ordagrant i sak: «per uppgift och per
-     deluppgift som bär poäng — översta raden är facit med full pott och hela
-     trappan bredvid, därunder en elevlösning per lägre steg med vilka poäng
-     den fick och varför den inte fick nästa.»
+  /* ══════════ BEDÖMNINGSANVISNINGEN I NATIONELLA PROVETS FORM ══════════
+     Lärarens dom 2026-09-23: «Hela bedömningsanvisningen skulle vi kunna
+     bygga mycket tydligare … lik det som finns på nationella proven. För just
+     nu känns det som att det är väldigt mycket text och det är svårt för mig
+     att rätta snabbt.» Formen hon valde är PRIM-gruppens häften (NP 1c vt22):
 
-     Formen är därför en TVÅSPALTSTABELL och inte två block under varandra:
-     poängen ska stå BREDVID det papper de gäller, inte under. Läraren läser
-     radvis — «så här ser 1 p ut, så här ser 2 p ut» — och det är den
-     jämförelsen hela anvisningen finns för.
+       20.  x = 6
+            Förenklar vänsterled genom att multiplicera parenteserna.   +C
+            Lösning med korrekt svar.                                   +C
+            (0/2/0)
 
-     Vänsterspalten är faksimil som förut (.loskann, handskriften); den bär
-     facitraden i rak stil och elevraderna i skrivstil, för den ena är tryckt
-     och de andra är påhittade elevpapper.
+     Tre spalter per uppgift: numret (.prnr), svaret och kraven, poängen. En
+     rad per poäng, per deluppgift när den bär poäng. Uppgiftstexten står inte
+     här (den har hon på provet bredvid sig), inte heller lösningsgången (den
+     står i lösningsförslaget) eller elevexemplen (de har ett eget ark sist,
+     se elevark). Tabellen förut, facit överst och ett elevpapper per lägre
+     poängsteg under, gjorde varje uppgift till en halv sida att läsa förbi.
 
-     FALLBACK: saknas elevlösningar (ett gammalt papper, eller en uppgift där
-     bedömningspassets anrop föll — exam_gen.bedomningspass är fail-open)
-     trycks bara facitraden. Ingen tom rad: en rad utan innehåll läses som ett
-     fel i pappret, inte som en lucka i underlaget. */
+     Spegel av app/exam_latex (_svaret, _svarsrad, _kravmening, _marke,
+     _elevexempel) och app/templates/bedomning.tex.j2. Ändras den ena ska den
+     andra ändras, annars säger skärm och PDF olika saker om samma poäng. */
 
-  /* Vilka trappsteg en elevlösning fick. Trappan är stigande och har en rad
-     per poäng (exam_spec.bedomningsrader), så «två C-poäng» ÄR dess två första
-     C-rader. Det går att räkna ut och ska därför inte skrivas av modellen en
-     gång till — två sanningar om samma poäng glider isär. */
-  function fickrader(rader, poang) {
-    const kvar = { E: poang[0] || 0, C: poang[1] || 0, A: poang[2] || 0 };
-    return rader.filter(r => {
-      const n = (String(r.niva).match(/([ECA])/) || [])[1];
-      if (!n || !kvar[n]) return false;
-      kvar[n] -= 1;
-      return true;
-    });
+  /* «löser ekvation (1), $x = 7$» blir «Löser ekvation (1), $x = 7$.». NP
+     skriver varje krav som en mening. En rad som börjar med matematik
+     behåller sin början. */
+  function kravmening(krav) {
+    const s = String(krav || '').trim();
+    if (!s) return '';
+    const v = /^\p{L}/u.test(s) ? s[0].toUpperCase() + s.slice(1) : s;
+    return /[.!?…]$/.test(v) ? v : v + '.';
   }
-  /* Elevlösningens poäng som trippel. Partierna summeras: pappret läraren bad
-     om är EN rad per poängsteg, men gamla dokument (och förlagans lo4) delar
-     lösningen i flera partier med var sin dom. */
+  /* NP:s märke, «+C», ett per poäng. «+1 C» var appens egen form, och ettan
+     säger ingenting när varje rad är en poäng. */
+  const marke = r => Array.from({ length: Math.max(r.poang, 0) }, () => '+' + r.niva).join(' ');
+
+  /* SVARET ÄR FÖRSTA RADEN I `losning`. Fältet är med flit kort, «svaret
+     först, ett par räkneled» (exam_spec._Uppgiftsbas), och räkneleden hör till
+     lösningsförslaget. Enheten följer med när svaret är ett tal och inte
+     redan bär den; ett led står före svaret när svaret inte redan är en
+     likhet. Spegel av exam_latex._svaret. */
+  const forstaRad = s => String(s || '').split('\n').map(r => r.trim()).find(Boolean) || '';
+  const arLed = e => String(e || '').trim().replace(/[$\s]+$/, '').endsWith('=');
+  const SVAR_TAL = /(\$|\d)\s*\.?$/;
+  function svaret(losning, enhet) {
+    const s = forstaRad(losning);
+    const e = String(enhet || '').trim();
+    if (!s || !e) return s;
+    if (arLed(e)) return s.includes('=') ? s : `${e} ${s}`;
+    if (!SVAR_TAL.test(s) || ENHET_SLUT(s, e)) return s;
+    const m = s.match(/^([\s\S]*?)(\.?)$/);
+    return `${m[1]} ${e}${m[2]}`;
+  }
+  /* Flervalets bokstav först, sedan svaret, versal först. Rutornas och
+     stegtabellens facit når aldrig skärmarket (plan.js franProv), så de står
+     bara på PDF:en (exam_latex._svarsrad). */
+  function bedsvar(bokstav, svar) {
+    const delar = [];
+    if (bokstav && svar.replace(/^[ .]+|[ .]+$/g, '') !== bokstav) delar.push(bokstav);
+    if (svar) delar.push(svar);
+    const t = delar.join(', ');
+    return /^\p{L}/u.test(t) ? t[0].toUpperCase() + t.slice(1) : t;
+  }
+  /* Poängen som trippel. Dokumentets egen (u.peca, u.delpeca) när den finns,
+     annars räknad ur raderna; utan båda står ingen trippel alls, för en
+     gissad «(0/0/0)» på en uppgift värd en poäng är värre än ingen. */
+  function trippel(poang, rader) {
+    let p = Array.isArray(poang) && poang.length >= 3 ? poang : null;
+    if (!p && rader.length) {
+      const t = { E: 0, C: 0, A: 0 };
+      rader.forEach(r => { t[r.niva] += r.poang; });
+      p = [t.E, t.C, t.A];
+    }
+    return p ? `(${p[0] || 0}/${p[1] || 0}/${p[2] || 0})` : '';
+  }
+
+  /* En poängbärande enhet som tabellrader: svaret, en rad per poäng, sist
+     trippeln. Svaret i fetstil, och matematiken i det med KaTeX egen \pmb:
+     KaTeX ignorerar font-weight, och utan den blev «2,5 km» ett magert tal
+     och en fet enhet. PDF:en gör samma sak (exam_latex.escape_mixed fet). */
+  function enhetRader(namn, svar, bed, poang) {
+    /* NOTRADEN TRYCKS INTE. «Vanligt fel»-raden bär ingen poäng, och
+       läraren om prov 40 (2026-09-06): «detta med vanliga fel kan vi ta bort
+       helt och hållet så att vi sparar plats». Parsern läser den fortfarande
+       (de gamla dokumenten bär den), det är sättningen som väljer bort den. */
+    const rader = trappsteg(bed).filter(r => r.niva);
+    const ut = [];
+    if (namn || svar) {
+      ut.push(`<tr data-svar><td>${namn ? `<b class="lobeddel">${esc(namn)}</b>` : ''}${
+        svar ? `<b class="lobedsvar">${matBryt(svar, true)}</b>` : ''}</td><td></td></tr>`);
+    }
+    rader.forEach(r => ut.push(`<tr><td class="lobedkrav">${mat(kravmening(r.krav))}</td><td><b class="lobedniva">${
+      esc(marke(r))}</b></td></tr>`));
+    const tr = trippel(poang, rader);
+    if (tr) ut.push(`<tr data-trippel><td><span class="lobedtrippel">${esc(tr)}</span></td><td></td></tr>`);
+    return ut.join('');
+  }
+
+  /* `table` och inte grid: blad.js delaUppgift delar en uppgift som är högre
+     än pappret mellan två ark rad för rad (`.lobed tbody > tr`), och det
+     kontraktet står kvar. */
+  function bedtabell(u) {
+    const beddel = u.beddel || [], vag = u.vag || [];
+    /* En uppgift med deluppgifter har ingen egen bedömning: poängen ligger på
+       a), b), c). Deras svar står i `vag` med bokstaven först (plan.js
+       franProv), och bokstaven står redan i namnet. Saknas `beddel` (ett
+       gammalt papper) men `vag` finns och `f` är tom, är `vag` ändå
+       deluppgifternas svar. */
+    const antal = Math.max(beddel.length, u.f ? 0 : vag.length);
+    const utanBokstav = s => String(s || '').replace(/^\s*[a-l]\)\s*/, '');
+    const kropp = antal
+      ? Array.from({ length: antal }, (_, k) => enhetRader(
+        `${BOKSTAVER[k] || k + 1})`,
+        svaret(utanBokstav((vag[k] || [])[0]), (u.delenhet || [])[k]),
+        beddel[k], (u.delpeca || [])[k])).join('')
+      : enhetRader('', bedsvar(u.alt && u.ratt != null ? BOKSTAV[u.ratt] || '' : '',
+                               svaret(u.f, u.enhet)), u.bed, u.peca);
+    return `<table class="lobed"><tbody>${kropp}</tbody></table>`;
+  }
+
+  /* Kortsvarsarket och lösningsgångsarket ritar SAMMA rad: läraren ska
+     bedöma uppgift 3 likadant vare sig den ligger i del B eller del C, och
+     «gäller varje uppgift i provet» var beställningens fjärde punkt.
+
+     Numret står ensamt i spalten. «2 p» under det sa samma sak som trippeln
+     under raderna, och NP har bara numret. Notisen säger att uppgiften har
+     bedömda elevlösningar och var de står; utan den vet läraren inte att de
+     finns. */
+  function losRad(u) {
+    const elever = (u.elever || []).length;
+    return `<div class="pruppg">
+      <span class="prnr">${u.nr}.</span>
+      <div>${bedtabell(u)}${elever
+        ? '<p class="lobednotis">Bedömda elevlösningar, sist i häftet</p>' : ''}</div></div>`;
+  }
+
+  /* ══════════ BEDÖMDA ELEVLÖSNINGAR ══════════
+     Eget ark sist, som i NP (lärarens dom 2026-09-23). Per uppgift ett
+     elevpapper per rad: elevens rader till vänster i handskriften (.loskann),
+     poängen de ges («0/1/0») och kommentaren till höger. Läraren läser radvis,
+     «så här ser 1 p ut, så här ser 2 p ut», och det syns bara när papper och
+     poäng står bredvid varandra (beställningen 2026-08-23).
+
+     Varje uppgift är en egen .pruppg med sitt nummer: blad.js markera ger den
+     samma data-el som uppgiften i tabellen (uppg{n}), och elevlösningarna
+     (.loskann) ärver det. En kommentar i canvas på en elevlösning gäller
+     alltså fortfarande sin uppgift. Spegel av exam_latex._elevexempel. */
+
+  /* Elevlösningens poäng som trippel. Partierna summeras: gamla dokument (och
+     förlagans lo4) delar lösningen i flera partier med var sin dom. */
   function elevpoang(e) {
     const ut = [0, 0, 0];
     (e.partier || []).forEach(p => {
@@ -1051,14 +1139,19 @@ window.BladBygg = (() => {
     return ut;
   }
 
+  /* NOLLRADEN SÄGER «INGA POÄNG» EN GÅNG. «0/0/0» står redan bredvid
+     papperet, och modellen skriver ofta kommentaren som en hel mening som
+     börjar likadant: «Inga poäng. Svaret är rätt, men …». Prompten ber om det
+     också (exam_gen.build_bedomning_prompt), men prompten är ett önskemål och
+     renderaren en regel, och papperen i basen skrevs innan önskemålet fanns.
+     Spegel av app/exam_latex._utan_rubriken. */
   const UTAN_POANG = /^\s*inga\s+po[äa]ng\s*[.:;,—–-]*\s*/i;
-  /* KOMMENTAREN FÅR INTE RÄKNA POÄNG EN GÅNG TILL. Trappstegen står redan i
-     högerspalten (fickrader), och modellen skrev «+1 E för 27, men i b testas
-     bara ett exempel.» — «+1 E» två gånger under varandra, och läraren räknade
-     dem (prov 81, uppgift 12). Ledet fram till första kommat klipps när
-     kommentaren börjar med ett poängmärke; utan komma stryks bara märkena.
-     Kommat i $8{,}9$ står i klammer och räknas inte. Spegel av
-     app/exam_latex._utan_stegen. */
+  /* KOMMENTAREN FÅR INTE RÄKNA POÄNG EN GÅNG TILL. Poängen står redan
+     bredvid, och modellen skrev «+1 E för 27, men i b testas bara ett
+     exempel.», och läraren räknade märkena (prov 81, uppgift 12). Ledet fram
+     till första kommat klipps när kommentaren börjar med ett poängmärke;
+     utan komma stryks bara märkena. Kommat i $8{,}9$ står i klammer och
+     räknas inte. Spegel av app/exam_latex._utan_stegen. */
   const POANGMARKE = /\+\s*\d+\s*[ECA]\b/g;
   const LEDET = /^\s*\+\s*\d+\s*[ECA]\b(?:\{,\}|[^,;])*[,;]\s*(?:men|och|sedan)?\s*/i;
   function utanStegen(dom) {
@@ -1070,33 +1163,10 @@ window.BladBygg = (() => {
     return kvar ? kvar[0].toUpperCase() + kvar.slice(1) : '';
   }
 
-  function bedrader(u) {
-    const rader = [], vag = u.vag || [], beddel = u.beddel || [];
-    /* Facitraden — en per poängbärande enhet. En uppgift med deluppgifter har
-       ingen egen bedömning (poängen ligger på a), b), c)), så där blir det en
-       facitrad per deluppgift med dess egen trappa bredvid. */
-    if (beddel.length) {
-      beddel.forEach((b, k) => rader.push({
-        facit: true, etikett: `Facit ${BOKSTAVER[k] || k + 1}) · full pott`,
-        vanster: `<div class="lobedfacit">${matBryt((vag[k] || [])[0] || '')}${
-          (vag[k] || [])[1] ? `<em>${esc(vag[k][1])}</em>` : ''}</div>`,
-        hoger: trappaHtml(trappsteg(b)) }));
-    } else {
-      rader.push({ facit: true, etikett: 'Facit · full pott',
-        vanster: `<div class="lobedfacit">${losvar(u) || losvag(u)}</div>`,
-        hoger: trappaHtml(trappsteg(u.bed)) });
-    }
-    const alla = trapprader(u);
-    (u.elever || []).forEach(e => {
+  function elevRad(u) {
+    const rader = u.elever.map(e => {
       const poang = elevpoang(e), total = poang[0] + poang[1] + poang[2];
       const skrivna = (e.partier || []).reduce((a, p) => a.concat(p.rader || []), []);
-      /* NOLLRADEN SÄGER «INGA POÄNG» EN GÅNG. Rubriken står redan i
-         högerspalten, och modellen skriver ofta kommentaren som en hel mening
-         som börjar likadant: «Inga poäng. Svaret är rätt, men …». Två rader
-         efter varandra som båda börjar med samma två ord. Prompten ber om det
-         också (exam_gen.build_bedomning_prompt) — men prompten är ett önskemål
-         och renderaren en regel, och papperen i basen skrevs innan önskemålet
-         fanns. Spegel av app/exam_latex._utan_rubriken. */
       let dom = (e.partier || []).map(p => p.dom).filter(Boolean).join(' ');
       if (!total) {
         dom = dom.replace(UTAN_POANG, '').trim();
@@ -1104,51 +1174,41 @@ window.BladBygg = (() => {
       } else {
         dom = utanStegen(dom);
       }
-      /* ETIKETTEN SÄGER VAD RADEN ÄR. «1 p» ensamt lästes som ett
-         lösningsförslag: läraren såg «O ≈ 8,9 dm» på en elevrad under en
-         uppgift som sa «Svara exakt» och trodde att facit var avrundat
-         (prov 82, uppgift 6). Samma form som «Facit · full pott», och samma
-         etikett på pappret (app/exam_latex._elevrader). */
-      rader.push({
-        utan: !total, etikett: `Elevexempel · ${total} p`,
-        /* Elevens rader är det som fick scrollbaren: bedömningspasset skriver
-           «$A(15) = 120 - 4 \cdot 15 = 120 - 60 = 60$» som EN formel. matBryt
-           delar den vid likhetstecknen så att raden kan brytas i spalten. */
-        vanster: `<div class="loskann">${skrivna.map(
-          r => `<div class="loskannrad">${matBryt(r)}</div>`).join('')}</div>`,
-        hoger: (total ? trappaHtml(fickrader(alla, poang))
-          : '<p class="lobedinga">Inga poäng</p>')
-          + (dom ? `<p class="lobedvarfor">${mat(dom)}</p>` : '') });
-    });
-    return rader;
-  }
-
-  const bedtabell = u => `<table class="lobed"><tbody>${bedrader(u).map(
-    r => `<tr${r.facit ? ' data-facit' : ''}${r.utan ? ' data-utan' : ''}>
-      <td><b class="lobedsteg">${esc(r.etikett)}</b>${r.vanster}</td>
-      <td>${r.hoger}</td></tr>`).join('')}</tbody></table>`;
-
-  /* Kortsvarsarket och lösningsgångsarket ritar SAMMA rad: läraren ska
-     bedöma uppgift 3 likadant vare sig den ligger i del B eller del C, och
-     «gäller varje uppgift i provet» var beställningens fjärde punkt. */
-  function losRad(u) {
+      /* Elevens rader är det som fick scrollbaren: bedömningspasset skriver
+         «$A(15) = 120 - 4 \cdot 15 = 120 - 60 = 60$» som EN formel. matBryt
+         delar den vid likhetstecknen så att raden kan brytas i spalten. */
+      return `<tr${total ? '' : ' data-utan'}>
+        <td><div class="loskann">${skrivna.map(
+          r => `<div class="loskannrad">${matBryt(r)}</div>`).join('')}</div></td>
+        <td><b class="lobedelevpoang">${poang.join('/')}</b>${
+          dom ? `<p class="lobedvarfor">${mat(dom)}</p>` : ''}</td></tr>`;
+    }).join('');
     return `<div class="pruppg">
-      <span class="prnr">${u.nr}.<span class="prvarde">${u.p} p</span></span>
-      <div><p class="prtext" data-ref="">${ref(u.t)}</p>
-        ${bedtabell(u)}
-      </div></div>`;
+      <span class="prnr">${u.nr}.</span>
+      <div><table class="lobed" data-elev=""><tbody>${rader}</tbody></table></div></div>`;
   }
-  /* Kortsvarsfacit för del A, utskriven lösningsgång för del B. Ett facit som
-     bara svarar på halva provet ska säga det — därför räknas uppgifterna. */
+
+  const spann = l => (l.length === 1 ? `uppgift ${l[0].nr}` : `uppgift ${l[0].nr}–${l[l.length - 1].nr}`);
+  function elevark(uppgifter) {
+    const med = uppgifter.filter(u => (u.elever || []).length);
+    if (!med.length) return '';
+    return `<div class="ark" data-form="lo-elev" data-brytbar="">
+      <div class="lohuvud"><b>Bedömningsanvisning · elevlösningar</b><span>${versal(spann(med))}</span></div>
+      <h1 class="lotitel">Bedömda elevlösningar</h1>
+      ${med.map(elevRad).join('')}</div>`;
+  }
+
+  /* Kortsvarsfacit för del A, utskriven lösningsgång för del B, och de
+     bedömda elevlösningarna sist. Ett facit som bara svarar på halva provet
+     ska säga det, därför räknas uppgifterna. */
   function losning(v, uppgifter, delB) {
     const b = uppgifter.filter(u => u.nr <= delB);
     const c = uppgifter.filter(u => u.nr > delB);
     const ut = [];
-    const spann = l => (l.length === 1 ? `uppgift ${l[0].nr}` : `uppgift ${l[0].nr}–${l[l.length - 1].nr}`);
     /* PAPPRETS NAMN ÄR «BEDÖMNINGSANVISNING» (lärarens beslut 2026-08-23).
        «Lösningsförslag» stod kvar från när arket bara bar facit; nu bär det
-       trappan och ett elevpapper per poängsteg, och det är en anvisning att
-       rätta efter. Namnet står likadant på fliken, i PDF:ens titel, i
+       poängraderna och de bedömda elevlösningarna, och det är en anvisning
+       att rätta efter. Namnet står likadant på fliken, i PDF:ens titel, i
        tryckpaketet och i kvittot — arbetsbladets och gruppuppgiftens facit
        heter fortfarande «Lösningsförslag» respektive «Facit». */
     if (b.length) ut.push(`<div class="ark" data-form="lo-b" data-brytbar="">
@@ -1159,6 +1219,8 @@ window.BladBygg = (() => {
       <div class="lohuvud"><b>Bedömningsanvisning · ${DELNAMN.C.toLowerCase()}</b><span>${DELNAMN.C} · ${spann(c)}</span></div>
       <h1 class="lotitel">Hela lösningen krävs</h1>
       ${c.map(losRad).join('')}</div>`);
+    const elever = elevark(uppgifter);
+    if (elever) ut.push(elever);
     return ut;
   }
 

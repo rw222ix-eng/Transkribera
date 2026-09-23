@@ -7,6 +7,10 @@
     de satta i två typsnitt med två uppgiftsrytmer fick hon leta efter uppgift
     7 i två olika layouter samtidigt. #))
 ((* set forlaga = true *))
+((# Ingen figur i anvisningen sedan 2026-09-23: uppgiftstexten och dess
+    figur står på provet, inte här. Utan tikz slipper pappret buntens
+    tyngsta paket (pgfplots) och en kompilering som kan falla offline. #))
+((* set med_tikz = false *))
 ((# DUBBLA BAKSTRECK I EN JINJA-STRÄNG. Jinjas lexer tolkar strängliteralen
     som Python gör: '\textemdash{}' blir TAB + «extemdash{}», och sidhuvudet
     stod på det skarpa provets bedömningsanvisning som «Matematik 1c
@@ -15,60 +19,40 @@
     literalerna som behöver dubbleras. #))
 ((* set sidhuvud = kurs ~ ' \\textemdash{} ' ~ titel ~ ' \\textperiodcentered{} Bedömningsanvisning' *))
 ((* include '_preamble.tex.j2' *))
-((* import '_former.tex.j2' as former *))
 
-((# ══════════ POÄNGTRAPPAN ══════════
-    Nationella provets form (Ma 1c vt22, Ma 2c vt22): kriteriet till vänster,
-    nivån i högermarginalen, EN RAD PER POÄNG — så att 1 p, 2 p, 3 p syns som
-    en trappa och läraren vet vilket steg elevens papper nådde. Raderna delas
-    i Python (exam_latex._bedomning_rader, som läser exam_spec.bedomningsrader
-    och därför också klarar de gamla dokumentens enradiga kommaform).
+((# ══════════ NATIONELLA PROVETS FORM ══════════
+    Lärarens dom 2026-09-23: «Hela bedömningsanvisningen skulle vi kunna bygga
+    mycket tydligare … lik det som finns på nationella proven. För just nu
+    känns det som att det är väldigt mycket text och det är svårt för mig att
+    rätta snabbt.» Hon valde PRIM-gruppens form (NP 1c vt22):
 
-    Trappan står i bedömningstabellens HÖGERSPALT (\bedrad) — hel på
-    facitraden, och bara de steg lösningen fick på en elevrad. #))
-((* macro trappa(rader) *))
-((* for r in rader *))
-((* if r.niva *))\bedsteg{((( r.krav )))}{((( r.niva )))}
-((* else *)){\small\itshape ((( r.krav )))}\par
+      20.  x = 6
+           Förenklar vänsterled genom att multiplicera parenteserna.   +C
+           Lösning med korrekt svar.                                   +C
+           (0/2/0)
+
+    Per uppgift, och per deluppgift när den bär poäng: svaret i fetstil, en
+    rad per poäng med märket i poängspalten, och sist enhetens poäng.
+    Uppgiftstexten står INTE här (den har hon på provet bredvid sig), inte
+    heller lösningsgången (den står i lösningsförslaget) eller förmågans namn.
+    Allt det var text hon fick läsa förbi. Raderna byggs i exam_latex
+    (_svarsrad, _bedomning_rader), och skärmen bygger samma rader
+    (app/web/ui/blad-bygg.js). #))
+((* macro enhet(e, namn) *))
+((* if namn or e.svar *))
+\bedsvar{((* if namn *))((( namn )))\enspace ((* endif *))((( e.svar )))}
 ((* endif *))
+((* for r in e.bedomning_rader *))
+\bedkrav{((( r.krav )))}{((( r.marke )))}
 ((* endfor *))
+\bedtrippel{((( e.trippel )))}
 ((* endmacro *))
 
-((# ══════════ FACITRADEN ══════════
-    Tabellens översta rad, en per poängbärande enhet: lösningen till vänster,
-    hela trappan till höger. Etiketten säger vad raden ÄR — «Facit · full
-    pott» — så att elevraderna under den läses som det de är, papper som inte
-    nådde ända fram.
-
-    Utan lösning OCH utan trappa trycks ingenting: en förälder med
-    deluppgifter bär varken det ena eller det andra, och en tom rad läses som
-    ett fel i pappret i stället för som en lucka i underlaget. #))
-((* macro facitrad(u, etikett) *))
-((* if u.losning or u.bedomning_rader *))
-\bedrad{((( etikett )))}{((* if u.losning *)){\small ((( u.losning )))}((* endif *))}{((( trappa(u.bedomning_rader) )))}
-((* endif *))
-((* endmacro *))
-
-((# ══════════ ELEVRADERNA ══════════
-    En rad per LÄGRE poängsteg — 0 p, 1 p, 2 p … — med elevens papper till
-    vänster och de trappsteg lösningen fick till höger, följt av det korta
-    skälet till att den inte fick nästa. Full pott står som facitraden ovan och
-    skrivs aldrig som elevlösning.
-
-    Raderna kommer ur bedömningspasset (exam_gen.bedomningspass), som är
-    fail-open per uppgift: föll anropet står bara facitraden här, och det är
-    med flit — ett papper utan elevexempel är fortfarande en anvisning man kan
-    rätta efter. #))
-((* macro elevrad(e) *))
-\bedskilj
-((# \par MÅSTE avslutas med ett mellanslag, precis som i gruppuppgift.tex.j2:
-    utan det klistras NÄSTA rads första ord fast i kommandonamnet. Lärarens
-    skarpa 1a-prov gav «\parTanken», ett odefinierat kommando, och HELA
-    bedömningsanvisningen föll — provet fick sin PDF, anvisningen ingen. Att
-    det inte syntes förr är att elevlösningarnas rader oftast börjar med
-    matematik ($…$ → \(), och \( avslutar \par på egen hand. #))
-\bedrad{((( e.etikett )))}{((* for r in e.rader *))((( r )))\par ((* endfor *))}{((* if e.utan *)){\small\bfseries Inga poäng}\par ((* else *))((( trappa(e.trappa) )))((* endif *))((* if e.kommentar *))\par\vspace{1mm}{\small ((( e.kommentar )))}((* endif *))}
-((* endmacro *))
+((# UPPGIFTERNA TÄTARE ÄN PÅ PROVET. Förlagans luft mellan två uppgifter
+    (\pfuppgluft, 22,6 pt) är till för elevens läsning av en fråga i taget.
+    Här delar en linje uppgifterna, som i NP:s tabell, och luften på var sida
+    om den räcker. Längden sätts om bara i det här dokumentet. #))
+\setlength{\pfuppgluft}{0pt}
 
 \begin{document}
 
@@ -83,7 +67,7 @@
 ((# Bara de gränser provet kan dela ut (exam_spec.betygsrader): ett prov
     utan C- och A-poäng har ingen C-gräns att rätta mot. #))
 ((# Bara totalpoäng: betyget sätts på summan och ingenting annat
-    (exam_spec.KRAV_DEFAULT). Uppgifternas (E/C/A) står kvar på raderna, 
+    (exam_spec.KRAV_DEFAULT). Uppgifternas (E/C/A) står kvar på raderna,
     det är poängens nivå, inte ett krav för betyget. #))
 {\small Poäng anges som (E/C/A). Kravgränser: E minst ((( granser.E.minst )))((* if 'C' in granser.get('betyg', ['E', 'C', 'A']) *)),
 C minst ((( granser.C.minst )))((* endif *))((* if 'A' in granser.get('betyg', ['E', 'C', 'A']) *)),
@@ -91,48 +75,67 @@ A minst ((( granser.A.minst )))((* endif *))
  \textemdash{}
 av totalt ((( granser.total ))) poäng.}
 
-\vspace{4mm}
+\vspace{2mm}
+((# Linjen står FÖRE varje uppgift utom den första: en linje efter den
+    sista hade sett ut som en summering. #))
+((* set ns = namespace(forsta=true) *))
 ((* for del in delar *))
 ((* for u in del.uppgifter *))
-((# \par avslutar ALLTID poäng-raden här — annars flyter \poangs \hfill in
-    i förmågenamnets stycke och poängen hamnar inline i stället för i
-    högermarginalen (jfr prov.tex.j2 och app/templates/_preamble.tex.j2). #))
-\begin{uppgift}{((( u.nummer )))}{((( u.poang_eca )))}\par
-((* if not u.har_deluppgifter *)){\small\textcolor{ink500}{((( u.formaga_namn )))}}\par\vspace{1mm}((* endif *))
-((# UPPGIFTSTEXTEN STÖRRE ÄN SVARET, och kursiv. Lärarens dom 2026-08-23:
-    «i lösningsförslaget ska uppgiftstexten vara kursiv och något större,
-    svaret mindre i rak stil» — hon läser frågan först och svaret sedan, och
-    graderna stod tvärtom. Samma ordning på skärmen (app/web/ui/losning.css),
-    för PDF:en ska vara skärmtrogen. #))
-{\itshape ((( former.stycken(u.stycken) )))}\par\vspace{2mm}
-((* if u.bild_fil *)){\small Uppgiften har en bild: ((( u.bild_fil )))}\par\vspace{1mm}((* endif *))
-((* if u.figur_tex *))\par\vspace{2mm}\begin{center}((( u.figur_tex )))\end{center}((* endif *))
-((( former.kropp(u) )))
+((* if not ns.forsta *))
+\bedlinje
+((* endif *))
+((* set ns.forsta = false *))
+((# Tomt poängargument: uppgiftens poäng står som trippel under raderna, och
+    högermarginalen hör till märkena. #))
+\begin{uppgift}{((( u.nummer )))}{}
 ((* if u.har_deluppgifter *))
 ((* for d in u.deluppgifter *))
-\begin{deluppgift}{((( d.bokstav )))}{((( d.poang_eca )))}\par
-{\small\textcolor{ink500}{((( d.formaga_namn )))}}\par\vspace{1mm}
-{\itshape ((( former.stycken(d.stycken) )))}\par\vspace{1mm}
-((( former.kropp(d) )))
-((* if d.flerval *)){\small\textbf{Rätt: ((( d.ratt_bokstav )))}}\par\vspace{1mm}((* endif *))
-((# MITTPUNKTEN SOM PÅ SKÄRMEN — men i \normalfont. Den ligger i TS1, och
-    etiketten är FET: «Font TS1/lmr/bx/n/10.95 not loadable» tog hela
-    bedömningsanvisningen med sig första gången. Samma vakt som escapningen
-    lägger runt modellens egna TS1-tecken (app/exam_latex._LATEX_SPECIALS);
-    mallens egna måste bära den själva. #))
-((( facitrad(d, 'Facit ' ~ d.bokstav ~ ') {\\normalfont\\textperiodcentered} full pott') )))
-\end{deluppgift}
+((* if not loop.first *))\vspace{1.5mm}
+((* endif *))
+((( enhet(d, d.delnamn) )))
 ((* endfor *))
 ((* else *))
-((* if u.flerval *)){\small\textbf{Rätt: ((( u.ratt_bokstav )))}}\par\vspace{1mm}((* endif *))
-((( facitrad(u, 'Facit {\\normalfont\\textperiodcentered} full pott') )))
+((( enhet(u, '') )))
 ((* endif *))
-((# Elevraderna sist i uppgiftens tabell, under facitraden (eller under alla
-    deluppgifternas facitrader). Eleven ser dem aldrig — det här är lärarens
-    papper. #))
-((* for e in u.elevrader *))((( elevrad(e) )))((* endfor *))
+((* if u.elevexempel *))
+\bednotis{Bedömda elevlösningar, sist i häftet}
+((* endif *))
 \end{uppgift}
 ((* endfor *))
 ((* endfor *))
+
+((# ══════════ BEDÖMDA ELEVLÖSNINGAR ══════════
+    Eget avsnitt sist i häftet, som i NP (lärarens dom 2026-09-23). Förut stod
+    de under varje uppgift, en rad per lägre poängsteg, och gjorde tabellen
+    till en halv sida per uppgift. Per uppgift: elevens rader, poängen de ges
+    och kommentaren (\bedelev).
+
+    Raderna kommer ur bedömningspasset (exam_gen.bedomningspass), som är
+    fail-open per uppgift: föll anropet saknas uppgiften här, och ett papper
+    utan några elevexempel får inget avsnitt alls. Eleven ser dem aldrig, det
+    här är lärarens papper. #))
+((* if elevavsnitt *))
+\clearpage
+{\large\bfseries Bedömda elevlösningar}\par
+\vspace{2mm}
+((* for u in elevavsnitt *))
+((* if not loop.first *))
+\bedlinje
+((* endif *))
+\begin{uppgift}{((( u.nummer )))}{}
+((* for e in u.elevexempel *))
+((* if not loop.first *))\bedskilj
+((* endif *))
+((# \par MÅSTE avslutas med ett mellanslag, precis som i gruppuppgift.tex.j2:
+    utan det klistras NÄSTA rads första ord fast i kommandonamnet. Lärarens
+    skarpa 1a-prov gav «\parTanken», ett odefinierat kommando, och HELA
+    bedömningsanvisningen föll — provet fick sin PDF, anvisningen ingen. Att
+    det inte syntes förr är att elevlösningarnas rader oftast börjar med
+    matematik ($…$ → \(), och \( avslutar \par på egen hand. #))
+\bedelev{((* for r in e.rader *))((( r )))\par ((* endfor *))}{((( e.trippel )))}{((( e.kommentar )))}
+((* endfor *))
+\end{uppgift}
+((* endfor *))
+((* endif *))
 
 \end{document}

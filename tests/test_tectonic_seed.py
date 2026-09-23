@@ -95,8 +95,12 @@ def test_sonden_satter_glyfer_i_alla_mattestorlekar():
     storlekskraschen ovan.
 
     escape_mixed gör om $…$ till \\(…\\), så matte-kroppen matchas utan
-    delimitrar."""
-    tex = exam_latex.render_bedomning(
+    delimitrar.
+
+    Arbetsbladet och inte bedömningsanvisningen: den trycker inte längre
+    uppgiftstexten (NP:s form, lärarens dom 2026-09-23), och arbetsbladet är
+    den mall som sätter texten med newtx, alltså ntx-typsnitten ovan."""
+    tex = exam_latex.render_arbetsblad(
         seed_tectonic_cache._representative_doc())
     assert r"x^{a \cdot \sqrt{b}}" in tex, \
         "symbolglyf i script-storlek (ntxsy7) seedas aldrig"

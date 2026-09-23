@@ -276,12 +276,13 @@ test("form 6 · figur och stegtabell på samma blad bär kombinationens nyckel",
     await expect(page.locator("#formprov .gulos")).toHaveCount(2);
   });
 
-test("bedömningsanvisningen · facitraden överst och ett papper per poängsteg",
+test("bedömningsanvisningen · nationella provets form, elevlösningarna sist",
   async ({ page }) => {
-    /* Lärarens beställning 2026-08-23. En tvåspaltstabell per enhet: vänster
-       lösningen, höger poängen. Översta raden är facit med full pott och hela
-       trappan bredvid; därunder en rad per LÄGRE poängsteg med de poäng den
-       fick och skälet till att den inte fick nästa.
+    /* Lärarens dom 2026-09-23: «Hela bedömningsanvisningen skulle vi kunna
+       bygga mycket tydligare … lik det som finns på nationella proven.» Per
+       uppgift och deluppgift: svaret först och fett, en rad per poäng med
+       märket «+E», «+C», «+A» i en egen spalt, trippeln sist. De bedömda
+       elevlösningarna står på ett eget ark sist.
 
        Partiets poäng är en trippel i schemat. Läst som ett tal blev «1 p» till
        strängen «1,0,0 p» — JavaScript adderar tal och array genom att foga
@@ -291,7 +292,7 @@ test("bedömningsanvisningen · facitraden överst och ett papper per poängsteg
     await L.oppna(page);
     const html = await page.evaluate(() => window.BladBygg.losning(
       { kurs: "Matematik, nivå 3c", klass: "NA25" },
-      [{ nr: 1, p: 2, t: "Förenkla uttrycket.", f: "$2x^2 - 1$",
+      [{ nr: 1, p: 2, t: "Förenkla uttrycket.", f: "$2x^2 - 1$\n$(x+1)^2 - ...$",
          enhet: "cm", bed: "+1 E utvecklar parentesen\n+1 E förenklar rätt" },
        { nr: 2, p: 4, t: "Har hon rätt? Motivera.", f: "Nej.",
          vag: [["a) Derivera", "1 p"], ["b) Motivera", "3 p"]],
@@ -308,29 +309,154 @@ test("bedömningsanvisningen · facitraden överst och ett papper per poängsteg
       1).join(""));
     await satt(page, html);
 
-    // Kortsvarsarket: svaret i sin ruta, med etikett och enhetens förtydligande.
-    const kort = page.locator("#formprov [data-form='lo-b'] .losvar").first();
-    await expect(kort.locator(".losetikett")).toHaveText("Svar");
-    await expect(kort.locator("em")).toHaveText("cm");
-    // …och arket heter Bedömningsanvisning, inte Lösningsförslag.
+    // Tre ark: kortsvaren, lösningsdelen och de bedömda elevlösningarna sist.
+    const former = await page.locator("#formprov .ark")
+      .evaluateAll(a => a.map(x => x.dataset.form));
+    expect(former).toEqual(["lo-b", "lo-c", "lo-elev"]);
     await expect(page.locator("#formprov [data-form='lo-b'] .lohuvud b"))
       .toHaveText("Bedömningsanvisning · kortsvar");
 
-    // Uppgift 2: en facitrad per deluppgift, sedan raderna 0 p och 1 p.
-    const tabell = page.locator("#formprov [data-form='lo-c'] .lobed").first();
-    const steg = await tabell.locator(".lobedsteg").allTextContents();
-    expect(steg).toEqual(["Facit a) · full pott", "Facit b) · full pott",
-                          "Elevexempel · 0 p", "Elevexempel · 1 p"]);
-    // Facitraderna bär HELA trappan; elevraden bara de steg den fick.
-    const rader = tabell.locator("tr");
-    await expect(rader.nth(1).locator(".lotrappa li")).toHaveCount(3);
-    await expect(rader.nth(2).locator(".lobedinga")).toHaveText("Inga poäng");
-    await expect(rader.nth(3).locator(".lotrappa li")).toHaveCount(1);
-    await expect(rader.nth(3).locator(".lotrappa li i")).toHaveText("+1 E");
-    await expect(rader.nth(3).locator(".lobedvarfor"))
+    // Uppgift 1: svaret först (bara första raden, med enheten), fett.
+    const kort = page.locator("#formprov [data-form='lo-b'] .lobed tr");
+    await expect(kort).toHaveCount(4);
+    await expect(kort.nth(0)).toHaveAttribute("data-svar", "");
+    await expect(kort.nth(0).locator(".lobedsvar")).toContainText("cm");
+    await expect(kort.nth(0).locator(".lobedsvar .mat")).toHaveCount(1);
+    expect(await kort.nth(0).locator(".lobedsvar").evaluate(
+      b => getComputedStyle(b).fontWeight)).toBe("700");
+    // En rad per poäng, kravet som mening och märket i sin högerställda spalt.
+    await expect(kort.nth(1).locator("td").first()).toHaveText("Utvecklar parentesen.");
+    await expect(kort.nth(1).locator(".lobedniva")).toHaveText("+E");
+    expect(await kort.nth(1).locator("td").last().evaluate(
+      td => getComputedStyle(td).textAlign)).toBe("right");
+    // Trippeln sist, dämpad.
+    await expect(kort.nth(3).locator(".lobedtrippel")).toHaveText("(2/0/0)");
+
+    // Uppgift 2: a) och b) med var sitt svar, sina rader och sin trippel.
+    const lang = page.locator("#formprov [data-form='lo-c'] .lobed").first();
+    await expect(lang.locator(".lobeddel")).toHaveText(["a)", "b)"]);
+    await expect(lang.locator(".lobedsvar")).toHaveText(["Derivera", "Motivera"]);
+    await expect(lang.locator(".lobedniva")).toHaveText(["+E", "+C", "+C", "+A"]);
+    await expect(lang.locator(".lobedtrippel")).toHaveText(["(1/0/0)", "(0/2/1)"]);
+    // Elevlösningarna står inte i tabellen, bara notisen om var de står.
+    await expect(page.locator("#formprov [data-form='lo-c'] .loskann")).toHaveCount(0);
+    await expect(page.locator("#formprov [data-form='lo-c'] .lobednotis"))
+      .toHaveText("Bedömda elevlösningar, sist i häftet");
+
+    // Sista arket: uppgiftens nummer, elevens papper, trippeln och skälet.
+    const elev = page.locator("#formprov [data-form='lo-elev']");
+    await expect(elev.locator(".lotitel")).toHaveText("Bedömda elevlösningar");
+    await expect(elev.locator(".prnr")).toHaveText(["2."]);
+    await expect(elev.locator(".loskann")).toHaveCount(2);
+    await expect(elev.locator(".lobedelevpoang")).toHaveText(["0/0/0", "1/0/0"]);
+    await expect(elev.locator(".lobedvarfor").first()).toHaveText("Derivatan är fel.");
+    await expect(elev.locator(".lobedvarfor").last())
       .toContainText("löser aldrig ekvationen");
     // Nollraden är utmärkt — grönt gav, rött gav inte.
-    await expect(tabell.locator("tr[data-utan]")).toHaveCount(1);
+    await expect(elev.locator("tr[data-utan]")).toHaveCount(1);
+  });
+
+test("bedömningsanvisningen ur serverns prov · paginerad, satt och pekbar",
+  async ({ page }) => {
+    /* Hela vägen som läraren tar: provet ligger i basen (här fejkat som
+       GET /api/exams/12), plan.js franProv gör om det till skärmens form,
+       blad.js paginerar, fyller och saltar arken, och KaTeX sätter formlerna.
+       Tre saker som inte syns i en ren sättning prövas: \pmb i svaret ger
+       ingen röd TeX-kod, elevarket spiller inte, och canvas kan peka på en
+       elevlösning och få SIN uppgift (uppg{n}), inte en egen serie. */
+    const EXAM = {
+      titel: "Prov · Uttryck", kurs: "Matematik, nivå 1c", klass: "NA25",
+      uppgifter: [
+        { del: "B", formaga: "B", typ: "rutin", poang: [1, 0, 0],
+          text: "Vilket uttryck är lika med $\\sqrt[3]{64}$?",
+          alternativ: ["$64^{3}$", "$64^{1/3}$"], ratt_alternativ: 1,
+          losning: "$64^{1/3}$\n$\\sqrt[3]{64} = 4$",
+          bedomning: "+1 E rätt alternativ",
+          elevlosningar: [{ etikett: "0 p", partier: [{
+            rader: ["$\\sqrt[3]{64} = \\frac{64}{3}$"], poang: [0, 0, 0],
+            dom: "Delar med 3." }] }] },
+        { del: "B", formaga: "P", typ: "rutin", poang: [0, 0, 0],
+          text: "Beräkna.", losning: "", bedomning: "",
+          deluppgifter: [
+            { poang: [1, 0, 0], text: "Sträckan.", losning: "$2{,}5$",
+              enhet: "km", bedomning: "+1 E svarar 2,5 km" },
+            { poang: [0, 1, 0], text: "Kvoten.", losning: "$\\dfrac{x^{8}}{2}$",
+              bedomning: "+1 C korrekt svar" }] },
+        { del: "C", formaga: "P", typ: "redovisning", poang: [0, 2, 0],
+          text: "Lös systemet.",
+          losning: "$a = 3{,}5$\n(1): $5(x+1) - 2(x-2) = 30$ ger $x = 7$",
+          bedomning: "+1 C löser ekvation (1), $x = 7$\n"
+                     + "+1 C sätter in $x = 7$ i (2), får $a = 3{,}5$",
+          elevlosningar: [
+            { etikett: "0 p", partier: [{ rader: ["$3x + 1 = 30$"],
+              poang: [0, 0, 0], dom: "Tappar minustecknet." }] },
+            { etikett: "1 p", partier: [{ rader: ["$x = 7$", "$a = 7$"],
+              poang: [0, 1, 0], dom: "+1 C för x, men multiplicerar fel." }] }] },
+      ],
+    };
+    const json = (route, kropp) => route.fulfill({
+      status: 200, contentType: "application/json", body: JSON.stringify(kropp) });
+    const papper = {
+      typ: "Prov", moment: "uttryck", klass: "NA25", kurs: "Matematik, nivå 1c",
+      datum: "2026-10-01", tid: "", gy: [], kalla: false, kallor: [],
+      inst: { antal: 3, delprov: "Del A + Del B" }, bilder: {}, referenser: [],
+      forlaga: null, resultat: null, fokus: "", kontext: "start", niva: false,
+      svarighet: 0, andrat: [], provId: 12, losningsblad: true,
+      uppgifter: [{ nr: 1, p: 1, t: "Platshållare.", f: "$1$", avd: "B" }],
+    };
+    const rad = { id: 1, status: "godkant", markor: 0, sort: 1, foljd: null,
+                  versioner: [papper], dokument: { ...papper, id: 1 } };
+    await page.route("**/api/schema", r => json(r, { schema: [], lov: [], poster: [] }));
+    await page.route("**/api/lessons", r => json(r, []));
+    await page.route("**/api/history", r => json(r, []));
+    await page.route("**/api/klassprofil", r => json(r, {}));
+    await page.route("**/api/dokument", r => json(r, { sparade: [rad], utkast: null }));
+    await page.route("**/api/dokument/**", r => json(r, { ok: true, id: 1 }));
+    await page.route("**/api/exams/**", r => {
+      const p = new URL(r.request().url()).pathname;
+      return json(r, p === "/api/exams/12" ? { id: 12, exam: EXAM } : {});
+    });
+    await page.goto("/");
+    await page.waitForFunction(() =>
+      window.Kalender && window.Kalender.franServern() && window.Dokument);
+    await page.getByRole("tab", { name: "Planering" }).click();
+    await page.evaluate(() => window.Dokument.visa(0));
+    await expect(page.locator("#forhandsskal")).toBeVisible();
+
+    // Serverns prov har ersatt platshållaren: elevarket finns, sist.
+    const ark = page.locator("#fh-ark .ark");
+    await expect.poll(() => ark.evaluateAll(a => a.map(x => x.dataset.form)),
+                      { timeout: 20_000 })
+      .toEqual(["lo-b", "lo-c", "lo-elev"]);
+
+    // Svaren ur franProv: bokstaven på flervalet, enheten på talet, bara
+    // första raden av lösningen.
+    const b = page.locator("#fh-ark [data-form='lo-b']");
+    await expect(b.locator(".lobedsvar").first()).toContainText("B,");
+    await expect(b.locator(".lobedsvar").nth(1)).toContainText("km");
+    await expect(b.locator(".lobedtrippel")).toHaveText(["(1/0/0)", "(1/0/0)", "(0/1/0)"]);
+    const c = page.locator("#fh-ark [data-form='lo-c']");
+    await expect(c.locator(".lobedniva")).toHaveText(["+C", "+C"]);
+    await expect(c.locator(".lobedkrav").first()).toContainText("Löser ekvation (1),");
+    await expect(c).not.toContainText("(1):");
+
+    // KaTeX satte formlerna, också de fetade (\pmb), utan en rad röd TeX-kod.
+    await expect.poll(() => page.locator("#fh-ark .lobedsvar .katex").count(),
+                      { timeout: 20_000 }).toBeGreaterThan(2);
+    await expect(page.locator("#fh-ark .katex-error")).toHaveCount(0);
+
+    // Inget ark spiller över A4:an.
+    const spill = await ark.evaluateAll(a => a.map(x => x.scrollHeight - x.clientHeight));
+    spill.forEach(s => expect(s).toBeLessThanOrEqual(0));
+
+    // Canvas pekar på en elevlösning och får dess uppgift, inte en egen serie.
+    const elev = page.locator("#fh-ark [data-form='lo-elev']");
+    await expect(elev.locator(".pruppg")).toHaveCount(2);
+    await expect(elev.locator(".pruppg").first()).toHaveAttribute("data-el", "uppg1");
+    await expect(elev.locator(".pruppg").last()).toHaveAttribute("data-el", "uppg3");
+    await expect(elev.locator(".loskann").last()).toHaveAttribute("data-el", "uppg3");
+    // Kommentaren räknar inte poängen en gång till (utanStegen).
+    await expect(elev.locator(".lobedvarfor").last()).toHaveText("Multiplicerar fel.");
   });
 
 test("provets försättsblad bär avtalet — och ingen OBS-ruta upprepar det",

@@ -77,9 +77,9 @@
 #lo4 .loelev span[data-full],[data-form="lo4"] .loelev span[data-full],[data-form^="fe-"] .loelev span[data-full],[data-form="lo-c"] .loelev span[data-full]{color:#1B7A46}
 
 /* Faksimilen: elevens egen hand, på papper som inte är bladets papper. */
-#lo4 .loskann,[data-form="lo4"] .loskann,[data-form^="fe-"] .loskann,[data-form="lo-c"] .loskann,[data-form="lo-b"] .loskann{position:relative;margin-top:9px;padding:12px 20px 12px 24px;background:#FBFAF7;border:1px solid #E2DFD8;font-family:Caveat,'Shadows Into Light Two',cursive;font-size:calc(22px * var(--fsk, 1));line-height:1.38;color:#22303F}
-#lo4 .loskann .katex,[data-form="lo4"] .loskann .katex,[data-form^="fe-"] .loskann .katex,[data-form="lo-c"] .loskann .katex,[data-form="lo-b"] .loskann .katex{font-size:1.02em}
-#lo4 .loskannrad,[data-form="lo4"] .loskannrad,[data-form^="fe-"] .loskannrad,[data-form="lo-c"] .loskannrad,[data-form="lo-b"] .loskannrad{display:flex;align-items:baseline;gap:14px}
+#lo4 .loskann,[data-form="lo4"] .loskann,[data-form^="fe-"] .loskann,[data-form="lo-elev"] .loskann{position:relative;margin-top:9px;padding:12px 20px 12px 24px;background:#FBFAF7;border:1px solid #E2DFD8;font-family:Caveat,'Shadows Into Light Two',cursive;font-size:calc(22px * var(--fsk, 1));line-height:1.38;color:#22303F}
+#lo4 .loskann .katex,[data-form="lo4"] .loskann .katex,[data-form^="fe-"] .loskann .katex,[data-form="lo-elev"] .loskann .katex{font-size:1.02em}
+#lo4 .loskannrad,[data-form="lo4"] .loskannrad,[data-form^="fe-"] .loskannrad,[data-form="lo-elev"] .loskannrad{display:flex;align-items:baseline;gap:14px}
 
 /* Partiet: den klämmare läraren sätter i marginalen när en poäng gäller flera
    rader. Bricka och klämmare bär samma nummer som kommentarraden nedanför — det
@@ -157,81 +157,82 @@
 .losteg{display:block}
 .lovag>li em{font-style:normal;font-weight:700;font-size:calc(11.5px * var(--fsk, 1));letter-spacing:.02em;color:#1B7A46;white-space:nowrap;margin-left:8px}
 
-/* ══════════ FRÅGAN STÖRRE OCH KURSIV, SVARET MINDRE OCH RAKT ══════════
-   Lärarens granskning av det skarpa provets lösningsförslag (2026-08-23).
-   Gäller PROVETS två facitark och bara dem: `lo-b` (kortsvar) och `lo-c`
-   (lösningsförslag). Bokens `lo-bok`/`lo-bok3` matchar också «lo-» och har en
-   egen, uppmätt rytm (handskriftens steg längre ned) — därför skrivs formerna
-   ut, aldrig med ^=.
+/* ══════════ BEDÖMNINGSANVISNINGEN I NATIONELLA PROVETS FORM ══════════
+   Lärarens dom 2026-09-23: «Hela bedömningsanvisningen skulle vi kunna bygga
+   mycket tydligare … lik det som finns på nationella proven. För just nu känns
+   det som att det är väldigt mycket text och det är svårt för mig att rätta
+   snabbt.» Formen är PRIM-gruppens häften: numret i marginalen (.prnr), svaret
+   i fetstil, en rad per poäng med märket («+C») i en smal högerspalt, och sist
+   poängen som trippel, «(0/2/0)», dämpad.
 
-   Samma ordning i PDF:en (app/templates/bedomning.tex.j2: uppgiftstexten i
-   \itshape på grundgraden, lösning och bedömning i \small) — pappret ska vara
-   skärmtroget. */
-[data-form="lo-b"] .prtext,[data-form="lo-c"] .prtext{font-style:italic;font-size:calc(16.5px * var(--fsk, 1));line-height:1.45}
-[data-form="lo-b"] .losvar>span,[data-form="lo-c"] .losvar>span{font-size:calc(14px * var(--fsk, 1))}
+   Gäller provets tre ark: `lo-b` (kortsvar), `lo-c` (lösningsdelen) och
+   `lo-elev` (de bedömda elevlösningarna sist). Bokens `lo-bok`/`lo-bok3`
+   matchar också «lo-» och har en egen, uppmätt rytm (längre ned), därför
+   skrivs formerna ut, aldrig med ^=.
 
-/* ── Poängtrappan ──
-   Nationella provets bedömningsanvisning: en rad per poäng, kriteriet till
-   vänster och nivån i marginalen. Nivån står FÖRST här och inte sist som i NP:s
-   tabell — spalten är smal på ett A4 med uppgiftstext, och en högerställd
-   etikett hade lämnat en ojämn lucka mitt på raden. Grön som poängen i
-   lösningsgången: det är samma poäng.
+   Samma rader i PDF:en (app/templates/bedomning.tex.j2): svaret fett i
+   grundgraden, kraven och trippeln mindre. Pappret ska vara skärmtroget.
 
-   Notraden (det väntade felet) hade en egen kursiv form här. Den är borta:
-   läraren om prov 40 (2026-09-06), «detta med vanliga fel kan vi ta bort helt
-   och hållet så att vi sparar plats», och blad-bygg trappaHtml trycker inte
-   längre rader utan nivå. Regeln gick med raden. Trappan bär bara poäng nu. */
-.lotrappa{margin:0;padding:0;list-style:none;display:grid;gap:3px;font-size:calc(13px * var(--fsk, 1));line-height:1.4;color:#000}
-.lotrappa>li{display:grid;grid-template-columns:calc(38px * var(--fsk, 1)) minmax(0,1fr);gap:0 9px;align-items:baseline}
-.lotrappa>li>i{font-style:normal;font-weight:700;font-size:calc(11.5px * var(--fsk, 1));letter-spacing:.02em;color:#1B7A46;white-space:nowrap;font-variant-numeric:tabular-nums}
+   Uppgifterna delas av en hårlinje, som raderna i NP:s tabell. Luften inne i
+   en uppgift är mindre än mellan två, så att det syns var en uppgift slutar
+   utan att räkna rader. */
+[data-form="lo-b"] .pruppg,[data-form="lo-c"] .pruppg,[data-form="lo-elev"] .pruppg{margin-top:0;padding:calc(12px * var(--fsk, 1)) 0 calc(10px * var(--fsk, 1));border-top:1px solid #E2DFD8}
+[data-form="lo-b"] .lotitel+.pruppg,[data-form="lo-c"] .lotitel+.pruppg,[data-form="lo-elev"] .lotitel+.pruppg{border-top:0}
 
-/* ══════════ BEDÖMNINGSTABELLEN ══════════
-   Lärarens beställning 2026-08-23: en tvåspaltstabell per enhet — vänster
-   lösningen (facit överst, elevernas papper därunder), höger poängen och
-   skälet. Radvis läsning är hela poängen: «så här ser 1 p ut, så här ser 2 p
-   ut», och det syns bara när papper och poäng står bredvid varandra.
+/* `table` och inte grid, med flit: raderna ska kunna brytas mellan sidor när
+   paginera delar en uppgift som är högre än arket (blad.js delaUppgift), och
+   en tabellrad är den enda form som gör det utan att lämna en halv cell kvar
+   på förra sidan.
 
-   `table` och inte grid, med flit: raderna ska kunna brytas mellan sidor när
-   paginate delar arket (blad.js), och en tabellrad är den enda form som gör
-   det utan att lämna en halv cell kvar på förra sidan.
-
-   Vänsterspalten är bredare än högerspalten (0,56/0,44). Elevens papper är det
-   som ska gå att läsa; poängen är korta rader.
-
-   `table-layout:fixed` och `word-break` på cellerna: en lång KaTeX-formel är en
-   enda oböjlig låda, och utan dem sprängde den spalten och drog hela arket ut
-   över A4:ans kant. */
-.lobed{width:100%;margin:10px 0 0;border-collapse:collapse;table-layout:fixed}
+   `table-layout:fixed`: en lång KaTeX-formel är en enda oböjlig låda, och
+   utan den sprängde den spalten och drog hela arket ut över A4:ans kant. */
+.lobed{width:100%;margin:0;border-collapse:collapse;table-layout:fixed}
 /* `overflow-x:auto` OCH INTE `visible`. En härledning i ett enda $…$ är EN
-   oböjlig låda — `.mat` är `white-space:nowrap` (matte.css), och KaTeX bryter
+   oböjlig låda (`.mat` är `white-space:nowrap`, matte.css), och KaTeX bryter
    inte inuti ett uttryck. Den första skarpa körningen gav en differenskvot som
-   sträckte sig tvärs över spaltlinjen och lade sig ovanpå «+1 C»: två rader
-   text på varandra, ingen av dem läsbar. Med scroll på CELLEN klipps den vid
-   spalten i stället, och läraren kan dra fram resten på skärmen. Att i stället
-   krympa graden hade gjort formeln oläslig på papper, och att låta den
-   överlappa är inget val alls.
+   lade sig ovanpå poängmärket. Med scroll på CELLEN klipps den vid spalten i
+   stället, och läraren kan dra fram resten på skärmen.
 
    `overflow` på cellen och inte på `.mat`: ett inline-block med overflow byter
    baslinje till sin nederkant, och all kort inline-matte hade hoppat nedåt. */
-.lobed td{vertical-align:top;padding:9px 0 11px;border-top:1px solid #E2DFD8;overflow-wrap:anywhere;overflow-x:auto}
-.lobed td:first-child{width:60%;padding-right:18px}
-.lobed td:last-child{width:40%;padding-left:18px;border-left:1px solid #E2DFD8}
-/* Facitraden bär ingen överlinje — den ÄR tabellens början — och en grön
-   vänsterkant som säger «det här är det rätta pappret». */
-.lobed tr[data-facit] td{border-top:0}
-/* Ingen versalisering: etiketten SÄGER poängsteget («0 p», «1 p»), och
-   «0 P» är inte samma sak som «0 p» på ett papper där p betyder poäng. */
-.lobedsteg{display:block;margin:0 0 5px;font-size:calc(12px * var(--fsk, 1));font-weight:700;letter-spacing:.04em;color:#1B7A46}
-.lobed tr[data-utan] .lobedsteg{color:#C0392B}
-/* En elevlösning på mer än noll men mindre än full pott är varken grön eller
-   röd: den är på väg. Grå etikett, och poängen den fick står i grönt bredvid. */
-.lobed tr:not([data-facit]):not([data-utan]) .lobedsteg{color:#4A4A4A}
-.lobedfacit{font-size:calc(14px * var(--fsk, 1));line-height:1.45;color:#000}
-.lobedfacit>em{font-style:normal;font-weight:700;font-size:calc(11.5px * var(--fsk, 1));letter-spacing:.02em;color:#1B7A46;white-space:nowrap;margin-left:8px}
-.lobedfacit .losvar,.lobedfacit .lovag{margin-top:0}
-.lobedinga{margin:0;font-size:calc(11.5px * var(--fsk, 1));font-weight:700;letter-spacing:.02em;color:#C0392B}
-/* Varför inte nästa poäng — det korta skälet, i samma grad som trappan och
-   satt i rak stil under den. */
+.lobed td{vertical-align:top;padding:2px 0;overflow-wrap:anywhere;overflow-x:auto;color:#000}
+/* Poängspalten: smal, högerställd, samma plats för varje rad. */
+.lobed td:last-child{width:calc(58px * var(--fsk, 1));padding-left:12px;text-align:right;white-space:nowrap}
+/* Nästa deluppgift börjar med sitt svar och får luft ovanför sig. */
+.lobed tr[data-svar]:not(:first-child) td{padding-top:calc(11px * var(--fsk, 1))}
+/* Svaret i fetstil och ett snäpp större än kraven: det är det första ögat ska
+   hitta. Matematiken i det är KaTeX \pmb (blad-bygg.js matBryt med fet),
+   för KaTeX bryr sig inte om font-weight. */
+.lobedsvar{font-weight:700;font-size:calc(15.5px * var(--fsk, 1));line-height:1.4}
+.lobeddel{font-weight:700;font-size:calc(15.5px * var(--fsk, 1));margin-right:9px}
+.lobedkrav{font-size:calc(13.5px * var(--fsk, 1));line-height:1.42}
+.lobedniva{font-weight:700;font-size:calc(13.5px * var(--fsk, 1));letter-spacing:.02em}
+.lobedtrippel{font-size:calc(12.5px * var(--fsk, 1));color:#6B6862;font-variant-numeric:tabular-nums}
+/* Notisen på en uppgift som har bedömda elevlösningar: de står på sista
+   arket, och utan raden vet läraren inte att de finns. */
+.lobednotis{margin:4px 0 0;font-style:italic;font-size:calc(12px * var(--fsk, 1));color:#6B6862}
+
+/* ── De bedömda elevlösningarna (lo-elev) ──
+   Elevens papper till vänster i handskriften, poängen och kommentaren till
+   höger, på SAMMA rad. Läraren läser radvis, «så här ser 1 p ut, så här ser
+   2 p ut» (beställningen 2026-08-23). Elevens papper är det som ska gå att
+   läsa, därför den bredare spalten. */
+/* Numret i lod med elevpapperets överkant. Uppgiftsraden baslinjejusterar
+   numret mot innehållet (prov.css .pruppg), men en tabell vars celler står
+   top-justerade har ingen baslinje att ge, och numret hamnade vid
+   tabellens nederkant: «2.» stod bredvid elevlösningens sista rad
+   (exam 119, 2026-09-23). */
+[data-form="lo-elev"] .pruppg{align-items:start}
+[data-form="lo-elev"] .prnr{padding-top:calc(10px * var(--fsk, 1))}
+.lobed[data-elev] td{padding:9px 0 11px;border-top:1px solid #E2DFD8}
+.lobed[data-elev] tr:first-child td{border-top:0;padding-top:0}
+.lobed[data-elev] td:first-child{width:62%;padding-right:18px}
+.lobed[data-elev] td:last-child{width:38%;padding-left:18px;text-align:left;white-space:normal;border-left:1px solid #E2DFD8}
+/* Grönt gav poäng, rött gav inga. Färgen är avläsningen: utfallet syns innan
+   man läst en rad. */
+.lobedelevpoang{display:block;font-weight:700;font-size:calc(14px * var(--fsk, 1));letter-spacing:.02em;color:#1B7A46;font-variant-numeric:tabular-nums}
+.lobed tr[data-utan] .lobedelevpoang{color:#C0392B}
+/* Varför inte nästa poäng: det korta skälet, satt i rak stil under poängen. */
 .lobedvarfor{margin:6px 0 0;font-size:calc(13px * var(--fsk, 1));line-height:1.42;color:#000}
 .lobed .loskann{margin-top:0}
 /* ── ELEVRADEN FLYTER SOM TEXT ──
@@ -244,21 +245,17 @@
    inline där den står. */
 .lobed .loskannrad{display:block}
 /* ── FORTSÄTTNINGSRADEN ──
-   En ENDA uppgift kan vara högre än pappret. En bedömningstabell med fem
+   En ENDA uppgift kan vara högre än pappret. En uppgift med fem bedömda
    elevlösningar är det ofta. blad.js delaUppgift flyttar då tabellraderna som
    inte ryms till en fortsättning på nästa blad (.pruppg[data-fortsuppg]) och
    sätter den här raden överst, så att läraren ser att tabellen börjar mitt i
    och inte att uppgiften har två facit. Kursiv och grå: den är en upplysning
    om pappret, inte något som står i uppgiften. */
-.lofortsatt{margin:0;font-style:italic;font-size:calc(12px * var(--fsk, 1));color:#555}
+.lofortsatt{margin:0 0 6px;font-style:italic;font-size:calc(12px * var(--fsk, 1));color:#555}
 
-/* Lösningsgången till delprov C bär tre fullständiga lösningar per blad. Den
-   luft ett kortsvarsfacit har råd med finns inte här — måtten är stramare, och
-   A4 går ihop utan att något steg faller utanför. */
+/* Lösningsdelen bär fler poängrader per blad än kortsvaren. Rubriken är
+   stramare, och A4 går ihop utan att något steg faller utanför. */
 [data-form^="lo-c"] .lotitel{margin-top:12px;font-size:calc(23px * var(--fsk, 1))}
-[data-form^="lo-c"] .pruppg{margin-top:16px}
-[data-form^="lo-c"] .lovag{margin-top:6px;gap:3px;font-size:calc(13.5px * var(--fsk, 1));line-height:1.42}
-[data-form^="lo-c"] .losvar{margin-top:6px}
 
 /* ══════════ BOKENS UPPGIFTER ══════════
    Gäller BARA bokens två egna former, lo-bok (svarsfacit) och lo-bok3 (nivå 3) —
