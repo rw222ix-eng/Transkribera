@@ -8934,7 +8934,11 @@ _SITUATION_STOPP = frozenset((
     # (2026-09-23 natt) fick «eftersom» och «undersök» som «samma situation».
     "eftersom", "undersök", "undersöka", "antaganden", "antagande",
     "använder", "behöver", "fortfarande", "samtidigt", "dessutom",
-    "därefter", "tillräckligt", "ungefär", "exempel", "procentuellt"))
+    "därefter", "tillräckligt", "ungefär", "exempel", "procentuellt",
+    # Formen är ett adjektiv, inte saken («kvadratiska klinkerplattor» mot
+    # en «kvadratisk affisch» är två situationer, generalrepetition 4).
+    "kvadratisk", "rektangulär", "triangulär", "cirkelformad", "cylindrisk",
+    "sexkantig"))
 _ORDSLUT = ("orna", "erna", "arna", "orna", "na", "en", "et", "er", "ar",
             "or", "a", "n")
 

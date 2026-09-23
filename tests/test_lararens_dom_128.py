@@ -424,6 +424,11 @@ def test_samma_situation_fran_en_annan_klass_falls():
     ny = _u("Sara påstår att kunden ska betala mer, eftersom jobbet tar tid. "
             "Undersök om Sara har räknat rätt.", [1, 0, 0])
     assert exam_gen.situationsvakt(_prov(ny), gammal) == []
+    # Formen är ingen situation: plattorna i 128 och en affisch i ett nytt
+    # prov delar bara adjektivet.
+    affisch = _u("En skrivare skriver ut en kvadratisk affisch med sidan "
+                 "$1$ m.", [0, 0, 1])
+    assert exam_gen.situationsvakt(_prov(affisch), [UPPG6["text"]]) == []
 
 
 def test_undvik_listan_namnger_sakerna_kursen_redan_haft():
