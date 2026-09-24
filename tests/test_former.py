@@ -404,6 +404,7 @@ def test_en_textrad_gor_kolumnen_vansterstalld():
     assert "& Leos lösning &" in tex
 
 
+@pytest.mark.tectonic
 def test_provets_stegtabell_kompilerar_aven_for_bred(tmp_path):
     """Två långa lösningar sida vid sida är bredare än raden. \\stegruta
     krymper tabellen i stället för att låta den gå ut i marginalen."""
