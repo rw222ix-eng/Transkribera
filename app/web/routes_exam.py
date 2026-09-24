@@ -606,6 +606,28 @@ def _kopiefynd(exam: dict, infor: dict | None) -> list[dict]:
     return ut
 
 
+def _lanfynd(exam: dict, infor: dict | None,
+             utom: set[int] | None = None) -> list[dict]:
+    """Lånar arbetsbladet provets personer eller sammanhang?
+
+    Lärarens dom 2026-09-24: prov 131 hade «Noah köper golvlister», och bladet
+    inför det fick «Noah köper spik». Samma sort av uppgift är meningen, men
+    namnen och sammanhangen ska vara andra. Räkningen är exam_gen.lanevakt,
+    noll modellanrop, och meningen är dess egen.
+
+    `utom` är uppgifter som redan fått ett kopiefynd: de ska bytas ut helt,
+    och en andra rad om samma uppgift säger inte mer. FAIL-OPEN utan provet,
+    samma skäl som _kopiefynd."""
+    if not infor:
+        return []
+    try:
+        fynd = exam_gen.lanevakt(exam or {}, infor)
+    except Exception:                       # pragma: no cover
+        return []
+    return [_fynd("provlan", f["message"], f["nr"]) for f in fynd
+            if f["nr"] not in (utom or set())]
+
+
 def _utan_granser(exam: dict | None) -> dict:
     """Pappret utan sitt gränsblock, för jämförelsen vid godkännandet."""
     return {k: v for k, v in (exam or {}).items() if k != "granser"}
@@ -643,7 +665,11 @@ def efterkontroll(view: dict, doc, summor: dict | None, *,
     ut += _cifynd(view.get("exam") or {})
     # Kopieringsvakten sist bland fynden, och bara när anroparen pekat ut
     # provet (se _kopiefynd). Den tiger på varje annat papper i appen.
-    ut += _kopiefynd(view.get("exam") or {}, infor)
+    kopior = _kopiefynd(view.get("exam") or {}, infor)
+    ut += kopior
+    # Provets personer och sammanhang, på samma villkor (se _lanfynd).
+    ut += _lanfynd(view.get("exam") or {}, infor,
+                   utom={f["nr"] for f in kopior})
     # Taket är läsarens, inte serverns: tjugofyra rader i en ruta är en vägg,
     # och pappret som ger fler än så har ett annat problem än det listan kan
     # beskriva.
@@ -699,6 +725,10 @@ _ATGARD = {
     "kopia": "Byt ut uppgiften mot en ny som övar samma metod med ett annat "
              "sammanhang och andra tal. Nya siffror i provets egen uppgift "
              "räcker inte. Poängen, förmågan och platsen står kvar.",
+    # Lärarens dom 2026-09-24 (exam 135 inför prov 131).
+    "provlan": "Byt namnen och situationen i uppgiften mot sådana som inte "
+               "finns på provet. Metoden, poängen, förmågan och platsen står "
+               "kvar. Talen får bytas om den nya situationen kräver det.",
     "delkrav": "Gör pappret samstämmigt: ändra hjälpmedelsregeln för delen, "
                "eller gör uppgifterna i den till uppgifter där endast svar "
                "krävs.",

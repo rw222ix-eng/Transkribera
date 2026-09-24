@@ -248,6 +248,161 @@ def test_ett_kopiefynd_per_uppgift():
     assert len(fynd) == len({f["nr"] for f in fynd})
 
 
+# ─────────────── provets namn och sammanhang (2026-09-24) ──────────
+
+
+def _prov_131():
+    """Provet i lärarens dom: Noah och golvlisterna, Ali och säckarna,
+    tändstickorna och hårstrået (prov 131 och 126 i ett)."""
+    prov = copy.deepcopy(_exam())
+    u = prov["uppgifter"]
+    u[3]["text"] = ("Noah köper golvlister till ett rum som är $4{,}2$ m "
+                    "långt och $3{,}5$ m brett. Beräkna hur många meter "
+                    "golvlist han behöver.")
+    u[4]["text"] = ("Ali ska gjuta en platta av betong. Han behöver $18$ "
+                    "säckar à $25$ kg. Bestäm hur mycket Alis säckar väger.")
+    u[4]["scen"] = {"begrepp": "betongplatta", "filnamn": "a-09-sandsackar",
+                    "scene": "SCENE. A young man in work clothes carries "
+                             "heavy sacks of sand across a building site "
+                             "at dusk. Intended use: betongplatta"}
+    u[5]["text"] = ("Figurerna nedan är byggda av tändstickor.\nHur många "
+                    "tändstickor behövs till figur 5?")
+    u[6]["text"] = ("Ett hårstrå är $0{,}00008$ m tjockt. Skriv tjockleken i "
+                    "grundpotensform.")
+    return prov
+
+
+def _blad_ur(texter):
+    """Ett blad med provets form och egna texter, uppgift för uppgift."""
+    blad = copy.deepcopy(_exam())
+    for i, u in enumerate(blad["uppgifter"]):
+        u.pop("scen", None)
+        u["text"] = texter[i] if i < len(texter) else f"Lös $x + {i} = 9$."
+    return blad
+
+
+def test_namnen_hittas_i_och_forst_i_meningen():
+    ut = exam_gen.provets_namn_och_sammanhang(_prov_131())
+    # Noah och Ali står först i sina meningar och känns igen ur namnlistan;
+    # genitivet «Alis» räknas till Ali.
+    assert ut["namn"] == ["Noah", "Ali"]
+    for o in ("golvlister", "sandsäckar", "tändstickor", "hårstrå"):
+        assert o in ut["sammanhang"], o
+    # Ett namn mitt i meningen känns igen utan listan.
+    mitt = exam_gen.provets_namn_och_sammanhang(
+        {"uppgifter": [{"text": "Figuren som Kim ritade har sidan 4 cm. "
+                                "Beräkna arean."}]})
+    assert "Kim" in mitt["namn"]
+
+
+def test_meningsinledande_ord_blir_inte_namn():
+    """«Beräkna», «Figurerna» och «Hans» (hans lön) är inga personer, och
+    inget ur $…$ heller."""
+    for text in ("Beräkna arean. Bestäm sedan omkretsen.",
+                 "Figurerna nedan är byggda av stickor. Hur många behövs?",
+                 "Hans lön är 300 kr. Beräkna hans skatt.",
+                 "Lös ekvationen $N(t) = Ae^{kt}$. Ange svaret med två "
+                 "decimaler.",
+                 "Undersök om påståendet stämmer. Motivera ditt svar."):
+        ut = exam_gen.provets_namn_och_sammanhang({"uppgifter": [
+            {"text": text}]})
+        assert ut["namn"] == [], (text, ut)
+    # Matematikens egna ord är inga sammanhang: bladet SKA öva dem.
+    ut = exam_gen.provets_namn_och_sammanhang({"uppgifter": [
+        {"text": "En andragradsfunktion har omkretsen och exponentiell "
+                 "tillväxt i procent.",
+         "innehall": ["andragradsfunktioner"]}]})
+    assert ut["sammanhang"] == []
+
+
+def test_prompten_namner_namnen_men_inte_provets_texter():
+    prov = _prov_131()
+    undvik = exam_gen.provets_namn_och_sammanhang(prov)
+    block = exam_gen.build_infor_prov(exam_gen.provslots(prov), [3], 6,
+                                      undvik)
+    assert "ANDRA NAMN OCH ANDRA SAMMANHANG" in block
+    assert "Noah och Ali" in block
+    assert "golvlister" in block and "tändstickor" in block
+    # Texterna går fortfarande inte till modellen, inte ens en halv mening.
+    for u in prov["uppgifter"]:
+        assert u["text"][:40] not in block, u["text"][:40]
+    assert "köper golvlister" not in block and "gjuta en platta" not in block
+    # Utan underlag är blocket byte för byte det gamla (kassetteregeln).
+    slots = exam_gen.provslots(_exam())
+    assert exam_gen.build_infor_prov(slots, [], 6, None) == \
+        exam_gen.build_infor_prov(slots, [], 6)
+    assert exam_gen.build_infor_prov(
+        slots, [], 6, {"namn": [], "sammanhang": []}) == \
+        exam_gen.build_infor_prov(slots, [], 6)
+
+
+def test_generatorn_skickar_namnen_till_prompten():
+    """Hela vägen: generate_exam bygger listan ur provet och lägger den i
+    prompten, utan provets texter."""
+    prompter = []
+
+    def llm(model, prompt, **k):
+        prompter.append(prompt)
+        return ""                            # inget giltigt svar, en runda
+
+    exam_gen.generate_exam("Matematik, nivå 2b", "TE27", ["Andragrad"],
+                           model="", antal=6, profil="arbetsblad",
+                           inforprov=_prov_131(), infor_nummer=[],
+                           llm=llm, max_rounds=1, doma=False)
+    assert prompter
+    assert "Noah och Ali" in prompter[0]
+    assert "köper golvlister" not in prompter[0]
+
+
+def test_vakten_faller_noah_och_ali():
+    """Exam 135 inför prov 131: «Noah köper spik», «Ali lastar säckar grus»,
+    och tändstickorna och hårstrået från 126 igen."""
+    blad = _blad_ur([
+        "Noah köper spik till ett staket. Hur mycket kostar spiken?",
+        "Ali lastar säckar grus på en släpvagn. Varje säck väger $25$ kg.",
+        "Mönstret nedan är byggt av tändstickor. Hur många behövs?",
+        "Ett hårstrå växer $0{,}4$ mm per dag. Hur mycket växer det på "
+        "en vecka?"])
+    fynd = routes_exam._lanfynd(blad, _prov_131())
+    assert [f["kod"] for f in fynd] == ["provlan"] * 4
+    assert [f["nr"] for f in fynd] == [1, 2, 3, 4]
+    assert "Noah" in fynd[0]["text"] and "Byt namnet" in fynd[0]["text"]
+    assert "Ali" in fynd[1]["text"] and "«säckar»" in fynd[1]["text"]
+    assert "«tändstickor»" in fynd[2]["text"]
+    # LAGBART på samma väg som kopian: «Laga fynden» skickar det vidare.
+    assert routes_exam.efterkontroll_nummer(fynd) == [1, 2, 3, 4]
+    assert "provlan" in routes_exam._ATGARD
+    assert "inte finns på provet" in \
+        routes_exam.efterkontroll_instruktion(fynd)
+
+
+def test_vakten_slapper_ett_blad_med_andra_namn():
+    blad = _blad_ur([
+        "Elias köper färg till ett staket. Hur mycket kostar färgen?",
+        "Saga lastar ved i en kärra. Varje vedträ väger $3$ kg.",
+        "Mönstret nedan är byggt av träklossar. Hur många behövs?",
+        "En pappersark är $0{,}1$ mm tjockt. Skriv tjockleken i "
+        "grundpotensform."])
+    assert routes_exam._lanfynd(blad, _prov_131()) == []
+    # Fail-open utan provet, som kopieringsvakten.
+    assert routes_exam._lanfynd(blad, None) == []
+
+
+def test_kopian_far_inget_lanfynd_till():
+    """En uppgift som är provets egen ska bytas ut helt: en andra rad om
+    samma uppgift säger inte mer."""
+    prov = _prov_131()
+    doc = exam_spec.validate_exam_json(prov)[0]
+    assert doc is not None
+    fynd = routes_exam.efterkontroll(
+        {"typ": "arbetsblad", "exam": copy.deepcopy(prov)}, doc, None,
+        infor=prov)
+    assert "kopia" in [f["kod"] for f in fynd]
+    nummer = [f["nr"] for f in fynd if f["kod"] in ("kopia", "provlan")]
+    assert len(nummer) == len(set(nummer))
+    assert "provlan" not in [f["kod"] for f in fynd if f["nr"] == 4]
+
+
 # ──────────────────────────── endpointsen ─────────────────────────
 
 

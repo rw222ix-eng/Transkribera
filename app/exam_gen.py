@@ -20,7 +20,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
 
 from app import (ci_utanfor, course_data, exam_spec, kursdomare, llm_client,
-                 niva_rubrik, np_vakter, rakneverk)
+                 niva_rubrik, np_vakter, postprocess, rakneverk)
 
 _LOG = logging.getLogger(__name__)
 
@@ -8745,8 +8745,269 @@ def drillnummer(slots: list[dict] | None,
             if not valda or s["nr"] in valda]
 
 
+# ── ANDRA NAMN, ANDRA SAMMANHANG (lärarens dom 2026-09-24) ────────────────
+# Prov 131 hade «Noah köper golvlister» och «Ali ska gjuta en platta …
+# säckar», och bladet inför det (exam 135) fick «Noah köper spik» och «Ali
+# lastar säckar grus». Prov 126 hade ett tändsticksmönster och ett hårstrå,
+# och bladen fick tändstickor och hårstrå igen. Läraren: «Då blir det lite så
+# här, jaha … det blir nästan identiskt.» Samma SORT av uppgift är meningen,
+# men namnen och sammanhangen ska vara andra.
+#
+# Kopieringsvakten (variationsflaggor) såg ingenting: «Noah köper spik» och
+# «Noah köper golvlister» har olika form. Situationsvakten jämför bara prov
+# mot prov och bara ord på sju bokstäver, och «Noah» och «säckar» är kortare.
+#
+# PROVETS TEXTER GÅR FORTFARANDE INTE TILL MODELLEN. Det som går in i
+# blocket är namn och enstaka ord, aldrig en mening (build_infor_prov).
+SAMMANHANG_TAK = 16            # ord i promptens lista
+SAMMANHANG_PER_UPPGIFT = 3
+# I uppgiftens text. Scenens filnamn och begrepp får vara kortare («hage»,
+# «kast»): där står bara saken, aldrig ett verb eller ett småord.
+SAMMANHANG_MINORD = 6
+LAN_MAX_FYND = 6
+
+_TOKEN_RE = re.compile(r"[^\W\d_]+|\d+|[.!?:;«»\"()\n•]")
+_GRANSTECKEN = frozenset(".!?:;«»\"()\n•")
+_SCENPREFIX_RE = re.compile(r"^[a-z]?-?\d+-")
+# Versala ord mitt i en mening som inte är personer.
+_INTE_NAMN = frozenset((
+    "pythagoras", "celsius", "fahrenheit", "kelvin", "newton", "euler",
+    "sverige", "sveriges", "figur", "figuren", "tabell", "tabellen", "bild",
+    "bilden", "diagram", "diagrammet", "graf", "grafen", "uppgift",
+    "uppgiften", "del", "exempel", "kapitel", "avsnitt", "excel", "geogebra",
+    "desmos"))
+# Förnamn i fornamn.txt som också är vanliga ord först i en mening: «Hans
+# lön är …» handlar inte om någon som heter Hans.
+_TVETYDIGA_NAMN = frozenset((
+    "hans", "axel", "liv", "bo", "sten", "love", "lova", "frank", "bill",
+    "ester", "tor", "tage"))
+# Uppgiftens första mening bär sakerna men också verben och vardagsorden. De
+# här är inte en situation, hur ovanliga de än är i kursens papper.
+_SAMMANHANG_STOPP = frozenset((
+    "byggda", "byggd", "bygger", "byggt", "består", "behöver", "använder",
+    "innehåller", "handlar", "sparar", "lastar", "startar", "börjar",
+    "planerar", "tänker", "undrar", "beskriver", "beskrivs", "gäller",
+    "fyller", "hämtar", "cyklar", "springer", "arbetar", "tjänar", "betalas",
+    "kostade", "säljer", "sålde", "minskar", "sjunker", "stiger", "enligt",
+    "också", "därför", "nedanför", "ovanför", "hennes", "deras", "själva",
+    "samma", "olika", "flera", "nedanstående", "ovanstående", "kostnad",
+    "kostnaden", "kostnader", "person", "personer", "personen", "sammanhang",
+    "situationen", "skolan", "klassen", "eleverna", "eleven", "elever",
+    "markera", "jämför", "uppskatta", "kontrollera", "teckna", "formulera",
+    "utveckla", "skissa", "placera", "deriver", "varför", "kommer",
+    "företag", "företaget", "företagets", "vanlig", "vanliga", "tredje",
+    "totalt", "stycken", "hundra", "miljoner", "veckan", "mycket", "alltid",
+    "aldrig", "ibland", "igenom", "utanför", "framför", "bredvid",
+    "tillbaka", "vardera", "respektive", "tjock", "tjockt", "tjocka",
+    "tjocklek", "tunnare", "tjockare", "bredare", "smalare", "tillverkar",
+    "tillverkas"))
+# Verbformer som nästan aldrig är ett substantiv: «ritade», «planerar».
+_VERBSLUT = ("ade", "ades", "erar", "erade")
+# Matematikens ord, som stammar utan å, ä och ö. Kursplanens ord (_kursord)
+# täcker bara det som står i Gy25-punkterna, och «omkretsen» eller
+# «exponentiell» är inget sammanhang: bladet SKA handla om samma matematik.
+_MATTEORD = frozenset((
+    "omkrets", "area", "volym", "langd", "bredd", "hojd", "radie", "diameter",
+    "vinkel", "triangel", "rektangel", "kvadrat", "cirkel", "parabel",
+    "linje", "lutning", "funktion", "varde", "nollstall", "ekvation",
+    "olikhet", "uttryck", "faktor", "procent", "andel", "okning", "minskning",
+    "tillvaxt", "exponent", "linjar", "modell", "talfoljd", "monster",
+    "figur", "summa", "differens", "produkt", "kvot", "medelvard", "median",
+    "typvard", "sannolik", "frekvens", "intervall", "skala", "enhet",
+    "prefix", "potens", "derivat", "integral", "koordinat", "punkt",
+    "symmetri", "maximum", "minimum", "storsta", "minsta", "optimer",
+    "brytpunkt", "berakn", "formel", "tabell", "diagram", "grafen", "rotter",
+    "variabel", "konstant", "decimal", "brak", "taljare", "namnare",
+    "primtal", "heltal", "negativ", "positiv", "kubik", "kvadratmeter",
+    "meter", "liter", "gram", "sekund", "minut", "timm", "grad", "ranta",
+    "rante", "hastighet", "temperatur"))
+
+
+def _normal(o: str) -> str:
+    """Ordet i gemener utan å, ä, ö och é, samma form som scenens filnamn
+    (exam_spec.Scen): «sandsäckar» och «a-09-sandsackar» ska vara samma ord."""
+    return (o.casefold().replace("å", "a").replace("ä", "a")
+            .replace("ö", "o").replace("é", "e").replace("ü", "u"))
+
+
+_FORNAMNEN: frozenset[str] | None = None
+
+
+def _fornamnen() -> frozenset[str]:
+    """Namnen som känns igen även först i en mening, där versalen inte säger
+    något. postprocess-listan (app/data/fornamn.txt) plus INSTRUCTION:s egna
+    tolv, minus de namn som också är vanliga ord."""
+    global _FORNAMNEN
+    if _FORNAMNEN is None:
+        _FORNAMNEN = ((postprocess._las_fornamn()
+                       | {n.casefold() for n in _NAMN_KON})
+                      - _TVETYDIGA_NAMN)
+    return _FORNAMNEN
+
+
+def _versala_ord(text: str) -> list[tuple[str, bool]]:
+    """Textens ord med versal och gemener efter, i ordning, och om ordet står
+    MITT I en mening. $…$ räknas som ett tal: det avslutar ingen mening."""
+    t = _MATTEBLOCK_RE.sub(" 0 ", str(text or ""))
+    ut: list[tuple[str, bool]] = []
+    borjan = True
+    for tok in _TOKEN_RE.findall(t):
+        if tok in _GRANSTECKEN:
+            borjan = True
+            continue
+        if (len(tok) >= 3 and tok[0].isupper() and tok[1:].islower()):
+            ut.append((tok, not borjan))
+        borjan = False
+    return ut
+
+
+def _matteord(o: str, extra: set[str] | frozenset[str] = frozenset()) -> bool:
+    n = _normal(o)
+    return any(n.startswith(m) or (len(m) >= 6 and m in n)
+               for m in (_MATTEORD | extra))
+
+
+def _sammanhangsord(o: str, namn: set[str],
+                    matte: set[str] | frozenset[str] = frozenset()) -> bool:
+    s = o.casefold()
+    if (s in namn or s in _SITUATION_STOPP or s in _SAMMANHANG_STOPP
+            or s.endswith(_VERBSLUT)
+            or _ordstam(s) in _SITUATION_STOPP or _ordstam(s) in _kursord()):
+        return False
+    return not _matteord(s, matte)
+
+
+def _provets_matteord(exam: dict | None) -> set[str]:
+    """Orden i provets egna innehålls- och delmomentsfält: det provet PRÖVAR,
+    och det är just det bladet ska öva. Koderna (G25-…) är inga ord."""
+    ut: set[str] = set()
+    for u in (exam or {}).get("uppgifter") or []:
+        if not isinstance(u, dict):
+            continue
+        falt = list(u.get("innehall") or []) + [u.get("delmoment") or ""]
+        for f in falt:
+            for o in re.findall(r"[^\W\d_]+", str(f or "")):
+                if len(o) >= 5:
+                    ut.add(_normal(_ordstam(o.casefold())))
+    return ut
+
+
+def _i_textens_form(d: str, textord: list[str]) -> str:
+    """Filnamnets ord med textens å, ä och ö: «sandsackar» blir «sandsäckar»
+    när texten har «sandsäckar», eller «säckar» som efterled."""
+    for w in textord:
+        if _normal(w) == d:
+            return w.casefold()
+    for w in textord:
+        n = _normal(w)
+        if len(n) >= 5 and d.endswith(n):
+            return d[:-len(n)] + w.casefold()
+    return d
+
+
+def _uppgiftens_saker(u: dict, namn: set[str], matte, *,
+                      meningar: int = 1) -> list[str]:
+    """Sakerna EN uppgift handlar om, som enstaka ord: scenens filnamn först
+    (lärarens eget system, «a-09-sandsackar»), sedan begreppet, sist huvudorden
+    i textens första mening. Filnamnets ord skrivs som i texten när texten har
+    dem, så att «sandsackar» blir «sandsäckar»."""
+    text = str(u.get("text") or "")
+    textord = re.findall(r"[^\W\d_]+", _MATTEBLOCK_RE.sub(" ", text))
+    scen = u.get("scen") if isinstance(u.get("scen"), dict) else {}
+    kandidater: list[tuple[str, int]] = []
+    fil = _SCENPREFIX_RE.sub("", str(scen.get("filnamn") or "").casefold())
+    for d in fil.split("-"):
+        if d.isalpha() and d != "scen":
+            kandidater.append((_i_textens_form(d, textord), 4))
+    for o in re.findall(r"[^\W\d_]+", str(scen.get("begrepp") or "")):
+        kandidater.append((o.casefold(), 4))
+    forsta = _MATTEBLOCK_RE.sub(" ", _inledning(text, meningar))
+    for o in re.findall(r"[^\W\d_]+", forsta):
+        kandidater.append((o.casefold(), SAMMANHANG_MINORD))
+    ut: list[str] = []
+    for o, minst in kandidater:
+        if (len(o) < minst or any(_samma_sak(o, x) for x in ut)
+                or not _sammanhangsord(o, namn, matte)):
+            continue
+        ut.append(o)
+    return ut
+
+
+def provets_namn_och_sammanhang(exam: dict | None) -> dict[str, list[str]]:
+    """Provets personer och sammanhang, som {"namn": [...], "sammanhang":
+    [...]}, båda i provets ordning.
+
+    NAMNEN är versala ord mitt i en mening (utom _INTE_NAMN), plus ord först i
+    en mening som antingen står i förnamnslistan eller som provet också
+    skriver mitt i en mening. «Beräkna» och «Figurerna» blir alltså aldrig
+    namn, men «Noah köper golvlister» ger Noah. Genitivet («Noahs») räknas
+    till namnet. Inget ur $…$.
+
+    SAMMANHANGEN är enstaka ord, aldrig meningar: scenens filnamn och begrepp
+    och huvudorden i varje uppgifts första mening, utan matematikens egna ord
+    (bladet ska öva samma matematik), högst SAMMANHANG_PER_UPPGIFT per uppgift
+    och SAMMANHANG_TAK totalt."""
+    uppgifter = [u for u in (exam or {}).get("uppgifter") or []
+                 if isinstance(u, dict)]
+    kanda = _fornamnen()
+    ord_ = [o for t in uppgiftstexter(exam) for o in _versala_ord(t)]
+    mitt_i = {w for w, mitt in ord_ if mitt and w.casefold() not in _INTE_NAMN}
+
+    def rot(w: str) -> str:
+        stam = w[:-1]
+        if w.endswith("s") and (stam in mitt_i or stam.casefold() in kanda):
+            return stam
+        return w
+
+    namn: list[str] = []
+    for w, mitt in ord_:
+        n = rot(w)
+        if mitt:
+            if w.casefold() in _INTE_NAMN:
+                continue
+        elif not (n.casefold() in kanda or n in mitt_i):
+            continue
+        if n not in namn:
+            namn.append(n)
+    sma = {n.casefold() for n in namn}
+    matte = _provets_matteord(exam)
+    sammanhang: list[str] = []
+    for u in uppgifter:
+        for o in _uppgiftens_saker(u, sma, matte)[:SAMMANHANG_PER_UPPGIFT]:
+            if not any(_samma_sak(o, x) for x in sammanhang):
+                sammanhang.append(o)
+    return {"namn": namn, "sammanhang": sammanhang[:SAMMANHANG_TAK]}
+
+
+def _och(delar: list[str]) -> str:
+    """«Noah», «Noah och Ali», «Noah, Ali och Maja»."""
+    if len(delar) < 2:
+        return "".join(delar)
+    return ", ".join(delar[:-1]) + " och " + delar[-1]
+
+
+def _andra_namn_och_sammanhang(undvik: dict | None) -> str:
+    """Regeln om provets personer och sammanhang, eller tom sträng."""
+    namn = list((undvik or {}).get("namn") or [])
+    saker = list((undvik or {}).get("sammanhang") or [])
+    if not namn and not saker:
+        return ""
+    vad = []
+    if namn:
+        vad.append(f"Provet har personerna {_och(namn)}." if len(namn) > 1
+                   else f"Provet har personen {namn[0]}.")
+    if saker:
+        vad.append("Provets uppgifter handlar om " + ", ".join(saker) + ".")
+    return (
+        "ANDRA NAMN OCH ANDRA SAMMANHANG ÄN PROVET. " + " ".join(vad) + " "
+        "Inget av det får stå på bladet. Välj andra namn och andra "
+        "situationer. Samma sort av uppgift är meningen, men en elev som "
+        "övat på bladet ska inte känna igen provets personer och situationer "
+        "när hon får provet.\n")
+
+
 def build_infor_prov(slots: list[dict] | None, nummer: list[int] | None,
-                     antal: int) -> str:
+                     antal: int, undvik: dict | None = None) -> str:
     """«Inför provet»-blocket, eller TOM STRÄNG.
 
     Tom när inget prov pekats ut, och det är kassetteregeln och inte en
@@ -8761,7 +9022,13 @@ def build_infor_prov(slots: list[dict] | None, nummer: list[int] | None,
 
     Det som ÄR nytt mot omprovet är den sista regeln. Omprovet får aldrig
     göras lättare; det här bladet får det, och ska det: ett förberedande steg
-    före den svåra frågan är precis vad en övning inför ett prov ska ha."""
+    före den svåra frågan är precis vad en övning inför ett prov ska ha.
+
+    `undvik` är provets personer och sammanhang (provets_namn_och_sammanhang,
+    lärarens dom 2026-09-24). De står som namn och enstaka ord, aldrig som
+    text, och gäller HELA provet, också de nummer som inte drillas: eleven
+    får hela provet på provdagen. None eller tomma listor lämnar blocket som
+    det var."""
     valda_nr = set(drillnummer(slots, nummer))
     valda = [s for s in (slots or []) if s["nr"] in valda_nr]
     if not valda:
@@ -8801,6 +9068,7 @@ def build_infor_prov(slots: list[dict] | None, nummer: list[int] | None,
         "Allt annat ska vara NYTT: andra tal, ett annat sammanhang, en annan "
         "infallsvinkel. Skriv inte av provet, och skriv inte provets uppgift "
         "med utbytta siffror. Då har klassen fått provet en vecka i förväg.\n"
+        + _andra_namn_och_sammanhang(undvik)
         + uppdrag +
         # DEN ENDA REGELN SOM SÄGER EMOT OMPROVET, och den är hela skillnaden
         # mellan att pröva och att öva.
@@ -8869,6 +9137,69 @@ def drilltackning(exam: dict, nummer: list[int] | None) -> list[dict]:
             f"bladet är märkt med drillar={n}. Byt ut en uppgift mot en som "
             f"övar den sorten och märk den."))
     return fel
+
+
+def _samma_sak(a: str, b: str) -> bool:
+    """Samma sak, också i sammansättning: «säckar» och «sandsäckar», «betong»
+    och «betongplatta». Den kortare delen måste ha fem bokstäver, annars blir
+    varje ord med samma ändelse samma sak."""
+    for x in {_normal(a), _normal(_ordstam(a.casefold()))}:
+        for y in {_normal(b), _normal(_ordstam(b.casefold()))}:
+            if x == y:
+                return True
+            kort, lang = sorted((x, y), key=len)
+            if len(kort) >= 5 and (lang.endswith(kort)
+                                   or lang.startswith(kort)):
+                return True
+    return False
+
+
+def lanevakt(exam: dict, prov: dict | None) -> list[dict]:
+    """Uppgifter på bladet som lånar provets personer eller sammanhang.
+
+    Deterministiskt, noll modellanrop. Ett fynd per uppgift med
+    {"nr", "namn", "sammanhang", "message"}: namnen är provets namn som står
+    i uppgiften (genitivet inräknat), sammanhangen bladets ord som är samma
+    sak som ett av provets (_samma_sak), lästa i uppgiftens två första
+    meningar och i dess scen.
+
+    FAIL-OPEN utan prov, samma skäl som kopieringsvakten
+    (routes_exam._kopiefynd): «vi vet inte» får inte se ut som «inget lånat».
+    """
+    if not prov:
+        return []
+    undvik = provets_namn_och_sammanhang(prov)
+    namn, saker = undvik["namn"], undvik["sammanhang"]
+    if not namn and not saker:
+        return []
+    sma = {n.casefold() for n in namn}
+    matte = _provets_matteord(prov) | _provets_matteord(exam)
+    ut: list[dict] = []
+    for nr, u in enumerate((exam or {}).get("uppgifter") or [], 1):
+        if not isinstance(u, dict):
+            continue
+        block = _MATTEBLOCK_RE.sub(" ", _uppgiftsblock(u))
+        mina_namn = [n for n in namn
+                     if re.search(rf"\b{re.escape(n)}s?\b", block)]
+        mina_saker = [o for o in _uppgiftens_saker(u, sma, matte, meningar=2)
+                      if any(_samma_sak(o, s) for s in saker)]
+        if not mina_namn and not mina_saker:
+            continue
+        vad, byt = [], []
+        if mina_namn:
+            vad.append("har " + _och(mina_namn))
+            byt.append("namnen" if len(mina_namn) > 1 else "namnet")
+        if mina_saker:
+            vad.append("handlar om " + _och([f"«{o}»" for o in mina_saker]))
+            byt.append("situationen")
+        ut.append({
+            "nr": nr, "namn": mina_namn, "sammanhang": mina_saker,
+            "message": (
+                f"Uppgift {nr} {' och '.join(vad)}, precis som provet. Bladet "
+                "ska öva samma sort av uppgift som provet, men med andra namn "
+                f"och andra sammanhang. Byt {' och '.join(byt)} mot något som "
+                "inte står på provet.")})
+    return ut[:LAN_MAX_FYND]
 
 
 def likvardighetsvakt(exam: dict, referens: dict | None) -> list[dict]:
@@ -10791,7 +11122,11 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # lämnar aldrig det här anropet. `drillade` styr täckningen nedan och
     # räknas ur samma lista som blocket, så de två kan inte glida isär.
     inforslots = provslots(inforprov) if inforprov else []
-    inforblock = build_infor_prov(inforslots, infor_nummer, antal)
+    # Provets personer och sammanhang (lärarens dom 2026-09-24) som namn och
+    # enstaka ord. Bladet ska ha andra; vakten är routes_exam._lanfynd.
+    inforblock = build_infor_prov(
+        inforslots, infor_nummer, antal,
+        provets_namn_och_sammanhang(inforprov) if inforprov else None)
     drillade = drillnummer(inforslots, infor_nummer) if inforblock else []
     prompt = build_prompt(kurs, klass, punkter, antal=antal, tid_min=tid_min,
                           delar=delar, memory=memory, teman=teman,

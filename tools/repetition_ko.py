@@ -472,6 +472,12 @@ def egna_fynd(svar: dict, post: dict) -> list[dict]:
         ut.append(_fynd("kopia", f"Uppgift {nr} är provets egen uppgift med nya "
                         f"tal: «{f.get('text') or ''}». Bladet delas ut före "
                         "provdagen, så uppgiften får inte stå här.", nr))
+    # Provets personer och sammanhang, av samma skäl som kopiorna: servern
+    # räknar dem bara i genereringen (routes_exam._lanfynd). En uppgift med
+    # ett kopiefynd ska bytas ut helt och får ingen rad till.
+    for f in (exam_gen.lanevakt(exam, prov) if prov else []):
+        if f["nr"] not in sedda:
+            ut.append(_fynd("provlan", f["message"], f["nr"]))
     for fel in exam_gen.drilltackning(exam, post.get("infor_nummer") or []):
         ut.append(_fynd("drilltackning", str(fel.get("message") or fel)))
     return ut
