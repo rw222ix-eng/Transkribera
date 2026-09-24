@@ -541,10 +541,18 @@ window.BladBygg = (() => {
        (arbetsblad.tex.j2, facitdelen) — skärmen ska lova samma sak.
        Gruppuppgiften behåller poängen: dess facit läses MED bedömningen. */
     const poang = u => v.typ === 'Arbetsblad' ? '' : `<span class="prvarde">${u.p} p</span>`;
+    /* Deluppgifterna i arbetsbladets facit: samma svarsrad som en uppgift med
+       «a) … b) …» i texten, alltså a) och b) under SVAR och uträkningen
+       under sitt svar. `vag` bär deluppgiftens poäng («1 p») för gruppens
+       facit, och på arbetsbladet stod den kvar i grönt trots domen ovan
+       (blad 141 uppgift 7 och 12, 2026-09-24). */
+    const svaret = u => (v.typ === 'Arbetsblad' && !u.f && u.vag && u.vag.length
+      ? losvar({ f: u.vag.map(s => s[0]).join('\n') })
+      : `${losvar(u)}${losvag(u)}`);
     const post = (u, k) => `<div class="pruppg">
       <span class="prnr">${k + 1}.${poang(u)}</span>
       <div><p class="prtext" data-ref="">${ref(u.t)}</p>
-        ${losvar(u)}${losvag(u)}
+        ${svaret(u)}
       </div></div>`;
     /* data-brytbar: facit är lika långt som sina lösningar, och ett svar på
        flera meningar sköt D-uppgiften ut under arkets nederkant. paginera
