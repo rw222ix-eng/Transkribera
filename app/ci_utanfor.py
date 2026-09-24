@@ -34,14 +34,15 @@ formel för figur n är tillåtna: de är «generella samband» (G25-M1C-PRO-1)
 och ersatte talföljderna i planeringen.
 
 IMPLIKATION OCH EKVIVALENS (Rickard 2026-09-25). Pilarna ⇒, ⇐ och ⇔ och
-begreppen står i 2c:s centrala innehåll («Logik och geometri»), inte i 1a,
-1b, 1c, 2a eller 2b. Ändå stod de på TE26A:s godkända prov 129 (uppgift 12)
+begreppen står i 2b:s och 2c:s centrala innehåll («Logik och geometri»),
+inte i 1a, 1b, 1c eller 2a. Kursplanen styr (Rickard 2026-09-24 kväll: «om
+det finns i kursplanen så ska den vara där»), så 2b är utan förbud. Ändå stod de på TE26A:s godkända prov 129 (uppgift 12)
 och på fem blad ur proven, också NA26F:s 134 och 136 fast prov 126 saknade
 dem. En omskrivning 23/9 bad om «2.2 (implikation ⇒ och ekvivalens ⇔)» för
 att Libers avsnitt 2.2 tycktes sakna uppgift (sidan 55 är implikation), och
 lärarens formdom över den uppgiften blev en regel i exam_gen.INSTRUCTION med
 pilarna som exempel, i varje prompt. Ingen vakt hade 1c-raden. Nu står den
-för alla fem nivåerna, i text, facit och bedömning: «ger» och «alltså»
+för de fyra nivåerna, i text, facit och bedömning: «ger» och «alltså»
 mellan stegen, aldrig en pil.
 
 Data per kurs står i UTANFOR. Nycklarna är steg och spår ur
@@ -78,7 +79,6 @@ UTANFOR: dict[str, list[tuple[str, str, re.Pattern]]] = {
     "1a": [_IMPLIKATION],
     "1b": [_IMPLIKATION],
     "2a": [_IMPLIKATION],
-    "2b": [_IMPLIKATION],
     "1c": [
         ("talföljder",
          "talföljder: aritmetisk och geometrisk talföljd, formler för a_n, "

@@ -217,7 +217,7 @@ def test_efterkontrollen_visar_det_i_canvas(typ):
 
 
 # ── IMPLIKATION OCH EKVIVALENS (Rickard 2026-09-25) ────────────────────
-# Står i 2c:s centrala innehåll, inte i 1a, 1b, 1c, 2a eller 2b. Fixturerna
+# Står i 2b:s och 2c:s centrala innehåll, inte i 1a, 1b, 1c eller 2a. Fixturerna
 # är uppgifterna som stod på TE26A:s godkända prov 129 och bladen ur proven
 # natten till 25/9.
 PROV129_12A = {
@@ -261,7 +261,7 @@ NY_143_5_FACIT = {
                "ger $1 < \\sqrt{a}$, alltså $a > 1$."}
 
 NIVA_UTAN = ["Matematik, nivå 1a", "Matematik, nivå 1b", "Matematik, nivå 1c",
-             "Matematik, nivå 2a", "Matematik 2b", "Ma2b"]
+             "Matematik, nivå 2a"]
 
 
 @pytest.mark.parametrize("kurs", NIVA_UTAN)
@@ -280,7 +280,10 @@ def test_pilarna_galler_alla_profiler(profil):
     assert ci_utanfor.ci_vakt(_papper(BLAD136_10), profil=profil)
 
 
-@pytest.mark.parametrize("kurs", ["Matematik, nivå 2c", "Matematik 3c"])
+# 2b följer kursplanen som 2c: gy25_ma2b.json har «Implikation och
+# ekvivalens» (Rickard 2026-09-24 kväll: kursplanen styr).
+@pytest.mark.parametrize("kurs", ["Matematik, nivå 2c", "Matematik 3c",
+                                  "Matematik 2b", "Ma2b"])
 def test_pilarna_ar_tillatna_fran_2c(kurs):
     for u in (PROV129_12A, BLAD136_10, BLAD147_1, BLAD143_5_FACIT):
         assert ci_utanfor.ci_vakt(_papper(u, kurs=kurs)) == []
@@ -324,7 +327,7 @@ def test_nyckeln_tar_2b_ocksa(kurs, nyckel):
 
 
 @pytest.mark.parametrize("kurs", ["Matematik, nivå 1c", "Matematik, nivå 1a",
-                                  "Matematik, nivå 2a", "Matematik 2b"])
+                                  "Matematik, nivå 2a"])
 def test_prompten_forbjuder_pilarna(kurs):
     p = exam_gen.build_prompt(kurs, "TE26A", ["Olikheter"], antal=4,
                               profil="arbetsblad")
