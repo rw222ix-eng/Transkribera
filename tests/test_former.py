@@ -389,6 +389,24 @@ def test_likhetsdelningen(cell, delning):
     assert exam_latex._likhetsdelning(cell) == delning
 
 
+def test_stegtabellen_raknas_in_i_uppgiftens_hojd():
+    """Exam 126 uppgift 10 delades mellan a) och b): uppskattningen
+    (exam_latex._behov_mm) visste inte att uppgiften bar en stegtabell."""
+    maja = {"kolumner": ["Majas lösning"],
+            "steg": [{"celler": ["$\\dfrac{x}{4} = 2$"]},
+                     {"celler": ["$x = 6$"]}, {"celler": ["$x = 8$"]}],
+            "forsta_fel": 1}
+    utan = _doc(_uppgift(poang=[0, 1, 1], typ="resonemang", formaga="R"),
+                profil="prov")
+    med = _doc(_uppgift(poang=[0, 1, 1], typ="resonemang", formaga="R",
+                        stegtabell=maja), profil="prov")
+    hojd = [int(re.findall(r"\\pfbehov\{(\d+)mm\}",
+                           exam_latex.render_prov(d))[-1]) for d in (utan, med)]
+    assert hojd[1] - hojd[0] == int(exam_latex._MM_STEGTABELL
+                                    + exam_latex._MM_STEG_BRAK
+                                    + 2 * exam_latex._MM_STEG)
+
+
 def test_en_textrad_gor_kolumnen_vansterstalld():
     """Går en rad inte att dela står hela kolumnen vänsterställd, som förut:
     ett likhetstecken som hoppar mellan raderna är värre än inget."""

@@ -521,6 +521,7 @@ _MM_HUVUD, _MM_RAD, _MM_LUFT = 7.0, 7.0, 5.0
 _MM_FORMEL, _MM_BRAKFORMEL, _MM_SVAR = 11.0, 15.0, 12.0
 _MM_ALT, _MM_DEL, _MM_BILD, _MM_FIGUR = 6.0, 6.0, 70.0, 60.0
 _MM_TABELLRAD, _TECKEN_PER_RAD, BEHOV_TAK_MM = 7.5, 85, 200
+_MM_STEGTABELL, _MM_STEG, _MM_STEG_BRAK = 16.0, 9.0, 15.0
 
 
 def _behov_mm(vy: dict, *, del_: bool = False) -> int:
@@ -539,6 +540,14 @@ def _behov_mm(vy: dict, *, del_: bool = False) -> int:
         mm += _MM_FIGUR
     if vy.get("tabell"):
         mm += 10 + _MM_TABELLRAD * (1 + len(vy["tabell"].get("rader") or []))
+    # Stegtabellen räknades inte alls, och exam 126 uppgift 10 (fyra steg,
+    # ett bråk) delades mellan a) och b) när uppgift 9 växte (2026-09-24
+    # kväll). Mätt på stegbok: rubrik och linjer ~16 mm, ett steg ~9 mm,
+    # ett steg med bråk ~15 mm.
+    if vy.get("stegtabell"):
+        mm += _MM_STEGTABELL + sum(
+            _MM_STEG_BRAK if s.get("brak") else _MM_STEG
+            for s in vy["stegtabell"].get("steg") or [])
     if vy.get("flerval"):
         mm += _MM_ALT * len(vy["flerval"]) + 2
     elif vy.get("svarsfalt_rad"):
