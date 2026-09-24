@@ -2089,9 +2089,14 @@ def build_spridning(avsnitt: list[dict], antal: int,
 # en provuppgift, och en repetitionslektion är inget eget innehåll utan de
 # tidigare lektionernas. Prompten säger att de är undantagna, så att modellen
 # inte tror att den beskurna listan är hela kapitlet.
+# «Fördjupning» sedan 2026-09-24 (Rickards beslut i sessionen «Andragrads-
+# ekvationer med GeoGebra», IndA prov 1): Origo 2a:s kvadratkomplettering
+# s. 53–55 är fördjupning och ligger utanför det centrala innehållet, och
+# exam 130 fick två uppgifter ur den.
 _EJ_PROVBART = ("programmering", "kalkylblad", "geogebra", "excel",
                 "repetition", "kapiteltest", "blandade uppgifter",
-                "aktivitet", "laboration", "provräkning", "utvärdering")
+                "aktivitet", "laboration", "provräkning", "utvärdering",
+                "fördjupning")
 
 
 def _delmomentnamn(text: str) -> str:

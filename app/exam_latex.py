@@ -212,8 +212,11 @@ def _del_instruktion(del_kod: str, utan_raknare: bool,
 # Svaret är True (verktyg tillåtna), False (inte tillåtna) eller None: säger
 # regeln ingenting om just den delen står husets gamla antagande kvar, och ett
 # prov skrivet före valet ser ut precis som förut.
-_UTAN_RE = re.compile(r"\butan\s+(digitala|räknare|miniräknare|räknar)",
-                      re.IGNORECASE)
+# «utan hjälpmedel» är också utan räknare (IndA prov 1, 2026-09-24: «Del 1
+# görs utan hjälpmedel, del 2 med miniräknare»).
+_UTAN_RE = re.compile(
+    r"\butan\s+(digitala|räknare|miniräknare|räknar|hjälpmedel)",
+    re.IGNORECASE)
 _MED_RE = re.compile(r"\b(räknare|miniräknare|digitala verktyg|"
                      r"digitala hjälpmedel|geogebra)\b", re.IGNORECASE)
 

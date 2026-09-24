@@ -99,6 +99,11 @@ def test_delsidan_sager_bara_delens_hjalpmedel():
         "Digitala verktyg och formelblad."
     # Tiger regeln om delen står hela meningen kvar.
     assert exam_latex._hjalpmedel_i_delen("Formelblad.", "C") is None
+    # IndA prov 1: «Del 1 görs utan hjälpmedel, del 2 med miniräknare.»
+    inda = "Del B utan hjälpmedel. Del C med miniräknare."
+    assert exam_latex._digitala_i_delen(inda, "B") is False
+    assert exam_latex._hjalpmedel_i_delen(inda, "C") == "Räknare."
+    assert exam_latex._hjalpmedel_i_delen(inda, "B") == "Inga."
 
 
 def test_tabellen_star_dar_den_namns():

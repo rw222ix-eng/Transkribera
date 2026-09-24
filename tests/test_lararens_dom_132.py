@@ -114,6 +114,19 @@ def test_minsta_varde_ar_funktionernas_begrepp():
                                       "kan få."), haft, forbjudna) == []
 
 
+def test_fordjupningen_provas_inte():
+    """IndA:s lektion «Kvadratkomplettering. Fördjupning. …» (Origo 2a s.
+    52–55) ligger utanför det centrala innehållet."""
+    rader = [{"datum": "2026-10-05", "fran": 52, "till": 55, "rubrik":
+              "Kvadratkomplettering. Fördjupning. Dessutom problemlösning",
+              "delar": []},
+             {"datum": "2026-09-28", "fran": 45, "till": 48,
+              "rubrik": "pq-formeln", "delar": []}]
+    dm = exam_gen.delmoment_ur_lektioner(rader, fran=8, till=55,
+                                         provdatum="2026-10-20")
+    assert [d["delmoment"] for d in dm] == ["pq-formeln"]
+
+
 def test_domarna_star_i_instruktionen():
     r = exam_gen.INSTRUCTION
     assert "kycklingens vikt" not in r
