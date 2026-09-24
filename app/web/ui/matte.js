@@ -72,9 +72,15 @@
   const BGAP = 5;
   const FRAC = /\\[dt]?frac\s*\{/;
 
+  /* «≠» SOM ETT TECKEN. KaTeX bygger \ne av ett snedstreck (privat glyf, som
+     faller till KaTeX_Main) lagt över ett «=» — och i det groteska snittet är
+     «=» Arimos, med en annan bredd. Strecket hamnade bredvid likhetstecknet:
+     facit visade «a =/ 9» (blad 147, 2026-09-24). Arimo har ≠ som eget tecken,
+     och \char ger det i det snitt som gäller. */
+  const ETT_TECKEN = s => s.replace(/\\neq?(?![a-zA-Z])/g, '\\mathrel{\\char"2260}');
   const rendera = (el, tex, grotesk) => {
     if (!tex || !tex.trim()) return;
-    katex.render((grotesk ? '\\sf ' : '') + tex, el, { throwOnError: false, displayMode: false });
+    katex.render(grotesk ? '\\sf ' + ETT_TECKEN(tex) : tex, el, { throwOnError: false, displayMode: false });
   };
 
   /* Räknande klammermatchning, så nästlade bråk överlever. */
