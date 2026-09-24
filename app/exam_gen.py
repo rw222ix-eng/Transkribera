@@ -137,12 +137,22 @@ SCEN_REGEL = (
     "och en människa i scenen, skriv hennes eller hans kön ur namnet: «a "
     "young woman» för Alva, «a young man» för Hugo. Aldrig bara «a figure» "
     "eller «a person», då väljer bildverktyget själv.\n"
+    # Lärarens dom 2026-09-24: scener utan namngiven person fick också
+    # oftast en ung kvinna. Regeln ovan räcker inte där, för texten har inget
+    # namn att ta könet ur. konsbalansvakt räknar båda sorterna.
+    "  BÅDE MÄN OCH KVINNOR PÅ BILDERNA: står ingen person i texten men en "
+    "människa i scenen, skriv ändå vem det är, «a man», «a boy», «a woman» "
+    "eller «a girl». Välj en man eller pojke lika ofta som en kvinna eller "
+    "flicka på pappret, aldrig «a young woman» på varje bild.\n"
     "  Sista raden är svensk och lyder «Intended use: » följt av begreppen.\n"
     "  Två exempel, och de är formen:\n"
     "  \"SCENE. A wide summer meadow under a deep cobalt sky, seen from the "
     "side at eye level. One enormous cumulus tower stands in the right half "
+    # Förlagan sa «of a person», och det är just det PERSONEN-regeln ovan
+    # förbjuder. En pojke, för att exemplet är formen (lärarens dom
+    # 2026-09-24 om bilderna som nästan bara visade kvinnor).
     "of the sky, its crown lit cream-white. A tiny faceless silhouette of a "
-    "person stands on the meadow at the lower left, feet on the grass, one "
+    "boy stands on the meadow at the lower left, feet on the grass, one "
     "arm raised straight up, having just thrown a small ball. The ball is a "
     "single small bright dab of paint high in the sky, roughly a third in "
     "from the left and a third down from the top, against clear open blue. "
@@ -751,6 +761,14 @@ INSTRUCTION = (
     "formel för en fisk eller ett djur med ovanliga exponenter.\n"
     "  • Namnen är vanliga svenska förnamn som är lätta att läsa: Elias, "
     "Maja, Noah, Ella, Hugo, Alva, Liam, Saga, Ali, Sara, Leo, Nora.\n"
+    # Lärarens dom 2026-09-24: bilderna till bladen inför proven visade
+    # nästan bara kvinnor. «Borde vara lite män också. Lite pojkar.» Bilden
+    # följer namnet (PERSONEN I TEXTEN ÄR PERSONEN PÅ BILDEN), och modellen
+    # valde Nora, Saga, Ella, Alva, Sara och Elsa. konsbalansvakt räknar.
+    "  • BLANDA KÖNEN. Ungefär hälften av namnen på ett papper är mansnamn "
+    "och hälften kvinnonamn: Elias, Noah, Hugo, Liam, Ali och Leo är "
+    "mansnamn, Maja, Ella, Alva, Saga, Sara och Nora kvinnonamn. Tre "
+    "personer får vara två och en, aldrig tre av samma kön.\n"
     # Lärarens dom 2026-09-23 (prov 126 uppgift 7 och 11): «Hugo bygger …
     # jätteonödig information, bättre att komma rakt på sak»; «otydligt
     # vilken olikhet som ska ställas upp, nämn att det gäller tiden t
@@ -8532,6 +8550,170 @@ def personvakt(exam: dict) -> list[dict]:
     return fel[:PERSON_MAX_FYND]
 
 
+# ── BÅDE MÄN OCH KVINNOR (lärarens dom 2026-09-24) ───────────────────────
+# Bilderna till bladen inför proven visade nästan bara kvinnor: «Borde vara
+# lite män också. Lite pojkar.» Bilden följer namnet (personvakt), och
+# modellen valde Nora, Saga, Ella, Alva, Sara och Elsa. Scener utan namngiven
+# person fick också oftast en ung kvinna.
+#
+# Könet ur namnet kräver en lista med kön. fornamn.txt har inget (den är
+# postprocess-nätet för initialer), och modellen går utanför INSTRUCTION:s tolv
+# («Elsa»). Namn som bärs av båda könen (Kim, Robin, Charlie, Sam, Alex) står
+# inte med och räknas inte åt något håll.
+_MANSNAMN = frozenset((
+    "adam", "adrian", "ahmed", "albin", "alexander", "alfred", "algot", "ali",
+    "alvin", "amir", "anders", "andreas", "anton", "arvid", "august", "axel",
+    "benjamin", "bill", "bror", "carl", "casper", "christian", "christoffer",
+    "colin", "daniel", "david", "dennis", "edvard", "edvin", "elias", "elis",
+    "elliot", "emil", "erik", "fabian", "fadi", "felix", "filip", "frank",
+    "fredrik", "gabriel", "gustav", "hannes", "hans", "harry", "hassan",
+    "helmer", "henrik", "hugo", "ibrahim", "isak", "ivar", "jacob", "jakob",
+    "jens", "jesper", "joel", "johan", "john", "jonas", "jonathan", "julian",
+    "kalle", "karl", "kevin", "knut", "kristian", "lars", "lennart", "leo",
+    "leon", "levi", "liam", "loke", "love", "lucas", "ludvig", "malte",
+    "marcus", "markus", "martin", "mats", "mattias", "maximilian", "mehmet",
+    "melker", "melvin", "mikael", "milo", "mohamed", "mohammed", "nils",
+    "noah", "noel", "oliver", "olle", "olof", "omar", "oscar", "oskar",
+    "otto", "patrik", "peter", "petter", "philip", "rasmus", "roger",
+    "samuel", "sebastian", "simon", "sixten", "sten", "sture", "svante",
+    "sven", "tage", "theo", "theodor", "thomas", "tim", "tobias", "tor",
+    "valter", "vidar", "viggo", "viktor", "vilgot", "vilhelm", "william",
+    "yusuf", "åke", "örjan", "östen"))
+_KVINNONAMN = frozenset((
+    "agnes", "alice", "alicia", "alma", "alva", "amanda", "amina", "amira",
+    "anna", "annie", "astrid", "bianca", "birgitta", "carolina", "cecilia",
+    "clara", "diana", "ebba", "elin", "elina", "elise", "ella", "ellen",
+    "ellie", "elsa", "elvira", "emilia", "emily", "emma", "esmeralda",
+    "ester", "eva", "fanny", "fatima", "felicia", "freja", "gabriella",
+    "hanna", "hedda", "helena", "ida", "ines", "inga", "ingrid", "irma",
+    "isabella", "jasmine", "jennifer", "johanna", "josefin", "julia", "juni",
+    "karin", "klara", "kristina", "laura", "leah", "leila", "lena", "lina",
+    "linn", "linnea", "liv", "lova", "lovisa", "luna", "maja", "malin",
+    "maria", "matilda", "meja", "mia", "milla", "minna", "mira", "moa",
+    "molly", "nadia", "nathalie", "nellie", "nora", "nova", "olivia",
+    "rebecka", "ronja", "saga", "sandra", "sara", "selma", "sigrid", "signe",
+    "siri", "sofia", "sofie", "stella", "stina", "tilda", "tindra", "tove",
+    "tuva", "tyra", "ulla", "ulrika", "vera", "vilda", "vilma", "wilma",
+    "yasmin", "ylva", "zara", "zeynep", "åsa"))
+# Scenens människa när texten inte namnger någon. Engelska, som scenen, och
+# bara ord som bär kön: «figure» och «person» säger ingenting.
+_SCEN_MAN_RE = re.compile(
+    r"\b(man|men|boy|boys|he|his|him|father|grandfather|brother|son)\b", re.I)
+_SCEN_KVINNA_RE = re.compile(
+    r"\b(woman|women|girl|girls|she|her|mother|grandmother|sister|"
+    r"daughter)\b", re.I)
+KONSBALANS_MINST = 3           # personer på pappret innan vakten räknar
+KONSBALANS_ANDEL = 2 / 3       # mer än så av ett kön är obalans
+KONSBALANS_MAX_FYND = 4
+_KON_ORD = {"man": ("en man eller pojke", "män och pojkar", "mansnamn",
+                    "«a man» eller «a boy»"),
+            "kvinna": ("en kvinna eller flicka", "kvinnor och flickor",
+                       "kvinnonamn", "«a woman» eller «a girl»")}
+
+
+def _kon_ur_namn(ord_: str) -> str | None:
+    """«man», «kvinna» eller None. Genitivet räknas till namnet: «Alvas»."""
+    s = ord_.casefold()
+    for n in (s, s[:-1] if s.endswith("s") else ""):
+        if n in _MANSNAMN:
+            return "man"
+        if n in _KVINNONAMN:
+            return "kvinna"
+    return None
+
+
+def _uppgiftens_personer(u: dict) -> list[tuple[str | None, str, bool]]:
+    """Personerna i EN uppgift som (namn, kön, på bilden), var och en en gång.
+
+    Namnen i texten och deluppgifterna först. Har scenen en människa är det
+    den namngivna personen (personvakt), och scenen räknas inte en gång
+    till. Annars scenens människa, en av varje kön scenen nämner: «a father
+    and his daughter» är två. Ett namn som också är ett vanligt ord («Hans
+    lön är …») räknas bara mitt i en mening, som i lanevakt."""
+    text = " ".join([str(u.get("text") or "")] + [
+        str(d.get("text") or "") for d in u.get("deluppgifter") or []
+        if isinstance(d, dict)])
+    # «Intended use:»-raden är svensk, och där är «man» ett pronomen.
+    scen = str(((u.get("scen") or {}).get("scene")) or "").split(
+        "Intended use")[0]
+    har_man = bool(_SCEN_MAN_RE.search(scen))
+    har_kvinna = bool(_SCEN_KVINNA_RE.search(scen))
+    pa_bilden = har_man or har_kvinna or bool(_SCEN_MANNISKA_RE.search(scen))
+    ut: list[tuple[str | None, str, bool]] = []
+    for w, mitt in _versala_ord(text):
+        kon = _kon_ur_namn(w)
+        if kon is None or (not mitt and w.casefold() in _TVETYDIGA_NAMN):
+            continue
+        namn = w[:-1] if w.casefold() not in (_MANSNAMN | _KVINNONAMN) else w
+        if all(namn != n for n, _, _ in ut):
+            ut.append((namn, kon, pa_bilden))
+    if ut:
+        return ut
+    return ([(None, "man", True)] if har_man else []) + (
+        [(None, "kvinna", True)] if har_kvinna else [])
+
+
+def konsbalansvakt(exam: dict) -> list[dict]:
+    """Är pappret nästan bara kvinnor, eller nästan bara män?
+
+    Räknar personerna en gång per uppgift (_uppgiftens_personer), två
+    gånger om: först bara de som står på bilderna, sedan alla. Bilderna
+    först, för det var dem läraren såg: blad 138 hade fyra mansnamn och fem
+    kvinnonamn, men tre kvinnor och en man på bilderna. Med minst
+    KONSBALANS_MINST personer och mer än KONSBALANS_ANDEL av ett kön får så
+    många bytas att det blir ungefär jämnt: sex kvinnor ger tre byten, tre
+    kvinnor ett. Det som bytts på bilderna räknas som bytt i den andra
+    räkningen.
+
+    Ett fynd per uppgift som ska bytas, med uppgiftens väg, så att
+    reparationen och «Laga fynden» vet var. Varannan av majoritetens
+    personer väljs, så att bytena sprids över pappret och inte samlas i
+    början."""
+    personer: list[tuple[int, str | None, str, bool]] = []
+    for nr, u in enumerate((exam or {}).get("uppgifter") or [], 1):
+        if isinstance(u, dict):
+            personer += [(nr, n, k, b) for n, k, b in _uppgiftens_personer(u)]
+    # Person → meningen som säger varför, i den ordning de valdes.
+    valda: dict[tuple, str] = {}
+    for urval, var in (([p for p in personer if p[3]], "Bilderna på pappret "
+                        "visar {n} personer"),
+                       (personer, "Pappret har {n} personer i namnen och på "
+                                  "bilderna")):
+        kon = [p[2] if p not in valda else
+               ("kvinna" if p[2] == "man" else "man") for p in urval]
+        man = kon.count("man")
+        storst, minst = max(man, len(kon) - man), min(man, len(kon) - man)
+        if len(kon) < KONSBALANS_MINST or storst <= KONSBALANS_ANDEL * len(kon):
+            continue
+        flest = "man" if man > len(kon) - man else "kvinna"
+        kandidater = [p for p, k in zip(urval, kon)
+                      if k == flest and p not in valda]
+        varfor = (var.format(n=len(kon)) + f", och {storst} av dem är "
+                  f"{_KON_ORD[flest][1]}.")
+        for p in (kandidater[1::2] + kandidater[0::2])[:(storst - minst) // 2]:
+            valda[p] = varfor
+    fel: list[dict] = []
+    for nr in sorted({p[0] for p in valda}):
+        mina = [p for p in valda if p[0] == nr]
+        andra = "kvinna" if mina[0][2] == "man" else "man"
+        ny, _, namnord, scenord = _KON_ORD[andra]
+        namn = [p[1] for p in mina if p[1]]
+        if not namn:
+            vem, hur = "människan på bilden", f"skriv {scenord} i scenen"
+        elif any(p[3] for p in mina):
+            vem, hur = _och(namn), (f"ett {namnord} i texten, pronomenen "
+                                    f"efter det och {scenord} i scenen")
+        else:
+            vem, hur = _och(namn), (f"ett {namnord} i texten och pronomenen "
+                                    "efter det")
+        fel.append(_err(
+            f"uppgift {nr}", "konsbalans",
+            f"{valda[mina[0]]} Lika många av varje är målet, och fler än två "
+            f"tredjedelar av samma kön är för många. Byt {vem} i uppgift {nr} "
+            f"mot {ny}: {hur}. Talen, metoden och poängen står kvar."))
+    return fel[:KONSBALANS_MAX_FYND]
+
+
 # ── BILDBESTÄLLNINGEN: SCENEN OCH BEGREPPET SKA HANDLA OM SAMMA SAK ──────
 # Plåtvalet självt (scen.plat) görs av platar.matcha med ett poängtak, och det
 # är den matchningens sak att välja rätt bild. Det som INTE prövades någonstans
@@ -10034,7 +10216,9 @@ def _raknade_fynd(exam: dict, *, avsnitt: list[dict] | None, antal: int | None,
                 + poangtakvakt(exam, poang_tak))
     # En mening per rad gäller alla papper eleverna läser (exam 129).
     return (fel + radvakt(exam) + scenvakt(exam) + personvakt(exam)
-            + forvaxlingsvakt(exam))
+            + forvaxlingsvakt(exam)
+            # Både män och kvinnor, på varje papper (lärarens dom 2026-09-24).
+            + konsbalansvakt(exam))
 
 
 def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
@@ -10191,7 +10375,9 @@ def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                      ("scenvakt", "Bilden: {n} bildbeställning(ar) hör till en "
                                   "annan uppgift …"),
                      ("forebildsvakt", "Formen: {n} uppgift(er) pekar inte "
-                                       "ut någon NP-typ, byter ut …")):
+                                       "ut någon NP-typ, byter ut …"),
+                     ("konsbalans", "Könen: {n} uppgift(er) får en person "
+                                    "av det andra könet, byter …")):
         n = len([f for f in fel if f["code"] == kod])
         if n:
             log(rad.format(n=n))

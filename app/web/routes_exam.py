@@ -534,6 +534,18 @@ def _radfynd(exam: dict) -> list[dict]:
             for f in fel]
 
 
+def _konsfynd(exam: dict) -> list[dict]:
+    """Både män och kvinnor i namnen och på bilderna (exam_gen.konsbalansvakt,
+    lärarens dom 2026-09-24). På varje papper, efter varje svar: en
+    omskrivning i canvas kan byta tillbaka till bara kvinnonamn."""
+    try:
+        fel = exam_gen.konsbalansvakt(exam or {})
+    except Exception:                       # pragma: no cover
+        return []
+    return [_fynd(f["code"], f["message"], _uppgiftsnr(f.get("path", "")))
+            for f in fel]
+
+
 def _cifynd(exam: dict) -> list[dict]:
     """Det som står UTANFÖR kursens centrala innehåll (app/ci_utanfor.py,
     Rickards princip 2026-09-17), på alla tre dokumenttyperna och efter varje
@@ -661,6 +673,7 @@ def efterkontroll(view: dict, doc, summor: dict | None, *,
     ut += _tipsfynd(view.get("exam") or {}, typ)
     ut += _npfynd(view.get("exam") or {}, typ)
     ut += _radfynd(view.get("exam") or {})
+    ut += _konsfynd(view.get("exam") or {})
     ut += _nptypfynd(doc, typ)
     ut += _cifynd(view.get("exam") or {})
     # Kopieringsvakten sist bland fynden, och bara när anroparen pekat ut
@@ -758,6 +771,10 @@ _ATGARD = {
                 "deluppgifter med var sin poäng. Övriga uppgifter står kvar.",
     "radlangd": "Dela meningen i två eller korta den, en mening per rad. "
                 "Samma matematik, samma tal, samma poäng.",
+    # Lärarens dom 2026-09-24: bilderna visade nästan bara kvinnor.
+    "konsbalans": "Byt personen i uppgiften mot en av det andra könet: "
+                  "namnet, pronomenen och människan i scenen. Talen, metoden, "
+                  "poängen och platsen står kvar.",
     # Utanför kursens centrala innehåll (app/ci_utanfor.py).
     "utanforci": "Byt ut uppgiften mot en inom kursens centrala innehåll, "
                  "samma del, samma poäng och samma förmåga. Orden får inte "
