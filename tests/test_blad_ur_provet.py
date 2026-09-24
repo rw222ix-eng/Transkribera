@@ -102,7 +102,11 @@ def test_provet_ror_vi_inte_forran_rickard_sagt_ja():
     # 1a har bara den nya raden, och då ingen mening om talföljder.
     rad_1a = ci_utanfor.build_utanfor("Matematik, nivå 1a", "arbetsblad")
     assert "kvadrerings" in rad_1a and "talföljder" not in rad_1a
-    assert ci_utanfor.build_utanfor("Matematik, nivå 1a") == ""
+    # Provets rad för 1a har bara implikationen (Rickard 2026-09-25), som
+    # gäller prov och blad lika.
+    rad_1a_prov = ci_utanfor.build_utanfor("Matematik, nivå 1a")
+    assert "kvadrerings" not in rad_1a_prov
+    assert "implikation och ekvivalens" in rad_1a_prov
 
 
 def test_efterkontrollen_visar_det_pa_bladet_men_inte_pa_provet():

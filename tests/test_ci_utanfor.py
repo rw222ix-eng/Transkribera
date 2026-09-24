@@ -8,6 +8,7 @@ på alla tre dokumenttyperna.
 """
 import copy
 import json
+import re
 
 import pytest
 
@@ -120,11 +121,19 @@ def test_titeln_och_bandet_lases_ocksa():
     ("Matematik, nivå 1a", "KPI var 340 år 2020."),
     ("Matematik, nivå 2a", "Beräkna medelvärdet."),
 ])
-def test_andra_kurser_har_inga_strykningar(kurs, text):
+def test_andra_kurser_har_inga_av_1c_strykningarna(kurs, text):
     """Talföljderna väntar till 2c och 3c, index står i 1a:s CI och
-    lägesmåtten i 2a/2c. Ma 1a, 2a och 2c granskades 17/9 utan strykningar."""
+    lägesmåtten i 2a/2c. Ma 1a, 2a och 2c granskades 17/9 utan strykningar.
+    Sedan 2026-09-25 har 1a och 2a implikationsraden, och bara den."""
     assert ci_utanfor.ci_vakt(_papper({"text": text}, kurs=kurs)) == []
-    assert ci_utanfor.build_utanfor(kurs) == ""
+    rad = ci_utanfor.build_utanfor(kurs)
+    for ord_ in ("talföljd", "index", "lägesmått", "parameterform"):
+        assert ord_ not in rad
+
+
+def test_2c_har_inga_strykningar():
+    assert ci_utanfor.build_utanfor("Matematik, nivå 2c") == ""
+    assert ci_utanfor.build_utanfor("Matematik, nivå 2c", "arbetsblad") == ""
 
 
 @pytest.mark.parametrize("profil", ["prov", "arbetsblad", "gruppuppgift"])
@@ -147,7 +156,7 @@ def test_omskrivningen_far_samma_rad():
     p = exam_gen.build_refine_prompt(_papper(NY_10), "gör uppgift 1 svårare",
                                      nummer=1)
     assert "UTANFÖR KURSEN" in p
-    p2 = exam_gen.build_refine_prompt(_papper(NY_10, kurs="Ma2b"),
+    p2 = exam_gen.build_refine_prompt(_papper(NY_10, kurs="Ma2c"),
                                       "gör uppgift 1 svårare", nummer=1)
     assert "UTANFÖR KURSEN" not in p2
 
@@ -205,3 +214,139 @@ def test_efterkontrollen_visar_det_i_canvas(typ):
         ("utanforci", 2, "uppg2")]
     text = routes_exam.efterkontroll_instruktion(fynd)
     assert "centrala innehåll" in text and "uppgift 2" in text
+
+
+# ── IMPLIKATION OCH EKVIVALENS (Rickard 2026-09-25) ────────────────────
+# Står i 2c:s centrala innehåll, inte i 1a, 1b, 1c, 2a eller 2b. Fixturerna
+# är uppgifterna som stod på TE26A:s godkända prov 129 och bladen ur proven
+# natten till 25/9.
+PROV129_12A = {
+    "text": "",
+    "deluppgifter": [{
+        "text": "Mellan utsagorna saknas en av pilarna $\\Rightarrow$, "
+                "$\\Leftarrow$ eller $\\Leftrightarrow$.\n"
+                "$x = 5 \\quad \\ldots \\quad x^{2} = 25$\n\n"
+                "Skriv den pil som gör påståendet sant.",
+        "losning": "$\\Rightarrow$\n$x^{2} = 25$ ger också $x = -5$"}]}
+BLAD136_10 = {
+    "text": "Räknare tillåten. Talet $a$ är positivt och $x$ är ett reellt "
+            "tal.\n$-a < x < 3 \\quad \\Rightarrow \\quad x^{2} < 9$\n"
+            "Utred för vilka $a$ påståendet ovan är sant."}
+BLAD147_1 = {
+    "text": "Utan räknare. Talet $k$ är en konstant.\nImplikationen "
+            "$x > k \\Rightarrow x > 5$ ska gälla för alla tal $x$."}
+# Bara facit: pilen som räknesteg.
+BLAD143_5_FACIT = {
+    "text": "Utan räknare. Undersök för vilka positiva tal $a$ som Ebba har "
+            "rätt.",
+    "losning": "$\\sqrt{a} < a \\iff 1 < \\sqrt{a} \\iff a > 1$"}
+BLAD146_1_FACIT = {
+    "text": "Utan räknare. Ange alla sådana tal $x$ som ett intervall.",
+    "losning": "$]{-3},\\ 3]$\n$7 - 3x \\ge -2 \\Leftrightarrow x \\le 3$"}
+BLAD144_5_FACIT = {
+    "text": "Utan räknare. Utred hur antalet lösningar beror på $a$.",
+    "losning": "$(x - 3)(x + 3) - a(x - 3) = 0 \\Rightarrow "
+               "(x - 3)(x + 3 - a) = 0$"}
+# Och så som de skrevs om 25/9.
+NY_136_10 = {
+    "text": "Räknare tillåten. Talet $a$ är en konstant, och $a \\ne 0$.\n"
+            "Kim påstår att olikheten $ax < 6$ alltid har lösningarna "
+            "$x < \\dfrac{6}{a}$.\nAvgör om Kim har rätt.",
+    "losning": "Nej.\nOm $a < 0$ vänds olikhetstecknet, och lösningarna blir "
+               "$x > \\dfrac{6}{a}$.\nTill exempel ger $a = -2$ olikheten "
+               "$-2x < 6$, alltså $x > -3$."}
+NY_143_5_FACIT = {
+    "text": BLAD143_5_FACIT["text"],
+    "losning": "Båda leden i $\\sqrt{a} < a$ delas med $\\sqrt{a} > 0$. Det "
+               "ger $1 < \\sqrt{a}$, alltså $a > 1$."}
+
+NIVA_UTAN = ["Matematik, nivå 1a", "Matematik, nivå 1b", "Matematik, nivå 1c",
+             "Matematik, nivå 2a", "Matematik 2b", "Ma2b"]
+
+
+@pytest.mark.parametrize("kurs", NIVA_UTAN)
+@pytest.mark.parametrize("uppgift", [
+    PROV129_12A, BLAD136_10, BLAD147_1, BLAD143_5_FACIT, BLAD146_1_FACIT,
+    BLAD144_5_FACIT])
+def test_pilarna_slar_larm_under_2c(kurs, uppgift):
+    fel = ci_utanfor.ci_vakt(_papper(uppgift, kurs=kurs))
+    assert [f["path"] for f in fel] == ["uppgift 1"], fel
+    assert "implikation och ekvivalens" in fel[0]["message"]
+    assert "«ger» eller «alltså»" in fel[0]["message"]
+
+
+@pytest.mark.parametrize("profil", ["prov", "arbetsblad", "gruppuppgift"])
+def test_pilarna_galler_alla_profiler(profil):
+    assert ci_utanfor.ci_vakt(_papper(BLAD136_10), profil=profil)
+
+
+@pytest.mark.parametrize("kurs", ["Matematik, nivå 2c", "Matematik 3c"])
+def test_pilarna_ar_tillatna_fran_2c(kurs):
+    for u in (PROV129_12A, BLAD136_10, BLAD147_1, BLAD143_5_FACIT):
+        assert ci_utanfor.ci_vakt(_papper(u, kurs=kurs)) == []
+
+
+@pytest.mark.parametrize("text", [
+    "Vektorn $\\overrightarrow{AB}$ har koordinaterna $(3, 4)$.",
+    "Det medför en extra kostnad på 40 kr.",
+    "$x \\to 3$ och $\\vec{v} = (1, 2)$",
+    "Om $x > 5$ så är också $x > 3$.",
+])
+def test_vektorer_och_vardagsord_ar_tillatna(text):
+    """Vektorer står i 1c:s CI, och overrightarrow får inte läsas som en
+    pil. «Medför» är vardagssvenska."""
+    assert ci_utanfor.ci_vakt(_papper({"text": text})) == []
+
+
+@pytest.mark.parametrize("text", [
+    "Visa att ekvationerna är ekvivalenta.",
+    "Talen uppfyller olikheten om och endast om $x > 2$.",
+    "$x = 2 \\implies x^2 = 4$",
+    "$x^2 = 4 ⇔ x = ±2$",
+    "$a \\Longrightarrow b$",
+])
+def test_orden_och_alla_pilformer_slar_larm(text):
+    fel = ci_utanfor.ci_vakt(_papper({"text": text}))
+    assert fel and "implikation" in fel[0]["message"], fel
+
+
+def test_omskrivna_uppgifter_ar_rena():
+    assert ci_utanfor.ci_vakt(_papper(NY_136_10, NY_143_5_FACIT)) == []
+
+
+@pytest.mark.parametrize("kurs,nyckel", [
+    ("Matematik, nivå 1c", "1c"), ("Matematik 2b", "2b"), ("Ma2b", "2b"),
+    ("Matematik, nivå 1b", "1b"), ("Matematik nivå 2c", "2c"), ("", "")])
+def test_nyckeln_tar_2b_ocksa(kurs, nyckel):
+    """niva_rubrik.kursnyckel ger None för 2b (inga uppmätta NP), så vakten
+    tittar på steg och spår i stället."""
+    assert ci_utanfor._nyckel(kurs) == nyckel
+
+
+@pytest.mark.parametrize("kurs", ["Matematik, nivå 1c", "Matematik, nivå 1a",
+                                  "Matematik, nivå 2a", "Matematik 2b"])
+def test_prompten_forbjuder_pilarna(kurs):
+    p = exam_gen.build_prompt(kurs, "TE26A", ["Olikheter"], antal=4,
+                              profil="arbetsblad")
+    assert "UTANFÖR KURSEN" in p and "implikation och ekvivalens" in p
+    assert "«ger» eller «alltså», aldrig en pil" in p
+
+
+def test_pilarna_star_bara_i_forbudet():
+    """INSTRUCTION går i varje prompt. Dess exempel visade pilarna ⇒, ⇐ och ⇔
+    till 2026-09-25, och bladen 134 och 136 fick dem samma eftermiddag. Nu
+    står pilarna i en 1c-prompt bara i raden som förbjuder dem."""
+    pil = re.compile(r"[⇒⇐⇔⟹⟸⟺]|\\(?:Rightarrow|Leftarrow|Leftrightarrow)")
+    assert not pil.search(exam_gen.INSTRUCTION)
+    p = exam_gen.build_prompt(KURS, "TE26A", ["Tecken i matematiska utsagor "
+                                              "och intervall"], antal=4,
+                              profil="prov")
+    klartext = ci_utanfor._IMPLIKATION[1]
+    assert klartext in p
+    assert not pil.search(p.replace(klartext, ""))
+
+
+def test_efterkontrollen_visar_pilarna_pa_ett_godkant_prov():
+    fynd = routes_exam._cifynd(_papper(NY_10, PROV129_12A))
+    assert [(f["kod"], f["nr"]) for f in fynd] == [("utanforci", 2)]
+

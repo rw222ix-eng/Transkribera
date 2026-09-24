@@ -140,6 +140,9 @@ _KURS1_UTANFOR = [
     "likformighets- och cirkelsatser, bevis med satser",
     "trigonometri utöver rätvinklig triangel (enhetscirkeln, sinus- och "
     "cosinussatsen)",
+    # Rickard 2026-09-25: står i 2c:s centrala innehåll, men stod på ett
+    # godkänt 1c-prov (app/ci_utanfor.py).
+    "implikation och ekvivalens, som begrepp eller som pil mellan utsagor",
 ]
 
 _KURS1_BADA = [

@@ -885,11 +885,16 @@ INSTRUCTION = (
     # a) … någonting annat än tecken, så att eleverna kan särskilja på vad vi
     # pratar om.» Och b), två rader, den ena i raden och den andra
     # centrerad: «dåligt disponerad».
+    # EXEMPLET BYTT 2026-09-25. Det visade pilarna ⇒, ⇐ och ⇔, och INSTRUCTION
+    # går i varje prompt: samma eftermiddag fick NA26F:s blad 134 och 136
+    # pilar fast prov 126 saknade dem. Implikation står först i 2c:s centrala
+    # innehåll (app/ci_utanfor.py). Domen gäller formen, så exemplet är nu
+    # olikhetstecknen, som alla kurser har.
     "  • Det eleven ska välja mellan står i deluppgiften och har ett eget "
-    "namn: «Mellan utsagorna saknas en av pilarna ⇒, ⇐ eller ⇔.», utsagorna "
-    "på egen rad, sedan «Skriv den pil som gör påståendet sant.» Aldrig "
-    "«tecknet», och ingen stam som förklarar uppställningen («Platsen för "
-    "tecknet är markerad med tre punkter.»).\n"
+    "namn: «Mellan talen saknas ett av olikhetstecknen < och >.», talen på "
+    "egen rad, sedan «Skriv det olikhetstecken som gör påståendet sant.» "
+    "Aldrig bara «tecknet», och ingen stam som förklarar uppställningen "
+    "(«Platsen för tecknet är markerad med tre punkter.»).\n"
     # Lärarens dom 2026-09-24 (exam 129 uppgift 10): «Bromssträckan får vara
     # högst 45 m.» och två rader ner «Bestäm den högsta farten bilen får
     # ha.» «Mycket bättre att skriva: bestäm den högsta farten bilen får ha,
@@ -2083,8 +2088,12 @@ def build_spridning(avsnitt: list[dict], antal: int,
             "samma rad och delar på radens uppgifter. Fördela de "
             f"{antal} uppgifterna så här:\n{rader}\n"
             "Varje avsnitt ska prövas, men en uppgift får pröva flera avsnitt "
-            "på samma rad (en uppgift kan pröva tecken, intervall och olikhet "
-            "på en gång). Skriv i uppgiftens fält \"avsnitt\" det avsnitt den "
+            # «olikhetstecken», inte «tecken»: Libers 2.2 «Tecken i
+            # matematiska utsagor» har implikationspilarna på s. 55, och de
+            # står inte i 1c:s centrala innehåll (app/ci_utanfor.py).
+            "på samma rad (en uppgift kan pröva olikhetstecken, intervall och "
+            "olikhet på en gång). Skriv i uppgiftens fält \"avsnitt\" det "
+            "avsnitt den "
             "mest prövar, t.ex. \"2.4\", och alla delmoment den prövar i "
             "fältet \"delmoment\".")
     mal = mal_per_avsnitt(avsnitt, antal)

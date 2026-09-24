@@ -33,9 +33,21 @@ Orden är MEDVETET snäva. «Följd» ensamt är vardagssvenska («till följd a
 formel för figur n är tillåtna: de är «generella samband» (G25-M1C-PRO-1)
 och ersatte talföljderna i planeringen.
 
-Data per kurs står i UTANFOR. Nycklarna är niva_rubrik.kursnyckel: «1c» för
-«Matematik, nivå 1c». En kurs som saknas har inga strykningar, och då tiger
-vakten.
+IMPLIKATION OCH EKVIVALENS (Rickard 2026-09-25). Pilarna ⇒, ⇐ och ⇔ och
+begreppen står i 2c:s centrala innehåll («Logik och geometri»), inte i 1a,
+1b, 1c, 2a eller 2b. Ändå stod de på TE26A:s godkända prov 129 (uppgift 12)
+och på fem blad ur proven, också NA26F:s 134 och 136 fast prov 126 saknade
+dem. En omskrivning 23/9 bad om «2.2 (implikation ⇒ och ekvivalens ⇔)» för
+att Libers avsnitt 2.2 tycktes sakna uppgift (sidan 55 är implikation), och
+lärarens formdom över den uppgiften blev en regel i exam_gen.INSTRUCTION med
+pilarna som exempel, i varje prompt. Ingen vakt hade 1c-raden. Nu står den
+för alla fem nivåerna, i text, facit och bedömning: «ger» och «alltså»
+mellan stegen, aldrig en pil.
+
+Data per kurs står i UTANFOR. Nycklarna är steg och spår ur
+niva_rubrik.kursniva: «1c» för «Matematik, nivå 1c», «2b» för «Matematik 2b».
+(kursnyckel duger inte: den ger None för 2b, som saknar uppmätta NP.) En
+kurs som saknas har inga strykningar, och då tiger vakten.
 """
 from __future__ import annotations
 
@@ -46,9 +58,27 @@ from app import niva_rubrik
 CI_MAX_FYND = 6
 KOD = "utanforci"
 
+# Pilarna som tecken och som LaTeX, och orden. LaTeX-namnen läses med stor
+# bokstav och utan (?i): \overrightarrow{AB} är en vektor, och vektorer står i
+# 1c. «Medför» står inte med, det är vardagssvenska («det medför en kostnad»).
+_IMPLIKATION = (
+    "implikation och ekvivalens",
+    "implikation och ekvivalens: pilarna ⇒, ⇐ och ⇔, också mellan stegen i "
+    "en lösning, och orden implikation och ekvivalens",
+    re.compile(
+        r"[⇒⇐⇔⟹⟸⟺]"
+        r"|\\(?:Rightarrow|Leftarrow|Leftrightarrow|Longrightarrow"
+        r"|Longleftarrow|Longleftrightarrow|implies|impliedby|iff)(?![A-Za-z])"
+        r"|(?i:implikation|ekvivalen[st])"
+        r"|(?i:(?<![\wåäö])om\s+och\s+endast\s+om(?![\wåäö]))"))
+
 # (namn, i klartext för prompten, mönster). Mönstren läser råtext med LaTeX i,
 # så `a_n` står som den skrivs: $a_n$, $a_{n}$, $a_{n+1}$.
 UTANFOR: dict[str, list[tuple[str, str, re.Pattern]]] = {
+    "1a": [_IMPLIKATION],
+    "1b": [_IMPLIKATION],
+    "2a": [_IMPLIKATION],
+    "2b": [_IMPLIKATION],
     "1c": [
         ("talföljder",
          "talföljder: aritmetisk och geometrisk talföljd, formler för a_n, "
@@ -85,6 +115,7 @@ UTANFOR: dict[str, list[tuple[str, str, re.Pattern]]] = {
              # listindex i ett program («index 0 till 4») är programmering,
              # som står i 1c:s CI, och ska tiga: därför tre siffror.
              r"|(?i:(?<![\wåäö])index(?:et)?\s+(?:\$?\d{3}|för\s+år))")),
+        _IMPLIKATION,
     ],
 }
 
@@ -183,11 +214,17 @@ BARA_OVNING: dict[str, list[tuple]] = {
 }
 
 
+def _nyckel(kurs: str) -> str:
+    """«1c», «2b» … ur kursnamnet, tom sträng när namnet inte säger nivån."""
+    niva = niva_rubrik.kursniva(kurs or "")
+    return f"{niva[0]}{niva[1]}" if niva else ""
+
+
 def utanfor(kurs: str, profil: str = "prov") -> list[tuple]:
     """Kursens strykningar, tom lista när kursen inte har några. Profilen
     avgör om BARA_OVNING räknas med; förvalet «prov» lämnar provet som det
     var, byte för byte."""
-    nyckel = niva_rubrik.kursnyckel(kurs or "") or ""
+    nyckel = _nyckel(kurs)
     lista = list(UTANFOR.get(nyckel, []))
     if profil != "prov":
         lista += BARA_OVNING.get(nyckel, [])
@@ -206,6 +243,10 @@ def build_utanfor(kurs: str, profil: str = "prov") -> str:
         "sådana samband går bra: det är generella samband, och de står i "
         "kursen. Skriv dem som mönster och figurer, aldrig som talföljder."
         if any(n == "talföljder" for n, _k, _p in lista) else "")
+    if any(n == _IMPLIKATION[0] for n, _k, _p in lista):
+        monster = (monster + "\n" if monster else "") + (
+            "Mellan stegen i en lösning skrivs «ger» eller «alltså», aldrig "
+            "en pil.")
     return (
         f"UTANFÖR KURSEN. Det här står inte i det centrala innehållet för "
         f"{kurs} och får inte förekomma någonstans på pappret, varken i "
@@ -264,7 +305,11 @@ def ci_vakt(exam: dict | None, kurs: str = "",
                    "bra." if namn == "talföljder" else "")
                 + (" Att multiplicera parenteser term för term, bryta ut en "
                    "gemensam faktor och förkorta går bra."
-                   if namn == _KVADRERING[0] else ""))})
+                   if namn == _KVADRERING[0] else "")
+                + (" Står pilen bara mellan stegen i lösningen räcker det att "
+                   "skriva «ger» eller «alltså» i stället, och uppgiften får "
+                   "stå kvar."
+                   if namn == _IMPLIKATION[0] else ""))})
     doktext = [str(exam.get(f) or "") for f in ("titel", "instruktion",
                                                  "nyckelfraga")]
     traff = _traff(doktext, lista)
