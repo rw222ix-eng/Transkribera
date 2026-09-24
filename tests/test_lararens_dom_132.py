@@ -80,12 +80,13 @@ def test_deluppgifterna_heter_a_parentes():
 def test_uttrycket_efter_kolon_far_rymmas_pa_pappret():
     rad = ("Kostnaden i kr ges av uttrycket: $45(n + 2)$, där $n$ är antalet "
            "elever.")
-    assert exam_gen.MENING_RAD_TAK < exam_gen._synlig_langd(rad) <= \
-        exam_gen.DEFINITION_RAD_TAK
+    # Sedan exam 131 (samma dag) är taket pappret för alla meningar.
+    assert exam_gen.DEFINITION_RAD_TAK == exam_gen.MENING_RAD_TAK == 80
+    assert 60 < exam_gen._synlig_langd(rad) <= exam_gen.MENING_RAD_TAK
     assert exam_gen.radvakt(_prov(rad)) == []
-    # Samma längd utan uttrycksformen fälls som förut.
-    lang = "Kostnaden i kronor för bussresan blir högre ju fler elever åker."
-    assert [f["code"] for f in exam_gen.radvakt(_prov(lang))] == ["radlangd"]
+    rulle = ("I butik B måste man köpa en hel rulle med $50$ m kabel, som "
+             "kostar $620$ kr.")
+    assert exam_gen.radvakt(_prov(rulle)) == []
     over = rad.replace("antalet elever", "antalet elever som följer med på "
                        "resan till museet")
     fel = exam_gen.radvakt(_prov(over))

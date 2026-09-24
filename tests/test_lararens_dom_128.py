@@ -280,8 +280,11 @@ def test_en_mening_per_rad_och_varje_mening_ryms():
     assert exam_gen.dela_meningar(text) == (
         "Ekvationen nedan har lösningen $x = 0{,}02$.\nBestäm $k$.\n"
         "Leo kör 4,5 km. kl. 13 går han.")
+    # Taket är pappret sedan 2026-09-24 (80 tecken, MENING_RAD_TAK), så 129:s
+    # 72 tecken långa mening ryms; en längre fälls som förut.
     lang = _prov(_u("Använd formeln och bestäm den högsta fart som ger "
-                    "högst 45 m bromssträcka.", [0, 1, 0]))
+                    "högst 45 m bromssträcka när vägen är våt och bilen är "
+                    "fullastad.", [0, 1, 0]))
     fel = exam_gen.radvakt(lang)
     assert _koder(fel) == ["radlangd"]
     assert "Dela meningen i två" in fel[0]["message"]

@@ -248,15 +248,18 @@ FORSATTSBILD_REGEL = (
 )
 
 # Tecken en mening i uppgiftstexten får ha, räknade som de syns (radvakt,
-# _synlig_langd). Skärmens uppgiftsspalt är 62ch (prov.css .prtext) och bröt
-# exam 129:s «Använd formeln och bestäm den högsta fart som ger högst 45 m /
-# bromssträcka.» efter drygt 60; pappret rymmer drygt 80. Det smalare vinner.
-MENING_RAD_TAK = 60
-# Meningen som ger ett uttryck («Kostnaden i kr ges av uttrycket: $45(n + 2)$,
-# där $n$ är antalet elever.») är lärarens form 2026-09-24 och ryms inte i 60.
-# Den mäts mot pappret i stället (exam 132 mätt: textspalten bär drygt 80
-# tecken), se radvakt och _DEFINITION_RE.
-DEFINITION_RAD_TAK = 80
+# _synlig_langd). Först 60: skärmens uppgiftsspalt var 62ch (prov.css .prtext)
+# och bröt exam 129:s «Använd formeln och bestäm den högsta fart som ger högst
+# 45 m / bromssträcka.» efter drygt 60, och det smalare fick vinna. Sedan
+# 2026-09-24 PAPPRET: läraren slog själv ihop meningar som blev längre än 60
+# («I butik B måste man köpa en hel rulle med 50 m kabel, som kostar 620 kr.»,
+# exam 131 uppgift 8; «Kostnaden i kr ges av uttrycket: $45(n + 2)$, där $n$
+# är antalet elever.», exam 132 uppgift 4), och det är pappret eleverna
+# läser. Textspalten bär drygt 80 tecken (mätt i exam 132:s PDF), och
+# skärmens spalt följer med (prov.css .prtext 80ch).
+MENING_RAD_TAK = 80
+# Uttrycksmeningen hade ett eget tak när det vanliga var 60; nu är de samma.
+DEFINITION_RAD_TAK = MENING_RAD_TAK
 
 INSTRUCTION = (
     "Skriv ett matteprov som JSON enligt schemat. Dokumentets egna fält är "
@@ -576,8 +579,8 @@ INSTRUCTION = (
     # uttrycket» och uttrycket på egen rad, «där m är …» på nästa): «Det borde
     # vara kolon … och sen får man uttrycket exakt, till höger om det. Och
     # sen komma.» Frågan står ensam efter en tom rad; den raden sätter appen
-    # (fraga_for_sig). Meningen blir längre än MENING_RAD_TAK och får vara
-    # det, se radvakt.
+    # (fraga_for_sig). Meningen var längre än det gamla taket på 60 och är
+    # en av orsakerna till att MENING_RAD_TAK nu är pappret.
     "- ETT UTTRYCK ELLER EN FORMEL SOM UPPGIFTEN GER står i meningen som "
     "presenterar det: «Kostnaden i kr ges av uttrycket: $45(n + 2)$, där $n$ "
     "är antalet elever.» Kolon, uttrycket till höger på samma rad, komma och "
@@ -723,8 +726,8 @@ INSTRUCTION = (
     # kapitlet och utanför Ma 1a. Exam 129 uppgift 10: «Det är mycket text
     # för en uppgift. Då krävs det att meningarna inte bryts mitt i … Det
     # borde vara målet.» Raden på skärmen bröt efter ungefär 60 tecken
-    # (prov.css .prtext 62ch), pappret rymmer drygt 80, och det smalare
-    # vinner. np_vakter.lasregelvakt, formbytesvakt och radvakt fäller det
+    # (prov.css .prtext 62ch), pappret rymmer drygt 80; sedan 2026-09-24 är
+    # pappret måttet (MENING_RAD_TAK). np_vakter.lasregelvakt, formbytesvakt och radvakt fäller det
     # som går att se i texten; hur regeln om villkorsmeningar går ihop med
     # domen om förtydliganden står i np_vakter vid LASREGEL_MAX_FYND.
     "- TEXTENS FORM, så att eleven förstår vid första läsningen:\n"
@@ -762,6 +765,15 @@ INSTRUCTION = (
     # bokstaven I och siffran 1». forvaxlingsvakt fäller det.
     "  • Inga tecken som går att förväxla bredvid varandra: aldrig «I 1 kg» "
     "eller «1 l». Skriv «Varje kilogram jord innehåller …» och «1 liter».\n"
+    # Samma dom, uppgift 8, andra varvet: «I butik B måste man köpa en hel
+    # rulle med 50 m kabel. En rulle kostar 620 kr.»: «De två meningarna vill
+    # jag få ihop.» Och «Han säger att metern kostar mindre där.»: «lite
+    # konstigt formulerad … bättre att skriva kostnaden per meter är mindre
+    # där».
+    "  • Det som hör till samma sak står i samma mening: «I butik B måste man "
+    "köpa en hel rulle med 50 m kabel, som kostar 620 kr.» Storheten säger "
+    "sitt namn: «kostnaden per meter är mindre där», aldrig «metern kostar "
+    "mindre».\n"
     # Samma dom, uppgift 7, två varv. Först «Beräkna hur många liter som
     # rinner ner från taket» för 2 E: för svår. Sedan a) «1 mm på 1 m²» och
     # b) taket: «varför ska jag inte räkna på hela taket? … Det blir ett
@@ -786,7 +798,7 @@ INSTRUCTION = (
     # meter, så då går ju inte ens lösa uppgiften … vissa kanske ger upp på
     # en gång.»
     "  • Ett villkor som ändrar räkningen står som det personen MÅSTE göra: "
-    "«I butik B måste man köpa en hel rulle med 50 m kabel. En rulle kostar "
+    "«I butik B måste man köpa en hel rulle med 50 m kabel, som kostar "
     "620 kr.», aldrig «Butik B säljer bara hela rullar», som eleven kan läsa "
     "som att uppgiften inte går att lösa.\n"
     # Samma dom, uppgift 10: tabellen stod under bilden, efter frågan. Nu

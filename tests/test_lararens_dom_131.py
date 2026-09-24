@@ -11,6 +11,8 @@ som kod.
   7  För svår för E, sedan delad med «1 mm på 1 m²» som förvirrade: a) takets
      area, b) litrarna, båda på takets egna mått.
   8  «Butik B säljer bara hela rullar» läses som att uppgiften inte går.
+     Sedan: rullen och priset i en mening, «kostnaden per meter», och
+     radtaket blir pappret (80 tecken).
   9  Sandkornen i 40 säckar: ingen räknar så i verkligheten.
   10 Tabellen stod under bilden, efter frågan.
 """
@@ -169,9 +171,12 @@ def test_domarna_star_i_instruktionen():
     assert "SPRÅKET ÄR ELEVERNAS" in r
     assert "«räknas som förorenad över»" in r
     assert "bara är uttryck under en gemensam uppmaning" in r
-    assert "«I butik B måste man köpa en hel rulle med 50 m kabel." in r
+    assert "«I butik B måste man köpa en hel rulle med 50 m kabel, som" in r
     assert "«Tabellen nedan visar …», och pappret" in r
     assert "UPPGIFTEN ÄR NÅGOT ELEVEN HAR NYTTA AV" in r
     assert "Frågan får inte se besvarad ut av texten ovanför" in r
     assert "Inga tecken som går att förväxla" in r
     assert "räknar varje deluppgift på uppgiftens egna tal" in r
+    assert "«kostnaden per meter är mindre där», aldrig «metern kostar" in r
+    assert "en hel rulle med 50 m kabel, som kostar 620 kr.»" in r
+    assert "högst 80 tecken" in r
