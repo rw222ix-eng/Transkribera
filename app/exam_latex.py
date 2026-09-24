@@ -119,6 +119,19 @@ def escape_latex(text: str) -> str:
     return "".join(out)
 
 
+# ── BRÅK I EXPONENTEN MED SNEDSTRECK (lärarens dom 2026-09-24, exam 126) ────
+# «$64^{\frac{1}{3}}$»: «svårt att se en tredjedel … ser det ut som att det
+# nästan står 64 gånger en tredjedel». Ett staplat bråk i en exponent sätts
+# två storlekar ner och hamnar i höjd med basen. Med snedstreck står 1/3 i
+# vanlig exponentstorlek och högt upp, som NP skriver det.
+_EXPONENTBRAK_RE = re.compile(
+    r"\^\s*(\{\s*)?\\[dt]?frac\{([^{}]+)\}\{([^{}]+)\}(?(1)\s*\})")
+
+
+def _exponentbrak(formel: str) -> str:
+    return _EXPONENTBRAK_RE.sub(r"^{\2/\3}", formel)
+
+
 def escape_mixed(text: str, *, fet: bool = False) -> str:
     """Escapa text med inline-matte: allt utanför ``$…$`` escapas, matten
     bevaras oförändrad som ``\\( … \\)`` (modellen skriver LaTeX-matte där,
@@ -137,7 +150,8 @@ def escape_mixed(text: str, *, fet: bool = False) -> str:
         return _HARD_PROCENT_RE.sub(r"\1~\2", escape_latex(s))
     for m in _MATH_SPLIT_RE.finditer(text):
         parts.append(_esc_text(text[pos:m.start()]))
-        formel = r"\pmb{" + m.group(1) + "}" if fet else m.group(1)
+        matte = _exponentbrak(m.group(1))
+        formel = r"\pmb{" + matte + "}" if fet else matte
         parts.append(r"\(" + formel + r"\)")
         pos = m.end()
     parts.append(_esc_text(text[pos:]))
@@ -443,7 +457,7 @@ def _stycken(text: str, luft: bool = False,
         if m and forst_i_raden and not ut:
             ut.append({"formel": False, "text": escape_mixed(rad)})
         elif m:
-            ut.append({"formel": True, "text": m.group(1)})
+            ut.append({"formel": True, "text": _exponentbrak(m.group(1))})
         else:
             ut.append({"formel": False, "text": escape_mixed(rad)})
         ut[-1]["luft"] = luft and tom
@@ -604,8 +618,14 @@ def _stegtabell_vy(s, *, facit: bool):
     som brister, för det är hela uppgiften. `facit=True` är bedömningen."""
     if s is None:
         return None
+    # LUFT I RADERNA (lärarens dom 2026-09-24, exam 126 uppgift 10: «den ser
+    # jätteful ut»). Ett staplat bråk i steg 1 fick en vanlig radhöjd och
+    # slog i linjerna över och under. Med bråk i någon cell får tabellen
+    # dubbel radhöjd, annars lite luft ändå.
+    brak = any("frac" in c for st in s.steg for c in st.celler)
     return {
         "spec": "l" + "X" * len(s.kolumner) + "c",
+        "stracka": "2.1" if brak else "1.3",
         "kolumner": [escape_mixed(k) for k in s.kolumner],
         "steg": [{"nr": i + 1, "celler": [escape_mixed(c) for c in st.celler],
                   "fel": facit and i == s.forsta_fel}

@@ -564,6 +564,8 @@ INSTRUCTION = (
     # modeller, A och B, ger priset för en studsmatta» («oftast är det inte så
     # här i verkligheten»), och taxin där «Taxin kör i 30 km/h, så en resa på
     # s km tar 2s minuter» bara fanns för att koppla ihop två bokstäver.
+    # Formraden var «Formeln $P_R$: $P_R = …$, ger priset …»; 2026-09-24
+    # «lite mycket text i onödan … Pizzeria Roma, kolon, P_R = 0,12d²».
     # Kycklingen stod kvar här som det goda exemplet («tiden i ugnen ur
     # kycklingens vikt») och kom tillbaka på exam 132 uppgift 4. Lärarens dom
     # 2026-09-24: «om inget annat så borde den förlora vätska i ugnen … du
@@ -585,9 +587,9 @@ INSTRUCTION = (
     "ugnen, man hyr, man betalar). Två formler för samma sak står bara där "
     "två alternativ finns att välja mellan på riktigt (två hyrfirmor, två "
     "abonnemang, två pizzerior), och varje formel står på en egen rad i "
-    "formen «Formeln $P_R$: $P_R = 0{,}12d^{2}$, ger priset i kr för en "
-    "pizza på Pizzeria Roma.», formelns namn, kolon, formeln, komma och vad "
-    "den räknar ut (lärarens form, prov 126). Ge bara "
+    "formen «Pizzeria Roma: $P_R = 0{,}12d^{2}$, ger priset i kr för en "
+    "pizza på Pizzeria Roma.», alternativets namn, kolon, formeln, komma och "
+    "vad den räknar ut (lärarens form, prov 126, andra varvet). Ge bara "
     "den information frågan behöver: har formeln fler bokstäver än frågan "
     "handlar om, skriv formeln med de bokstäver frågan handlar om i stället "
     "för en extra mening som kopplar ihop dem.\n"

@@ -160,6 +160,35 @@ def test_tecken_som_gar_att_forvaxla():
         assert exam_gen.forvaxlingsvakt(prov(ok)) == [], ok
 
 
+def test_exponentbraket_och_stegtabellens_luft():
+    """Exam 126 uppgift 1 («$64^{\\frac{1}{3}}$» såg ut som 64 · 1/3) och
+    uppgift 10 (stegtabellens bråk slog i linjerna), samma dag."""
+    assert exam_latex.escape_mixed("Ange värdet av $64^{\\frac{1}{3}}$.") \
+        == "Ange värdet av \\(64^{1/3}\\)."
+    assert exam_latex._exponentbrak("a^\\dfrac{2}{3} + \\frac{1}{2}") == \
+        "a^{2/3} + \\frac{1}{2}"
+    st = exam_latex._stycken("$x^{\\frac{1}{2}} = 3$")
+    assert st[0]["formel"] and st[0]["text"] == "x^{1/2} = 3"
+
+    class Steg:
+        def __init__(self, celler):
+            self.celler = celler
+
+    class Tabell:
+        kolumner = ["Majas lösning"]
+        forsta_fel = 1
+        def __init__(self, rader):
+            self.steg = [Steg([r]) for r in rader]
+
+    brak = exam_latex._stegtabell_vy(Tabell(["$\\dfrac{x}{4} = 2$", "$x = 8$"]),
+                                     facit=False)
+    assert brak["stracka"] == "2.1"
+    assert exam_latex._stegtabell_vy(Tabell(["$x = 8$"]),
+                                     facit=False)["stracka"] == "1.3"
+    mall = Path("app/templates/_former.tex.j2").read_text(encoding="utf-8")
+    assert "\\renewcommand{\\arraystretch}{((( s.stracka )))}" in mall
+
+
 def _scenuppgift(text, scene):
     return {"uppgifter": [{"text": text, "scen": {"scene": scene}}]}
 

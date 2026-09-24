@@ -819,7 +819,8 @@ def test_situationen_ska_vara_sann_i_instruktionen():
     assert "aldrig tiden i ugnen ur vikten på det som tillagas" in r
     assert "tiden i ugnen ur kycklingens vikt" not in r
     assert "två alternativ finns att välja mellan på riktigt" in r
-    assert "formelns namn, kolon, formeln, komma och vad" in r
+    assert "alternativets namn, kolon, formeln, komma och vad" in r
+    assert "«Pizzeria Roma: $P_R = 0{,}12d^{2}$, ger priset" in r
     assert "Ge bara den information frågan behöver" in r
 
 

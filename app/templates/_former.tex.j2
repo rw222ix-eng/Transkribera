@@ -35,7 +35,7 @@
     papper (exam_latex bygger vyn med facit=True bara för bedömningen). #))
 ((* macro steg(s) *))
 ((* if s *))\par\vspace{2mm}
-{\small\noindent\begin{tabularx}{\linewidth}{((( s.spec )))}\hline
+{\small\renewcommand{\arraystretch}{((( s.stracka )))}\noindent\begin{tabularx}{\linewidth}{((( s.spec )))}\hline
 \tabrubrik{Steg} ((* for k in s.kolumner *))& \tabrubrik{((( k )))} ((* endfor *))& \tabrubrik{Fel} \\ \hline
 ((* for rad in s.steg *))((( rad.nr ))) ((* for c in rad.celler *))& ((( c ))) ((* endfor *))& ((* if rad.fel *))\textbf{X}((* else *))\kryssruta((* endif *)) \\ \hline
 ((* endfor *))\end{tabularx}}\par\vspace{2mm}
