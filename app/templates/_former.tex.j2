@@ -139,8 +139,13 @@
     displayformel som klistras direkt efter texten (utan \par) får förlagans
     \abovedisplayskip; ett \par emellan sköt ner den 7,5 pt. Därför står \par
     på egen rad och bara där exam_latex._stycken säger att det ska stå. #))
+((# En tom rad i uppgiftstexten är en tom rad på pappret (s.luft): frågan står
+    för sig, en rad under det givna (lärarens dom 2026-09-24, exam 132
+    uppgift 4). Stycket före har redan sitt \par, se exam_latex._stycken. #))
 ((* macro stycken(st) *))
 ((* for s in st *))
+((* if s.luft *))\vspace{\baselineskip}
+((* endif *))
 ((* if s.formel *))
 \[ ((( s.text ))) \]
 ((* if s.par_efter *))\par

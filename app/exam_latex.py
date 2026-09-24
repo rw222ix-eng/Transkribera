@@ -387,23 +387,32 @@ def _nrlista(nrs: list[int]) -> str:
     return f"{', '.join(map(str, nrs[:-1]))} och {nrs[-1]}"
 
 
-def _stycken(text: str) -> list[dict]:
+def _stycken(text: str, luft: bool = False) -> list[dict]:
     """Uppgiftstexten som stycken, och formelrader som displayformler.
 
     Modellen skriver sina medvetna radbrytningar i `text` (skärmen sätter
     white-space:pre-line av samma skäl). Här blir varje rad ett eget stycke —
     utan det klumpades förlagans «Låt $x$ meter vara …» ihop med meningen före
-    och rytmen på pappret blev en vägg."""
+    och rytmen på pappret blev en vägg.
+
+    `luft=True` gör en tom rad till en tom rad på pappret också (s["luft"] på
+    stycket efter), som skärmen redan visar den. Det är frågans egen rad, se
+    exam_gen.luft_fore_fragan. Lösningarnas text går förbi med False: där är en
+    tom rad modellens och kollapsas som förut."""
     ut: list[dict] = []
+    tom = False
     for rad in str(text or "").replace("\r\n", "\n").split("\n"):
         rad = rad.strip()
         if not rad:
+            tom = bool(ut)
             continue
         m = _ENSAM_FORMEL_RE.match(rad)
         if m:
             ut.append({"formel": True, "text": m.group(1)})
         else:
             ut.append({"formel": False, "text": escape_mixed(rad)})
+        ut[-1]["luft"] = luft and tom
+        tom = False
     # DISPLAYFORMELN HÖR TILL SITT STYCKE. Förlagan skriver «… ges av» och
     # sedan \[…\] UTAN tom rad emellan, så formeln får sitt \abovedisplayskip
     # och ingenting mer. Med ett \par före hamnade den 7,5 pt för långt ner —
@@ -416,9 +425,10 @@ def _stycken(text: str) -> list[dict]:
             # Efter en displayformel fortsätter stycket. Ett \par här gav
             # förlagans «Visa algebraiskt …» ett eget stycke i stället för det
             # \belowdisplayskip hon har.
-            s["par_efter"] = nasta is None
+            s["par_efter"] = nasta is None or nasta["luft"]
         else:
-            s["par_efter"] = not (nasta and nasta["formel"])
+            s["par_efter"] = not (nasta and nasta["formel"]
+                                  and not nasta["luft"])
     return ut
 
 
@@ -833,7 +843,7 @@ def _enhet_vy(*, poang, typ, formaga, text, losning, bedomning,
         # (`svarsfalt` ovan): arbetsbladet och gruppuppgiften bygger sin form
         # på det och har inte lärarens provregel.
         "svarsfalt_rad": _faltrad(svarsfalt) if typ == "rutin" else None,
-        "stycken": _stycken(text),
+        "stycken": _stycken(text, luft=True),
         "tabell": _tabell_vy(tabell),
         "svarsrutor": _svarsrutor_vy(svarsrutor, facit=facit),
         "stegtabell": _stegtabell_vy(stegtabell, facit=facit),
@@ -1205,7 +1215,7 @@ def _build_view(doc: exam_spec.ExamDoc,
                     # «Endast svar krävs», aldrig till en redovisningsuppgift.
                     "svarsfalt_rad": (_faltrad(it.svarsfalt)
                                       if it.typ == "rutin" else None),
-                    "stycken": _stycken(it.text),
+                    "stycken": _stycken(it.text, luft=True),
                     "notis": escape_mixed(it.notis) if it.notis else None,
                     "flerval": None, "ratt_bokstav": None,
                     # endast_svar/utrymme_mm nås av mallen för VARJE uppgift

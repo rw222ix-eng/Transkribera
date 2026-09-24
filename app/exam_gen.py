@@ -245,6 +245,11 @@ FORSATTSBILD_REGEL = (
 # exam 129:s «Använd formeln och bestäm den högsta fart som ger högst 45 m /
 # bromssträcka.» efter drygt 60; pappret rymmer drygt 80. Det smalare vinner.
 MENING_RAD_TAK = 60
+# Meningen som ger ett uttryck («Kostnaden i kr ges av uttrycket: $45(n + 2)$,
+# där $n$ är antalet elever.») är lärarens form 2026-09-24 och ryms inte i 60.
+# Den mäts mot pappret i stället (exam 132 mätt: textspalten bär drygt 80
+# tecken), se radvakt och _DEFINITION_RE.
+DEFINITION_RAD_TAK = 80
 
 INSTRUCTION = (
     "Skriv ett matteprov som JSON enligt schemat. Dokumentets egna fält är "
@@ -533,8 +538,19 @@ INSTRUCTION = (
     # modeller, A och B, ger priset för en studsmatta» («oftast är det inte så
     # här i verkligheten»), och taxin där «Taxin kör i 30 km/h, så en resa på
     # s km tar 2s minuter» bara fanns för att koppla ihop två bokstäver.
+    # Kycklingen stod kvar här som det goda exemplet («tiden i ugnen ur
+    # kycklingens vikt») och kom tillbaka på exam 132 uppgift 4. Lärarens dom
+    # 2026-09-24: «om inget annat så borde den förlora vätska i ugnen … du
+    # hör ju själv att det är lite ovanligt att ens tänka på det.» Bokstaven
+    # stod för något som ändras medan formeln räknar, och sambandet är inget
+    # någon räknar med. Exemplet är nu färgen och väggen.
     "- SITUATIONEN SKA VARA SANN. Frågan gäller det man faktiskt vill veta i "
-    "situationen: tiden i ugnen ur kycklingens vikt, aldrig vikten ur tiden. "
+    "situationen: hur mycket färg som går åt till en vägg, aldrig väggens "
+    "storlek ur färgen. Ett samband i en formel är ett som människor "
+    "verkligen räknar med (pris, lön, hyra, biljetter, sträcka och tid), och "
+    "bokstaven står för något som står still medan det formeln räknar på "
+    "pågår: aldrig tiden i ugnen ur vikten på det som tillagas, det tappar "
+    "vätska och vikt i ugnen. "
     "Det någon GÖR i uppgiften ska vara något som görs på riktigt: ingen "
     "lägger virus i rad över ett hårstrå (prov 126). Ska två storlekar "
     "jämföras, fråga «Hur många gånger tjockare är … än …?» om två saker "
@@ -549,6 +565,29 @@ INSTRUCTION = (
     "den information frågan behöver: har formeln fler bokstäver än frågan "
     "handlar om, skriv formeln med de bokstäver frågan handlar om i stället "
     "för en extra mening som kopplar ihop dem.\n"
+    # Lärarens dom 2026-09-24 (exam 132 uppgift 4, «Tiden i minuter ges av
+    # uttrycket» och uttrycket på egen rad, «där m är …» på nästa): «Det borde
+    # vara kolon … och sen får man uttrycket exakt, till höger om det. Och
+    # sen komma.» Frågan står ensam efter en tom rad; den raden sätter appen
+    # (fraga_for_sig). Meningen blir längre än MENING_RAD_TAK och får vara
+    # det, se radvakt.
+    "- ETT UTTRYCK ELLER EN FORMEL SOM UPPGIFTEN GER står i meningen som "
+    "presenterar det: «Kostnaden i kr ges av uttrycket: $45(n + 2)$, där $n$ "
+    "är antalet elever.» Kolon, uttrycket till höger på samma rad, komma och "
+    "vad bokstaven står för. Aldrig uttrycket på en egen rad mitt i meningen. "
+    "Frågan står sist, ensam på sin rad.\n"
+    # Lärarens dom 2026-09-24 (exam 132 uppgift 10): «Ali extrajobbar … En
+    # månad jobbar han s timmar på söndagar. På vardagar jobbar han 3 timmar
+    # fler.» «Vissa elever kanske tolkar som att han jobbar fem arbetsdagar
+    # och sen har han ledigt på helgen förutom på söndagar … vissa elever
+    # bara, men han jobbar varje dag. Det framgår inte så tydligt vad som
+    # gäller.»
+    "- TID OCH MÄNGD GÅR BARA ATT LÄSA PÅ ETT SÄTT. Säg om talet gäller per "
+    "dag, per vecka eller sammanlagt, och för vilka dagar: «Den månaden "
+    "jobbar Ali $s$ timmar på söndagar och sammanlagt $s + 3$ timmar de "
+    "andra dagarna.» Aldrig «På vardagar jobbar han 3 timmar fler.», där "
+    "eleven måste gissa fler än vad, per dag eller totalt, och om lördagen "
+    "räknas.\n"
     # EN ALLMÄNT STÄLLD UPPGIFT SÄGER VAD SOM SÖKS (samma dom, uppgift 12):
     # «Bestäm med algebraisk metod det minsta värde som uttrycket kan anta.»
     # Nationella provet frågar ibland så, och läraren vill inte hjälpa
@@ -574,6 +613,30 @@ INSTRUCTION = (
     "svaras: «Elias köper x pennor för 12 kr styck. a) Skriv ett uttryck för "
     "vad pennorna kostar tillsammans. b) Elias betalar med 200 kr. Skriv ett "
     "uttryck för hur mycket han får tillbaka.»\n"
+    # Lärarens dom 2026-09-24 (exam 132 uppgift 6): stammen «Sara påstår att
+    # likheterna i a) och b) stämmer.» och i a) likheten på en rad, «Avgör om
+    # likheten stämmer.» på nästa. «Det första man ser är "Avgör om
+    # likheten", … och "stämmer" efter det. Det är jättetydligt
+    # dispositionerat.»
+    "  • Deluppgiftens fråga bär själv det den frågar om: «a) Avgör om "
+    "likheten $\\sqrt{36 + 64} = 14$ stämmer.» Aldrig likheten på en rad och "
+    "«Avgör om likheten stämmer.» på nästa. Stammen hänvisar aldrig till "
+    "deluppgifterna («likheterna i a) och b)», «uttrycken i a) och b)»); "
+    "finns inget som gäller alla deluppgifter är stammen tom.\n"
+    # Lärarens dom 2026-09-24 (exam 132 uppgift 11): «det första rummet och
+    # det andra rummet. Det är väldigt, väldigt krångligt … att hålla isär de
+    # två. Det vore kanske bättre om man döper det till typ det gröna rummet
+    # och det blå rummet. För på bilden så ser man ju att hon målar väggen
+    # grön.» Och i b), «Det andra rummet är 2x m långt och y m brett. Det
+    # andra rummets väggarea är mindre än dubbla det förstas.»: «Och dess
+    # area är mindre än dubbla det förstas … Det borde vara en och samma
+    # mening på något sätt.»
+    "  • Två saker av samma slag heter något eleven ser, helst det bilden "
+    "visar: «det gröna rummet» och «det blå rummet», aldrig «det första "
+    "rummet» och «det andra rummet». Mer om samma sak pekar tillbaka med "
+    "«dess»: «Det blå rummet är $2x$ m långt och $y$ m brett. Dess väggarea "
+    "är mindre än dubbla det gröna rummets.» Aldrig sakens namn en gång "
+    "till («Det blå rummets väggarea …»).\n"
     "  • Skriv aldrig bara «leden». Säg vilka: «vänsterledet (x + 5)² och "
     "högerledet x² + 25».\n"
     "  • Ett påstående som kan vara fel står som ett PÅSTÅENDE: «Hugo påstår "
@@ -6386,6 +6449,60 @@ def mening_per_rad(exam: dict | None) -> dict | None:
     return exam
 
 
+# ── FRÅGAN STÅR FÖR SIG (lärarens dom 2026-09-24, exam 132 uppgift 4) ─────
+# «… där m är kycklingens vikt i kg. Sen på raden under, eller egentligen två
+# rader under, för det hoppar ett steg. Då blir meningen "Beräkna tiden för en
+# kyckling som väger 1,5 kg." Den blir själv.» Det givna först, en tom rad,
+# sedan frågan. Samma pass som mening_per_rad och av samma skäl deterministiskt:
+# modellen skriver raderna, appen sätter luften. Bara på provet; arbetsbladet
+# har sin egen form. Frågan är första raden som slutar på frågetecken eller
+# börjar med en uppmaning; «Svara i …» och förtydligandet efter frågan hör
+# till frågan och får ingen luft. Står frågan först finns inget givet att
+# skilja den från.
+_UPPMANINGAR = frozenset((
+    "beräkna", "bestäm", "avgör", "teckna", "förenkla", "skriv", "visa",
+    "lös", "förklara", "undersök", "ange", "motivera", "faktorisera",
+    "utveckla", "jämför", "ställ", "rita", "uppskatta", "pröva", "hur",
+    "vilken", "vilket", "vilka", "hitta", "tolka", "kontrollera", "beskriv",
+    "markera", "avrunda", "välj"))
+
+
+def _ar_fraga(rad: str) -> bool:
+    r = rad.strip()
+    if not r or r.startswith("$"):
+        return False
+    ord1 = re.split(r"[\s,.:;?!]", r, 1)[0].lower()
+    return r.endswith("?") or ord1 in _UPPMANINGAR
+
+
+def luft_fore_fragan(text):
+    """Texten med en tom rad före frågan, när något givet står före den."""
+    if not isinstance(text, str) or "\n\n" in text:
+        return text
+    rader = text.split("\n")
+    for i, rad in enumerate(rader):
+        if _ar_fraga(rad):
+            if i and any(r.strip() for r in rader[:i]):
+                return "\n".join(rader[:i] + [""] + rader[i:])
+            return text
+    return text
+
+
+def fraga_for_sig(exam: dict | None) -> dict | None:
+    """luft_fore_fragan på uppgifternas och deluppgifternas `text`."""
+    if not isinstance(exam, dict):
+        return exam
+    uppgifter = exam.get("uppgifter")
+    for u in uppgifter if isinstance(uppgifter, list) else []:
+        if not isinstance(u, dict):
+            continue
+        delar = u.get("deluppgifter")
+        for x in [u] + (delar if isinstance(delar, list) else []):
+            if isinstance(x, dict) and isinstance(x.get("text"), str):
+                x["text"] = luft_fore_fragan(x["text"])
+    return exam
+
+
 def _validate(exam: dict, profil: str, koder: list[str] | None = None,
               niva_mal: dict | None = None):
     """validate_exam_json + variationskontroll (BARA prov) + CI-taggningen.
@@ -8802,7 +8919,9 @@ def _slapp_poanglaset(fel: list[dict]) -> list[dict]:
 # sätts, inte som den skrivs: «$\dfrac{x}{0{,}05}$» är fyra tecken brett på
 # pappret, inte tjugo.
 RADVAKT_MAX_FYND = 4
-_BRAK_RE = re.compile(r"\\[dt]?frac\{([^{}]*)\}\{([^{}]*)\}")
+# «… ges av uttrycket: $…$, där …» — se DEFINITION_RAD_TAK.
+_DEFINITION_RE = re.compile(r":\s*\$[^$]+\$\s*,\s*där\s")
+_BRAK_RE =re.compile(r"\\[dt]?frac\{([^{}]*)\}\{([^{}]*)\}")
 _ROT_RE = re.compile(r"\\sqrt\{([^{}]*)\}")
 _TEXTKOMMANDO_RE = re.compile(
     r"\\(?:text|mathrm|operatorname|mbox|textbf|mathbf)\{([^{}]*)\}")
@@ -8859,7 +8978,9 @@ def radvakt(exam: dict, delad: bool = True) -> list[dict]:
                 if not rad or re.fullmatch(r"\$[^$]*\$", rad) or rad in sedda:
                     continue
                 langd = _synlig_langd(rad)
-                if langd <= MENING_RAD_TAK:
+                tak = (DEFINITION_RAD_TAK if _DEFINITION_RE.search(rad)
+                       else MENING_RAD_TAK)
+                if langd <= tak:
                     continue
                 sedda.add(rad)
                 flera = "\n" in dela_meningar(rad)
@@ -8867,12 +8988,12 @@ def radvakt(exam: dict, delad: bool = True) -> list[dict]:
                     f"uppgift {nr}", "radlangd",
                     f"Uppgift {nr}: " + (
                         f"raden «{_kort(rad, 120)}» bär flera meningar och "
-                        f"är ungefär {langd} tecken (högst {MENING_RAD_TAK}). "
+                        f"är ungefär {langd} tecken (högst {tak}). "
                         "Radbryt efter varje mening"
                         if flera else
                         f"meningen «{_kort(rad, 120)}» är ungefär {langd} "
                         f"tecken och ryms inte på en rad (högst "
-                        f"{MENING_RAD_TAK}). Dela meningen i två eller korta "
+                        f"{tak}). Dela meningen i två eller korta "
                         "den") + ", så att varje mening står på en egen rad. "
                     "Samma matematik, samma tal, samma poäng."))
     return fel[:RADVAKT_MAX_FYND]
@@ -10461,6 +10582,8 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
         # kväll, exam 129), se mening_per_rad. FÖRE räknarbeskedet: «Utan
         # räknare.» hör till uppgiftens första rad och ska inte bli en egen.
         mening_per_rad(r.get("exam"))
+        if profil == "prov":
+            fraga_for_sig(r.get("exam"))
         ovningspappret_stadat(r.get("exam"), profil)
         # ── UTANFÖR KURSEN, SIST AV ALLT (app/ci_utanfor.py) ─────────────
         # Fixrundan och slutgrinden kör vakten bara när de körs alls (en

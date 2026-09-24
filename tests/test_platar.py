@@ -809,11 +809,15 @@ def test_canvas_visar_forsattsbildens_scen_som_uppgifternas():
 
 def test_situationen_ska_vara_sann_i_instruktionen():
     """Lärarens dom 2026-09-23 över prov 126: kycklingens vikt ur tiden i
-    ugnen, två «modeller» för en studsmatta, taxins kopplingsmening."""
+    ugnen, två «modeller» för en studsmatta, taxins kopplingsmening. Och
+    2026-09-24 över exam 132: inte heller tiden ur kycklingens vikt, den
+    tappar vätska i ugnen, så kycklingen är inget gott exempel längre."""
     r = exam_gen.INSTRUCTION
     assert "SITUATIONEN SKA VARA SANN" in r
     assert "ingen lägger virus i rad över ett hårstrå" in r
-    assert "tiden i ugnen ur kycklingens vikt, aldrig vikten ur tiden" in r
+    assert "aldrig väggens storlek ur färgen" in r
+    assert "aldrig tiden i ugnen ur vikten på det som tillagas" in r
+    assert "tiden i ugnen ur kycklingens vikt" not in r
     assert "två alternativ finns att välja mellan på riktigt" in r
     assert "formelns namn, kolon, formeln, komma och vad" in r
     assert "Ge bara den information frågan behöver" in r
