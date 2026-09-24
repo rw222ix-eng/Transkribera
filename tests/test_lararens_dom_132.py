@@ -4,8 +4,9 @@ kod. Uppgiftstexterna nedan står ordagrant som modellen skrev dem.
   4   Kycklingen: vikten ändras i ugnen och ingen räknar så. Uttrycket står
       efter ett kolon på samma rad som meningen, «där m är …» efter ett
       komma, och frågan ensam efter en tom rad.
-  6   Deluppgiften bär sin likhet: «Avgör om likheten … stämmer.» Stammen
-      hänvisar inte till «a) och b)», och pappret skriver a) i stället för (a).
+  6   Deluppgiften bär sin likhet: «Avgör om √(36 + 64) = 14 stämmer.», utan
+      ordet «likheten». Stammen hänvisar inte till «a) och b)», och pappret
+      skriver a) i stället för (a).
   10  «På vardagar jobbar han 3 timmar fler.»: per dag, totalt, och lördagen?
   11  «det första rummet» och «det andra rummet» blir det gröna och det blå,
       och «dess» i stället för rummets namn en gång till.
@@ -95,7 +96,8 @@ def test_domarna_star_i_instruktionen():
     assert "det tappar vätska och vikt i ugnen" in r
     assert "ges av uttrycket: $45(n + 2)$, där $n$ är antalet elever." in r
     assert "Aldrig uttrycket på en egen rad mitt i meningen." in r
-    assert "«a) Avgör om likheten $\\sqrt{36 + 64} = 14$ stämmer.»" in r
+    assert "«a) Avgör om $\\sqrt{36 + 64} = 14$ stämmer.»" in r
+    assert "Inget «likheten» eller «påståendet» framför" in r
     assert "Stammen hänvisar aldrig till deluppgifterna" in r
     assert "TID OCH MÄNGD GÅR BARA ATT LÄSA PÅ ETT SÄTT" in r
     assert "«det gröna rummet» och «det blå rummet»" in r

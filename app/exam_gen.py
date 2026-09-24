@@ -617,9 +617,12 @@ INSTRUCTION = (
     # likheterna i a) och b) stämmer.» och i a) likheten på en rad, «Avgör om
     # likheten stämmer.» på nästa. «Det första man ser är "Avgör om
     # likheten", … och "stämmer" efter det. Det är jättetydligt
-    # dispositionerat.»
+    # dispositionerat.» Samma dag, efter att ha sett det tryckt: «Att nämna
+    # likheten kanske är onödigt … bara "Avgör om rot 36 plus 64 är lika med
+    # 14 stämmer".» Likheten syns; ordet säger ingenting till.
     "  • Deluppgiftens fråga bär själv det den frågar om: «a) Avgör om "
-    "likheten $\\sqrt{36 + 64} = 14$ stämmer.» Aldrig likheten på en rad och "
+    "$\\sqrt{36 + 64} = 14$ stämmer.» Inget «likheten» eller «påståendet» "
+    "framför det som redan står där, och aldrig likheten på en rad och "
     "«Avgör om likheten stämmer.» på nästa. Stammen hänvisar aldrig till "
     "deluppgifterna («likheterna i a) och b)», «uttrycken i a) och b)»); "
     "finns inget som gäller alla deluppgifter är stammen tom.\n"
