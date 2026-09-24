@@ -694,6 +694,59 @@ def undervisade_delmoment(db_file: Path, body: dict, *,
         conn.close()
 
 
+def undervisade_lektionsmal(db_file: Path, body: dict, *,
+                            group_id: int | None, course_id: int | None,
+                            digital: bool = True) -> list[dict]:
+    """Tavlornas MÅL för samma lektioner som undervisade_delmoment räknar:
+    kalenderns lektioner före provet med sidor inom spannet. Målen läses ur
+    planned_lessons (exam_gen.lektionsmal_ur_tavlor). Lärarens dom
+    2026-09-24 kväll, exam 126: delmomenten sa vilka lektioner provet skulle
+    pröva, inte vad de lärde ut. Tom lista utan bok, klass eller tavlor."""
+    val = bok_val(body)
+    if val is None:
+        return []
+    _bid, fran, till = val
+    try:
+        gid, cid = int(group_id or 0), int(course_id or 0)
+    except (TypeError, ValueError):
+        return []
+    if not gid or not cid:
+        return []
+    provdatum = (body.get("datum") or "").strip()
+    conn = db.connect(db_file)
+    try:
+        datum = set()
+        for r in db.lektionsinnehall_for_kurs(conn, gid, cid):
+            d = str(r.get("datum") or "")
+            if provdatum and d >= provdatum:
+                continue
+            spann = [(x.get("fran"), x.get("till")) for x in
+                     (r.get("delar") or []) if isinstance(x, dict)] \
+                or [(r.get("fran"), r.get("till"))]
+            try:
+                if any(int(f or 0) <= int(till) and int(t or f or 0) >= int(fran)
+                       for f, t in spann if f):
+                    datum.add(d)
+            except (TypeError, ValueError):
+                continue
+        if not datum:
+            return []
+        rader = conn.execute(
+            "SELECT datum, titel, board_json FROM planned_lessons "
+            "WHERE group_id = ? AND datum IN (%s) ORDER BY id"
+            % ",".join("?" * len(datum)), (gid, *sorted(datum))).fetchall()
+    finally:
+        conn.close()
+    tavlor = []
+    for r in rader:
+        try:
+            tavlor.append({"datum": r["datum"], "titel": r["titel"],
+                           "board": json.loads(r["board_json"] or "{}")})
+        except (ValueError, TypeError):
+            continue                        # trasig tavla: hoppa över den
+    return exam_gen.lektionsmal_ur_tavlor(tavlor, digital=digital)
+
+
 def bok_nivaer(db_file: Path, body: dict, *, profil: str,
                urval: bool = False) -> str:
     """Bokens nivåskala för det valda uppslaget (Del C, C2b) — arbetsbladets

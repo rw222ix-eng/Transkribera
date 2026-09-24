@@ -7766,6 +7766,309 @@ def doma_delmoment(exam: dict, delmoment: list[dict] | None, *, model: str,
     return metodfynd(_json_objekt(raw))
 
 
+# ── LEKTIONSMÅLEN (lärarens dom 2026-09-24 kväll, exam 126) ─────────────────
+# Delmomenten säger VILKA lektioner provet ska pröva. De säger inte VAD
+# lektionen lärde ut. Exam 126 bar en uppgift per delmoment och räkningen var
+# nöjd, men granskningen hittade ändå:
+#
+#   * ingen E-poäng för att LÖSA en linjär ekvation. Balansmetodens enda
+#     E-poäng var att ställa upp ekvationen i uppgift 12;
+#   * ingen olikhet där tecknet vänds, fast tavlan 11/9 lovade «Lösa och
+#     vända tecknet»;
+#   * en kubikrot men ingen kvadratrot, fast lektionen 24/8 hette
+#     «Kvadratrötter och kubikrötter»;
+#   * mönstret bara på A-nivå, så en E- eller C-elev prövades inte alls i det.
+#
+# Läraren: «vi behöver lösa det så att vi slipper hålla på såhär fram och
+# tillbaka». Tre delar, och alla tre bygger på det läraren själv skrev:
+#
+#   1. MÅLEN ur tavlan (planned_lessons.board_json). Punktlistan under
+#      rubriken på vänstra tavlan är lektionens mål i lärarens ord. De går in
+#      i prompten (build_lektionsmal) och till domaren (doma_lektionsmal), som
+#      går mål för mål och frågar om någon uppgift kräver metoden, och om
+#      lektionens grundmetod får en E-poäng.
+#   2. RÄKNAT: ett delmoment som bara bär A-poäng (delmomentniva). Den regeln
+#      behöver ingen modell, och den körs i efterkontrollen också.
+#   3. DIGITALT BARA MED DIGITAL DEL. Tavlan 10/9 hade «Digitalt när talet
+#      blir fult», men klassen gick aldrig igenom GeoGebra (läraren 24/9), och
+#      provet har ingen datordel. Ett mål eller en kryssad DIG-punkt som
+#      kräver verktyget kan inte prövas på det pappret och ska inte begäras
+#      (har_digital_del, ci_tackning).
+#
+# Ett HÅRT krav på en E-poäng per delmoment prövades mot de fem godkända
+# proven 24/9 och föll: femton delmoment på 26 poäng ryms inte i NP:s E-band
+# (24–36 % i 1c), och vakten hade fällt vartenda prov. Därför bara A-golvet
+# räknat, och E-kravet på lektionens GRUNDMETOD hos domaren, som kan skilja
+# grundmetoden från fördjupningen.
+
+_DIGITALT_RE = re.compile(r"\b(dator\w*|digital\w*|geogebra|cas|kalkylblad)\b",
+                          re.IGNORECASE)
+_UTAN_DIGITALT_RE = re.compile(
+    r"\b(ingen|utan|inte)\b[^.]{0,20}\b(dator\w*|digital\w*)", re.IGNORECASE)
+
+
+def har_digital_del(exam: dict) -> bool:
+    """Har provet en del där digitala verktyg är tillåtna? Hjälpmedelsraden
+    avgör, och en rad som inte nämner verktygen betyder nej: lärarens prov
+    har hittills varit «Formelblad på hela provet, räknare bara på del C»,
+    och IndA-provet «INGEN DATORDEL» (Rickard 24/9)."""
+    text = " ".join(str((exam or {}).get(f) or "")
+                    for f in ("hjalpmedel", "instruktion"))
+    return bool(_DIGITALT_RE.search(text)) \
+        and not _UTAN_DIGITALT_RE.search(text)
+
+
+# Punkter på tavlan som inte är mål: bokens sidor och uppgiftsnummer,
+# «Två exempel tillsammans», räknarbesked («Mest utan miniräknare»).
+_INTE_MAL_RE = re.compile(r"\bs\.\s*\d|\bboken\b|\buppg\b|\buppg\.|\buppgift"
+                          r"|exempel|räknare", re.IGNORECASE)
+LEKTIONSMAL_PER_LEKTION = 4
+
+
+def lektionsmal_ur_tavlor(tavlor: list[dict], *,
+                          digital: bool = True) -> list[dict]:
+    """Tavlorna → [{"datum", "lektion", "mal": [...]}], en post per datum.
+
+    `tavlor` är {"datum", "titel", "board"} i databasens ordning (id). En
+    lektion kan ha sparats i flera versioner samma dag (24/8 har sex), och den
+    SENASTE gäller. Målen är den första punktlistan på den första tavlan,
+    utan bokhänvisningar, exempelrubriker och det som inte är provbart
+    (_EJ_PROVBART). Utan digital del faller de digitala målen också bort."""
+    per_datum: dict[str, dict] = {}
+    for t in tavlor or []:
+        if not isinstance(t, dict) or not isinstance(t.get("board"), dict):
+            continue
+        brador = t["board"].get("boards") or []
+        forsta = brador[0] if brador and isinstance(brador[0], dict) else {}
+        lista = next((s for s in (forsta.get("sections") or [])
+                      if isinstance(s, dict) and s.get("kind") == "list"), None)
+        mal = []
+        for punkt in ((lista or {}).get("items") or []):
+            p = " ".join(str(punkt or "").split())
+            if not p or _INTE_MAL_RE.search(p) or _ej_provbart(p):
+                continue
+            if not digital and _DIGITALT_RE.search(p):
+                continue
+            mal.append(p)
+        datum = str(t.get("datum") or "")
+        if mal and datum:
+            per_datum[datum] = {"datum": datum,
+                                "lektion": _delmomentnamn(t.get("titel") or ""),
+                                "mal": mal[:LEKTIONSMAL_PER_LEKTION]}
+    return [per_datum[d] for d in sorted(per_datum)]
+
+
+# Pappret har ingen tallinje att rita på (exam_spec har ingen sådan figur).
+# Domaren fällde «Markera intervall på tallinjen» på exam 126 två gånger, och
+# ett fynd som ingen uppgift kan laga är en reparationsrunda i onödan.
+_TALLINJE = ("Mål om att läsa eller markera på en tallinje prövas med "
+             "intervall eller olikhetstecken, eftersom pappret inte har "
+             "tallinjer att rita på.")
+
+
+def _malrader(mal: list[dict]) -> str:
+    return "\n".join(f"- {m['datum']} {m['lektion']}: " + "; ".join(m["mal"])
+                     for m in mal)
+
+
+def build_lektionsmal(mal: list[dict], *, digital: bool = True) -> str:
+    """Lektionsmålen som promptblock, eller TOM STRÄNG (kassetteregeln, samma
+    villkor som build_delmoment: utan tavlor är prompten byte för byte den
+    som spelades in)."""
+    if not mal:
+        return ""
+    return (
+        "LEKTIONSMÅLEN, som de stod på tavlan, i lärarens egna ord:\n"
+        + _malrader(mal) + "\n"
+        "Provet ska pröva det lektionerna LÄRDE UT, inte bara deras rubriker. "
+        "Ett mål som är en metod eller regel eleven ska kunna använda (lösa, "
+        "förenkla, dra roten, vända olikhetstecknet, lösa ut en variabel ur en "
+        "formel) ska krävas av minst en uppgift eller deluppgift. Varje "
+        "lektions GRUNDMETOD ska ge minst en E-poäng: en enkel uppgift där "
+        "eleven gör just det, gärna som a) före en svårare b). Att ställa upp "
+        "en ekvation är inte att lösa den. Inget delmoment får prövas bara på "
+        "A-nivå. Mål som är ett samtal eller en genomgång («Vad betyder "
+        "likhetstecknet?») behöver ingen egen uppgift. " + _TALLINJE
+        + ("" if digital else
+           " Provet har ingen digital del: ingen uppgift får kräva GeoGebra, "
+           "CAS, kalkylblad eller numerisk lösning med verktyg."))
+
+
+DELMOMENTNIVA_UNDANTAG = ("nivå 3",)
+
+
+def delmomentniva(exam: dict, delmoment: list[dict] | None) -> list[dict]:
+    """Ett undervisat delmoment som BARA bär A-poäng är oprövat för den som
+    läser för E eller C (exam 126 uppgift 7, mönstret 0/0/2; exam 129 samma).
+
+    Räknas ur samma bärare som täckningen (_delmomentbarare). Luckan, ett
+    delmoment utan uppgift, är delmomenttackning:s fynd och inte det här.
+    Samma fail-open: ingen lista, eller ingen uppgift som bär fältet.
+    Delmoment som själva heter «nivå 3» (bokens fördjupning, IndA 5/10) är
+    A-stoff med flit och undantas."""
+    if not delmoment:
+        return []
+    uppgifter = [u for u in ((exam or {}).get("uppgifter") or [])
+                 if isinstance(u, dict)]
+    if not any(str(u.get("delmoment") or "").strip() for u in uppgifter):
+        return []
+    fel: list[dict] = []
+    for namn, nr in _delmomentbarare(exam, delmoment).items():
+        if not nr or any(o in namn.casefold() for o in DELMOMENTNIVA_UNDANTAG):
+            continue
+        e = c = a = 0
+        for n in nr:
+            pe, pc, pa = _uppgiftspoang((exam.get("uppgifter") or [])[n - 1])
+            e, c, a = e + pe, c + pc, a + pa
+        if a and not e and not c:
+            lista = ", ".join(str(n) for n in nr)
+            fel.append(_err(
+                f"uppgift {nr[0]}", "delmomentniva",
+                f"Delmomentet «{namn}» prövas bara på A-nivå (uppgift {lista}). "
+                "En elev som läser för E eller C prövas då inte alls i det. "
+                "Ge det minst en E-poäng: gör uppgiften till a) på E-nivå och "
+                "b) den svåra, och ta poängen från ett delmoment som redan bär "
+                "flera, så att summan och fördelningen står kvar."))
+    return fel[:DELMOMENT_MAX_FYND]
+
+
+LEKTIONSMAL_MAX_FYND = 4
+LEKTIONSMAL_MAX_TOKENS = 4_000
+
+LEKTIONSMAL_SYSTEM = (
+    "Du är en svensk gymnasielärare i matematik som läser ett prov mot det "
+    "hon faktiskt lärt ut på lektionerna. Du svarar ALLTID med giltig JSON "
+    "enligt schemat, ingenting annat."
+)
+
+LEKTIONSMAL_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "saknas": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"datum": {"type": "string"},
+                               "mal": {"type": "string"},
+                               "niva": {"type": "string",
+                                        "enum": ["E", "C", "A"]},
+                               "varfor": {"type": "string"}},
+                "required": ["datum", "mal", "niva", "varfor"],
+            },
+        },
+    },
+    "required": ["saknas"],
+}
+
+
+def _malkort(exam: dict) -> list[dict]:
+    """Uppgifterna med poängen, för domaren som ska se VILKEN nivå som prövar
+    vad. uppgiftskort saknar poängen med flit (relevansen är nivålös)."""
+    ut = []
+    for i, u in enumerate((exam or {}).get("uppgifter") or [], 1):
+        if not isinstance(u, dict):
+            continue
+        rad = {"nr": str(i), "text": u.get("text") or ""}
+        delar = [d for d in (u.get("deluppgifter") or []) if isinstance(d, dict)]
+        if delar:
+            rad["deluppgifter"] = [
+                {"del": "abcdefghijkl"[k], "text": d.get("text") or "",
+                 "poang_ECA": list(_trippel(d.get("poang"))),
+                 "losning": d.get("losning") or "",
+                 "bedomning": d.get("bedomning") or ""}
+                for k, d in enumerate(delar)]
+        else:
+            rad.update({"poang_ECA": list(_trippel(u.get("poang"))),
+                        "losning": u.get("losning") or "",
+                        "bedomning": u.get("bedomning") or ""})
+        ut.append(rad)
+    return ut
+
+
+def build_lektionsmal_prompt(kort: list[dict], mal: list[dict], *,
+                             digital: bool = True) -> str:
+    """Lektionsmålsdomarens prompt. Ordet «lektionsmålsdomare» står här och
+    ingen annanstans (tests/fejk.py `_auto` väljer band på domarens namn)."""
+    return (
+        "Du är lektionsmålsdomare. Nedan står lektionerna klassen haft före "
+        "provet, med målen som stod på tavlan, och därefter provets uppgifter "
+        "som JSON med poängen (E, C, A) per uppgift och deluppgift.\n\n"
+        f"LEKTIONERNA:\n{_malrader(mal)}\n\n"
+        f"UPPGIFTERNA:\n{json.dumps(kort, ensure_ascii=False)}\n\n"
+        "Gå lektion för lektion och mål för mål, och skriv lösningarna för "
+        "dig själv. Två sorters fynd:\n"
+        "1. METOD SOM INTE PRÖVAS. Målet är en metod eller regel eleven ska "
+        "använda (lösa, förenkla, dra roten, vända olikhetstecknet, lösa ut "
+        "ur en formel), och INGEN uppgift kräver den i sin lösning. «niva» "
+        "är den nivå en uppgift på målet hör till, oftast E.\n"
+        "2. GRUNDMETOD UTAN E-POÄNG. Lektionens grundmetod, det lektionen "
+        "heter, ska ge minst en E-poäng. Ges E-poängen bara för något runt "
+        "omkring, till exempel att ställa upp en ekvation men inte att lösa "
+        "den, är det ett fynd med «niva» E.\n"
+        "Mål som är ett samtal eller en genomgång («Vad betyder …?») är inga "
+        "fynd. Att en uppgift är svår är inget fynd. " + _TALLINJE
+        + ("" if digital else
+           " Provet har ingen digital del: mål som kräver digitala verktyg "
+           "är inga fynd.")
+        + "\nSvara med \"saknas\": en post per fynd med datum, målet "
+        "ordagrant, niva och en mening varfor. Tom lista när provet prövar "
+        "det lektionerna lärde ut. Svara med enbart JSON."
+    )
+
+
+def lektionsmalfynd(data) -> list[dict]:
+    """Domens svar → problemposter för reparationsrundan."""
+    if not isinstance(data, dict):
+        return []
+    ut: list[dict] = []
+    for s in (data.get("saknas") or []):
+        if not isinstance(s, dict):
+            continue
+        mal = str(s.get("mal") or "").strip()
+        if not mal:
+            continue
+        niva = str(s.get("niva") or "E").strip().upper()[:1] or "E"
+        datum = _kort(str(s.get("datum") or "").strip(), 12)
+        varfor = _kort(str(s.get("varfor") or "").strip(), 160)
+        ut.append(_err(
+            "uppgifter", "lektionsmal",
+            f"Lektionen {datum} lärde ut «{_kort(mal, 80)}», men provet prövar "
+            f"det inte på {niva}-nivå. {varfor} Skriv om en uppgift i samma "
+            f"delmoment så att den kräver det på {niva}-nivå, gärna som a) "
+            "före en svårare b), och ta poängen från ett delmoment som redan "
+            "bär flera, så att summan och fördelningen står kvar."))
+    return ut[:LEKTIONSMAL_MAX_FYND]
+
+
+def doma_lektionsmal(exam: dict, mal: list[dict] | None, *, model: str,
+                     llm=llm_client.generate,
+                     log_cb: Callable[[str], None] | None = None) -> list[dict]:
+    """Ett domaranrop → fynd där ett lektionsmål inte prövas, eller där
+    lektionens grundmetod saknar E-poäng. Utan mål körs INGENTING (samma
+    villkor som delmomentsdomaren utan delmoment), och ett nätfel kostar
+    inte genereringen (fail-open)."""
+    log = log_cb or (lambda _m: None)
+    kort = _malkort(exam or {})
+    if not kort or not mal:
+        return []
+    log("Lektionsmålsdomaren läser provet mot tavlornas mål …")
+    try:
+        raw = llm(model, build_lektionsmal_prompt(
+                      kort, mal, digital=har_digital_del(exam)),
+                  system=LEKTIONSMAL_SYSTEM,
+                  options={"temperature": 0.0},
+                  response_format={"type": "json_schema",
+                                   "json_schema": {"name": "lektionsmaldom",
+                                                   "schema": LEKTIONSMAL_SCHEMA}},
+                  max_tokens=LEKTIONSMAL_MAX_TOKENS,
+                  token_cb=None)
+    except Exception as e:                          # noqa: BLE001
+        log(f"Lektionsmålsdomaren kunde inte nås ({e}) — provet lämnas som "
+            "det är.")
+        return []
+    return lektionsmalfynd(_json_objekt(raw))
+
+
 # ── VIKTEN, NIVÅN OCH MÄRKNINGEN (2026-09-19, tre granskningar samma dag) ──
 # Läraren granskade prov 85 (IndA 2a, kap 1), 86 (NA26F 1c, kap 1–2) och 87
 # (omprov TE26A 1c, kap 1) och fann samma sorts fel i alla tre. Täckningen
@@ -8178,6 +8481,11 @@ def ci_tackning(exam: dict, koder: list[str] | None) -> list[dict]:
     kontrakt) och utan en enda taggad uppgift (pappret skrevs innan fältet
     låstes, eller grammatiken körde utan enum)."""
     valda = [k for k in (koder or []) if str(k or "").strip()]
+    # Den digitala punkten kan inte prövas på ett prov utan digital del
+    # (lärarens dom 2026-09-24, exam 126: DIG-2 kryssad, GeoGebra aldrig
+    # genomgånget, ingen datordel). Se har_digital_del.
+    if not har_digital_del(exam):
+        valda = [k for k in valda if f"-{_CI_DIGITALT}-" not in k]
     if not valda:
         return []
     taggade: set[str] = set()
@@ -10709,6 +11017,8 @@ def _raknade_fynd(exam: dict, *, avsnitt: list[dict] | None, antal: int | None,
     A-poäng att skydda och ingen kravrad att motsäga."""
     fel = (avsnittstackning(exam, avsnitt or [], antal or 0, koder)
            + delmomenttackning(exam, delmoment or [], bokuppgifter)
+           # Inget delmoment bara på A-nivå (exam 126, 2026-09-24 kväll).
+           + delmomentniva(exam, delmoment or [])
            + poangvakt(exam, profil, poang_tak)
            + avsnittsniva(exam, avsnitt or [], bokuppgifter, koder)
            + delmomentvikt(exam, delmoment or [])
@@ -10756,6 +11066,7 @@ def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                    punkter: list[str] | None = None, inriktning: str = "",
                    kurs: str = "", referensprov: dict | None = None,
                    doma: bool = True, tidigare: list[str] | None = None,
+                   lektionsmal: list[dict] | None = None,
                    log_cb: Callable[[str], None] | None = None) -> dict:
     """Kapitelramens kontroll, med SAMMA kontrakt som _rakneverk_pass: högst EN
     reparationsrunda, samma budget, samma «rent före, trasigt efter»-grind, och
@@ -10808,6 +11119,10 @@ def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
     if doma:
         fel = fel + doma_delmoment(exam, delmoment, model=model, llm=llm,
                                    forbjudna=forbjudna, log_cb=log_cb)
+        # Tavlornas mål i samma runda (exam 126): det lektionen lärde ut,
+        # och lektionens grundmetod på E-nivå. Utan tavlor inget anrop.
+        fel = fel + doma_lektionsmal(exam, lektionsmal, model=model, llm=llm,
+                                     log_cb=log_cb)
     # ── PROVETS BOK- OCH TEXTGRIND ────────────────────────────────────
     # EN grind med två domare, och den körs när provet har ett KAPITEL att
     # mätas mot. Villkoret är bokuppgifterna, av två skäl som pekar åt samma
@@ -11658,6 +11973,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                   inforprov: dict | None = None,
                   infor_nummer: list[int] | None = None,
                   infor_ram: dict | None = None,
+                  lektionsmal: list[dict] | None = None,
                   llm=llm_client.generate, max_rounds: int = MAX_ROUNDS,
                   log_cb: Callable[[str], None] | None = None,
                   steg_cb: Callable[[str], None] | None = None) -> dict:
@@ -11829,6 +12145,14 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # Delmomenten (2026-09-13). Samma villkor och samma skäl som ovan: tom
     # lista ger en TOM STRÄNG och en oförändrad prompt.
     delmomentblock = build_delmoment(delmoment or [], antal)
+    # Tavlornas mål under delmomenten (exam 126, 2026-09-24 kväll). Tom
+    # lista ger en tom sträng och blocket ovan orört.
+    malblock = build_lektionsmal(lektionsmal or [],
+                                 digital=har_digital_del({"hjalpmedel":
+                                                          hjalpmedel}))
+    if malblock:
+        delmomentblock = "\n\n".join(b for b in (delmomentblock, malblock)
+                                     if b)
     # Förbudet och provets bokförebild (2026-09-13). Samma villkor och samma
     # skäl som ovan: tomma listor ger TOMMA STRÄNGAR och en oförändrad prompt.
     # Förebilden är PROVETS. Gruppuppgiften bygger sin egen inne i
@@ -11956,6 +12280,8 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                              punkter=punkter, inriktning=inriktning,
                              kurs=kurs, referensprov=referensprov,
                              doma=doma, tidigare=tidigare,
+                             lektionsmal=lektionsmal if profil == "prov"
+                             else None,
                              rounds_used=res["rounds"], max_rounds=max_rounds,
                              log_cb=log_cb)
     # ── «INFÖR PROVET»-TÄCKNINGEN (2026-09-19) ───────────────────────

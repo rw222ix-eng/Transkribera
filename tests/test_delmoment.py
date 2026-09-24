@@ -1114,8 +1114,10 @@ def test_provets_forebilder_tar_bokens_repetitionssidor_forst(tmp_path):
 _FORMAGA = ["B", "P", "PL", "M", "R", "K", "B", "P", "PL", "M"]
 _TYP = ["rutin", "problem", "rutin", "resonemang", "redovisning",
         "rutin", "problem", "rutin", "resonemang", "redovisning"]
+# Inget delmoment bara på A-nivå (exam_gen.delmomentniva, 2026-09-24 kväll):
+# de två sista var (0, 0, 2) och fällde det balanserade provet.
 _POANG = [[2, 0, 0], [1, 1, 0], [1, 1, 0], [1, 1, 0], [1, 1, 0],
-          [2, 0, 0], [0, 2, 0], [0, 1, 1], [0, 0, 2], [0, 0, 2]]
+          [2, 0, 0], [0, 2, 0], [0, 1, 1], [0, 1, 1], [0, 1, 1]]
 # Var uppgift sin egen mening. Variationsvakten byter talen mot # innan den
 # jämför, så «uppgift 6» och «uppgift 8» hade varit samma text för den — och
 # den bortbytta uppgiften nedan hade fällts för en likhet testet inte handlar

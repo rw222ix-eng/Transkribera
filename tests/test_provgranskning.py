@@ -194,7 +194,11 @@ def test_den_kryssade_punkten_utan_uppgift_blir_ett_fynd():
     assert len(koder) == 2
     u = _u(text="Faktorisera $x^2 - 4$.", innehall=["G25-M1C-ALG-1"],
            losning="$(x-2)(x+2)$")
-    fel = exam_gen.ci_tackning(_prov([u]), koder)
+    # Prov 85 hade en digital del. Utan den kan punkten inte prövas och
+    # begärs inte (exam_gen.har_digital_del, exam 126 2026-09-24).
+    assert exam_gen.ci_tackning(_prov([u]), koder) == []
+    fel = exam_gen.ci_tackning(
+        _prov([u], hjalpmedel="Digitala verktyg och formelblad."), koder)
     assert [f["code"] for f in fel] == ["citackning"]
     assert "G25-M1C-DIG-1" in fel[0]["message"]
     # Den digitala punkten får sin egen rad, den prövas bara om provet BER

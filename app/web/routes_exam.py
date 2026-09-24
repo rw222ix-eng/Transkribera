@@ -332,7 +332,11 @@ def _lektionsfynd(view: dict, doc, bok: dict | None, db_file: Path) -> list[dict
     except Exception:                       # pragma: no cover, trasig bas
         return []
     fel = exam_gen.delmomenttackning(view.get("exam") or {}, delmoment)
-    return [_fynd("lektion", f["message"]) for f in fel]
+    # Och inget delmoment bara på A-nivå (exam 126 uppgift 7, 2026-09-24).
+    niva = exam_gen.delmomentniva(view.get("exam") or {}, delmoment)
+    return ([_fynd("lektion", f["message"]) for f in fel]
+            + [_fynd("lektion", f["message"],
+                     _uppgiftsnr(f.get("path", ""))) for f in niva])
 
 
 def _delfynd(doc) -> list[dict]:
@@ -1957,6 +1961,15 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     forbjudna = routes_planning.forbjudna_metoder(
                         db_file, body, group_id=group_id, course_id=course_id,
                         undervisade=delmoment)
+                    # Tavlornas mål för samma lektioner (lärarens dom
+                    # 2026-09-24 kväll, exam 126). Digitala mål bara när
+                    # hjälpmedlen ger provet en digital del.
+                    lektionsmal = routes_planning.undervisade_lektionsmal(
+                        db_file, body, group_id=group_id, course_id=course_id,
+                        digital=exam_gen.har_digital_del(
+                            {"hjalpmedel": hjalpmedelsregel}))
+                else:
+                    lektionsmal = []
                 # PROVETS RAM FÖR BLADET INFÖR PROVET (2026-09-24 kväll).
                 # Samma tre listor som provet skrevs mot, med PROVETS datum
                 # och klass, plus bokens fördjupning inom sidorna. De går
@@ -2026,6 +2039,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     boknivaer=nivaer_block, forlaga=forlaga_block,
                     avsnitt=avsnitt, delmoment=delmoment,
                     forbjudna=forbjudna, bokuppgifter=bokuppgifter,
+                    lektionsmal=lektionsmal,
                     hjalpmedel=exam_gen.build_hjalpmedel(hjalpmedelsregel),
                     svart=svart_block, fokus=fokus_block,
                     inriktning=inriktning, profil=typ,
