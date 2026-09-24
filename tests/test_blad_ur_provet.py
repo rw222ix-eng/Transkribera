@@ -86,34 +86,31 @@ def test_ma_1a_far_samma_regel_men_inte_nivå_2():
     assert ci_utanfor.ci_vakt(papper, "Matematik, nivå 2c", "arbetsblad") == []
 
 
-def test_provet_ror_vi_inte_forran_rickard_sagt_ja():
-    """BARA_OVNING: proven är granskade och godkända, och en ny vakt på dem är
-    lärarens beslut. Förvalet är provet, så varje gammal anropare är orörd."""
+def test_provet_far_samma_regel_som_bladet():
+    """Först bara på bladen (BARA_OVNING). Nu gäller regeln proven också,
+    samma princip som implikationen: det som inte står i kursens centrala
+    innehåll ska ut ur proven. GY25 har reglerna bara i 2a och 2c."""
     papper = _papper(KVADRERING[1])
-    assert ci_utanfor.ci_vakt(papper, KURS1C) == []
-    assert ci_utanfor.ci_vakt(papper, KURS1C, "prov") == []
-    # Promptraden för provet är byte för byte den gamla.
-    assert ci_utanfor.build_utanfor(KURS1C) == \
-        ci_utanfor.build_utanfor(KURS1C, "prov")
-    assert "kvadrerings" not in ci_utanfor.build_utanfor(KURS1C)
-    blad = ci_utanfor.build_utanfor(KURS1C, "arbetsblad")
-    assert "kvadrerings- och konjugatreglerna" in blad
-    assert "talföljder" in blad
-    # 1a har bara den nya raden, och då ingen mening om talföljder.
-    rad_1a = ci_utanfor.build_utanfor("Matematik, nivå 1a", "arbetsblad")
-    assert "kvadrerings" in rad_1a and "talföljder" not in rad_1a
-    # Provets rad för 1a har bara implikationen (Rickard 2026-09-25), som
-    # gäller prov och blad lika.
-    rad_1a_prov = ci_utanfor.build_utanfor("Matematik, nivå 1a")
-    assert "kvadrerings" not in rad_1a_prov
-    assert "implikation och ekvivalens" in rad_1a_prov
+    for profil in ("prov", "arbetsblad", "gruppuppgift"):
+        fel = ci_utanfor.ci_vakt(papper, KURS1C, profil)
+        assert [f["path"] for f in fel] == ["uppgift 1"], profil
+    assert ci_utanfor.ci_vakt(papper, "Matematik, nivå 1b", "prov")
+    assert ci_utanfor.BARA_OVNING == {}
+    for kurs in (KURS1C, "Matematik, nivå 1a"):
+        rad = ci_utanfor.build_utanfor(kurs)
+        assert "kvadrerings- och konjugatreglerna" in rad
+        assert rad == ci_utanfor.build_utanfor(kurs, "arbetsblad")
+    # Talföljdsmeningen bara där talföljder står med.
+    assert "talföljder" in ci_utanfor.build_utanfor(KURS1C)
+    assert "talföljder" not in ci_utanfor.build_utanfor("Matematik, nivå 1a")
+    # Nivå 2 har reglerna i sitt centrala innehåll.
+    assert "kvadrerings" not in ci_utanfor.build_utanfor("Matematik, nivå 2a")
 
 
-def test_efterkontrollen_visar_det_pa_bladet_men_inte_pa_provet():
+def test_efterkontrollen_visar_det_pa_blad_och_prov():
     papper = _papper(KVADRERING[0])
-    assert [f["kod"] for f in routes_exam._cifynd(papper, "arbetsblad")] == \
-        ["utanforci"]
-    assert routes_exam._cifynd(papper, "prov") == []
+    for typ in ("arbetsblad", "prov"):
+        assert [f["kod"] for f in routes_exam._cifynd(papper, typ)] ==             ["utanforci"]
 
 
 # ──────────────── räknarraden ur provets delar ────────────────

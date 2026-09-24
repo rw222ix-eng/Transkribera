@@ -131,9 +131,9 @@ UTANFOR: dict[str, list[tuple[str, str, re.Pattern]]] = {
 # eller förenklas, och produkten (a + b)(a − b). En formel som bara ska räknas
 # ut, h = (12 − 0,5t)², står kvar.
 #
-# BARA ÖVNINGSPAPPREN TILLS VIDARE. Proven är granskade och godkända av
-# läraren, och en ny vakt på provet är hennes beslut (uppdraget 2026-09-24).
-# Svarar hon ja flyttas raderna in i UTANFOR ovan, och då gäller de allt.
+# Först bara på övningspappren (proven var granskade och godkända, och en ny
+# vakt på provet är lärarens beslut). Nu i UTANFOR för 1a, 1b och 1c, se
+# nedanför _KVADRERING.
 _LATEXORD = re.compile(r"\\[A-Za-z]+")
 _MATTESTYCKE = re.compile(r"\$\$?([^$]+)\$\$?")
 _KVADRATPARENTES = re.compile(r"\(([^()]*)\)\s*\^\s*\{?\s*2\s*\}?")
@@ -208,10 +208,15 @@ _KVADRERING = ("kvadrerings- och konjugatreglerna",
                "igen som en kvadrat. Att multiplicera parenteser term för "
                "term, bryta ut en gemensam faktor och förkorta ingår",
                _Kvadreringsregler())
-BARA_OVNING: dict[str, list[tuple]] = {
-    "1a": [_KVADRERING],
-    "1c": [_KVADRERING],
-}
+# PROVEN OCKSÅ, samma princip som implikationen (Rickard 2026-09-24 kväll):
+# det som inte står i kursens centrala innehåll ska ut ur proven. GY25 har
+# reglerna bara i 2a och 2c. De godkända proven 126, 129, 131 och 132 klarar
+# vakten; gamla 119 och 81 hade inte gjort det.
+for _niva in ("1a", "1b", "1c"):
+    UTANFOR.setdefault(_niva, []).append(_KVADRERING)
+# Det som bara ska gälla övningspapper, tills läraren sagt ja för proven.
+# Tom sedan kvadreringsreglerna flyttade till UTANFOR; mekanismen står kvar.
+BARA_OVNING: dict[str, list[tuple]] = {}
 
 
 def _nyckel(kurs: str) -> str:

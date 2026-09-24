@@ -143,6 +143,10 @@ _KURS1_UTANFOR = [
     # Rickard 2026-09-25: står i 2c:s centrala innehåll, men stod på ett
     # godkänt 1c-prov (app/ci_utanfor.py).
     "implikation och ekvivalens, som begrepp eller som pil mellan utsagor",
+    # Står bara i 2a:s och 2c:s centrala innehåll (app/ci_utanfor.py,
+    # _KVADRERING).
+    "kvadrerings- och konjugatreglerna: en kvadrat av en parentes att "
+    "utveckla, en differens av två kvadrater att faktorisera",
 ]
 
 _KURS1_BADA = [
