@@ -89,3 +89,41 @@ test("märket är scenens filnamn, och en uppgift utan scen märks med texten",
     ], SLANG);
     expect(ut).toEqual(["a-03-vattenslang", "Lös ekvationen", true, false]);
   });
+
+test("den inaktuella bilden säger varför i canvas, men inte i trycket",
+  async ({ page }) => {
+    await fejka(page, []);
+    await page.goto("/");
+    await hydrerad(page);
+    const ut = await page.evaluate(dok => {
+      const bo = document.createElement("div");
+      bo.style.cssText = "position:fixed;left:-30000px;top:0;width:900px";
+      document.body.appendChild(bo);
+      window.Blad.rita(bo, dok);
+      const rad = bo.querySelector('[data-el="uppg1"] .prinaktuell');
+      const ut = { rad: rad ? rad.textContent : "", img: bo.querySelectorAll('[data-el="uppg1"] img').length };
+      bo.remove();
+      return ut;
+    }, papper({ uppg1: "a-03-planka" }));
+    expect(ut.rad).toContain("äldre version");
+    expect(ut.img).toBe(0);
+  });
+
+test("intervallets minus efter «]» är ett förtecken", async ({ page }) => {
+  await fejka(page, []);
+  await page.goto("/");
+  await hydrerad(page);
+  const tex = await page.evaluate(() => {
+    const fangat = [];
+    const org = window.katex.render;
+    window.katex.render = function (t, el, o) { fangat.push(t); return org.call(this, t, el, o); };
+    const d = document.createElement("div");
+    d.innerHTML = '<span class="mat" data-tex="]-3,\ 4]"></span>';
+    document.body.appendChild(d);
+    try { window.Matte && window.Matte.satt && window.Matte.satt(d); } finally {
+      window.katex.render = org; d.remove();
+    }
+    return fangat;
+  });
+  expect(tex.some(t => t.includes("]{-}3"))).toBe(true);
+});

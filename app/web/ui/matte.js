@@ -78,9 +78,15 @@
      facit visade «a =/ 9» (blad 147, 2026-09-24). Arimo har ≠ som eget tecken,
      och \char ger det i det snitt som gäller. */
   const ETT_TECKEN = s => s.replace(/\\neq?(?![a-zA-Z])/g, '\\mathrel{\\char"2260}');
+  /* «]-3, 4]»: efter «]» läser KaTeX minuset som binärt, och intervallet
+     fick luft mellan hakparentesen och talet (granskningen 2026-09-24 natt).
+     I svensk intervallnotation öppnar «]», så minuset är ett tecken: {-}.
+     Samma rättelse i LaTeX (exam_latex._intervallminus). */
+  const INTERVALL = s => s.replace(/\](\s*)-/g, ']$1{-}');
   const rendera = (el, tex, grotesk) => {
     if (!tex || !tex.trim()) return;
-    katex.render(grotesk ? '\\sf ' + ETT_TECKEN(tex) : tex, el, { throwOnError: false, displayMode: false });
+    const t = INTERVALL(tex);
+    katex.render(grotesk ? '\\sf ' + ETT_TECKEN(t) : t, el, { throwOnError: false, displayMode: false });
   };
 
   /* Räknande klammermatchning, så nästlade bråk överlever. */

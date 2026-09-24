@@ -590,3 +590,12 @@ def test_provets_losningsforslag_reserven_har_ett_steg_per_rad():
     assert doc is not None
     tex = exam_latex.render_losningsforslag(doc)
     assert r"\(x = 1\)\newline \(x - 1 = 0\)\newline \(x = 1\)" in tex
+
+
+def test_intervallets_minus_ar_ett_fortecken_i_latex():
+    """«]-3, 4]»: efter «]» läser TeX minuset som binärt (granskningen
+    2026-09-24 natt). Andra hakparenteser rörs inte."""
+    from app import exam_latex
+    ut = exam_latex.escape_mixed(r"$]-3,\ 4]$ och $x \in ]-\infty, 2[$ "
+                                 r"och $[1, 2]$")
+    assert r"]{-}3" in ut and r"]{-}\infty" in ut and r"[1, 2]" in ut

@@ -1001,9 +1001,18 @@ window.BladBygg = (() => {
     /* Enheten står INNE i svarets spann, och spannet tar resten av raden
        (.lossvar). Annars bröts ett långt svar till en egen rad under
        etiketten, till vänster om de indragna uträkningsraderna. */
-    const [svar, steg] = svarOchSteg(u.f);
-    return `<div class="losvar"><b class="losetikett">Svar</b><span class="lossvar">${matBryt(svar)}${
-      u.enhet && !ENHET_SLUT(svar, u.enhet) ? ` <em>${enhetHtml(u.enhet)}</em>` : ''}</span>${
+    /* Granskningen 2026-09-24 natt: «Svar: 3» under etiketten SVAR stod
+       dubbelt, «$n =$» som enhet hamnade EFTER svaret (133:3, 145:2), och
+       «%» efter «2,5 per år (…)» (146:6). Samma regler som
+       bedömningsanvisningens svaret() nedan: ett led («$n =$») står före
+       svaret, en enhet bara efter ett tal. */
+    const [rad, steg] = svarOchSteg(u.f);
+    const svar = rad.replace(/^\s*svar\s*:\s*/i, '');
+    const e = String(u.enhet || '').trim();
+    const fore = e && arLed(e) && !svar.includes('=') ? `${matBryt(e)} ` : '';
+    const efter = e && !arLed(e) && SVAR_TAL.test(svar) && !ENHET_SLUT(svar, e)
+      ? ` <em>${enhetHtml(e)}</em>` : '';
+    return `<div class="losvar"><b class="losetikett">Svar</b><span class="lossvar">${fore}${matBryt(svar)}${efter}</span>${
       steg ? `<span class="losrader">${matBryt(steg)}</span>` : ''}</div>`;
   }
   /* Vägen till svaret — och på en uppgift med deluppgifter ÄR den svaret:

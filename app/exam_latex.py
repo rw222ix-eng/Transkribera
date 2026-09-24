@@ -132,6 +132,17 @@ def _exponentbrak(formel: str) -> str:
     return _EXPONENTBRAK_RE.sub(r"^{\2/\3}", formel)
 
 
+# «]-3, 4]» (granskningen 2026-09-24 natt): efter «]» läser TeX minuset som
+# binärt och sätter luft mellan hakparentesen och talet. I svensk
+# intervallnotation öppnar «]», så minuset är ett förtecken: {-}. Samma
+# rättelse på skärmen (matte.js INTERVALL).
+_INTERVALLMINUS_RE = re.compile(r"\](\s*)-")
+
+
+def _intervallminus(formel: str) -> str:
+    return _INTERVALLMINUS_RE.sub(r"]\1{-}", formel)
+
+
 def escape_mixed(text: str, *, fet: bool = False) -> str:
     """Escapa text med inline-matte: allt utanför ``$…$`` escapas, matten
     bevaras oförändrad som ``\\( … \\)`` (modellen skriver LaTeX-matte där,
@@ -150,7 +161,7 @@ def escape_mixed(text: str, *, fet: bool = False) -> str:
         return _HARD_PROCENT_RE.sub(r"\1~\2", escape_latex(s))
     for m in _MATH_SPLIT_RE.finditer(text):
         parts.append(_esc_text(text[pos:m.start()]))
-        matte = _exponentbrak(m.group(1))
+        matte = _exponentbrak(_intervallminus(m.group(1)))
         formel = r"\pmb{" + matte + "}" if fet else matte
         parts.append(r"\(" + formel + r"\)")
         pos = m.end()
@@ -470,7 +481,8 @@ def _stycken(text: str, luft: bool = False,
         if m and forst_i_raden and not ut:
             ut.append({"formel": False, "text": escape_mixed(rad)})
         elif m:
-            ut.append({"formel": True, "text": _exponentbrak(m.group(1))})
+            ut.append({"formel": True,
+                       "text": _exponentbrak(_intervallminus(m.group(1)))})
         else:
             ut.append({"formel": False, "text": escape_mixed(rad)})
         ut[-1]["luft"] = luft and tom

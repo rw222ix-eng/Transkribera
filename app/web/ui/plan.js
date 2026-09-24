@@ -4673,7 +4673,21 @@
          nedan, annars tappade varvet boksidorna och rutorna blev streckade
          igen mitt i en iteration. */
       v.underlag = res.underlag || v.underlag || null;
+      /* LÄRARENS PLÅTVAL ÖVERLEVER VARVET (2026-09-24 kväll). `scen.plat`
+         bor i dokumentet tills hon godkänner (db.stampla_platval), och
+         franProv tog serverns matchning i stället: en bortvald plåt kom
+         tillbaka efter varje omskrivning. Valet följer med när uppgiften har
+         samma scen som förut (samma filnamn); en ny scen får serverns val. */
+      const platval = new Map((v.uppgifter || [])
+        .filter(u => u.scen && typeof u.scen.plat === 'string')
+        .map(u => [u.nr, { fil: u.scen.filnamn || '', plat: u.scen.plat }]));
       v.uppgifter = franProv(res.exam);
+      v.uppgifter.forEach(u => {
+        const g = platval.get(u.nr);
+        if (g && u.scen && (u.scen.filnamn || '') === g.fil) {
+          u.scen = Object.assign({}, u.scen, { plat: g.plat });
+        }
+      });
       v.granser = res.granser || v.granser || null;
       v.summor = res.summor || v.summor || null;
       v.provFel = res.errors || [];

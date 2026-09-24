@@ -1989,8 +1989,17 @@ window.Blad = (() => {
       const el = $(`[data-el="${nyckel}"] .prbild, [data-el="${nyckel}"] .gufigur`, trav);
       if (!el) return;
       /* En bild som målades för en scen uppgiften inte längre har ritas
-         inte (bildInaktuell nedan). Rutan står kvar med den nya scenen. */
-      if (bildInaktuell(v, nyckel)) return;
+         inte (bildInaktuell nedan). Rutan står kvar med den nya scenen, och
+         en rad säger varför. Raden har .prscenhint och följer därför inte
+         med till trycket (blad-bild.js rastrera). */
+      if (bildInaktuell(v, nyckel)) {
+        if (!$('.prinaktuell', el)) {
+          el.insertAdjacentHTML('afterbegin', '<p class="prscenhint prinaktuell">'
+            + 'Bilden du släppte här hörde till en äldre version av uppgiften. '
+            + 'Släpp en ny bild.</p>');
+        }
+        return;
+      }
       const matt = nyckel === 'forsatt'
         ? 'max-width:100%;max-height:100%;width:auto;height:auto'
         : 'max-width:100%;max-height:340px;width:auto;height:auto';

@@ -186,3 +186,35 @@ test("ett fullt facit paginerar fortfarande — och sida två får sin egen grad
     // Sista bladet bär resten och har därför luft kvar — den går till graden.
     expect(arken[arken.length - 1].fsk).toBeGreaterThan(arken[0].fsk);
   });
+
+/* ── FACITRADEN EFTER GRANSKNINGEN 2026-09-24 NATT ──
+   «Svar: 3» stod under etiketten SVAR, «$n =$» som enhet hamnade efter
+   svaret, och «%» efter «2,5 per år (…)». Samma regler som
+   bedömningsanvisningens svaret(): ett led före svaret, en enhet bara efter
+   ett tal. */
+test("facitraden: inget dubbelt Svar, ledet före, enheten bara efter ett tal",
+  async ({ page }) => {
+    await fejka(page, []);
+    await page.goto("/");
+    await hydrerad(page);
+    const rader = await page.evaluate(() => {
+      const d = document.createElement("div");
+      d.innerHTML = window.BladBygg.arkfacit({ moment: "x" }, [
+        { nr: 1, p: 1, t: "Hur många burkar?", f: "Svar: 3\n$20/8 = 2{,}5$", enhet: "burkar" },
+        { nr: 2, p: 1, t: "Ange $n$.", f: "$5$", enhet: "$n =$" },
+        { nr: 3, p: 1, t: "Hur snabbt?", f: "2,5 per år (ungefär)", enhet: "%" },
+        { nr: 4, p: 1, t: "Hur långt?", f: "$12$", enhet: "m" },
+      ]);
+      document.body.appendChild(d);
+      /* Matten är spann med data-tex tills Matte.satt kört: jämför källan. */
+      const ut = [...d.querySelectorAll(".lossvar")].map(s => s.innerHTML);
+      d.remove();
+      return ut;
+    });
+    expect(rader[0]).not.toMatch(/^Svar/i);
+    expect(rader[0]).toContain("burkar");
+    expect(rader[1].indexOf("n =")).toBeGreaterThan(-1);
+    expect(rader[1].indexOf("n =")).toBeLessThan(rader[1].indexOf('"5'));
+    expect(rader[2]).not.toContain("%");
+    expect(rader[3]).toContain("m");
+  });
