@@ -71,3 +71,67 @@ def test_kvallskopian_tas_en_gang_per_dag(tmp_path):
     assert bk.dags_for_kvallskopia("2026-08-05T19:02:00", dt(2026, 8, 6, 19)) is True
     # En trasig tidsstämpel ska inte tysta kopian för alltid.
     assert bk.dags_for_kvallskopia("i går", dt(2026, 8, 6, 19)) is True
+
+
+# ── WAL, gallring och betygskopian (2026-09-24) ─────────────────────────────
+
+def test_kopian_bar_det_som_bara_ligger_i_wal_filen(tmp_path):
+    """Kvällens dikterade poäng ligger i transkribera.db-wal tills sqlite gör
+    checkpoint. En kopia av bara huvudfilen hade tappat dem."""
+    import sqlite3
+    levande = sqlite3.connect(tmp_path / "transkribera.db")
+    levande.execute("PRAGMA journal_mode=WAL")
+    levande.execute("PRAGMA wal_autocheckpoint=0")
+    levande.execute("CREATE TABLE t(x)")
+    levande.execute("INSERT INTO t VALUES ('kvällens poäng')")
+    levande.commit()                          # appen lever, ingen checkpoint
+    try:
+        res = backup.create_backup(tmp_path)
+        ut = tmp_path / "ut"
+        with zipfile.ZipFile(res["path"]) as zf:
+            zf.extract("transkribera.db", ut)
+        kopia = sqlite3.connect(ut / "transkribera.db")
+        assert kopia.execute("SELECT x FROM t").fetchall() == [("kvällens poäng",)]
+        kopia.close()
+    finally:
+        levande.close()
+    assert not (tmp_path / ".backup-ogonblick.db").exists()
+
+
+def test_platsen_behaller_sju_kopior(tmp_path):
+    plats = tmp_path / "D"
+    plats.mkdir()
+    for dag in range(1, 10):
+        (plats / f"transkribera-backup-202609{dag:02d}-1800.zip").write_bytes(b"")
+    (plats / "annat.zip").write_bytes(b"")
+    res = backup.create_backup(tmp_path, dest_dir=plats, now=datetime(2026, 9, 24, 18, 0))
+    kvar = sorted(p.name for p in plats.glob("transkribera-backup-*.zip"))
+    assert len(kvar) == backup.BEHALL == 7
+    assert kvar[-1] == Path(res["path"]).name
+    assert (plats / "annat.zip").exists()     # bara appens egna kopior gallras
+
+
+def test_betygskopian_bar_poangen_per_rad(tmp_path):
+    import json
+    from app import db
+    conn = db.connect(tmp_path / "transkribera.db")
+    papper = {"typ": "Prov", "klass": "TE26A", "kurs": "Matematik, nivå 1c",
+              "moment": "1.1", "datum": "2026-09-16", "titel": "Tal och uttryck",
+              "uppgifter": [{"nr": 1, "t": "Beräkna.", "p": 2, "peca": [2, 0, 0],
+                             "formaga": "P"}]}
+    did = db.create_dokument(conn, dokument=papper, status="godkant")["id"]
+    db.save_rattning(conn, did, elever=1, andel=None, rader=[], klass="TE26A",
+                     kurs=papper["kurs"], datum="2026-09-16")
+    ada = db.save_elever(conn, db.get_or_create_group(conn, "TE26A"), ["Ada"])[0]["id"]
+    db.save_elevresultat(conn, did, {ada: {"1": [2, 0, 0]}})
+    conn.close()
+
+    res = backup.create_betygskopia(tmp_path, tmp_path / "OneDrive" / "betyg",
+                                    now=datetime(2026, 9, 24, 18, 0))
+    assert res["fallback"] is False and res["prov"] == 1
+    data = json.loads(Path(res["path"]).read_text(encoding="utf-8"))
+    te = data["klasser"]["TE26A"]
+    assert te["elever"] == [{"id": ada, "namn": "Ada", "aktiv": 1}]
+    rad = te["prov"][0]["rader"][0]
+    assert (rad["nyckel"], rad["peca"], rad["formaga"]) == ("1", [2, 0, 0], "Procedur")
+    assert te["prov"][0]["resultat"] == {str(ada): {"1": [2, 0, 0]}}

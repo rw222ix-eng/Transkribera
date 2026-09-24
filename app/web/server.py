@@ -1917,6 +1917,8 @@ def create_app(base_dir: Path | None = None,
                 status_code=507)
         s["backup_senast"] = datetime.now().isoformat(timespec="seconds")
         settings_store.save(base, s)
+        if s.get("backup_betyg_vag"):
+            res["betyg"] = backup.create_betygskopia(base, s["backup_betyg_vag"])
         return res | _backup_installningar()
 
     def _kvallskopian():
@@ -1931,6 +1933,9 @@ def create_app(base_dir: Path | None = None,
                 if not backup.dags_for_kvallskopia(s.get("backup_senast")):
                     continue
                 backup.create_backup(base, dest_dir=s.get("backup_vag") or None)
+                # Elevpoängen till en andra plats (OneDrive), se create_betygskopia.
+                if s.get("backup_betyg_vag"):
+                    backup.create_betygskopia(base, s["backup_betyg_vag"])
                 s = settings_store.load(base)
                 s["backup_senast"] = datetime.now().isoformat(timespec="seconds")
                 settings_store.save(base, s)
