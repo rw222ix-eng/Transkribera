@@ -640,13 +640,18 @@ INSTRUCTION = (
     # grön.» Och i b), «Det andra rummet är 2x m långt och y m brett. Det
     # andra rummets väggarea är mindre än dubbla det förstas.»: «Och dess
     # area är mindre än dubbla det förstas … Det borde vara en och samma
-    # mening på något sätt.»
+    # mening på något sätt.» Samma dag, efter att ha sett det tryckt: «Och då
+    # blir dess väggarea mindre än dubbla det gröna rummets väggarea.»
+    # Storheten ska stå på båda sidor om jämförelsen, «det gröna rummets»
+    # ensamt lämnar eleven att gissa vad som jämförs.
     "  • Två saker av samma slag heter något eleven ser, helst det bilden "
     "visar: «det gröna rummet» och «det blå rummet», aldrig «det första "
     "rummet» och «det andra rummet». Mer om samma sak pekar tillbaka med "
-    "«dess»: «Det blå rummet är $2x$ m långt och $y$ m brett. Dess väggarea "
-    "är mindre än dubbla det gröna rummets.» Aldrig sakens namn en gång "
-    "till («Det blå rummets väggarea …»).\n"
+    "«dess»: «Det blå rummet är $2x$ m långt och $y$ m brett. Då blir dess "
+    "väggarea mindre än dubbla det gröna rummets väggarea.» Aldrig sakens "
+    "namn en gång till («Det blå rummets väggarea …»). En jämförelse säger "
+    "storheten på båda sidor: «dubbla det gröna rummets väggarea», aldrig "
+    "bara «dubbla det gröna rummets».\n"
     "  • Skriv aldrig bara «leden». Säg vilka: «vänsterledet (x + 5)² och "
     "högerledet x² + 25».\n"
     "  • Ett påstående som kan vara fel står som ett PÅSTÅENDE: «Hugo påstår "

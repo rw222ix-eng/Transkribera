@@ -10,7 +10,8 @@ kod. Uppgiftstexterna nedan står ordagrant som modellen skrev dem.
   10  «På vardagar jobbar han 3 timmar fler.»: per dag, totalt, och lördagen?
       Och t för timmarna, inte s: bokstaven hör till storheten.
   11  «det första rummet» och «det andra rummet» blir det gröna och det blå,
-      och «dess» i stället för rummets namn en gång till.
+      och «dess» i stället för rummets namn en gång till. Jämförelsen säger
+      väggarea på båda sidor.
 """
 from pathlib import Path
 
@@ -105,6 +106,7 @@ def test_domarna_star_i_instruktionen():
     assert "$s$ timmar på söndagar" not in r
     assert "«det gröna rummet» och «det blå rummet»" in r
     assert "pekar tillbaka med «dess»" in r
+    assert "«dubbla det gröna rummets väggarea», aldrig" in r
 
 
 def test_kycklingen_ar_inte_langre_formen():
