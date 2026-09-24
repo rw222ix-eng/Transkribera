@@ -69,6 +69,18 @@ def test_blandat_krav_falls():
     np = _u(["rutin", "redovisning"])
     np["deluppgifter"][1]["text"] = "Motivera ditt svar med $1 + 1$."
     assert exam_gen.blandat_krav_vakt({"uppgifter": [np]}) == []
+    # Uttrycket först och egen text efter är deluppgiftens egen fråga
+    # (exam 129 uppgift 12, godkänt av läraren).
+    tecken = _u(["rutin", "redovisning"])
+    tecken["deluppgifter"][0]["text"] = "$x = 5$\nSkriv det tecken som passar."
+    tecken["deluppgifter"][1]["text"] = "$x > 3$\nSkriv rätt tecken."
+    assert exam_gen.blandat_krav_vakt({"uppgifter": [tecken]}) == []
+    # Samma uppmaning med sitt eget uttryck (exam 130:s form) är samma sort.
+    los = _u(["rutin", "redovisning"])
+    for d, ekv in zip(los["deluppgifter"], ("$x^2 = 4$\nSvara exakt.",
+                                            "$5x^2 = 30x$")):
+        d["text"] = "Lös ekvationen: " + ekv
+    assert exam_gen.blandat_krav_vakt({"uppgifter": [los]})
 
 
 def test_delsidan_sager_bara_delens_hjalpmedel():
@@ -171,7 +183,7 @@ def test_domarna_star_i_instruktionen():
     assert "PERSONEN I TEXTEN ÄR PERSONEN PÅ BILDEN" in r
     assert "SPRÅKET ÄR ELEVERNAS" in r
     assert "«räknas som förorenad över»" in r
-    assert "bara är uttryck under en gemensam uppmaning" in r
+    assert "Deluppgifter med samma uppmaning («Beräkna …», «Lös ekvationen" in r
     assert "«I butik B måste man köpa en hel rulle med 50 m kabel, som" in r
     assert "«Tabellen nedan visar …», och pappret" in r
     assert "UPPGIFTEN ÄR NÅGOT ELEVEN HAR NYTTA AV" in r

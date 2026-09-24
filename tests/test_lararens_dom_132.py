@@ -110,6 +110,10 @@ def test_domarna_star_i_instruktionen():
     # Exam 130 uppgift 1, samma dag.
     assert "ingen stam «Utgå från uttrycket …»" in r
     assert "ur uttrycket du fick när du förenklade i a).»" in r
+    assert "Varje deluppgift bär sin egen uppmaning: «a) Lös ekvationen:" in r
+    assert "Uppmaningen och uttrycket står på samma rad" in r
+    assert "«kan skrivas på formen», aldrig «i formen»" in r
+    assert "«med algebraisk metod» står bara i en del där digitala" in r
     assert "«dubbla det gröna rummets väggarea», aldrig" in r
 
 

@@ -523,6 +523,12 @@ INSTRUCTION = (
     "det som prövas. Tillåtet är bara «med algebraisk metod», «bryt ut» och "
     "«med hjälp av grafen». På arbetsblad och gruppuppgift får metoden stå "
     "i notisen, aldrig i frågan.\n"
+    # Lärarens dom 2026-09-24 (exam 130 uppgift 6, del A utan verktyg):
+    # «det här med algebraisk metod kan man ju ta bort helt och hållet, för
+    # det är underförstått».
+    "  «med algebraisk metod» står bara i en del där digitala verktyg är "
+    "tillåtna. Utan verktyg är det underförstått: «Lös ekvationen: "
+    "$(x + 3)(2x - 1) = x^2 + 2x + 7$.»\n"
     # SAMMANHANGET SKA GÅ ATT SE FRAMFÖR SIG (lärarens dom 2026-09-22, exam
     # 118 uppgift 10): «En robotcell målar detaljer. […] En körning avbryts
     # efter 600 minuter.» Hennes ord: jätteoklart, inte ens jag fattar det.
@@ -653,6 +659,22 @@ INSTRUCTION = (
     "uttrycket $(a + 2)^2 - a(a - 4)$.», ingen stam «Utgå från uttrycket …». "
     "En deluppgift som bygger på svaret i en annan säger det rakt ut: «b) "
     "Bryt ut faktorn 4 ur uttrycket du fick när du förenklade i a).»\n"
+    # Samma dom, uppgift 2: «Lös ekvationerna och svara exakt.» och bara
+    # ekvationen i a), b), c). «Är det inte bättre att bara skriva lös
+    # ekvationen, kolon, så kommer ekvationen … samma sak på c).»
+    "  • Varje deluppgift bär sin egen uppmaning: «a) Lös ekvationen: "
+    "$x^2 + 11 = 39$.», aldrig en gemensam stam «Lös ekvationerna.» med bara "
+    "ekvationen i a). Ett krav som bara gäller en deluppgift («Svara "
+    "exakt.») står i den deluppgiften.\n"
+    # Samma dom, uppgift 3 och 6: «Lös ekvationen och svara exakt.» och
+    # ekvationen på egen rad under. «Lös ekvationen, sen har man kolon, sen
+    # har man ekvationen till höger om det. Och sen punkt. … svara exakt.»
+    # Uppgift 4: «kan skrivas i formen»: «Är det inte bättre att skriva på
+    # formen?»
+    "  • Uppmaningen och uttrycket står på samma rad: «Lös ekvationen: "
+    "$x^2 + 2\\,000x + 999\\,999 = 0$.» och sedan «Svara exakt.» på nästa, "
+    "aldrig uttrycket ensamt på raden under uppmaningen. Ett uttryck «kan "
+    "skrivas på formen», aldrig «i formen».\n"
     # Lärarens dom 2026-09-24 (exam 132 uppgift 11): «det första rummet och
     # det andra rummet. Det är väldigt, väldigt krångligt … att hålla isär de
     # två. Det vore kanske bättre om man döper det till typ det gröna rummet
@@ -833,10 +855,10 @@ INSTRUCTION = (
     "betong, hur många plattor, vad hyran kostar). Aldrig något som bara går "
     "att räkna på, som antalet sandkorn i en säck.\n"
     # Samma dom, uppgift 4: a) fick svarslinje, b) ingen.
-    "  • Deluppgifter som bara är uttryck under en gemensam uppmaning "
-    "(«Beräkna.» och sedan a) och b)) har samma typ: endast svar i alla, "
-    "eller redovisning i alla. Pappret sätter svarslinje bara under endast "
-    "svar, och a) med linje och b) utan ser ut som ett fel.\n"
+    "  • Deluppgifter med samma uppmaning («Beräkna …», «Lös ekvationen: …») "
+    "har samma typ: endast svar i alla, eller redovisning i alla. Pappret "
+    "sätter svarslinje bara under endast svar, och a) med linje och b) utan "
+    "ser ut som ett fel.\n"
     "  • Bara det klassen har haft, bara kursens innehåll.\n"
     "- figur: lägg en matematisk figur på en uppgift genom att välja typ och "
     "sätta talen (aldrig fri kod): linjar {k, m}, andragrad {a, b, c}, "
@@ -8275,16 +8297,33 @@ def kravradsvakt(exam: dict) -> list[dict]:
 _BARA_UTTRYCK_RE = re.compile(r"^\s*\$[^$]+\$\s*$")
 
 
+def _uppmaningen(text: str) -> str | None:
+    """Deluppgiftens uppmaning: orden före första uttrycket på första raden
+    («lös ekvationen»), "" för ett rent uttryck, None utan uttryck."""
+    rader = str(text or "").strip().split("\n")
+    if "$" not in rader[0]:
+        return None
+    uppm = rader[0].split("$")[0].strip().rstrip(":").strip().lower()
+    # Ett uttryck först och sedan egen text är deluppgiftens egen fråga
+    # (exam 129 uppgift 12: «x = 5 … x² = 25» och «Skriv det tecken …»),
+    # inte samma sort som grannens.
+    if not uppm and len([r for r in rader if r.strip()]) > 1:
+        return None
+    return uppm
+
+
 def blandat_krav_vakt(exam: dict) -> list[dict]:
-    """Rena uttryck under en gemensam uppmaning där ett är «rutin» (endast
-    svar) och ett annat inte är det."""
+    """Deluppgifter av samma sort där en är «rutin» (endast svar) och en
+    annan inte är det. Samma sort: rena uttryck under en gemensam uppmaning
+    (exam 131), eller samma uppmaning följd av sitt uttryck («Lös ekvationen:
+    …», lärarens form från exam 130)."""
     fel: list[dict] = []
     for nr, u in enumerate((exam or {}).get("uppgifter") or [], 1):
         if not isinstance(u, dict):
             continue
         delar = [d for d in (u.get("deluppgifter") or []) if isinstance(d, dict)]
-        if not delar or not all(_BARA_UTTRYCK_RE.match(str(d.get("text") or ""))
-                                for d in delar):
+        uppm = {_uppmaningen(d.get("text")) for d in delar}
+        if not delar or len(uppm) != 1 or None in uppm:
             continue
         typer = [(d.get("typ") or u.get("typ") or "") for d in delar]
         rutin = [chr(97 + k) for k, t in enumerate(typer) if t == "rutin"]
