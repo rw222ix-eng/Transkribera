@@ -2109,6 +2109,17 @@ def _ej_provbart(namn: str) -> bool:
     return any(ord_ in n for ord_ in _EJ_PROVBART)
 
 
+def _fordjupade(rubrik: str) -> set[str]:
+    """Avsnitten som kalenderns lektionsrubrik märker med «Fördjupning»
+    efteråt. IndA 5/10: «Kvadratkomplettering. Fördjupning. Dessutom
+    problemlösning …» med delen «Kvadratkomplettering» (s. 53–55) för sig;
+    delens egen rubrik säger inget om fördjupningen, lektionens gör det."""
+    delar = [_delmomentnamn(s).casefold()
+             for s in re.split(r"[.;]", rubrik or "")]
+    return {delar[i - 1] for i, s in enumerate(delar)
+            if i and s == "fördjupning" and delar[i - 1]}
+
+
 def _sidspann(fran: int, till: int) -> str:
     return f"{fran}–{till}" if till > fran else f"{fran}"
 
@@ -2178,9 +2189,13 @@ def delmoment_ur_lektioner(rader: list[dict], *, fran: int, till: int,
         if provdatum and str(r.get("datum") or "") >= str(provdatum):
             continue
         rubrik = str(r.get("rubrik") or "")
+        fordjupat = _fordjupade(rubrik)
         delar = [d for d in (r.get("delar") or []) if isinstance(d, dict)] \
             if isinstance(r.get("delar"), list) else []
         for d in (delar or [{}]):
+            if _delmomentnamn(str(d.get("rubrik") or "")).casefold() \
+                    in fordjupat:
+                continue
             try:
                 f = int(d.get("fran") or r.get("fran") or 0)
                 t = int(d.get("till") or d.get("fran")

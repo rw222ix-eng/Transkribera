@@ -125,6 +125,18 @@ def test_fordjupningen_provas_inte():
     dm = exam_gen.delmoment_ur_lektioner(rader, fran=8, till=55,
                                          provdatum="2026-10-20")
     assert [d["delmoment"] for d in dm] == ["pq-formeln"]
+    # Som kalendern faktiskt har den: delarna har egna rubriker, och bara
+    # lektionens rubrik säger vilken av dem som är fördjupning.
+    rader[0]["rubrik"] = ("Kvadratkomplettering. Fördjupning. Dessutom "
+                          "problemlösning n")
+    rader[0]["delar"] = [
+        {"fran": 53, "till": 55, "rubrik": "Kvadratkomplettering"},
+        {"fran": 52, "till": 52, "rubrik": "Dessutom problemlösning nivå 3"},
+        {"fran": 52, "till": 52}]
+    dm = exam_gen.delmoment_ur_lektioner(rader, fran=8, till=55,
+                                         provdatum="2026-10-20")
+    assert [d["delmoment"] for d in dm] == [
+        "pq-formeln", "Dessutom problemlösning nivå 3"]
 
 
 def test_domarna_star_i_instruktionen():
