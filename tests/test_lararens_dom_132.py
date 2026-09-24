@@ -8,6 +8,7 @@ kod. Uppgiftstexterna nedan står ordagrant som modellen skrev dem.
       ordet «likheten». Stammen hänvisar inte till «a) och b)», och pappret
       skriver a) i stället för (a).
   10  «På vardagar jobbar han 3 timmar fler.»: per dag, totalt, och lördagen?
+      Och t för timmarna, inte s: bokstaven hör till storheten.
   11  «det första rummet» och «det andra rummet» blir det gröna och det blå,
       och «dess» i stället för rummets namn en gång till.
 """
@@ -100,6 +101,8 @@ def test_domarna_star_i_instruktionen():
     assert "Inget «likheten» eller «påståendet» framför" in r
     assert "Stammen hänvisar aldrig till deluppgifterna" in r
     assert "TID OCH MÄNGD GÅR BARA ATT LÄSA PÅ ETT SÄTT" in r
+    assert "BOKSTAVEN HÖR TILL STORHETEN: $t$ för tid" in r
+    assert "$s$ timmar på söndagar" not in r
     assert "«det gröna rummet» och «det blå rummet»" in r
     assert "pekar tillbaka med «dess»" in r
 

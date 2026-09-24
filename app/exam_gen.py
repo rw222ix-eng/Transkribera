@@ -576,6 +576,13 @@ INSTRUCTION = (
     "är antalet elever.» Kolon, uttrycket till höger på samma rad, komma och "
     "vad bokstaven står för. Aldrig uttrycket på en egen rad mitt i meningen. "
     "Frågan står sist, ensam på sin rad.\n"
+    # Lärarens dom 2026-09-24 (exam 132 uppgift 10, «s timmar på söndagar»):
+    # «istället för variabeln s så väljer vi variabeln t eftersom att det är
+    # mer rimligt när det handlar om tid.»
+    "- BOKSTAVEN HÖR TILL STORHETEN: $t$ för tid (timmar, minuter, år), $s$ "
+    "för sträcka, $n$ för antal, $m$ för massa, $A$ för area, $V$ för volym. "
+    "Aldrig «$s$ timmar» eller «$x$ minuter» när det finns en bokstav som "
+    "säger vad den står för.\n"
     # Lärarens dom 2026-09-24 (exam 132 uppgift 10): «Ali extrajobbar … En
     # månad jobbar han s timmar på söndagar. På vardagar jobbar han 3 timmar
     # fler.» «Vissa elever kanske tolkar som att han jobbar fem arbetsdagar
@@ -583,9 +590,9 @@ INSTRUCTION = (
     # bara, men han jobbar varje dag. Det framgår inte så tydligt vad som
     # gäller.»
     "- TID OCH MÄNGD GÅR BARA ATT LÄSA PÅ ETT SÄTT. Säg om talet gäller per "
-    "dag, per vecka eller sammanlagt, och för vilka dagar: «Den månaden "
-    "jobbar Ali $s$ timmar på söndagar och sammanlagt $s + 3$ timmar de "
-    "andra dagarna.» Aldrig «På vardagar jobbar han 3 timmar fler.», där "
+    "dag, per vecka eller sammanlagt, och för vilka dagar: «En månad jobbar "
+    "Ali $t$ timmar på söndagar. Övriga dagar jobbar han totalt 3 timmar mer "
+    "än på söndagar.» Aldrig «På vardagar jobbar han 3 timmar fler.», där "
     "eleven måste gissa fler än vad, per dag eller totalt, och om lördagen "
     "räknas.\n"
     # EN ALLMÄNT STÄLLD UPPGIFT SÄGER VAD SOM SÖKS (samma dom, uppgift 12):
