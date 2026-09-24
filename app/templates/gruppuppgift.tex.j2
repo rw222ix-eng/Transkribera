@@ -88,9 +88,9 @@
     «\parGränsvärdet», ett odefinierat kommando, och HELA gruppuppgiftens facit
     föll. Att det inte syntes förrän nu är för att seedens övriga lösningar
     börjar med matematik ($…$ → \(), och \( avslutar \par på egen hand. #))
-\begin{deluppgift}{((( d.bokstav )))}{((( d.poang_str )))}\par ((( d.losning_steg )))\par\textit{((( d.bedomning )))}\end{deluppgift}
+\begin{deluppgift}{((( d.bokstav )))}{((( d.poang_str )))}\par ((( d.losning_steg if d.losning_steg is defined else d.losning )))\par\textit{((( d.bedomning )))}\end{deluppgift}
 ((* endfor *))
-((* else *))((( u.losning_steg )))\par\textit{((( u.bedomning )))}((* endif *))
+((* else *))((( u.losning_steg if u.losning_steg is defined else u.losning )))\par\textit{((( u.bedomning )))}((* endif *))
 \end{uppgift}
 ((* endfor *))
 ((* endfor *))

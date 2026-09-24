@@ -91,9 +91,9 @@ på sista sidan((* endif *))((* if visa_poang *)); poäng anges som totalpoäng(
 \begin{uppgift}{((( u.nummer )))}{}
 ((* if u.har_deluppgifter *))
 ((* for d in u.deluppgifter *))
-\begin{deluppgift}{((( d.bokstav )))}{}((( d.losning_steg )))\end{deluppgift}
+\begin{deluppgift}{((( d.bokstav )))}{}((( d.losning_steg if d.losning_steg is defined else d.losning )))\end{deluppgift}
 ((* endfor *))
-((* else *))((( u.losning_steg )))((* endif *))
+((* else *))((( u.losning_steg if u.losning_steg is defined else u.losning )))((* endif *))
 \end{uppgift}
 ((* endfor *))
 ((* endfor *))
