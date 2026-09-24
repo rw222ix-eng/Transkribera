@@ -860,6 +860,13 @@ INSTRUCTION = (
     "  • Det som skiljer två alternativ åt står så att det bara gäller det "
     "ena: «Hos firma B betalar man bara ett pris per dag.», aldrig «Firma B "
     "tar samma pris per dag.», som är sant om firma A också.\n"
+    # Lärarens dom 2026-09-24 (exam 129 uppgift 10): «Bromssträckan får vara
+    # högst 45 m.» och två rader ner «Bestäm den högsta farten bilen får
+    # ha.» «Mycket bättre att skriva: bestäm den högsta farten bilen får ha,
+    # då bromssträckan högst får vara 45 meter.»
+    "  • Villkoret som frågan gäller står i frågan: «Bestäm den högsta farten "
+    "bilen får ha, då bromssträckan högst får vara 45 m.», aldrig som en egen "
+    "mening före frågan.\n"
     # Samma dom, uppgift 5b: «Han har 1 200 kr och gör överslaget 30 · 40 =
     # 1 200. Avgör om överslaget visar att pengarna räcker.» «Jag har ju
     # redan svaret på frågan typ … de är lite trötta och slarviga när de
