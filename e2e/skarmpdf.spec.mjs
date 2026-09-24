@@ -534,3 +534,50 @@ test("bokens lösningsförslag följer INTE med till elevernas ark",
     const xml = await xmlUr(page, v);
     for (const s of xml) expect(s).not.toContain("lo-bok");
   });
+
+/* ── CANVASENS BILDVERKTYG STANNAR PÅ SKÄRMEN (granskningen 2026-09-24) ──
+   Blad vars bild inte var målad än trycktes med platshållaren «Bild att
+   skapa …», hela SCENE-stycket och knapparna. Plåten, en adress och inte en
+   data-URI, blev en tom ruta: en bild i <foreignObject> hämtar ingenting. */
+const SCEN = { begrepp: "vattenslang", filnamn: "a-03-vattenslang",
+  scene: "SCENE. A green garden hose on a lawn.\nIntended use: längd." };
+
+test("en bild som inte är målad än trycks inte, platshållaren stannar på skärmen",
+  async ({ page }) => {
+    await fejka(page);
+    await page.goto("/");
+    await hydrerad(page);
+    const v = papper();
+    v.uppgifter[0].scen = SCEN;
+    const xml = await xmlUr(page, v);
+    expect(xml.length).toBeGreaterThan(0);
+    for (const s of xml) {
+      expect(s).not.toContain("Bild att skapa");
+      expect(s).not.toContain("SCENE.");
+      expect(s).not.toContain("Kopiera basprompt");
+    }
+    // Med lärarens bild på samma uppgift står bilden kvar.
+    const med = papper({ bilder: { uppg1: BILD } });
+    med.uppgifter[0].scen = SCEN;
+    const xml2 = await xmlUr(page, med);
+    expect(xml2.some(s => s.indexOf(BILD.slice(0, 60)) >= 0)).toBe(true);
+  });
+
+test("plåten bakas in i bilden och dess knappar stannar på skärmen",
+  async ({ page }) => {
+    await fejka(page);
+    await page.route("**/api/platar/**", route => route.fulfill({
+      status: 200, contentType: "image/png",
+      body: Buffer.from(BILD.split(",")[1], "base64") }));
+    await page.goto("/");
+    await hydrerad(page);
+    const v = papper();
+    v.uppgifter[0].scen = { ...SCEN, plat: "a-05-ang" };
+    const xml = await xmlUr(page, v);
+    expect(xml.length).toBeGreaterThan(0);
+    for (const s of xml) {
+      expect(s).not.toContain("/api/platar/");
+      expect(s).not.toContain("Byt plåt");
+    }
+    expect(xml.some(s => s.indexOf("data:image/png;base64") >= 0)).toBe(true);
+  });

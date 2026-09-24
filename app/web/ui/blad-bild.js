@@ -186,8 +186,36 @@ window.BladBild = (() => {
        kvitto på att uppgiften hör till de uppslagna sidorna, inte en del av
        elevens papper. Den ska inte ut ur skrivaren. */
     Array.from(kopia.querySelectorAll('.guforebild')).forEach(n => n.remove());
+    /* Canvasens bildverktyg stannar också på skärmen (granskningen
+       2026-09-24 natt). En uppgift vars bild inte är målad än bär
+       platshållaren «Bild att skapa …» med hela SCENE-stycket och knapparna,
+       och den trycktes på elevernas papper. Plåtens fot («Byt plåt», «Ta
+       bort») likaså. En ruta som fått lärarens bild har en <img> och står
+       kvar. */
+    Array.from(kopia.querySelectorAll('.prscen')).forEach(n => {
+      if (!n.querySelector('img')) n.remove();
+    });
+    Array.from(kopia.querySelectorAll('.prplatfot, .prscenhint'))
+      .forEach(n => n.remove());
     trav.appendChild(kopia);
-    return css().then(regelverk => {
+    /* Plåtarna är adresser (/api/platar/…), och en bild i <foreignObject>
+       hämtar aldrig något: plåten blev en tom ruta på pappret. Bakas in som
+       data-URI, samma form som lärarens egna bilder redan har. Går hämtningen
+       inte står taggen kvar som förut. */
+    const adresser = Array.from(trav.querySelectorAll('img')).filter(im => {
+      const s = im.getAttribute('src') || '';
+      return s && s.indexOf('data:') !== 0;
+    });
+    return Promise.all(adresser.map(im => {
+      let abs;
+      try { abs = new URL(im.getAttribute('src'), location.href).href; }
+      catch (e) { return null; }
+      return fetch(abs)
+        .then(svar => { if (!svar.ok) throw new Error(String(svar.status)); return svar.blob(); })
+        .then(dataUrl)
+        .then(url => im.setAttribute('src', url))
+        .catch(() => null);
+    })).then(() => css()).then(regelverk => {
       /* XML-säkra CSS:en: & och < får inte stå råa i XML. */
       const trygg = regelverk.replace(/&/g, '&amp;').replace(/</g, '&lt;');
       const kropp = new XMLSerializer().serializeToString(trav);
