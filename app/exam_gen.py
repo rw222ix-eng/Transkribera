@@ -756,8 +756,21 @@ INSTRUCTION = (
     "  • SPRÅKET ÄR ELEVERNAS: vardagsord och korta huvudsatser, allra "
     "enklast i en yrkesklass. Inget ord eleven måste översätta innan hon kan "
     "räkna («gränsen», «halten», «räknas som förorenad över»). Frågan säger "
-    "med vardagsord vad som ska räknas ut: «I 1 kg jord finns 2 000 mg "
-    "olja. Hur många procent av jorden är olja?»\n"
+    "med vardagsord vad som ska räknas ut: «Varje kilogram jord innehåller "
+    "2 000 mg olja. Hur många procent av jorden är olja?»\n"
+    # Samma dom, uppgift 3: «I 1 kg jord …»: «ganska svårt att skilja på
+    # bokstaven I och siffran 1». forvaxlingsvakt fäller det.
+    "  • Inga tecken som går att förväxla bredvid varandra: aldrig «I 1 kg» "
+    "eller «1 l». Skriv «Varje kilogram jord innehåller …» och «1 liter».\n"
+    # Samma dom, uppgift 5b: «Han har 1 200 kr och gör överslaget 30 · 40 =
+    # 1 200. Avgör om överslaget visar att pengarna räcker.» «Jag har ju
+    # redan svaret på frågan typ … de är lite trötta och slarviga när de
+    # läser, och då förstår de inte vad uppgiften går ut på.»
+    "  • Frågan får inte se besvarad ut av texten ovanför. Står räkningen "
+    "redan där är den någons påstående och frågan gäller personen: «Han gör "
+    "överslaget 30 · 40 = 1 200. Han påstår att pengarna räcker. Avgör om "
+    "Noah har rätt.», aldrig «Avgör om överslaget visar att pengarna "
+    "räcker.»\n"
     # Samma dom, uppgift 8: «Butik B säljer bara hela rullar på 50 m för
     # 620 kr.» «Då kan vissa elever tänka: jaha, men då säljer de inte per
     # meter, så då går ju inte ens lösa uppgiften … vissa kanske ger upp på
@@ -8286,6 +8299,35 @@ def rubrikordsvakt(exam: dict, kurs: str = "") -> list[dict]:
     return []
 
 
+# ── TECKEN SOM GÅR ATT FÖRVÄXLA (lärarens dom 2026-09-24, exam 131) ─────────
+# Uppgift 3: «I 1 kg jord från en byggtomt …»: «ganska svårt att skilja på
+# bokstaven I och siffran 1». Samma sak med «1 l» (en liter). Matten skyddas
+# inte: $1$ i en mening ser likadan ut som 1.
+_FORVAXLING_RE = re.compile(
+    r"(?<![A-Za-zÅÄÖåäö])[Il]\s+\$?1(?![\d{,])|\b1\$?\s+l\b")
+FORVAXLING_MAX_FYND = 3
+
+
+def forvaxlingsvakt(exam: dict) -> list[dict]:
+    """Bokstaven I eller l bredvid siffran 1 i en uppgiftstext."""
+    fel: list[dict] = []
+    for nr, u in enumerate((exam or {}).get("uppgifter") or [], 1):
+        if not isinstance(u, dict):
+            continue
+        for x in [u] + [d for d in u.get("deluppgifter") or []
+                        if isinstance(d, dict)]:
+            m = _FORVAXLING_RE.search(str(x.get("text") or ""))
+            if m:
+                fel.append(_err(
+                    f"uppgift {nr}", "forvaxling",
+                    f"Uppgift {nr}: «{m.group(0).strip()}» går inte att läsa "
+                    "säkert, bokstaven och siffran ser likadana ut. Skriv om "
+                    "så att de inte står bredvid varandra («Varje kilogram "
+                    "…», «1 liter»). Samma tal, samma poäng."))
+                break
+    return fel[:FORVAXLING_MAX_FYND]
+
+
 # ── PERSONEN I TEXTEN ÄR PERSONEN PÅ BILDEN (lärarens dom 2026-09-24) ──────
 # Exam 131 uppgift 6: «Hugo ska tvätta en altan» och scenen «A small faceless
 # figure in work clothes kneels …». Bildverktyget målade en kvinna. Namnen är
@@ -9494,7 +9536,8 @@ def _raknade_fynd(exam: dict, *, avsnitt: list[dict] | None, antal: int | None,
                 # Passets tak håller hela vägen, inte bara i skelettet.
                 + poangtakvakt(exam, poang_tak))
     # En mening per rad gäller alla papper eleverna läser (exam 129).
-    return fel + radvakt(exam) + scenvakt(exam) + personvakt(exam)
+    return (fel + radvakt(exam) + scenvakt(exam) + personvakt(exam)
+            + forvaxlingsvakt(exam))
 
 
 def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,

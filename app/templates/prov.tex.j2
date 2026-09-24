@@ -255,13 +255,21 @@ Provet kan ge totalt \textbf{((( forsatt.total ))) poäng}.
 \pfbehov{((( u.behov_mm )))mm}
 
 ((( former.fraga(u) )))
-((# Tabellen står direkt efter meningen som nämner den, frågan efter
-    tabellen och bilden sist (lärarens dom 2026-09-24, exam 131 uppgift 10;
-    exam_latex._dela_vid_tabellen). Utan tabell är stycken_efter tom. #))
+((# Tabellen står direkt efter meningen som nämner den (uppgift 10), och
+    på en uppgift med svarsplats står bilden före frågan så att frågan står
+    ovanför svarslinjen (uppgift 2). Lärarens dom 2026-09-24, exam 131;
+    exam_latex._dela_uppgiften. Utan fråga efter tom rad är stycken_fraga
+    tom och bilden står efter texten som förut. #))
 ((( former.stycken(u.stycken_fore) )))
 ((( former.tabellbok(u.tabell) )))
 ((( former.stycken(u.stycken_efter) )))
-((* if u.bild_fil *))
+((* if u.bild_fil and u.bild_fore_fragan *))
+\begin{center}
+  \includegraphics[width=0.7\textwidth]{((( u.bild_fil )))}
+\end{center}
+((* endif *))
+((( former.stycken(u.stycken_fraga) )))
+((* if u.bild_fil and not u.bild_fore_fragan *))
 \begin{center}
   \includegraphics[width=0.7\textwidth]{((( u.bild_fil )))}
 \end{center}

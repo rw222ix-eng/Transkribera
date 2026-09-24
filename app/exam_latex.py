@@ -531,6 +531,27 @@ def _dela_vid_tabellen(stycken: list[dict], har_tabell: bool
     return fore, [dict(s) for s in stycken[i:]]
 
 
+# ── FRÅGAN OVANFÖR SVARSLINJEN (lärarens dom 2026-09-24, exam 131 uppgift 2)
+# «En regel är 2½ m lång. Hugo kapar bort ¾ m. Sen kommer bilden. Sen efter
+# bilden kommer frågan, Hur lång är regeln nu? Och sen svaret nedanför.»
+# Bilden stod mellan frågan och «Svar: ____». På en uppgift med svarsplats
+# (svarslinje, ifyllnad eller kryssrutor) står bilden därför före frågan;
+# utan svarsplats står den efter texten som förut (uppgift 10: tabellen,
+# frågan, sist bilden). Frågan är stycket efter den tomma raden
+# (exam_gen.luft_fore_fragan).
+def _dela_uppgiften(stycken: list[dict], har_tabell: bool
+                    ) -> tuple[list[dict], list[dict], list[dict]]:
+    """Före tabellen, mellan tabellen och frågan, och frågan."""
+    k = next((k for k, s in enumerate(stycken) if s.get("luft") and k), None)
+    givet, fraga = ((stycken, []) if k is None
+                    else ([dict(s) for s in stycken[:k]],
+                          [dict(s) for s in stycken[k:]]))
+    if fraga and givet:
+        givet[-1]["par_efter"] = True
+    fore, efter = _dela_vid_tabellen(givet, har_tabell)
+    return fore, efter, fraga
+
+
 # Etiketten på en ifyllnadsrad får kolon — men bara när den inte redan slutar
 # på ett skiljetecken som bär samma funktion. Modellen skriver fält som
 # «$(-4)^2 =$», och «$(-4)^2 =$:» är inte en etikett, det är ett skrivfel.
@@ -1374,9 +1395,13 @@ def _build_view(doc: exam_spec.ExamDoc,
                 item_vy.get("bild_fil")
                 or any(d.get("bild_fil") for d in (item_vy.get("deluppgifter") or [])))
             item_vy["behov_mm"] = _behov_mm(item_vy)
-            item_vy["stycken_fore"], item_vy["stycken_efter"] = \
-                _dela_vid_tabellen(item_vy["stycken"],
-                                   bool(item_vy.get("tabell")))
+            (item_vy["stycken_fore"], item_vy["stycken_efter"],
+             item_vy["stycken_fraga"]) = _dela_uppgiften(
+                item_vy["stycken"], bool(item_vy.get("tabell")))
+            item_vy["bild_fore_fragan"] = bool(
+                item_vy["stycken_fraga"]
+                and (item_vy.get("flerval") or item_vy.get("svarsfalt_rad")
+                     or item_vy.get("endast_svar")))
             # Gruppuppgiftens uppgifter heter 1, 2, 3 (lärarens val 2026-08-20)
             # — då kan deluppgifterna heta a) b) utan att två bokstavsserier
             # blandas på samma papper. Fältet heter `bokstav` av historiska

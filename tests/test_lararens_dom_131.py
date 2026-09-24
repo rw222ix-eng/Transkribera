@@ -1,8 +1,10 @@
 """Lärarens dom 2026-09-24 över exam 131 (BA26B, Ma 1a, MATTETEST 1 7/10),
 som kod.
 
+  2  Bilden stod mellan frågan och svarslinjen.
   3  Frågan och svarslinjen hamnade överst på nästa sida, och språket var för
      avancerat («räknas som förorenad över», «Bestäm gränsen i procent»).
+     Sedan «I 1 kg»: bokstaven och siffran går inte att skilja åt.
   4  Uttrycket i a) stod centrerat under en tom etikettrad, och b) fick ingen
      svarslinje: a) var endast svar, b) redovisning.
   6  «Hugo ska tvätta en altan» och en kvinna på bilden.
@@ -105,6 +107,38 @@ def test_tabellen_star_dar_den_namns():
         "former.stycken(u.stycken_efter)") < mall.index("u.bild_fil")
 
 
+def test_fragan_star_ovanfor_svarslinjen():
+    """Uppgift 2: bilden stod mellan frågan och «Svar: ____»."""
+    st = exam_latex._stycken("En regel är 2 m lång.\nHugo kapar bort 1 m.\n\n"
+                             "Hur lång är regeln nu?", luft=True)
+    fore, efter, fraga = exam_latex._dela_uppgiften(st, False)
+    assert [s["text"] for s in fraga] == ["Hur lång är regeln nu?"]
+    assert len(fore) == 2 and fore[-1]["par_efter"] is True and efter == []
+    # Utan tom rad finns ingen fråga att skilja ut.
+    st = exam_latex._stycken("Beräkna $2 + 2$.", luft=True)
+    assert exam_latex._dela_uppgiften(st, False)[2] == []
+    mall = Path("app/templates/prov.tex.j2").read_text(encoding="utf-8")
+    fore_bild = mall.index("u.bild_fil and u.bild_fore_fragan")
+    assert mall.index("former.stycken(u.stycken_efter)") < fore_bild < \
+        mall.index("former.stycken(u.stycken_fraga)") < \
+        mall.index("u.bild_fil and not u.bild_fore_fragan")
+
+
+def test_tecken_som_gar_att_forvaxla():
+    """Uppgift 3: «I 1 kg jord …»."""
+    def prov(text):
+        return {"uppgifter": [{"text": text}]}
+    assert [f["code"] for f in exam_gen.forvaxlingsvakt(prov(
+        "I 1 kg jord från en byggtomt finns $2\\,000$ mg olja."))] == \
+        ["forvaxling"]
+    assert exam_gen.forvaxlingsvakt(prov("Hon häller i 1 l vatten."))
+    assert exam_gen.forvaxlingsvakt(prov("I $1$ kg jord finns olja."))
+    for ok in ("Varje kilogram jord innehåller 2 000 mg olja.",
+               "I 12 kg jord finns olja.", "I 1,5 kg jord finns olja.",
+               "Hon häller i 1 liter vatten."):
+        assert exam_gen.forvaxlingsvakt(prov(ok)) == [], ok
+
+
 def _scenuppgift(text, scene):
     return {"uppgifter": [{"text": text, "scen": {"scene": scene}}]}
 
@@ -137,3 +171,5 @@ def test_domarna_star_i_instruktionen():
     assert "«I butik B måste man köpa en hel rulle med 50 m kabel." in r
     assert "«Tabellen nedan visar …», och pappret" in r
     assert "UPPGIFTEN ÄR NÅGOT ELEVEN HAR NYTTA AV" in r
+    assert "Frågan får inte se besvarad ut av texten ovanför" in r
+    assert "Inga tecken som går att förväxla" in r
