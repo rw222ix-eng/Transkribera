@@ -128,7 +128,13 @@
    spann som vägrar krympa blir så brett som sin text — utanför A4-arket. Med
    krympning radbryts texten inne i spannet; min-width:0 låter flexen ge den
    radens plats i stället för innehållets bredd. Korta svar står som förut. */
-.losvar>span{flex:0 1 auto;min-width:0;font-size:calc(17.5px * var(--fsk, 1));color:#000}
+/* pre-line: facit bär stegen på var sin rad («$K = 468 + 1{,}2E$
+$\dfrac{…}$
+…»),
+   och utan den kollapsade radbrytningarna till mellanslag, så att svar och
+   uträkning stod ihopklistrade på en rad (blad 134 uppgift 4, 2026-09-24).
+   `.mat` är nowrap (matte.css), så formlerna själva påverkas inte. */
+.losvar>span{flex:0 1 auto;min-width:0;font-size:calc(17.5px * var(--fsk, 1));color:#000;white-space:pre-line}
 /* Etiketten som skiljer svaret från frågan. Utan den läses de två raderna som
    ett stycke — frågan är satt i löptext och svaret är ofta bara en formel till. */
 .losetikett{flex:0 0 auto;min-width:40px;font-size:calc(11px * var(--fsk, 1));font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#000}
@@ -154,7 +160,8 @@
 
 /* Poängen per steg i lösningsgången: det är dem läraren delar ut, så de står i
    marginalen av steget — inte i en summering under. */
-.losteg{display:block}
+/* Samma pre-line som svaret: en deluppgifts lösning kan ha flera steg. */
+.losteg{display:block;white-space:pre-line}
 .lovag>li em{font-style:normal;font-weight:700;font-size:calc(11.5px * var(--fsk, 1));letter-spacing:.02em;color:#1B7A46;white-space:nowrap;margin-left:8px}
 
 /* ══════════ BEDÖMNINGSANVISNINGEN I NATIONELLA PROVETS FORM ══════════
