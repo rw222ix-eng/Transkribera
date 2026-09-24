@@ -17,6 +17,7 @@
    dokumentrad i taget, och skriver om PDF:en på disk:
 
      cd e2e && node godkann-avritat.mjs <dokument_id> [fler …] */
+import { statSync } from 'node:fs';
 import { chromium } from 'playwright';
 
 const BAS = process.env.APP || 'http://127.0.0.1:18731';
@@ -48,13 +49,30 @@ for (const id of ids) {
   await page.waitForFunction(() => [...document.querySelectorAll('#arkskal img')].every(im => im.complete), null, { timeout: 30000 }).catch(() => {});
   await vila(3000);
   const svar = page.waitForResponse(r => r.url().includes(`/api/exams/${info.provId}/approve`), { timeout: 600000 });
+  /* Klockan före klicket: PDF:en måste vara skriven EFTER den (se nedan). */
+  const fore = Date.now();
   await page.locator('#godkann').click();
   const r = await svar;
   console.log('   approve svarade', r.status());
   /* Strömmen läses av klienten; vi väntar på att högen fått sin pdf-sökväg. */
   const pdf = await page.waitForFunction(n => (window.Dokument.sparade().find(v => v.id === n) || {}).pdf, id, { timeout: 600000 })
     .then(h => h.jsonValue()).catch(() => null);
-  console.log('   pdf:', pdf || '(pdf-fältet kom inte i högen)');
+  /* DEN NYA FILEN, INTE DEN GAMLA (granskningen 2026-09-24 natt). Svaret är
+     200 också när godkännandets jobb dör, och ett dokument som godkänts förut
+     har redan sin pdf-sökväg i högen. Skriptet skrev då ut den gamla filen,
+     och bygg.sh krympte och laddade upp den utan att säga något. Filen måste
+     alltså vara ändrad efter klicket; annars skrivs ingen «pdf:»-rad. */
+  let ny = false;
+  for (let t = 0; pdf && t < 600 && !ny; t++) {
+    try { ny = statSync(pdf).mtimeMs >= fore - 2000; } catch { ny = false; }
+    if (!ny) await vila(1000);
+  }
+  if (pdf && ny) console.log('   pdf:', pdf);
+  else {
+    console.log(`   FEL: ingen ny PDF för dokument ${id}`
+      + (pdf ? ` (${pdf} är inte omskriven, godkännandet föll troligen)` : ' (pdf-fältet kom inte i högen)'));
+    process.exitCode = 1;
+  }
   await vila(1500);
 }
 await browser.close();
