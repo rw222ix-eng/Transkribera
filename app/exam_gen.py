@@ -643,7 +643,9 @@ INSTRUCTION = (
     # mening på något sätt.» Samma dag, efter att ha sett det tryckt: «Och då
     # blir dess väggarea mindre än dubbla det gröna rummets väggarea.»
     # Storheten ska stå på båda sidor om jämförelsen, «det gröna rummets»
-    # ensamt lämnar eleven att gissa vad som jämförs.
+    # ensamt lämnar eleven att gissa vad som jämförs. Upprepningen är ett
+    # implicit tips, och läraren vill ha det så: den gör frågan begriplig och
+    # föreskriver ingen metod (se minnet «Förtydliganden står kvar»).
     "  • Två saker av samma slag heter något eleven ser, helst det bilden "
     "visar: «det gröna rummet» och «det blå rummet», aldrig «det första "
     "rummet» och «det andra rummet». Mer om samma sak pekar tillbaka med "
