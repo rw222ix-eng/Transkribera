@@ -85,7 +85,12 @@ def fran_prov(exam):
 def main(exam_id, mall_id, overrides, status="utkast"):
     c = sqlite3.connect(DB); c.row_factory = sqlite3.Row
     ex = c.execute("select * from exams where id=?", (exam_id,)).fetchone()
-    ver = c.execute("select id, version, exam_json from exam_versions where exam_id=? order by version desc limit 1", (exam_id,)).fetchone()
+    # Den version provet PEKAR på (exams.current_version), inte den senast
+    # skrivna: ett ångrat eller kastat varv ligger kvar i exam_versions, och
+    # dokumentets provVersion ska vara den läraren ser. Reserv: den senaste.
+    ver = (c.execute("select id, version, exam_json from exam_versions where id=?", (ex["current_version"],)).fetchone()
+           if ex["current_version"] else None) or c.execute(
+        "select id, version, exam_json from exam_versions where exam_id=? order by version desc limit 1", (exam_id,)).fetchone()
     exam = json.loads(ver["exam_json"])
     mall = json.loads(c.execute("select data from dokument_versioner where dokument_id=? order by version desc limit 1", (mall_id,)).fetchone()[0])
     # `variant` följer inte med ur mallen: ett omprov som mall hade gjort ett
