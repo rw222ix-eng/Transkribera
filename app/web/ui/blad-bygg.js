@@ -990,9 +990,12 @@ window.BladBygg = (() => {
     /* matBryt och inte mat: en hel härledning i ett dollarpar är en enda
        oböjlig låda, och i en smal spalt gav den en scrollbar (se matBryt
        ovan). */
+    /* Enheten står INNE i svarets spann, och spannet tar resten av raden
+       (.lossvar). Annars bröts ett långt svar till en egen rad under
+       etiketten, till vänster om de indragna uträkningsraderna. */
     const [svar, steg] = svarOchSteg(u.f);
-    return `<div class="losvar"><b class="losetikett">Svar</b><span>${matBryt(svar)}</span>${
-      u.enhet && !ENHET_SLUT(svar, u.enhet) ? `<em>${enhetHtml(u.enhet)}</em>` : ''}${
+    return `<div class="losvar"><b class="losetikett">Svar</b><span class="lossvar">${matBryt(svar)}${
+      u.enhet && !ENHET_SLUT(svar, u.enhet) ? ` <em>${enhetHtml(u.enhet)}</em>` : ''}</span>${
       steg ? `<span class="losrader">${matBryt(steg)}</span>` : ''}</div>`;
   }
   /* Vägen till svaret — och på en uppgift med deluppgifter ÄR den svaret:

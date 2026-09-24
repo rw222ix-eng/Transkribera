@@ -141,6 +141,8 @@ $\dfrac{…}$
 /* I en deluppgift bär a) b) c) redan navigeringen; en etikett till blir brus. */
 /* Uträkningen under svaret (blad-bygg.js svarOchSteg): en egen rad i flexen,
    indragen till svarets vänsterkant, etikettens 40 px plus luckan 14 px. */
+.losvar>.lossvar{flex:1 1 0}
+.losvar>.lossvar>em{font-style:normal;font-size:calc(12.5px * var(--fsk, 1));font-weight:400;color:#000}
 .losvar>.losrader{flex:0 0 100%;padding-left:54px;box-sizing:border-box}
 .prdel .losvar{margin-top:0;padding-left:0}
 .losvar>span .katex{font-size:1.05em}
