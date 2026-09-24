@@ -638,6 +638,47 @@ def _tabell_vy(t):
     }
 
 
+# Relationerna en lösningsrad kan stå kring. Provets stegtabell ställer dem
+# under varandra (_likhetsdelning), som en lösning skriven för hand.
+_RELATIONER = {"approx", "leq", "geq", "le", "ge", "neq", "ne", "lt", "gt",
+               "equiv"}
+_EN_FORMEL_RE = re.compile(r"\s*\$([^$]*)\$\s*")
+
+
+def _likhetsdelning(cell: str) -> tuple[str, str, str] | None:
+    """(vänsterled, relation, högerled) för en cell som är EN formel med högst
+    en relation utanför klamrar. En rad utan relation («$(x + 3)^2 - 9$», första
+    raden i en förenkling) är helt vänsterled. None för text, flera formler
+    eller flera relationer: den raden går inte att ställa under de andra."""
+    m = _EN_FORMEL_RE.fullmatch(str(cell or ""))
+    if not m:
+        return None
+    matte = m.group(1)
+    djup, traffar, i = 0, [], 0
+    while i < len(matte):
+        t = matte[i]
+        if t == "\\":
+            namn = re.match(r"[A-Za-z]+", matte[i + 1:])
+            steg = 1 + (len(namn.group()) if namn else 1)
+            if namn and djup == 0 and namn.group() in _RELATIONER:
+                traffar.append((i, i + steg))
+            i += steg
+            continue
+        if t == "{":
+            djup += 1
+        elif t == "}":
+            djup -= 1
+        elif t in "=<>" and djup == 0:
+            traffar.append((i, i + 1))
+        i += 1
+    if len(traffar) > 1:
+        return None
+    if not traffar:
+        return matte.strip(), "", ""
+    a, b = traffar[0]
+    return matte[:a].strip(), matte[a:b], matte[b:].strip()
+
+
 def _stegtabell_vy(s, *, facit: bool):
     """Stegtabellen. `facit=False` är elevens ark — då står det INTE vilket steg
     som brister, för det är hela uppgiften. `facit=True` är bedömningen."""
@@ -648,11 +689,39 @@ def _stegtabell_vy(s, *, facit: bool):
     # slog i linjerna över och under. Med bråk i någon cell får tabellen
     # dubbel radhöjd, annars lite luft ändå.
     brak = any("frac" in c for st in s.steg for c in st.celler)
+    # PROVETS SÄTTNING (_former.stegbok, lärarens dom 2026-09-24 kväll: «behöver
+    # göras mycket snyggare»). Tabellen gick över hela raden och lämnade ett hål
+    # mellan lösningen och rutan. Nu står likhetstecknen under varandra, i en
+    # kolumn per lösning, när varje rad i den är en formel med högst en relation.
+    delning = [[_likhetsdelning(st.celler[j]) if j < len(st.celler) else None
+                for st in s.steg] for j in range(len(s.kolumner))]
+    delad = [all(d is not None for d in kol) and any(d[1] for d in kol)
+             for kol in delning]
+
+    def bokceller(i, st):
+        ut = []
+        for j in range(len(s.kolumner)):
+            if delad[j]:
+                v, rel, h = delning[j][i]
+                ut.append(escape_mixed(f"${v}$") if v else "")
+                ut.append(escape_mixed(f"${{}}{rel} {h}$") if rel else "")
+            else:
+                ut.append(escape_mixed(st.celler[j]) if j < len(st.celler)
+                          else "")
+        return ut
+
+    kolumner = [escape_mixed(k) for k in s.kolumner]
     return {
         "spec": "l" + "X" * len(s.kolumner) + "c",
         "stracka": "2.1" if brak else "1.3",
-        "kolumner": [escape_mixed(k) for k in s.kolumner],
+        "kolumner": kolumner,
+        "bok_spec": "c@{\\hspace{1.5em}}" + "@{\\hspace{2.5em}}".join(
+            "r@{}l" if d else "l" for d in delad) + "@{\\hspace{2.5em}}c",
+        "bok_rubriker": [f"\\multicolumn{{2}}{{c}}{{{k}}}" if d else k
+                         for k, d in zip(kolumner, delad)],
         "steg": [{"nr": i + 1, "celler": [escape_mixed(c) for c in st.celler],
+                  "bok": bokceller(i, st),
+                  "brak": any("frac" in c for c in st.celler),
                   "fel": facit and i == s.forsta_fel}
                  for i, st in enumerate(s.steg)],
         "forsta_fel": s.forsta_fel + 1 if facit else None,

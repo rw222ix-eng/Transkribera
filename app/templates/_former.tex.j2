@@ -43,6 +43,34 @@
 ((* endif *))
 ((* endmacro *))
 
+((# Provets stegtabell, i förlagans sättning som tabellbok nedan: booktabs,
+    centrerad, naturlig bredd, ingen fetstil. Lärarens dom 2026-09-24 kväll
+    över exam 126 uppgift 10 («behöver göras mycket snyggare»): den breda
+    tabellen ovan lämnade ett hål mellan lösningen och rutan, och \small
+    krympte matten. Likhetstecknen står under varandra när raderna tillåter
+    det (exam_latex._likhetsdelning), rutan sitter nära raden den hör till,
+    och \stegruta krymper tabellen i stället för att låta den gå ut i
+    marginalen. #))
+((* macro stegbok(s) *))
+((* if s *))
+\vspace{4mm}
+\begin{center}
+\renewcommand{\arraystretch}{1.6}%
+\stegruta{\begin{tabular}{((( s.bok_spec )))}
+  \toprule
+  Steg ((* for k in s.bok_rubriker *))& ((( k ))) ((* endfor *))& Fel \\
+  \midrule
+((* for rad in s.steg *))
+  ((( rad.nr )))((* if rad.brak *))\bråkstrut((* endif *)) ((* for c in rad.bok *))& ((( c ))) ((* endfor *))& ((* if rad.fel *))\textbf{X}((* else *))\kryssruta((* endif *)) \\
+((* endfor *))
+  \bottomrule
+\end{tabular}}
+\end{center}
+\vspace{2mm}
+((* if s.forsta_fel *))\par{\small\itshape Första felet står i steg ((( s.forsta_fel ))).}\par((* endif *))
+((* endif *))
+((* endmacro *))
+
 ((# Ifyllnadsraderna: en namngiven rad per beslut eleven ska skriva ner
     («Ekvation: ……», «Svar i ord: ……»). De ERSÄTTER svarsraden — den som fyller
     i namngivna rader har redan skrivit sitt svar — och därför frågar mallarna

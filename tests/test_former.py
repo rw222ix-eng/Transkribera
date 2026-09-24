@@ -233,7 +233,9 @@ def test_formerna_satts_i_latex():
     for namn in ("prov", "arbetsblad"):
         t = tex[namn]
         assert "\\begin{tabular}" in t, f"{namn} saknar datatabellen"
-        assert "\\begin{tabularx}" in t, f"{namn} saknar stegtabellen"
+        # Provet sätter stegtabellen i förlagans form (_former.stegbok).
+        steg = "\\stegruta{" if namn == "prov" else "\\begin{tabularx}"
+        assert steg in t, f"{namn} saknar stegtabellen"
         assert "\\svarsrutor{" in t, f"{namn} saknar kryssruteraden"
         assert "Randvinkelsatsen" in t and "Kordasatsen" in t
     # Bedömningsanvisningen i NP:s form (lärarens dom 2026-09-23) trycker inte
@@ -343,7 +345,85 @@ def test_tva_kolumner_ger_tva_elevers_losningar_sida_vid_sida():
                         stegtabell=tva))
     tex = exam_latex.render_prov(doc)
     assert "Alvas lösning" in tex and "Bilals lösning" in tex
-    assert "{lXXc}" in tex        # steg + två lösningar + kryssrutekolumn
+    # Steg + två lösningar, var och en delad vid relationen + kryssrutekolumn.
+    assert ("{c@{\\hspace{1.5em}}r@{}l@{\\hspace{2.5em}}r@{}l"
+            "@{\\hspace{2.5em}}c}") in tex
+    assert "{lXXc}" in exam_latex.render_arbetsblad(doc)
+
+
+def test_provets_stegtabell_staller_likhetstecknen_under_varandra():
+    """Lärarens dom 2026-09-24 kväll, exam 126 uppgift 10: «Tabellen behöver
+    göras mycket snyggare. Detta gäller alla prov som genereras framöver.»
+    Den gick över hela raden med \\small-matte och ett hål fram till rutan.
+    Nu: förlagans booktabs, naturlig bredd, likhetstecknen under varandra."""
+    maja = {"kolumner": ["Majas lösning"],
+            "steg": [{"celler": ["$\\dfrac{x + 2}{4} - \\dfrac{x - 3}{6} = 2$"]},
+                     {"celler": ["$3(x + 2) - 2(x - 3) = 24$"]},
+                     {"celler": ["$3x + 6 - 2x - 6 = 24$"]},
+                     {"celler": ["$x = 24$"]}],
+            "forsta_fel": 2}
+    doc = _doc(_uppgift(poang=[0, 1, 1], typ="resonemang", formaga="R",
+                        stegtabell=maja), profil="prov")
+    tex = exam_latex.render_prov(doc)
+    assert "\\multicolumn{2}{c}{Majas lösning}" in tex
+    assert "\\(3x + 6 - 2x - 6\\) & \\({}= 24\\) & \\kryssruta" in tex
+    assert "\\(x\\) & \\({}= 24\\)" in tex
+    assert "\\toprule" in tex and "\\bottomrule" in tex
+    # Bråkraden får sin strut, de andra raderna inte.
+    assert "1\\bråkstrut &" in tex and "2\\bråkstrut" not in tex
+    assert "Första felet" not in tex and "\\textbf{X}" not in tex
+
+
+@pytest.mark.parametrize("cell,delning", [
+    ("$x = 24$", ("x", "=", "24")),
+    ("$= -2$", ("", "=", "-2")),
+    ("$\\dfrac{-6+(-2)}{2}$", ("\\dfrac{-6+(-2)}{2}", "", "")),
+    ("$x \\approx 0{,}77$", ("x", "\\approx", "0{,}77")),
+    ("$2x \\leq 6$", ("2x", "\\leq", "6")),
+    ("$\\text{om a = b}$", ("\\text{om a = b}", "", "")),
+    ("$2 < x < 5$", None),                    # två relationer
+    ("Hon subtraherar 6.", None),              # text
+    ("$x = 3$ och $y = 2$", None),             # två formler
+])
+def test_likhetsdelningen(cell, delning):
+    assert exam_latex._likhetsdelning(cell) == delning
+
+
+def test_en_textrad_gor_kolumnen_vansterstalld():
+    """Går en rad inte att dela står hela kolumnen vänsterställd, som förut:
+    ett likhetstecken som hoppar mellan raderna är värre än inget."""
+    blandad = {"kolumner": ["Leos lösning"],
+               "steg": [{"celler": ["$2x + 4 = 10$"]},
+                        {"celler": ["Leo delar båda leden med 2."]},
+                        {"celler": ["$x + 4 = 5$"]}],
+               "forsta_fel": 1}
+    doc = _doc(_uppgift(poang=[0, 1, 1], typ="resonemang", formaga="R",
+                        stegtabell=blandad), profil="prov")
+    tex = exam_latex.render_prov(doc)
+    assert "{c@{\\hspace{1.5em}}l@{\\hspace{2.5em}}c}" in tex
+    assert "& Leos lösning &" in tex
+
+
+def test_provets_stegtabell_kompilerar_aven_for_bred(tmp_path):
+    """Två långa lösningar sida vid sida är bredare än raden. \\stegruta
+    krymper tabellen i stället för att låta den gå ut i marginalen."""
+    lang = "$3(x + 2)^2 - 2(x - 3)^2 + 4(x + 1)(x - 1) - 7x^2$"
+    bred = {"kolumner": ["Alvas lösning", "Bilals lösning"],
+            "steg": [{"celler": [lang, lang]},
+                     {"celler": ["$= 3x^2 + 12x + 12 - 2x^2 + 12x - 18 + 4x^2 - 4 - 7x^2$",
+                                 "$= 3x^2 + 6x + 12 - 2x^2 - 6x + 18 + 4x^2 - 4 - 7x^2$"]},
+                     {"celler": ["$= -2x^2 + 24x - 10$", "$= -2x^2 + 26$"]}],
+            "forsta_fel": 1}
+    doc = _doc(_uppgift(poang=[0, 1, 1], typ="resonemang", formaga="R",
+                        stegtabell=bred), profil="prov")
+    pdf, logg = exam_pdf.compile_pdf(exam_latex.render_prov(doc), tmp_path, "prov")
+    assert pdf is not None, f"provet föll:\n{logg[-800:]}"
+    fitz = pytest.importorskip("fitz")
+    for sida in fitz.open(pdf):
+        for ord_ in sida.get_text("words"):
+            if "Bilals" in ord_[4]:
+                # Förlagans satsyta slutar 25 mm från högerkanten.
+                assert ord_[2] <= sida.rect.width - 25 / 25.4 * 72 + 1
 
 
 # ══════════════════════════ skärmen och papperet ═════════════════════════

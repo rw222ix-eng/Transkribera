@@ -601,6 +601,16 @@
     utan den här gick raderna i varandra (lösningsförslaget «Ekvationer med
     bråk», 2026-09-21). Sätts av _former.tex.j2 bara i celler som bär frac. #))
 \newcommand{\bråkstrut}{\rule[-2.4ex]{0pt}{5.6ex}}
+((# Provets stegtabell (_former.stegbok) har naturlig bredd. Två elevers
+    lösningar sida vid sida kan bli bredare än raden, och då krymps tabellen
+    till radens bredd i stället för att gå ut i marginalen. \resizebox kommer
+    från graphicx, som provet redan laddar: inget nytt paket i Tectonic-cachen. #))
+((* if med_grafik *))
+\newsavebox{\stegbox}
+\newcommand{\stegruta}[1]{\sbox{\stegbox}{#1}%
+  \ifdim\wd\stegbox>\linewidth\resizebox{\linewidth}{!}{\usebox{\stegbox}}%
+  \else\usebox{\stegbox}\fi}
+((* endif *))
 
 ((# ══════════ EN BEDÖMD ELEVLÖSNING ══════════
     Avsnittet «Bedömda elevlösningar» sist i bedömningsanvisningen (lärarens
