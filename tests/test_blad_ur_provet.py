@@ -530,3 +530,63 @@ def test_provets_uttryck_pa_bladet_falls():
     assert "provuttryck" in routes_exam._ATGARD
     # Fail-open utan prov.
     assert exam_gen.uttrycksvakt(blad, None) == []
+
+
+# ──────────── Rickards besked 24/9 kväll: figuren, elevläsaren, reserven ────
+
+
+def test_provets_monsterfigur_star_kvar():
+    """Rickard har lovat NA26F att mönsteruppgiften på provet har en figur.
+    Bladets regel (INFOR_BILD, bildfigurvakt) får alltså aldrig nå provet."""
+    prov = exam_gen.build_prompt(KURS1C, "NA26F", ["Mönster"], antal=6,
+                                 profil="prov")
+    assert "UNDANTAG, MÖNSTERUPPGIFTER" in prov
+    assert "BILDEN BÄR ALDRIG MATEMATIKEN PÅ BLADET" not in prov
+    # Efterkontrollen på provet räknar inte bladets bildvakt.
+    papper = _papper(_u("Figurerna nedan är byggda av tändstickor.",
+                        scen=_scen("Three square grids made of exactly "
+                                   "twelve matchsticks.")))
+    assert routes_exam._ovningsfynd(papper, _prov_1c(), "prov") == []
+
+
+def test_elevlasaren_laser_bladet_inför_provet():
+    """Ett anrop per blad, och fyndet lagas i samma runda som vakterna."""
+    blad = _blad()
+    prompter = []
+
+    def llm(model, prompt, **k):
+        prompter.append(prompt)
+        if "elevläsare" in prompt:
+            return json.dumps({"domar": [{
+                "nr": "3", "omskrivning": "Jag ska rita en graf.",
+                "forstar": "nej", "avvikelse": "Facit löser en ekvation.",
+                "fortydligande": "Skriv att ekvationen ska lösas."}]})
+        return json.dumps(_blad())
+
+    res = exam_gen._infor_pass(
+        blad, [], model="", llm=llm, profil="arbetsblad", antal=7,
+        skeleton=None, nummer=[1, 2, 3, 4, 5, 6, 7], rounds_used=1,
+        max_rounds=5, prov=_prov_1c(), doma=True)
+    assert sum("elevläsare" in p for p in prompter) == 1
+    rundor = [p for p in prompter if "Problem att åtgärda" in p]
+    assert len(rundor) == 1 and "en elev läser den så här" in rundor[0]
+    assert res["rounds"] == 2
+    # doma=False: inget anrop.
+    prompter.clear()
+    exam_gen._infor_pass(
+        _blad(), [], model="", llm=llm, profil="arbetsblad", antal=7,
+        skeleton=None, nummer=[1, 2, 3, 4, 5, 6, 7], rounds_used=1,
+        max_rounds=5, prov=_prov_1c(), doma=False)
+    assert not any("elevläsare" in p for p in prompter)
+
+
+def test_provets_losningsforslag_reserven_har_ett_steg_per_rad():
+    """Utan utförlig lösning sätts `losning`, och stegen slogs ihop till en
+    rad. Nu som arbetsbladets facit."""
+    from app import exam_latex
+    prov = copy.deepcopy(_prov_1c())
+    prov["uppgifter"][0]["losning"] = "$x = 1$\n$x - 1 = 0$\n$x = 1$"
+    doc = exam_spec.validate_exam_json(prov)[0]
+    assert doc is not None
+    tex = exam_latex.render_losningsforslag(doc)
+    assert r"\(x = 1\)\newline \(x - 1 = 0\)\newline \(x = 1\)" in tex
