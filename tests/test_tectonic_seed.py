@@ -95,7 +95,13 @@ def test_sonden_satter_glyfer_i_alla_mattestorlekar():
     storlekskraschen ovan.
 
     escape_mixed gör om $…$ till \\(…\\), så matte-kroppen matchas utan
-    delimitrar.
+    delimitrar. Den skriver också om ett bråk i en exponent till snedstreck
+    (_exponentbrak), så scriptscript nås med en dubbel exponent: ett
+    y^{\\frac{c \\cdot d}{e}} blir y^{c \\cdot d/e} och stannar i script.
+
+    newtxmath skalar storlekarna: vid 12pt står scriptscript på 6,6pt och
+    tar ntxmi7/ntxsy7. ntxmi5/ntxsy5 väljs först under 6,3pt, alltså i
+    \\small (notisrutan), och ingen seed hade dem före 2026-09-24.
 
     Arbetsbladet och inte bedömningsanvisningen: den trycker inte längre
     uppgiftstexten (NP:s form, lärarens dom 2026-09-23), och arbetsbladet är
@@ -104,8 +110,11 @@ def test_sonden_satter_glyfer_i_alla_mattestorlekar():
         seed_tectonic_cache._representative_doc())
     assert r"x^{a \cdot \sqrt{b}}" in tex, \
         "symbolglyf i script-storlek (ntxsy7) seedas aldrig"
-    assert r"y^{\frac{c \cdot d}{e}}" in tex, \
-        "glyfer i scriptscript-storlek (ntxmi5/ntxsy5) seedas aldrig"
+    assert r"y^{c^{d \cdot e}}" in tex, \
+        "glyfer i scriptscript-storlek (ntxmi7/ntxsy7 vid 12pt) seedas aldrig"
+    notis = tex[tex.index(r"\notisruta{Rita"):].split("\n", 1)[0]
+    assert r"\(y^{c^{d \cdot e}}\)" in notis, \
+        "scriptscript i \\small (ntxmi5/ntxsy5, notisrutan) seedas aldrig"
     assert r"\sum_{i=1}^{n} i^2" in tex, \
         "stor operator med gränser (familj 3, ntxexx) seedas aldrig"
     assert r"\int_0^1 f(x)\,dx" in tex, \
@@ -117,7 +126,8 @@ def test_sonden_satter_glyfer_i_alla_mattestorlekar():
     # Sonden speglar stegen (belt and braces, som \pic-figuren) så att den
     # står kvar även om det representativa dokumentet skrivs om.
     assert r"x^{a \cdot \sqrt{b}}" in seed_tectonic_cache.PROBE_TEX
-    assert r"y^{\frac{c \cdot d}{e}}" in seed_tectonic_cache.PROBE_TEX
+    assert r"y^{c^{d \cdot e}}" in seed_tectonic_cache.PROBE_TEX
+    assert r"{\small $y^{c^{d \cdot e}}$}" in seed_tectonic_cache.PROBE_TEX
     assert r"\sum_{i=1}^{n} i^2" in seed_tectonic_cache.PROBE_TEX
     assert r"\int_0^1 f(x)\,dx" in seed_tectonic_cache.PROBE_TEX
     assert r"\left(\frac{n(n+1)}{2}\right)" in seed_tectonic_cache.PROBE_TEX

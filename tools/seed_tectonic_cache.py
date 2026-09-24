@@ -93,7 +93,9 @@ PROBE_TEX = r"""
 Sond för cacheseedning. Matematik: $x^2 - 4x + 3 = 0$,
 $\frac{a}{b} \geq \sqrt{c} \neq \pm\infty$, $\alpha \cdot \beta \leq \Sigma$.
 Storleksstege (text → script → scriptscript, glyf på varje nivå):
-$x^{a \cdot \sqrt{b}}$ och $y^{\frac{c \cdot d}{e}}$.
+$x^{a \cdot \sqrt{b}}$ och $y^{c^{d \cdot e}}$.
+I \small faller scriptscript under 6,3pt (ntxmi5/ntxsy5):
+{\small $y^{c^{d \cdot e}}$}.
 Familj 3 (utökningsfamiljen; stor operator, extensibel parentes, stor rot):
 $\sum_{i=1}^{n} i^2$ och $\int_0^1 f(x)\,dx$ samt
 $\left(\frac{n(n+1)}{2}\right)$ och $\sqrt{\frac{x}{2}}$.
@@ -243,9 +245,17 @@ def _representative_doc() -> exam_spec.ExamDoc:
                 # en gång — men den måste träffas av en riktig GLYF.
                 #   x^{a \cdot \sqrt{b}} → script: bokstav (ntxmi7) OCH symbol
                 #                          (\cdot, \sqrt → familj 2 = ntxsy7)
-                #   y^{\frac{c \cdot d}{e}} → bråket ligger i script, så
-                #                          täljare/nämnare faller till
-                #                          scriptscript: ntxmi5 + ntxsy5
+                #   y^{c^{d \cdot e}}     → c i script, d · e i den inre
+                #                          exponenten faller till
+                #                          scriptscript, 6,6pt vid 12pt:
+                #                          newtx tar då ntxmi7 + ntxsy7
+                #                          (ntxmi5/ntxsy5 först i \small,
+                #                          se notisen nedan)
+                # Förr y^{\frac{c \cdot d}{e}}, men escape_mixed skriver om
+                # ett bråk i en exponent till snedstreck (_exponentbrak,
+                # lärarens dom 2026-09-24): y^{c \cdot d/e} står helt i
+                # script och scriptscript seedades aldrig. En dubbel
+                # exponent rör _exponentbrak inte.
                 # Utan detta hämtades bara .tfm-metriken och --only-cached
                 # kraschade på skarpa prov med "Could not locate a virtual/
                 # physical font for TFM ntxsy7" (skarp körning 2026-07-25).
@@ -263,7 +273,7 @@ def _representative_doc() -> exam_spec.ExamDoc:
                 # samma sätt fast på "ntxexx" i stället för "ntxsy7".
                 text=r"En population modelleras av $N(t) = N_0 \cdot a^{t}$. "
                      r"Undersök hur populationen växer. Förenkla också "
-                     r"$x^{a \cdot \sqrt{b}}$ och $y^{\frac{c \cdot d}{e}}$. "
+                     r"$x^{a \cdot \sqrt{b}}$ och $y^{c^{d \cdot e}}$. "
                      r"Beräkna även $\sum_{i=1}^{n} i^2$ och "
                      r"$\int_0^1 f(x)\,dx$ samt förenkla "
                      r"$\left(\frac{n(n+1)}{2}\right)$ och "
@@ -321,8 +331,16 @@ def _representative_doc() -> exam_spec.ExamDoc:
                 del_="C", formaga="R", typ="resonemang", poang=(0, 1, 1),
                 text=r"Avgör om påståendet stämmer: en andragradsfunktion "
                      r"med $a < 0$ saknar minsta värde. Motivera.",
+                # SCRIPTSCRIPT I \small. newtxmath skalar mattestorlekarna:
+                # vid 12pt står scriptscript på 6,6pt och tar ntxmi7/ntxsy7
+                # (stegen i problemuppgiften ovan). Först under 6,3pt tar
+                # omlntxmi.fd ntxmi5, och dit når bara matte i \small
+                # (6,1pt). Notisrutan sätter sin text i \small, så en dubbel
+                # exponent här kräver ntxmi5.vf + NewTXMI5.pfb och ntxsy5.
+                # Ingen seed hade dem (2026-09-24): «Could not locate a
+                # virtual/physical font for TFM ntxmi5» under --only-cached.
                 notis=r"Rita gärna en skiss av grafen som stöd för "
-                      r"resonemanget.",
+                      r"resonemanget. Jämför med $y^{c^{d \cdot e}}$.",
                 losning=r"Sant — grafen är en nedåtriktad parabel.",
                 bedomning=r"+1 C ställningstagande, +1 A stringens.",
             ),
