@@ -475,10 +475,13 @@ def _stycken(text: str, luft: bool = False,
 # pappret som det sätts (11 pt, radavstånd ~5 mm, svarslinje med luft ~11 mm,
 # plåten 0,7·textbredd ~ 63 mm plus luft). En uppgift högre än taket kan ändå
 # inte hållas ihop, och ska inte skjuta en halvtom sida framför sig.
-_MM_HUVUD, _MM_RAD, _MM_LUFT = 7.0, 5.5, 5.0
-_MM_FORMEL, _MM_BRAKFORMEL, _MM_SVAR = 11.0, 15.0, 11.0
-_MM_ALT, _MM_DEL, _MM_BILD, _MM_FIGUR = 6.0, 4.0, 68.0, 60.0
-_MM_TABELLRAD, _TECKEN_PER_RAD, BEHOV_TAK_MM = 6.5, 85, 200
+# Mätt i exam 126 och 129 samma dag: en textrad tar ~7 mm med sitt
+# styckeavstånd (5,5 mm var för lite, och uppgift 11 delades mellan a och b
+# på båda proven).
+_MM_HUVUD, _MM_RAD, _MM_LUFT = 7.0, 7.0, 5.0
+_MM_FORMEL, _MM_BRAKFORMEL, _MM_SVAR = 11.0, 15.0, 12.0
+_MM_ALT, _MM_DEL, _MM_BILD, _MM_FIGUR = 6.0, 6.0, 70.0, 60.0
+_MM_TABELLRAD, _TECKEN_PER_RAD, BEHOV_TAK_MM = 7.5, 85, 200
 
 
 def _behov_mm(vy: dict, *, del_: bool = False) -> int:

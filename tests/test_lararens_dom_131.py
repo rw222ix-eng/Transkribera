@@ -42,9 +42,9 @@ def test_varje_uppgift_begar_sin_hojd():
         "Jord.\nOlja.\n\nHur många procent?", luft=True),
         "endast_svar": True}
     mm = exam_latex._behov_mm(kort)
-    assert 35 <= mm <= 45, mm
+    assert 35 <= mm <= 50, mm
     med_bild = dict(kort, bild_fil="egen-03.png")
-    assert exam_latex._behov_mm(med_bild) - mm == 68
+    assert exam_latex._behov_mm(med_bild) - mm == exam_latex._MM_BILD
     delad = {"stycken": exam_latex._stycken("Beräkna."), "endast_svar": False,
              "deluppgifter": [kort, kort, kort, kort, kort, kort, kort]}
     assert exam_latex._behov_mm(delad) == exam_latex.BEHOV_TAK_MM
