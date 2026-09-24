@@ -308,9 +308,12 @@ Provet kan ge totalt \textbf{((( forsatt.total ))) poäng}.
 ((( former.tabellbok(d.tabell) )))((( former.steg(d.stegtabell) )))((( former.rutor(d.svarsrutor) )))
 ((* if d.notis *))\pftips{((( d.notis )))}
 ((* endif *))
+((# Svarsplatsen följer UPPGIFTENS kravrad: «Fullständig lösning krävs»
+    betyder lösblad, också för en deluppgift som själv är kortsvar (lärarens
+    dom 2026-09-24, exam 129 uppgift 11; u.svar_pa_pappret). #))
 ((* if d.flerval *))((* for alt in d.flerval *))\par\kryssruta\ ((( alt.bokstav ))): ((( alt.text )))((* endfor *))\par\vspace{2mm}
-((* elif d.svarsfalt_rad *))((( former.svarsrader(d.svarsfalt_rad) )))
-((* elif d.endast_svar *))((( former.svarsplats(d) )))
+((* elif d.svarsfalt_rad and u.svar_pa_pappret *))((( former.svarsrader(d.svarsfalt_rad) )))
+((* elif d.endast_svar and u.svar_pa_pappret *))((( former.svarsplats(d) )))
 ((* endif *))
 ((* endfor *))
 

@@ -1420,6 +1420,13 @@ def _build_view(doc: exam_spec.ExamDoc,
             item_vy["har_bild"] = bool(
                 item_vy.get("bild_fil")
                 or any(d.get("bild_fil") for d in (item_vy.get("deluppgifter") or [])))
+            # KRAVRADEN GÄLLER HELA UPPGIFTEN (lärarens dom 2026-09-24, exam 129
+            # uppgift 11): «Fullständig lösning krävs» på uppgiften och «Svar:
+            # ____» under a). «Då ska ju inte ens det finnas svar, kolon och
+            # understreck, för då ska eleverna svara på lösblad.» En
+            # deluppgift får svarsplats på provpappret bara när uppgiften
+            # själv är endast svar (prov.tex.j2).
+            item_vy["svar_pa_pappret"] = it.typ == "rutin"
             item_vy["behov_mm"] = _behov_mm(item_vy)
             (item_vy["stycken_fore"], item_vy["stycken_efter"],
              item_vy["stycken_fraga"]) = _dela_uppgiften(

@@ -189,6 +189,31 @@ def test_exponentbraket_och_stegtabellens_luft():
     assert "\\renewcommand{\\arraystretch}{((( s.stracka )))}" in mall
 
 
+def test_kravraden_galler_hela_uppgiften():
+    """Exam 129 uppgift 11: «Fullständig lösning krävs.» och «Svar: ____»
+    under a). Lösblad betyder ingen svarsrad, inte heller på en deluppgift."""
+    from tests.test_exam import _exam
+    from app import exam_spec
+    exam = _exam()
+    u = exam["uppgifter"][0]
+    u.update(typ="redovisning", poang=[0, 0, 0], losning="", bedomning="",
+             deluppgifter=[
+                 {"poang": [1, 0, 0], "typ": "rutin", "text": "$1 + 1$",
+                  "losning": "2", "bedomning": "+1 E rätt"},
+                 {"poang": [1, 0, 0], "typ": "redovisning",
+                  "text": "Visa att $2 > 1$.", "losning": "x",
+                  "bedomning": "+1 E rätt"}])
+    doc, fel = exam_spec.validate_exam_json(exam)
+    assert doc is not None, fel
+    vy = exam_latex._build_view(doc)
+    it = next(x for d in vy["delar"] for x in d["uppgifter"]
+              if x["har_deluppgifter"])
+    assert it["svar_pa_pappret"] is False
+    mall = Path("app/templates/prov.tex.j2").read_text(encoding="utf-8")
+    assert "((* elif d.endast_svar and u.svar_pa_pappret *))" in mall
+    assert "((* elif d.svarsfalt_rad and u.svar_pa_pappret *))" in mall
+
+
 def _scenuppgift(text, scene):
     return {"uppgifter": [{"text": text, "scen": {"scene": scene}}]}
 
