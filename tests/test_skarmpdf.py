@@ -240,13 +240,17 @@ def test_lararens_egna_bilder_foljer_med_till_mallen(client, monkeypatch):
     res = _done(client.post(f"/api/exams/{result['id']}/approve", json={
         "bilder": {"uppg2": _png(200, 120), "rubrik": _png(50, 50)}}))
     ut = Path(res["pdf"]).parent
-    # Uppgiftens bild skrivs till utkatalogen med sitt nummer i namnet …
-    assert (ut / "egen-02.png").is_file(), sorted(p.name for p in ut.iterdir())
+    eid = result["id"]
+    # Uppgiftens bild skrivs till utkatalogen med provets id och sitt nummer
+    # i namnet (katalogen delas av alla papper med samma kurs och datum) …
+    assert (ut / f"egen-{eid}-02.png").is_file(), sorted(
+        p.name for p in ut.iterdir())
     # … och sidhuvudets bild är inte en uppgift och lämnas därför.
-    assert not (ut / "egen-00.png").exists()
+    assert not (ut / f"egen-{eid}-00.png").exists()
     # Mallen ska verkligen inkludera filen, inte bara ha den liggande.
     tex = Path(res["tex"]).read_text(encoding="utf-8")
-    assert r"\includegraphics[width=0.7\textwidth]{egen-02.png}" in tex
+    assert (r"\includegraphics[width=0.7\textwidth]{" + f"egen-{eid}-02.png}}"
+            in tex)
     assert byggda, "provet kompilerades inte alls"
 
 
@@ -265,13 +269,14 @@ def test_forsattsbladets_egna_bild_har_en_egen_nyckel(tmp_path):
     assert tryck.forsattsbild_egen({"forsatt": dataurl}) == dataurl
     # … och den skrivs till utkatalogen med sitt eget namn, som FILNAMN:
     # Tectonic kompilerar med utkatalogen som arbetskatalog.
-    namn = tryck.spara_forsattsbild(dataurl, tmp_path)
-    assert namn == "egen-forsatt.png"
+    namn = tryck.spara_forsattsbild(dataurl, tmp_path, 126)
+    assert namn == "egen-126-forsatt.png"
     assert (tmp_path / namn).is_file()
     # En bild som inte går att avkoda ger None. Försättsbladet sätts då utan
     # bild i stället för att provet inte kompilerar alls.
-    assert tryck.spara_forsattsbild("data:image/png;base64,%%", tmp_path) is None
-    assert tryck.spara_forsattsbild(None, tmp_path) is None
+    assert tryck.spara_forsattsbild("data:image/png;base64,%%", tmp_path,
+                                    126) is None
+    assert tryck.spara_forsattsbild(None, tmp_path, 126) is None
 
 
 def test_forsattsbladets_egna_bild_foljer_med_till_mallen(client, monkeypatch):
@@ -282,12 +287,12 @@ def test_forsattsbladets_egna_bild_foljer_med_till_mallen(client, monkeypatch):
     res = _done(client.post(f"/api/exams/{result['id']}/approve", json={
         "bilder": {"forsatt": _png(320, 180), "uppg2": _png(200, 120)}}))
     ut = Path(res["pdf"]).parent
-    assert (ut / "egen-forsatt.png").is_file(), sorted(
-        q.name for q in ut.iterdir())
+    namn = f"egen-{result['id']}-forsatt.png"
+    assert (ut / namn).is_file(), sorted(q.name for q in ut.iterdir())
     tex = Path(res["tex"]).read_text(encoding="utf-8")
-    assert "{egen-forsatt.png}" in tex
+    assert "{" + namn + "}" in tex
     # … och den står på FÖRSÄTTSBLADET, alltså före den första sidbrytningen.
-    assert "egen-forsatt.png" in tex.split(r"\newpage")[0]
+    assert namn in tex.split(r"\newpage")[0]
     assert byggda, "provet kompilerades inte alls"
 
 
@@ -530,3 +535,43 @@ def test_anteckningarna_utan_bilder_kompileras_som_forut(client, monkeypatch):
     byggda = _tectonic(monkeypatch)
     res = _done(client.post(f"/api/anteckningar/{result['id']}/approve", json={}))
     assert res["pdf"] and byggda, byggda
+
+
+def test_bilderna_i_katalogen_ar_provets_egna(tmp_path):
+    """Utkatalogen är per kurs och datum och delas av alla papper där
+    (2026-09-24 kväll). 23/9 visades gamla egen-NN.png under nya uppgifter
+    med samma nummer. Nya filer bär provets id; en gammal fil utan id räknas
+    bara när provets egen .tex nämner den och den inte skrivits om efter."""
+    import os
+    import time
+    for namn in ("egen-5-02.png", "egen-6-02.png", "egen-6-forsatt.png",
+                 "bild-6-01.png", "egen-03.png", "egen-forsatt.png",
+                 "bild-04.png"):
+        (tmp_path / namn).write_bytes(b"PNG")
+    tex = tmp_path / "Prov 5.tex"
+    tex.write_text(r"\includegraphics{egen-03.png} \includegraphics"
+                   r"{egen-forsatt.png}", encoding="utf-8")
+    nu = time.time()
+    for namn in ("egen-03.png", "egen-forsatt.png", "bild-04.png"):
+        os.utime(tmp_path / namn, (nu - 100, nu - 100))
+    os.utime(tex, (nu - 50, nu - 50))
+
+    und, egna, forsatt = tryck.bilder_i_katalogen(tmp_path, 5, [tex])
+    assert egna == {2: "egen-5-02.png", 3: "egen-03.png"}
+    assert forsatt == "egen-forsatt.png"
+    assert und == {}                     # bild-04.png nämns inte av provet
+
+    # Ett annat prov i samma katalog ser bara sina egna, aldrig de gamla.
+    und, egna, forsatt = tryck.bilder_i_katalogen(tmp_path, 6, [])
+    assert egna == {2: "egen-6-02.png"}
+    assert forsatt == "egen-6-forsatt.png" and und == {1: "bild-6-01.png"}
+
+    # En gammal fil som skrivits om EFTER provets .tex är ett annat papper.
+    os.utime(tmp_path / "egen-03.png", (nu, nu))
+    _und, egna, _f = tryck.bilder_i_katalogen(tmp_path, 5, [tex])
+    assert egna == {2: "egen-5-02.png"}
+    # Provets egna nya fil vinner över en gammal med samma nummer.
+    (tmp_path / "egen-5-03.png").write_bytes(b"PNG")
+    os.utime(tmp_path / "egen-03.png", (nu - 100, nu - 100))
+    _und, egna, _f = tryck.bilder_i_katalogen(tmp_path, 5, [tex])
+    assert egna[3] == "egen-5-03.png"

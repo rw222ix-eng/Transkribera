@@ -49,22 +49,29 @@ for (const id of ids) {
   await page.waitForFunction(() => [...document.querySelectorAll('#arkskal img')].every(im => im.complete), null, { timeout: 30000 }).catch(() => {});
   await vila(3000);
   const svar = page.waitForResponse(r => r.url().includes(`/api/exams/${info.provId}/approve`), { timeout: 600000 });
-  /* Klockan före klicket: PDF:en måste vara skriven EFTER den (se nedan). */
+  /* Klockan och sökvägen före klicket: PDF:en måste vara skriven EFTER den. */
+  const pdfIHogen = () => page.evaluate(
+    n => (window.Dokument.sparade().find(v => v.id === n) || {}).pdf || null, id);
+  const pdfFore = await pdfIHogen();
   const fore = Date.now();
   await page.locator('#godkann').click();
   const r = await svar;
   console.log('   approve svarade', r.status());
-  /* Strömmen läses av klienten; vi väntar på att högen fått sin pdf-sökväg. */
-  const pdf = await page.waitForFunction(n => (window.Dokument.sparade().find(v => v.id === n) || {}).pdf, id, { timeout: 600000 })
-    .then(h => h.jsonValue()).catch(() => null);
   /* DEN NYA FILEN, INTE DEN GAMLA (granskningen 2026-09-24 natt). Svaret är
      200 också när godkännandets jobb dör, och ett dokument som godkänts förut
      har redan sin pdf-sökväg i högen. Skriptet skrev då ut den gamla filen,
-     och bygg.sh krympte och laddade upp den utan att säga något. Filen måste
-     alltså vara ändrad efter klicket; annars skrivs ingen «pdf:»-rad. */
-  let ny = false;
-  for (let t = 0; pdf && t < 600 && !ny; t++) {
-    try { ny = statSync(pdf).mtimeMs >= fore - 2000; } catch { ny = false; }
+     och bygg.sh krympte och laddade upp den utan att säga något. Godkänt är
+     en NY sökväg i högen, eller samma sökväg till en fil som skrivits om
+     efter klicket; annars skrivs ingen «pdf:»-rad. Högen läses om varje
+     sekund, för strömmen läses av klienten och sökvägen kommer när den är
+     klar. */
+  let pdf = null, ny = false;
+  for (let t = 0; t < 600 && !ny; t++) {
+    pdf = await pdfIHogen().catch(() => null);
+    if (pdf && pdf !== pdfFore) ny = true;
+    else if (pdf) {
+      try { ny = statSync(pdf).mtimeMs >= fore - 2000; } catch { ny = false; }
+    }
     if (!ny) await vila(1000);
   }
   if (pdf && ny) console.log('   pdf:', pdf);

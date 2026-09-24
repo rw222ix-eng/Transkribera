@@ -1297,8 +1297,8 @@ def test_approve_copies_bilder_and_includes_graphics(client, monkeypatch):
     result = _done(r2)
     from pathlib import Path
     tex = Path(result["tex"]).read_text(encoding="utf-8")
-    assert r"\includegraphics" in tex and "bild-01.png" in tex
-    assert (Path(result["tex"]).parent / "bild-01.png").exists()
+    assert r"\includegraphics" in tex and f"bild-{exam_id}-01.png" in tex
+    assert (Path(result["tex"]).parent / f"bild-{exam_id}-01.png").exists()
 
 
 def test_provet_gar_att_andra_efter_en_omstart(client, monkeypatch):
@@ -2066,11 +2066,12 @@ def _godkant_med_egna(client, monkeypatch, *, egna=("03", "forsatt")):
     res = _done(client.post(f"/api/exams/{result['id']}/approve", json={}))
     from pathlib import Path
     ut = Path(res["tex"]).parent
+    eid = result["id"]
     for stam in egna:
-        (ut / f"egen-{stam}.png").write_bytes(b"PNG" + stam.encode())
+        (ut / f"egen-{eid}-{stam}.png").write_bytes(b"PNG" + stam.encode())
     # Underlagets sidor ligger i samma katalog och är INTE lärarens egna.
-    (ut / "bild-01.png").write_bytes(b"underlag")
-    return result["id"], ut
+    (ut / f"bild-{eid}-01.png").write_bytes(b"underlag")
+    return eid, ut
 
 
 def test_egna_listar_bara_lararens_bilder(client, monkeypatch):

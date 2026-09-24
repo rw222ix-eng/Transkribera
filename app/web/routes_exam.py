@@ -2623,7 +2623,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     for n in sorted(idx):
                         src = und_dir / f"sida-{n:02d}.png"
                         if src.is_file():
-                            dst = out_dir / f"bild-{n:02d}.png"
+                            dst = out_dir / tryck.underlag_namn(exam_id, n)
                             dst.write_bytes(src.read_bytes())
                             bilder_map[n] = dst.name
                 # Lärarens egna inlagda bilder, nycklade på uppgiftsnummer —
@@ -2637,14 +2637,15 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # underlagets sida.
                 egna_map = dict(platar.plat_bilder(exam, platval, out_dir,
                                                    base=base))
-                egna_map.update(tryck.spara_egna_bilder(egna_bilder, out_dir))
+                egna_map.update(tryck.spara_egna_bilder(egna_bilder, out_dir,
+                                                        exam_id))
                 # Försättsbladets bild har ingen plats i egna_map (den
                 # nycklas på uppgiftsnummer) och skrivs därför för sig,
                 # till samma katalog och med samma kontrakt: filnamnet,
                 # inte sökvägen. None betyder «ingen bild» hela vägen ner
                 # i mallen.
                 forsatt_fil = tryck.spara_forsattsbild(forsatt_egen,
-                                                       out_dir)
+                                                       out_dir, exam_id)
                 # PROVET SÄTTS I LaTeX. Se kommentaren där avritningen tas
                 # emot: mallen är lärarens egen förlaga, och skärmen kan inte
                 # se ut som den. Övriga papper ritas av precis som förut.
@@ -3030,7 +3031,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
 
     # -------------------------------------------------- ändra kravgränserna --
 
-    def _bilder_ur_utkatalogen(exam: dict,
+    def _bilder_ur_utkatalogen(view: dict,
                                out_dir: Path) -> tuple[dict, dict, str | None]:
         """Bildindexen ur de filer godkännandet REDAN skrev i utkatalogen.
 
@@ -3047,23 +3048,25 @@ def create_router(base: Path, arbiter) -> APIRouter:
         över en fil som redan är skalad, alltså samma bild igen. Väljarens
         plåtbyte i canvas (`platar` i godkännandets kropp) bor bara i
         webbläsaren och går inte att återskapa här. Därför läggs lärarens EGNA
-        bilder överst, precis som i godkännandet, och de vinner ändå."""
-        bilder: dict[int, str] = {}
-        egna: dict[int, str] = {}
-        for fil in sorted(out_dir.glob("bild-*.png")):
-            try:
-                bilder[int(fil.stem.removeprefix("bild-"))] = fil.name
-            except ValueError:
-                continue
-        egna.update(platar.plat_bilder(exam, None, out_dir, base=base))
-        for fil in sorted(out_dir.glob("egen-*.png")):
-            try:
-                egna[int(fil.stem.removeprefix("egen-"))] = fil.name
-            except ValueError:
-                continue            # «egen-forsatt.png» går sin egen väg nedan
-        forsatt = ("egen-forsatt.png"
-                   if (out_dir / "egen-forsatt.png").is_file() else None)
+        bilder överst, precis som i godkännandet, och de vinner ändå.
+
+        Filerna är PROVETS egna sedan 2026-09-24 kväll (tryck.bilder_i_katalogen):
+        «egen-126-07.png», och en gammal «egen-07.png» bara när provets egen
+        .tex nämner den och den inte skrivits om efter. Katalogen delas av alla
+        papper med samma kurs och datum."""
+        exam = view.get("exam") or {}
+        bilder, egna_filer, forsatt = tryck.bilder_i_katalogen(
+            out_dir, int(view["id"]), _egna_tex(view))
+        egna: dict[int, str] = dict(platar.plat_bilder(exam, None, out_dir,
+                                                       base=base))
+        egna.update(egna_filer)
         return bilder, egna, forsatt
+
+    def _egna_tex(view: dict) -> list[Path]:
+        """Provets egna .tex-filer (varje version som godkänts), för att
+        avgöra vilka gamla bildfiler utan id som är provets."""
+        return [Path(v["tex_path"]) for v in view.get("versions") or []
+                if v.get("tex_path")]
 
     def _tryck_om_provet(view: dict, doc,
                          out_dir: Path) -> tuple[Path | None, str]:
@@ -3085,7 +3088,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         hade lämnat läraren med två papper och inget sätt att se vilket som
         gäller."""
         slug = _safe_component(doc.titel, view.get("typ") or "prov")
-        bilder, egna, forsatt = _bilder_ur_utkatalogen(view["exam"], out_dir)
+        bilder, egna, forsatt = _bilder_ur_utkatalogen(view, out_dir)
         tex = exam_latex.render_prov(doc, bilder=bilder, egna_bilder=egna,
                                      forsatt_bild=forsatt)
         (out_dir / f"{slug}.tex").write_text(tex, encoding="utf-8")
@@ -3382,7 +3385,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
             godkand, _ = _artefaktvag(exam_id, "pdf")
             slug = (godkand.stem if godkand is not None
                     else _safe_component(doc.titel, typ))
-            bilder, _egna, _forsatt = _bilder_ur_utkatalogen(view["exam"], out_dir)
+            bilder, _egna, _forsatt = _bilder_ur_utkatalogen(view, out_dir)
             # INGA POÄNG I MARGINALEN PÅ GRUPPUPPGIFTENS FACIT. Gruppens eget
             # ark bär inga heller — «en siffra i marginalen gör uppgiften till
             # en tävling» (gruppuppgift.tex.j2) — och ett facit som plötsligt
@@ -3442,14 +3445,20 @@ def create_router(base: Path, arbiter) -> APIRouter:
             conn.close()
         if view is None:
             return None
-        if nyckel == "forsatt":
-            namn = "egen-forsatt.png"
-        elif _EGEN_NUMMER.match(nyckel):
-            namn = f"egen-{int(nyckel):02d}.png"
-        else:
-            return None
         ut_dir = _artifact_dir(view)
         if ut_dir is None:
+            return None
+        # Bara provets EGNA filer (tryck.bilder_i_katalogen): katalogen delas
+        # av alla papper med samma kurs och datum.
+        _und, egna, forsatt = tryck.bilder_i_katalogen(
+            ut_dir, exam_id, _egna_tex(view))
+        if nyckel == "forsatt":
+            namn = forsatt
+        elif _EGEN_NUMMER.match(nyckel):
+            namn = egna.get(int(nyckel))
+        else:
+            return None
+        if not namn:
             return None
         try:
             fil = (ut_dir / namn).resolve()
@@ -3480,14 +3489,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
         ut_dir = _artifact_dir(view)
         if ut_dir is None or not ut_dir.is_dir():
             return {}
+        # Provets egna filer, inte katalogens (tryck.bilder_i_katalogen).
+        _und, egna, forsatt = tryck.bilder_i_katalogen(
+            ut_dir, exam_id, _egna_tex(view))
         ut: dict[str, str] = {}
-        if (ut_dir / "egen-forsatt.png").is_file():
+        if forsatt:
             ut["forsatt"] = f"/api/exams/{exam_id}/egen/forsatt"
-        for fil in sorted(ut_dir.glob("egen-*.png")):
-            try:
-                nr = int(fil.stem.removeprefix("egen-"))
-            except ValueError:
-                continue        # «egen-forsatt.png» gick sin egen väg ovan
+        for nr in sorted(egna):
             ut[f"uppg{nr}"] = f"/api/exams/{exam_id}/egen/{nr}"
         return ut
 

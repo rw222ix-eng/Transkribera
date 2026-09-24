@@ -260,20 +260,106 @@ def egna_bilder(bilder) -> dict[int, str]:
     return ut
 
 
-def spara_egna_bilder(bilder: dict[int, str], ut_dir: Path) -> dict[int, str]:
+# ── FILNAMNEN BÄR PROVETS ID (2026-09-24 kväll) ─────────────────────────
+# Utkatalogen är per kurs och datum (routes_exam._artifact_dir), inte per
+# prov. «egen-07.png» och «bild-03.png» delades alltså av alla papper med samma
+# kurs och datum, och 23/9 visades gamla bilder under nya uppgifter med samma
+# nummer. Nu skrivs «egen-126-07.png», «bild-126-03.png» och
+# «egen-126-forsatt.png». Filer med de gamla namnen läses bara av det prov
+# som äger dem (agande_gamla_filer nedan).
+def egen_namn(exam_id: int, nr: int) -> str:
+    return f"egen-{int(exam_id)}-{int(nr):02d}.png"
+
+
+def forsatt_namn(exam_id: int) -> str:
+    return f"egen-{int(exam_id)}-forsatt.png"
+
+
+def underlag_namn(exam_id: int, nr: int) -> str:
+    return f"bild-{int(exam_id)}-{int(nr):02d}.png"
+
+
+_EGET_NAMN = re.compile(r"^(egen|bild)-(\d+)-(\d+|forsatt)\.png$")
+_GAMMALT_NAMN = re.compile(r"^(egen|bild)-(\d+|forsatt)\.png$")
+
+
+def bilder_i_katalogen(ut_dir: Path, exam_id: int,
+                       egna_tex: list[Path] | None = None
+                       ) -> tuple[dict[int, str], dict[int, str], str | None]:
+    """(underlag, egna, försättsbild) som filnamn, för ETT prov.
+
+    Provets egna filer först. En fil med det gamla namnet utan id räknas bara
+    när provet saknar en ny fil för samma plats OCH en av provets egna .tex
+    (`egna_tex`) nämner filnamnet OCH filen inte är nyare än den .tex:en:
+    då skrevs den av det här provets godkännande och inte av ett annat
+    papper senare. Allt annat hoppas över, också en fil som bara ser rätt
+    ut."""
+    underlag: dict[int, str] = {}
+    egna: dict[int, str] = {}
+    forsatt: str | None = None
+    if not ut_dir.is_dir():
+        return underlag, egna, forsatt
+    for fil in sorted(ut_dir.glob("*.png")):
+        m = _EGET_NAMN.match(fil.name)
+        if not m or int(m.group(2)) != int(exam_id):
+            continue
+        slag, plats = m.group(1), m.group(3)
+        if plats == "forsatt":
+            if slag == "egen":
+                forsatt = fil.name
+        elif slag == "egen":
+            egna[int(plats)] = fil.name
+        else:
+            underlag[int(plats)] = fil.name
+    agda = agande_gamla_filer(ut_dir, egna_tex or [])
+    for namn in agda:
+        m = _GAMMALT_NAMN.match(namn)
+        slag, plats = m.group(1), m.group(2)
+        if plats == "forsatt":
+            if slag == "egen" and forsatt is None:
+                forsatt = namn
+        elif slag == "egen":
+            egna.setdefault(int(plats), namn)
+        else:
+            underlag.setdefault(int(plats), namn)
+    return underlag, egna, forsatt
+
+
+def agande_gamla_filer(ut_dir: Path, egna_tex: list[Path]) -> list[str]:
+    """De gamla filnamnen (utan id) som provets egna .tex-filer nämner och som
+    inte skrivits om efter den .tex:en. Tom lista utan .tex."""
+    ut: list[str] = []
+    for fil in sorted(ut_dir.glob("*.png")):
+        if not _GAMMALT_NAMN.match(fil.name) or fil.name in ut:
+            continue
+        for tex in egna_tex:
+            try:
+                if (tex.is_file() and fil.name in tex.read_text(
+                        encoding="utf-8", errors="replace")
+                        and fil.stat().st_mtime <= tex.stat().st_mtime + 5):
+                    ut.append(fil.name)
+                    break
+            except OSError:
+                continue
+    return ut
+
+
+def spara_egna_bilder(bilder: dict[int, str], ut_dir: Path,
+                      exam_id: int) -> dict[int, str]:
     """Skriv lärarens bilder till utkatalogen och returnera nummer → filnamn.
 
     Filnamnet, inte sökvägen: Tectonic kompilerar med utkatalogen som
     arbetskatalog (jfr underlagets ``bild-NN.png``). En bild som inte går att
     avkoda hoppas över tyst — mallen sätter då uppgiften utan bild, vilket är
-    bättre än ett prov som inte kompilerar alls."""
+    bättre än ett prov som inte kompilerar alls. Namnet bär provets id
+    (egen_namn ovan)."""
     ut: dict[int, str] = {}
     for nr, dataurl in sorted(bilder.items()):
         bild = _oppna_png(dataurl)
         if bild is None:
             continue
         ut_dir.mkdir(parents=True, exist_ok=True)
-        namn = f"egen-{nr:02d}.png"
+        namn = egen_namn(exam_id, nr)
         bild.save(ut_dir / namn, format="PNG")
         ut[nr] = namn
     return ut
@@ -298,7 +384,7 @@ def forsattsbild_egen(bilder) -> str | None:
     return None
 
 
-def spara_forsattsbild(dataurl, ut_dir: Path) -> str | None:
+def spara_forsattsbild(dataurl, ut_dir: Path, exam_id: int) -> str | None:
     """Skriv försättsbladets bild till utkatalogen och returnera FILNAMNET.
 
     Filnamnet och inte sökvägen, av samma skäl som ``spara_egna_bilder``:
@@ -309,7 +395,7 @@ def spara_forsattsbild(dataurl, ut_dir: Path) -> str | None:
     if bild is None:
         return None
     ut_dir.mkdir(parents=True, exist_ok=True)
-    namn = "egen-forsatt.png"
+    namn = forsatt_namn(exam_id)
     bild.save(ut_dir / namn, format="PNG")
     return namn
 
