@@ -541,8 +541,10 @@ def test_ogodkant_prov_avvisas_med_svensk_mening(client, monkeypatch):
 
 
 def test_kopiefynden_foljer_med_genereringens_svar(client, monkeypatch):
-    """Provets id når `_exam_result` bara i genereringen; ett senare GET på
-    samma blad ger inga kopiefynd (fail-open)."""
+    """Sedan 2026-09-24 kväll bär bladet provets id själv (ExamDoc.infor_prov),
+    så ett senare GET på samma blad räknar kopiorna också. Förut tystnade de
+    (fail-open), och en omskrivning i canvas kunde lägga tillbaka en kopia
+    utan att någon såg det."""
     prov_id, gid, cid = _godkant_prov(
         client, titel="Prov 1", datum="2026-10-20",
         klass="TE27G", kurs="Matematik, nivå 3c")
@@ -552,5 +554,6 @@ def test_kopiefynden_foljer_med_genereringens_svar(client, monkeypatch):
         "infor_prov_id": prov_id}))
     koder = [f["kod"] for f in svar["efterkontroll"]]
     assert "kopia" in koder
+    assert svar["exam"]["infor_prov"] == prov_id
     kvar = client.get(f"/api/exams/{svar['id']}").json()
-    assert "kopia" not in [f["kod"] for f in kvar["efterkontroll"]]
+    assert "kopia" in [f["kod"] for f in kvar["efterkontroll"]]

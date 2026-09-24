@@ -600,6 +600,32 @@ def forbjudna_metoder(db_file: Path, body: dict, *,
                                       delmoment=undervisade)
 
 
+def fordjupningar(db_file: Path, body: dict, *, group_id: int | None,
+                  course_id: int | None) -> list[dict]:
+    """Kalenderns fördjupningsrader inom bokspannet, före provdagen
+    (exam_gen.fordjupningar_ur_lektioner). Bladet inför provet läser hela
+    uppslaget, och fördjupningen ligger mitt i det (IndA 5/10: «Kvadrat-
+    komplettering. Fördjupning.», s. 52–55). Tom lista utan bok eller klass."""
+    val = bok_val(body)
+    if val is None:
+        return []
+    _bid, fran, till = val
+    try:
+        gid, cid = int(group_id or 0), int(course_id or 0)
+    except (TypeError, ValueError):
+        return []
+    if not (gid and cid):
+        return []
+    conn = db.connect(db_file)
+    try:
+        rader = db.lektionsinnehall_for_kurs(conn, gid, cid)
+    finally:
+        conn.close()
+    return exam_gen.fordjupningar_ur_lektioner(
+        rader, fran=fran, till=till,
+        provdatum=(body.get("datum") or "").strip())
+
+
 def bok_avsnitt(db_file: Path, body: dict) -> list[dict]:
     """Avsnitten i det valda bokspannet, provets RAM för spridningen.
 

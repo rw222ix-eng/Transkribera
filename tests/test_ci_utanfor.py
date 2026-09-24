@@ -162,10 +162,15 @@ def test_de_raknade_vakterna_bar_den_pa_alla_profiler():
 
 
 def _arbetsblad_med(uppgift: dict) -> dict:
+    """Testprovet omdöpt till 1c. Dess kvadratkompletteringsuppgift hör till
+    nivå 2 och fälls på ett 1c-blad sedan 2026-09-24 (BARA_OVNING), så den
+    tas bort: testerna här gäller talföljden."""
     from tests.test_exam import _exam
     d = copy.deepcopy(_exam())
     d["kurs"] = KURS
     d.pop("forsattsbild", None)
+    d["uppgifter"] = [u for u in d["uppgifter"]
+                      if "kvadratkomplett" not in u["text"]]
     d["uppgifter"][0].update(uppgift)
     return d
 

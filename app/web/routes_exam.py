@@ -546,13 +546,15 @@ def _konsfynd(exam: dict) -> list[dict]:
             for f in fel]
 
 
-def _cifynd(exam: dict) -> list[dict]:
+def _cifynd(exam: dict, typ: str = "prov") -> list[dict]:
     """Det som står UTANFÖR kursens centrala innehåll (app/ci_utanfor.py,
     Rickards princip 2026-09-17), på alla tre dokumenttyperna och efter varje
     svar: en omskrivning i canvas kan skriva tillbaka en talföljd som
-    genereringen tog bort, och det ska synas före godkännandet."""
+    genereringen tog bort, och det ska synas före godkännandet. `typ` avgör
+    om övningspapprens egna rader räknas (ci_utanfor.BARA_OVNING)."""
     try:
-        fel = ci_utanfor.ci_vakt(exam, str((exam or {}).get("kurs") or ""))
+        fel = ci_utanfor.ci_vakt(exam, str((exam or {}).get("kurs") or ""),
+                                 typ)
     except Exception:                       # pragma: no cover
         return []
     return [_fynd(f["code"], f["message"], _uppgiftsnr(f.get("path", "")))
@@ -640,6 +642,34 @@ def _lanfynd(exam: dict, infor: dict | None,
             if f["nr"] not in (utom or set())]
 
 
+def _ovningsfynd(exam: dict, infor: dict | None, typ: str) -> list[dict]:
+    """Bladet inför provet: det provets vakter kräver och som inte redan har
+    ett eget fynd ovan (exam_gen.ovningsvakter, 2026-09-24 kväll). Räknarraden
+    ur provets delar, tal som inte går att räkna för hand utan räknare, en
+    målad bild som bär matematiken, och språket. Tyst på alla andra papper
+    och utan provet, samma fail-open som kopiorna."""
+    if typ != "arbetsblad" or not infor:
+        return []
+    ut: list[dict] = []
+    try:
+        beslut = exam_gen.raknarbeslut_ur_provet(exam or {}, infor)
+        n = len([u for u in (exam or {}).get("uppgifter") or []
+                 if isinstance(u, dict)])
+        nu = exam_gen.tolka_raknarrad((exam or {}).get("hjalpmedel"), n)
+        if beslut and beslut != nu:
+            ut.append(_fynd(
+                "raknarrad", "Räknarraden följer inte provets delar. Den ska "
+                f"vara «{exam_gen.raknarrad(beslut)}»: en uppgift som övar "
+                "provets räknarfria del görs utan räknare, de andra med."))
+        fel = (exam_gen.raknarfri_talvakt(exam or {}, infor)
+               + exam_gen.bildfigurvakt(exam or {}))
+    except Exception:                       # pragma: no cover
+        return ut
+    ut += [_fynd(f["code"], f["message"], _uppgiftsnr(f.get("path", "")))
+           for f in fel]
+    return ut
+
+
 def _utan_granser(exam: dict | None) -> dict:
     """Pappret utan sitt gränsblock, för jämförelsen vid godkännandet."""
     return {k: v for k, v in (exam or {}).items() if k != "granser"}
@@ -669,13 +699,17 @@ def efterkontroll(view: dict, doc, summor: dict | None, *,
         ut += _delfynd(doc)
     ut += _tidfynd(doc, summor, typ)
     ut += _bildfynd(doc, base or Path("."))
-    ut += _sprakfynd(view.get("exam") or {}, typ)
+    # Bladet inför provet ska vara lika lätt att läsa som provet: samma
+    # språkvakt (2026-09-24 kväll). Andra blad som förut.
+    ut += _sprakfynd(view.get("exam") or {},
+                     "prov" if typ == "arbetsblad" and infor else typ)
     ut += _tipsfynd(view.get("exam") or {}, typ)
     ut += _npfynd(view.get("exam") or {}, typ)
     ut += _radfynd(view.get("exam") or {})
     ut += _konsfynd(view.get("exam") or {})
     ut += _nptypfynd(doc, typ)
-    ut += _cifynd(view.get("exam") or {})
+    ut += _cifynd(view.get("exam") or {}, typ)
+    ut += _ovningsfynd(view.get("exam") or {}, infor, typ)
     # Kopieringsvakten sist bland fynden, och bara när anroparen pekat ut
     # provet (se _kopiefynd). Den tiger på varje annat papper i appen.
     kopior = _kopiefynd(view.get("exam") or {}, infor)
@@ -779,6 +813,16 @@ _ATGARD = {
     "utanforci": "Byt ut uppgiften mot en inom kursens centrala innehåll, "
                  "samma del, samma poäng och samma förmåga. Orden får inte "
                  "stå kvar i text, lösning eller bedömning.",
+    # Bladet inför provet (exam_gen.ovningsvakter, 2026-09-24 kväll).
+    # Räknarraden skrivs om av appen själv i varje varv (refine_exam), så
+    # meningen här räcker som order.
+    "raknarrad": "Skriv hjälpmedelsraden exakt som fyndet säger. Rör inga "
+                 "uppgifter.",
+    "raknarfri": "Byt talen så att uppgiften går att räkna för hand. Samma "
+                 "metod, samma sammanhang, samma poäng.",
+    "bildfigur": "Flytta det eleven räknar med från bilden till texten eller "
+                 "en tabell, och skriv scenen utan antal. Samma matematik, "
+                 "samma tal, samma poäng.",
 }
 
 
@@ -1064,6 +1108,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
         doc, _ = exam_spec.validate_exam_json(view.get("exam") or {})
         summor = exam_spec.poangsummor(doc) if doc else None
         bok, boksidor = _bokunderlag(view) if doc else (None, {})
+        # Bladet bär sin provkoppling själv sedan 2026-09-24 kväll
+        # (ExamDoc.infor_prov): efterkontrollen efter ett omskrivningsvarv
+        # och ett GET räknar då kopiorna och provets namn också.
+        if not infor_prov_id and (view.get("typ") or "") == "arbetsblad":
+            infor_prov_id = (view.get("exam") or {}).get("infor_prov")
         fynd = efterkontroll(view, doc, summor, bok=bok, sidor=boksidor,
                              base=base, infor=_inforunderlag(infor_prov_id),
                              db_file=db_file)
@@ -1727,6 +1776,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
             # till samma klass är däremot hennes sak, hon kan vilja låna
             # parallellklassens prov, så det blir en rad i loggen.
             inforprov = None
+            # Provets datum och klass, för provets ram (se jobbet nedan).
+            infor_datum, infor_grupp = "", None
             try:
                 if infor_prov_id:
                     rad = db.get_exam(conn, int(infor_prov_id))
@@ -1741,6 +1792,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                                      "papper som kan ändras")
                     else:
                         inforprov = rad["exam"]
+                        infor_datum = str(rad.get("datum") or "")
+                        infor_grupp = rad.get("group_id")
                         if group_id and rad.get("group_id") \
                                 and int(rad["group_id"]) != int(group_id):
                             _LOG.info(
@@ -1866,6 +1919,31 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     forbjudna = routes_planning.forbjudna_metoder(
                         db_file, body, group_id=group_id, course_id=course_id,
                         undervisade=delmoment)
+                # PROVETS RAM FÖR BLADET INFÖR PROVET (2026-09-24 kväll).
+                # Samma tre listor som provet skrevs mot, med PROVETS datum
+                # och klass, plus bokens fördjupning inom sidorna. De går
+                # INTE in som `avsnitt`/`delmoment`/`forbjudna`: då hade
+                # bladet fått provets täckningspass, och ett blad som drillar
+                # två av provets uppgifter ska inte täcka hela kapitlet. Se
+                # exam_gen.generate_exam, `infor_ram`.
+                infor_ram = None
+                if typ == "arbetsblad" and inforprov:
+                    ram_body = {**body, "datum": infor_datum or datum or ""}
+                    ram_grupp = infor_grupp or group_id
+                    ram_del = routes_planning.undervisade_delmoment(
+                        db_file, ram_body, group_id=ram_grupp,
+                        course_id=course_id)
+                    infor_ram = {
+                        "delmoment": ram_del,
+                        "avsnitt": routes_planning.bok_avsnitt(db_file,
+                                                               ram_body),
+                        "forbjudna": routes_planning.forbjudna_metoder(
+                            db_file, ram_body, group_id=ram_grupp,
+                            course_id=course_id, undervisade=ram_del),
+                        "fordjupning": routes_planning.fordjupningar(
+                            db_file, ram_body, group_id=ram_grupp,
+                            course_id=course_id),
+                    }
                 # LÄRARENS VALDA UPPGIFTER, en och en — och bara för
                 # GRUPPUPPGIFTEN (lärarens dom 2026-09-09: «vissa uppgifter är
                 # inte relevanta utifrån vad som står i boken, för man utgår ju
@@ -1925,6 +2003,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     # prompten (exam_gen.build_infor_prov); texterna som står
                     # här går bara till variationsvakten.
                     inforprov=inforprov, infor_nummer=infor_nummer,
+                    infor_ram=infor_ram,
                     # ── TVÅ SPÅR, INGEN PROCENT PÅ NÅGOT AV DEM ───────
                     # Det stod länge bara EN kanal här: loggraden. Generatorn
                     # skickar «Skriver uppgift 4 av 12 …» ur strömmen
@@ -1978,6 +2057,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # tomt, och då gäller husets, precis som före fältet.
                 if res["exam"] is not None and takt:
                     res["exam"]["takt"] = takt
+                # PROVKOPPLINGEN på bladet (ExamDoc.infor_prov), av samma skäl
+                # som takten: efterkontrollen efter nästa varv behöver den.
+                if res["exam"] is not None and inforprov:
+                    res["exam"]["infor_prov"] = int(infor_prov_id)
                 # Hjälpmedelsraden är MODELLENS så länge läraren inte sagt
                 # något: den skiljer delarna åt med lärarens egna ord, och
                 # skärmen har läst dokumentets regel sedan blad.js planvalProv.
@@ -2183,6 +2266,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # ett papper som skrevs innan fältet fylldes i ska få regeln i sitt
         # nästa varv. Tomt fält ger byte-identisk prompt.
         inriktning = routes_planning.inriktning_val(body)
+        # Provet bladet övar inför (ExamDoc.infor_prov): varvet skriver
+        # räknarraden ur provets delar igen, också när en uppgift byttes ut.
+        infor_id = (view.get("exam") or {}).get("infor_prov") \
+            if (view.get("typ") or "") == "arbetsblad" else None
+        infor = _inforunderlag(infor_id) if infor_id else None
 
         def job(emit):
             steg = Stege(emit, _STEG_OM)
@@ -2197,6 +2285,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     inriktning=inriktning,
                     profil=view.get("typ") or "prov",
                     niva_mal=nivaval["mal"] if nivaval else None,
+                    infor=infor,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     steg_cb=steg.na)
                 # Klockslagen överlever omskrivningen: modellen skriver om
@@ -2211,6 +2300,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 gammal_takt = (view.get("exam") or {}).get("takt")
                 if isinstance(res.get("exam"), dict) and gammal_takt:
                     res["exam"]["takt"] = gammal_takt
+                # Provkopplingen likaså (ExamDoc.infor_prov).
+                if isinstance(res.get("exam"), dict) and infor_id:
+                    res["exam"]["infor_prov"] = infor_id
                 # Plåtvalet överlever inte omskrivningen av sig självt:
                 # modellen skriver om hela dokumentet, och `scen.plat` står
                 # inte i grammatiken. Matchningen körs därför om — den är ren

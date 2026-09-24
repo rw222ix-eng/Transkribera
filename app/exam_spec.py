@@ -674,6 +674,13 @@ class ExamDoc(_Model):
     # och då säger skärmen en annan sak om provet än den beställning det
     # skrevs mot. Tomt fält = husets takt, precis som före fältet.
     takt: float | None = None
+    # PROVET ARBETSBLADET ÖVAR INFÖR (2026-09-24 kväll), som exam-id. Appens
+    # fält, aldrig modellens, poppas ur grammatiken av samma skäl som takten.
+    # Kopplingen fanns bara i genereringens anrop, så efterkontrollen efter
+    # ett omskrivningsvarv eller ett GET räknade varken kopiorna, provets
+    # namn eller räknarraden ur provets delar (fail-open i _kopiefynd). Nu
+    # bär bladet den själv. Tomt på prov, gruppuppgift och vanliga blad.
+    infor_prov: int | None = None
     # KLOCKSLAGEN, när läraren valt dem. Förlagan skriver «Provtid: kl.
     # 12.45–14.15 (90 minuter).» och inte «Provtid: 90 minuter.» — eleven som
     # sitter i salen vill veta när pennan ska ner, inte hur länge hon får hålla
@@ -845,6 +852,8 @@ def _bygg_response_format(antal: int | None = None,
     # inspelad prompt orörd, schemat är byte för byte detsamma som innan
     # fältet fanns.
     schema["properties"].pop("takt", None)
+    # PROVKOPPLINGEN likaså (ExamDoc.infor_prov): routen skriver den.
+    schema["properties"].pop("infor_prov", None)
     # DEN UTFÖRLIGA LÖSNINGEN STÅR INTE HELLER I GRAMMATIKEN (se
     # _Uppgiftsbas.utforlig): den skrivs av ett eget pass efter godkännandet.
     # Poppas ur BÅDA uppgiftsdefinitionerna innan skelettet kopierar dem

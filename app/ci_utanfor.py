@@ -89,27 +89,129 @@ UTANFOR: dict[str, list[tuple[str, str, re.Pattern]]] = {
 }
 
 
-def utanfor(kurs: str) -> list[tuple[str, str, re.Pattern]]:
-    """Kursens strykningar, tom lista när kursen inte har några."""
-    return UTANFOR.get(niva_rubrik.kursnyckel(kurs or "") or "", [])
+# ── KVADRERINGS- OCH KONJUGATREGLERNA I NIVÅ 1 (Rickards dom 2026-09-24) ──
+# De står i det centrala innehållet för 2a och 2c, inte för 1a och 1c, och
+# Skolverkets formelblad för nivå 1 saknar dem av just det skälet. Ändå fick
+# fem av bladen inför proven 24/9 (134, 136, 142, 143, 147) uppgifter som
+# «(a + b)² − (a − b)²», «4x² − (x + 3)²» och «visa att x² + 12x + 36 är en
+# kvadrat». Orden står sällan i uppgiften, så vakten läser MATTEN: en parentes
+# med en bokstav och ett plus eller minus, i kvadrat, som ska utvecklas
+# (samma mattestycke har ett likhetstecken och en kvadrat till), faktoriseras
+# eller förenklas, och produkten (a + b)(a − b). En formel som bara ska räknas
+# ut, h = (12 − 0,5t)², står kvar.
+#
+# BARA ÖVNINGSPAPPREN TILLS VIDARE. Proven är granskade och godkända av
+# läraren, och en ny vakt på provet är hennes beslut (uppdraget 2026-09-24).
+# Svarar hon ja flyttas raderna in i UTANFOR ovan, och då gäller de allt.
+_LATEXORD = re.compile(r"\\[A-Za-z]+")
+_MATTESTYCKE = re.compile(r"\$\$?([^$]+)\$\$?")
+_KVADRATPARENTES = re.compile(r"\(([^()]*)\)\s*\^\s*\{?\s*2\s*\}?")
+_ENSAM_BOKSTAV = re.compile(r"(?<![A-Za-z])[A-Za-z](?![A-Za-z])")
+_KVADRAT = re.compile(r"\^\s*\{?\s*2\s*\}?")
+_PARENTESPAR = re.compile(r"\(([^()]+)\)\s*(?:\\cdot\s*)?\(([^()]+)\)")
+_TVA_TERMER = re.compile(r"^\s*([^+\-−]+?)\s*([+\-−])\s*([^+\-−]+?)\s*$")
+_UTVECKLA = re.compile(r"(?i:utveckla|förenkla|faktorisera|skrivas?\s+som\s+"
+                       r"(?:en\s+)?kvadrat|kvadratkomplett)")
+_KVADRERINGSORD = re.compile(
+    r"(?i:kvadreringsregel|konjugatregel|konjugat(?:et|en|er|erna)?\b"
+    r"|kvadratkomplett\w*|differens(?:en)?\s+(?:av|mellan)\s+två\s+kvadrater"
+    r"|jämn\s+kvadrat)")
 
 
-def build_utanfor(kurs: str) -> str:
+class _Traff:
+    """Det lilla av re.Match som _traff läser."""
+
+    def __init__(self, text: str):
+        self._text = text
+
+    def group(self, _n: int = 0) -> str:
+        return self._text
+
+
+def _ren(s: str) -> str:
+    return re.sub(r"\s+", "", _LATEXORD.sub("", s.replace("−", "-")))
+
+
+def _konjugat(a: str, b: str) -> bool:
+    """(p + q)(p − q) eller (p − q)(p + q), samma två termer."""
+    ma, mb = _TVA_TERMER.match(_ren(a)), _TVA_TERMER.match(_ren(b))
+    if not (ma and mb):
+        return False
+    return ({ma.group(2), mb.group(2)} == {"+", "-"}
+            and ma.group(1) == mb.group(1) and ma.group(3) == mb.group(3)
+            and bool(_ENSAM_BOKSTAV.search(ma.group(1) + ma.group(3))))
+
+
+class _Kvadreringsregler:
+    """re-lik sökare: `.search(text)` ger en träff eller None."""
+
+    def search(self, text: str) -> _Traff | None:
+        text = str(text or "")
+        m = _KVADRERINGSORD.search(text)
+        if m:
+            return _Traff(m.group(0))
+        verb = bool(_UTVECKLA.search(_MATTESTYCKE.sub(" ", text)))
+        for stycke in _MATTESTYCKE.findall(text):
+            s = stycke.replace("\\left", "").replace("\\right", "")
+            for par in _PARENTESPAR.finditer(s):
+                if _konjugat(par.group(1), par.group(2)):
+                    return _Traff(par.group(0).strip())
+            for kv in _KVADRATPARENTES.finditer(s):
+                inre = _LATEXORD.sub(" ", kv.group(1)).strip().lstrip("+-−")
+                if not (_ENSAM_BOKSTAV.search(inre)
+                        and re.search(r"[+\-−]", inre)):
+                    continue
+                ovrigt = s[:kv.start()] + s[kv.end():]
+                identitet = "=" in s and _KVADRAT.search(ovrigt)
+                tva_kvadrater = re.search(r"[-−]", ovrigt) and _KVADRAT.search(
+                    ovrigt)
+                if identitet or tva_kvadrater or verb:
+                    return _Traff(kv.group(0).strip())
+        return None
+
+
+_KVADRERING = ("kvadrerings- och konjugatreglerna",
+               "kvadrerings- och konjugatreglerna och kvadratkomplettering: "
+               "ingen kvadrat av en parentes att utveckla, ingen differens av "
+               "två kvadrater att faktorisera, inget uttryck som ska kännas "
+               "igen som en kvadrat. Att multiplicera parenteser term för "
+               "term, bryta ut en gemensam faktor och förkorta ingår",
+               _Kvadreringsregler())
+BARA_OVNING: dict[str, list[tuple]] = {
+    "1a": [_KVADRERING],
+    "1c": [_KVADRERING],
+}
+
+
+def utanfor(kurs: str, profil: str = "prov") -> list[tuple]:
+    """Kursens strykningar, tom lista när kursen inte har några. Profilen
+    avgör om BARA_OVNING räknas med; förvalet «prov» lämnar provet som det
+    var, byte för byte."""
+    nyckel = niva_rubrik.kursnyckel(kurs or "") or ""
+    lista = list(UTANFOR.get(nyckel, []))
+    if profil != "prov":
+        lista += BARA_OVNING.get(nyckel, [])
+    return lista
+
+
+def build_utanfor(kurs: str, profil: str = "prov") -> str:
     """Promptraden. Tom sträng utan strykningar (kassetteregeln: prompten ska
     då vara byte för byte den som gick i väg förut)."""
-    lista = utanfor(kurs)
+    lista = utanfor(kurs, profil)
     if not lista:
         return ""
     rader = "\n".join(f"- {klartext}" for _n, klartext, _p in lista)
+    monster = (
+        "Mönster med figurer (hur många stickor figur n har) och formler för "
+        "sådana samband går bra: det är generella samband, och de står i "
+        "kursen. Skriv dem som mönster och figurer, aldrig som talföljder."
+        if any(n == "talföljder" for n, _k, _p in lista) else "")
     return (
         f"UTANFÖR KURSEN. Det här står inte i det centrala innehållet för "
         f"{kurs} och får inte förekomma någonstans på pappret, varken i "
         "uppgifter, lösningar eller bedömning, och orden nämns inte, även om "
         "boken har avsnittet:\n"
-        f"{rader}\n"
-        "Mönster med figurer (hur många stickor figur n har) och formler för "
-        "sådana samband går bra: det är generella samband, och de står i "
-        "kursen. Skriv dem som mönster och figurer, aldrig som talföljder.")
+        f"{rader}\n" + monster).rstrip("\n")
 
 
 def _texter(u: dict) -> list[str]:
@@ -131,14 +233,15 @@ def _traff(texter: list[str], lista) -> tuple[str, str] | None:
     return None
 
 
-def ci_vakt(exam: dict | None, kurs: str = "") -> list[dict]:
+def ci_vakt(exam: dict | None, kurs: str = "",
+            profil: str = "prov") -> list[dict]:
     """Ett fynd per uppgift (och ett för dokumentets egna fält) där något
     utanför kursens centrala innehåll står. Samma fyndform som de andra
-    räknade vakterna: {path, code, message}."""
+    räknade vakterna: {path, code, message}. `profil` som i utanfor()."""
     if not isinstance(exam, dict):
         return []
     kurs = str(kurs or exam.get("kurs") or "")
-    lista = utanfor(kurs)
+    lista = utanfor(kurs, profil)
     if not lista:
         return []
     fel: list[dict] = []
@@ -158,7 +261,10 @@ def ci_vakt(exam: dict | None, kurs: str = "") -> list[dict]:
                 "förmåga, och låt inte orden stå kvar i text, lösning eller "
                 "bedömning."
                 + (" Ett mönster med figurer (antal stickor i figur n) går "
-                   "bra." if namn == "talföljder" else ""))})
+                   "bra." if namn == "talföljder" else "")
+                + (" Att multiplicera parenteser term för term, bryta ut en "
+                   "gemensam faktor och förkorta går bra."
+                   if namn == _KVADRERING[0] else ""))})
     doktext = [str(exam.get(f) or "") for f in ("titel", "instruktion",
                                                  "nyckelfraga")]
     traff = _traff(doktext, lista)

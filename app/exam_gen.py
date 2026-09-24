@@ -3180,7 +3180,7 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
     # rymmer det som ströks (talföljderna ligger mitt i 1c:s kapitel 2), och
     # bokblocken längre ned läses annars som en order. Tom sträng för en kurs
     # utan strykningar, och prompten är då byte för byte den som gick i väg.
-    utanfor = ci_utanfor.build_utanfor(kurs)
+    utanfor = ci_utanfor.build_utanfor(kurs, profil)
     if utanfor:
         block.append(utanfor)
     # Lärarens egna ord om vad klassen hade svårt för står FÖRE minnet och
@@ -6442,7 +6442,7 @@ def build_refine_prompt(exam: dict, instruction: str,
                         nummer=None,
                         mal: dict | None = None, bok: str = "",
                         historik=None, malen=None,
-                        inriktning: str = "") -> str:
+                        inriktning: str = "", profil: str = "prov") -> str:
     """Riktad omgenerering: 'byt uppgift 4', 'gör 7 svårare' …
 
     `nummer` är uppgiften önskemålet gäller — en int, eller en LISTA av int när
@@ -6489,7 +6489,8 @@ def build_refine_prompt(exam: dict, instruction: str,
     # med omskrivningen av samma skäl som yrket: ett varv som skriver om en
     # uppgift utan regeln kan skriva tillbaka talföljden läraren nyss fick
     # bort. Tom sträng utan strykningar, och prompten är då som förut.
-    utanfor = ci_utanfor.build_utanfor(str((exam or {}).get("kurs") or ""))
+    utanfor = ci_utanfor.build_utanfor(str((exam or {}).get("kurs") or ""),
+                                       profil)
     yrket += f"{utanfor}\n\n" if utanfor else ""
     return (
         f"{INSTRUCTION}\n"
@@ -9188,8 +9189,38 @@ def _andra_namn_och_sammanhang(undvik: dict | None) -> str:
         "när hon får provet.\n")
 
 
+def _delord(del_: str) -> str:
+    """Provuppgiftens del som besked om räknaren, eller tom sträng."""
+    if not del_:
+        return ""
+    return "utan räknare, " if del_ == "B" else "med räknare, "
+
+
+# DE TRE REGLERNA SOM BARA BLADET INFÖR PROVET HAR (2026-09-24 kväll). De
+# står i blocket och inte i INSTRUCTION: ett vanligt arbetsblad ska få samma
+# prompt som förut, och provet har sina egna regler för samma saker.
+INFOR_RAKNARE = (
+    "RÄKNAREN FÖLJER PROVETS DEL. En uppgift som övar en sort ur provets del "
+    "utan räknare görs utan räknare på bladet också, och dess tal ska gå att "
+    "räkna för hand: heltal inom ±30, decimaltal med en decimal, runda belopp "
+    "(3 500 kr, 1 200 kWh, aldrig 4 668 kr), och ett exakt svar. Välj svaret "
+    "först och talen sedan. Appen skriver hjälpmedelsraden själv ur fältet "
+    "\"drillar\".\n")
+INFOR_BILD = (
+    "BILDEN BÄR ALDRIG MATEMATIKEN PÅ BLADET. Undantaget för mönsterfigurer i "
+    "scen-regeln gäller provet, inte bladet. Allt eleven räknar med står i "
+    "texten eller i en tabell: ett mönster beskrivs i ord, figur för figur "
+    "(«Figur 1 är en kvadrat av 4 stickor. Figur 2 är två kvadrater bredvid "
+    "varandra.»), aldrig figur n, med antalen i tabellen, och texten säger "
+    "aldrig «figurerna nedan» eller «bilden visar». Scenen är en "
+    "stämningsbild och anger inga antal på fem "
+    "eller fler: «a pile of sacks», aldrig «24 sacks» eller «exactly 12 "
+    "matchsticks».\n")
+
+
 def build_infor_prov(slots: list[dict] | None, nummer: list[int] | None,
-                     antal: int, undvik: dict | None = None) -> str:
+                     antal: int, undvik: dict | None = None,
+                     fordjupning: list[dict] | None = None) -> str:
     """«Inför provet»-blocket, eller TOM STRÄNG.
 
     Tom när inget prov pekats ut, och det är kassetteregeln och inte en
@@ -9210,7 +9241,12 @@ def build_infor_prov(slots: list[dict] | None, nummer: list[int] | None,
     lärarens dom 2026-09-24). De står som namn och enstaka ord, aldrig som
     text, och gäller HELA provet, också de nummer som inte drillas: eleven
     får hela provet på provdagen. None eller tomma listor lämnar blocket som
-    det var."""
+    det var.
+
+    Sedan 2026-09-24 kväll står provuppgiftens DEL i raden (utan eller med
+    räknare), och tre regler följer: räknaren följer delen (INFOR_RAKNARE),
+    bilden bär aldrig matematiken (INFOR_BILD) och `fordjupning`, bokens
+    fördjupning inom provets sidor, övas inte."""
     valda_nr = set(drillnummer(slots, nummer))
     valda = [s for s in (slots or []) if s["nr"] in valda_nr]
     if not valda:
@@ -9221,10 +9257,18 @@ def build_infor_prov(slots: list[dict] | None, nummer: list[int] | None,
                  if s["deluppgifter"] else "")
         vad = f", delmomentet {s['delmoment']}" if s["delmoment"] else ""
         rader.append(
-            f"- provets uppgift {s['nr']}: {s['typ']}, förmåga "
-            f"{s['formaga']}, poäng (E/C/A) {tuple(s['poang'])}, nivå "
+            f"- provets uppgift {s['nr']}: {_delord(s['del'])}{s['typ']}, "
+            f"förmåga {s['formaga']}, poäng (E/C/A) {tuple(s['poang'])}, nivå "
             f"{s['niva'] or '–'}{vad}{delar}, facit på cirka {s['steg']} "
             "räknesteg")
+    fordjup = ""
+    if fordjupning:
+        fordjup = (
+            "FÖRDJUPNING ÖVAS INTE. Det här står i bokens sidor men är "
+            "fördjupning och inte provets innehåll: "
+            + "; ".join(f"{f['metod']} (s. {f['sidor']})"
+                        for f in fordjupning)
+            + ". Ingen uppgift på bladet får kräva det.\n")
     # BLANDAT ELLER EN SAK. Samma block, två olika order, och skillnaden är
     # lärarens val i panelen: valde hon inga nummer ska bredden övas, valde hon
     # några ska just de nötas. Att skriva båda orderna i samma stycke och låta
@@ -9258,6 +9302,8 @@ def build_infor_prov(slots: list[dict] | None, nummer: list[int] | None,
         "frågan, «beräkna först …, använd sedan …», hör hemma på ett "
         "övningsblad även när provets uppgift frågar rakt ut. Metoden som ska "
         "övas får däremot aldrig bytas mot en enklare.\n"
+        + (INFOR_RAKNARE if any(s["del"] for s in valda) else "")
+        + INFOR_BILD + fordjup +
         # FÄLTET, och orden \"drillar\" i citattecken är det som tänder det i
         # grammatiken (_drillar_i_grammatiken). Ändras stavningen här faller
         # fältet ur schemat och täckningen blir tyst.
@@ -9382,6 +9428,415 @@ def lanevakt(exam: dict, prov: dict | None) -> list[dict]:
                 f"och andra sammanhang. Byt {' och '.join(byt)} mot något som "
                 "inte står på provet.")})
     return ut[:LAN_MAX_FYND]
+
+
+# ── BLADET INFÖR PROVET FÅR PROVETS VAKTER (2026-09-24 kväll) ────────────
+# Rickard var nöjd med proven och inte med bladen som byggdes ur dem. Felen på
+# de femton bladen 24/9 var provets gamla fel, sådana som provets vakter redan
+# fångar: kvadreringsregler i 1c, största och minsta värde i 2a:s kapitel 1,
+# provets egna sammanhang, räknare på en uppgift ur provets räknarfria del och
+# tvärtom, tal som inte går att räkna för hand, och uppgifter som hängde på en
+# figur i en målad bild. Skälet var vägen och inte vakterna: täckningspasset
+# och slutgrinden kör bara när pappret har en kapitelram eller är ett prov,
+# och ett arbetsblad har ingetdera. Bladet fick därför ingen reparationsrunda
+# alls för det de räknade vakterna hittade, bara en varning på slutet.
+#
+# Här samlas det bladet inför provet ska klara, och _infor_pass lagar det i en
+# runda. Efterkontrollen räknar samma sak efter varje varv (routes_exam).
+
+def raknarbeslut_ur_provet(exam: dict, prov: dict | None) -> dict[int, bool] | None:
+    """Bladets uppgifter → räknaren tillåten, läst ur PROVETS del.
+
+    Rickards dom 24/9: bladets räknarrad följer provets del. En uppgift som
+    övar provets uppgift 3 i delen utan räknare görs utan räknare, och en som
+    övar en uppgift i räknardelen med. Kopplingen är uppgiftens `drillar`.
+
+    Provets egen del (B utan räknare, C och D med) gäller först. Saknar provet
+    delar läses dess hjälpmedelsrad. En uppgift utan `drillar` får modellens
+    rad. None när någon uppgift ändå står utan besked: ett papper utan besked
+    är bättre än ett som ljuger om räknaren."""
+    uppgifter = [u for u in (exam or {}).get("uppgifter") or []
+                 if isinstance(u, dict)]
+    slots = provslots(prov) if prov else []
+    if not uppgifter or not slots:
+        return None
+    if any(s["del"] for s in slots):
+        provets = {s["nr"]: s["del"] != "B" for s in slots if s["del"]}
+    else:
+        provets = tolka_raknarrad((prov or {}).get("hjalpmedel"),
+                                  len(slots)) or {}
+    modellens = tolka_raknarrad((exam or {}).get("hjalpmedel"),
+                                len(uppgifter)) or {}
+    ut: dict[int, bool] = {}
+    for nr, u in enumerate(uppgifter, 1):
+        d = u.get("drillar")
+        val = provets.get(d) if isinstance(d, int) else None
+        if val is None:
+            val = modellens.get(nr)
+        if val is None:
+            return None
+        ut[nr] = val
+    return ut
+
+
+def raknarrad(beslut: dict[int, bool]) -> str:
+    """Besluten som EN mening i den form tolka_raknarrad läser tillbaka."""
+    ja = [str(n) for n, v in sorted(beslut.items()) if v]
+    nej = [str(n) for n, v in sorted(beslut.items()) if not v]
+    if not ja:
+        return "Utan räknare."
+    if not nej:
+        return "Räknare får användas på alla uppgifter."
+    return (f"Räknare får användas på uppgift {_och(ja)}, men inte på "
+            f"uppgift {_och(nej)}.")
+
+
+def satt_raknarrad_ur_provet(exam: dict | None, prov: dict | None) -> bool:
+    """Skriv bladets hjälpmedelsrad ur provets delar. Sant när raden sattes.
+    Markeringarna i uppgifterna skrivs sedan av satt_raknarmarkering."""
+    if not isinstance(exam, dict) or not prov:
+        return False
+    beslut = raknarbeslut_ur_provet(exam, prov)
+    if not beslut:
+        return False
+    exam["hjalpmedel"] = raknarrad(beslut)
+    return True
+
+
+def _uppgiftens_beslut(exam: dict, prov: dict | None) -> dict[int, bool]:
+    """Räknarbesluten på det papper som ligger, också när provet saknas:
+    då läses bladets egen rad."""
+    beslut = raknarbeslut_ur_provet(exam, prov) if prov else None
+    if beslut is None:
+        n = len([u for u in (exam or {}).get("uppgifter") or []
+                 if isinstance(u, dict)])
+        beslut = tolka_raknarrad((exam or {}).get("hjalpmedel"), n) or {}
+    return beslut
+
+
+# UTAN RÄKNARE SKA GÅ ATT RÄKNA FÖR HAND (blad 134 uppgift 4, 24/9). «Ett år
+# använde de 3 500 kWh och betalade 4 668 kr. Året efter 4 500 kWh och
+# 5 868 kr» stod under «Utan räknare». Provets talsignaler (talsignaler, del
+# B) fäller sådant, men de läser uppgiftens `del`, och arbetsbladet har ingen.
+# Samma mått här, läst ur räknarbeslutet i stället, med tre skillnader som
+# provkörningen på de femton bladen visade (2026-09-24):
+#   * STORA TAL: ett belopp i jämna tiotal (1 590 kr, 5 250 kr) räknas för
+#     hand; 4 668 och 5 868 gör det inte. Blockundantaget är snävare än
+#     provets: ett stort tal som bara återkommer i facit är inget block (facit
+#     räknar alltid med uppgiftens tal), bara ett tal i en potens (4444²) eller
+#     två stora tal inom tio från varandra (4444 och 4443).
+#   * TVÅ DECIMALER fälls bara när talet multipliceras eller divideras i
+#     facit. 2,08 m mot 2,1 m är en jämförelse, 2,45 · 3,6 är det inte.
+#     Tiopotenser (0,006 · 10⁴) är undantagna helt: där är decimalerna saken.
+#   * NÄRMEVÄRDET läses i SVARET, facits första rad (bladets facit börjar med
+#     svaret), inte i ett mellanled som «70/31 ≈ 2,3» när svaret är 3 turer.
+RAKNARFRI_MAX_FYND = 4
+_TIOPOTENS_RE = re.compile(r"10\s*\^|\\cdot\s*10\b|grundpotensform|prefix",
+                           re.I)
+_RAKNESATT_RE = r"(?:\\cdot|\\times|·|\*|/|÷)"
+
+
+def _blocktal(tal: str, text: str, stora: list[str]) -> bool:
+    if re.search(rf"(?<![\d,]){re.escape(tal)}\s*\^", text):
+        return True
+    return any(t != tal and abs(int(t) - int(tal)) <= 10 for t in stora)
+
+
+def _svarsrad(facit: str) -> str:
+    rader = [r.strip() for r in str(facit or "").split("\n") if r.strip()]
+    return rader[0] if rader else ""
+
+
+def raknarfri_talvakt(exam: dict, prov: dict | None = None) -> list[dict]:
+    """Uppgifter utan räknare vars tal kräver räknare. Övningspappret."""
+    beslut = _uppgiftens_beslut(exam, prov)
+    fel: list[dict] = []
+    for nr, u in enumerate((exam or {}).get("uppgifter") or [], 1):
+        if not isinstance(u, dict) or beslut.get(nr) is not False:
+            continue
+        delar = [d for d in u.get("deluppgifter") or [] if isinstance(d, dict)]
+        text = _normaltal(" ".join(
+            [_RAKNARMARKE.sub("", str(u.get("text") or ""))]
+            + [str(d.get("text") or "") for d in delar]))
+        facit = _normaltal(" ".join([str(u.get("losning") or "")]
+                                    + [str(d.get("losning") or "")
+                                       for d in delar]))
+        svar = _normaltal(" ".join(_svarsrad(x.get("losning"))
+                                   for x in [u] + delar))
+        tiopotens = bool(_TIOPOTENS_RE.search(text + " " + facit))
+        skal = []
+        stora = [t for t in _stora_tal(text) if int(t) % 10]
+        stora = [t for t in stora if not _blocktal(t, text, stora)]
+        if stora:
+            skal.append(f"stora tal att räkna med ({', '.join(stora[:3])})")
+        fula = [t for t in _TAL_RE.findall(text)
+                if _decimaler(t) >= 2 and not _FAKTOR_RE.match(t)
+                and not tiopotens
+                and re.search(rf"{_RAKNESATT_RE}\s*{re.escape(t)}(?![\d,])"
+                              rf"|(?<![\d,]){re.escape(t)}\s*{_RAKNESATT_RE}",
+                              facit)]
+        if fula:
+            skal.append(f"tal med två decimaler att multiplicera eller "
+                        f"dividera ({', '.join(fula[:3])})")
+        langa = [t for t in _TAL_RE.findall(svar) if _decimaler(t) >= 3]
+        if (langa and not tiopotens) or _UNGEFAR_RE.search(svar):
+            skal.append("ett svar som är ett närmevärde")
+        if not skal:
+            continue
+        fel.append(_err(
+            f"uppgift {nr}", "raknarfri",
+            f"Uppgift {nr} görs utan räknare men har {' och '.join(skal)}. "
+            "Utan räknare är talen heltal inom ±30, decimaltal med en decimal "
+            "eller runda belopp (3 500 kr, 1 200 kWh), och svaret är exakt. "
+            "Välj svaret först och talen sedan. Samma metod, samma poäng och "
+            "samma sort."))
+    return fel[:RAKNARFRI_MAX_FYND]
+
+
+# INGEN UPPGIFT PÅ BLADET HÄNGER PÅ EN MÅLAD BILD (Rickards dom 24/9). Blad
+# 147 uppgift 6 sa «Figurerna nedan» om ett kors av klinkerplattor som
+# ChatGPT skulle måla, och bilderna på 135 visade ett annat antal säckar än
+# texten. Provet har undantaget för mönsterfiguren (SCEN_REGEL) för att
+# läraren målar och granskar den själv; bladen görs i serie utan hennes
+# granskning, och där ska texten och tabellen bära allt eleven räknar med.
+# Scenen blir en stämningsbild utan antal.
+BILDFIGUR_MAX_FYND = 4
+_HANGER_PA_BILDEN = re.compile(
+    r"(?i:\b(?:figur(?:en|erna)?|bilden)\s+(?:nedan|ovan|visar)"
+    r"|\bse\s+(?:bilden|figuren)\b|\bi\s+bilden\b|\bpå\s+bilden\b"
+    r"|\bräkna\s+(?:på\s+)?bilden\b)")
+# Ett antal på fem eller fler: dit räknar bildverktyget fel (24 säckar blev
+# åtta), medan «two kayaks» och «four colleagues» brukar bli rätt. Åldern
+# («a boy of about six») och mått är inga antal.
+_SCEN_ANTAL = re.compile(
+    r"(?i)(?<!about )(?<!aged )(?<!age )\b(?:exactly\s+)?"
+    r"(five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|"
+    r"fifteen|sixteen|twenty|thirty|forty|fifty|\d{1,3})\s+"
+    r"(?!years?\b|months?\b|o'clock|%|percent|degrees|cm\b|mm\b|m\b|km\b|"
+    r"meters?\b|metres?\b|kg\b|minutes?\b|hours?\b|or\b|to\b)[a-z]")
+
+
+def _scenantal(scen: str) -> re.Match | None:
+    for m in _SCEN_ANTAL.finditer(scen):
+        tal = m.group(1)
+        if not tal.isdigit() or int(tal) >= 5:
+            return m
+    return None
+
+
+def bildfigurvakt(exam: dict) -> list[dict]:
+    """Uppgifter vars text pekar på en målad bild, och scener som räknar upp
+    ett antal. Bara arbetsbladet inför provet (se ovan). En figur som appen
+    ritar själv (`figur`) är ingen målning och får pekas på."""
+    fel: list[dict] = []
+    for nr, u in enumerate((exam or {}).get("uppgifter") or [], 1):
+        if not isinstance(u, dict) or not isinstance(u.get("scen"), dict):
+            continue
+        text = _MATTEBLOCK_RE.sub(" ", " ".join(
+            [str(u.get("text") or "")] + [str(d.get("text") or "")
+                                          for d in u.get("deluppgifter") or []
+                                          if isinstance(d, dict)]))
+        scen = str(u["scen"].get("scene") or "").split("Intended use")[0]
+        pekar = (_HANGER_PA_BILDEN.search(text)
+                 if u.get("figur") is None else None)
+        antal = _scenantal(scen)
+        if not pekar and not antal:
+            continue
+        vad = []
+        if pekar:
+            vad.append(f"texten pekar på bilden («{pekar.group(0)}»)")
+        if antal:
+            vad.append(f"scenen anger ett antal («{antal.group(0).strip()}»)")
+        fel.append(_err(
+            f"uppgift {nr}", "bildfigur",
+            f"Uppgift {nr}: {' och '.join(vad)}. På arbetsbladet är bilden en "
+            "målning och bär aldrig matematiken: allt eleven räknar med står i "
+            "texten eller i en tabell, och ett mönster beskrivs i ord med "
+            "antalen i tabellen. Skriv scenen som en stämningsbild utan antal "
+            "(«a pile of sacks», «a few matchsticks», aldrig «exactly 12»). "
+            "Samma matematik, samma tal och samma poäng."))
+    return fel[:BILDFIGUR_MAX_FYND]
+
+
+# FÖRDJUPNING ÖVAS INTE (Rickards beslut 24/9, IndA prov 1). Kalenderraden
+# «Kvadratkomplettering. Fördjupning. …» ligger inom provets sidor, så
+# förbudslistan (det som kommer SENARE) når den inte, och delmomentlistan
+# stryker den bara ur det provet ska pröva (_EJ_PROVBART). Bladet läser hela
+# bokuppslaget och fick två uppgifter ur den (blad 144).
+def fordjupningar_ur_lektioner(lektioner: list[dict] | None, *, fran: int,
+                               till: int, provdatum: str = "") -> list[dict]:
+    """Kalenderns fördjupningsrader inom provets sidor, före provdagen, som
+    {"metod", "sidor", "fordjupning": True}. Metoden är rubriken före ordet
+    «fördjupning»."""
+    ut: list[dict] = []
+    for r in lektioner or []:
+        rubrik = str(r.get("rubrik") or "")
+        m = re.search(r"(?i)fördjupning", rubrik)
+        if not m:
+            continue
+        if provdatum and str(r.get("datum") or "") >= provdatum:
+            continue
+        try:
+            a, b = int(r.get("fran") or 0), int(r.get("till") or 0)
+        except (TypeError, ValueError):
+            continue
+        if b < fran or a > till:
+            continue
+        metod = rubrik[:m.start()].strip(" .,:;–-") or rubrik.strip()
+        if any(f["metod"] == metod for f in ut):
+            continue
+        ut.append({"metod": metod, "sidor": f"{a}–{b}", "fordjupning": True})
+    return ut
+
+
+def _metodstammar(metod: str) -> list[str]:
+    """Metodens långa ord som stammar: «Kvadratkomplettering» →
+    «kvadratkomplett»."""
+    ut = []
+    for o in re.findall(r"[^\W\d_]{8,}", metod.casefold()):
+        ut.append(o[:max(8, len(o) - 4)])
+    return ut
+
+
+# Kvadratkompletteringen syns sällan som ord. Blad 144 uppgift 7 skrev den i
+# facit: «x² + 2ax + 4a + 5 = (x + a)² − a² + 4a + 5». Formen är ett
+# andragradsuttryck i x = en kvadrat av (x ± …) plus eller minus något.
+_KVADRATKOMPLETTERING = re.compile(
+    r"x\s*\^\s*\{?\s*2\s*\}?[^=$]*?[+\-−][^=$]*?x[^=$]*=\s*"
+    r"(?:\\left)?\(\s*x\s*[+\-−][^()]*(?:\\right)?\)\s*\^\s*\{?\s*2\s*\}?"
+    r"\s*[+\-−]")
+
+
+def fordjupningsvakt(exam: dict, fordjupning: list[dict] | None) -> list[dict]:
+    """Uppgifter som kräver en fördjupning. Tyst utan lista."""
+    fel: list[dict] = []
+    for f in fordjupning or []:
+        stammar = _metodstammar(str(f.get("metod") or ""))
+        if not stammar:
+            continue
+        form = (_KVADRATKOMPLETTERING
+                if any("kvadratkomplett" in s for s in stammar) else None)
+        for nr, u in enumerate((exam or {}).get("uppgifter") or [], 1):
+            if not isinstance(u, dict):
+                continue
+            text = " ".join(ci_utanfor._texter(u)).casefold()
+            if any(s in text for s in stammar) or (form and form.search(text)):
+                fel.append(_err(
+                    f"uppgift {nr}", "forbudsvakt",
+                    f"Uppgift {nr} kräver {f['metod'].casefold()} (s. "
+                    f"{f['sidor']}), och det är fördjupning i boken, inte "
+                    "provets innehåll. Byt ut uppgiften mot en som provet "
+                    "prövar, samma sort, samma poäng och samma förmåga."))
+    return fel[:FORBUD_MAX_FYND]
+
+
+# STÖRST OCH MINST UTAN ORDET «VÄRDE» (blad 144 uppgift 9, 24/9): «Bestäm det
+# pris som ger störst intäkt». Förbudsvakten känner «största värde» ur
+# funktionsavsnittets begrepp (_METODBEGREPP), men den läser bara uppgiftens
+# text och bara de orden. På bladet läses facit också: symmetrilinjen och
+# extrempunkten står där. Samma villkor som förbudsvakten: funktionerna, eller
+# största och minsta värde, ska stå bland det som kommer senare och inte
+# bland det klassen haft.
+_EXTREMVARDE = re.compile(
+    r"(?i)\b(?:störst|största|minst|minsta)\s+(?:möjliga\s+)?"
+    r"(?:värde\w*|intäkt\w*|vinst\w*|area\w*|volym\w*|kostnad\w*|"
+    r"inkomst\w*)|symmetrilinje\w*|extrempunkt\w*|maximipunkt\w*|"
+    r"minimipunkt\w*")
+
+
+def extremvardesvakt(exam: dict, forbjudna: list[dict] | None,
+                     delmoment: list[dict] | None,
+                     avsnitt: list[dict] | None) -> list[dict]:
+    """Uppgifter som söker ett största eller minsta värde när det kommer
+    senare i boken. Tyst utan förbud."""
+    haft = _haft_text(delmoment, avsnitt)
+    senare = [f for f in forbjudna or []
+              if re.search(r"(?i)funktion|största|minsta",
+                           str(f.get("metod") or ""))]
+    if not senare or any(o in haft for o in ("största", "minsta",
+                                              "extrempunkt")):
+        return []
+    f0 = next((f for f in senare if re.search(r"(?i)största|minsta",
+                                             str(f.get("metod") or ""))),
+              senare[0])
+    fel: list[dict] = []
+    for nr, u in enumerate((exam or {}).get("uppgifter") or [], 1):
+        if not isinstance(u, dict):
+            continue
+        m = _EXTREMVARDE.search(" ".join(ci_utanfor._texter(u)))
+        if not m:
+            continue
+        fel.append(_err(
+            f"uppgift {nr}", "forbudsvakt",
+            f"Uppgift {nr} söker ett största eller minsta värde («{m.group(0)}»), "
+            f"och {f0.get('metod')} (s. {f0.get('sidor')}) kommer senare i "
+            "boken än provets kapitel. Byt ut uppgiften mot en som går att "
+            "lösa med provets delmoment, samma sort, samma poäng och samma "
+            "förmåga."))
+    return fel[:FORBUD_MAX_FYND]
+
+
+def _ramens_listor(ram: dict | None) -> dict:
+    """infor_ram som ovningsvakters nyckelord. Fördjupningsraderna ligger i
+    samma lista som förbudet men prövas av sin egen vakt."""
+    alla = list((ram or {}).get("forbjudna") or [])
+    return {"forbjudna": [f for f in alla if not f.get("fordjupning")],
+            "fordjupning": ([f for f in alla if f.get("fordjupning")]
+                            + list((ram or {}).get("fordjupning") or [])),
+            "delmoment": (ram or {}).get("delmoment") or [],
+            "avsnitt": (ram or {}).get("avsnitt") or []}
+
+
+# Koderna ovningsvakter ger, för slutkontrollen som rensar de gamla innan den
+# räknar om på det papper som lämnar genereringen.
+OVNINGSKODER = ("raknarfri", "bildfigur", "provlan", "kopia", "forbudsvakt",
+                ci_utanfor.KOD, "begriplighet", "radlangd", "person",
+                "forvaxling", "konsbalans")
+
+
+def ovningsvakter(exam: dict, *, prov: dict | None = None,
+                  forbjudna: list[dict] | None = None,
+                  delmoment: list[dict] | None = None,
+                  avsnitt: list[dict] | None = None,
+                  fordjupning: list[dict] | None = None) -> list[dict]:
+    """Det provets vakter kräver, på arbetsbladet inför provet. Noll
+    modellanrop. Bladets egna (radvakt, scenvakt, personvakt, könen) står
+    sist, samma ordning som i _raknade_fynd."""
+    kurs = str((exam or {}).get("kurs") or "")
+    fel = ci_utanfor.ci_vakt(exam, kurs, "arbetsblad")
+    forbud = forbudsvakt(exam, delmoment, forbjudna, avsnitt)
+    sedda_forbud = {f["path"] for f in forbud}
+    forbud += [f for f in (fordjupningsvakt(exam, fordjupning)
+                           + extremvardesvakt(exam, forbjudna, delmoment,
+                                              avsnitt))
+               if f["path"] not in sedda_forbud
+               and not sedda_forbud.add(f["path"])]
+    fel += forbud
+    if prov:
+        sedda = set()
+        texter = uppgiftstexter(prov)
+        for f in (variationsflaggor(exam, texter) if texter else []):
+            m = re.match(r"(\d+)", str(f.get("nr") or ""))
+            if not m or int(m.group(1)) in sedda:
+                continue
+            sedda.add(int(m.group(1)))
+            fel.append(_err(
+                f"uppgift {m.group(1)}", "kopia",
+                f"Uppgift {m.group(1)} är provets egen uppgift med nya tal: "
+                f"«{f.get('text') or ''}». Byt ut den mot en ny som övar samma "
+                "metod med ett annat sammanhang och andra tal."))
+        fel += [_err(f"uppgift {f['nr']}", "provlan", f["message"])
+                for f in lanevakt(exam, prov) if f["nr"] not in sedda]
+    fel += raknarfri_talvakt(exam, prov)
+    fel += bildfigurvakt(exam)
+    # Provets språkvakt: bladet ska vara lika lätt att läsa som provet.
+    fel += sprakvakt(exam)
+    # Scenvakten står INTE här: provkörningen på de femton bladen fällde
+    # hälften av dem på ett begrepp som inte stod ordagrant i texten
+    # («färgåtgång» om en vägg som ska målas), och en reparationsrunda skriver
+    # om hela bladet.
+    return (fel + radvakt(exam) + personvakt(exam)
+            + forvaxlingsvakt(exam) + konsbalansvakt(exam))
 
 
 def likvardighetsvakt(exam: dict, referens: dict | None) -> list[dict]:
@@ -10194,7 +10649,7 @@ def _raknade_fynd(exam: dict, *, avsnitt: list[dict] | None, antal: int | None,
            # Det som står UTANFÖR kursens centrala innehåll, på alla tre
            # profilerna: ett arbetsblad med en talföljd i 1c är lika fel som
            # ett prov med den (app/ci_utanfor.py, Rickard 2026-09-17).
-           + ci_utanfor.ci_vakt(exam, kurs))
+           + ci_utanfor.ci_vakt(exam, kurs, profil))
     if profil == "prov":
         fel += (a_nivavakt(exam) + kravradsvakt(exam)
                 + blandat_krav_vakt(exam)
@@ -10400,6 +10855,7 @@ def _infor_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                 nummer: list[int] | None, rounds_used: int, max_rounds: int,
                 koder: list[str] | None = None,
                 niva_mal: dict | None = None,
+                prov: dict | None = None, ram: dict | None = None,
                 log_cb: Callable[[str], None] | None = None) -> dict:
     """Blev varje vald sort övad? Ett EGET litet pass, med samma kontrakt som
     _tackning_pass: högst EN reparationsrunda, samma budget, samma «rent före,
@@ -10413,15 +10869,30 @@ def _infor_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
 
     FAIL-OPEN hela vägen: utan valda nummer och utan ett enda ifyllt fält
     räknas ingenting (drilltackning), och en runda som inte lyckades lämnar
-    bladet som det var med fyndet som varning."""
+    bladet som det var med fyndet som varning.
+
+    PROVETS VAKTER I SAMMA RUNDA (2026-09-24 kväll). Stycket ovan valde bort
+    _raknade_fynd för att dess vakter var mätta på prov, och det höll inte:
+    de femton bladen inför proven fick kvadreringsregler i 1c, provets egna
+    sammanhang och räknarfria uppgifter med fyrsiffriga tal, allt sådant
+    provets vakter fångar. `prov` och `ram` tänder ovningsvakter, det urval
+    av dem som gäller ett övningsblad, och fynden lagas i samma runda som
+    drilltäckningen. Utan `prov` är passet som förut."""
     log = log_cb or (lambda _m: None)
-    fel = drilltackning(exam, nummer)
+    tack = drilltackning(exam, nummer)
+    ovning = (ovningsvakter(exam, prov=prov, **_ramens_listor(ram))
+              if prov else [])
+    fel = tack + ovning
     if not fel:
         return {"exam": exam, "errors": errors, "rounds": rounds_used}
     if rounds_used >= max_rounds:
         return {"exam": exam, "errors": errors + fel, "rounds": rounds_used}
-    log(f"Inför provet: {len(fel)} av provets uppgifter saknar övning på "
-        "bladet, byter ut …")
+    if tack:
+        log(f"Inför provet: {len(tack)} av provets uppgifter saknar övning "
+            "på bladet, byter ut …")
+    if ovning:
+        log("Inför provet: " + ", ".join(sorted({f["code"] for f in ovning}))
+            + f" på {len({f['path'] for f in ovning})} ställen, lagar …")
     kandidat = _llm_round(build_repair_prompt(exam, fel + errors, profil),
                           model, llm, antal, skeleton, koder, profil=profil,
                           log_cb=log_cb,
@@ -11105,6 +11576,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                   referensprov: dict | None = None,
                   inforprov: dict | None = None,
                   infor_nummer: list[int] | None = None,
+                  infor_ram: dict | None = None,
                   llm=llm_client.generate, max_rounds: int = MAX_ROUNDS,
                   log_cb: Callable[[str], None] | None = None,
                   steg_cb: Callable[[str], None] | None = None) -> dict:
@@ -11218,6 +11690,12 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     provets texter) och täckningen räknas på svaret (drilltackning, högst en
     reparationsrunda). None lämnar prompten, grammatiken och rundorna orörda,
     byte för byte som de var.
+
+    `infor_ram` är PROVETS RAM för bladet inför provet (2026-09-24 kväll):
+    {"forbjudna", "delmoment", "avsnitt", "fordjupning"}, uppslagna av
+    routes_exam med provets datum och klass, samma listor provet självt
+    skrevs mot. Förbudet går in i prompten och vakterna (ovningsvakter) i
+    _infor_pass. Utan den, eller utan valt prov, är allt som förut.
     """
     log = log_cb or (lambda _m: None)
     # `steg` NAMNGER var i arbetet vi är; `log` säger vad som händer just nu.
@@ -11279,6 +11757,17 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # en tom sträng.
     forbjudetblock = build_forbjudet(forbjudna or [], delmoment or [],
                                      avsnitt or [])
+    # BLADET INFÖR PROVET FÅR PROVETS FÖRBUD (2026-09-24 kväll). Blad 144
+    # krävde största värde, som är kapitel 3, på ett blad inför prov 1: bladet
+    # läser hela bokuppslaget och fick ingen förbudslista. Samma lista provet
+    # skrevs mot, med provets datum. Bara med valt prov: annars som förut.
+    ram = infor_ram if (inforprov and profil == "arbetsblad") else None
+    ram_forbjudna = [f for f in (ram or {}).get("forbjudna") or []
+                     if not f.get("fordjupning")]
+    if ram_forbjudna and not forbjudna:
+        forbjudetblock = build_forbjudet(ram_forbjudna,
+                                         ram.get("delmoment") or [],
+                                         ram.get("avsnitt") or [])
     # FÖRBEHÅLLEN på de kryssade punkterna (2026-09-13, kväll). Deterministiskt
     # ur de två listor prompten redan bär — lärarens kryss och förbudet — och
     # alltså inget nytt anrop. Tom sträng när ingen punkt krockar, och då är
@@ -11312,7 +11801,8 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # enstaka ord. Bladet ska ha andra; vakten är routes_exam._lanfynd.
     inforblock = build_infor_prov(
         inforslots, infor_nummer, antal,
-        provets_namn_och_sammanhang(inforprov) if inforprov else None)
+        provets_namn_och_sammanhang(inforprov) if inforprov else None,
+        fordjupning=(ram or {}).get("fordjupning"))
     drillade = drillnummer(inforslots, infor_nummer) if inforblock else []
     prompt = build_prompt(kurs, klass, punkter, antal=antal, tid_min=tid_min,
                           delar=delar, memory=memory, teman=teman,
@@ -11396,6 +11886,8 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
         res = _infor_pass(res["exam"], res["errors"], model=model, llm=llm,
                           profil=profil, antal=antal, skeleton=grammatik,
                           nummer=drillade, koder=koder, niva_mal=niva_mal,
+                          prov=inforprov if profil == "arbetsblad" else None,
+                          ram=ram,
                           rounds_used=res["rounds"], max_rounds=max_rounds,
                           log_cb=log_cb)
     # ── RÄKNEVERKET (Etapp 4) ────────────────────────────────────────
@@ -11466,6 +11958,10 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
         mening_per_rad(r.get("exam"))
         if profil == "prov":
             fraga_for_sig(r.get("exam"))
+        # BLADETS RÄKNARRAD UR PROVETS DELAR (Rickards dom 2026-09-24), före
+        # markeringen som läser den. Utan valt prov skriver modellen raden.
+        if inforprov and profil == "arbetsblad":
+            satt_raknarrad_ur_provet(r.get("exam"), inforprov)
         ovningspappret_stadat(r.get("exam"), profil)
         # ── UTANFÖR KURSEN, SIST AV ALLT (app/ci_utanfor.py) ─────────────
         # Fixrundan och slutgrinden kör vakten bara när de körs alls (en
@@ -11474,9 +11970,18 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
         # faktiskt lämnar genereringen, på alla tre profilerna, och det som
         # står kvar blir lärarens varning i `errors`. Gamla kopior rensas
         # först: en uppgift som lagats ska inte bära larmet vidare.
-        larm = ci_utanfor.ci_vakt(r.get("exam"), kurs)
+        # Bladet inför provet räknar hela sin uppsättning (ovningsvakter,
+        # där den här ingår) av samma skäl: domarnas runda kan ha skrivit om
+        # en uppgift efter _infor_pass.
+        if inforprov and profil == "arbetsblad" and r.get("exam") is not None:
+            larm = ovningsvakter(r["exam"], prov=inforprov,
+                                 **_ramens_listor(ram))
+            koder_ut = set(OVNINGSKODER)
+        else:
+            larm = ci_utanfor.ci_vakt(r.get("exam"), kurs, profil)
+            koder_ut = {ci_utanfor.KOD}
         r["errors"] = [e for e in (r.get("errors") or [])
-                       if e.get("code") != ci_utanfor.KOD] + larm
+                       if e.get("code") not in koder_ut] + larm
         for f in larm:
             log(f["message"])
         return r
@@ -11627,6 +12132,7 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
                 mal: dict | None = None, malen=None,
                 bok: str = "", historik=None, inriktning: str = "",
                 niva_mal: dict | None = None,
+                infor: dict | None = None,
                 llm=llm_client.generate,
                 max_rounds: int = MAX_ROUNDS,
                 log_cb: Callable[[str], None] | None = None,
@@ -11647,7 +12153,7 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
     log("Uppdaterar provet …")
     candidate = _llm_round(
         build_refine_prompt(exam, instruction, nummer, mal, bok, historik,
-                            malen, inriktning),
+                            malen, inriktning, profil),
         model, llm, profil=profil, log_cb=log_cb, etikett="Uppdaterar")
     if candidate is None:
         return {"exam": exam,
@@ -11758,6 +12264,11 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
     # ord ur basen, och ett pass här hade ändrat det på skärmen utan att något
     # sparades. Skärmen ska säga samma sak som raden i exam_versions.
     if res.get("exam") is not exam:
+        # Bladet inför provet: räknarraden ur provets delar, också efter ett
+        # varv som bytt ut en uppgift och därmed dess `drillar` (`infor` är
+        # provet, routes_exam slår upp det ur bladets `infor_prov`).
+        if infor and profil == "arbetsblad":
+            satt_raknarrad_ur_provet(res.get("exam"), infor)
         ovningspappret_stadat(res.get("exam"), profil)
     return res
 

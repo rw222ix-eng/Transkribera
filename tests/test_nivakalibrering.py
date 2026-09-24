@@ -794,8 +794,10 @@ def test_grinden_kor_extrarundorna_och_sager_ifran_nar_de_inte_racker():
     assert "kvadreringsregeln eller konjugatregeln" in rundor[-1]
     assert [(f["nr"], f["pastadd"], f["domd"]) for f in res["nivafel"]] \
         == [("2", "E", "C")]
-    # Fyndet står kvar i fellistan också: den är klientens `provFel`.
-    assert [e["code"] for e in res["errors"]] == ["niva"]
+    # Fyndet står kvar i fellistan också: den är klientens `provFel`. Sedan
+    # 2026-09-24 kväll fäller ci_utanfor dessutom kvadreringsregeln på ett
+    # 1a-blad (BARA_OVNING), och det är just den här uppgiften.
+    assert [e["code"] for e in res["errors"]] == ["niva", "utanforci"]
 
 
 def test_grinden_ar_tyst_nar_omskrivningen_lagade_nivan():
