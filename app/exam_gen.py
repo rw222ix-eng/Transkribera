@@ -685,6 +685,27 @@ INSTRUCTION = (
     "$x^2 + 2\\,000x + 999\\,999 = 0$.» och sedan «Svara exakt.» på nästa, "
     "aldrig uttrycket ensamt på raden under uppmaningen. Ett uttryck «kan "
     "skrivas på formen», aldrig «i formen».\n"
+    # Samma dom, uppgift 8: «Några elever säljer tygkassar i ett UF-företag.
+    # … R = −1,8p² + 412p − 14 300 …» «Vad då är UF-företag? … Behöver vi
+    # göra den lite mer konkret?» och «det känns relativt svårt för att vara
+    # en E- eller C-uppgift». Läraren valde konkret text, enklare tal och en
+    # a) som räknar ett värde innan b) löser ekvationen.
+    "  • Inga förkortningar eller namn på organisationer eleven måste känna "
+    "till: «ett företag i skolan», aldrig «ett UF-företag». En modell på "
+    "E-nivå har enkla koefficienter (hela, runda tal: «R = −2p² + 400p − "
+    "13 200»), aldrig «−1,8p² + 412p − 14 300», och börjar gärna med att "
+    "eleven räknar ett värde («a) Beräkna vinsten när en kasse kostar 100 "
+    "kr.») innan hon löser en ekvation.\n"
+    # Samma dom, uppgift 10 och 12: «samma känsla» (rummen med 0,8 m och
+    # 5,6 m²) och «väldigt svårt för de flesta eleverna och till och med jag
+    # att tolka uppgiften» («Varje rad ska ha 5 plattor fler än antalet
+    # rader … Bestäm alla antal plattor som är möjliga.»).
+    "  • EN SVÅR UPPGIFT ÄR SVÅR I MATEMATIKEN, ALDRIG I SPRÅKET. Strukturen "
+    "står rakt ut («Plattorna ligger i $n$ rader, och i varje rad ligger "
+    "$n + 5$ plattor.»), talen är hela där det går («1 m längre», «7 m² "
+    "större», inte 0,8 m och 5,6 m²), och frågan gäller det enklaste svaret "
+    "(«Hur många rader kan det vara?», inte «Bestäm alla antal plattor som "
+    "är möjliga.»).\n"
     # Samma dom, uppgift 3: «Svara exakt.» under x² + 2 000x + 999 999 = 0,
     # där svaren är −999 och −1 001. Raden fick eleven att leta efter rötter.
     "  • «Svara exakt.» står bara där svaret annars kunde avrundas (en rot, "
@@ -9299,6 +9320,13 @@ _METODSTAMMAR = ("ekvation", "olikhet", "funktion", "sannolikhet",
                  "exponential", "förändringsfaktor", "pythagoras", "tangens",
                  "sinus", "cosinus", "vektor", "derivat", "logaritm",
                  "faktoriser", "andragrad")
+# BEGREPPEN SOM HÖR TILL EN METOD (lärarens dom 2026-09-24, exam 130 uppgift
+# 11): «Bestäm det minsta värde som uttrycket (x − 3)² + 4x + 11 kan få.»
+# «känns lite utanför kursen». Det är andragradsfunktionernas «Största och
+# minsta värde» (Origo 2a 3.2, s. 144), men ordet funktion stod inte i
+# uppgiften. Är stammen förbjuden är dess begrepp det också.
+_METODBEGREPP = {"funktion": ("minsta värde", "största värde", "extrempunkt",
+                              "maximipunkt", "minimipunkt", "symmetrilinje")}
 # BOKSTÄVERNA (samma dom, exam 128 uppgift 3 och generalrepetitionen samma
 # natt). Läraren valde A-formen «UTAN bokstäver, eftersom klassen inte läst
 # algebra än», och den skarpa omkörningen skrev ändå «En fisk väger m kg …
@@ -9362,6 +9390,10 @@ def forbudsvakt(exam: dict, delmoment: list[dict] | None,
         for s in _METODSTAMMAR:
             if s in namn and s not in haft:
                 forbud.setdefault(s, f)
+
+    def traff(text: str, s: str) -> str | None:
+        return next((o for o in (s,) + _METODBEGREPP.get(s, ())
+                     if o in text), None)
     algebra = algebra_forbjuden(forbjudna, delmoment, avsnitt)
     if not forbud and not algebra:
         return []
@@ -9373,7 +9405,7 @@ def forbudsvakt(exam: dict, delmoment: list[dict] | None,
         # Ett fynd per uppgift: nämner den en metod ur listan säger det
         # fyndet mer än bokstäverna gör.
         uppg = _uppgiftsnr(e["nr"])
-        namnger = any(s in text for s in forbud)
+        namnger = any(traff(text, s) for s in forbud)
         bokstaver = _bokstaver(ratext) if algebra and not namnger else []
         if bokstaver and (uppg, "bokstav") not in sedda:
             sedda.add((uppg, "bokstav"))
@@ -9389,12 +9421,13 @@ def forbudsvakt(exam: dict, delmoment: list[dict] | None,
                 "varför.»). Samma del, samma poäng och samma förmåga."))
         for s, f in forbud.items():
             nyckel = (_uppgiftsnr(e["nr"]), s)
-            if s not in text or nyckel in sedda:
+            ord_ = traff(text, s)
+            if not ord_ or nyckel in sedda:
                 continue
             sedda.add(nyckel)
             fel.append(_err(
                 f"uppgift {e['nr']}", "forbudsvakt",
-                f"Uppgift {e['nr']} handlar om «{s}…», och {f.get('metod')} "
+                f"Uppgift {e['nr']} handlar om «{ord_}…», och {f.get('metod')} "
                 f"(s. {f.get('sidor')}) kommer senare i boken än provets "
                 "kapitel: klassen har inte haft det när provet skrivs. Byt UT "
                 "uppgiften mot en som går att lösa med delmomenten, samma "

@@ -93,6 +93,27 @@ def test_uttrycket_efter_kolon_far_rymmas_pa_pappret():
     assert fel and f"högst {exam_gen.DEFINITION_RAD_TAK}" in fel[0]["message"]
 
 
+def test_minsta_varde_ar_funktionernas_begrepp():
+    """Exam 130 uppgift 11 (IndA, Ma 2a kapitel 1): «Bestäm det minsta
+    värde som uttrycket … kan få.» Största och minsta värde är Origo 2a 3.2
+    (s. 144), och ordet funktion stod aldrig i uppgiften."""
+    delmoment = [{"delmoment": "Kvadratkomplettering", "sidor": "52–55"}]
+    forbjudna = [{"metod": "Andragradsfunktioner", "sidor": "144–150"}]
+    fel = exam_gen.forbudsvakt(_prov(
+        "Bestäm det minsta värde som uttrycket $(x - 3)^2 + 4x + 11$ kan "
+        "få."), delmoment, forbjudna)
+    assert [f["code"] for f in fel] == ["forbudsvakt"]
+    assert "«minsta värde…»" in fel[0]["message"]
+    assert exam_gen.forbudsvakt(_prov(
+        "Visa att ekvationen $x^2 - 6x + 10 = 0$ saknar lösning."),
+        delmoment, forbjudna) == []
+    # Har klassen haft funktionerna är begreppet inget förbud.
+    haft = delmoment + [{"delmoment": "Andragradsfunktioner",
+                         "sidor": "144–150"}]
+    assert exam_gen.forbudsvakt(_prov("Bestäm det minsta värde som $x^2$ "
+                                      "kan få."), haft, forbjudna) == []
+
+
 def test_domarna_star_i_instruktionen():
     r = exam_gen.INSTRUCTION
     assert "kycklingens vikt" not in r
@@ -115,6 +136,9 @@ def test_domarna_star_i_instruktionen():
     assert "«kan skrivas på formen», aldrig «i formen»" in r
     assert "«med algebraisk metod» står bara i en del där digitala" in r
     assert "«Svara exakt.» står bara där svaret annars kunde avrundas" in r
+    assert "«ett företag i skolan», aldrig «ett UF-företag»" in r
+    assert "En modell på E-nivå har enkla koefficienter" in r
+    assert "EN SVÅR UPPGIFT ÄR SVÅR I MATEMATIKEN, ALDRIG I SPRÅKET" in r
     assert "«dubbla det gröna rummets väggarea», aldrig" in r
 
 
