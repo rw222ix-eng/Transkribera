@@ -158,6 +158,19 @@ def escape_mixed(text: str, *, fet: bool = False) -> str:
     return "".join(parts)
 
 
+def losning_steg(text: str) -> str:
+    """Facit med ett steg per rad (2026-09-24 kväll, blad 134 uppgift 4).
+
+    Modellen skriver stegen på var sin rad, och escape_mixed behåller
+    radbrytningen, men i TeX är en ensam radbrytning ett mellanslag: facit
+    trycktes som «K = 468 + 1,2E (5868−4668)/1000 = 1,2 4668 − …». Skärmen
+    fick samma rättelse i losning.css (447baa3). Tomma rader stryks, varje
+    rad escapas för sig och raderna binds med \\newline."""
+    rader = [r.strip() for r in str(text or "").replace("\r\n", "\n")
+             .split("\n") if r.strip()]
+    return r"\newline ".join(escape_mixed(r) for r in rader)
+
+
 _env: Environment | None = None
 
 
@@ -1007,6 +1020,8 @@ def _enhet_vy(*, poang, typ, formaga, text, losning, bedomning,
         "utrymme_mm": _utrymme_mm(poang, typ),
         "text": escape_mixed(text),
         "losning": escape_mixed(losning),
+        # Arbetsbladets och gruppuppgiftens facit: ett steg per rad.
+        "losning_steg": losning_steg(losning),
         "bedomning": escape_mixed(bedomning),
         # Bedömningsanvisningens tre rader (NP:s form, se _svarsrad ovan).
         # Strukturens facit bara på lärarens papper, alltså bara med facit.
@@ -1374,6 +1389,7 @@ def _build_view(doc: exam_spec.ExamDoc,
                     # finnas (StrictUndefined) så att föräldern har hela lövets
                     # nyckeluppsättning.
                     "losning": escape_mixed(it.losning),
+                    "losning_steg": losning_steg(it.losning),
                     "bedomning": escape_mixed(it.bedomning),
                     "bedomning_rader": _bedomning_rader(it.bedomning),
                     # Anvisningen sätter svaret och trippeln per deluppgift;
