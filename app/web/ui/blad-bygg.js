@@ -49,7 +49,12 @@ window.BladBygg = (() => {
      fetstil, och KaTeX bryr sig inte om font-weight (se enhetRader). */
   const matBryt = (s, fet) => String(s == null ? '' : s).split('$').map((bit, i) => {
     if (!(i % 2)) return esc(bit);
-    const led = bit.length > MATBRYT_MIN ? texled(bit) : [bit];
+    /* Ett led som BÖRJAR med likhetstecknet saknar vänsterled, och då sätter
+       KaTeX inget mellanrum före tecknet: facit visade «P= 49 + 13,5 · 14=
+       49 + 189= 238» (blad 133, 2026-09-24). Den tomma gruppen `{}` ger
+       relationen ett vänsterled och därmed samma luft som i en hel formel. */
+    const led = (bit.length > MATBRYT_MIN ? texled(bit) : [bit])
+      .map((b, k) => (k && /^\s*=/.test(b) ? `{}${b}` : b));
     return led.map(b => `<span class="mat" data-tex="${attr(fet ? `\\pmb{${b}}` : b)}"></span>`).join('<wbr>');
   }).join('');
   /* ── Tomraderna ──
@@ -965,13 +970,30 @@ window.BladBygg = (() => {
     const s = String(f || '').replace(/\$/g, '').replace(/[.\s]+$/, '');
     return !!e && s.toLowerCase().endsWith(e.toLowerCase());
   };
+  /* Svaret är FÖRSTA raden i losning, uträkningen raderna efter
+     («$K = 468 + 1{,}2E$» och sedan stegen). Enheten hör till svaret och står
+     direkt efter det: i ett enda spann hamnade den till höger om den bredaste
+     uträkningsraden, långt från talet («238 ……… kr», blad 133, 2026-09-24).
+     En radbrytning inuti $…$ är TeX-källa och delar inte, så bara en
+     radbrytning med ett jämnt antal dollartecken före räknas. */
+  function svarOchSteg(f) {
+    const s = String(f || '');
+    let dollar = 0;
+    for (let i = 0; i < s.length; i++) {
+      if (s[i] === '$') dollar++;
+      else if (s[i] === '\n' && dollar % 2 === 0) return [s.slice(0, i), s.slice(i + 1).trim()];
+    }
+    return [s, ''];
+  }
   function losvar(u) {
     if (!u.f) return '';
     /* matBryt och inte mat: en hel härledning i ett dollarpar är en enda
        oböjlig låda, och i en smal spalt gav den en scrollbar (se matBryt
        ovan). */
-    return `<div class="losvar"><b class="losetikett">Svar</b><span>${matBryt(u.f)}</span>${
-      u.enhet && !ENHET_SLUT(u.f, u.enhet) ? `<em>${enhetHtml(u.enhet)}</em>` : ''}</div>`;
+    const [svar, steg] = svarOchSteg(u.f);
+    return `<div class="losvar"><b class="losetikett">Svar</b><span>${matBryt(svar)}</span>${
+      u.enhet && !ENHET_SLUT(svar, u.enhet) ? `<em>${enhetHtml(u.enhet)}</em>` : ''}${
+      steg ? `<span class="losrader">${matBryt(steg)}</span>` : ''}</div>`;
   }
   /* Vägen till svaret — och på en uppgift med deluppgifter ÄR den svaret:
      `vag` bär «a) …», «b) …» med sin poäng (plan.js franProv). */

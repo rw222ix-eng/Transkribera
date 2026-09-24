@@ -139,6 +139,9 @@ $\dfrac{…}$
    ett stycke — frågan är satt i löptext och svaret är ofta bara en formel till. */
 .losetikett{flex:0 0 auto;min-width:40px;font-size:calc(11px * var(--fsk, 1));font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#000}
 /* I en deluppgift bär a) b) c) redan navigeringen; en etikett till blir brus. */
+/* Uträkningen under svaret (blad-bygg.js svarOchSteg): en egen rad i flexen,
+   indragen till svarets vänsterkant, etikettens 40 px plus luckan 14 px. */
+.losvar>.losrader{flex:0 0 100%;padding-left:54px;box-sizing:border-box}
 .prdel .losvar{margin-top:0;padding-left:0}
 .losvar>span .katex{font-size:1.05em}
 .losvar>em{font-style:normal;font-size:calc(12.5px * var(--fsk, 1));font-weight:400;color:#000}
