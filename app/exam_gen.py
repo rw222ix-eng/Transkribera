@@ -10924,6 +10924,7 @@ def _infor_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                 koder: list[str] | None = None,
                 niva_mal: dict | None = None,
                 prov: dict | None = None, ram: dict | None = None,
+                doma: bool = False, inriktning: str = "",
                 log_cb: Callable[[str], None] | None = None) -> dict:
     """Blev varje vald sort övad? Ett EGET litet pass, med samma kontrakt som
     _tackning_pass: högst EN reparationsrunda, samma budget, samma «rent före,
@@ -10945,11 +10946,23 @@ def _infor_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
     sammanhang och räknarfria uppgifter med fyrsiffriga tal, allt sådant
     provets vakter fångar. `prov` och `ram` tänder ovningsvakter, det urval
     av dem som gäller ett övningsblad, och fynden lagas i samma runda som
-    drilltäckningen. Utan `prov` är passet som förut."""
+    drilltäckningen. Utan `prov` är passet som förut.
+
+    ELEVLÄSAREN OCKSÅ, men inte NP-typdomaren (Rickard 2026-09-24 kväll lät
+    mig välja). Elevläsaren (app/elevlasare.py) läser varje uppgift som en
+    elev och jämför med facit, och det är Rickards egen risk «krångligt
+    skrivna». Ett anrop per blad, fail-open, fynden lagas i samma runda.
+    NP-typdomaren står utanför: bladets form är redan knuten till provets
+    uppgifter genom `drillar`, och provet har redan dömts mot typerna.
+    `doma=False` stänger av anropet, som för alla domare."""
     log = log_cb or (lambda _m: None)
     tack = drilltackning(exam, nummer)
     ovning = (ovningsvakter(exam, prov=prov, **_ramens_listor(ram))
               if prov else [])
+    if prov and doma:
+        from app import elevlasare              # lånar domarenheter härifrån
+        ovning = ovning + elevlasare.doma_elevlasare(
+            exam, model=model, inriktning=inriktning, llm=llm, log_cb=log_cb)
     fel = tack + ovning
     if not fel:
         return {"exam": exam, "errors": errors, "rounds": rounds_used}
@@ -11955,7 +11968,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                           profil=profil, antal=antal, skeleton=grammatik,
                           nummer=drillade, koder=koder, niva_mal=niva_mal,
                           prov=inforprov if profil == "arbetsblad" else None,
-                          ram=ram,
+                          ram=ram, doma=doma, inriktning=inriktning,
                           rounds_used=res["rounds"], max_rounds=max_rounds,
                           log_cb=log_cb)
     # ── RÄKNEVERKET (Etapp 4) ────────────────────────────────────────

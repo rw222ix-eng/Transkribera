@@ -33,7 +33,10 @@
 ((* if e.utforlig *))
 ((( former.stycken(e.utforlig) )))
 ((* elif e.losning *))
-((( e.losning )))\par
+((# Reserven utan utförlig lösning: ett steg per rad, som arbetsbladets
+    facit (exam_latex.losning_steg). Utan fältet, på en äldre server, som
+    förut. #))
+((( e.losning_steg if e.losning_steg is defined else e.losning )))\par
 ((* endif *))
 ((* endmacro *))
 
