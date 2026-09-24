@@ -724,7 +724,9 @@ def test_elevens_harledning_delas_vid_likhetstecknen():
     assert rad.count('class="mat"') == 4, "härledningen delades inte i led"
     assert rad.count("<wbr>") == 3, "utan wbr finns ingen plats att bryta på"
     assert 'data-tex="A(15) "' in rad
-    assert 'data-tex="= 120 - 60 "' in rad
+    # Ett led som börjar med «=» får ett tomt vänsterled, annars sätter KaTeX
+    # inget mellanrum före tecknet (3f197eb, «P= 49 + 189= 238» i facit).
+    assert 'data-tex="{}= 120 - 60 "' in rad
     # Korta uttryck rörs inte. En delad «$x = 4$» vore två lådor där en räcker.
     kort = _losark([_uppg(p=2, f="$x = 4$", bed="+1 E räknar")])
     assert "<wbr>" not in kort
