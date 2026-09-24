@@ -662,7 +662,8 @@ def _ovningsfynd(exam: dict, infor: dict | None, typ: str) -> list[dict]:
                 f"vara «{exam_gen.raknarrad(beslut)}»: en uppgift som övar "
                 "provets räknarfria del görs utan räknare, de andra med."))
         fel = (exam_gen.raknarfri_talvakt(exam or {}, infor)
-               + exam_gen.bildfigurvakt(exam or {}))
+               + exam_gen.bildfigurvakt(exam or {})
+               + exam_gen.uttrycksvakt(exam or {}, infor))
     except Exception:                       # pragma: no cover
         return ut
     ut += [_fynd(f["code"], f["message"], _uppgiftsnr(f.get("path", "")))
@@ -820,6 +821,8 @@ _ATGARD = {
                  "uppgifter.",
     "raknarfri": "Byt talen så att uppgiften går att räkna för hand. Samma "
                  "metod, samma sammanhang, samma poäng.",
+    "provuttryck": "Byt talen i uttrycket så att det inte är provets. Samma "
+                   "metod, samma sammanhang, samma poäng.",
     "bildfigur": "Flytta det eleven räknar med från bilden till texten eller "
                  "en tabell, och skriv scenen utan antal. Samma matematik, "
                  "samma tal, samma poäng.",

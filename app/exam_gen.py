@@ -9215,7 +9215,10 @@ INFOR_BILD = (
     "aldrig «figurerna nedan» eller «bilden visar». Scenen är en "
     "stämningsbild och anger inga antal på fem "
     "eller fler: «a pile of sacks», aldrig «24 sacks» eller «exactly 12 "
-    "matchsticks».\n")
+    "matchsticks». Det texten räknar (brädor, kartonger, rader, säckar) "
+    "målas så att det inte går att räkna: ett enda i förgrunden, eller en "
+    "hög på avstånd, delvis dold. Annars visar bilden ett annat antal än "
+    "texten.\n")
 
 
 def build_infor_prov(slots: list[dict] | None, nummer: list[int] | None,
@@ -9776,6 +9779,59 @@ def extremvardesvakt(exam: dict, forbjudna: list[dict] | None,
     return fel[:FORBUD_MAX_FYND]
 
 
+# PROVETS EGNA UTTRYCK (granskningen 24/9 natt). Prov 129 uppgift 6 hade
+# «5 − 2x < 11», och blad 145 uppgift 9 fick samma olikhet vänd, så att c)
+# avslöjade provets svar; blad 146 uppgift 1 fick «5 − 2x». Kopieringsvakten
+# jämför hela uppgiftens form och ser inte ett uttryck mitt i en ny text. Här
+# jämförs matten: varje led i provets uttryck (delat vid =, <, >, ≤, ≥) med
+# en bokstav, ett räknesätt och minst fyra tecken, mot bladets led. Hela led
+# mot hela led: (x − 3)² inne i ett längre uttryck på bladet är inte provets
+# «(x − 3)² = 25», men «(x − 3)² = 16» är det.
+_RELATION = re.compile(r"\\(?:le|ge|leq|geq|neq|ne|lt|gt)\b|[=<>≤≥≠]")
+
+
+def _normalmatte(s: str) -> str:
+    s = s.replace("−", "-").replace("\\cdot", "*").replace("\\,", "")
+    s = re.sub(r"\\(?:left|right|dfrac|frac|tfrac)", "", s)
+    return re.sub(r"[\s{}]", "", s)
+
+
+def _provets_led(prov: dict | None) -> set[str]:
+    ut: set[str] = set()
+    for t in uppgiftstexter(prov):
+        for stycke in re.findall(r"\$([^$]+)\$", str(t or "")):
+            for led in _RELATION.split(stycke):
+                n = _normalmatte(led)
+                if (len(n) >= 4 and re.search(r"[a-z]", n)
+                        and re.search(r"[+\-*/^]", n.lstrip("-"))
+                        and re.search(r"[2-9]", n)):
+                    ut.add(n)
+    return ut
+
+
+def uttrycksvakt(exam: dict, prov: dict | None) -> list[dict]:
+    """Uppgifter på bladet som återanvänder ett av provets uttryck."""
+    led = _provets_led(prov)
+    if not led:
+        return []
+    fel: list[dict] = []
+    for nr, u in enumerate((exam or {}).get("uppgifter") or [], 1):
+        if not isinstance(u, dict):
+            continue
+        mina = {_normalmatte(x) for m in re.findall(r"\$([^$]+)\$",
+                                                     _uppgiftsblock(u))
+                for x in _RELATION.split(m)}
+        traff = sorted(led & mina)
+        if traff:
+            fel.append(_err(
+                f"uppgift {nr}", "provuttryck",
+                f"Uppgift {nr} har provets eget uttryck (${traff[0]}$). Eleven "
+                "som övat på bladet känner igen det på provet, och en vänd "
+                "olikhet eller ekvation kan avslöja provets svar. Byt talen i "
+                "uttrycket. Samma metod, samma poäng."))
+    return fel[:LAN_MAX_FYND]
+
+
 def _ramens_listor(ram: dict | None) -> dict:
     """infor_ram som ovningsvakters nyckelord. Fördjupningsraderna ligger i
     samma lista som förbudet men prövas av sin egen vakt."""
@@ -9790,6 +9846,7 @@ def _ramens_listor(ram: dict | None) -> dict:
 # Koderna ovningsvakter ger, för slutkontrollen som rensar de gamla innan den
 # räknar om på det papper som lämnar genereringen.
 OVNINGSKODER = ("raknarfri", "bildfigur", "provlan", "kopia", "forbudsvakt",
+                "provuttryck",
                 ci_utanfor.KOD, "begriplighet", "radlangd", "person",
                 "forvaxling", "konsbalans")
 
@@ -9827,6 +9884,8 @@ def ovningsvakter(exam: dict, *, prov: dict | None = None,
                 "metod med ett annat sammanhang och andra tal."))
         fel += [_err(f"uppgift {f['nr']}", "provlan", f["message"])
                 for f in lanevakt(exam, prov) if f["nr"] not in sedda]
+        fel += [f for f in uttrycksvakt(exam, prov)
+                if _uppgiftsnr(f["path"].removeprefix("uppgift ")) not in sedda]
     fel += raknarfri_talvakt(exam, prov)
     fel += bildfigurvakt(exam)
     # Provets språkvakt: bladet ska vara lika lätt att läsa som provet.

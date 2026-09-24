@@ -506,3 +506,26 @@ def test_latexfacit_har_ett_steg_per_rad():
         text = (mallar / namn).read_text(encoding="utf-8")
         assert "u.losning_steg" in text and "d.losning_steg" in text
         assert "((( u.losning )))" not in text
+
+
+# ──────────────── provets egna uttryck (granskningen 24/9 natt) ────────────
+
+
+def test_provets_uttryck_pa_bladet_falls():
+    """Prov 129 uppgift 6 hade «5 − 2x < 11», och blad 145 uppgift 9 fick
+    samma olikhet vänd. Prov 130 hade «(x − 3)² = 25», och blad 138 uppgift 11
+    «(x − 3)² = 16»."""
+    prov = _papper(_u("Lös olikheten $5 - 2x < 11$."),
+                   _u("Lös ekvationen: $(x - 3)^2 = 25$."))
+    blad = _papper(
+        _u("Olikheten är $11 > 5 - 2x$. Avgör om $x = -4$ är en lösning."),
+        _u("Lös ekvationen: $(x - 3)^{2} = 16$."),
+        # Samma parentes inne i ett längre uttryck är inte provets uttryck.
+        _u("Förenkla $(x + 4)(x - 4) - 2(x - 3)^2$."),
+        _u("Lös olikheten $7 - 3x < 19$."))
+    fel = exam_gen.uttrycksvakt(blad, prov)
+    assert [f["path"] for f in fel] == ["uppgift 1", "uppgift 2"]
+    assert all(f["code"] == "provuttryck" for f in fel)
+    assert "provuttryck" in routes_exam._ATGARD
+    # Fail-open utan prov.
+    assert exam_gen.uttrycksvakt(blad, None) == []
