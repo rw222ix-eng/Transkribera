@@ -150,7 +150,7 @@ def test_arket_visar_omprovet_utan_att_kalla_det_missat(klass):
     assert per_namn["Dan"][betyg_orig] == "skrev inte"
     assert per_namn["Cai"][betyg_orig].endswith("(räknas ej)")
     assert per_namn["Bo"][rub.index("Kurs E")] == "5 av 5"
-    assert per_namn["Ada"][rub.index("Skrivna prov")] == "1/1"
+    assert per_namn["Ada"][rub.index("Skrivna prov")] == "1 av 1"
 
 
 def test_kompensationen_ar_bonus_utanfor_maxen(conn):

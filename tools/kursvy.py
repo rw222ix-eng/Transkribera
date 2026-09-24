@@ -191,7 +191,7 @@ def andel(x: int, m: int) -> str:
 def till_rader(vy: dict) -> list[list]:
     """Tabellen som Google-arket får: rubrikrad + en rad per elev. Kursens
     poäng skrivs «7 av 9», eftersom maxen följer pappret eleven skrev (Sheets
-    hade läst «7/9» som ett datum)."""
+    hade läst «7/9» och «1/1» som datum)."""
     rub = ["Elev"]
     for p in vy["prov"]:
         k = f"{p['titel']} ({p['datum']})"
@@ -216,7 +216,7 @@ def till_rader(vy: dict) -> list[list]:
         fm = lambda d: ", ".join(f"{f} {n}" for f, n in sorted(d.items(), key=lambda kv: -kv[1])) or "–"
         rad += [f"{s[0]} av {m[0]}", andel(s[0], m[0]), f"{s[1]} av {m[1]}", andel(s[1], m[1]),
                 f"{s[2]} av {m[2]}", andel(s[2], m[2]), fm(e["formagor"]["C"]),
-                fm(e["formagor"]["A"]), f"{e['skrivna']}/{len(vy['moment'])}",
+                fm(e["formagor"]["A"]), f"{e['skrivna']} av {len(vy['moment'])}",
                 e["forslag"], e["nasta"]]
         ut.append(rad)
     return ut
