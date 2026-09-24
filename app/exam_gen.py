@@ -784,6 +784,13 @@ INSTRUCTION = (
     "regnar det 23 mm. Beräkna hur många liter vatten som rinner ner från "
     "taket.» Aldrig ett eget specialfall vid sidan av («1 mm på 1 m²») som "
     "eleven måste undra över.\n"
+    # Samma dom, uppgift 10: «Firma B tar samma pris per dag.» «Det gäller
+    # väl för firma A också. Men det glömmer vi skriva.» A tar 480 kr per
+    # dag plus 950 kr i avgift, B bara 650 kr per dag, och meningen skulle
+    # säga just det som skiljer dem, men den var sann om båda.
+    "  • Det som skiljer två alternativ åt står så att det bara gäller det "
+    "ena: «Hos firma B betalar man bara ett pris per dag.», aldrig «Firma B "
+    "tar samma pris per dag.», som är sant om firma A också.\n"
     # Samma dom, uppgift 5b: «Han har 1 200 kr och gör överslaget 30 · 40 =
     # 1 200. Avgör om överslaget visar att pengarna räcker.» «Jag har ju
     # redan svaret på frågan typ … de är lite trötta och slarviga när de

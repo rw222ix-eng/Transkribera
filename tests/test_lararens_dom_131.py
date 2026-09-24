@@ -14,7 +14,8 @@ som kod.
      Sedan: rullen och priset i en mening, «kostnaden per meter», och
      radtaket blir pappret (80 tecken).
   9  Sandkornen i 40 säckar: ingen räknar så i verkligheten.
-  10 Tabellen stod under bilden, efter frågan.
+  10 Tabellen stod under bilden, efter frågan. Och «Firma B tar samma pris
+     per dag» var sant om firma A också.
 """
 from pathlib import Path
 
@@ -180,3 +181,4 @@ def test_domarna_star_i_instruktionen():
     assert "«kostnaden per meter är mindre där», aldrig «metern kostar" in r
     assert "en hel rulle med 50 m kabel, som kostar 620 kr.»" in r
     assert "högst 80 tecken" in r
+    assert "«Hos firma B betalar man bara ett pris per dag.», aldrig" in r
