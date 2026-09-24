@@ -6,6 +6,10 @@ som kod.
   4  Uttrycket i a) stod centrerat under en tom etikettrad, och b) fick ingen
      svarslinje: a) var endast svar, b) redovisning.
   6  «Hugo ska tvätta en altan» och en kvinna på bilden.
+  7  För svår för E: delad som NP 1a vt17 uppgift 17.
+  8  «Butik B säljer bara hela rullar» läses som att uppgiften inte går.
+  9  Sandkornen i 40 säckar: ingen räknar så i verkligheten.
+  10 Tabellen stod under bilden, efter frågan.
 """
 from pathlib import Path
 
@@ -79,6 +83,28 @@ def test_delsidan_sager_bara_delens_hjalpmedel():
     assert exam_latex._hjalpmedel_i_delen("Formelblad.", "C") is None
 
 
+def test_tabellen_star_dar_den_namns():
+    """Uppgift 10: tabellen stod under bilden, efter frågan."""
+    st = exam_latex._stycken(
+        "Tabellen nedan visar vad det kostar att hyra en minigrävare.\n"
+        "Firma B tar samma pris per dag.\n\n"
+        "Från hur många dagar är firma A billigast?", luft=True)
+    fore, efter = exam_latex._dela_vid_tabellen(st, True)
+    assert len(fore) == 1 and fore[0]["par_efter"] is True
+    assert efter[-1]["text"].startswith("Från hur många")
+    # Nämns tabellen inte står den före frågan.
+    st = exam_latex._stycken("Priserna gäller två firmor.\n\nVilken?",
+                             luft=True)
+    fore, efter = exam_latex._dela_vid_tabellen(st, True)
+    assert [s["text"] for s in efter] == ["Vilken?"]
+    # Utan tabell rörs ingenting.
+    assert exam_latex._dela_vid_tabellen(st, False) == (st, [])
+    mall = Path("app/templates/prov.tex.j2").read_text(encoding="utf-8")
+    i = mall.index("former.stycken(u.stycken_fore)")
+    assert i < mall.index("former.tabellbok(u.tabell)") < mall.index(
+        "former.stycken(u.stycken_efter)") < mall.index("u.bild_fil")
+
+
 def _scenuppgift(text, scene):
     return {"uppgifter": [{"text": text, "scen": {"scene": scene}}]}
 
@@ -108,3 +134,6 @@ def test_domarna_star_i_instruktionen():
     assert "SPRÅKET ÄR ELEVERNAS" in r
     assert "«räknas som förorenad över»" in r
     assert "bara är uttryck under en gemensam uppmaning" in r
+    assert "«I butik B måste man köpa en hel rulle med 50 m kabel." in r
+    assert "«Tabellen nedan visar …», och pappret" in r
+    assert "UPPGIFTEN ÄR NÅGOT ELEVEN HAR NYTTA AV" in r

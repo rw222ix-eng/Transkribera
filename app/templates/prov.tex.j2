@@ -255,7 +255,12 @@ Provet kan ge totalt \textbf{((( forsatt.total ))) poäng}.
 \pfbehov{((( u.behov_mm )))mm}
 
 ((( former.fraga(u) )))
-((( former.stycken(u.stycken) )))
+((# Tabellen står direkt efter meningen som nämner den, frågan efter
+    tabellen och bilden sist (lärarens dom 2026-09-24, exam 131 uppgift 10;
+    exam_latex._dela_vid_tabellen). Utan tabell är stycken_efter tom. #))
+((( former.stycken(u.stycken_fore) )))
+((( former.tabellbok(u.tabell) )))
+((( former.stycken(u.stycken_efter) )))
 ((* if u.bild_fil *))
 \begin{center}
   \includegraphics[width=0.7\textwidth]{((( u.bild_fil )))}
@@ -268,7 +273,7 @@ Provet kan ge totalt \textbf{((( forsatt.total ))) poäng}.
 \end{center}
 \vspace{2mm}
 ((* endif *))
-((( former.tabellbok(u.tabell) )))((( former.steg(u.stegtabell) )))((( former.rutor(u.svarsrutor) )))
+((( former.steg(u.stegtabell) )))((( former.rutor(u.svarsrutor) )))
 ((* if u.notis *))\pftips{((( u.notis )))}
 ((* endif *))
 ((* if u.har_deluppgifter *))

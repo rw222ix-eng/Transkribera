@@ -387,8 +387,10 @@ def test_bilden_drar_med_sig_plats_pa_sidan():
     assert r"\usepackage{needspace}" not in preamble
     mall = (Path(__file__).resolve().parent.parent / "app" / "templates"
             / "prov.tex.j2").read_text(encoding="utf-8")
-    assert r"\pfbehov{92mm}" in mall
-    assert "((* if u.har_bild *))" in mall
+    # Sedan 2026-09-24 begär VARJE uppgift sin höjd, och bilden ingår i den
+    # (exam_latex._behov_mm, lärarens dom över exam 131).
+    assert r"\pfbehov{((( u.behov_mm )))mm}" in mall
+    assert exam_latex._MM_BILD >= 63
 
 
 def test_har_bild_raknas_i_python_och_inte_i_mallen():

@@ -505,6 +505,32 @@ def _behov_mm(vy: dict, *, del_: bool = False) -> int:
     return int(min(mm, BEHOV_TAK_MM))
 
 
+# ── TABELLEN DÄR DEN NÄMNS (lärarens dom 2026-09-24, exam 131 uppgift 10) ──
+# «Tabellen visar vad det kostar …», sedan frågan, sedan bilden, och först
+# under bilden tabellen: «jättekonstigt. Tabellen borde ju komma direkt när
+# man nämner den i texten.» Ordningen blir meningen som nämner tabellen,
+# tabellen, resten av texten (frågan), och sist bilden. Nämns tabellen inte
+# står den före frågan, och utan fråga efter texten.
+_NAMNER_TABELLEN_RE = re.compile(r"\b[Tt]abell")
+
+
+def _dela_vid_tabellen(stycken: list[dict], har_tabell: bool
+                       ) -> tuple[list[dict], list[dict]]:
+    """Styckena före och efter tabellen."""
+    if not har_tabell or not stycken:
+        return stycken, []
+    i = next((k + 1 for k, s in enumerate(stycken)
+              if not s["formel"] and _NAMNER_TABELLEN_RE.search(s["text"])),
+             None)
+    if i is None:
+        i = next((k for k, s in enumerate(stycken) if s.get("luft") and k),
+                 len(stycken))
+    fore = [dict(s) for s in stycken[:i]]
+    if fore:
+        fore[-1]["par_efter"] = True
+    return fore, [dict(s) for s in stycken[i:]]
+
+
 # Etiketten på en ifyllnadsrad får kolon — men bara när den inte redan slutar
 # på ett skiljetecken som bär samma funktion. Modellen skriver fält som
 # «$(-4)^2 =$», och «$(-4)^2 =$:» är inte en etikett, det är ett skrivfel.
@@ -1348,6 +1374,9 @@ def _build_view(doc: exam_spec.ExamDoc,
                 item_vy.get("bild_fil")
                 or any(d.get("bild_fil") for d in (item_vy.get("deluppgifter") or [])))
             item_vy["behov_mm"] = _behov_mm(item_vy)
+            item_vy["stycken_fore"], item_vy["stycken_efter"] = \
+                _dela_vid_tabellen(item_vy["stycken"],
+                                   bool(item_vy.get("tabell")))
             # Gruppuppgiftens uppgifter heter 1, 2, 3 (lärarens val 2026-08-20)
             # — då kan deluppgifterna heta a) b) utan att två bokstavsserier
             # blandas på samma papper. Fältet heter `bokstav` av historiska

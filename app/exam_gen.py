@@ -758,6 +758,28 @@ INSTRUCTION = (
     "räkna («gränsen», «halten», «räknas som förorenad över»). Frågan säger "
     "med vardagsord vad som ska räknas ut: «I 1 kg jord finns 2 000 mg "
     "olja. Hur många procent av jorden är olja?»\n"
+    # Samma dom, uppgift 8: «Butik B säljer bara hela rullar på 50 m för
+    # 620 kr.» «Då kan vissa elever tänka: jaha, men då säljer de inte per
+    # meter, så då går ju inte ens lösa uppgiften … vissa kanske ger upp på
+    # en gång.»
+    "  • Ett villkor som ändrar räkningen står som det personen MÅSTE göra: "
+    "«I butik B måste man köpa en hel rulle med 50 m kabel. En rulle kostar "
+    "620 kr.», aldrig «Butik B säljer bara hela rullar», som eleven kan läsa "
+    "som att uppgiften inte går att lösa.\n"
+    # Samma dom, uppgift 10: tabellen stod under bilden, efter frågan. Nu
+    # sätter pappret den direkt efter meningen som nämner den
+    # (exam_latex._dela_vid_tabellen).
+    "  • En tabell presenteras med «Tabellen nedan visar …», och pappret "
+    "sätter den direkt efter den meningen. Upprepa inte i text det tabellens "
+    "rubriker redan säger («Priserna gäller firma A och firma B.»).\n"
+    # Samma dom, uppgift 9 (sandkornen i 40 säckar): «det här kan man väl
+    # räkna på … Det här kommer inte eleverna att göra i verkligheten. Jag
+    # vill försöka få in uppgifter som faktiskt eleverna har någon nytta
+    # av.»
+    "  • UPPGIFTEN ÄR NÅGOT ELEVEN HAR NYTTA AV: en räkning någon faktiskt "
+    "gör i verkligheten, i en yrkesklass helst i yrket (hur många säckar "
+    "betong, hur många plattor, vad hyran kostar). Aldrig något som bara går "
+    "att räkna på, som antalet sandkorn i en säck.\n"
     # Samma dom, uppgift 4: a) fick svarslinje, b) ingen.
     "  • Deluppgifter som bara är uttryck under en gemensam uppmaning "
     "(«Beräkna.» och sedan a) och b)) har samma typ: endast svar i alla, "
