@@ -7888,7 +7888,8 @@ def build_lektionsmal(mal: list[dict], *, digital: bool = True) -> str:
         "eleven gör just det, gärna som a) före en svårare b). Att ställa upp "
         "en ekvation är inte att lösa den. Inget delmoment får prövas bara på "
         "A-nivå. Mål som är ett samtal eller en genomgång («Vad betyder "
-        "likhetstecknet?») behöver ingen egen uppgift. " + _TALLINJE
+        "likhetstecknet?») behöver ingen egen uppgift, och ett mål som står "
+        "UTANFÖR KURSEN prövas inte. " + _TALLINJE
         + ("" if digital else
            " Provet har ingen digital del: ingen uppgift får kräva GeoGebra, "
            "CAS, kalkylblad eller numerisk lösning med verktyg."))
@@ -7986,14 +7987,21 @@ def _malkort(exam: dict) -> list[dict]:
 
 
 def build_lektionsmal_prompt(kort: list[dict], mal: list[dict], *,
-                             digital: bool = True) -> str:
+                             digital: bool = True, utanfor: str = "") -> str:
     """Lektionsmålsdomarens prompt. Ordet «lektionsmålsdomare» står här och
-    ingen annanstans (tests/fejk.py `_auto` väljer band på domarens namn)."""
+    ingen annanstans (tests/fejk.py `_auto` väljer band på domarens namn).
+
+    `utanfor` är kursens strykningar (ci_utanfor.build_utanfor). Tavlan
+    15/9 lovade NA26F «Läsa pilarna rätt», och domaren fällde exam 126 för
+    att pilarna saknades, fast Rickard strukit implikation och ekvivalens ur
+    1c (2026-09-25). Ett mål utanför kursen är inget fynd."""
+    utanfor_rad = (f"\n{utanfor}\nMål som gäller något ovan är inga fynd, "
+                   "även om en lektion gick igenom det.\n" if utanfor else "")
     return (
         "Du är lektionsmålsdomare. Nedan står lektionerna klassen haft före "
         "provet, med målen som stod på tavlan, och därefter provets uppgifter "
         "som JSON med poängen (E, C, A) per uppgift och deluppgift.\n\n"
-        f"LEKTIONERNA:\n{_malrader(mal)}\n\n"
+        f"LEKTIONERNA:\n{_malrader(mal)}\n{utanfor_rad}\n"
         f"UPPGIFTERNA:\n{json.dumps(kort, ensure_ascii=False)}\n\n"
         "Gå lektion för lektion och mål för mål, och skriv lösningarna för "
         "dig själv. Två sorters fynd:\n"
@@ -8058,7 +8066,9 @@ def doma_lektionsmal(exam: dict, mal: list[dict] | None, *, model: str,
     log("Lektionsmålsdomaren läser provet mot tavlornas mål …")
     try:
         raw = llm(model, build_lektionsmal_prompt(
-                      kort, mal, digital=har_digital_del(exam)),
+                      kort, mal, digital=har_digital_del(exam),
+                      utanfor=ci_utanfor.build_utanfor(
+                          str((exam or {}).get("kurs") or ""))),
                   system=LEKTIONSMAL_SYSTEM,
                   options={"temperature": 0.0},
                   response_format={"type": "json_schema",

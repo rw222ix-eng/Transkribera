@@ -140,10 +140,13 @@ def test_domaren_ser_poangen_och_malen():
             "datum": "2026-09-11", "mal": "Lösa och vända tecknet",
             "niva": "E", "varfor": "Ingen olikhet delas med ett negativt tal."}]})
 
-    prov = {"hjalpmedel": "Formelblad.",
+    prov = {"hjalpmedel": "Formelblad.", "kurs": "Matematik 1c",
             "uppgifter": [_u("Olikheter", [1, 0, 0], text="Lös $2x < 6$.")]}
     fel = exam_gen.doma_lektionsmal(prov, MAL, model="", llm=llm)
     assert "lektionsmålsdomare" in sett["prompt"]
+    # Kursens strykningar följer med: pilarna är inte 1c (Rickard 25/9).
+    assert "UTANFÖR KURSEN" in sett["prompt"]
+    assert "implikation och ekvivalens" in sett["prompt"]
     assert '"poang_ECA": [1, 0, 0]' in sett["prompt"]
     assert "ingen digital del" in sett["prompt"]
     assert sett["kw"]["response_format"]["json_schema"]["name"] == "lektionsmaldom"
