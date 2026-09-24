@@ -252,6 +252,7 @@ def test_domarna_star_i_instruktionen():
     assert "Inga tecken som går att förväxla" in r
     assert "räknar varje deluppgift på uppgiftens egna tal" in r
     assert "Villkoret som frågan gäller står i frågan" in r
+    assert "«Mellan utsagorna saknas en av pilarna ⇒, ⇐ eller ⇔.»" in r
     assert "«kostnaden per meter är mindre där», aldrig «metern kostar" in r
     assert "en hel rulle med 50 m kabel, som kostar 620 kr.»" in r
     assert "högst 80 tecken" in r

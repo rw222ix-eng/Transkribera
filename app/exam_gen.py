@@ -860,6 +860,18 @@ INSTRUCTION = (
     "  • Det som skiljer två alternativ åt står så att det bara gäller det "
     "ena: «Hos firma B betalar man bara ett pris per dag.», aldrig «Firma B "
     "tar samma pris per dag.», som är sant om firma A också.\n"
+    # Lärarens dom 2026-09-24 (exam 129 uppgift 12): stammen «Mellan
+    # utsagorna ska det stå ⇒, ⇐ eller ⇔. Platsen för tecknet är markerad
+    # med tre punkter.» och deluppgifterna «x = 5 … x² = 25 / Skriv det
+    # tecken som gör utsagan sann.» «Det är bättre att direkt i deluppgift
+    # a) … någonting annat än tecken, så att eleverna kan särskilja på vad vi
+    # pratar om.» Och b), två rader, den ena i raden och den andra
+    # centrerad: «dåligt disponerad».
+    "  • Det eleven ska välja mellan står i deluppgiften och har ett eget "
+    "namn: «Mellan utsagorna saknas en av pilarna ⇒, ⇐ eller ⇔.», utsagorna "
+    "på egen rad, sedan «Skriv den pil som gör påståendet sant.» Aldrig "
+    "«tecknet», och ingen stam som förklarar uppställningen («Platsen för "
+    "tecknet är markerad med tre punkter.»).\n"
     # Lärarens dom 2026-09-24 (exam 129 uppgift 10): «Bromssträckan får vara
     # högst 45 m.» och två rader ner «Bestäm den högsta farten bilen får
     # ha.» «Mycket bättre att skriva: bestäm den högsta farten bilen får ha,
