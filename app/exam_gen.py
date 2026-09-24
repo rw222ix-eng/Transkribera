@@ -123,6 +123,16 @@ SCEN_REGEL = (
     # Lärarens dom 2026-09-24 (exam 131 uppgift 6): «Hugo ska tvätta en
     # altan» med en kvinna på bilden. Scenen sa «a small faceless figure»,
     # och bildverktyget valde själv. personvakt fäller det.
+    # Lärarens dom 2026-09-24 (exam 130 uppgift 7): «Grusgången har samma
+    # area som gräsmattan», och på bilden var gången en smal ram. «Bilden är
+    # lite missvisande … Bilden behöver representera bättre själva
+    # uppgiften.» Med gräsmattan a × 2a är gången 0,28a bred; det måste
+    # scenen säga, annars målar bildverktyget en vanlig trädgårdsgång.
+    "  BILDEN SÄGER INTE EMOT TEXTEN: bygger uppgiften på proportioner (två "
+    "lika stora areor, dubbelt så lång, en bredd i förhållande till en "
+    "annan), skriv dem i scenen i ord och ungefärliga förhållanden: «The "
+    "path is wide: its width is a little more than a quarter of the lawn's "
+    "width, so the gravel covers exactly as much ground as the grass.»\n"
     "  PERSONEN I TEXTEN ÄR PERSONEN PÅ BILDEN: står ett namn i uppgiften "
     "och en människa i scenen, skriv hennes eller hans kön ur namnet: «a "
     "young woman» för Alva, «a young man» för Hugo. Aldrig bara «a figure» "
@@ -675,6 +685,10 @@ INSTRUCTION = (
     "$x^2 + 2\\,000x + 999\\,999 = 0$.» och sedan «Svara exakt.» på nästa, "
     "aldrig uttrycket ensamt på raden under uppmaningen. Ett uttryck «kan "
     "skrivas på formen», aldrig «i formen».\n"
+    # Samma dom, uppgift 3: «Svara exakt.» under x² + 2 000x + 999 999 = 0,
+    # där svaren är −999 och −1 001. Raden fick eleven att leta efter rötter.
+    "  • «Svara exakt.» står bara där svaret annars kunde avrundas (en rot, "
+    "ett bråk), aldrig när svaren är heltal.\n"
     # Lärarens dom 2026-09-24 (exam 132 uppgift 11): «det första rummet och
     # det andra rummet. Det är väldigt, väldigt krångligt … att hålla isär de
     # två. Det vore kanske bättre om man döper det till typ det gröna rummet

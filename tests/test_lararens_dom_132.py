@@ -114,6 +114,7 @@ def test_domarna_star_i_instruktionen():
     assert "Uppmaningen och uttrycket står på samma rad" in r
     assert "«kan skrivas på formen», aldrig «i formen»" in r
     assert "«med algebraisk metod» står bara i en del där digitala" in r
+    assert "«Svara exakt.» står bara där svaret annars kunde avrundas" in r
     assert "«dubbla det gröna rummets väggarea», aldrig" in r
 
 

@@ -181,6 +181,8 @@ def test_personen_i_texten_ar_personen_pa_bilden():
 def test_domarna_star_i_instruktionen():
     r = exam_gen.INSTRUCTION
     assert "PERSONEN I TEXTEN ÄR PERSONEN PÅ BILDEN" in r
+    # Exam 130 uppgift 7, samma dag: grusgången var en smal ram på bilden.
+    assert "BILDEN SÄGER INTE EMOT TEXTEN" in r
     assert "SPRÅKET ÄR ELEVERNAS" in r
     assert "«räknas som förorenad över»" in r
     assert "Deluppgifter med samma uppmaning («Beräkna …», «Lös ekvationen" in r
