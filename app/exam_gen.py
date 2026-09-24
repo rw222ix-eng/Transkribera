@@ -8001,12 +8001,16 @@ def build_lektionsmal_prompt(kort: list[dict], mal: list[dict], *,
         "använda (lösa, förenkla, dra roten, vända olikhetstecknet, lösa ut "
         "ur en formel), och INGEN uppgift kräver den i sin lösning. «niva» "
         "är den nivå en uppgift på målet hör till, oftast E.\n"
-        "2. GRUNDMETOD UTAN E-POÄNG. Lektionens grundmetod, det lektionen "
-        "heter, ska ge minst en E-poäng. Ges E-poängen bara för något runt "
-        "omkring, till exempel att ställa upp en ekvation men inte att lösa "
-        "den, är det ett fynd med «niva» E.\n"
+        "2. GRUNDMETOD UTAN E-POÄNG. Lektionens grundmetod, det ENKLASTE den "
+        "lärde ut (att lösa, att räkna ut, att skriva om), ska ge minst en "
+        "E-poäng. Ges E-poängen bara för något runt omkring, till exempel att "
+        "ställa upp en ekvation men inte att lösa den, är det ett fynd med "
+        "«niva» E. En generalisering, som en formel för figur n eller ett "
+        "bevis, är C- och A-stoff och inte grundmetoden.\n"
         "Mål som är ett samtal eller en genomgång («Vad betyder …?») är inga "
-        "fynd. Att en uppgift är svår är inget fynd. " + _TALLINJE
+        "fynd. Ett mål som räknar upp flera fall («tid, massa och volym») är "
+        "prövat när ett av fallen prövas. Att en uppgift är svår är inget "
+        "fynd. " + _TALLINJE
         + ("" if digital else
            " Provet har ingen digital del: mål som kräver digitala verktyg "
            "är inga fynd.")
