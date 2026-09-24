@@ -205,8 +205,12 @@ Provet kan ge totalt \textbf{((( forsatt.total ))) poäng}.
 ((* if del.titelrad *))
 ((# \markboth och inte en ny \runningheader: se _preamble.tex.j2. #))
 \markboth{((( del.rubrik )))}{((( del.rubrik )))}
+((# \vphantom{gy}: linjen under ligger på rubrikradens djup, och förlagans
+    «Digitala verktyg är inte tillåtna» har g och y. «Räknare är inte
+    tillåten» har inga nedstaplar och drog upp linjen 3,3 pt (a35a6de). Med
+    fantomen står linjen på y = 105,0 vad rubriken än säger. #))
 \begin{center}
-  {\Large\bfseries ((( del.titelrad )))}
+  {\Large\bfseries ((( del.titelrad )))\vphantom{gy}}
 \end{center}
 \vspace{2mm}
 \hrule height 0.5pt

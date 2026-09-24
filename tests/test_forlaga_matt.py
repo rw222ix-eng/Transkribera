@@ -223,11 +223,20 @@ def test_kravraden_och_forsta_stycket(rader):
 @pytest.mark.tectonic
 def test_linjerna_ligger_dar_forlagan_har_dem(rader):
     """Sidhuvudets linje på y = 55,7 och delrubrikens på y = 105,0 — båda
-    tvärs över hela satsytan."""
+    tvärs över hela satsytan.
+
+    Delrubrikens linje prövas för VARJE del, inte för någon av dem: den
+    följde en gång rubrikens nedstaplar, så Del B («Digitala verktyg») låg
+    rätt medan Del C («Räknare är tillåten») låg 3,3 pt för högt. Sida 0 är
+    försättsbladet, vars 0,8 pt-linje under titeln hör till en annan form."""
     _rad, linjer = rader
     y_varden = [y for _s, y in linjer]
     assert any(abs(y - HUVUDLINJE_Y) < TAL for y in y_varden), y_varden
-    assert any(abs(y - DELRUBRIKLINJE_Y) < TAL for y in y_varden), y_varden
+    # En linje per del (provet har två), och ingen av dem på fel höjd.
+    del_linjer = [y for s, y in linjer
+                  if s > 0 and abs(y - HUVUDLINJE_Y) >= TAL]
+    assert len(del_linjer) == 2, linjer
+    assert all(abs(y - DELRUBRIKLINJE_Y) < TAL for y in del_linjer), linjer
 
 
 @pytest.mark.tectonic
