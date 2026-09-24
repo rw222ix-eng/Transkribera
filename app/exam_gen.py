@@ -762,6 +762,16 @@ INSTRUCTION = (
     # bokstaven I och siffran 1». forvaxlingsvakt fäller det.
     "  • Inga tecken som går att förväxla bredvid varandra: aldrig «I 1 kg» "
     "eller «1 l». Skriv «Varje kilogram jord innehåller …» och «1 liter».\n"
+    # Samma dom, uppgift 7, två varv. Först «Beräkna hur många liter som
+    # rinner ner från taket» för 2 E: för svår. Sedan a) «1 mm på 1 m²» och
+    # b) taket: «varför ska jag inte räkna på hela taket? … Det blir ett
+    # extra steg», och b) var «två uppgifter i en, fast man får bara en
+    # poäng». Läraren: kör på uppgiftens egna siffror.
+    "  • Delas en uppgift i steg räknar varje deluppgift på uppgiftens egna "
+    "tal, ett steg per poäng: «a) Beräkna takets area. b) Under ett skyfall "
+    "regnar det 23 mm. Beräkna hur många liter vatten som rinner ner från "
+    "taket.» Aldrig ett eget specialfall vid sidan av («1 mm på 1 m²») som "
+    "eleven måste undra över.\n"
     # Samma dom, uppgift 5b: «Han har 1 200 kr och gör överslaget 30 · 40 =
     # 1 200. Avgör om överslaget visar att pengarna räcker.» «Jag har ju
     # redan svaret på frågan typ … de är lite trötta och slarviga när de

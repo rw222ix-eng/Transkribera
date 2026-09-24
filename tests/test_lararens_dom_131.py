@@ -8,7 +8,8 @@ som kod.
   4  Uttrycket i a) stod centrerat under en tom etikettrad, och b) fick ingen
      svarslinje: a) var endast svar, b) redovisning.
   6  «Hugo ska tvätta en altan» och en kvinna på bilden.
-  7  För svår för E: delad som NP 1a vt17 uppgift 17.
+  7  För svår för E, sedan delad med «1 mm på 1 m²» som förvirrade: a) takets
+     area, b) litrarna, båda på takets egna mått.
   8  «Butik B säljer bara hela rullar» läses som att uppgiften inte går.
   9  Sandkornen i 40 säckar: ingen räknar så i verkligheten.
   10 Tabellen stod under bilden, efter frågan.
@@ -173,3 +174,4 @@ def test_domarna_star_i_instruktionen():
     assert "UPPGIFTEN ÄR NÅGOT ELEVEN HAR NYTTA AV" in r
     assert "Frågan får inte se besvarad ut av texten ovanför" in r
     assert "Inga tecken som går att förväxla" in r
+    assert "räknar varje deluppgift på uppgiftens egna tal" in r
