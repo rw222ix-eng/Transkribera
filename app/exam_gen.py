@@ -643,6 +643,16 @@ INSTRUCTION = (
     "«Avgör om likheten stämmer.» på nästa. Stammen hänvisar aldrig till "
     "deluppgifterna («likheterna i a) och b)», «uttrycken i a) och b)»); "
     "finns inget som gäller alla deluppgifter är stammen tom.\n"
+    # Lärarens dom 2026-09-24 (exam 130 uppgift 1): «Utgå från uttrycket …
+    # a) Förenkla uttrycket. b) Bryt ut faktorn 4 ur det förenklade
+    # uttrycket.» «Är det inte bara mycket lättare att skippa skriva utgå från
+    # uttrycket … sen står det bara förenkla uttrycket och sen kommer
+    # uttrycket.» Och b): «man får typ skriva bryt ut faktorn 4 ur det du fick
+    # ovan … så att eleverna verkligen fattar vad det är de ska göra.»
+    "  • Uttrycket står i den deluppgift som använder det först: «a) Förenkla "
+    "uttrycket $(a + 2)^2 - a(a - 4)$.», ingen stam «Utgå från uttrycket …». "
+    "En deluppgift som bygger på svaret i en annan säger det rakt ut: «b) "
+    "Bryt ut faktorn 4 ur uttrycket du fick när du förenklade i a).»\n"
     # Lärarens dom 2026-09-24 (exam 132 uppgift 11): «det första rummet och
     # det andra rummet. Det är väldigt, väldigt krångligt … att hålla isär de
     # två. Det vore kanske bättre om man döper det till typ det gröna rummet

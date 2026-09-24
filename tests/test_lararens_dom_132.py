@@ -107,6 +107,9 @@ def test_domarna_star_i_instruktionen():
     assert "$s$ timmar på söndagar" not in r
     assert "«det gröna rummet» och «det blå rummet»" in r
     assert "pekar tillbaka med «dess»" in r
+    # Exam 130 uppgift 1, samma dag.
+    assert "ingen stam «Utgå från uttrycket …»" in r
+    assert "ur uttrycket du fick när du förenklade i a).»" in r
     assert "«dubbla det gröna rummets väggarea», aldrig" in r
 
 
