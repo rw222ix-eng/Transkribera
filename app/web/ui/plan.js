@@ -2874,8 +2874,19 @@
       /* Ett tomt svar skriver ingenting: hellre den gamla listan än ett blankt
          papper om examen råkar sakna uppgifter. */
       if (!nya.length) return false;
-      if (JSON.stringify(nya) === JSON.stringify(v.uppgifter || [])) return false;
+      /* VERSIONEN FÖLJER LISTAN (2026-09-24 kväll, blad 146). Listan som nu
+         står på pappret är provets aktuella version, och godkännandet
+         skickar `provVersion` som «versionen läraren ser». Stod den kvar på
+         den gamla flyttade godkännandet provets pekare bakåt, och en version
+         som skrivits efter att dokumentet sparats försvann ur provet
+         (146 hamnade på 546 i stället för 561). */
+      const version = res && res.current_version;
+      if (JSON.stringify(nya) === JSON.stringify(v.uppgifter || [])) {
+        if (version) v.provVersion = version;
+        return false;
+      }
       v.uppgifter = nya;
+      if (version) v.provVersion = version;
       return true;
     }).catch(() => false);
   }
@@ -6265,6 +6276,10 @@
   $('#godkann').addEventListener('click', () => {
     if (nu < 0) return;
     const v = versioner[nu];
+    /* Står läraren på ett äldre varv har hon ångrat med flit, och då ska
+       godkännandet få gå tillbaka till en äldre version av provet
+       (routes_exam approve, `aldre_version`). Annars vägrar servern. */
+    const angrat = nu < versioner.length - 1;
     /* Momentet töms längre ner (nästa papper är en ny fråga) — bladkön behöver
        det kvar, för nästa blad handlar om SAMMA lektion. */
     const momentFore = moment.value;
@@ -6344,6 +6359,7 @@
                           || godkant.typ === 'Gruppuppgift')
             && (godkant.inst || {}).facit !== 'Facit i bladet',
           version: godkant.provVersion || null,
+          aldre_version: angrat,
           /* FILNAMNET (Rickard 2026-09-23). PDF:en döps efter Drives mall,
              «1.2 Potenslagarna – E-nivå», och avsnittet och nivån bor bara
              här i webbläsarens dokument. Servern sätter ihop namnet

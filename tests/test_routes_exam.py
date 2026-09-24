@@ -461,12 +461,37 @@ def test_godkannandet_trycker_varvet_lararen_ser(client, monkeypatch):
     assert forsta != andra
 
     sedda = _fangar_tex(monkeypatch)
-    # Ångra: klienten visar första varvet igen och säger vilken version det var.
+    # Ångra: klienten visar första varvet igen och säger vilken version det
+    # var, och att läraren står på ett äldre varv med flit (aldre_version).
     _done(client.post(f"/api/exams/{result['id']}/approve",
-                      json={"version": forsta}))
+                      json={"version": forsta, "aldre_version": True}))
     prov = next(t for n, t in sedda.items() if "bedomning" not in n)
     assert "Byggställningens" in prov
     assert "Pizzerians" not in prov
+
+
+def test_godkannandet_tappar_ingen_nyare_version_i_tysthet(client, monkeypatch):
+    """Blad 146 (2026-09-24): dokumentet i webbläsaren pekade på version 546,
+    en omskrivning via API:t hade lagt 561, och godkännandet flyttade provets
+    pekare tillbaka till 546. Utan uttrycklig ångring blir det ett nej."""
+    result, _ = _make_exam(client, monkeypatch)
+    forsta = _varv(client, monkeypatch, result["id"], "Byggställningens höjd.")
+    andra = _varv(client, monkeypatch, result["id"], "Pizzerians intäkt.")
+    _fangar_tex(monkeypatch)
+    r = client.post(f"/api/exams/{result['id']}/approve",
+                    json={"version": forsta})
+    assert r.status_code == 409
+    assert "nyare version" in r.json()["error"]
+    assert r.json()["current_version"] == andra
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    try:
+        vy = appdb.get_exam(conn, result["id"])
+    finally:
+        conn.close()
+    assert vy["current_version"] == andra, "pekaren fick inte flyttas"
+    # Den aktuella versionen och en äldre med SAMMA uppgifter går igenom.
+    _done(client.post(f"/api/exams/{result['id']}/approve",
+                      json={"version": andra}))
 
 
 def test_omskrivningen_bygger_vidare_pa_varvet_lararen_ser(client, monkeypatch):

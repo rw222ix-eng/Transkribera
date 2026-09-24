@@ -1057,6 +1057,41 @@ def create_router(base: Path, arbiter) -> APIRouter:
         finally:
             conn.close()
 
+    def _nyare_version_forsvinner(exam_id: int, version) -> tuple[int, int] | None:
+        """(begärd, aktuell) när pekaren skulle flyttas BAKÅT till en version
+        vars uppgifter skiljer sig från den aktuella; annars None.
+
+        Samma uppgifter är ingen förlust: godkännandet självt lägger ibland
+        ett varv som bara bär om kravgränserna, och ett nytt godkännande med
+        dokumentets gamla nummer ska gå igenom som förut."""
+        try:
+            v = int(version)
+        except (TypeError, ValueError):
+            return None
+        conn = db.connect(db_file)
+        try:
+            rad = conn.execute("SELECT current_version FROM exams WHERE id = ?",
+                               (exam_id,)).fetchone()
+            aktuell = rad[0] if rad else None
+            if not aktuell or v >= int(aktuell):
+                return None
+            rader = dict(conn.execute(
+                "SELECT id, exam_json FROM exam_versions WHERE exam_id = ? "
+                "AND id IN (?, ?)", (exam_id, v, int(aktuell))).fetchall())
+        finally:
+            conn.close()
+        if v not in rader or int(aktuell) not in rader:
+            return None
+
+        def uppgifter(js) -> list:
+            try:
+                return (json.loads(js) or {}).get("uppgifter") or []
+            except (TypeError, ValueError):
+                return []
+        if uppgifter(rader[v]) == uppgifter(rader[int(aktuell)]):
+            return None
+        return v, int(aktuell)
+
     def _bokunderlag(view: dict) -> tuple[dict | None, dict[int, int]]:
         """Boken efterkontrollen mäter mot, plus dess uppgiftssidor (nr → sida).
 
@@ -2514,6 +2549,27 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # — samma sak som `bilder` ovan, och det reser samma väg.
         # {"uppg7": "a-19-hage-flod"} byter, {"uppg7": ""} tar bort.
         platval = body.get("platar") if isinstance(body, dict) else None
+        # INGEN VERSION FÖRSVINNER TYST (2026-09-24 kväll, blad 146). Pekaren
+        # nedan flyttas till den version klienten säger att den visar. Är den
+        # ÄLDRE än provets aktuella och uppgifterna skiljer sig, försvinner
+        # den nyare ur provet: 146 hamnade på 546 i stället för 561, för en
+        # sparad kopia i webbläsaren kände inte till 561. Det är rätt bara när
+        # läraren ångrat med flit, och då säger klienten det (`aldre_version`,
+        # plan.js: hon står på ett äldre varv). Annars ett nej med besked.
+        overhoppad = _nyare_version_forsvinner(
+            exam_id, (body or {}).get("version") if isinstance(body, dict)
+            else None)
+        if overhoppad and not (isinstance(body, dict)
+                               and body.get("aldre_version")):
+            aldre, nyare = overhoppad
+            return JSONResponse(
+                {"error": f"Provet har en nyare version ({nyare}) än den "
+                          f"pappret visar ({aldre}), och den skulle försvinna "
+                          "ur provet. Öppna pappret igen så visas den nyare, "
+                          "eller ångra i canvas om du vill tillbaka till den "
+                          "äldre.",
+                 "version": aldre, "current_version": nyare},
+                status_code=409)
         # Det som trycks är det läraren SER. Ångrade hon ett varv backade bara
         # utkastets markör; provets pekare stod kvar på det förkastade varvet,
         # och PDF:en byggdes ur det. Klienten säger vilken version varvet gällde

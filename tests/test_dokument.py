@@ -576,7 +576,10 @@ def test_lakningen_ritar_om_bara_nar_listan_faktiskt_byttes():
     """En förhandsvisning som ritas två gånger flimrar, och ett papper som
     redan speglar examen har inget nytt att visa."""
     js = PLAN_JS.read_text(encoding="utf-8")
-    assert "if (JSON.stringify(nya) === JSON.stringify(v.uppgifter || [])) return false;" in js
+    assert "if (JSON.stringify(nya) === JSON.stringify(v.uppgifter || [])) {" in js
+    # Versionen följer listan, också när listan redan stod rätt (blad 146,
+    # 2026-09-24: godkännandet flyttade annars provets pekare bakåt).
+    assert js.count("if (version) v.provVersion = version;") == 2
     # Öppnas rutan tio gånger läses basen en gång.
     assert "const speglat = new WeakSet();" in js
     assert "if (speglat.has(v)) return Promise.resolve(false);" in js
