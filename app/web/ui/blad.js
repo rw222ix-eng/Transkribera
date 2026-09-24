@@ -1988,6 +1988,9 @@ window.Blad = (() => {
     Object.entries(v.bilder || {}).forEach(([nyckel, src]) => {
       const el = $(`[data-el="${nyckel}"] .prbild, [data-el="${nyckel}"] .gufigur`, trav);
       if (!el) return;
+      /* En bild som målades för en scen uppgiften inte längre har ritas
+         inte (bildInaktuell nedan). Rutan står kvar med den nya scenen. */
+      if (bildInaktuell(v, nyckel)) return;
       const matt = nyckel === 'forsatt'
         ? 'max-width:100%;max-height:100%;width:auto;height:auto'
         : 'max-width:100%;max-height:340px;width:auto;height:auto';
@@ -2021,6 +2024,28 @@ window.Blad = (() => {
     return formmarke(trav) !== fore;
   }
 
+  /* ── BILDEN HÖR TILL SCENEN, INTE TILL NUMRET (2026-09-24 kväll) ──────
+     Lärarens egna bilder bor i `v.bilder` under uppgiftens NUMMER («uppg4»).
+     Skrevs uppgift 4 om i ett varv stod den gamla bilden kvar: blad 134
+     uppgift 11 fick tändstickor över en biodlare, blad 135 en planka över en
+     vattenslang. Nu sparas uppgiftens scen i `v.bildscen` när bilden släpps
+     (plan.js), och en bild vars scen inte längre är uppgiftens räknas som
+     inaktuell: den ritas inte och följer inte med till trycket. Bilder utan
+     märke (släppta före den här raden) räknas som förut. */
+  function scenNyckel(u) {
+    if (!u) return '';
+    const s = u.scen || {};
+    return String(s.filnamn || s.begrepp || (s.scene || '').slice(0, 160) ||
+                  (u.t || '').slice(0, 160)).replace(/\s+/g, ' ').trim();
+  }
+  function bildInaktuell(v, nyckel) {
+    const markt = ((v && v.bildscen) || {})[nyckel];
+    const m = /^uppg(\d+)$/.exec(nyckel || '');
+    if (markt === undefined || !m) return false;
+    const u = ((v && v.uppgifter) || []).find(x => x.nr === Number(m[1]));
+    return scenNyckel(u) !== markt;
+  }
+
   return { rita, form, formaOm, uppgifter, skala, omritaTavlor, tavlaTill,
-           tavlaDelar, bokTill, underlag, figurer };
+           tavlaDelar, bokTill, underlag, figurer, scenNyckel, bildInaktuell };
 })();

@@ -5074,6 +5074,14 @@
       const v = nyVersion(versioner[nu], x => {
         x.anteckning = `Bild inlagd — ${fil.name}`;
         x.bilder = Object.assign({}, x.bilder, { [bildmal]: las.result });
+        /* Scenen bilden målades för (Blad.bildInaktuell): skrivs uppgiften
+           om ritas bilden inte längre över den nya texten. */
+        const m = /^uppg(\d+)$/.exec(bildmal);
+        if (m && window.Blad && Blad.scenNyckel) {
+          const u = (x.uppgifter || []).find(y => y.nr === Number(m[1]));
+          x.bildscen = Object.assign({}, x.bildscen,
+                                     { [bildmal]: Blad.scenNyckel(u) });
+        }
         x.andrat = [bildmal];
         x.andradVid = Date.now();
       });
@@ -6339,7 +6347,11 @@
              egen förlaga, och utan den här raden tappar ett prov med ett
              inlagt foto fotot i tryck. Servern plockar ut «uppgN» och lägger
              dem i mallens bildplats (app/tryck.egna_bilder). */
-          bilder: godkant.bilder || {},
+          /* Utom de inaktuella: en bild målad för en scen uppgiften inte
+             längre har ska inte tryckas (Blad.bildInaktuell). */
+          bilder: Object.fromEntries(Object.entries(godkant.bilder || {})
+            .filter(([k]) => !(window.Blad && Blad.bildInaktuell &&
+                               Blad.bildInaktuell(godkant, k)))),
           /* PLÅTVALEN. De bor i dokumentets `scen.plat` (plåtväljaren ovan),
              men servern har sin EGEN kopia av provet i basen — och den kopian
              känner bara den plåt appen matchade vid genereringen. Utan den
