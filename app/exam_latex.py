@@ -275,6 +275,30 @@ def _verktyget_i_delen(hjalpmedel: str | None, del_kod: str) -> str:
     return "digitala verktyg"
 
 
+# ── DELSIDANS HJÄLPMEDELSRAD (lärarens dom 2026-09-24, exam 131) ───────────
+# Del B:s första sida bar hela provets mening: «Hjälpmedel: Del A utan
+# räknare, formelbladet är tillåtet. Del B med räknare och formelblad.»
+# Läraren: «den informationen behövs ju inte … den är till för del A … då
+# borde det ju bara stå Hjälpmedel: Räknare och formelblad. Punkt slut.» Och
+# «det gäller ju alla prov». Försättsbladet behåller hela meningen; delsidan
+# säger bara vad som gäller i delen, byggt ur delens klausul. Tiger regeln om
+# delen står hela meningen kvar, som förut.
+_FORMELBLAD_RE = re.compile(r"formelblad", re.IGNORECASE)
+
+
+def _hjalpmedel_i_delen(hjalpmedel: str | None, del_kod: str) -> str | None:
+    """«Räknare och formelblad.» för delen, eller None när regeln tiger."""
+    tillatet = _digitala_i_delen(hjalpmedel, del_kod)
+    if tillatet is None:
+        return None
+    formelblad = bool(_FORMELBLAD_RE.search(str(hjalpmedel or "")))
+    if tillatet:
+        verktyg = _verktyget_i_delen(hjalpmedel, del_kod)
+        ord_ = "Räknare" if verktyg == "räknare" else "Digitala verktyg"
+        return f"{ord_} och formelblad." if formelblad else f"{ord_}."
+    return "Formelblad." if formelblad else "Inga."
+
+
 # NP skriver «visa hur du använder ditt digitala verktyg». Läraren (2026-09-22):
 # eleven kan läsa «visa» som att hon ska visa upp något, en film. Pappret ber
 # om det som faktiskt ska göras, på pappret, och säger vilket verktyg det är:
@@ -387,7 +411,8 @@ def _nrlista(nrs: list[int]) -> str:
     return f"{', '.join(map(str, nrs[:-1]))} och {nrs[-1]}"
 
 
-def _stycken(text: str, luft: bool = False) -> list[dict]:
+def _stycken(text: str, luft: bool = False,
+             forst_i_raden: bool = False) -> list[dict]:
     """Uppgiftstexten som stycken, och formelrader som displayformler.
 
     Modellen skriver sina medvetna radbrytningar i `text` (skärmen sätter
@@ -398,7 +423,12 @@ def _stycken(text: str, luft: bool = False) -> list[dict]:
     `luft=True` gör en tom rad till en tom rad på pappret också (s["luft"] på
     stycket efter), som skärmen redan visar den. Det är frågans egen rad, se
     exam_gen.luft_fore_fragan. Lösningarnas text går förbi med False: där är en
-    tom rad modellens och kollapsas som förut."""
+    tom rad modellens och kollapsas som förut.
+
+    `forst_i_raden=True` är deluppgiftens: står uttrycket först sätts det i
+    raden, direkt efter «a)», inte centrerat under en tom etikettrad (lärarens
+    dom 2026-09-24, exam 131 uppgift 4: «bäst att man faktiskt har det precis
+    bredvid a) och sen så kommer allting precis till höger om det»)."""
     ut: list[dict] = []
     tom = False
     for rad in str(text or "").replace("\r\n", "\n").split("\n"):
@@ -407,7 +437,9 @@ def _stycken(text: str, luft: bool = False) -> list[dict]:
             tom = bool(ut)
             continue
         m = _ENSAM_FORMEL_RE.match(rad)
-        if m:
+        if m and forst_i_raden and not ut:
+            ut.append({"formel": False, "text": escape_mixed(rad)})
+        elif m:
             ut.append({"formel": True, "text": m.group(1)})
         else:
             ut.append({"formel": False, "text": escape_mixed(rad)})
@@ -430,6 +462,47 @@ def _stycken(text: str, luft: bool = False) -> list[dict]:
             s["par_efter"] = not (nasta and nasta["formel"]
                                   and not nasta["luft"])
     return ut
+
+
+# ── HELA UPPGIFTEN PÅ SAMMA SIDA (lärarens dom 2026-09-24, exam 131) ───────
+# Uppgift 3:s fråga och svarslinje hamnade överst på nästa sida: «eleverna kan
+# lätt missa var de ska skriva svaret». Förut begärdes plats (\pfbehov) bara
+# före en uppgift med bild. Nu begär varje uppgift sin egen höjd, uppskattad
+# ur raderna nedan, och ryms den inte bryts sidan före uppgiften. Måtten är
+# pappret som det sätts (11 pt, radavstånd ~5 mm, svarslinje med luft ~11 mm,
+# plåten 0,7·textbredd ~ 63 mm plus luft). En uppgift högre än taket kan ändå
+# inte hållas ihop, och ska inte skjuta en halvtom sida framför sig.
+_MM_HUVUD, _MM_RAD, _MM_LUFT = 7.0, 5.5, 5.0
+_MM_FORMEL, _MM_BRAKFORMEL, _MM_SVAR = 11.0, 15.0, 11.0
+_MM_ALT, _MM_DEL, _MM_BILD, _MM_FIGUR = 6.0, 4.0, 68.0, 60.0
+_MM_TABELLRAD, _TECKEN_PER_RAD, BEHOV_TAK_MM = 6.5, 85, 200
+
+
+def _behov_mm(vy: dict, *, del_: bool = False) -> int:
+    """Uppgiftens (eller deluppgiftens) ungefärliga höjd på pappret i mm."""
+    mm = 0.0 if del_ else _MM_HUVUD
+    for s in vy.get("stycken") or []:
+        if s.get("luft"):
+            mm += _MM_LUFT
+        if s.get("formel"):
+            mm += _MM_BRAKFORMEL if "frac" in s["text"] else _MM_FORMEL
+        else:
+            mm += _MM_RAD * (1 + len(s["text"]) // _TECKEN_PER_RAD)
+    if vy.get("bild_fil"):
+        mm += _MM_BILD
+    if vy.get("figur_tex"):
+        mm += _MM_FIGUR
+    if vy.get("tabell"):
+        mm += 10 + _MM_TABELLRAD * (1 + len(vy["tabell"].get("rader") or []))
+    if vy.get("flerval"):
+        mm += _MM_ALT * len(vy["flerval"]) + 2
+    elif vy.get("svarsfalt_rad"):
+        mm += _MM_SVAR * len(vy["svarsfalt_rad"])
+    elif vy.get("endast_svar"):
+        mm += _MM_SVAR
+    for d in vy.get("deluppgifter") or []:
+        mm += _MM_DEL + max(_MM_RAD, _behov_mm(d, del_=True))
+    return int(min(mm, BEHOV_TAK_MM))
 
 
 # Etiketten på en ifyllnadsrad får kolon — men bara när den inte redan slutar
@@ -817,7 +890,7 @@ def _elevexempel(it) -> list[dict]:
 def _enhet_vy(*, poang, typ, formaga, text, losning, bedomning,
              alternativ, ratt_alternativ, notis, bild_fil,
              enhet=None, tabell=None, svarsrutor=None, stegtabell=None,
-             svarsfalt=None, facit=False):
+             svarsfalt=None, facit=False, deluppgift=False):
     """Delad vy för ett löv och för en deluppgift."""
     flerval, ratt_bokstav = _flerval_vy(alternativ, ratt_alternativ)
     return {
@@ -843,7 +916,7 @@ def _enhet_vy(*, poang, typ, formaga, text, losning, bedomning,
         # (`svarsfalt` ovan): arbetsbladet och gruppuppgiften bygger sin form
         # på det och har inte lärarens provregel.
         "svarsfalt_rad": _faltrad(svarsfalt) if typ == "rutin" else None,
-        "stycken": _stycken(text, luft=True),
+        "stycken": _stycken(text, luft=True, forst_i_raden=deluppgift),
         "tabell": _tabell_vy(tabell),
         "svarsrutor": _svarsrutor_vy(svarsrutor, facit=facit),
         "stegtabell": _stegtabell_vy(stegtabell, facit=facit),
@@ -1157,7 +1230,7 @@ def _build_view(doc: exam_spec.ExamDoc,
                         enhet=d.enhet,
                         tabell=d.tabell, svarsrutor=d.svarsrutor,
                         stegtabell=d.stegtabell, svarsfalt=d.svarsfalt,
-                        facit=facit)
+                        facit=facit, deluppgift=True)
                     ev["bokstav"] = _BOKSTAV[j]
                     # ── KORTSVAREN KRYSSAS INTE ────────────────────────
                     # Lärarens dom över den första skarpa renderingen
@@ -1274,6 +1347,7 @@ def _build_view(doc: exam_spec.ExamDoc,
             item_vy["har_bild"] = bool(
                 item_vy.get("bild_fil")
                 or any(d.get("bild_fil") for d in (item_vy.get("deluppgifter") or [])))
+            item_vy["behov_mm"] = _behov_mm(item_vy)
             # Gruppuppgiftens uppgifter heter 1, 2, 3 (lärarens val 2026-08-20)
             # — då kan deluppgifterna heta a) b) utan att två bokstavsserier
             # blandas på samma papper. Fältet heter `bokstav` av historiska
@@ -1355,7 +1429,9 @@ def _build_view(doc: exam_spec.ExamDoc,
         })
     for i, d in enumerate(delar):
         if i and d["rubrik"]:
-            d["hjalpmedelsrad"] = escape_mixed(_delnamn_visning(doc.hjalpmedel))
+            d["hjalpmedelsrad"] = escape_mixed(
+                _hjalpmedel_i_delen(doc.hjalpmedel, d["_kod"] or "")
+                or _delnamn_visning(doc.hjalpmedel))
     return {
         "titel": escape_latex(doc.titel),
         "kurs": escape_latex(doc.kurs),

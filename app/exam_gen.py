@@ -120,6 +120,13 @@ SCEN_REGEL = (
     "lodrätt. Säg uttryckligen var himlen eller vattnet är TOMT och lugnt — "
     "en sammanhängande tredjedel av bilden ska vara fri, för det är dit "
     "notationen ritas. Måla människor som små gestalter för skalans skull.\n"
+    # Lärarens dom 2026-09-24 (exam 131 uppgift 6): «Hugo ska tvätta en
+    # altan» med en kvinna på bilden. Scenen sa «a small faceless figure»,
+    # och bildverktyget valde själv. personvakt fäller det.
+    "  PERSONEN I TEXTEN ÄR PERSONEN PÅ BILDEN: står ett namn i uppgiften "
+    "och en människa i scenen, skriv hennes eller hans kön ur namnet: «a "
+    "young woman» för Alva, «a young man» för Hugo. Aldrig bara «a figure» "
+    "eller «a person», då väljer bildverktyget själv.\n"
     "  Sista raden är svensk och lyder «Intended use: » följt av begreppen.\n"
     "  Två exempel, och de är formen:\n"
     "  \"SCENE. A wide summer meadow under a deep cobalt sky, seen from the "
@@ -741,6 +748,21 @@ INSTRUCTION = (
     "  • Sakerna heter det de heter: «kvadratiska klinkerplattor», "
     "«gipsskivor», «reglar», aldrig «kvadratiska plattor». En yrkesklass får "
     "yrkets ord.\n"
+    # Lärarens dom 2026-09-24 (exam 131 uppgift 3, BA26B): «Jord från en
+    # byggtomt kan innehålla olja. Jorden räknas som förorenad över 2 000 mg
+    # olja per kg. Bestäm gränsen i procent.» «Språknivån är lite för
+    # avancerad för de här eleverna.» Matematiken var rätt; eleven måste
+    # först översätta «räknas som förorenad över» och «gränsen».
+    "  • SPRÅKET ÄR ELEVERNAS: vardagsord och korta huvudsatser, allra "
+    "enklast i en yrkesklass. Inget ord eleven måste översätta innan hon kan "
+    "räkna («gränsen», «halten», «räknas som förorenad över»). Frågan säger "
+    "med vardagsord vad som ska räknas ut: «I 1 kg jord finns 2 000 mg "
+    "olja. Hur många procent av jorden är olja?»\n"
+    # Samma dom, uppgift 4: a) fick svarslinje, b) ingen.
+    "  • Deluppgifter som bara är uttryck under en gemensam uppmaning "
+    "(«Beräkna.» och sedan a) och b)) har samma typ: endast svar i alla, "
+    "eller redovisning i alla. Pappret sätter svarslinje bara under endast "
+    "svar, och a) med linje och b) utan ser ut som ett fel.\n"
     "  • Bara det klassen har haft, bara kursens innehåll.\n"
     "- figur: lägg en matematisk figur på en uppgift genom att välja typ och "
     "sätta talen (aldrig fri kod): linjar {k, m}, andragrad {a, b, c}, "
@@ -8167,6 +8189,46 @@ def kravradsvakt(exam: dict) -> list[dict]:
     return fel[:SPRAK_MAX_FYND]
 
 
+# ── SAMMA KRAV I ALLA DELUPPGIFTER (lärarens dom 2026-09-24, exam 131) ─────
+# Uppgift 4: a) «rutin» fick «Svar: ____», b) «redovisning» fick ingenting,
+# och uppgiften hette «Fullständig lösning krävs.» «På deluppgift b saknas
+# ju svar, kolon och sen understrecket.» Pappret har EN kravrad per uppgift;
+# blandas kraven säger den fel om en av deluppgifterna.
+#
+# BARA NÄR DELUPPGIFTERNA ÄR AV SAMMA SORT: rena uttryck under en gemensam
+# uppmaning («Beräkna.»). a) endast svar och b) «Motivera …» är NP:s form och
+# står på prov läraren godkänt (126 uppgift 6, 129 uppgift 11 och 12).
+_BARA_UTTRYCK_RE = re.compile(r"^\s*\$[^$]+\$\s*$")
+
+
+def blandat_krav_vakt(exam: dict) -> list[dict]:
+    """Rena uttryck under en gemensam uppmaning där ett är «rutin» (endast
+    svar) och ett annat inte är det."""
+    fel: list[dict] = []
+    for nr, u in enumerate((exam or {}).get("uppgifter") or [], 1):
+        if not isinstance(u, dict):
+            continue
+        delar = [d for d in (u.get("deluppgifter") or []) if isinstance(d, dict)]
+        if not delar or not all(_BARA_UTTRYCK_RE.match(str(d.get("text") or ""))
+                                for d in delar):
+            continue
+        typer = [(d.get("typ") or u.get("typ") or "") for d in delar]
+        rutin = [chr(97 + k) for k, t in enumerate(typer) if t == "rutin"]
+        if not rutin or len(rutin) == len(typer):
+            continue
+        andra = [chr(97 + k) for k, t in enumerate(typer) if t != "rutin"]
+        fel.append(_err(
+            f"uppgift {nr}", "blandatkrav",
+            f"Uppgift {nr} blandar endast svar ({', '.join(rutin)}) med "
+            f"redovisning ({', '.join(andra)}) i uttryck av samma sort under "
+            "samma uppmaning. Pappret sätter då en svarslinje under det ena "
+            "och ingen under det andra, och uppgiftens kravrad säger fel om "
+            "ett av dem. Ge alla deluppgifter samma typ som uppgiften: endast "
+            "svar där svaret räcker för poängen, redovisning i alla annars. "
+            "Behåll del, poäng och nivå."))
+    return fel[:SPRAK_MAX_FYND]
+
+
 def rubrikordsvakt(exam: dict, kurs: str = "") -> list[dict]:
     """Bär provet kursens egna frågeformer?
 
@@ -8200,6 +8262,56 @@ def rubrikordsvakt(exam: dict, kurs: str = "") -> list[dict]:
             "Ersätt de överflödiga med kursens egna former (en fråga som ska "
             "besvaras, ett alternativ som ska väljas) och behåll poängen.")]
     return []
+
+
+# ── PERSONEN I TEXTEN ÄR PERSONEN PÅ BILDEN (lärarens dom 2026-09-24) ──────
+# Exam 131 uppgift 6: «Hugo ska tvätta en altan» och scenen «A small faceless
+# figure in work clothes kneels …». Bildverktyget målade en kvinna. Namnen är
+# INSTRUCTION:s lista; står ett av dem i uppgiften och en människa i scenen
+# ska scenen säga samma kön som namnet.
+_NAMN_KON = {**dict.fromkeys(("Elias", "Noah", "Hugo", "Liam", "Ali", "Leo"),
+                             "man"),
+             **dict.fromkeys(("Maja", "Ella", "Alva", "Saga", "Sara", "Nora"),
+                             "kvinna")}
+_SCEN_MANNISKA_RE = re.compile(
+    r"\b(figure|person|people|worker|silhouette|man|men|woman|women|boy|"
+    r"girl|he|she)\b", re.I)
+_SCEN_KON_RE = {"man": re.compile(r"\b(man|boy|he|his|him)\b", re.I),
+                "kvinna": re.compile(r"\b(woman|girl|she|her)\b", re.I)}
+PERSON_MAX_FYND = 3
+
+
+def personvakt(exam: dict) -> list[dict]:
+    """En namngiven person i uppgiften och en människa av okänt eller annat
+    kön i scenen."""
+    fel: list[dict] = []
+    for nr, u in enumerate((exam or {}).get("uppgifter") or [], 1):
+        if not isinstance(u, dict):
+            continue
+        # «Intended use:»-raden är svensk, och där är «man» ett pronomen.
+        scen = str(((u.get("scen") or {}).get("scene")) or "").split(
+            "Intended use")[0]
+        if not _SCEN_MANNISKA_RE.search(scen):
+            continue
+        text = " ".join([str(u.get("text") or "")] + [
+            str(d.get("text") or "") for d in u.get("deluppgifter") or []
+            if isinstance(d, dict)])
+        namn = [n for n in _NAMN_KON if re.search(rf"\b{n}\b", text)]
+        if len(namn) != 1:
+            continue
+        kon = _NAMN_KON[namn[0]]
+        annat = "kvinna" if kon == "man" else "man"
+        if _SCEN_KON_RE[kon].search(scen) and not _SCEN_KON_RE[annat].search(
+                scen):
+            continue
+        ord_ = "a young man" if kon == "man" else "a young woman"
+        fel.append(_err(
+            f"uppgift {nr}", "person",
+            f"Uppgift {nr} handlar om {namn[0]}, men scenen säger inte att "
+            f"människan på bilden är {'en man' if kon == 'man' else 'en kvinna'}"
+            f", och då väljer bildverktyget själv. Skriv «{ord_}» i scenen "
+            "där människan står, och inget ord av det andra könet."))
+    return fel[:PERSON_MAX_FYND]
 
 
 # ── BILDBESTÄLLNINGEN: SCENEN OCH BEGREPPET SKA HANDLA OM SAMMA SAK ──────
@@ -9342,6 +9454,7 @@ def _raknade_fynd(exam: dict, *, avsnitt: list[dict] | None, antal: int | None,
            + ci_utanfor.ci_vakt(exam, kurs))
     if profil == "prov":
         fel += (a_nivavakt(exam) + kravradsvakt(exam)
+                + blandat_krav_vakt(exam)
                 + rubrikordsvakt(exam, kurs)
                 + likvardighetsvakt(exam, referensprov)
                 # NP-formen (2026-09-22, prov 88): steg per poäng, poängform,
@@ -9359,7 +9472,7 @@ def _raknade_fynd(exam: dict, *, avsnitt: list[dict] | None, antal: int | None,
                 # Passets tak håller hela vägen, inte bara i skelettet.
                 + poangtakvakt(exam, poang_tak))
     # En mening per rad gäller alla papper eleverna läser (exam 129).
-    return fel + radvakt(exam) + scenvakt(exam)
+    return fel + radvakt(exam) + scenvakt(exam) + personvakt(exam)
 
 
 def _tackning_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
