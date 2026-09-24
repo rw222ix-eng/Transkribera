@@ -154,10 +154,13 @@ def create_betygskopia(base: Path, dest_dir: Path | str, *,
                 "titel": papper.get("titel"), "datum": papper.get("datum") or r["datum"],
                 "kurs": r["kurs"], "moment": papper.get("moment"),
                 "variant": papper.get("variant"), "granser": papper.get("granser"),
+                # Grupprader (uppgiftens rubrik ovanför a/b) bär inga poäng.
                 "rader": [{"nyckel": x["nyckel"], "peca": x.get("peca"),
-                           "formaga": x.get("formaga"), "grupp": x.get("grupp")}
+                           "formaga": x.get("formaga"),
+                           "kompensation": bool(x.get("kompensation"))}
                           for x in rattning.bygg(papper.get("uppgifter"),
-                                                 papper.get("kompensation"))],
+                                                 papper.get("kompensation"))
+                          if not x.get("grupp")],
                 "resultat": {str(e): v for e, v in
                              db.get_elevresultat(conn, r["dokument_id"]).items()},
             })

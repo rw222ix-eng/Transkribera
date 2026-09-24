@@ -118,7 +118,9 @@ def test_betygskopian_bar_poangen_per_rad(tmp_path):
     papper = {"typ": "Prov", "klass": "TE26A", "kurs": "Matematik, nivå 1c",
               "moment": "1.1", "datum": "2026-09-16", "titel": "Tal och uttryck",
               "uppgifter": [{"nr": 1, "t": "Beräkna.", "p": 2, "peca": [2, 0, 0],
-                             "formaga": "P"}]}
+                             "formaga": "P"},
+                            {"nr": 2, "t": "Undersök.", "p": 3, "del": ["a", "b"],
+                             "delpeca": [[1, 0, 0], [0, 2, 0]]}]}
     did = db.create_dokument(conn, dokument=papper, status="godkant")["id"]
     db.save_rattning(conn, did, elever=1, andel=None, rader=[], klass="TE26A",
                      kurs=papper["kurs"], datum="2026-09-16")
@@ -134,4 +136,6 @@ def test_betygskopian_bar_poangen_per_rad(tmp_path):
     assert te["elever"] == [{"id": ada, "namn": "Ada", "aktiv": 1}]
     rad = te["prov"][0]["rader"][0]
     assert (rad["nyckel"], rad["peca"], rad["formaga"]) == ("1", [2, 0, 0], "Procedur")
+    # Uppgift 2:s grupprad (rubriken över a/b) bär inga poäng och följer inte med.
+    assert [r["nyckel"] for r in te["prov"][0]["rader"]] == ["1", "2a", "2b"]
     assert te["prov"][0]["resultat"] == {str(ada): {"1": [2, 0, 0]}}
