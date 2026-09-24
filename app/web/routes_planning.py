@@ -1434,9 +1434,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 stoppa_om_avbrutet(emit)
                 steg.na("sparar")
                 if res["board"] is not None:
-                    st["board"] = lesson_board.satt_tid(res["board"],
-                                                        st.get("starttid"),
-                                                        st.get("sluttid"))
+                    # «ger» i stället för ⇒ under 2c, som i genereringen
+                    # (lesson_board.pilar_till_ger, Rickard 2026-09-25).
+                    st["board"] = lesson_board.satt_tid(
+                        lesson_board.pilar_till_ger(res["board"],
+                                                    st.get("course") or ""),
+                        st.get("starttid"), st.get("sluttid"))
                 # Varje användariteration får en färsk reparationsbudget.
                 st["rounds"] = res["rounds"]
                 # Formen skrivs tillbaka: bar begäran nya val (läraren kryssade

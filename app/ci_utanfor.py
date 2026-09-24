@@ -236,6 +236,12 @@ def utanfor(kurs: str, profil: str = "prov") -> list[tuple]:
     return lista
 
 
+def pilar_forbjudna(kurs: str) -> bool:
+    """Står implikation och ekvivalens utanför kursen? Tavlan frågar, för den
+    skriver då «ger» i stället för ⇒ (lesson_board.pilar_till_ger)."""
+    return any(n == _IMPLIKATION[0] for n, _k, _p in utanfor(kurs))
+
+
 def build_utanfor(kurs: str, profil: str = "prov") -> str:
     """Promptraden. Tom sträng utan strykningar (kassetteregeln: prompten ska
     då vara byte för byte den som gick i väg förut)."""

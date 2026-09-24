@@ -28,6 +28,7 @@ from typing import Callable
 
 from pydantic import BaseModel, ConfigDict
 
+from app import ci_utanfor
 from app import dokumentdiff
 from app import llm_client
 from app import rakneverk
@@ -454,8 +455,12 @@ INSTRUCTION = (
     # Vakten (whiteboard_spec._ankaret) släpper igenom exakt den här formen
     # och fäller allt annat med tal — skriv ankaret som regeln säger, annars
     # stryks det i reparationsrundan.
+    # «GER», INTE ⇒ (Rickard 2026-09-25). Implikationspilen står bara i Ma
+    # 2c:s centrala innehåll (app/ci_utanfor.py), och ankaret stod med den på
+    # tavlor för 1c och 2a. Exemplen säger «ger» i alla kurser;
+    # pilar_till_ger() byter det som ändå kommer under 2c.
     "8d. ANKARET: EN math-rad med TAL som visar formelns VARFÖR, direkt före "
-    "den allmänna formeln (x^2 = 64 \\Rightarrow x = \\pm 8), sedan en "
+    "den allmänna formeln (x^2 = 64 \\text{ ger } x = \\pm 8), sedan en "
     "etikett på högst FYRA ORD («Båda ger 64») och sedan pilen (6c). Bara EN "
     "sådan rad på hela vänstertavlan, inga mellanled, ingen uträkning. "
     "Ankaret skrivs när formeln har ett varför som ett tal gör synligt (±, "
@@ -475,7 +480,7 @@ INSTRUCTION = (
     "Aldrig en lista räknelagar: kan eleven slå upp "
     "regeln, och är den inte dagens begrepp, skriv den inte — «inte en massa "
     "räknelagar och skit, det hör till deras formelsamling». Momentets "
-    "tillämpningsformel (A = a^2 \\Rightarrow a = \\sqrt{A}) skrivs som "
+    "tillämpningsformel (A = a^2 \\text{ ger } a = \\sqrt{A}) skrivs som "
     "FÖRSTA led i det exempel som använder den, inte på vänstern: vänstern "
     "säger vad begreppet ÄR, exemplet visar vad det används till. "
     # DEFINITIONEN OCH ÄR/INTE (lärarens dom 2026-09-23 kväll, BA26B). Om
@@ -1126,7 +1131,8 @@ REPAIR_HINTS = (
     "uträkning som math-rader, ETT led per rad i receptets ordning, sist "
     "svaret med enhet, och stryk ordstegen; orden säger läraren. Varje led på "
     "EGEN rad, också jämförelsens brytpunkt: ekvationen, sedan svaret, sedan "
-    "tolkningen i ord, aldrig som en kedja med ⇒. Räkna efter varje led.\n"
+    "tolkningen i ord, aldrig som en kedja på samma rad. Räkna efter varje "
+    "led.\n"
     # STÖDORDEN OCH HÄNVISNINGEN (2026-09-17), se stodordsfragor() och
     # hanvisningar(). Båda är lärarens fällningar på tavlan om linjära samband.
     "- 'stödord med frågetecken': skriv varje fråga som en hel fråga i en "
@@ -3600,6 +3606,40 @@ def satt_forra(board: dict | None, rubrik: str | None) -> dict | None:
     return board
 
 
+# «GER» I STÄLLET FÖR PILEN (Rickard 2026-09-25). Implikation och ekvivalens
+# står bara i Ma 2c:s centrala innehåll, och i kurserna under står «ger»
+# mellan leden. Prompten visar redan «ger», men en modell som skriver
+# x^2 = 64 \Rightarrow x = \pm 8 av vana ska inte kosta en reparationsrunda:
+# bytet är deterministiskt och gratis. \Leftarrow byts inte («ger» läses åt
+# höger), och \Downarrow är vänsterns röda tråd mellan sektionerna, ingen
+# implikation (6c, _ar_pilrad).
+_PIL_LATEX = re.compile(
+    r"\s*(?:\\;|\\,|\\quad|\\qquad|~)*\s*"
+    r"(?:\\(?:Rightarrow|Longrightarrow|implies|Leftrightarrow"
+    r"|Longleftrightarrow|iff)(?![A-Za-z])|⇒|⇔|⟹|⟺)"
+    r"\s*(?:\\;|\\,|\\quad|\\qquad|~)*\s*")
+_PIL_TEXT = re.compile(r"\s*(?:⇒|⇔|⟹|⟺)\s*")
+
+
+def pilar_till_ger(board: dict | None, kurs: str) -> dict | None:
+    """Pilarna ⇒ och ⇔ blir «ger» på tavlor i kurser där implikation inte
+    står i det centrala innehållet (ci_utanfor). Tavlan i 2c lämnas orörd."""
+    if not isinstance(board, dict) or not ci_utanfor.pilar_forbjudna(kurs):
+        return board
+
+    def byt(v, nyckel=""):
+        if isinstance(v, dict):
+            return {k: byt(x, k) for k, x in v.items()}
+        if isinstance(v, list):
+            return [byt(x, nyckel) for x in v]
+        if isinstance(v, str):
+            if nyckel == "latex":
+                return _PIL_LATEX.sub(r" \\text{ ger } ", v).strip()
+            return _PIL_TEXT.sub(" ger ", v)
+        return v
+    return byt(board)
+
+
 def _rensa_toppnycklar(board: dict | None) -> dict | None:
     """Samma städning som i exam_gen: toppnycklar utanför dokumentet slängs.
     Grammatiktvånget är tillbaka på lärarens maskin (claude_code minifierar
@@ -4703,8 +4743,8 @@ TACKNING_INSTRUKTION = (
     "är ett exempel på fel tavla — på vänstern står bokstäver. Undantagen är "
     "lektionstiden överst, det felaktiga ledet under «Vanligt fel:», och "
     "ANKARET: den FÖRSTA sifferraden vars nästa math-rad i samma spalt är en "
-    "bokstavsformel (x^2 = 64 \\Rightarrow x = \\pm 8 med x^2 = a "
-    "\\Rightarrow x = \\pm \\sqrt{a} under sig). Bara EN sådan rad per tavla "
+    "bokstavsformel (x^2 = 64 \\text{ ger } x = \\pm 8 med x^2 = a "
+    "\\text{ ger } x = \\pm \\sqrt{a} under sig). Bara EN sådan rad per tavla "
     # RANDFALLEN OCKSÅ (2026-09-20, andra rundan). Domaren fällde x^2 = -20
     # och x = ±√27 som «andra sifferrad på vänstern» (jobb 480, seq 7–8), och
     # kompletteringen strök dem — men ett randfall ÄR ett tal, och blocket
@@ -5253,6 +5293,7 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
                             "message": "modellen svarade inte med giltig JSON"}],
                 "rounds": rounds}
     log("Tavlan är skriven — validerar …")
+    board = pilar_till_ger(board, course)
     _doc, errors = ws.validate_board_json(board)
     # Bokkopievakten går in HÄR, före reparationsrundorna: en avskriven
     # uppgift ska rättas i samma varv som ett schemafel, inte redovisas som en
@@ -5265,6 +5306,9 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     res = _repair_until_valid(board, errors, model=model, llm=llm,
                               rounds_used=rounds, max_rounds=max_rounds,
                               log_cb=log, token_cb=token_cb, form=form)
+    # Reparationen kan skriva pilen igen.
+    if res.get("board") is not None:
+        res["board"] = pilar_till_ger(res["board"], course)
     # …och en gång till på resultatet. Rättningsrundan mäter bara mot schemat
     # (validate_board_json), så en avskrift som modellen lät stå kvar hade
     # försvunnit ur fellistan utan att försvinna ur tavlan. Kvarstående fynd
@@ -5287,7 +5331,8 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
                              token_cb=token_cb)
         # `rounds` är den budget generering och renderingsreparation delar:
         # domaren har sin egen och lämnar därför siffran orörd.
-        res = {"board": dom["board"], "errors": dom["errors"],
+        res = {"board": pilar_till_ger(dom["board"], course),
+               "errors": dom["errors"],
                "rounds": res["rounds"], "domarrundor": dom["rounds"]}
     return res
 

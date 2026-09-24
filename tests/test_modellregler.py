@@ -322,4 +322,7 @@ def test_reparationsraden_bar_de_nya_koderna():
     # var brytpunkten den enda uträkning ett exempel fick bära. Nu bär alla
     # exempel sin, och brytpunkten följer samma regel som varje led.
     assert "också jämförelsens brytpunkt" in h
-    assert "aldrig som en kedja med ⇒" in h
+    # «aldrig som en kedja med ⇒» till 2026-09-25: tavlan visar ingen pil
+    # under 2c (test_tavla_ger), och regeln gäller kedjan, inte pilen.
+    assert "aldrig som en kedja på samma rad" in h
+    assert "⇒" not in h

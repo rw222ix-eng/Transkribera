@@ -781,8 +781,11 @@ def _check_rutor(sections: list, path: str, errors: list[dict]) -> None:
 # «y = -100x + 600» är bokstavsformler eller uppställningar. Det som fälls är
 # ledet som RÄKNAR: en pil till ett svar i tal, eller en kedja som slutar i ett
 # rent tal, med tal på båda sidor om likhetstecknet.
+# «\text{ ger }» är samma led som pilen: under 2c skriver tavlan «ger» i
+# stället för ⇒ (Rickard 2026-09-25, lesson_board.pilar_till_ger).
 _PIL_RE = re.compile(r"\\(?:Rightarrow|Longrightarrow|implies|to|rightarrow|"
-                     r"Leftrightarrow|leftrightarrow)\b")
+                     r"Leftrightarrow|leftrightarrow)\b"
+                     r"|\\text\s*\{\s*ger\s*\}")
 # Exponenter, index och rotindex är inte «tal» eleven räknar med: a^2 + b^2 =
 # c^2 är bokstäver, \sqrt[3]{x} likaså. De städas bort före sifferletandet,
 # annars fälldes Pythagoras sats som ett sifferexempel.

@@ -168,9 +168,12 @@ def build_prompt(bok_namn: str, avsnitt: str,
         "inte på sidorna ovan, hoppa över det.",
         "· `delar` — för en uppgift med deluppgifter: en post per del, med "
         "bokstaven («a») och delens EGEN väg. Vägens första rad UTGÅR från "
+        # «ger», inte ⇒ (Rickard 2026-09-25): implikationspilen står bara i
+        # Ma 2c:s centrala innehåll, och lösningarna går till tavlor i 1c.
         "delens uttryck ur boken och kedjan SLUTAR i svaret: «$\\dfrac"
-        "{\\sqrt{2}\\cdot\\sqrt{4}}{\\sqrt{a}} = 1 \\Rightarrow \\sqrt{a} = "
-        "\\sqrt{8} \\Rightarrow a = 8$». En eller två rader per del räcker. "
+        "{\\sqrt{2}\\cdot\\sqrt{4}}{\\sqrt{a}} = 1$ ger $\\sqrt{a} = "
+        "\\sqrt{8}$ ger $a = 8$». Mellan leden står «ger», aldrig en pil. En "
+        "eller två rader per del räcker. "
         "`vag` på posten lämnas då tom.",
         "· `svar` — det färdiga svaret; för deluppgifter åtskilda «a) $8$ · "
         "b) $0{,}5$». Exakt form när boken arbetar exakt ($\\sqrt{21}$, inte "
@@ -180,7 +183,7 @@ def build_prompt(bok_namn: str, avsnitt: str,
         "· `vag` (uppgift utan deluppgifter) — raderna du skulle skriva på "
         "tavlan, som man skriver för hand: EN uträkning per rad, orden om "
         "vad som händer som radens andra led, nästa steg på nästa rad. "
-        "Aldrig en hel kedja med flera $\\Rightarrow$ i samma rad. 1–4 "
+        "Aldrig en hel kedja med flera «ger» i samma rad. 1–4 "
         "rader för nivå 1–2, upp till 6 för nivå 3. Inte en fullständig "
         "redovisning — tavlans rader.",
     ]
