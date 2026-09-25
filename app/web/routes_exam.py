@@ -398,7 +398,9 @@ def _tidfynd(doc, summor: dict | None, typ: str) -> list[dict]:
     if takt is not None:
         tak = exam_spec.poang_tak_for(doc.tid_min, takt)
         poang = int(summor.get("total") or 0)
-        if tak is None or poang <= tak:
+        # Takten är ett riktmärke (lärarens dom 2026-09-25): några
+        # småpoäng över taket är ingen varning.
+        if tak is None or poang <= exam_spec.poang_tak_med_marginal(tak):
             return []
         return [_fynd(
             "tid", f"Pappret är satt till {doc.tid_min} minuter, och i din "

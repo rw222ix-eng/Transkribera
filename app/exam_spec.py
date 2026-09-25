@@ -2528,12 +2528,42 @@ def _banta_skelett(slots: list[dict], tak: int,
             return        # inget att banta: närmast möjliga summa är den här
 
 
+def _fyll_skelett(slots: list[dict], tak: int,
+                  rent: str | None = None, form: dict | None = None) -> None:
+    """Spegeln av _banta_skelett: byt billiga NP-tripplar mot rikare tills
+    summan når `tak` (lärarens dom 2026-09-25, se TAKT_MARGINAL). Ett steg i
+    taget på den BILLIGASTE raden, inom karaktärens egna tripplar och aldrig
+    över taket, så att poängen sprids på många rader i stället för att en
+    uppgift blir tung. Rikare rader delas sedan i deluppgifter
+    (_dela_i_deluppgifter), och det är de små deluppgifterna läraren bad om."""
+    while True:
+        total = sum(sum(s["poang"]) for s in slots)
+        if total >= tak:
+            return
+        for i in sorted(range(len(slots)),
+                        key=lambda j: (sum(slots[j]["poang"]), j)):
+            nu = sum(slots[i]["poang"])
+            rikare = [p for p in _lagliga_tripplar(slots[i]["karaktar"],
+                                                   slots[i]["formaga"],
+                                                   rent, form,
+                                                   slots[i]["typ"])
+                      if nu < sum(p) <= nu + tak - total]
+            if rikare:
+                slots[i]["poang"] = min(rikare, key=sum)
+                slots[i]["typ"] = _np_kortsvar(slots[i]["typ"],
+                                               slots[i]["poang"], form)
+                break
+        else:
+            return        # ingen rad kan växa: närmast möjliga summa
+
+
 def balanced_skeleton(antal: int, profil: str = "prov",
                       delar: bool | None = None,
                       mix: tuple[float, float, float] | None = None,
                       niva_mal: dict | None = None,
                       kurs: str = "",
-                      poang_tak: int | None = None) -> list[dict]:
+                      poang_tak: int | None = None,
+                      fyll: bool = True) -> list[dict]:
     """Deterministiskt balanserat skelett: {del, formaga, typ, poang} per
     uppgift, konstruerat så förmåge- OCH nivåbalans + ordningsregler uppfylls
     BY CONSTRUCTION. Grammatiken tvingar modellen till skelettet, så modellen
@@ -2660,6 +2690,10 @@ def balanced_skeleton(antal: int, profil: str = "prov",
     # inspelad prompt orörd: skelettet är byte för byte det som byggdes förut
     # så länge ingen skickar ett tak.
     if poang_tak is not None:
+        # Provet fylls upp till taket (lärarens dom 2026-09-25, se
+        # TAKT_MARGINAL), sedan bantas det som gick över.
+        if profil == "prov" and fyll:
+            _fyll_skelett(slots, int(poang_tak), rent, form)
         _banta_skelett(slots, int(poang_tak), rent, form)
 
     if delar:
@@ -2735,7 +2769,7 @@ def balanced_skeleton(antal: int, profil: str = "prov",
         s.pop("karaktar")
 
     _justera_skelett(slots, profil, niva_mal=niva_mal, kurs=kurs,
-                     poang_tak=poang_tak, form=form)
+                     poang_tak=poang_tak, form=form, fyll=fyll)
     if profil == "prov":
         _dela_i_deluppgifter(slots)
     return slots
@@ -2980,6 +3014,26 @@ def poang_tak_for(tid_min: int | None, takt: float | None) -> int | None:
     return max(1, int(tid // t))
 
 
+# ── TAKTEN ÄR ETT RIKTMÄRKE (lärarens dom 2026-09-25) ────────────────────
+# «Då kan jag välja takten trea, men det är ju egentligen bara ett riktmärke.
+# Det varierar från klass till klass, och det kan gå lite snabbare än
+# nationella provet. Det vore bra om vi hade lite fler poäng så att vi fyller
+# ut provet, så vi slipper göra såna här småändringar hela tiden.»
+# Exam 126 fick fem lagningar på en natt, och varje ny småpoäng för täckningens
+# skull tände tidsvakten. Två följder:
+#   1. Skelettet FYLLS upp till taket (_fyll_skelett), med billiga NP-tripplar
+#      som blir små deluppgifter, så att fler delmoment får sin poäng från
+#      början. Bara provet: arbetsbladet har ingen tid att fylla.
+#   2. Taket får överskridas med TAKT_MARGINAL innan tidsvakten, takvakten
+#      och stegvakten säger ifrån, så att en lagning kan lägga en småpoäng.
+TAKT_MARGINAL = 1.15
+
+
+def poang_tak_med_marginal(tak: int | None) -> int | None:
+    """Taket vakterna mäter mot: lärarens tak plus riktmärkets marginal."""
+    return None if tak is None else int(tak * TAKT_MARGINAL)
+
+
 def papperstid(summor: dict, antal: int, takt_pa_pappret: float | None,
                profil: str = "prov") -> int:
     """Minuterna ett FÄRDIGT papper tar, med samma linjal som taket.
@@ -3029,7 +3083,7 @@ def skelettsummor(antal: int, profil: str = "prov",
                   niva_mal: dict | None = None,
                   takt: float | None = None,
                   kurs: str = "",
-                  tid_min: int | None = None) -> dict:
+                  tid_min: int | None = None, fyll: bool = True) -> dict:
     """Vad ett upplägg SKULLE ge, räknat på skelettet som faktiskt byggs:
     {antal, poang, summor {e, c, a}, tid, takt, tak}.
 
@@ -3057,7 +3111,7 @@ def skelettsummor(antal: int, profil: str = "prov",
         delar = profil == "prov"
     skelett = balanced_skeleton(max(1, int(antal or 1)), profil, delar=delar,
                                 mix=mix, niva_mal=niva_mal, kurs=kurs,
-                                poang_tak=tak)
+                                poang_tak=tak, fyll=fyll)
     summor = poangsummor(_skeleton_doc(skelett))
     return {"antal": len(skelett), "poang": summor["total"],
             "summor": {n: int(summor.get(n) or 0) for n in ("e", "c", "a")},
@@ -3111,9 +3165,14 @@ def foreslag_antal(tid_min: int, profil: str = "prov",
         # de två knapparna inte kan svara olika på samma upplägg, och med
         # samma tak, så att inte den ena räknar på ett papper genereringen
         # aldrig skulle bygga.
+        # OFYLLT (lärarens dom 2026-09-25): antalet räknas på uppgifternas
+        # egen storlek, och genereringen fyller sedan upp till taket med
+        # småpoäng. Fyllt hade varje kandidat vägt lika mycket, och
+        # förslaget hade krympt till färre och tyngre uppgifter.
         kandidat = skelettsummor(n, profil, delar=(profil == "prov"),
                                  mix=mix, niva_mal=niva_mal, takt=takt,
-                                 kurs=kurs, tid_min=tid_min if tak else None)
+                                 kurs=kurs, tid_min=tid_min if tak else None,
+                                 fyll=False)
         tid = kandidat["tid"]
         # Närmast vinner; står två lika nära vinner det MINDRE provet. Ett prov
         # som ryms är alltid bättre än ett som spiller över lika mycket åt andra
@@ -3235,11 +3294,13 @@ def _avstand(andel: float, band: tuple[float, float]) -> float:
 # ett prov som är fem procentenheter för C-tungt skrivs klart, ett prov som är
 # tjugo minuter för långt gör det inte.
 TAKSTRAFF = 10.0
+FYLLSTRAFF = 0.02
 
 
 def _straff(slots: list[dict], profil: str,
             niva_mal: dict | None = None, kurs: str = "",
-            poang_tak: int | None = None, brett: bool = False) -> float:
+            poang_tak: int | None = None, brett: bool = False,
+            fyll: bool = True) -> float:
     """Hur långt skelettet ligger från målen, som ETT tal. `brett` byter
     kursens hårda band mot valideringens (se _justera_skelett).
 
@@ -3283,6 +3344,12 @@ def _straff(slots: list[dict], profil: str,
     # mycket, så sökningen ser en rak väg ner och kan inte fastna på vägen.
     if poang_tak is not None and total > poang_tak:
         straff += TAKSTRAFF * (total - poang_tak)
+    # Och provet ska FYLLA taket (lärarens dom 2026-09-25, se TAKT_MARGINAL).
+    # Vikten är liten med flit: en saknad poäng får aldrig kosta ett
+    # bandbrott (0,1), bara avgöra mellan två godkända skelett.
+    if (fyll and profil == "prov" and poang_tak is not None
+            and total < poang_tak):
+        straff += FYLLSTRAFF * (poang_tak - total)
     if len(slots) >= MIN_BARARE_FOR_BAND:
         # Samma undantag som valideringen gör: ett rent E-papper har ingen
         # K-uppgift, och ett straff för en förmåga inget drag kan nå hade bara
@@ -3417,7 +3484,7 @@ def _drag(slots: list[dict],
 def _justera_skelett(slots: list[dict], profil: str = "prov",
                      varv: int = 200, niva_mal: dict | None = None,
                      kurs: str = "", poang_tak: int | None = None,
-                     form: dict | None = None) -> bool:
+                     form: dict | None = None, fyll: bool = True) -> bool:
     """Sök poängen fria från balansfel med enpoängsdrag, ett i taget, alltid
     det som sänker straffet mest. Returnerar True när skelettet är rent.
 
@@ -3429,14 +3496,14 @@ def _justera_skelett(slots: list[dict], profil: str = "prov",
     stangda = stangda_nivaer(niva_mal)
 
     def sok(brett: bool) -> float:
-        nuvarande = _straff(slots, profil, niva_mal, kurs, poang_tak, brett)
+        nuvarande = _straff(slots, profil, niva_mal, kurs, poang_tak, brett, fyll)
         for _ in range(varv):
             if nuvarande <= 0:
                 break
             basta = None
             for i, idx, delta in _drag(slots, stangda, form):
                 slots[i]["poang"][idx] += delta
-                varde = _straff(slots, profil, niva_mal, kurs, poang_tak, brett)
+                varde = _straff(slots, profil, niva_mal, kurs, poang_tak, brett, fyll)
                 slots[i]["poang"][idx] -= delta
                 if varde < nuvarande - 1e-12 and (basta is None
                                                   or varde < basta[0]):
@@ -3473,7 +3540,7 @@ def _justera_skelett(slots: list[dict], profil: str = "prov",
                         continue
                     slots[j]["poang"][jdx] -= 1
                     varde = _straff(slots, profil, niva_mal, kurs, poang_tak,
-                                    brett)
+                                    brett, fyll)
                     slots[j]["poang"][jdx] += 1
                     if varde < nuvarande - 1e-12 and (basta is None
                                                       or varde < basta[0]):

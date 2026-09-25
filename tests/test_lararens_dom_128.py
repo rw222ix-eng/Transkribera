@@ -343,10 +343,13 @@ def test_efterkontrollens_tidsfynd_foljer_taket():
         tid_min, takt, uppgifter = 60, 3.0, [None] * 10
 
     assert routes_exam._tidfynd(Doc, {"total": 20}, "prov") == []
-    fynd = routes_exam._tidfynd(Doc, {"total": 21}, "prov")
+    # Takten är ett riktmärke (lärarens dom 2026-09-25): 15 % marginal, så
+    # 23 poäng på 20:s tak är ingen varning, 24 är det.
+    assert routes_exam._tidfynd(Doc, {"total": 23}, "prov") == []
+    fynd = routes_exam._tidfynd(Doc, {"total": 24}, "prov")
     assert [f["kod"] for f in fynd] == ["tid"]
     assert "rymmer det 20 poäng" in fynd[0]["text"]
-    assert "21 poäng, alltså 63 minuter" in fynd[0]["text"]
+    assert "24 poäng, alltså 72 minuter" in fynd[0]["text"]
 
 
 def test_poangtaket_haller_hela_vagen():

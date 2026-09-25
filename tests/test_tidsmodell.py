@@ -465,6 +465,37 @@ def test_rutten_svarar_med_summor(client):
 # Taket är HENNES räkning (minuterna delat med takten), inte tidsmodellens:
 # det är den siffran hon jämför pappret mot.
 
+def test_provet_fylls_upp_till_taket():
+    """Lärarens dom 2026-09-25: «det vore bra om vi hade lite fler poäng så
+    att vi fyller ut provet, så vi slipper göra såna här småändringar hela
+    tiden». Tolv uppgifter på 100 minuter i takt 3 gav 26 poäng av 33."""
+    tak = exam_spec.poang_tak_for(100, 3)
+    assert tak == 33
+    fyllt = exam_spec.balanced_skeleton(12, "prov", kurs="Matematik 1c",
+                                        poang_tak=tak)
+    doc = exam_spec._skeleton_doc(fyllt)
+    assert exam_spec.poangsummor(doc)["total"] == tak
+    assert exam_spec.validate_balance(doc, profil="prov") == []
+    assert len(fyllt) == 12                       # antalet är hennes
+    ofyllt = exam_spec.balanced_skeleton(12, "prov", kurs="Matematik 1c",
+                                         poang_tak=tak, fyll=False)
+    assert exam_spec.poangsummor(
+        exam_spec._skeleton_doc(ofyllt))["total"] < tak
+    # Arbetsbladet har ingen provtid att fylla.
+    blad = exam_spec.balanced_skeleton(8, "arbetsblad", poang_tak=40)
+    assert exam_spec.poangsummor(exam_spec._skeleton_doc(blad))["total"] < 40
+    # «Föreslå antal» räknar på uppgifternas egen storlek, inte på det
+    # fyllda: annars föreslog den färre och tyngre uppgifter.
+    assert exam_spec.foreslag_antal(100, "prov", takt=3,
+                                    kurs="Matematik 1c")["antal"] >= 12
+
+
+def test_takten_ar_ett_riktmarke_med_marginal():
+    assert exam_spec.poang_tak_med_marginal(20) == 23
+    assert exam_spec.poang_tak_med_marginal(33) == 37
+    assert exam_spec.poang_tak_med_marginal(None) is None
+
+
 def test_taket_ar_lararens_egen_rakning():
     assert exam_spec.poang_tak_for(70, 3) == 23
     assert exam_spec.poang_tak_for(90, 3.5) == 25

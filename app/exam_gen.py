@@ -7887,7 +7887,10 @@ def build_lektionsmal(mal: list[dict], *, digital: bool = True) -> str:
         "lektions GRUNDMETOD ska ge minst en E-poäng: en enkel uppgift där "
         "eleven gör just det, gärna som a) före en svårare b). Att ställa upp "
         "en ekvation är inte att lösa den. Inget delmoment får prövas bara på "
-        "A-nivå. Mål som är ett samtal eller en genomgång («Vad betyder "
+        "A-nivå. Provets poäng fyller passet (lärarens takt är ett "
+        "riktmärke): lägg dem som små deluppgifter på en poäng, så att fler "
+        "delmoment och mål får en egen poäng. Mål som är ett samtal eller en "
+        "genomgång («Vad betyder "
         "likhetstecknet?») behöver ingen egen uppgift, och ett mål som står "
         "UTANFÖR KURSEN prövas inte. " + _TALLINJE
         + ("" if digital else
@@ -10584,12 +10587,16 @@ def poangtakvakt(exam: dict, poang_tak: int | None) -> list[dict]:
         return []
     total = sum(sum(e.get("poang") or (0, 0, 0))
                 for e in domarenheter(exam or {}))
-    if total <= poang_tak:
+    # Takten är ett riktmärke (lärarens dom 2026-09-25): skelettet fylls
+    # till taket, och en lagning får lägga småpoäng upp till marginalen.
+    grans = exam_spec.poang_tak_med_marginal(poang_tak)
+    if total <= grans:
         return []
     return [_err(
         "uppgifter", "poangtak",
         f"Pappret har {total} p, och passet bär {poang_tak} p i lärarens "
-        f"takt. Ta bort {total - poang_tak} p: välj den uppgift eller "
+        f"takt, högst {grans} p med marginal. Ta bort {total - grans} p: "
+        "välj den uppgift eller "
         "deluppgift som fått en poäng mer än den behöver, sänk "
         "poängtrippeln med en på den nivån, stryk en bedömningsrad och låt "
         "uppgiften be om en sak mindre. Lägg inte till och ta inte bort "

@@ -295,8 +295,11 @@ def stegvakt(exam: dict, poang_tak: int | None = None) -> list[dict]:
     63 minuter i hennes takt. Poängvakten (exam_gen.poangvakt) hade redan
     samma regel; här saknades den. Ligger pappret på taket ska ett steg bort
     ur uppgiften i stället."""
+    # Taket med riktmärkets marginal (exam_spec.TAKT_MARGINAL, lärarens dom
+    # 2026-09-25): under den får en uppgift en poäng till.
     pa_taket = poang_tak is not None and sum(
-        _poang(e) for e in _enheter(exam)) >= poang_tak
+        _poang(e) for e in _enheter(exam)) >= exam_spec.poang_tak_med_marginal(
+            poang_tak)
     fel: list[dict] = []
     for e in _enheter(exam):
         if (e.get("typ") or "") == "rutin":
@@ -387,8 +390,11 @@ def formbytesvakt(exam: dict, poang_tak: int | None = None) -> list[dict]:
     """Fler formbyten än poäng i en enhet (enhetsbyte och grundpotensform
     räknas var för sig). På passets tak (stegvakten, exam 128) är rådet bara
     ett byte, aldrig en poäng till."""
+    # Taket med riktmärkets marginal (exam_spec.TAKT_MARGINAL, lärarens dom
+    # 2026-09-25): under den får en uppgift en poäng till.
     pa_taket = poang_tak is not None and sum(
-        _poang(e) for e in _enheter(exam)) >= poang_tak
+        _poang(e) for e in _enheter(exam)) >= exam_spec.poang_tak_med_marginal(
+            poang_tak)
     fel: list[dict] = []
     for e in _enheter(exam):
         poang = _poang(e)
