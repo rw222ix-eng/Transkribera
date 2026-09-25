@@ -67,6 +67,11 @@
 .gufraga i{font-style:italic}
 .gudel{margin:9px 0 0 18px;padding:0;list-style:none;font-size:13.5px}
 .gudel li{margin:2px 0}
+/* Arbetsbladets deluppgifter i frågans grad och med luft emellan, som på
+   provet (Rickard 2026-09-25). blad-bygg.js kort sätter data-blad. */
+.gudel[data-blad]{font-size:15px;line-height:1.6}
+.gudel[data-blad]>li+li{margin-top:12px}
+.gudel[data-blad] .gusvarsrad{margin-top:8px}
 
 /* ── Ifyllnadsraden: hårlinjen ÄR fältet ── */
 /* Radhöjden är ett skrivmått, inte ett luftmått: 17 px marginal + etikettens

@@ -365,13 +365,22 @@ window.BladBygg = (() => {
       const n = (u.delnotis || [])[k];
       return n ? `<p class="gunotis">${brodtext(n)}</p>` : '';
     };
+    /* EN SVARSRAD PER DELUPPGIFT PÅ ARBETSBLADET, som på provet (Rickard
+       2026-09-25, samma disposition): a) och b) med «Endast svar» fick en
+       enda «Svar:» under båda, och eleven visste inte var b) skulle stå.
+       Deluppgiften sätts då också i frågans grad (data-blad i blad.css).
+       Gruppuppgiften står som förut. */
+    const perDel = typ === 'Arbetsblad' && u.ut === 'kort' && !(u.falt && u.falt.length) && !u.rutor;
+    const delsvar = k => (perDel && !((u.delrutor || [])[k]) && !(((u.delfalt || [])[k] || []).length)
+      ? svarsradEnhet((u.delenhet || [])[k]) : '');
     const del = u.del && u.del.length
-      ? `<ul class="gudel">${u.del.map((d, k) => `<li>${'abcdef'[k]}) ${brodtext(flod(d))}`
+      ? `<ul class="gudel"${typ === 'Arbetsblad' ? ' data-blad=""' : ''}>${u.del.map((d, k) => `<li>${'abcdef'[k]}) ${brodtext(flod(d))}`
         + delform(u, k, 'gutab')
         + rutor((u.delrutor || [])[k])
         + delflerval(u, k, 'gudel')
         + delnotis(k)
         + falt((u.delfalt || [])[k])
+        + delsvar(k)
         + '</li>').join('')}</ul>` : '';
     /* Bildplatsen. `u.bild` är uppgiftens egen hänvisning till bildunderlaget
        (exam_spec: ett 1-baserat index bland de uppladdade bilderna). Den
@@ -440,10 +449,11 @@ window.BladBygg = (() => {
        har aldrig haft den ordningen: gruppuppgift.tex.j2 och arbetsblad.tex.j2
        sätter former.kropp(u) FÖRE \begin{deluppgift}. */
     const former = tabell(u.tabell, 'gutab') + stegtabell(u.stegtabell);
+    const yta = perDel && u.del && u.del.length ? '' : svarsyta(u);
     const kropp = egen
-      ? `<div class="gutva"><div><p class="gufraga">${brodtext(flod(fraga))}</p>${alt}${former}${del}${notis}${svarsyta(u)}</div>`
+      ? `<div class="gutva"><div><p class="gufraga">${brodtext(flod(fraga))}</p>${alt}${former}${del}${notis}${yta}</div>`
         + `<div>${egen}</div></div>`
-      : `<p class="gufraga">${brodtext(flod(fraga))}</p>${alt}${former}${del}${fig}${notis}${svarsyta(u)}`;
+      : `<p class="gufraga">${brodtext(flod(fraga))}</p>${alt}${former}${del}${fig}${notis}${yta}`;
     return `<div class="gukort" data-ut="${u.ut || 'rakna'}">
       ${raknare
         ? `<div class="guraknarrad"><span class="gubricka">${bricka}</span>${raknare}</div>`

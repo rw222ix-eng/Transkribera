@@ -225,6 +225,40 @@ test("facitraden: inget dubbelt Svar, ledet före, enheten bara efter ett tal",
     expect(rader[3]).toContain("m");
   });
 
+/* ── DELUPPGIFTERNA PÅ BLADET SOM PÅ PROVET (2026-09-25) ──
+   Två kortsvar a) och b) fick en enda «Svar:» under båda, och
+   deluppgifternas text stod i mindre grad än frågan. */
+test("bladets kortsvar: en svarsrad per deluppgift, frågans grad",
+  async ({ page }) => {
+    await fejka(page, [rad(1, papper({ losningsblad: false, uppgifter: [
+      { nr: 1, p: 2, ut: "kort", t: "Utan räknare. Skriv som en potens.",
+        f: "", del: ["$\\sqrt[3]{5}$", "$\\dfrac{b^{2}}{b^{8}}$"],
+        vag: [["a) $5^{1/3}$", "1 p"], ["b) $b^{-6}$", "1 p"]] },
+      { nr: 2, p: 2, ut: "rakna", t: "Lös ekvationerna.", f: "",
+        del: ["$2x = 8$", "$x + 1 = 3$"],
+        vag: [["a) $x = 4$", "1 p"], ["b) $x = 2$", "1 p"]] },
+    ] }))]);
+    await page.goto("/");
+    await hydrerad(page);
+    await page.getByRole("tab", { name: "Planering" }).click();
+    await page.evaluate(() => window.Dokument.visa(0));
+    await expect(page.locator("#forhandsskal")).toBeVisible();
+    const kort = page.locator("#fh-ark .gukort");
+    await expect(kort).toHaveCount(2);
+    const matt = await kort.evaluateAll(k => k.map(x => ({
+      rader: x.querySelectorAll(".gusvarsrad").length,
+      iDel: x.querySelectorAll(".gudel .gusvarsrad").length,
+      losblad: x.querySelectorAll(".gulos").length,
+      grad: [x.querySelector(".gufraga"), x.querySelector(".gudel")]
+        .map(e => parseFloat(getComputedStyle(e).fontSize)),
+    })));
+    expect(matt[0].rader).toBe(2);
+    expect(matt[0].iDel).toBe(2);
+    expect(matt[1].rader).toBe(0);
+    expect(matt[1].losblad).toBe(1);
+    expect(matt[0].grad[0]).toBe(matt[0].grad[1]);
+  });
+
 /* ── ARBETSBLADETS FACIT I BEDÖMNINGSANVISNINGENS FORM (2026-09-25) ──
    Rickard: facit ska bli mycket tydligare för eleverna, i samma form som
    provens bedömningsanvisning. Svaret fett, ett steg per rad i samma grad,
