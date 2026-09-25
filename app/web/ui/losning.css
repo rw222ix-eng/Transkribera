@@ -202,6 +202,14 @@ $\dfrac{…}$
 [data-form="fa"] .pruppg{margin-top:0;padding:calc(12px * var(--fsk, 1)) 0 calc(10px * var(--fsk, 1));border-top:1px solid #E2DFD8}
 [data-form="fa"] .lotitel+.pruppg{border-top:0}
 .lobed[data-facit] td:last-child{width:auto;padding-left:0;text-align:left;white-space:normal}
+/* Ingen rullningslist i facit: bladet är en avritning, och listen följde med
+   till pappret vid varje rad med ett högt bråk eller en rot (slutkollen
+   2026-09-25). Raden bryts redan vid likhetstecknen (matBryt). */
+.lobed[data-facit] td{overflow:visible}
+/* FET MATEMATIK SOM SYNS. KaTeX \pmb är bara en skugga på 0,02 em, och på
+   pappret såg «a = 27» mager ut bredvid ett fett «kr». Strecket tjockar
+   glyferna på riktigt, i skärmen och i avritningen. */
+.lobedsvar .katex{-webkit-text-stroke:.035em currentColor}
 .lobedsteg{font-size:calc(15.5px * var(--fsk, 1));line-height:1.45}
 
 /* `table` och inte grid, med flit: raderna ska kunna brytas mellan sidor när

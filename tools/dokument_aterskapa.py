@@ -76,6 +76,7 @@ def fran_prov(exam):
             # ingen egen lösning när deluppgifterna bär den.
             if any(d.get("svarsfalt") for d in delar): r["delfalt"] = [d.get("svarsfalt") for d in delar]
             if any(d.get("enhet") for d in delar): r["delenhet"] = [d.get("enhet") for d in delar]
+            r["delut"] = ["kort" if (d.get("typ") or u.get("typ")) == "rutin" else "rakna" for d in delar]
             r["vag"] = [[f"{'abcdef'[k]}) {d.get('losning') or ''}", f"{summa(d.get('poang'))} p"]
                         for k, d in enumerate(delar)]
             r["beddel"] = [d.get("bedomning") or "" for d in delar]

@@ -577,7 +577,10 @@ def test_skarmen_ritar_deluppgiftens_egna_former():
     # datat a) och b) räknar på, och skärmen lade den under de frågor som
     # använde den — mallarna sätter den före (\begin{deluppgift}, \begin{parts}).
     assert "${alt}${former}${del}" in js
-    assert js.count("${alt}${former}${del}") == 3, \
+    # Arbetsbladets bild står mellan formerna och deluppgifterna, som på
+    # provet (2026-09-25); formerna står fortfarande före.
+    assert (js.count("${alt}${former}${del}")
+            + js.count("${alt}${former}${figFore}${del}")) == 3, \
         "något papper sätter fortfarande stammens former efter deluppgifterna"
 
 

@@ -2794,6 +2794,10 @@
         if (nagonDel(d => d.notis)) ut.delnotis = delar.map(d => d.notis || null);
         if (nagonDel(d => d.svarsfalt)) ut.delfalt = delar.map(d => d.svarsfalt || null);
         if (nagonDel(d => d.enhet)) ut.delenhet = delar.map(d => d.enhet || null);
+        /* Deluppgiftens egen svarsform: «kort» ger en svarsrad under just den
+           på arbetsbladet (blad-bygg.js kort), annars lösblad. Typen ärvs
+           från uppgiften när deluppgiften saknar egen (exam_latex gör samma). */
+        ut.delut = delar.map(d => ((d.typ || u.typ) === 'rutin' ? 'kort' : 'rakna'));
         /* Facitbladets poängsatta väg: varje deluppgift är ett steg med sin
            egen poäng — samma form som prototypens `vag`. */
         ut.vag = delar.map((d, k) => [`${'abcdef'[k]}) ${d.losning || ''}`,

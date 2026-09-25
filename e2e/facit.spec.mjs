@@ -237,6 +237,10 @@ test("bladets kortsvar: en svarsrad per deluppgift, frågans grad",
       { nr: 2, p: 2, ut: "rakna", t: "Lös ekvationerna.", f: "",
         del: ["$2x = 8$", "$x + 1 = 3$"],
         vag: [["a) $x = 4$", "1 p"], ["b) $x = 2$", "1 p"]] },
+      /* Deluppgiftens egen typ (franProv `delut`): a) kortsvar, b) lösning. */
+      { nr: 3, p: 2, ut: "rakna", t: "En boll kastas.", f: "",
+        del: ["Beräkna höjden.", "Bestäm tiden."], delut: ["kort", "rakna"],
+        vag: [["a) $6$ m", "1 p"], ["b) $2$ s", "1 p"]] },
     ] }))]);
     await page.goto("/");
     await hydrerad(page);
@@ -244,7 +248,7 @@ test("bladets kortsvar: en svarsrad per deluppgift, frågans grad",
     await page.evaluate(() => window.Dokument.visa(0));
     await expect(page.locator("#forhandsskal")).toBeVisible();
     const kort = page.locator("#fh-ark .gukort");
-    await expect(kort).toHaveCount(2);
+    await expect(kort).toHaveCount(3);
     const matt = await kort.evaluateAll(k => k.map(x => ({
       rader: x.querySelectorAll(".gusvarsrad").length,
       iDel: x.querySelectorAll(".gudel .gusvarsrad").length,
@@ -256,6 +260,8 @@ test("bladets kortsvar: en svarsrad per deluppgift, frågans grad",
     expect(matt[0].iDel).toBe(2);
     expect(matt[1].rader).toBe(0);
     expect(matt[1].losblad).toBe(1);
+    expect(matt[2].iDel).toBe(1);
+    expect(matt[2].losblad).toBe(1);
     expect(matt[0].grad[0]).toBe(matt[0].grad[1]);
   });
 
