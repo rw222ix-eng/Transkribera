@@ -77,10 +77,11 @@ window.BladBygg = (() => {
     .replace(/^\s+/, '').replace(/\s+$/, '');
   /* Uppgiftstext: tomraderna först, matematiken sedan. */
   const brodtext = s => mat(luft(s));
-  /* DELUPPGIFTENS MENINGAR I ETT STYCKE (lärarens dom 2026-09-25, exam 126
-     9a): «På Pizzeria Roma kostar en pizza 108 kr. Bestäm pizzans diameter.»
-     på samma rad, ingen tom rad före frågan. En rad som bara är en formel står
-     kvar för sig, utom först i raden. Spegel av exam_latex._ihop. */
+  /* MENINGARNA I ETT STYCKE (lärarens dom 2026-09-25, exam 126 9a och exam
+     130 uppgift 9–10): «På Pizzeria Roma kostar en pizza 108 kr. Bestäm
+     pizzans diameter.» på samma rad, ingen tom rad före frågan. Gäller både
+     deluppgiften och uppgiftens stam. En rad som bara är en formel står kvar
+     för sig, utom först i raden. Spegel av exam_latex._ihop. */
   const ENSAM_FORMEL = /^\$[^$]+\$$/;
   const ihop = s => {
     const ut = [];
@@ -727,7 +728,7 @@ window.BladBygg = (() => {
     const former = tabell(u.tabell, 'prtab') + stegtabell(u.stegtabell);
     return `<div class="pruppg">
       <span class="prnr">${u.nr}.<span class="prvarde">${varde}</span></span>
-      <div>${krav}<p class="prtext">${brodtext(u.t)}</p>${alt}${former}${del}${scenruta(u)}${figur}${notis}${svarsrad}</div>
+      <div>${krav}<p class="prtext">${brodtext(ihop(u.t))}</p>${alt}${former}${del}${scenruta(u)}${figur}${notis}${svarsrad}</div>
     </div>`;
   }
   /* ══════════ BILDSTÖDET PÅ SKÄRMEN ══════════

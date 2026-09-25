@@ -624,6 +624,22 @@ def _dela_vid_tabellen(stycken: list[dict], har_tabell: bool
 # utan svarsplats står den efter texten som förut (uppgift 10: tabellen,
 # frågan, sist bilden). Frågan är stycket efter den tomma raden
 # (exam_gen.luft_fore_fragan).
+def _ihop_stycken(stycken: list[dict]) -> list[dict]:
+    """Textstyckena efter varandra i ETT stycke, formlerna för sig och ingen
+    tom rad (lärarens dom 2026-09-25, se _build_view: STAMMEN I ETT
+    STYCKE). Spegeln av _ihop för en redan styckad text."""
+    ut: list[dict] = []
+    for s in stycken:
+        s = dict(s, luft=False)
+        forra = ut[-1] if ut else None
+        if (forra is not None and not s["formel"] and not forra["formel"]):
+            forra["text"] = f"{forra['text']} {s['text']}"
+            forra["par_efter"] = s["par_efter"]
+        else:
+            ut.append(s)
+    return ut
+
+
 def _dela_uppgiften(stycken: list[dict], har_tabell: bool
                     ) -> tuple[list[dict], list[dict], list[dict]]:
     """Före tabellen, mellan tabellen och frågan, och frågan."""
@@ -1573,6 +1589,25 @@ def _build_view(doc: exam_spec.ExamDoc,
                 item_vy["stycken_fraga"]
                 and (item_vy.get("flerval") or item_vy.get("svarsfalt_rad")
                      or item_vy.get("endast_svar")))
+            # STAMMEN I ETT STYCKE (lärarens dom 2026-09-25, exam 130 uppgift
+            # 9 och 10): «Hugo påstår att (x + 6)² = x² + 36. Avgör om Hugo
+            # har rätt.» direkt efter varandra, luften först före nästa
+            # uppgift. Samma dom som deluppgifterna (_ihop), och den ersätter
+            # 24/9:s en mening per rad och tomma rad före frågan. Det som
+            # står MELLAN styckena står kvar: tabellen efter meningen som
+            # nämner den, och bilden före frågan (exam 131 uppgift 2).
+            fore, efter, fraga = (item_vy["stycken_fore"],
+                                  item_vy["stycken_efter"],
+                                  item_vy["stycken_fraga"])
+            if not (item_vy["bild_fore_fragan"] and item_vy.get("bild_fil")):
+                if efter or item_vy.get("tabell"):
+                    efter, fraga = efter + fraga, []
+                else:
+                    fore, fraga = fore + fraga, []
+            (item_vy["stycken_fore"], item_vy["stycken_efter"],
+             item_vy["stycken_fraga"]) = (_ihop_stycken(fore),
+                                          _ihop_stycken(efter),
+                                          _ihop_stycken(fraga))
             # Gruppuppgiftens uppgifter heter 1, 2, 3 (lärarens val 2026-08-20)
             # — då kan deluppgifterna heta a) b) utan att två bokstavsserier
             # blandas på samma papper. Fältet heter `bokstav` av historiska

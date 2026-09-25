@@ -11068,8 +11068,11 @@ def _raknade_fynd(exam: dict, *, avsnitt: list[dict] | None, antal: int | None,
                 + situationsvakt(exam, tidigare)
                 # Passets tak håller hela vägen, inte bara i skelettet.
                 + poangtakvakt(exam, poang_tak))
-    # En mening per rad gäller alla papper eleverna läser (exam 129).
-    return (fel + radvakt(exam) + scenvakt(exam) + personvakt(exam)
+    # En mening per rad gäller alla papper eleverna läser (exam 129), utom
+    # provet sedan lärarens dom 2026-09-25: där står meningarna i ett stycke
+    # och bryts av pappret (exam_latex._ihop_stycken).
+    rader = radvakt(exam) if profil != "prov" else []
+    return (fel + rader + scenvakt(exam) + personvakt(exam)
             + forvaxlingsvakt(exam)
             # Både män och kvinnor, på varje papper (lärarens dom 2026-09-24).
             + konsbalansvakt(exam))

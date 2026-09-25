@@ -712,7 +712,10 @@ def efterkontroll(view: dict, doc, summor: dict | None, *,
                      "prov" if typ == "arbetsblad" and infor else typ)
     ut += _tipsfynd(view.get("exam") or {}, typ)
     ut += _npfynd(view.get("exam") or {}, typ)
-    ut += _radfynd(view.get("exam") or {})
+    # Provets meningar står i ett stycke sedan 2026-09-25 (exam_latex
+    # _ihop_stycken), så radlängden mäts bara på de andra papperen.
+    if typ != "prov":
+        ut += _radfynd(view.get("exam") or {})
     ut += _konsfynd(view.get("exam") or {})
     ut += _nptypfynd(doc, typ)
     ut += _cifynd(view.get("exam") or {}, typ)

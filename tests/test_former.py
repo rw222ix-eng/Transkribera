@@ -407,11 +407,32 @@ def test_deluppgiftens_meningar_star_i_ett_stycke():
     st = exam_latex._stycken("$\\sqrt[3]{a}$", luft=True,
                              forst_i_raden=True, ihop=True)
     assert [s["formel"] for s in st] == [False]
-    stam = exam_latex._stycken("Sara räknar till 7,5 s.\n\nBeräkna avståndet.",
-                               luft=True)
-    assert len(stam) == 2 and stam[1]["luft"]
     js = (UI / "blad-bygg.js").read_text(encoding="utf-8")
     assert "brodtext(ihop(d))" in js
+
+
+def test_stammen_star_i_ett_stycke_utom_runt_bilden():
+    """Lärarens dom 2026-09-25, exam 130 uppgift 9: «Hugo påstår att
+    (x + 6)² = x² + 36. Avgör om Hugo har rätt.» i ett stycke. Bilden före
+    frågan på en kortsvarsuppgift (exam 131 uppgift 2) står kvar emellan."""
+    hugo = _uppgift(poang=[1, 0, 0], typ="resonemang", formaga="R",
+                    text="Hugo påstår att $(x + 6)^2 = x^2 + 36$.\n\n"
+                         "Avgör om Hugo har rätt.")
+    regel = _uppgift(poang=[1, 0, 0], typ="rutin", formaga="P",
+                     text="En regel är 2 m lång.\nHugo kapar bort 1 m.\n\n"
+                          "Hur lång är regeln nu?")
+    doc = _doc(hugo, regel, profil="prov")
+    tex = exam_latex.render_prov(doc)
+    assert ("Hugo påstår att \\((x + 6)^2 = x^2 + 36\\). Avgör om Hugo har "
+            "rätt.") in tex
+    vy = exam_latex._build_view(doc, None, egna={2: "egen-02.png"})
+    it = [u for d in vy["delar"] for u in d["uppgifter"]][1]
+    assert [s["text"] for s in it["stycken_fore"]] == [
+        "En regel är 2 m lång. Hugo kapar bort 1 m."]
+    assert [s["text"] for s in it["stycken_fraga"]] == [
+        "Hur lång är regeln nu?"]
+    assert "brodtext(ihop(u.t))" in (UI / "blad-bygg.js").read_text(
+        encoding="utf-8")
 
 
 def test_stegtabellen_raknas_in_i_uppgiftens_hojd():
