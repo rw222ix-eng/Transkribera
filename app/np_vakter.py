@@ -665,10 +665,17 @@ DOLDA_KRAV: list[tuple[str, re.Pattern, re.Pattern]] = [
      # fälldes ändå för ett dolt krav, för ordet slutade inte där mönstret gjorde.
      re.compile(r"(?<![\wåäö])anta(?:r|g[a-zåäö]*)?(?![\wåäö])|förutsätt",
                 re.I)),
+    # «Visar hur uttrycket följer av figurerna» är också en motivering. Och
+    # det som STÄLLER kravet är en uppmaning, inte ett ord som råkar stå där:
+    # granskningen 2026-09-25 hittade fyra dolda motiveringar som gått förbi
+    # (126:7b, 129:7b, 129:11b, 132:7), för «Hur lång …», «Avgör om Hugo har
+    # rätt» och «Tabellen nedan visar» räknades som att frågan bad om den.
+    # «Avgör» räcker bara på en enpoängare, där avgörandet ÄR motiveringen
+    # (_AVGOR_RE nedan, doltkravvakt).
     ("en motivering",
-     re.compile(r"motiver|förklar", re.I),
-     re.compile(r"motiver|förklar|varför|resoner|undersök|avgör|visa|utred"
-                r"|(?<![\wåäö])hur(?![\wåäö])|stämmer|rätt", re.I)),
+     re.compile(r"motiver|förklar|visar (?:hur|varför)", re.I),
+     re.compile(r"(?<![\wåäö])(?:motivera|förklara|visa|resonera|undersök"
+                r"|utred|beskriv|jämför)(?![\wåäö])|varför", re.I)),
     ("en enhet",
      re.compile(r"(?<![\wåäö])enhet", re.I),
      re.compile(r"(?<![\wåäö])enhet|kronor|(?<![\wåäö])kr(?![\wåäö])|meter"
@@ -680,6 +687,11 @@ DOLDA_KRAV: list[tuple[str, re.Pattern, re.Pattern]] = [
                 re.I),
      re.compile(r"redovis|visa (?:hur|din|dina)|lösning", re.I)),
 ]
+
+
+_AVGOR_RE = re.compile(r"avgör|stämmer|(?<![\wåäö])rätt(?![\wåäö])", re.I)
+_EGEN_FORKLARING_RE = re.compile(
+    r"\s*(?:förklarar|motiverar|visar (?:hur|varför))", re.I)
 
 
 def doltkravvakt(exam: dict) -> list[dict]:
@@ -699,6 +711,14 @@ def doltkravvakt(exam: dict) -> list[dict]:
                 if namn == "en enhet" and str(u.get("enhet") or "").strip():
                     continue
                 if staller.search(text):
+                    continue
+                # «Avgör» ställer motiveringen när den ÄR avgörandet: på en
+                # enpoängare, och på raden «motiverad slutsats» (132:6b). En
+                # rad som kräver en EGEN förklaring («förklarar att räknelagen
+                # kräver positiv bas», 132:7) är fortfarande dold.
+                if (namn == "en motivering" and _AVGOR_RE.search(text)
+                        and (_poang(e) <= 1 or not _EGEN_FORKLARING_RE.match(
+                            r["krav"]))):
                     continue
                 fel.append(_err(
                     f"uppgift {nr}", "doltkrav",
@@ -903,9 +923,74 @@ def lasregelvakt(exam: dict) -> list[dict]:
     return fel[:LASREGEL_MAX_FYND]
 
 
-# ── ALLA NIO, i läsordning ───────────────────────────────────────────────
+# ── 9. AVRUNDNINGSVAKTEN (granskningen 2026-09-25, exam 129 uppgift 10) ──
+# «Bestäm den högsta farten … Avrunda svaret till ett heltal.» 33,97 avrundas
+# till 34, och 34 km/h ger för lång bromssträcka: facit var 33. Frågar
+# uppgiften efter ett högsta eller minsta värde är avrundningen ett villkor,
+# inte en regel, och det ska stå «Svara i hela km/h». Och «två siffrors
+# noggrannhet» (exam 131 uppgift 7b) lästes som två decimaler.
+_GRANSVARDE_RE = re.compile(
+    r"(?<![\wåäö])(?:högst[ae]?|minst[ae]?|längst[ae]?|kortast[ae]?|flest"
+    r"|färst|max(?:imal)?|min(?:imal)?)(?![\wåäö])", re.I)
+_AVRUNDA_RE = re.compile(r"avrunda", re.I)
+_SIFFRORS_RE = re.compile(r"siffrors noggrannhet", re.I)
+AVRUNDNING_MAX_FYND = 3
+
+
+def avrundningsvakt(exam: dict) -> list[dict]:
+    fel: list[dict] = []
+    for e in _enheter(exam):
+        nr, text = e["nr"], _text(e)
+        if _AVRUNDA_RE.search(text) and _GRANSVARDE_RE.search(text):
+            fel.append(_err(
+                f"uppgift {nr}", "avrundning",
+                f"Uppgift {nr} frågar efter ett högsta eller minsta värde och "
+                "ber samtidigt eleven avrunda. Då kan avrundningen ge ett svar "
+                "som bryter villkoret (33,97 blir 34 fast 33 är högst). Skriv "
+                "i stället vilken form svaret ska ha, t.ex. «Svara i hela "
+                "km/h.», och låt facit vara det värde som uppfyller villkoret."))
+        elif _SIFFRORS_RE.search(text):
+            fel.append(_err(
+                f"uppgift {nr}", "avrundning",
+                f"Uppgift {nr}: «siffrors noggrannhet» läses lätt som antal "
+                "decimaler. Stryk meningen och godta rimliga avrundningar i "
+                "bedömningen, eller skriv t.ex. «Avrunda till hela liter.»"))
+    return fel[:AVRUNDNING_MAX_FYND]
+
+
+# ── 10. ENDAST-SVAR-VAKTEN (granskningen 2026-09-25, exam 126 2 och 4) ───
+# «Endast svar krävs» och bedömningen «+1 E faktoriserar, förkortar och
+# svarar 5»: eleven skriver bara svaret, och raden kräver ett arbete som
+# aldrig syns. På ett kortsvar gäller raden svaret.
+_ARBETE_RE = re.compile(
+    r"(?<![\wåäö])(?:faktoriserar|förkortar|löser ut|sätter in|ställer upp"
+    r"|tecknar|utvecklar|beräknar|visar|motiverar|redovisar)(?![\wåäö])",
+    re.I)
+ENDASTSVAR_MAX_FYND = 4
+
+
+def endastsvarvakt(exam: dict) -> list[dict]:
+    fel: list[dict] = []
+    for e in _enheter(exam):
+        if (e.get("typ") or "") != "rutin":
+            continue
+        for r in exam_spec.bedomningsrader(e.get("bedomning")):
+            if r["not"] or not _ARBETE_RE.search(r["krav"]):
+                continue
+            fel.append(_err(
+                f"uppgift {e['nr']}", "endastsvar",
+                f"Uppgift {e['nr']} har «Endast svar krävs», men bedömningen "
+                f"«+{r['poang']} {r['niva']} {r['krav']}» kräver ett arbete "
+                "som eleven inte redovisar. Skriv raden som svaret, t.ex. "
+                "«+1 E korrekt svar 5»."))
+            break
+    return fel[:ENDASTSVAR_MAX_FYND]
+
+
+# ── ALLA ELVA, i läsordning ──────────────────────────────────────────────
 KODER = ("stegvakt", "formbyte", "poangform", "metodvakt", "parametervakt",
-         "kursvakt", "familjvakt", "doltkrav", "lasregel")
+         "kursvakt", "familjvakt", "doltkrav", "lasregel", "avrundning",
+         "endastsvar")
 
 
 def np_vakter(exam: dict, kurs: str = "",
@@ -920,4 +1005,5 @@ def np_vakter(exam: dict, kurs: str = "",
     return (stegvakt(exam, poang_tak) + formbytesvakt(exam, poang_tak)
             + poangformvakt(exam, kurs) + metodvakt(exam)
             + parametervakt(exam, kurs) + kursvakt(exam, kurs)
-            + familjvakt(exam) + doltkravvakt(exam) + lasregelvakt(exam))
+            + familjvakt(exam) + doltkravvakt(exam) + lasregelvakt(exam)
+            + avrundningsvakt(exam) + endastsvarvakt(exam))

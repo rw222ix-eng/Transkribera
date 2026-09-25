@@ -8844,9 +8844,12 @@ _NAMN_KON = {**dict.fromkeys(("Elias", "Noah", "Hugo", "Liam", "Ali", "Leo"),
                              "man"),
              **dict.fromkeys(("Maja", "Ella", "Alva", "Saga", "Sara", "Nora"),
                              "kvinna")}
+# En kroppsdel är också en människa på bilden: exam 129 uppgift 4 handlade om
+# Majas fot, scenen sa «a bare adult foot», och bildverktyget målade ett
+# håligt mansben bredvid en herrsko (granskningen 2026-09-25).
 _SCEN_MANNISKA_RE = re.compile(
     r"\b(figure|person|people|worker|silhouette|man|men|woman|women|boy|"
-    r"girl|he|she)\b", re.I)
+    r"girl|he|she|foot|feet|leg|legs|hand|hands|arm|arms|face)\b", re.I)
 _SCEN_KON_RE = {"man": re.compile(r"\b(man|boy|he|his|him)\b", re.I),
                 "kvinna": re.compile(r"\b(woman|girl|she|her)\b", re.I)}
 PERSON_MAX_FYND = 3
@@ -8867,10 +8870,21 @@ def personvakt(exam: dict) -> list[dict]:
         text = " ".join([str(u.get("text") or "")] + [
             str(d.get("text") or "") for d in u.get("deluppgifter") or []
             if isinstance(d, dict)])
-        namn = [n for n in _NAMN_KON if re.search(rf"\b{n}\b", text)]
-        if len(namn) != 1:
+        # Hela namnlistan och inte bara INSTRUCTION:s tolv: «Omar» och
+        # «Elsa» står inte där (_kon_ur_namn, samma som konsbalansvakt).
+        hittade: list[tuple[str, str]] = []
+        for w, mitt in _versala_ord(text):
+            k = _kon_ur_namn(w)
+            if k is None or (not mitt and w.casefold() in _TVETYDIGA_NAMN):
+                continue
+            bas = (w if w.casefold() in (_MANSNAMN | _KVINNONAMN)
+                   else w[:-1])
+            if all(bas != n for n, _ in hittade):
+                hittade.append((bas, k))
+        if len(hittade) != 1:
             continue
-        kon = _NAMN_KON[namn[0]]
+        namn = [hittade[0][0]]
+        kon = hittade[0][1]
         annat = "kvinna" if kon == "man" else "man"
         if _SCEN_KON_RE[kon].search(scen) and not _SCEN_KON_RE[annat].search(
                 scen):
@@ -8921,6 +8935,7 @@ _KVINNONAMN = frozenset((
     "ellie", "elsa", "elvira", "emilia", "emily", "emma", "esmeralda",
     "ester", "eva", "fanny", "fatima", "felicia", "freja", "gabriella",
     "hanna", "hedda", "helena", "ida", "ines", "inga", "ingrid", "irma",
+    "lea",
     "isabella", "jasmine", "jennifer", "johanna", "josefin", "julia", "juni",
     "karin", "klara", "kristina", "laura", "leah", "leila", "lena", "lina",
     "linn", "linnea", "liv", "lova", "lovisa", "luna", "maja", "malin",

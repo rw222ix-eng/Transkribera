@@ -543,3 +543,77 @@ def test_kursvakten_faller_for_vilka_varden_pa_c_aldrig():
     exam["uppgifter"][0]["text"] = ("Bestäm för vilka värden på $k$ "
                                     "ekvationen har två rötter.")
     assert np_vakter.kursvakt(exam, "Matematik 2a") == []
+
+
+# ── granskningen 2026-09-25: fem prov, samma felsorter ───────────────────
+
+def test_dold_motivering_nar_fragan_bara_ber_om_ett_uttryck():
+    """126:7b och 129:7b: «Teckna ett uttryck …» med raden «+1 A motiverar
+    uttrycket med figurerna». «Tabellen nedan visar» i stammen är ingen
+    uppmaning att visa."""
+    u = _u("Tabellen nedan visar antalet klossar. Teckna ett uttryck för "
+           "antalet klossar i figur $n$.", poang=(0, 0, 2),
+           bedomning="+1 A korrekt uttryck\n+1 A motiverar uttrycket med "
+                     "figurerna")
+    assert _koder(np_vakter.doltkravvakt(_prov([u])), "doltkrav") == {"1"}
+    u["text"] += " Motivera uttrycket med hjälp av figurerna."
+    assert np_vakter.doltkravvakt(_prov([u])) == []
+
+
+def test_avgor_racker_bara_pa_en_enpoangare():
+    """132:7: «Avgör om Hugo har rätt» på två A-poäng där den andra raden är
+    en förklaring. En enpoängare «Avgör …» med motivering är NP:s form."""
+    tva = _u("Hugo påstår att $x = 8$. Avgör om Hugo har rätt.",
+             poang=(0, 0, 2), bedomning="+1 A visar att det blir 8\n"
+                                        "+1 A förklarar att lagen kräver "
+                                        "positiv bas")
+    en = _u("Leo påstår att $x = 8$. Avgör om Leo har rätt.",
+            bedomning="+1 E svarar nej med motivering")
+    fel = np_vakter.doltkravvakt(_prov([tva, en]))
+    assert _koder(fel, "doltkrav") == {"1"}
+
+
+def test_avrunda_vid_hogsta_varde_falls():
+    """129:10: «Bestäm den högsta farten … Avrunda svaret till ett heltal.»
+    gav 34, facit var 33."""
+    u = _u("Bestäm den högsta farten bilen får ha. Avrunda svaret till ett "
+           "heltal.", poang=(0, 3, 0))
+    assert _koder(np_vakter.avrundningsvakt(_prov([u])), "avrundning") == {"1"}
+    u["text"] = "Bestäm den högsta farten bilen får ha. Svara i hela km/h."
+    assert np_vakter.avrundningsvakt(_prov([u])) == []
+    v = _u("Beräkna volymen. Svara med två siffrors noggrannhet.")
+    assert _koder(np_vakter.avrundningsvakt(_prov([v])), "avrundning") == {"1"}
+
+
+def test_endast_svar_bedoms_pa_svaret():
+    """126:2b: «Endast svar krävs» och raden «+1 E faktoriserar, förkortar
+    och svarar 5»."""
+    u = _u("Förenkla $\\dfrac{10a - 15}{2a - 3}$.", typ="rutin",
+           bedomning="+1 E faktoriserar, förkortar och svarar 5")
+    assert _koder(np_vakter.endastsvarvakt(_prov([u])), "endastsvar") == {"1"}
+    u["bedomning"] = "+1 E korrekt svar 5"
+    assert np_vakter.endastsvarvakt(_prov([u])) == []
+    u["typ"] = "redovisning"
+    u["bedomning"] = "+1 E faktoriserar, förkortar och svarar 5"
+    assert np_vakter.endastsvarvakt(_prov([u])) == []
+
+
+def test_kroppsdelen_pa_bilden_ska_ha_namnets_kon():
+    """129:4: Majas fot, scenen sa «a bare adult foot», och bilden visade
+    ett mansben. En fot är en människa, och alla namn i listan räknas."""
+    u = _u("Omars fot är 24 cm lång. Bestäm Omars skostorlek.",
+           scen={"begrepp": "fot", "filnamn": "a-04-fot",
+                 "scene": "SCENE. A bare adult foot beside a shoe."})
+    fel = exam_gen.personvakt(_prov([u]))
+    assert fel and fel[0]["code"] == "person" and "Omar" in fel[0]["message"]
+    u["scen"]["scene"] = "SCENE. A young man's bare foot beside a shoe."
+    assert exam_gen.personvakt(_prov([u])) == []
+
+
+def test_avgor_med_motiverad_slutsats_ar_nps_form():
+    """132:6b: «Avgör om √3 + √12 = √27 stämmer.» på två C, raderna
+    omskrivningen och en motiverad slutsats. Ingen dold förklaring."""
+    u = _u("Avgör om likheten stämmer.", poang=(0, 2, 0),
+           bedomning="+1 C skriver om roten\n+1 C motiverad slutsats att "
+                     "likheten stämmer")
+    assert np_vakter.doltkravvakt(_prov([u])) == []

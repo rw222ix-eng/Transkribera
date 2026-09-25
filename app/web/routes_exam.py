@@ -810,6 +810,12 @@ _ATGARD = {
                   "modellfamilj: samma del, samma poäng, samma förmåga.",
     "doltkrav": "Skriv kravet i uppgiftstexten eller stryk det ur "
                 "bedömningsraden. Poängen står kvar.",
+    # Granskningen 2026-09-25 (exam 129:10, 131:7b och 126:2/4).
+    "avrundning": "Skriv vilken form svaret ska ha («Svara i hela km/h.») i "
+                  "stället för att be eleven avrunda, och låt facit uppfylla "
+                  "villkoret. Samma tal och samma poäng.",
+    "endastsvar": "Skriv bedömningsraden som svaret, t.ex. «+1 E korrekt svar "
+                  "5». Uppgiften står kvar.",
     # Lärarens dom 2026-09-23 kväll (exam 128 och 129).
     "formbyte": "Låt uppgiften be om ett formbyte per poäng, eller dela den i "
                 "deluppgifter med var sin poäng. Övriga uppgifter står kvar.",
