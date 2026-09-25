@@ -2379,7 +2379,8 @@ def test_render_arbetsblad_has_facit_no_kravgranser():
     assert "Arbetsblad" in tex
     assert "Facit" in tex
     assert "Kravgränser" not in tex
-    assert r"\(x = 2\)" in tex                    # facit = lösningarna
+    # facit = lösningarna, svaret fett som i bedömningsanvisningen (2026-09-25)
+    assert r"\(\pmb{x = 2}\)" in tex
     # Poäng dolda som standard. Kontrollen gäller RENDERADE poäng, inte
     # makrots förekomst. Uppgiftsloopen anropar numera den delade
     # uppgift-miljön (\begin{uppgift}{n}{poäng}) i stället för att skriva

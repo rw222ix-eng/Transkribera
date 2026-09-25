@@ -130,7 +130,7 @@ test("skalan växer på ett halvtomt facit — men aldrig under basen",
       const grad = sel => parseFloat(getComputedStyle(ark.querySelector(sel)).fontSize);
       return {
         spill: ark.scrollHeight - ark.clientHeight,
-        vag: grad(".losvar > span"),
+        vag: grad(".lobedsvar"),
         titel: grad(".lotitel"),
         nr: grad(".prnr"),
         blad: document.querySelectorAll("#fh-ark .ark[data-form='fa']").length,
@@ -139,8 +139,9 @@ test("skalan växer på ett halvtomt facit — men aldrig under basen",
 
     // Aldrig över kanten: ett svar under nederkanten är värre än vitt papper.
     expect(matt.spill).toBeLessThanOrEqual(0);
-    // Aldrig under lärarens tolva — och basen (17,5 px) är golvet, inte taket.
-    expect(matt.vag).toBeGreaterThanOrEqual(17.5);
+    // Aldrig under lärarens tolva, och basen (15,5 px, svaret i
+    // bedömningsanvisningens form sedan 2026-09-25) är golvet, inte taket.
+    expect(matt.vag).toBeGreaterThanOrEqual(15.5);
     expect(matt.vag).toBeGreaterThanOrEqual(12);
     // EN ratt: rubrik och marginalsiffra växer med svaret, inte var för sig.
     expect(matt.titel).toBeGreaterThan(25);
@@ -155,9 +156,14 @@ test("ett fullt facit paginerar fortfarande — och sida två får sin egen grad
        Pagineringen mäter i BASGRADEN och delar därför på samma ställe som
        förut; sedan fyller varje blad sig självt, och sida två — den halvtomma —
        får en större grad än sida ett. */
+    /* Arbetsbladets facit trycker inte uppgiftstexten sedan 2026-09-25, så
+       höjden ligger i stegen: svaret och fyra led per uppgift. */
     const vag = k => [[`Ledet ${k}`, "1 p"], ["Svaret sätts in", "1 p"]];
     const uppgifter = Array.from({ length: 14 }, (_, k) => ({
-      nr: k + 1, p: 3, f: `$x = ${k + 1}$`,
+      nr: k + 1, p: 3,
+      f: [`$x = ${k + 1}$`, `$${k + 2}x + ${k} = ${(k + 2) * (k + 1) + k}$`,
+          `$${k + 2}x = ${(k + 2) * (k + 1)}$`, `$x = ${k + 1}$`,
+          `Kontroll: $${k + 2} \\cdot ${k + 1} + ${k} = ${(k + 2) * (k + 1) + k}$`].join("\n"),
       t: `Lös ekvationen $${k + 2}x + ${k} = ${(k + 2) * (k + 1) + k}$ och `
          + "kontrollera svaret genom insättning i det ursprungliga ledet.",
       vag: vag(k + 1),
@@ -217,4 +223,59 @@ test("facitraden: inget dubbelt Svar, ledet före, enheten bara efter ett tal",
     expect(rader[1].indexOf("n =")).toBeLessThan(rader[1].indexOf('"5'));
     expect(rader[2]).not.toContain("%");
     expect(rader[3]).toContain("m");
+  });
+
+/* ── ARBETSBLADETS FACIT I BEDÖMNINGSANVISNINGENS FORM (2026-09-25) ──
+   Rickard: facit ska bli mycket tydligare för eleverna, i samma form som
+   provens bedömningsanvisning. Svaret fett, ett steg per rad i samma grad,
+   ingen uppgiftstext, inga poäng, en linje mellan uppgifterna. */
+test("bladets facit: svaret fett, ett steg per rad, samma grad",
+  async ({ page }) => {
+    await fejka(page, [rad(1, papper({ uppgifter: [
+      { nr: 1, p: 1, t: "Utan räknare. Beräkna priset för 15 km.",
+        f: "225\n$P = 45 + 12 \\cdot 15 = 225$", enhet: "kr" },
+      { nr: 2, p: 2, t: "Nora påstår något. Avgör om Nora har rätt.",
+        f: "Nej. Talet ska vara minst 1.\n$52 \\cdot 10^{3} = 5{,}2 \\cdot 10^{4}$" },
+      { nr: 3, p: 2, t: "Lös ekvationerna.", f: "",
+        del: ["Lös $2x = 8$.", "Lös $x + 1 = 3$."],
+        vag: [["a) $x = 4$\n$x = 8/2$", "1 p"], ["b) $x = 2$", "1 p"]] },
+    ] }))]);
+    await page.goto("/");
+    await hydrerad(page);
+    await visa(page);
+
+    const ark = page.locator("#fh-ark .ark[data-form='fa']").first();
+    await expect(ark.locator(".pruppg")).toHaveCount(3);
+    const matt = await ark.evaluate(a => {
+      const grad = el => parseFloat(getComputedStyle(el).fontSize);
+      const u = [...a.querySelectorAll(".pruppg")];
+      return {
+        text: a.textContent,
+        svar: u.map(x => [...x.querySelectorAll(".lobedsvar")].length),
+        steg: u.map(x => [...x.querySelectorAll(".lobedsteg")].length),
+        del: [...u[2].querySelectorAll(".lobeddel")].map(b => b.textContent),
+        nej: u[1].querySelector(".lobedsvar").textContent,
+        kr: u[0].querySelector(".lobedsvar").textContent,
+        grad: [grad(a.querySelector(".lobedsvar")), grad(a.querySelector(".lobedsteg"))],
+        vikt: getComputedStyle(a.querySelector(".lobedsvar")).fontWeight,
+        linje: u.map(x => getComputedStyle(x).borderTopWidth),
+        ref: a.querySelectorAll(".prtext, .losetikett, .prvarde").length,
+      };
+    });
+    // Ingen uppgiftstext och inga poäng: eleven har bladet bredvid sig.
+    expect(matt.text).not.toContain("Beräkna priset");
+    expect(matt.text).not.toContain("1 p");
+    expect(matt.ref).toBe(0);
+    // Svaret först, fett; stegen en rad var.
+    expect(matt.svar).toEqual([1, 1, 2]);
+    expect(matt.steg).toEqual([1, 2, 1]);
+    expect(matt.del).toEqual(["a)", "b)"]);
+    expect(matt.nej).toBe("Nej");
+    expect(matt.kr).toContain("kr");
+    expect(Number(matt.vikt)).toBeGreaterThanOrEqual(700);
+    // En grad för svar och steg.
+    expect(matt.grad[0]).toBeCloseTo(matt.grad[1], 1);
+    // Linjen står mellan uppgifterna, inte över den första.
+    expect(matt.linje[0]).toBe("0px");
+    matt.linje.slice(1).forEach(b => expect(parseFloat(b)).toBeGreaterThan(0));
   });

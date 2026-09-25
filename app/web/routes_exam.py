@@ -669,7 +669,9 @@ def _ovningsfynd(exam: dict, infor: dict | None, typ: str) -> list[dict]:
                 "provets räknarfria del görs utan räknare, de andra med."))
         fel = (exam_gen.raknarfri_talvakt(exam or {}, infor)
                + exam_gen.bildfigurvakt(exam or {})
-               + exam_gen.uttrycksvakt(exam or {}, infor))
+               + exam_gen.uttrycksvakt(exam or {}, infor)
+               # Provets vakter från granskningen 2026-09-25 (5e8bae9).
+               + exam_gen.bladets_npvakter(exam or {}))
     except Exception:                       # pragma: no cover
         return ut
     ut += [_fynd(f["code"], f["message"], _uppgiftsnr(f.get("path", "")))

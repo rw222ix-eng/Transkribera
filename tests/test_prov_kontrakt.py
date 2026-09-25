@@ -157,11 +157,13 @@ def test_arbetsbladet_bar_sitt_facit_provet_inte():
     # Mallarna sätter matematiken som \(…\); jämför i den formen.
     import re
     losning = re.sub(r"\$([^$]*)\$", r"\\(\1\\)", doc.uppgifter[0].losning).strip()
-    assert losning in ark, "arbetsbladet ska bära sitt facit"
-    assert losning not in prov, "provet får aldrig innehålla lösningarna"
     # Bedömningsanvisningen bär svaret fett, med formlerna i \pmb (NP:s form,
-    # lärarens dom 2026-09-23; cachen har ingen fet matematik).
+    # lärarens dom 2026-09-23; cachen har ingen fet matematik). Arbetsbladets
+    # facit har samma form sedan Rickards beställning 2026-09-25.
     fet = re.sub(r"\$([^$]*)\$", r"\\(\\pmb{\1}\\)", doc.uppgifter[0].losning).strip()
+    assert f"\\bedsvar{{{fet}}}" in ark, "arbetsbladet ska bära sitt facit"
+    assert losning not in prov, "provet får aldrig innehålla lösningarna"
+    assert fet not in prov
     assert f"\\bedsvar{{{fet}}}" in bedomning, \
         "bedömningsanvisningen bär provets lösningar"
     # Och bedömningsanvisningen — lärarens eget papper — hör inte till eleven.
@@ -176,8 +178,8 @@ def test_arbetsbladet_bar_sitt_facit_provet_inte():
     # lärarens separata blad (only_facit). Utan flaggan fick eleverna dem
     # dubbelt — en gång i bladet, en gång i facit-PDF:en.
     utan = exam_latex.render_arbetsblad(doc, utan_facit=True)
-    assert losning not in utan
-    assert losning in exam_latex.render_arbetsblad(doc, only_facit=True)
+    assert losning not in utan and fet not in utan
+    assert fet in exam_latex.render_arbetsblad(doc, only_facit=True)
 
 
 def test_bedomningsanvisning_skrivs_bara_for_prov(client, monkeypatch):

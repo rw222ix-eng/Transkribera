@@ -457,6 +457,13 @@ def _nrlista(nrs: list[int]) -> str:
     return f"{', '.join(map(str, nrs[:-1]))} och {nrs[-1]}"
 
 
+# En rad som börjar med «a) » är en deluppgift i uppgiftstexten. Bladen bar
+# länge sina deluppgifter så (Rickard 2026-09-25, samma disposition som
+# provet), och raden börjar ett nytt stycke i stället för att klistras efter
+# frågan. Spegel av blad-bygg.js DELRAD.
+_DELRAD_RE = re.compile(r"^[a-h]\)\s")
+
+
 def _ihop(rader: list[str], forst_i_raden: bool) -> list[str]:
     """Textraderna hopslagna till en rad per stycke; formelrader för sig.
     Står uttrycket först på en deluppgift är det text (se _stycken)."""
@@ -471,6 +478,9 @@ def _ihop(rader: list[str], forst_i_raden: bool) -> list[str]:
                 ut.append(" ".join(buf))
                 buf = []
             ut.append(rad)
+        elif _DELRAD_RE.match(rad) and buf:
+            ut.append(" ".join(buf))
+            buf = [rad]
         else:
             buf.append(rad)
     if buf:
@@ -637,7 +647,8 @@ def _ihop_stycken(stycken: list[dict]) -> list[dict]:
     for s in stycken:
         s = dict(s, luft=False)
         forra = ut[-1] if ut else None
-        if (forra is not None and not s["formel"] and not forra["formel"]):
+        if (forra is not None and not s["formel"] and not forra["formel"]
+                and not _DELRAD_RE.match(s["text"])):
             forra["text"] = f"{forra['text']} {s['text']}"
             forra["par_efter"] = s["par_efter"]
         else:
@@ -978,6 +989,98 @@ def _svaret(losning: str | None, enhet: str | None = None) -> str:
     return f"{m.group(1)} {e}{m.group(2)}"
 
 
+# ── ARBETSBLADETS FACIT I BEDÖMNINGSANVISNINGENS FORM ──────────────────
+# Rickard 2026-09-25: facit ska bli mycket tydligare för eleverna, i samma
+# form som provens bedömningsanvisning. Svaret i fetstil, ett steg per rad i
+# samma grad, luft före nästa deluppgift och en linje mellan uppgifterna. Inga
+# poäng och ingen uppgiftstext: eleven har bladet bredvid sig.
+#
+# `losning` bär svaret på första raden och stegen efter. En rad som börjar
+# med «a)» börjar en ny deluppgift (bladen bar deluppgifterna i texten).
+# Första raden delas vid första meningsslutet utanför matematiken («Nej.
+# Talet framför …») eller vid «, eftersom»: det som följer är ett steg.
+# Spegel av blad-bygg.js facitGrupper.
+_DELSTART_RE = re.compile(r"^([a-h])\)\s*")
+_ORSAK_RE = re.compile(r",?\s+(eftersom|för att)\s+")
+
+
+def _losrader(text: str | None) -> list[str]:
+    """Raderna i `losning`; en radbrytning inuti $…$ delar inte."""
+    ut, dollar, start = [], 0, 0
+    t = str(text or "")
+    for i, c in enumerate(t):
+        if c == "$":
+            dollar += 1
+        elif c == "\n" and dollar % 2 == 0:
+            ut.append(t[start:i])
+            start = i + 1
+    ut.append(t[start:])
+    return [r.strip() for r in ut if r.strip()]
+
+
+def _dela_svaret(rad: str) -> tuple[str, str]:
+    """Svaret och resten av första raden (resten är ett steg)."""
+    s = re.sub(r"^\s*svar\s*:\s*", "", rad, flags=re.I)
+    i_mat = False
+    for i, c in enumerate(s):
+        if c == "$" and (i == 0 or s[i - 1] != "\\"):
+            i_mat = not i_mat
+            continue
+        if i_mat:
+            continue
+        if (c == "." and re.match(r"\s+[A-ZÅÄÖ0-9$]", s[i + 1:])
+                and not _FORKORTNING.search(s[:i])):
+            return s[:i].rstrip(), s[i + 1:].strip()
+        m = _ORSAK_RE.match(s, i)
+        if c in ", " and m and i > 0:
+            rest = s[m.end():].strip()
+            return s[:i].rstrip(), m.group(1).capitalize() + " " + rest
+    return s, ""
+
+
+def _med_enhet(s: str, enhet: str | None) -> str:
+    """Enheten efter ett tal, ledet före ett svar som inte är en likhet.
+    Samma regel som _svaret."""
+    e = str(enhet or "").strip()
+    if not s or not e:
+        return s
+    if _ar_led(e):
+        return s if "=" in s else f"{e} {s}"
+    if not _SVAR_TAL_RE.search(s) or _enhet_slut(s, e):
+        return s
+    m = re.match(r"^(.*?)(\.?)$", s, re.S)
+    return f"{m.group(1)} {e}{m.group(2)}"
+
+
+def facit_grupper(losning: str | None, enhet: str | None = None
+                  ) -> list[dict]:
+    """[{namn, svar, steg}] ur `losning`, rå text (inte escapad)."""
+    grupper: list[dict] = []
+    for r in _losrader(losning):
+        m = _DELSTART_RE.match(r)
+        if m or not grupper:
+            grupper.append({"namn": f"{m.group(1)})" if m else "",
+                            "rader": []})
+        grupper[-1]["rader"].append(r[m.end():] if m else r)
+    ut = []
+    for g in grupper:
+        svar, rest = _dela_svaret(g["rader"][0] if g["rader"] else "")
+        steg = ([rest] if rest else []) + g["rader"][1:]
+        # Enheten hör till hela uppgiften: bara när det finns ett svar.
+        if len(grupper) == 1:
+            svar = _med_enhet(svar, enhet)
+        if svar or steg:
+            ut.append({"namn": g["namn"], "svar": svar, "steg": steg})
+    return ut
+
+
+def _facit_vy(losning: str | None, enhet: str | None = None) -> list[dict]:
+    """facit_grupper escapad för mallen: svaret fett, stegen raka."""
+    return [{"namn": g["namn"], "svar": escape_mixed(g["svar"], fet=True),
+             "steg": [escape_mixed(x) for x in g["steg"]]}
+            for g in facit_grupper(losning, enhet)]
+
+
 def _jamfor(losning: str | None, enhet: str | None = None,
             bokstav: str | None = None) -> tuple:
     """Det en kravrad kan upprepa (se _kravrad): svaret med och utan enhet,
@@ -1165,6 +1268,8 @@ def _enhet_vy(*, poang, typ, formaga, text, losning, bedomning,
         "losning": escape_mixed(losning),
         # Arbetsbladets och gruppuppgiftens facit: ett steg per rad.
         "losning_steg": losning_steg(losning),
+        # Arbetsbladets facit i bedömningsanvisningens form (_facit_vy).
+        "facit": _facit_vy(losning, enhet),
         "bedomning": escape_mixed(bedomning),
         # Bedömningsanvisningens tre rader (NP:s form, se _svarsrad ovan).
         # Strukturens facit bara på lärarens papper, alltså bara med facit.
@@ -1533,6 +1638,7 @@ def _build_view(doc: exam_spec.ExamDoc,
                     # nyckeluppsättning.
                     "losning": escape_mixed(it.losning),
                     "losning_steg": losning_steg(it.losning),
+                    "facit": _facit_vy(it.losning, it.enhet),
                     "bedomning": escape_mixed(it.bedomning),
                     "bedomning_rader": _bedomning_rader(it.bedomning),
                     # Anvisningen sätter svaret och trippeln per deluppgift;
@@ -1585,6 +1691,11 @@ def _build_view(doc: exam_spec.ExamDoc,
             # understreck, för då ska eleverna svara på lösblad.» En
             # deluppgift får svarsplats på provpappret bara när uppgiften
             # själv är endast svar (prov.tex.j2).
+            # ARBETSBLADETS STAM I ETT STYCKE (Rickard 2026-09-25, samma
+            # disposition som provet): meningarna efter varandra och frågan
+            # direkt efter. arbetsblad.tex.j2 läser den; provet delar själv
+            # upp stammen runt tabell och bild nedan.
+            item_vy["stycken_blad"] = _ihop_stycken(item_vy["stycken"])
             item_vy["svar_pa_pappret"] = it.typ == "rutin"
             item_vy["behov_mm"] = _behov_mm(item_vy)
             (item_vy["stycken_fore"], item_vy["stycken_efter"],

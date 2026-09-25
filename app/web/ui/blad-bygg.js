@@ -81,8 +81,14 @@ window.BladBygg = (() => {
      130 uppgift 9–10): «På Pizzeria Roma kostar en pizza 108 kr. Bestäm
      pizzans diameter.» på samma rad, ingen tom rad före frågan. Gäller både
      deluppgiften och uppgiftens stam. En rad som bara är en formel står kvar
-     för sig, utom först i raden. Spegel av exam_latex._ihop. */
+     för sig, utom först i raden. Spegel av exam_latex._ihop.
+
+     Arbetsbladet också (Rickard 2026-09-25: samma disposition som provet).
+     Bladen bar länge sina deluppgifter i uppgiftstexten, «a) Beräkna …» på
+     egen rad, och en sådan rad börjar ett nytt stycke i stället för att
+     klistras efter frågan. */
   const ENSAM_FORMEL = /^\$[^$]+\$$/;
+  const DELRAD = /^[a-h]\)\s/;
   const ihop = s => {
     const ut = [];
     let buf = [];
@@ -91,6 +97,9 @@ window.BladBygg = (() => {
         if (ENSAM_FORMEL.test(r) && (ut.length || buf.length)) {
           if (buf.length) { ut.push(buf.join(' ')); buf = []; }
           ut.push(r);
+        } else if (DELRAD.test(r) && buf.length) {
+          ut.push(buf.join(' '));
+          buf = [r];
         } else buf.push(r);
       });
     if (buf.length) ut.push(buf.join(' '));
@@ -336,8 +345,13 @@ window.BladBygg = (() => {
      kortreferens (ref nedan). Samma sil som exam_gen._RAKNARMARKE. */
   const RAKNARMARKE = /^\s*(Räknare tillåten|Utan räknare)\.\s*/;
   const utanRaknarmarke = t => String(t == null ? '' : t).replace(RAKNARMARKE, '');
-  function kort(u, i) {
+  function kort(u, i, typ) {
     const bricka = String(i + 1);
+    /* Stammen och deluppgiften i ETT stycke med frågan direkt efter, som på
+       provet (ihop). Bara arbetsbladet: gruppuppgiftens text är en
+       arbetsbeskrivning med en mening per rad, och ingen har bett om att den
+       ska flöda. */
+    const flod = t => (typ === 'Arbetsblad' ? ihop(t) : t);
     const marke = RAKNARMARKE.exec(String(u.t || ''));
     const fraga = marke ? utanRaknarmarke(u.t) : u.t;
     const raknare = marke
@@ -352,7 +366,7 @@ window.BladBygg = (() => {
       return n ? `<p class="gunotis">${brodtext(n)}</p>` : '';
     };
     const del = u.del && u.del.length
-      ? `<ul class="gudel">${u.del.map((d, k) => `<li>${'abcdef'[k]}) ${brodtext(d)}`
+      ? `<ul class="gudel">${u.del.map((d, k) => `<li>${'abcdef'[k]}) ${brodtext(flod(d))}`
         + delform(u, k, 'gutab')
         + rutor((u.delrutor || [])[k])
         + delflerval(u, k, 'gudel')
@@ -427,9 +441,9 @@ window.BladBygg = (() => {
        sätter former.kropp(u) FÖRE \begin{deluppgift}. */
     const former = tabell(u.tabell, 'gutab') + stegtabell(u.stegtabell);
     const kropp = egen
-      ? `<div class="gutva"><div><p class="gufraga">${brodtext(fraga)}</p>${alt}${former}${del}${notis}${svarsyta(u)}</div>`
+      ? `<div class="gutva"><div><p class="gufraga">${brodtext(flod(fraga))}</p>${alt}${former}${del}${notis}${svarsyta(u)}</div>`
         + `<div>${egen}</div></div>`
-      : `<p class="gufraga">${brodtext(fraga)}</p>${alt}${former}${del}${fig}${notis}${svarsyta(u)}`;
+      : `<p class="gufraga">${brodtext(flod(fraga))}</p>${alt}${former}${del}${fig}${notis}${svarsyta(u)}`;
     return `<div class="gukort" data-ut="${u.ut || 'rakna'}">
       ${raknare
         ? `<div class="guraknarrad"><span class="gubricka">${bricka}</span>${raknare}</div>`
@@ -521,7 +535,7 @@ window.BladBygg = (() => {
       <div class="guband"${bandtext ? ' data-egen' : ''}>${esc(bandtext || BAND[v.typ] || BAND.Arbetsblad)}${
         (v.hjalpmedel || '').trim() ? ` <b>${esc(v.hjalpmedel.trim())}</b>` : ''}${
         v.nyckelfraga ? ` <b>${mat(v.nyckelfraga)}</b>` : ''}</div>
-      ${uppgifter.map(kort).join('')}
+      ${uppgifter.map((u, k) => kort(u, k, v.typ)).join('')}
     </div>`;
   }
 
@@ -558,11 +572,9 @@ window.BladBygg = (() => {
 
   /* ── Facit till arbetsbladet ─────────────────────── */
   function arkfacit(v, uppgifter) {
-    /* Arbetsbladets facit bär inga poäng (lärarens dom 2026-08-26): bladet är
-       övning utan betygsgränser, så «3 p» vid svaret är en siffra som inte
-       delas ut någonstans. PDF:ns facitband skriver redan tomt där
-       (arbetsblad.tex.j2, facitdelen) — skärmen ska lova samma sak.
-       Gruppuppgiften behåller poängen: dess facit läses MED bedömningen. */
+    if (v.typ === 'Arbetsblad') return bladfacit(v, uppgifter);
+    /* Gruppuppgiftens facit behåller poängen och uppgiftsraden: det läses MED
+       bedömningen. Arbetsbladets facit är bladfacit nedan. */
     const poang = u => v.typ === 'Arbetsblad' ? '' : `<span class="prvarde">${u.p} p</span>`;
     /* Deluppgifterna i arbetsbladets facit: samma svarsrad som en uppgift med
        «a) … b) …» i texten, alltså a) och b) under SVAR och uträkningen
@@ -1232,6 +1244,105 @@ window.BladBygg = (() => {
                           [svar, svaret(u.f)].concat(bokstav ? [bokstav, `(${bokstav})`] : []));
       })();
     return `<table class="lobed"><tbody>${kropp}</tbody></table>`;
+  }
+
+  /* ══════════ ARBETSBLADETS FACIT I BEDÖMNINGSANVISNINGENS FORM ══════════
+     Rickard 2026-09-25: facit ska bli mycket tydligare för eleverna, i samma
+     form som provens bedömningsanvisning. Förut stod uppgiftstexten i liten
+     stil, etiketten SVAR i kapitäler, svaret stort, enheten liten och stegen
+     stora: fem grader på samma uppgift. Nu: numret, svaret i fetstil, ett
+     steg per rad i samma grad, luft före nästa deluppgift och en linje
+     mellan uppgifterna, som bedtabell ovan. Inga poäng (lärarens dom
+     2026-08-26) och ingen uppgiftstext: eleven har bladet bredvid sig, som
+     läraren har provet bredvid anvisningen.
+
+     `losning` bär svaret på första raden och stegen på raderna efter
+     (exam_spec, «svaret först»). En rad som börjar med «a)» börjar en ny
+     deluppgift: bladen bar länge deluppgifterna i uppgiftstexten, och då
+     står alla svaren i samma fält. Spegel av exam_latex._facit_grupper. */
+  const DELSTART = /^([a-h])\)\s*/;
+  /* Raderna i `losning`. En radbrytning inuti $…$ är TeX-källa och delar
+     inte (samma regel som svarOchSteg). */
+  function losrader(s) {
+    const ut = [];
+    let dollar = 0, start = 0;
+    const t = String(s == null ? '' : s);
+    for (let i = 0; i < t.length; i++) {
+      if (t[i] === '$') dollar++;
+      else if (t[i] === '\n' && dollar % 2 === 0) { ut.push(t.slice(start, i)); start = i + 1; }
+    }
+    ut.push(t.slice(start));
+    return ut.map(r => r.trim()).filter(Boolean);
+  }
+  /* Svaret och resten av första raden. Delas vid första meningsslutet utanför
+     matematiken («Nej. Talet framför …») eller vid «, eftersom» («$5$,
+     eftersom $5 \cdot 5 \cdot 5 = 125$»): det som följer är ett steg. */
+  const ORSAK = /^,?\s+(eftersom|för att)\s+/;
+  function delaSvaret(rad) {
+    const s = rad.replace(/^\s*svar\s*:\s*/i, '');
+    let iMat = false;
+    for (let i = 0; i < s.length; i++) {
+      if (s[i] === '$' && (i === 0 || s[i - 1] !== '\\')) { iMat = !iMat; continue; }
+      if (iMat) continue;
+      if (s[i] === '.' && /^\s+[A-ZÅÄÖ0-9$]/.test(s.slice(i + 1)) && !FORKORTNING.test(s.slice(0, i))) {
+        return [s.slice(0, i).trimEnd(), s.slice(i + 1).trim()];
+      }
+      const m = ORSAK.exec(s.slice(i));
+      if ((s[i] === ',' || s[i] === ' ') && m && i > 0) {
+        return [s.slice(0, i).trimEnd(), versal(m[1]) + ' ' + s.slice(i + m[0].length).trim()];
+      }
+    }
+    return [s, ''];
+  }
+  /* Enheten efter ett tal, ledet före ett svar som inte redan är en likhet.
+     Samma regel som svaret() ovan. */
+  function medEnhet(s, enhet) {
+    const e = String(enhet || '').trim();
+    if (!s || !e) return s;
+    if (arLed(e)) return s.includes('=') ? s : `${e} ${s}`;
+    if (!SVAR_TAL.test(s) || ENHET_SLUT(s, e)) return s;
+    const m = s.match(/^([\s\S]*?)(\.?)$/);
+    return `${m[1]} ${e}${m[2]}`;
+  }
+  function facitGrupper(losning, enhet) {
+    const grupper = [];
+    losrader(losning).forEach(r => {
+      const m = DELSTART.exec(r);
+      if (m || !grupper.length) grupper.push({ namn: m ? `${m[1]})` : '', rader: [] });
+      grupper[grupper.length - 1].rader.push(m ? r.slice(m[0].length) : r);
+    });
+    return grupper.map(g => {
+      const [svar, rest] = delaSvaret(g.rader[0] || '');
+      const steg = (rest ? [rest] : []).concat(g.rader.slice(1));
+      /* Enheten hör till hela uppgiften och sätts bara när det finns ett svar. */
+      return { namn: g.namn, svar: grupper.length === 1 ? medEnhet(svar, enhet) : svar, steg };
+    }).filter(g => g.svar || g.steg.length);
+  }
+  function facitRader(grupper, bokstav) {
+    return grupper.map((g, i) => {
+      const svar = i === 0 && bokstav ? bedsvar(bokstav, g.svar) : g.svar;
+      return `<tr data-svar><td>${g.namn ? `<b class="lobeddel">${esc(g.namn)}</b>` : ''}${
+        svar ? `<b class="lobedsvar">${matBryt(svar, true)}</b>` : ''}</td></tr>`
+        + g.steg.map(s => `<tr><td class="lobedsteg">${matBryt(s)}</td></tr>`).join('');
+    }).join('');
+  }
+  function bladfacit(v, uppgifter) {
+    const post = (u, k) => {
+      /* Deluppgifterna bär var sin lösning i `vag`, «a) …» (plan.js franProv). */
+      const kropp = !u.f && u.vag && u.vag.length
+        ? u.vag.map((s, j) => facitRader(facitGrupper(s[0], (u.delenhet || [])[j])
+          .map(g => (g.namn ? g : Object.assign(g, { namn: `${BOKSTAVER[j]})` }))))).join('')
+        : facitRader(facitGrupper(u.f, u.enhet),
+                     u.alt && u.ratt != null ? BOKSTAV[u.ratt] || '' : '');
+      return `<div class="pruppg">
+      <span class="prnr">${k + 1}.</span>
+      <div><table class="lobed" data-facit=""><tbody>${kropp}</tbody></table></div></div>`;
+    };
+    return `<div class="ark" data-form="fa" data-brytbar="">
+      <div class="lohuvud"><b>Facit</b><span>${esc(versal(v.moment || ''))}</span></div>
+      <h1 class="lotitel">Svar och lösningsgång</h1>
+      ${uppgifter.map(post).join('')}
+    </div>`;
   }
 
   /* Kortsvarsarket och lösningsgångsarket ritar SAMMA rad: läraren ska

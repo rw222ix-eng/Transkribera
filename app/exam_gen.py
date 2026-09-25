@@ -10197,7 +10197,18 @@ def _ramens_listor(ram: dict | None) -> dict:
 OVNINGSKODER = ("raknarfri", "bildfigur", "provlan", "kopia", "forbudsvakt",
                 "provuttryck",
                 ci_utanfor.KOD, "begriplighet", "radlangd", "person",
-                "forvaxling", "konsbalans")
+                "forvaxling", "konsbalans", "doltkrav", "avrundning",
+                "endastsvar")
+
+
+def bladets_npvakter(exam: dict) -> list[dict]:
+    """Provets vakter från granskningen 2026-09-25 (5e8bae9) på bladet inför
+    provet: dolt krav, avrundning vid högsta eller minsta värde, och «Endast
+    svar» som bedöms på svaret. Samma fel är lika fel på övningen, och
+    facit eleverna läser är samma räkning (Rickard 2026-09-25). De andra
+    NP-vakterna är mätta på provets poäng och står utanför."""
+    return (np_vakter.doltkravvakt(exam) + np_vakter.avrundningsvakt(exam)
+            + np_vakter.endastsvarvakt(exam))
 
 
 def ovningsvakter(exam: dict, *, prov: dict | None = None,
@@ -10237,6 +10248,7 @@ def ovningsvakter(exam: dict, *, prov: dict | None = None,
                 if _uppgiftsnr(f["path"].removeprefix("uppgift ")) not in sedda]
     fel += raknarfri_talvakt(exam, prov)
     fel += bildfigurvakt(exam)
+    fel += bladets_npvakter(exam)
     # Provets språkvakt: bladet ska vara lika lätt att läsa som provet.
     fel += sprakvakt(exam)
     # Scenvakten står INTE här: provkörningen på de femton bladen fällde

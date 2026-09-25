@@ -382,9 +382,11 @@ async function hojdparitet(page, v) {
        att mäta följden hade gjort provet beroende av att just den här texten
        råkar hamna på gränsen. Probet är `.prtext` — arkets löptext, som INTE
        skriver någon egen `letter-spacing` och därför ärver den som frågan
-       gäller. Rubrikerna duger inte: de sätter sin egen. */
+       gäller. Rubrikerna duger inte: de sätter sin egen. Arbetsbladets
+       facit bär ingen uppgiftstext sedan 2026-09-25, och där är probet
+       ett steg (`.lobedsteg`), som inte heller skriver någon. */
     const bredden = ark => {
-      const el = ark && ark.querySelector(".prtext");
+      const el = ark && ark.querySelector(".prtext, .lobedsteg");
       if (!el) return -1;
       const r = el.ownerDocument.createRange();
       r.selectNodeContents(el);
@@ -435,7 +437,8 @@ test("bilden bryter raderna där skärmen bryter dem", async ({ page }) => {
   const v = papper({
     inst: { antal: 6, niva: "Blandat", facit: "Separat facit" },
     uppgifter: [1, 2, 3, 4, 5, 6].map(i => ({
-      nr: i, p: 2, t: `Beräkna $${i}x + ${i}$ när $x = ${i}$.`, f: lang(i),
+      nr: i, p: 2, t: `Beräkna $${i}x + ${i}$ när $x = ${i}$.`, f: `$${i * i + i}$
+${lang(i)}`,
       niva: "E" })),
     losningsblad: true,
   });

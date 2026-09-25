@@ -25,6 +25,17 @@ def _exam_doc():
     return _exam()
 
 
+def _facitdelar(u):
+    """Uppgiftens facit som arbetsbladets mall sätter det: svaret fett och
+    ett steg per rad (exam_latex.facit_grupper, 2026-09-25)."""
+    from app import exam_latex
+    ut = []
+    for g in exam_latex.facit_grupper(u["losning"], u.get("enhet")):
+        ut.append(exam_latex.escape_mixed(g["svar"], fet=True))
+        ut += [exam_latex.escape_mixed(x) for x in g["steg"]]
+    return ut
+
+
 @pytest.fixture
 def client(llm_ready):
     """Allt i den här sviten genererar — arbitern måste svara.
@@ -967,11 +978,11 @@ def test_facitfilen_ar_facit_ensamt_inte_hela_bladet(client, monkeypatch):
     assert "Öva i egen takt" in blad and "Öva i egen takt" not in facit
     assert r"\newpage" in blad and r"\newpage" not in facit
     assert r"\svarsrad" in blad and r"\svarsrad" not in facit
-    # …men lösningarna är kvar, ordagrant desamma som på bladets sista sida.
-    from app import exam_latex
+    # …men lösningarna är kvar, ordagrant desamma som på bladets sista sida
+    # (svaret fett och stegen rad för rad sedan 2026-09-25).
     for u in _exam_doc()["uppgifter"]:
-        satt = exam_latex.escape_mixed(u["losning"])
-        assert satt in blad and satt in facit, satt
+        for satt in _facitdelar(u):
+            assert satt in blad and satt in facit, satt
 
 
 def test_separat_facit_slacker_bandet_i_elevbladet(client, monkeypatch):
@@ -991,13 +1002,14 @@ def test_separat_facit_slacker_bandet_i_elevbladet(client, monkeypatch):
     # Instruktionsraden lovar inte längre något som inte finns i bladet.
     assert "sista sidan" not in blad and "delas ut separat" in blad
     for u in _exam_doc()["uppgifter"]:
-        assert exam_latex.escape_mixed(u["losning"]) not in blad
+        assert _facitdelar(u)[0] not in blad
     # …och lösningarna finns kvar — men BARA i det separata facit-bladet.
     facit = kropp(next(Path(res["tex"]).parent.glob("* - facit.tex")
                        ).read_text(encoding="utf-8"))
     assert r"\delprovband{Facit}" in facit
     for u in _exam_doc()["uppgifter"]:
-        assert exam_latex.escape_mixed(u["losning"]) in facit
+        for satt in _facitdelar(u):
+            assert satt in facit, satt
 
 
 def test_plan_js_skickar_separat_facit_med_approve():

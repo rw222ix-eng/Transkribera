@@ -49,7 +49,10 @@ på sista sidan((* endif *))((* if visa_poang *)); poäng anges som totalpoäng(
 ((* else *))
 \begin{uppgift}{((( u.nummer )))}{}
 ((* endif *))
-((( former.stycken(u.stycken) )))
+((# Stammen i ETT stycke med frågan direkt efter, som på provet (Rickard
+    2026-09-25). «is defined»: den körande servern har Python i minnet och
+    läser mallen från disk, och en äldre vy saknar fältet. #))
+((( former.stycken(u.stycken_blad if u.stycken_blad is defined else u.stycken) )))
 ((* if u.bild_fil *))\par\vspace{2mm}\begin{center}\includegraphics[width=0.72\linewidth,height=90mm,keepaspectratio]{((( u.bild_fil )))}\end{center}((* endif *))
 ((* if u.figur_tex *))\par\vspace{2mm}\begin{center}((( u.figur_tex )))\end{center}((* endif *))
 ((( former.kropp(u) )))
@@ -86,12 +89,42 @@ på sista sidan((* endif *))((* if visa_poang *)); poäng anges som totalpoäng(
 ((* endif *))
 ((* if not utan_facit *))
 \delprovband{Facit}
+((# FACIT I BEDÖMNINGSANVISNINGENS FORM (Rickard 2026-09-25): svaret fett,
+    ett steg per rad, luft före nästa deluppgift och en linje mellan
+    uppgifterna, som bedomning.tex.j2. Inga poäng och ingen uppgiftstext.
+    Grupperna byggs i exam_latex._facit_vy; en äldre vy utan fältet får
+    förra facit, en rad per steg. #))
+((* macro facitgrupp(g, namn) *))
+\bedsvar{((* if namn *))((( namn )))\enspace ((* endif *))((( g.svar )))}
+((* for s in g.steg *))
+\noindent ((( s )))\par\nopagebreak
+((* endfor *))
+((* endmacro *))
+((* set ns = namespace(forsta=true) *))
 ((* for del in delar *))
 ((* for u in del.uppgifter *))
+((# Linjen som \bedlinje ritar, men utan dess \pfbehov: det kommandot finns
+    bara i förlagans preamble, och arbetsbladet har inte den. #))
+((* if not ns.forsta *))
+\par\nopagebreak\vspace{2.5mm}\noindent\textcolor{ink200}{\rule{\linewidth}{0.15mm}}\par
+((* endif *))
+((* set ns.forsta = false *))
 \begin{uppgift}{((( u.nummer )))}{}
 ((* if u.har_deluppgifter *))
 ((* for d in u.deluppgifter *))
+((* if d.facit is defined *))
+((* if not loop.first *))\vspace{1.5mm}
+((* endif *))
+((* for g in d.facit *))((( facitgrupp(g, g.namn or (d.bokstav ~ ')')) )))((* endfor *))
+((* else *))
 \begin{deluppgift}{((( d.bokstav )))}{}((( d.losning_steg if d.losning_steg is defined else d.losning )))\end{deluppgift}
+((* endif *))
+((* endfor *))
+((* elif u.facit is defined *))
+((* for g in u.facit *))
+((* if not loop.first *))\vspace{1.5mm}
+((* endif *))
+((( facitgrupp(g, g.namn) )))
 ((* endfor *))
 ((* else *))((( u.losning_steg if u.losning_steg is defined else u.losning )))((* endif *))
 \end{uppgift}
