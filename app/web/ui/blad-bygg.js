@@ -94,7 +94,11 @@ window.BladBygg = (() => {
         } else buf.push(r);
       });
     if (buf.length) ut.push(buf.join(' '));
-    return ut.join('\n');
+    /* «2 000» får inte brytas mellan raderna nu när texten flödar
+       (exam_latex._HARD_TUSEN_RE): hårt mellanslag utanför matten. */
+    return ut.join('\n').split('$')
+      .map((bit, i) => (i % 2 ? bit : bit.replace(/(\d) (?=\d{3}(?!\d))/g, '$1 ')))
+      .join('$');
   };
   const BOKSTAV = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
   const versal = s => String(s || '').charAt(0).toUpperCase() + String(s || '').slice(1);

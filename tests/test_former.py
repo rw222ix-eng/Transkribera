@@ -435,6 +435,16 @@ def test_stammen_star_i_ett_stycke_utom_runt_bilden():
         encoding="utf-8")
 
 
+def test_tusentalet_bryts_inte_mellan_raderna():
+    """Exam 130 uppgift 12: «mellan 2» sist på en rad, «000 och 2 500» på
+    nästa, när meningarna började stå i ett stycke."""
+    assert exam_latex.escape_mixed("mellan 2 000 och 2 500 plattor") == \
+        "mellan 2~000 och 2~500 plattor"
+    assert exam_latex.escape_mixed("rad 2 och 100 plattor") == \
+        "rad 2 och 100 plattor"
+    assert exam_latex.escape_mixed("$2\\,000$ kr") == "\\(2\\,000\\) kr"
+
+
 def test_stegtabellen_raknas_in_i_uppgiftens_hojd():
     """Exam 126 uppgift 10 delades mellan a) och b): uppskattningen
     (exam_latex._behov_mm) visste inte att uppgiften bar en stegtabell."""

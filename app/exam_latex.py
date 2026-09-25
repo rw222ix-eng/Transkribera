@@ -109,6 +109,10 @@ _MATH_SPLIT_RE = re.compile(r"\$([^$]*)\$")
 # tal och tecken kan brytas isär. Körs EFTER escaping (% är då \%), så det
 # insatta ~ blir en icke-brytande space i LaTeX, inte \textasciitilde.
 _HARD_PROCENT_RE = re.compile(r"(\d) +(\\%)")
+# Tusentalsmellanslaget är hårt av samma skäl: sedan meningarna står i ett
+# stycke (2026-09-25) bröts «2 000» mellan raderna på exam 130 uppgift 12,
+# «mellan 2» sist på en rad och «000 och 2 500» på nästa.
+_HARD_TUSEN_RE = re.compile(r"(?<=\d) (?=\d{3}(?!\d))")
 
 
 def escape_latex(text: str) -> str:
@@ -158,7 +162,8 @@ def escape_mixed(text: str, *, fet: bool = False) -> str:
     # aldrig på matten inom \(…\): ett procenttecken inuti matte får inte
     # röras. Därför per segment, inte på den hopslagna strängen.
     def _esc_text(s: str) -> str:
-        return _HARD_PROCENT_RE.sub(r"\1~\2", escape_latex(s))
+        return _HARD_TUSEN_RE.sub("~", _HARD_PROCENT_RE.sub(
+            r"\1~\2", escape_latex(s)))
     for m in _MATH_SPLIT_RE.finditer(text):
         parts.append(_esc_text(text[pos:m.start()]))
         matte = _exponentbrak(_intervallminus(m.group(1)))
