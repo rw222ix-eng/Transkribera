@@ -389,6 +389,31 @@ def test_likhetsdelningen(cell, delning):
     assert exam_latex._likhetsdelning(cell) == delning
 
 
+def test_deluppgiftens_meningar_star_i_ett_stycke():
+    """Lärarens dom 2026-09-25, exam 126 9a: «På Pizzeria Roma kostar en pizza
+    108 kr. Bestäm pizzans diameter.» på samma rad, utan tom rad emellan.
+    Uppgiftens stam behåller en mening per rad och luften före frågan."""
+    st = exam_latex._stycken("På Pizzeria Roma kostar en pizza 108 kr.\n\n"
+                             "Bestäm pizzans diameter.", luft=True,
+                             forst_i_raden=True, ihop=True)
+    assert [s["text"] for s in st] == [
+        "På Pizzeria Roma kostar en pizza 108 kr. Bestäm pizzans diameter."]
+    assert not st[0]["luft"]
+    # En formelrad mitt i står kvar som displayformel; först i raden är den
+    # text, direkt efter «a)».
+    st = exam_latex._stycken("Utsagorna är\n$x = 5$\nSkriv pilen.",
+                             luft=True, forst_i_raden=True, ihop=True)
+    assert [s["formel"] for s in st] == [False, True, False]
+    st = exam_latex._stycken("$\\sqrt[3]{a}$", luft=True,
+                             forst_i_raden=True, ihop=True)
+    assert [s["formel"] for s in st] == [False]
+    stam = exam_latex._stycken("Sara räknar till 7,5 s.\n\nBeräkna avståndet.",
+                               luft=True)
+    assert len(stam) == 2 and stam[1]["luft"]
+    js = (UI / "blad-bygg.js").read_text(encoding="utf-8")
+    assert "brodtext(ihop(d))" in js
+
+
 def test_stegtabellen_raknas_in_i_uppgiftens_hojd():
     """Exam 126 uppgift 10 delades mellan a) och b): uppskattningen
     (exam_latex._behov_mm) visste inte att uppgiften bar en stegtabell."""

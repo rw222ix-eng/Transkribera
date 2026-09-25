@@ -77,6 +77,24 @@ window.BladBygg = (() => {
     .replace(/^\s+/, '').replace(/\s+$/, '');
   /* Uppgiftstext: tomraderna först, matematiken sedan. */
   const brodtext = s => mat(luft(s));
+  /* DELUPPGIFTENS MENINGAR I ETT STYCKE (lärarens dom 2026-09-25, exam 126
+     9a): «På Pizzeria Roma kostar en pizza 108 kr. Bestäm pizzans diameter.»
+     på samma rad, ingen tom rad före frågan. En rad som bara är en formel står
+     kvar för sig, utom först i raden. Spegel av exam_latex._ihop. */
+  const ENSAM_FORMEL = /^\$[^$]+\$$/;
+  const ihop = s => {
+    const ut = [];
+    let buf = [];
+    String(s == null ? '' : s).split('\n').map(r => r.trim()).filter(Boolean)
+      .forEach(r => {
+        if (ENSAM_FORMEL.test(r) && (ut.length || buf.length)) {
+          if (buf.length) { ut.push(buf.join(' ')); buf = []; }
+          ut.push(r);
+        } else buf.push(r);
+      });
+    if (buf.length) ut.push(buf.join(' '));
+    return ut.join('\n');
+  };
   const BOKSTAV = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
   const versal = s => String(s || '').charAt(0).toUpperCase() + String(s || '').slice(1);
 
@@ -639,7 +657,7 @@ window.BladBygg = (() => {
       return kropp ? `<div class="prdelform">${kropp}</div>` : '';
     };
     const del = u.del && u.del.length
-      ? `<ul class="prdel" data-avdelad="">${u.del.map((d, k) => `<li><i>${'abcdef'[k]})</i><span>${brodtext(d)}</span><span class="prpo">${delpoang(k)} p</span>${delfigur(k)}${delform_pr(k)}${delsvar()}</li>`).join('')}</ul>` : '';
+      ? `<ul class="prdel" data-avdelad="">${u.del.map((d, k) => `<li><i>${'abcdef'[k]})</i><span>${brodtext(ihop(d))}</span><span class="prpo">${delpoang(k)} p</span>${delfigur(k)}${delform_pr(k)}${delsvar()}</li>`).join('')}</ul>` : '';
     /* FIGUREN. Provets uppgift kan bära en ritad figur (exam_spec figur) — en
        graf, en triangel, en enhetscirkel — och den ritas i PDF:en av
        exam_figures. På skärmarket saknades den helt: uppgiften hänvisade till

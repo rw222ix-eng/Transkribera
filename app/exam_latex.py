@@ -452,8 +452,29 @@ def _nrlista(nrs: list[int]) -> str:
     return f"{', '.join(map(str, nrs[:-1]))} och {nrs[-1]}"
 
 
+def _ihop(rader: list[str], forst_i_raden: bool) -> list[str]:
+    """Textraderna hopslagna till en rad per stycke; formelrader för sig.
+    Står uttrycket först på en deluppgift är det text (se _stycken)."""
+    ut: list[str] = []
+    buf: list[str] = []
+    for rad in (r.strip() for r in rader):
+        if not rad:
+            continue
+        if _ENSAM_FORMEL_RE.match(rad) and not (forst_i_raden and not ut
+                                                 and not buf):
+            if buf:
+                ut.append(" ".join(buf))
+                buf = []
+            ut.append(rad)
+        else:
+            buf.append(rad)
+    if buf:
+        ut.append(" ".join(buf))
+    return ut
+
+
 def _stycken(text: str, luft: bool = False,
-             forst_i_raden: bool = False) -> list[dict]:
+             forst_i_raden: bool = False, ihop: bool = False) -> list[dict]:
     """Uppgiftstexten som stycken, och formelrader som displayformler.
 
     Modellen skriver sina medvetna radbrytningar i `text` (skärmen sätter
@@ -469,10 +490,20 @@ def _stycken(text: str, luft: bool = False,
     `forst_i_raden=True` är deluppgiftens: står uttrycket först sätts det i
     raden, direkt efter «a)», inte centrerat under en tom etikettrad (lärarens
     dom 2026-09-24, exam 131 uppgift 4: «bäst att man faktiskt har det precis
-    bredvid a) och sen så kommer allting precis till höger om det»)."""
+    bredvid a) och sen så kommer allting precis till höger om det»).
+
+    `ihop=True` är också deluppgiftens: meningarna står efter varandra i ETT
+    stycke, utan radbrytning och utan tom rad före frågan (lärarens dom
+    2026-09-25, exam 126 9a: «På Pizzeria Roma kostar en pizza 108 kr.
+    Bestäm pizzans diameter.» på samma rad, luft först före b). En rad som
+    bara är en formel står kvar som displayformel."""
+    rader = str(text or "").replace("\r\n", "\n").split("\n")
+    if ihop:
+        rader = _ihop(rader, forst_i_raden)
+        luft = False
     ut: list[dict] = []
     tom = False
-    for rad in str(text or "").replace("\r\n", "\n").split("\n"):
+    for rad in rader:
         rad = rad.strip()
         if not rad:
             tom = bool(ut)
@@ -1092,7 +1123,8 @@ def _enhet_vy(*, poang, typ, formaga, text, losning, bedomning,
         # (`svarsfalt` ovan): arbetsbladet och gruppuppgiften bygger sin form
         # på det och har inte lärarens provregel.
         "svarsfalt_rad": _faltrad(svarsfalt) if typ == "rutin" else None,
-        "stycken": _stycken(text, luft=True, forst_i_raden=deluppgift),
+        "stycken": _stycken(text, luft=True, forst_i_raden=deluppgift,
+                            ihop=deluppgift),
         "tabell": _tabell_vy(tabell),
         "svarsrutor": _svarsrutor_vy(svarsrutor, facit=facit),
         "stegtabell": _stegtabell_vy(stegtabell, facit=facit),
