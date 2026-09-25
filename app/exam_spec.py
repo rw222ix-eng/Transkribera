@@ -3026,7 +3026,10 @@ def poang_tak_for(tid_min: int | None, takt: float | None) -> int | None:
 #      början. Bara provet: arbetsbladet har ingen tid att fylla.
 #   2. Taket får överskridas med TAKT_MARGINAL innan tidsvakten, takvakten
 #      och stegvakten säger ifrån, så att en lagning kan lägga en småpoäng.
-TAKT_MARGINAL = 1.15
+#      20 % sedan exam 130 samma dag: 8b fick 2 E (tre steg på en poäng),
+#      27 p på 70 minuter i takt 3, och läraren valde att behålla dem. Det är
+#      2,6 min/p, och hennes egen förlaga ligger på 2,4.
+TAKT_MARGINAL = 1.2
 
 
 def poang_tak_med_marginal(tak: int | None) -> int | None:

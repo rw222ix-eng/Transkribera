@@ -491,8 +491,11 @@ def test_provet_fylls_upp_till_taket():
 
 
 def test_takten_ar_ett_riktmarke_med_marginal():
-    assert exam_spec.poang_tak_med_marginal(20) == 23
-    assert exam_spec.poang_tak_med_marginal(33) == 37
+    assert exam_spec.poang_tak_med_marginal(20) == 24
+    assert exam_spec.poang_tak_med_marginal(33) == 39
+    # Exam 130: 27 p på 70 minuter i takt 3 (taket 23) är lärarens val.
+    assert exam_spec.poang_tak_med_marginal(
+        exam_spec.poang_tak_for(70, 3)) == 27
     assert exam_spec.poang_tak_med_marginal(None) is None
 
 
