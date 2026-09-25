@@ -1653,7 +1653,7 @@ def _build_view(doc: exam_spec.ExamDoc,
         delar.append({
             "rubrik": escape_latex(rubrik) if rubrik else None,
             "verktyg": None if utan_raknare else verktyg,
-            "titelrad": (escape_latex(f"{rubrik} – {tillatet}")
+            "titelrad": (escape_latex(f"{rubrik}: {tillatet}")
                          if rubrik else None),
             # Den FÖRSTA delen behöver ingen egen hjälpmedels- och namnrad:
             # försättsbladet ligger kvar i elevens hand. De följande delarna
@@ -1671,7 +1671,7 @@ def _build_view(doc: exam_spec.ExamDoc,
             # kosmetik — utan den kan en elev skriva ett svar räknaren gav och
             # ingen kan bedöma vägen dit.
             "kravrad": (None if nagot_kortsvar else escape_latex(
-                "Fullständiga lösningar krävs på samtliga uppgifter."
+                "Fullständiga lösningar krävs på alla uppgifter."
                 + ("" if utan_raknare else
                    " " + REDOVISA_VERKTYGET[verktyg]))),
             "instruktion": escape_latex(

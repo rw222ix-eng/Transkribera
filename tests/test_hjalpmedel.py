@@ -145,15 +145,15 @@ def test_delrubriken_i_pdf_foljer_lararens_val():
     tex = exam_latex.render_prov(_doc(
         exam_gen.hjalpmedelsregel("Räknare", "Räknare och formelblad")))
     # Räknaren är inte ett digitalt verktyg (lärarens dom 2026-09-22).
-    assert r"Del A \textendash{} Räknare är tillåten" in tex
-    assert r"Del B \textendash{} Räknare är tillåten" in tex
+    assert r"Del A: Räknare är tillåten" in tex
+    assert r"Del B: Räknare är tillåten" in tex
     # Och försättsbladet bär samma mening, med papprets delnamn.
     assert (r"\textbf{Hjälpmedel:} Del A med räknare."
             in tex)
     # Datorn är det digitala verktyget: valet «Digitala verktyg och formelblad».
     tex = exam_latex.render_prov(_doc(exam_gen.hjalpmedelsregel(
         "Formelblad", "Digitala verktyg och formelblad")))
-    assert r"Del B \textendash{} Digitala verktyg är tillåtna" in tex
+    assert r"Del B: Digitala verktyg är tillåtna" in tex
     assert ("Redovisa kort på pappret hur du har använt GeoGebra på datorn."
             in tex)
     assert "GeoGebra på datorn" in exam_gen.hjalpmedelsregel(
@@ -173,7 +173,7 @@ def test_verktyget_fore_delnamnet_lases_ocksa():
         "Formelblad på hela provet, räknare bara på del C.", "B") is None
     tex = exam_latex.render_prov(_doc(
         "Formelblad på hela provet, räknare bara på del C."))
-    assert r"Del B \textendash{} Räknare är tillåten" in tex
+    assert r"Del B: Räknare är tillåten" in tex
     assert "GeoGebra" not in tex
 
 
@@ -181,8 +181,8 @@ def test_delrubriken_star_kvar_nar_regeln_tiger_om_delen():
     """Ett prov skrivet före valet — eller en modellmening som inte nämner
     delarna — ska se ut precis som förut."""
     tex = exam_latex.render_prov(_doc("Formelblad och linjal."))
-    assert r"Del A \textendash{} Räknare är inte tillåten" in tex
-    assert r"Del B \textendash{} Digitala verktyg är tillåtna" in tex
+    assert r"Del A: Räknare är inte tillåten" in tex
+    assert r"Del B: Digitala verktyg är tillåtna" in tex
     assert exam_latex._del_instruktion("B", True) == (
         "Del A löses utan räknare. Endast svar krävs om inget annat anges.")
     assert exam_latex._del_instruktion("C", False) == (
@@ -198,7 +198,7 @@ def test_delen_utan_verktyg_ber_inte_eleven_redovisa_verktyget():
     den meningen en order eleven inte kan följa."""
     tex = exam_latex.render_prov(_doc(
         exam_gen.hjalpmedelsregel("Inga digitala", "Formelblad")))
-    assert r"Del B \textendash{} Räknare är inte tillåten" in tex
+    assert r"Del B: Räknare är inte tillåten" in tex
     assert "Visa också hur du använder ditt digitala verktyg" not in tex
     assert exam_latex._del_instruktion("C", True) == (
         "Del B löses utan räknare. Fullständig redovisning krävs.")

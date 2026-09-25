@@ -1208,9 +1208,9 @@ def test_render_prov_golden_markers():
     # elevens prov visar endast totalsumman — E/C/A hör till bedömningen
     assert "(9/6/5)" not in tex and "3/0/0" not in tex
     # delrubrikerna räknar från A (lärarens beslut 2026-08-20)
-    assert (r"Del A \textendash{} Räknare är inte tillåten"
+    assert (r"Del A: Räknare är inte tillåten"
             in tex)
-    assert r"Del B \textendash{} Räknare är tillåten" in tex
+    assert r"Del B: Räknare är tillåten" in tex
     assert "Redovisa kort på pappret hur du har använt din räknare." in tex
     # uppgifterna i exam-klassens questions/parts, med kravetiketten i kursiv
     assert "\\begin{questions}" in tex and "\\setcounter{question}{0}" in tex
@@ -4136,11 +4136,12 @@ def test_ts1_tecknen_satts_alltid_magert_och_uppratt():
                              ("·", r"\textperiodcentered"), ("€", r"\texteuro")):
         assert exam_latex.escape_mixed(f"x {tecken} y") == \
             "x {\\normalfont" + kommando + "} y"
-    # MALLENS EGNA tecken står i känd kontext och behöver ingen vakt: två
-    # \textperiodcentered står i sidhuvudet och i rubriken, båda i mager
-    # upprätt stil. Den feta etiketten som bar vakten själv («Facit · full
+    # MALLENS EGNA tecken står i känd kontext och behöver ingen vakt: fyra
+    # \textperiodcentered, två i sidhuvudet och två i rubriken, alla i mager
+    # upprätt stil (tankstrecken där blev punkter 2026-09-25, lärarens regel:
+    # inga tankstreck). Den feta etiketten som bar vakten själv («Facit · full
     # pott», den fällde ts1-lmbx10 första gången) finns inte i NP:s form.
-    assert tex.count(r"\textperiodcentered") == 2
+    assert tex.count(r"\textperiodcentered") == 4
 
 
 def test_nollraden_upprepar_inte_rubriken_i_pdfen():

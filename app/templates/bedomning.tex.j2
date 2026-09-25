@@ -17,7 +17,7 @@
     extemdash Potenser extperiodcentered Bedömningsanvisning». Kommandona i
     mallens BRÖDTEXT (utanför ((* … *))) rörs inte — det är bara de här
     literalerna som behöver dubbleras. #))
-((* set sidhuvud = kurs ~ ' \\textemdash{} ' ~ titel ~ ' \\textperiodcentered{} Bedömningsanvisning' *))
+((* set sidhuvud = kurs ~ ' \\textperiodcentered{} ' ~ titel ~ ' \\textperiodcentered{} Bedömningsanvisning' *))
 ((* include '_preamble.tex.j2' *))
 
 ((# ══════════ NATIONELLA PROVETS FORM ══════════
@@ -60,7 +60,7 @@
   {\LARGE\bfseries Bedömningsanvisning}\\[2mm]
 ((# Tankstreck och punkt som KOMMANDON: Computer Modern har inga glyfer på
     U+2014/U+00B7, och tecknen försvinner (eller blir «ů») rakt av. #))
-  {\large ((( titel ))) \textemdash{} ((( kurs )))((* if datum *)) \enspace\textperiodcentered\enspace ((( datum )))((* endif *))}
+  {\large ((( titel ))) \enspace\textperiodcentered\enspace ((( kurs )))((* if datum *)) \enspace\textperiodcentered\enspace ((( datum )))((* endif *))}
 \end{center}
 
 \vspace{4mm}
@@ -71,9 +71,8 @@
     det är poängens nivå, inte ett krav för betyget. #))
 {\small Poäng anges som (E/C/A). Kravgränser: E minst ((( granser.E.minst )))((* if 'C' in granser.get('betyg', ['E', 'C', 'A']) *)),
 C minst ((( granser.C.minst )))((* endif *))((* if 'A' in granser.get('betyg', ['E', 'C', 'A']) *)),
-A minst ((( granser.A.minst )))((* endif *))
- \textemdash{}
-av totalt ((( granser.total ))) poäng.}
+A minst ((( granser.A.minst )))((* endif *)).
+Totalt ((( granser.total ))) poäng.}
 ((# EN GÅNG, i inledningen (lärarens dom 2026-09-23). Notisen stod förut
     under varje uppgift som hade elevexempel, alltså under nästan alla, och
     det var just den sortens upprepade text hon ville bort ifrån. Bara när

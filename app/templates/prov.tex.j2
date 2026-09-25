@@ -55,7 +55,7 @@
 
 ((* if forsatt.delrader *))
 \noindent
-((* for d in forsatt.delrader *))\textbf{((( d.namn )))} \textemdash{} ((( d.text )))((* if not loop.last *))\\((* endif *))
+((* for d in forsatt.delrader *))\textbf{((( d.namn ))):} ((( d.text )))((* if not loop.last *))\\((* endif *))
 ((* endfor *))
 
 \vspace{4mm}
@@ -117,8 +117,8 @@ Provet kan ge totalt \textbf{((( forsatt.total ))) poäng}.
 
 \begin{itemize}[nosep, leftmargin=*]
   \item Poängen för varje uppgift anges i högermarginalen.
-  \item \emph{\textquotedblleft Endast svar krävs\textquotedblright} \textemdash{} skriv bara svaret.
-  \item Övriga uppgifter \textemdash{} visa tydliga beräkningar och motivera dina svar.
+  \item \emph{\textquotedblright Endast svar krävs\textquotedblright}: skriv bara svaret.
+  \item Övriga uppgifter: visa tydliga beräkningar och motivera dina svar.
   \item Skriv lösningar på lösblad. Skriv ditt namn på alla blad du lämnar in.
 \end{itemize}
 
