@@ -862,7 +862,9 @@ def lasregelvakt(exam: dict) -> list[dict]:
                  "«vänsterledet … och högerledet …».")
         if _MODELLEN_STODER_RE.search(t):
             fynd(nr, "stoder", "«om modellen stöder påståendet» är krångligt. "
-                 "Fråga om personen har rätt: «Avgör om … har rätt.»")
+                 "Fråga om personen har rätt och säg vad eleven ska visa: "
+                 "«Avgör med en beräkning om … har rätt.» eller «Avgör om … "
+                 "har rätt och förklara varför.»")
         if _TVA_EKVATIONER_RE.search(t) and not _NUMRERAD_RE.search(t):
             fynd(nr, "numrera", "två ekvationer utan nummer. Sätt (1) och (2) "
                  "till vänster om ekvationerna och hänvisa till numren i "

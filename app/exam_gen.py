@@ -759,7 +759,8 @@ INSTRUCTION = (
     "  • Skriv aldrig bara «leden». Säg vilka: «vänsterledet (x + 5)² och "
     "högerledet x² + 25».\n"
     "  • Ett påstående som kan vara fel står som ett PÅSTÅENDE: «Hugo påstår "
-    "att (x + 5)² = x² + 25.» Frågan är «Avgör om Hugo har rätt.» Skriv "
+    "att (x + 5)² = x² + 25.» Frågan är «Avgör med en beräkning om Hugo har "
+    "rätt.» Skriv "
     "aldrig «Hugo skriver likheten …» som om den stämde, och aldrig «avgör "
     "om modellen stöder påståendet».\n"
     "  • Står två eller fler ekvationer i uppgiften får de nummer (1), (2) "
@@ -934,8 +935,9 @@ INSTRUCTION = (
     # läser, och då förstår de inte vad uppgiften går ut på.»
     "  • Frågan får inte se besvarad ut av texten ovanför. Står räkningen "
     "redan där är den någons påstående och frågan gäller personen: «Han gör "
-    "överslaget 30 · 40 = 1 200. Han påstår att pengarna räcker. Avgör om "
-    "Noah har rätt.», aldrig «Avgör om överslaget visar att pengarna "
+    "överslaget 30 · 40 = 1 200. Han påstår att pengarna räcker. Avgör med en "
+    "beräkning om Noah har rätt.», aldrig «Avgör om överslaget visar att "
+    "pengarna "
     "räcker.»\n"
     # Samma dom, uppgift 8: «Butik B säljer bara hela rullar på 50 m för
     # 620 kr.» «Då kan vissa elever tänka: jaha, men då säljer de inte per
