@@ -1140,7 +1140,9 @@ window.BladBygg = (() => {
      en inledande variabel («d = 30 cm» mot svaret «30 cm»). `jamfor` är det
      raden kan upprepa: svaret med och utan enhet, flervalets bokstav. Spegel
      av exam_latex._kravrad. */
-  const KORREKT = /^(?:för\s+)?(?:rätt|korrekt)\s+(svar|alternativ)\b[\s,:;–-]*([\s\S]*?)[\s.]*$/i;
+  /* «korrekt lösning med svaret x = 12» blir «Korrekt lösning.» (126:10c,
+     2026-09-26). Spegel av exam_latex._KORREKT_RE. */
+  const KORREKT = /^(?:för\s+)?(?:rätt|korrekt)\s+(svar|alternativ|lösning\s+med\s+(?:rätt\s+|korrekt\s+)?svar(?:et)?)\b[\s,:;–-]*([\s\S]*?)[\s.]*$/i;
   const LEDPREFIX = /^[a-zåäö][a-z0-9_']*(?:\([^()]*\))?=$/;
   const jamforbar = s => String(s || '').toLowerCase().replace(/\{,\}/g, ',')
     .replace(/\\[,;: ]|~|\$|\s/g, '').replace(/\.+$/, '');
@@ -1153,7 +1155,10 @@ window.BladBygg = (() => {
   }
   function kravrad(krav, jamfor) {
     const m = String(krav || '').trim().match(KORREKT);
-    if (m && (!m[2].trim() || (jamfor || []).some(k => k && sammaSvar(m[2], k)))) {
+    const samma = m && (jamfor || []).some(k => k && sammaSvar(m[2], k));
+    if (m && /^lösning/i.test(m[1])) {
+      if (m[2].trim() && samma) return 'Korrekt lösning.';
+    } else if (m && (!m[2].trim() || samma)) {
       return m[1].toLowerCase() === 'alternativ' ? 'Korrekt alternativ.' : 'Korrekt svar.';
     }
     return kravmening(krav);
@@ -1219,9 +1224,17 @@ window.BladBygg = (() => {
        (de gamla dokumenten bär den), det är sättningen som väljer bort den. */
     const rader = trappsteg(bed).filter(r => r.niva);
     const ut = [];
+    /* Ett svar som är en MENING (minst fem ord utanför matematiken) står i
+       vanlig vikt; i fetstil såg det ut som en rubrik (126:10b, 2026-09-26).
+       Spegel av exam_latex._ar_mening. */
+    const mening = String(svar || '').split('$').filter((_b, k) => k % 2 === 0)
+      .join(' ').match(/[A-Za-zÅÄÖåäöÉé]+/g);
+    const svarHtml = mening && mening.length >= 5
+      ? `<span class="lobedsvar" data-mening="">${matBryt(svar)}</span>`
+      : `<b class="lobedsvar">${matBryt(svar, true)}</b>`;
     if (namn || svar) {
       ut.push(`<tr data-svar><td>${namn ? `<b class="lobeddel">${esc(namn)}</b>` : ''}${
-        svar ? `<b class="lobedsvar">${matBryt(svar, true)}</b>` : ''}</td><td></td></tr>`);
+        svar ? svarHtml : ''}</td><td></td></tr>`);
     }
     rader.forEach(r => ut.push(`<tr><td class="lobedkrav">${mat(kravrad(r.krav, jamfor))}</td><td><b class="lobedniva">${
       esc(marke(r))}</b></td></tr>`));

@@ -1433,8 +1433,9 @@ def test_bedomning_visar_deluppgifternas_facit():
     tex = exam_latex.render_bedomning(doc)
     # Svaret är första raden i losning, och bara den.
     assert r"\bedsvar{a)\enspace \(\pmb{x = 3}\) via \(\pmb{-b/(2a)}\).}" in tex
-    assert (r"\bedsvar{b)\enspace Mittpunkt mellan nollställena; "
-            r"grafen är symmetrisk.}") in tex
+    # Ett svar som är en mening står i vanlig vikt (126:10b, 2026-09-26).
+    assert (r"\bedsvar{b)\enspace \textmd{Mittpunkt mellan nollställena; "
+            r"grafen är symmetrisk.}}") in tex
     assert "(0/2/0)" not in tex and "(0/1/1)" not in tex
     assert r"\bedkrav{Korrekt linje.}{+C}" in tex
     assert r"\bedkrav{Flera representationer.}{+A}" in tex
@@ -4127,6 +4128,25 @@ def test_bedomningspasset_skriver_elevlosningar_per_deluppgift_med_not():
     # PDF:en sätter noten vid raden och poängen i ord.
     assert exam_latex.poangrubrik([0, 1, 1]) == "+1 C, +1 A"
     assert exam_latex.poangrubrik((0, 0, 0)) == "0 poäng"
+
+
+def test_svarsraden_i_126_10():
+    """Lärarens fråga 2026-09-26 över 126:10 («Det ser jättekonstigt ut»):
+    a) «Första felet i steg 3, Steg 3: …» sa steget två gånger, b) ett svar
+    som är en hel mening stod i fetstil som en rubrik, c) «Korrekt lösning
+    med svaret x = 12» upprepade svaret ovanför."""
+    s = exam_latex._svarsrad("Steg 3: $3x + 6 - 2x - 6 = 24$", forsta_fel=3)
+    assert "första felet" not in s.lower() and s.startswith("Steg 3")
+    assert "första felet i steg 2" in exam_latex._svarsrad(
+        "$x = 4$", forsta_fel=2).lower()
+    b = exam_latex._svarsrad("Hon byter inte tecken när $-2(x - 3)$ löses upp. "
+                             "$-2 \\cdot (-3) = +6$")
+    assert b.startswith(r"\textmd{Hon byter inte tecken") and r"\pmb" not in b
+    assert exam_latex._svarsrad("$x = 12$") == r"\(\pmb{x = 12}\)"
+    assert exam_latex._kravrad("korrekt lösning med svaret $x = 12$",
+                               ("$x = 12$",)) == "Korrekt lösning."
+    assert exam_latex._kravrad("korrekt lösning med svaret $x = 13$",
+                               ("$x = 12$",)).startswith("Korrekt lösning med")
 
 
 def test_kortsvaren_far_inga_elevlosningar():

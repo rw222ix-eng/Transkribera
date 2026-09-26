@@ -871,8 +871,11 @@ def _kravmening(krav: str) -> str:
 #
 # Jämförelsen tål formen: dollartecken, mellanrum, {,} och en inledande
 # variabel («d = 30 cm» mot svaret «30 cm»). Spegel av blad-bygg.js kravrad.
+# «korrekt lösning med svaret x = 12» är samma upprepning (126:10c,
+# 2026-09-26) och blir «Korrekt lösning.».
 _KORREKT_RE = re.compile(
-    r"^(?:för\s+)?(?:rätt|korrekt)\s+(svar|alternativ)\b[\s,:;–-]*(.*?)[\s.]*$",
+    r"^(?:för\s+)?(?:rätt|korrekt)\s+(svar|alternativ|lösning\s+med\s+"
+    r"(?:rätt\s+|korrekt\s+)?svar(?:et)?)\b[\s,:;–-]*(.*?)[\s.]*$",
     re.I | re.S)
 _LEDPREFIX_RE = re.compile(r"^[a-zåäö][a-z0-9_']*(?:\([^()]*\))?=$")
 
@@ -899,8 +902,12 @@ def _kravrad(krav: str, jamfor: tuple = ()) -> str:
     m = _KORREKT_RE.match(str(krav or "").strip())
     if m:
         rest = m.group(2)
-        if not rest.strip() or any(_samma_svar(rest, k) for k in jamfor if k):
-            return ("Korrekt alternativ." if m.group(1).lower() == "alternativ"
+        slag = m.group(1).lower()
+        if slag.startswith("lösning"):
+            if rest.strip() and any(_samma_svar(rest, k) for k in jamfor if k):
+                return "Korrekt lösning."
+        elif not rest.strip() or any(_samma_svar(rest, k) for k in jamfor if k):
+            return ("Korrekt alternativ." if slag == "alternativ"
                     else "Korrekt svar.")
     return _kravmening(krav)
 
@@ -1108,14 +1115,32 @@ def _svarsrad(losning: str | None, enhet: str | None = None, *,
         delar.append(bokstav)
     if rutor and rutor not in forsta:
         delar.append(rutor)
-    if forsta_fel:
+    # Steget en gång (lärarens fråga 2026-09-26 över 126:10a, «Första felet
+    # i steg 3, Steg 3: …»): säger facit redan vilket steg, står bara facit.
+    if forsta_fel and not re.search(rf"\bsteg\s*{forsta_fel}\b", forsta, re.I):
         delar.append(f"första felet i steg {forsta_fel}")
     if forsta:
         delar.append(forsta)
     text = ", ".join(delar)
     if text and text[0].isalpha():
         text = text[0].upper() + text[1:]
+    # ETT SVAR SOM ÄR EN MENING står i vanlig vikt: «Hon byter inte tecken
+    # när −2(x − 3) löses upp» i fetstil såg ut som en rubrik (126:10b,
+    # samma dag). \bedsvar sätter fetstil, \textmd tar tillbaka den för
+    # meningen men inte för deluppgiftens bokstav. Spegel i blad-bygg.js.
+    if _ar_mening(text):
+        return r"\textmd{" + escape_mixed(text) + "}"
     return escape_mixed(text, fet=True)
+
+
+_ORD_RE = re.compile(r"[A-Za-zÅÄÖåäöÉé]+")
+
+
+def _ar_mening(text: str) -> bool:
+    """Minst fem ord utanför matematiken: en förklaring, inte ett svar."""
+    utanfor = "".join(bit for k, bit in enumerate(str(text or "").split("$"))
+                      if k % 2 == 0)
+    return len(_ORD_RE.findall(utanfor)) >= 5
 
 
 # NOLLRADEN SÄGER «INGA POÄNG» EN GÅNG. Poängen står redan bredvid elevens

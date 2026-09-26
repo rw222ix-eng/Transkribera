@@ -237,6 +237,9 @@ $\dfrac{…}$
    hitta. Matematiken i det är KaTeX \pmb (blad-bygg.js matBryt med fet),
    för KaTeX bryr sig inte om font-weight. */
 .lobedsvar{font-weight:700;font-size:calc(15.5px * var(--fsk, 1));line-height:1.4}
+/* Ett svar som är en mening står i vanlig vikt (blad-bygg.js enhetRader). */
+.lobedsvar[data-mening]{font-weight:400}
+.lobedsvar[data-mening] .katex{-webkit-text-stroke:0}
 .lobeddel{font-weight:700;font-size:calc(15.5px * var(--fsk, 1));margin-right:9px}
 .lobedkrav{font-size:calc(13.5px * var(--fsk, 1));line-height:1.42}
 .lobedniva{font-weight:700;font-size:calc(13.5px * var(--fsk, 1));letter-spacing:.02em}
