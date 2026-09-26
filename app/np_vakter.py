@@ -987,10 +987,34 @@ def endastsvarvakt(exam: dict) -> list[dict]:
     return fel[:ENDASTSVAR_MAX_FYND]
 
 
-# ── ALLA ELVA, i läsordning ──────────────────────────────────────────────
+# ── 11. RUTVAKTEN (lärarens dom 2026-09-26, exam 126 uppgift 3) ──────────
+# «Skriv i rutan den exponent som gör likheten sann. Svara med ett uttryck i
+# n.» och under det «Svar: ____». Eleven skriver svaret två gånger, eller
+# vet inte var. En ruta i formeln och en svarsrad frågar efter samma sak:
+# kalla det okända något (a^k) och låt svarsraden bära det («Svar k =»).
+_RUTA_RE = re.compile(r"\\fbox|\\boxed|(?<![\wåäö])rutan(?![\wåäö])", re.I)
+RUTA_MAX_FYND = 3
+
+
+def rutvakt(exam: dict) -> list[dict]:
+    fel: list[dict] = []
+    for e in _enheter(exam):
+        if (e.get("typ") or "") != "rutin" or not _RUTA_RE.search(_text(e)):
+            continue
+        fel.append(_err(
+            f"uppgift {e['nr']}", "ruta",
+            f"Uppgift {e['nr']} har både en ruta att fylla i och en svarsrad. "
+            "Eleven vet inte var svaret ska stå, eller skriver det två gånger. "
+            "Ge det okända ett namn i formeln (t.ex. $a^{k}$), fråga «Bestäm "
+            "k.» och sätt ledet «$k =$» i fältet enhet, så står svaret på "
+            "raden «Svar k = ____»."))
+    return fel[:RUTA_MAX_FYND]
+
+
+# ── ALLA TOLV, i läsordning ──────────────────────────────────────────────
 KODER = ("stegvakt", "formbyte", "poangform", "metodvakt", "parametervakt",
          "kursvakt", "familjvakt", "doltkrav", "lasregel", "avrundning",
-         "endastsvar")
+         "endastsvar", "ruta")
 
 
 def np_vakter(exam: dict, kurs: str = "",
@@ -1006,4 +1030,4 @@ def np_vakter(exam: dict, kurs: str = "",
             + poangformvakt(exam, kurs) + metodvakt(exam)
             + parametervakt(exam, kurs) + kursvakt(exam, kurs)
             + familjvakt(exam) + doltkravvakt(exam) + lasregelvakt(exam)
-            + avrundningsvakt(exam) + endastsvarvakt(exam))
+            + avrundningsvakt(exam) + endastsvarvakt(exam) + rutvakt(exam))

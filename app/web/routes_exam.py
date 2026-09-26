@@ -818,6 +818,9 @@ _ATGARD = {
                   "villkoret. Samma tal och samma poäng.",
     "endastsvar": "Skriv bedömningsraden som svaret, t.ex. «+1 E korrekt svar "
                   "5». Uppgiften står kvar.",
+    # Lärarens dom 2026-09-26 (exam 126 uppgift 3).
+    "ruta": "Ta bort rutan, ge det okända ett namn i formeln och låt "
+            "svarsraden bära det («Svar k =»). Samma matematik och poäng.",
     # Lärarens dom 2026-09-23 kväll (exam 128 och 129).
     "formbyte": "Låt uppgiften be om ett formbyte per poäng, eller dela den i "
                 "deluppgifter med var sin poäng. Övriga uppgifter står kvar.",

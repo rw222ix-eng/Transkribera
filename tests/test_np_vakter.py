@@ -617,3 +617,13 @@ def test_avgor_med_motiverad_slutsats_ar_nps_form():
            bedomning="+1 C skriver om roten\n+1 C motiverad slutsats att "
                      "likheten stämmer")
     assert np_vakter.doltkravvakt(_prov([u])) == []
+
+
+def test_ruta_och_svarsrad_fragar_efter_samma_sak():
+    """Exam 126 uppgift 3 (lärarens dom 2026-09-26): «Skriv i rutan den
+    exponent …» och «Svar: ____» under. Eleven skriver svaret två gånger."""
+    u = _u("Skriv i rutan den exponent som gör likheten sann. $a^{\\fbox{x}}$",
+           typ="rutin", poang=(0, 0, 1))
+    assert _koder(np_vakter.rutvakt(_prov([u])), "ruta") == {"1"}
+    u["text"] = "Bestäm $k$. Svara med ett uttryck i $n$."
+    assert np_vakter.rutvakt(_prov([u])) == []
