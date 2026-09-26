@@ -5460,10 +5460,28 @@ TALREGLER_ELEV = (
 )
 
 
+# TABELLEN OCH ALTERNATIVEN FÖLJER MED (2026-09-26). Underlaget bar bara
+# texten, och en tabelluppgift som «Tabellen nedan visar vad det kostar att
+# hyra en minigrävare» (131:10) fick elevexempel skrivna utan talen: passet
+# såg aldrig tabellen. Fälten står bara med när uppgiften har dem.
+_BED_EXTRA = ("tabell", "alternativ")
+
+
 def _bedenhet(d: dict) -> dict:
     return {"text": d.get("text") or "", "losning": d.get("losning") or "",
             "poang": list(d.get("poang") or (0, 0, 0)),
-            "bedomning": d.get("bedomning") or ""}
+            "bedomning": d.get("bedomning") or "",
+            **{k: d[k] for k in _BED_EXTRA if d.get(k)}}
+
+
+def _bedkort(underlag: dict) -> dict:
+    """Uppgiften som passen ser den: stammen, dess tabell och enheterna."""
+    return {"nr": underlag["nr"], "uppgift": underlag["text"],
+            **{k: underlag[k] for k in _BED_EXTRA if underlag.get(k)},
+            "enheter": [{k: e[k] for k in
+                         ("nyckel", "text", "losning", "poang", "bedomning")
+                         + _BED_EXTRA if k in e}
+                        for e in underlag["enheter"]]}
 
 
 def bedomningsunderlag(exam: dict) -> list[dict]:
@@ -5484,7 +5502,10 @@ def bedomningsunderlag(exam: dict) -> list[dict]:
         ut.append({"nr": i, "text": u.get("text") or "",
                    "typ": u.get("typ") or "", "enhet": u.get("enhet") or "",
                    "summa": sum(sum(e["poang"]) for e in enheter),
-                   "enheter": enheter})
+                   "enheter": enheter,
+                   # Uppgiftens egen tabell när deluppgifterna delar den; utan
+                   # deluppgifter står den redan på enheten.
+                   **({k: u[k] for k in _BED_EXTRA if u.get(k)} if delar else {})})
     return ut
 
 
@@ -5497,10 +5518,7 @@ def build_bedomning_prompt(underlag: dict, *, skala: str = "") -> str:
     matcha den generator som skrev den."""
     tak = int(underlag["summa"])
     steg = ", ".join(f"{p} p" for p in range(tak)) or "0 p"
-    kort = {"nr": underlag["nr"], "uppgift": underlag["text"],
-            "enheter": [{k: e[k] for k in
-                         ("nyckel", "text", "losning", "poang", "bedomning")}
-                        for e in underlag["enheter"]]}
+    kort = _bedkort(underlag)
     return (
         "Du är bedömningsskrivare för EN uppgift på ett matematikprov. Nedan "
         "står uppgiften med sitt facit (losning), sina poäng som (E, C, A) och "
@@ -5882,10 +5900,7 @@ LOSNING_RADER_TAK = 12
 def build_losning_prompt(underlag: dict) -> str:
     """Lösningsskrivarens prompt — EN uppgift, samma underlag som
     bedömningsskrivaren (bedomningsunderlag)."""
-    kort = {"nr": underlag["nr"], "uppgift": underlag["text"],
-            "enheter": [{k: e[k] for k in
-                         ("nyckel", "text", "losning", "poang", "bedomning")}
-                        for e in underlag["enheter"]]}
+    kort = _bedkort(underlag)
     return (
         "Du är lösningsskrivare för EN uppgift på ett matematikprov. Nedan "
         "står uppgiften med sitt facit (losning), sina poäng som (E, C, A) "
