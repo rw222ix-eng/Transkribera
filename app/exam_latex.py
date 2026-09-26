@@ -1084,10 +1084,21 @@ def facit_grupper(losning: str | None, enhet: str | None = None
 
 
 def _facit_vy(losning: str | None, enhet: str | None = None) -> list[dict]:
-    """facit_grupper escapad för mallen: svaret fett, stegen raka."""
-    return [{"namn": g["namn"], "svar": escape_mixed(g["svar"], fet=True),
-             "steg": [escape_mixed(x) for x in g["steg"]]}
-            for g in facit_grupper(losning, enhet)]
+    """facit_grupper escapad för mallen: svaret fett, stegen raka, och ett
+    steg med förklaring («rad ← not», exam_spec.ELEVNOT) som rad och not
+    (Rickard 2026-09-26, se exam_gen.BLAD_FACIT). En pil på svarsraden
+    stryks: svaret är bara svaret."""
+    ut = []
+    for g in facit_grupper(losning, enhet):
+        steg = []
+        for x in g["steg"]:
+            rad, notis = exam_spec.elevrad_delar(x)
+            steg.append({"rad": escape_mixed(rad), "not": escape_mixed(notis)})
+        ut.append({"namn": g["namn"],
+                   "svar": escape_mixed(exam_spec.elevrad_delar(g["svar"])[0],
+                                        fet=True),
+                   "steg": steg})
+    return ut
 
 
 def _jamfor(losning: str | None, enhet: str | None = None,

@@ -211,6 +211,11 @@ $\dfrac{…}$
    glyferna på riktigt, i skärmen och i avritningen. */
 .lobedsvar .katex{-webkit-text-stroke:.035em currentColor}
 .lobedsteg{font-size:calc(15.5px * var(--fsk, 1));line-height:1.45}
+/* Facitets steg med förklaring (Rickard 2026-09-26): steget till vänster och
+   «← förklaring» till höger på samma höjd, i mörkgrått (blad-bygg.js facitRader). */
+.lobedsteg[data-not]{display:grid;grid-template-columns:minmax(0,1fr) 40%;column-gap:16px;align-items:baseline}
+.lofacitrad{min-width:0;overflow-wrap:anywhere}
+.lofacitnot{font-size:calc(13.5px * var(--fsk, 1));line-height:1.35;color:#3A3835}
 
 /* `table` och inte grid, med flit: raderna ska kunna brytas mellan sidor när
    paginera delar en uppgift som är högre än arket (blad.js delaUppgift), och

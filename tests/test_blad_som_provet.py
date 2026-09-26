@@ -102,6 +102,36 @@ def test_skarmens_facit_ar_speglingen():
     assert '[data-form="fa"] .pruppg' in css and ".lobedsteg" in css
 
 
+def test_facitets_steg_far_en_forklaring_efter_pilen():
+    """Rickard 2026-09-26: «lösningarna är ganska svåra att förstå». Ett steg
+    i facit kan bära en kort förklaring, «rad ← not» (exam_spec.ELEVNOT), som
+    sätts till höger om steget på samma höjd. Svaret är bara svaret: en pil
+    på svarsraden stryks. Prompten ber om formen (exam_gen.BLAD_FACIT)."""
+    vy = exam_latex._facit_vy("$\\dfrac{x}{4}$ ← stryk\n"
+                              "$x^2 - 6x = x(x - 6)$ ← bryt ut $x$\n"
+                              "$36 \\cdot 2 = 72$")
+    assert "←" not in vy[0]["svar"] and "stryk" not in vy[0]["svar"]
+    assert vy[0]["steg"][0] == {"rad": "\\(x^2 - 6x = x(x - 6)\\)",
+                                "not": "bryt ut \\(x\\)"}
+    assert vy[0]["steg"][1]["not"] == ""
+    _exam, doc = _blad({"text": "Förenkla.",
+                        "losning": "$\\dfrac{x}{4}$\n$x^2 - 6x = x(x - 6)$ ← bryt ut $x$\n"
+                                   "$36 \\cdot 2 = 72$"})
+    tex = exam_latex.render_arbetsblad(doc)
+    facit = tex[tex.index("\\delprovband{Facit}"):]
+    assert "\\facitsteg{\\(x^2 - 6x = x(x - 6)\\)}{bryt ut \\(x\\)}" in facit
+    assert "\\noindent \\(36 \\cdot 2 = 72\\)\\par" in facit
+    assert "\\newcommand{\\facitsteg}" in tex
+    # Skärmen: samma rad och not.
+    js = (UI / "blad-bygg.js").read_text(encoding="utf-8")
+    assert "lofacitnot" in js and "elevradDelar(s)" in js
+    css = (UI / "losning.css").read_text(encoding="utf-8")
+    assert ".lobedsteg[data-not]" in css
+    # Prompten.
+    assert "FACIT FÖR ELEVERNA" in exam_gen.BLAD_FACIT
+    assert "högst SEX ord" in exam_gen.BLAD_FACIT
+
+
 # ─────────────────────────── stammen i ett stycke ───────────────────────────
 
 

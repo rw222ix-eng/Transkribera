@@ -1341,12 +1341,24 @@ window.BladBygg = (() => {
       return { namn: g.namn, svar: grupper.length === 1 ? medEnhet(svar, enhet) : svar, steg };
     }).filter(g => g.svar || g.steg.length);
   }
+  /* FACIT FÖR ELEVERNA (Rickard 2026-09-26: «lösningarna är ganska svåra att
+     förstå»). Ett steg med förklaring, «rad ← not» (elevradDelar), står som
+     steget till vänster och «← förklaring» till höger på samma höjd, samma
+     form som bedömningsanvisningens elevlösningar. En pil på svarsraden
+     stryks: svaret är bara svaret. Spegel av exam_latex._facit_vy och
+     \facitsteg. */
   function facitRader(grupper, bokstav) {
     return grupper.map((g, i) => {
-      const svar = i === 0 && bokstav ? bedsvar(bokstav, g.svar) : g.svar;
+      const bara = elevradDelar(g.svar)[0];
+      const svar = i === 0 && bokstav ? bedsvar(bokstav, bara) : bara;
       return `<tr data-svar><td>${g.namn ? `<b class="lobeddel">${esc(g.namn)}</b>` : ''}${
         svar ? `<b class="lobedsvar">${matBryt(svar, true)}</b>` : ''}</td></tr>`
-        + g.steg.map(s => `<tr><td class="lobedsteg">${matBryt(s)}</td></tr>`).join('');
+        + g.steg.map(s => {
+          const [rad, not] = elevradDelar(s);
+          return not
+            ? `<tr><td class="lobedsteg" data-not=""><span class="lofacitrad">${matBryt(rad)}</span><span class="lofacitnot">← ${mat(not)}</span></td></tr>`
+            : `<tr><td class="lobedsteg">${matBryt(rad)}</td></tr>`;
+        }).join('');
     }).join('');
   }
   function bladfacit(v, uppgifter) {

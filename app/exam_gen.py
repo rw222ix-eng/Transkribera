@@ -3485,7 +3485,9 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             # självt om hur eleven märker sitt lösblad.
             "uppgiftens nummer skrivs överst på lösbladet, och räkningen ska "
             "visas — inte bara svaret. "
-            "Lösningsförslagen blir facit, och facit ska vara kort: svaret och på sin höjd ett par led. Svara med enbart JSON.")
+            "Lösningsförslagen blir facit, och eleverna ska kunna följa det "
+            "(FACIT FÖR ELEVERNA nedan). Svara med enbart JSON.")
+        block.append(BLAD_FACIT)
         # TEXT → EKVATION på arbetsbladet också. Lärarens dom gällde
         # gruppuppgiften, men regeln är momentets och inte formens: ett
         # övningsblad om ekvationer som ger bort uppställningen övar bara
@@ -9739,6 +9741,26 @@ INFOR_BILD = (
 # av uppgifterna mot 53 %. Bladets tak är därför lägre än provets, utom för
 # C- och A-problemet utan deluppgifter: det får inte delas i ledda steg (då
 # sjunker nivån, planeringen är en del av uppgiften), så där gäller provets.
+# FACIT FÖR ELEVERNA (Rickard 2026-09-26: «lösningarna är ganska svåra att
+# förstå»). Facit var svaret och nakna räkneled: 126:s C-blad förkortade
+# x(x − 6)/4(x − 6) utan ett ord om att täljare och nämnare faktoriserats.
+# Nu ett steg per rad med en kort förklaring efter en pil, samma form som
+# bedömningsanvisningens elevlösningar han godkände samma dag
+# (exam_spec.ELEVNOT, «rad ← not»). Språket är lösningsförslagets
+# (build_losning_prompt, lärarens domar 2026-09-17).
+BLAD_FACIT = (
+    "FACIT FÖR ELEVERNA. `losning` är det eleven läser när hon rättar sig "
+    "själv och ska förstå hur man löser uppgiften. Första raden är SVARET, "
+    "bara svaret och aldrig en pil. Sedan ett steg per rad, i den ordning "
+    "eleven räknar, så att hela vägen syns och inget steg måste fyllas i. "
+    "Efter ett steg som inte förklarar sig självt står en pil och en kort "
+    "förklaring på vardagssvenska, högst SEX ord: «$x^2 - 6x = x(x - 6)$ ← "
+    "bryt ut $x$», «$5x = 7$ ← dela båda sidor med 5». Pilen är tecknet ← "
+    "och står utanför $…$. Ett steg som förklarar sig självt ($36 \\cdot 2 = "
+    "72$) får ingen pil. Vardagsord: «räkna ut», «flytta över», «dela», "
+    "«gånger in», «stryk», «bryt ut», aldrig «subtrahera», «dividera», "
+    "«ekvivalent». En enkel uppgift är två till fyra rader.\n")
+
 BLAD_ORD_FORE_FRAGAN = 30
 BLAD_STAM_MENINGAR = 2
 BLAD_DEL_FAKTA = 1

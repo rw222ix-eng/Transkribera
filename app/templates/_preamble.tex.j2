@@ -669,6 +669,16 @@
   \par\noindent{\bfseries #1}\par\nopagebreak\vspace{1mm}\nopagebreak}
 \newcommand{\bedelevgruppluft}{\par\vspace{5mm}}
 
+((# FACITETS STEG MED FÖRKLARING (Rickard 2026-09-26): samma två spalter som
+    \bedelevrad, och förklaringen i mörkgrått i stället för rött och grönt,
+    för i facit är inget fel. #))
+\newcommand{\facitsteg}[2]{%
+  \par\noindent\begin{minipage}[t]{0.58\linewidth}%
+    \setlength{\lineskiplimit}{3pt}\setlength{\lineskip}{3pt}#1\end{minipage}%
+  \hfill\begin{minipage}[t]{0.39\linewidth}\small\hangindent=1.4em\hangafter=1\relax
+    \textcolor{ink700}{\(\leftarrow\)\enspace #2}\end{minipage}%
+  \par\nopagebreak\vspace{0.6mm}\nopagebreak}
+
 ((# Skiljelinjen mellan två elevlösningar på samma uppgift. Står FÖRE varje
     lösning utom den första och aldrig efter den sista: en linje under hade
     sett ut som en avstämning. \nopagebreak först: bryts sidan här ska linjen

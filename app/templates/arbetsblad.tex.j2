@@ -94,10 +94,20 @@ på sista sidan((* endif *))((* if visa_poang *)); poäng anges som totalpoäng(
     uppgifterna, som bedomning.tex.j2. Inga poäng och ingen uppgiftstext.
     Grupperna byggs i exam_latex._facit_vy; en äldre vy utan fältet får
     förra facit, en rad per steg. #))
+((# Ett steg med förklaring står som \facitsteg: steget till vänster och
+    «← förklaring» till höger på samma höjd (Rickard 2026-09-26, samma form
+    som bedömningsanvisningens elevlösningar). #))
 ((* macro facitgrupp(g, namn) *))
 \bedsvar{((* if namn *))((( namn )))\enspace ((* endif *))((( g.svar )))}
 ((* for s in g.steg *))
+((# En äldre vy (servern har Python i minnet) bär stegen som strängar. #))
+((* if s is string *))
 \noindent ((( s )))\par\nopagebreak
+((* elif s.not *))
+\facitsteg{((( s.rad )))}{((( s.not )))}
+((* else *))
+\noindent ((( s.rad )))\par\nopagebreak
+((* endif *))
 ((* endfor *))
 ((* endmacro *))
 ((* set ns = namespace(forsta=true) *))
