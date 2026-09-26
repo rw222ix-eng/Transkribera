@@ -133,6 +133,34 @@ def test_vakten_star_i_bladets_kontroller():
     assert not routes_exam._ovningsfynd(lang, prov, "prov")
 
 
+def test_bladet_far_provets_form():
+    """Provgranskningens domar 2026-09-26 på bladet: avgör-frågan säger vad
+    eleven ska visa, uttrycksformen står i frågan, figurerna visar uttrycket
+    och räknarmeningen står aldrig i uppgiften."""
+    fel = _blad(
+        _uppg("Leo påstår att $x = 3$ löser $x^2 = 9$.\n\nAvgör om Leo har rätt."),
+        _uppg("Beräkna $B$.\nSvara med ett uttryck i $A$."),
+        _uppg("Tabellen visar figurerna.\n\nTeckna ett uttryck för figur $n$ "
+              "och motivera det."),
+        _uppg("Beräkna volymen.\nRedovisa kort på pappret hur du har använt "
+              "din räknare."))
+    fynd = exam_gen.bladets_formvakt(fel)
+    assert [f["path"] for f in fynd] == [f"uppgift {n}" for n in (1, 2, 3, 4)]
+    assert {f["code"] for f in fynd} == {"provform"}
+    ratt = _blad(
+        _uppg("Leo påstår att $x = 3$ löser $x^2 = 9$.\n\nAvgör om Leo har rätt "
+              "och förklara varför."),
+        _uppg("Lea löser $2x = 8$ och får $x = 3$.\n\nAvgör med en beräkning om "
+              "Lea har räknat rätt."),
+        _uppg("Bestäm $B$ som ett uttryck i $A$."),
+        _uppg("Tabellen visar figurerna.\n\nTeckna ett uttryck för figur $n$. "
+              "Visa med hjälp av figurerna hur du kom fram till uttrycket."))
+    assert exam_gen.bladets_formvakt(ratt) == []
+    assert "provform" in exam_gen.OVNINGSKODER
+    assert "provform" in routes_exam._ATGARD
+    assert "provform" in {f["code"] for f in exam_gen.ovningsvakter(fel)}
+
+
 def test_prompten_bar_regeln_med_vaktens_tal():
     prov = {"uppgifter": [{"del": "B", "typ": "problem", "poang": [1, 0, 0],
                            "text": "Beräkna $2 + 3$.", "formaga": "P",

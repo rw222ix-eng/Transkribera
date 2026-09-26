@@ -10249,7 +10249,7 @@ OVNINGSKODER = ("raknarfri", "bildfigur", "provlan", "kopia", "forbudsvakt",
                 "provuttryck",
                 ci_utanfor.KOD, "begriplighet", "radlangd", "person",
                 "forvaxling", "konsbalans", "doltkrav", "avrundning",
-                "endastsvar", "textmangd")
+                "endastsvar", "textmangd", "provform")
 
 
 def bladets_npvakter(exam: dict) -> list[dict]:
@@ -10346,6 +10346,58 @@ def textmangdvakt(exam: dict) -> list[dict]:
     return ut
 
 
+# PROVETS FORM PÅ BLADET (Rickard 2026-09-26, via provgranskningen): bladen
+# ska vara lika tydliga som provuppgifterna. Reglerna står i INSTRUCTION
+# (ec8b629, b3a6246, 8db972b, d83a42f) och gäller därmed varje prompt; här är
+# det av dem som går att räkna, bara på bladet inför provet. Provets vakter
+# rör de inte.
+_ENSAMT_AVGOR = re.compile(
+    r"Avgör om [^.?!]{1,80}? har (?:rätt|räknat rätt|hittat alla lösningar)"
+    r"\s*\.\s*$")
+_SVARA_UTTRYCK = re.compile(r"Svara med ett uttryck i", re.I)
+_MOTIVERA_UTTRYCKET = re.compile(r"Motivera uttrycket|och motivera det\b", re.I)
+_RAKNARMENING = re.compile(r"hur du har använt (?:din|en) (?:mini)?räknare",
+                           re.I)
+
+
+def bladets_formvakt(exam: dict) -> list[dict]:
+    """Ensamt «Avgör om … har rätt.», «Svara med ett uttryck i …», «Motivera
+    uttrycket» och räknarmeningen i uppgiften. Noll modellanrop."""
+    ut: list[dict] = []
+    for i, u in enumerate((exam or {}).get("uppgifter") or [], 1):
+        if not isinstance(u, dict):
+            continue
+        delar = [d for d in (u.get("deluppgifter") or []) if isinstance(d, dict)]
+        enheter = ([(f"{i}{chr(ord('a') + j)}", d.get("text") or "")
+                    for j, d in enumerate(delar)] if delar else [])
+        enheter.append((str(i), u.get("text") or ""))
+        for nr, text in enheter:
+            t = str(text).strip()
+            if _ENSAMT_AVGOR.search(t):
+                ut.append(_err(
+                    f"uppgift {nr}", "provform",
+                    f"uppgift {nr} slutar med ett ensamt «Avgör om … har rätt.». "
+                    "Säg vad eleven ska visa: «Avgör med en beräkning om … har "
+                    "räknat rätt.» när bedömningen kräver en beräkning, annars "
+                    "«Avgör om … har rätt och förklara varför.»"))
+            if _SVARA_UTTRYCK.search(t):
+                ut.append(_err(
+                    f"uppgift {nr}", "provform",
+                    f"uppgift {nr} skriver «Svara med ett uttryck i …». Formen "
+                    "står i frågan: «Bestäm $k$ som ett uttryck i $n$.»"))
+            if _MOTIVERA_UTTRYCKET.search(t):
+                ut.append(_err(
+                    f"uppgift {nr}", "provform",
+                    f"uppgift {nr} ber eleven motivera uttrycket. Skriv «Visa "
+                    "med hjälp av figurerna hur du kom fram till uttrycket.»"))
+            if _RAKNARMENING.search(t):
+                ut.append(_err(
+                    f"uppgift {nr}", "provform",
+                    f"uppgift {nr} har räknarmeningen. Stryk den: den står "
+                    "aldrig i uppgiften."))
+    return ut
+
+
 def ovningsvakter(exam: dict, *, prov: dict | None = None,
                   forbjudna: list[dict] | None = None,
                   delmoment: list[dict] | None = None,
@@ -10388,6 +10440,8 @@ def ovningsvakter(exam: dict, *, prov: dict | None = None,
     fel += sprakvakt(exam)
     # Och lika kort (Rickard 2026-09-26).
     fel += textmangdvakt(exam)
+    # Och i provets form (samma dag, domarna ur provgranskningen).
+    fel += bladets_formvakt(exam)
     # Scenvakten står INTE här: provkörningen på de femton bladen fällde
     # hälften av dem på ett begrepp som inte stod ordagrant i texten
     # («färgåtgång» om en vägg som ska målas), och en reparationsrunda skriver

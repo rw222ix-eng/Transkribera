@@ -673,7 +673,8 @@ def _ovningsfynd(exam: dict, infor: dict | None, typ: str) -> list[dict]:
                # Provets vakter från granskningen 2026-09-25 (5e8bae9).
                + exam_gen.bladets_npvakter(exam or {})
                # Kort text som provet (Rickard 2026-09-26).
-               + exam_gen.textmangdvakt(exam or {}))
+               + exam_gen.textmangdvakt(exam or {})
+               + exam_gen.bladets_formvakt(exam or {}))
     except Exception:                       # pragma: no cover
         return ut
     ut += [_fynd(f["code"], f["message"], _uppgiftsnr(f.get("path", "")))
@@ -834,6 +835,10 @@ _ATGARD = {
                  "som inte behövs för att räkna stryks. Ett C- eller "
                  "A-problem delas inte i ledda steg. Samma tal, samma svar, "
                  "samma poäng.",
+    # Provgranskningens domar 2026-09-26, på bladet inför provet.
+    "provform": "Skriv om frågan så som fyndet säger. Samma matematik, "
+                "samma tal, samma poäng; bedömningen ska kräva det frågan "
+                "ber om.",
     # Lärarens dom 2026-09-24: bilderna visade nästan bara kvinnor.
     "konsbalans": "Byt personen i uppgiften mot en av det andra könet: "
                   "namnet, pronomenen och människan i scenen. Talen, metoden, "
