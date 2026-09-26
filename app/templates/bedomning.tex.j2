@@ -128,17 +128,25 @@ Totalt ((( granser.total ))) poäng.}
 ((* if not loop.first *))
 \bedlinje
 ((* endif *))
+((# PER DELUPPGIFT, MED PILAR (lärarens dom 2026-09-26): en grupp per
+    deluppgift med luft emellan, elevens rader med noten vid raden («← +C
+    korrekt ekvation», «← byter inte tecken»), och sist poängen i ord, «0
+    poäng» eller «+1 C», med kommentaren som motiverar dem. Förut stod a), b)
+    och c) i samma lösning under «0/0/0» och en gemensam dom. #))
 \begin{uppgift}{((( u.nummer )))}{}
-((* for e in u.elevexempel *))
+((* for g in u.elevexempel *))
+((* if not loop.first *))\bedelevgruppluft
+((* endif *))
+((* if g.namn *))\bedelevdel{((( g.namn )))}
+((* endif *))
+((* for e in g.exempel *))
 ((* if not loop.first *))\bedskilj
 ((* endif *))
-((# \par MÅSTE avslutas med ett mellanslag, precis som i gruppuppgift.tex.j2:
-    utan det klistras NÄSTA rads första ord fast i kommandonamnet. Lärarens
-    skarpa 1a-prov gav «\parTanken», ett odefinierat kommando, och HELA
-    bedömningsanvisningen föll — provet fick sin PDF, anvisningen ingen. Att
-    det inte syntes förr är att elevlösningarnas rader oftast börjar med
-    matematik ($…$ → \(), och \( avslutar \par på egen hand. #))
-\bedelev{((* for r in e.rader *))((( r )))\par ((* endfor *))}{((( e.trippel )))}{((( e.kommentar )))}
+((* for r in e.rader *))
+\bedelevrad{((( r.rad )))}{((* if r.slag == 'plus' *))\bedelevplus{((( r.marke )))}{((( r.not )))}((* elif r.slag == 'fel' *))\bedelevfel{((( r.not )))}((* endif *))}
+((* endfor *))
+\bedelevpoang{((( e.poang )))}{((( e.kommentar )))}
+((* endfor *))
 ((* endfor *))
 \end{uppgift}
 ((* endfor *))

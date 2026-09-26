@@ -347,12 +347,13 @@ test("bedömningsanvisningen · nationella provets form, elevlösningarna sist",
     await expect(page.locator("#formprov [data-form='lo-c']"))
       .not.toContainText("står sist i häftet");
 
-    // Sista arket: uppgiftens nummer, elevens papper, trippeln och skälet.
+    // Sista arket: uppgiftens nummer, elevens papper, poängen i ord och
+    // skälet (lärarens dom 2026-09-26: «0 poäng», «+1 E», inte «0/0/0»).
     const elev = page.locator("#formprov [data-form='lo-elev']");
     await expect(elev.locator(".lotitel")).toHaveText("Bedömda elevlösningar");
     await expect(elev.locator(".prnr")).toHaveText(["2."]);
     await expect(elev.locator(".loskann")).toHaveCount(2);
-    await expect(elev.locator(".lobedelevpoang")).toHaveText(["0/0/0", "1/0/0"]);
+    await expect(elev.locator(".lobedelevpoang")).toHaveText(["0 poäng", "+1 E"]);
     await expect(elev.locator(".lobedvarfor").first()).toHaveText("Derivatan är fel.");
     await expect(elev.locator(".lobedvarfor").last())
       .toContainText("löser aldrig ekvationen");

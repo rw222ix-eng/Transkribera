@@ -687,14 +687,16 @@ def test_elevexemplen_star_pa_eget_ark_sist():
     assert html.count("står sist i häftet") == 1
     # Inga elevpapper i tabellen.
     assert "loskann" not in arken[1] + arken[2]
-    # På elevarket: numret, elevens rader i handskriften, trippeln och skälet.
+    # På elevarket: numret, elevens rader i handskriften, poängen i ord och
+    # skälet (lärarens dom 2026-09-26: «0 poäng», «+1 E», inte «0/0/0»).
     assert '<span class="prnr">2.</span>' in elevark
     assert elevark.count('<div class="loskann">') == 2
-    assert '<b class="lobedelevpoang">0/0/0</b>' in elevark
-    assert '<b class="lobedelevpoang">1/0/0</b>' in elevark
+    assert '<b class="lobedelevpoang">0 poäng</b>' in elevark
+    assert '<b class="lobedelevpoang">+1 E</b>' in elevark
+    assert "0/0/0" not in elevark
     # Kommentaren versaliseras (blad-bygg.js UTAN_POANG och utanStegen).
-    assert '<p class="lobedvarfor">Ingen ansats</p>' in elevark
-    assert '<p class="lobedvarfor">Tecknar men stannar</p>' in elevark
+    assert '<span class="lobedvarfor">Ingen ansats</span>' in elevark
+    assert '<span class="lobedvarfor">Tecknar men stannar</span>' in elevark
     # Nollraden är utmärkt: rött gav inte.
     assert elevark.count("<tr data-utan>") == 1
     # Elevexemplet bär trippeln, inte raderna det fick: poängraderna står EN
@@ -800,8 +802,39 @@ def test_arbetsbladets_facit_heter_fortfarande_losningsforslag():
     assert "Lösningsförslag · boken" in bygg
 
 
+def test_elevlosningarna_per_deluppgift_med_pilar():
+    """Lärarens dom 2026-09-26: varje deluppgift för sig med luft emellan,
+    och vid elevens rad en pil med noten, grön där poängen gavs och röd där
+    det blev fel. Spegel av exam_latex._elevexempel."""
+    elever = [
+        {"etikett": "a) 0 p", "partier": [{"rader": [
+            "$4a - (7 - 3a) + 2 = 4a - 7 - 3a + 2$ ← byter inte tecken på $3a$",
+            "$= a - 5$"], "poang": [0, 0, 0], "dom": "Tecknet på 3a blir fel."}]},
+        {"etikett": "b) 0 p", "partier": [{"rader": ["$x = 3$ ← fel"],
+                                           "poang": [0, 0, 0], "dom": ""}]},
+        {"etikett": "b) 1 p", "partier": [{"rader": [
+            "$2x = 6$ ← +C korrekt ekvation", "$x = 4$ ← delar fel"],
+            "poang": [0, 1, 0], "dom": "Korrekt ekvation men fel svar."}]},
+    ]
+    html = _losark([_uppg(nr=2, p=3, f="", ut="rakna", elever=elever,
+                          beddel=["+1 E a", "+1 C b\n+1 C c"],
+                          delpeca=[[1, 0, 0], [0, 2, 0]])], delB=0)
+    elevark = html.split('data-form="lo-elev"')[1]
+    # En rubrik per deluppgift, a) först utan luft ovanför.
+    assert elevark.count("<tr data-del") == 2
+    assert '<tr data-del data-forsta><td colspan="2"><b class="loelevdel">a)</b>' in elevark
+    assert '<tr data-del><td colspan="2"><b class="loelevdel">b)</b>' in elevark
+    # Noten vid raden: röd där det blev fel, grön med märket där poängen gavs.
+    assert '<span class="loelevnot" data-slag="fel">← byter inte tecken på' in elevark
+    assert '<span class="loelevnot" data-slag="plus">← <b>+C</b> korrekt ekvation</span>' in elevark
+    assert "←" not in elevark.split("loelevrad")[1].split("</span>")[0]
+    # Poängen i ord.
+    assert elevark.count('<b class="lobedelevpoang">0 poäng</b>') == 2
+    assert '<b class="lobedelevpoang">+1 C</b>' in elevark
+
+
 def test_nollraden_upprepar_inte_beskedet_pa_skarmen():
-    """Spegel av app/exam_latex._utan_rubriken: «0/0/0» säger redan att
+    """Spegel av app/exam_latex._utan_rubriken: «0 poäng» säger redan att
     lösningen inte gav något, och kommentaren säger bara varför."""
     html = _losark([_uppg(p=2, f="$x = 4$", bed="+1 E a\n+1 C b",
                           elever=[{"etikett": "0 p",
@@ -810,7 +843,7 @@ def test_nollraden_upprepar_inte_beskedet_pa_skarmen():
                                                 "dom": "Inga poäng. Eleven "
                                                        "deriverar aldrig."}]}])])
     assert "Inga poäng" not in html
-    assert '<p class="lobedvarfor">Eleven deriverar aldrig.</p>' in html
+    assert '<span class="lobedvarfor">Eleven deriverar aldrig.</span>' in html
     # Var kommentaren BARA beskedet blir det ingen rad alls under poängen.
     tom = _losark([_uppg(p=2, f="$x = 4$", bed="+1 E a\n+1 C b",
                          elever=[{"etikett": "0 p",

@@ -1414,7 +1414,43 @@ window.BladBygg = (() => {
     return kvar ? kvar[0].toUpperCase() + kvar.slice(1) : '';
   }
 
+  /* ── PER DELUPPGIFT OCH MED PILAR (lärarens dom 2026-09-26) ──
+     «0/0/0 och en massa text under hjälper mig inte.» Varje deluppgift för
+     sig med luft emellan, elevens rader med en not vid raden där poängen
+     gavs («← +C korrekt ekvation», grön) och där det blev fel («← byter inte
+     tecken», röd), och sist poängen i ord, «0 poäng» eller «+1 C», med
+     kommentaren. Noten står i raden efter en pil utanför $…$, deluppgiften
+     i etiketten («a) 0 p»). Spegel av app/exam_spec.elevrad_delar,
+     elevgrupp och app/exam_latex.poangrubrik. */
+  const ELEVNOT = '←';
+  function elevradDelar(rad) {
+    const s = String(rad == null ? '' : rad);
+    let dollar = 0;
+    for (let i = 0; i < s.length; i++) {
+      if (s[i] === '$') dollar++;
+      else if (s[i] === ELEVNOT && dollar % 2 === 0) return [s.slice(0, i).trimEnd(), s.slice(i + 1).trim()];
+    }
+    return [s, ''];
+  }
+  function elevgrupp(etikett) {
+    const m = /^\s*([a-l])\)/.exec(String(etikett || ''));
+    return m ? m[1] + ')' : '';
+  }
+  function poangrubrik(p) {
+    if (!(p[0] + p[1] + p[2])) return '0 poäng';
+    return p.map((n, i) => (n ? `+${n} ${'ECA'[i]}` : '')).filter(Boolean).join(', ');
+  }
+  const NOTMARKE = /^\+\s*(?:1\s*)?([ECA])\b[\s:.,]*/;
+  function elevNot(not) {
+    if (!not) return '';
+    const m = NOTMARKE.exec(not);
+    return m
+      ? `<span class="loelevnot" data-slag="plus">← <b>+${m[1]}</b> ${mat(not.slice(m[0].length).trim())}</span>`
+      : `<span class="loelevnot" data-slag="fel">← ${mat(not)}</span>`;
+  }
+
   function elevRad(u) {
+    let forra = null;
     const rader = u.elever.map(e => {
       const poang = elevpoang(e), total = poang[0] + poang[1] + poang[2];
       const skrivna = (e.partier || []).reduce((a, p) => a.concat(p.rader || []), []);
@@ -1425,14 +1461,22 @@ window.BladBygg = (() => {
       } else {
         dom = utanStegen(dom);
       }
+      /* En rad med deluppgiftens bokstav före första lösningen i gruppen, med
+         luft ovanför när den inte är uppgiftens första (data-del). */
+      const grupp = elevgrupp(e.etikett);
+      const rubrik = grupp && grupp !== forra
+        ? `<tr data-del${forra === null ? ' data-forsta' : ''}><td colspan="2"><b class="loelevdel">${esc(grupp)}</b></td></tr>` : '';
+      forra = grupp;
       /* Elevens rader är det som fick scrollbaren: bedömningspasset skriver
          «$A(15) = 120 - 4 \cdot 15 = 120 - 60 = 60$» som EN formel. matBryt
          delar den vid likhetstecknen så att raden kan brytas i spalten. */
-      return `<tr${total ? '' : ' data-utan'}>
-        <td><div class="loskann">${skrivna.map(
-          r => `<div class="loskannrad">${matBryt(r)}</div>`).join('')}</div></td>
-        <td><b class="lobedelevpoang">${poang.join('/')}</b>${
-          dom ? `<p class="lobedvarfor">${mat(dom)}</p>` : ''}</td></tr>`;
+      return `${rubrik}<tr${total ? '' : ' data-utan'}>
+        <td colspan="2"><div class="loskann">${skrivna.map(r => {
+          const [rad, not] = elevradDelar(r);
+          return `<div class="loskannrad"><span class="loelevrad">${matBryt(rad)}</span>${elevNot(not)}</div>`;
+        }).join('')}</div>
+        <p class="lobedelevrad"><b class="lobedelevpoang">${poangrubrik(poang)}</b>${
+          dom ? ` <span class="lobedvarfor">${mat(dom)}</span>` : ''}</p></td></tr>`;
     }).join('');
     return `<div class="pruppg">
       <span class="prnr">${u.nr}.</span>

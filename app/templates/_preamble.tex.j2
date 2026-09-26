@@ -639,6 +639,36 @@
     \vspace{0.8mm}{\small #3}\end{minipage}%
   \par}
 
+((# PER RAD OCH PER DELUPPGIFT (lärarens dom 2026-09-26). \bedelev ovan satte
+    hela lösningen i en spalt och «0/0/0» med domen i den andra; läraren såg
+    inte VAR det blev rätt eller fel. Nu står varje elevrad i vänsterspalten
+    med sin not i högerspalten, på samma höjd: grön med märket där poängen
+    gavs, röd där det blev fel. Under raderna poängen i ord och kommentaren
+    på samma rad, «+1 C  Korrekt ekvation, men …». Mallen använder inte
+    \bedelev längre; den står kvar som de andra gamla formerna nedan.
+
+    \nopagebreak mellan raderna: en elevlösning bryts inte över en sida.
+    Sidan får brytas efter poängraden, alltså mellan två lösningar eller två
+    deluppgifter. #))
+\definecolor{bedratt}{HTML}{1B7A46}
+\definecolor{bedfel}{HTML}{B03A2E}
+\newcommand{\bedelevrad}[2]{%
+  \par\noindent\begin{minipage}[t]{0.58\linewidth}%
+    \setlength{\lineskiplimit}{3pt}\setlength{\lineskip}{3pt}#1\end{minipage}%
+  \hfill\begin{minipage}[t]{0.39\linewidth}\small #2\end{minipage}%
+  \par\nopagebreak\vspace{0.8mm}\nopagebreak}
+((# Hängande indrag: en not som bryts fortsätter under texten, inte under
+    pilen. #))
+\newcommand{\bedelevplus}[2]{\hangindent=1.4em\hangafter=1\relax
+  \textcolor{bedratt}{\(\leftarrow\)\enspace\textbf{#1}\enspace #2}}
+\newcommand{\bedelevfel}[1]{\hangindent=1.4em\hangafter=1\relax
+  \textcolor{bedfel}{\(\leftarrow\)\enspace #1}}
+\newcommand{\bedelevpoang}[2]{%
+  \par\nopagebreak\vspace{1.2mm}\noindent{\bfseries #1}\enspace{\small #2}\par}
+\newcommand{\bedelevdel}[1]{%
+  \par\noindent{\bfseries #1}\par\nopagebreak\vspace{1mm}\nopagebreak}
+\newcommand{\bedelevgruppluft}{\par\vspace{5mm}}
+
 ((# Skiljelinjen mellan två elevlösningar på samma uppgift. Står FÖRE varje
     lösning utom den första och aldrig efter den sista: en linje under hade
     sett ut som en avstämning. \nopagebreak först: bryts sidan här ska linjen

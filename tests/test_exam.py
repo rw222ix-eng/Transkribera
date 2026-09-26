@@ -3623,14 +3623,17 @@ def test_prompterna_ber_om_korta_rader_och_ingen_notrad():
     assert "Vanligt fel" not in prompt
     # Trappraderna: ett tak i ord, inte «kort och konkret».
     assert "ÅTTA ord" in prompt
-    # Kommentaren: EN mening, tolv ord, och BARA skälet — poängmärket stod
+    # Kommentaren: EN mening, tolv ord, och aldrig poängmärket — det stod
     # förut i exemplet, och läraren räknade det dubbelt (prov 81, uppgift 12).
     assert "HÖGST TOLV ORD" in prompt
-    assert "Prövar bara ett exempel i b." in prompt
     assert "+1 C för potensen i täljaren" not in prompt
-    assert "aldrig «+1 E» i kommentaren" in prompt
+    assert "Skriv aldrig «+1 E»" in prompt
     # Elevens papper kortas med en rad.
     assert "högst FEM rader" in prompt
+    # Lärarens dom 2026-09-26: varje deluppgift för sig, och en not vid
+    # raden där poängen gavs och där det blev fel.
+    assert "EN ENHET I TAGET" in prompt
+    assert "«+C korrekt ekvation»" in prompt
 
 
 def test_bedomningssignal_faller_flera_poang_pa_samma_rad():
@@ -3809,8 +3812,8 @@ def test_bedomningens_sidhuvud_bar_riktiga_tecken():
 def test_elevexemplen_star_i_eget_avsnitt_sist():
     """Lärarens dom 2026-09-23 (NP:s form): de bedömda elevlösningarna står
     inte under varje uppgift utan i ett eget avsnitt sist, «Bedömda
-    elevlösningar». Per uppgift: elevens rader, poängen som trippel och
-    kommentaren. Att de finns sägs EN gång, i inledningen, inte under varje
+    elevlösningar». Per uppgift: elevens rader, poängen i ord och
+    kommentaren (lärarens dom 2026-09-26: «0 poäng», «+1 E», inte «0/0/0»). Att de finns sägs EN gång, i inledningen, inte under varje
     uppgift (lärarens dom samma dag: upprepad text var det hon ville bort
     ifrån)."""
     exam = _exam()
@@ -3835,14 +3838,17 @@ def test_elevexemplen_star_i_eget_avsnitt_sist():
     assert (tabell.index("Kravgränser:") < tabell.index(rad)
             < tabell.index(r"\begin{uppgift}{1}{}"))
     assert "bednotis" not in tex
-    # Uppgiftens nummer, elevens rader, trippeln och kommentaren. Kommentaren
-    # versaliseras: nollradens «Inga poäng.»-led stryks (_utan_rubriken) och
-    # den poängsatta radens märken (_utan_stegen).
+    # Uppgiftens nummer, elevens rader, poängen i ord och kommentaren.
+    # Kommentaren versaliseras: nollradens «Inga poäng.»-led stryks
+    # (_utan_rubriken) och den poängsatta radens märken (_utan_stegen).
     assert r"\begin{uppgift}{3}{}" in avsnitt
-    assert r"\bedelev{fel\par }{0/0/0}{Ingen ansats}" in avsnitt
-    assert r"\bedelev{ansats\par }{1/0/0}{Tecknar men löser inte}" in avsnitt
+    assert r"\bedelevrad{fel}{}" in avsnitt
+    assert r"\bedelevpoang{0 poäng}{Ingen ansats}" in avsnitt
+    assert r"\bedelevrad{ansats}{}" in avsnitt
+    assert r"\bedelevpoang{+1 E}{Tecknar men löser inte}" in avsnitt
+    assert "0/0/0" not in avsnitt and "1/0/0" not in avsnitt
     assert avsnitt.count(r"\bedskilj") == 1          # mellan de två, inte efter
-    # Trappan står EN gång, i tabellen. Elevexemplet bär trippeln och inte
+    # Trappan står EN gång, i tabellen. Elevexemplet bär poängen och inte
     # raderna den fick.
     assert tex.count(r"\bedkrav{Ansats.}{+E}") == 1
 
@@ -4066,6 +4072,53 @@ def test_bedomningspasset_skriver_trappan_per_deluppgift():
         ["0 p", "1 p"]
 
 
+def test_bedomningspasset_skriver_elevlosningar_per_deluppgift_med_not():
+    """Lärarens dom 2026-09-26: varje deluppgift för sig, och vid elevens rad
+    en not om var poängen gavs och var det blev fel. Svaret bär `enhet` och
+    raderna som {rad, not}; det skrivs in som «rad ← not» med deluppgiften i
+    etiketten, och vakten räknar stegen per deluppgift. `trappa=False` rör
+    inte trappan."""
+    exam = {"uppgifter": [{"poang": [0, 0, 0], "text": "stam", "losning": "",
+                           "bedomning": "", "deluppgifter": [
+                               {"poang": [1, 0, 0], "text": "a", "losning": "l",
+                                "bedomning": "+1 E gammalt a"},
+                               {"poang": [0, 1, 1], "text": "b", "losning": "l",
+                                "bedomning": "+1 C gammalt b\n+1 A gammalt b"}]}]}
+    svar = json.dumps({
+        "bedomning": [{"enhet": "a", "rader": ["+1 E nytt a"]}],
+        "elevlosningar": [
+            {"enhet": "a", "poang": [0, 0, 0], "kommentar": "Tecknet blir fel.",
+             "rader": [{"rad": "$4a - 7 - 3a$", "not": "byter inte tecken"},
+                       {"rad": "$= a - 7$", "not": ""}]},
+            {"enhet": "b", "poang": [0, 1, 0], "kommentar": "Rätt ekvation.",
+             "rader": [{"rad": "$2x = 6$", "not": "+C korrekt ekvation"}]},
+            {"enhet": "b", "poang": [0, 0, 0], "kommentar": "Ingen ansats.",
+             "rader": [{"rad": "$x = 9$", "not": "gissar"}]},
+            # En E-poäng på en C/A-deluppgift är fel nivå och kastas.
+            {"enhet": "b", "poang": [1, 0, 0], "kommentar": "x",
+             "rader": [{"rad": "y", "not": ""}]},
+        ]}, ensure_ascii=False)
+    llm, _c = _stub_llm([svar])
+    exam_gen.bedomningspass(exam, model="m", llm=llm, trappa=False)
+    u = exam["uppgifter"][0]
+    assert u["deluppgifter"][0]["bedomning"] == "+1 E gammalt a"
+    assert [e["etikett"] for e in u["elevlosningar"]] == ["a) 0 p", "b) 0 p",
+                                                          "b) 1 p"]
+    assert u["elevlosningar"][0]["partier"][0]["rader"] == [
+        "$4a - 7 - 3a$ ← byter inte tecken", "$= a - 7$"]
+    assert exam_spec.elevrad_delar("$4a - 7 - 3a$ ← byter inte tecken") == (
+        "$4a - 7 - 3a$", "byter inte tecken")
+    assert exam_spec.elevgrupp("b) 1 p") == "b)"
+    assert exam_gen.bedomningssignaler(exam) == []
+    # Saknas b):s 1 p-steg säger vakten det, per deluppgift.
+    u["elevlosningar"].pop()
+    fynd = exam_gen.bedomningssignaler(exam)
+    assert len(fynd) == 1 and "uppgift 1b" in fynd[0]["message"]
+    # PDF:en sätter noten vid raden och poängen i ord.
+    assert exam_latex.poangrubrik([0, 1, 1]) == "+1 C, +1 A"
+    assert exam_latex.poangrubrik((0, 0, 0)) == "0 poäng"
+
+
 def test_andrade_uppgifter_ser_bara_det_bedomningen_bryr_sig_om():
     """Omskrivningen ska bara betala för det som ändrades. En bild som bytts
     ändrar ingen bedömning; en poäng, en text, ett facit eller en trappa gör
@@ -4150,8 +4203,8 @@ def test_ts1_tecknen_satts_alltid_magert_och_uppratt():
 def test_nollraden_upprepar_inte_rubriken_i_pdfen():
     """«Inga poäng» stod två gånger på lärarens papper: en gång som rubrik i
     högerspalten och en gång till som kommentarens första två ord, för det är
-    så modellen skriver en hel mening. Sedan 2026-09-23 säger trippeln
-    «0/0/0» det, och kommentaren säger bara varför."""
+    så modellen skriver en hel mening. Poängen säger det («0 poäng» sedan
+    2026-09-26), och kommentaren säger bara varför."""
     exam = _exam()
     exam["uppgifter"][2]["elevlosningar"] = [
         {"etikett": "0 p",
@@ -4164,7 +4217,7 @@ def test_nollraden_upprepar_inte_rubriken_i_pdfen():
     doc, _fel = exam_spec.validate_exam_json(exam)
     tex = exam_latex.render_bedomning(doc)
     assert "Inga poäng" not in tex
-    assert r"\bedelev{fel\par }{0/0/0}{Svaret är rätt av fel skäl.}" in tex
+    assert r"\bedelevpoang{0 poäng}{Svaret är rätt av fel skäl.}" in tex
     # En kommentar som inte BÖRJAR med ett poängmärke får bara märket
     # struket — ledet står kvar som det skrevs.
     assert "Får , men stannar där." not in tex
@@ -4267,15 +4320,16 @@ def test_kommentaren_raknar_inte_poangen_en_gang_till():
     ]
     doc, _fel = exam_spec.validate_exam_json(exam)
     tex = exam_latex.render_bedomning(doc)
-    assert r"\bedelev{a) 27\par }{1/0/0}{I b testas bara ett exempel.}" in tex
+    assert r"\bedelevrad{a) 27}{}" in tex
+    assert r"\bedelevpoang{+1 E}{I b testas bara ett exempel.}" in tex
     assert "+1 E för 27" not in tex
-    # Poängraden står EN gång, i tabellen; elevexemplet bär trippeln.
+    # Poängraden står EN gång, i tabellen; elevexemplet bär poängen i ord.
     assert tex.count(r"\bedkrav{Ansats.}{+E}") == 1
 
 
 def test_nollraden_utan_egen_kommentar_far_ingen_tom_rad():
     """Skrev modellen bara «Inga poäng» är hela kommentaren beskedet, och
-    «0/0/0» säger det redan. Då ska ingenting stå under poängen."""
+    «0 poäng» säger det redan. Då ska ingenting stå efter poängen."""
     exam = _exam()
     exam["uppgifter"][2]["elevlosningar"] = [
         {"etikett": "0 p",
@@ -4284,7 +4338,7 @@ def test_nollraden_utan_egen_kommentar_far_ingen_tom_rad():
     doc, _fel = exam_spec.validate_exam_json(exam)
     tex = exam_latex.render_bedomning(doc)
     assert "Inga poäng" not in tex
-    assert r"\bedelev{fel\par }{0/0/0}{}" in tex
+    assert r"\bedelevpoang{0 poäng}{}" in tex
 
 
 def test_poangmarket_star_i_egen_spalt_i_lod():

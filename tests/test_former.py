@@ -279,9 +279,10 @@ def test_facit_stannar_pa_lararens_papper():
     assert "\\bedsvar{Randvinkelsatsen, 42}" in tex["bedomning"]
     # Elevlösningarna står i avsnittet sist: poängen som trippel och
     # kommentaren som skäl. Partierna summeras till ett papper.
-    assert r"\bedelev{\(f'(x) = 3x^2\)\par }{0/0/0}{Derivatan är fel.}" \
+    assert r"\bedelevrad{\(f'(x) = 3x^2\)}{}" in tex["bedomning"]
+    assert r"\bedelevpoang{0 poäng}{Derivatan är fel.}" \
         in tex["bedomning"]
-    assert "}{1/1/0}{Godtagbar ansats. Godtagbart resonemang.}" \
+    assert r"\bedelevpoang{+1 E, +1 C}{Godtagbar ansats. Godtagbart resonemang.}" \
         in tex["bedomning"]
 
 
@@ -310,9 +311,10 @@ def test_en_elevlosning_som_borjar_med_ord_klistras_inte_fast_i_par():
     assert "\\parTanken" not in tex
     # Bara elevraderna: preamblen har \parindent och \parskip, som är egna
     # kommandon och inte ett \par med ett ord fastklistrat. Raderna är
-    # \bedelev:s första argument (bedomning.tex.j2, avsnittet sist).
-    partier = re.findall(r"\\bedelev\{(.*?)\}\{\d+/\d+/\d+\}", tex, re.S)
-    assert len(partier) == 2
+    # \bedelevrad:s första argument (bedomning.tex.j2, avsnittet sist), en
+    # rad per anrop sedan 2026-09-26.
+    partier = re.findall(r"\\bedelevrad\{(.*?)\}\{", tex)
+    assert len(partier) == 4
     for p in partier:
         assert re.search(r"\\par[A-Za-zÅÄÖåäö]", p) is None, \
             "\\par klistrat mot ett ord — kommandonamnet blir odefinierat"

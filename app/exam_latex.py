@@ -1191,19 +1191,49 @@ def _losningsstycken(utforlig: str | None) -> list[dict]:
     return ut
 
 
+_NOTMARKE_RE = re.compile(r"^\+\s*(?:1\s*)?([ECA])\b[\s:.,]*")
+
+
+def poangrubrik(poang) -> str:
+    """Elevlösningens poäng som läraren läser dem: «0 poäng», «+1 C»,
+    «+1 E, +1 C» (lärarens dom 2026-09-26, i stället för «0/1/0»)."""
+    p = [int(x) for x in (list(poang) + [0, 0, 0])[:3]]
+    if not sum(p):
+        return "0 poäng"
+    return ", ".join(f"+{n} {niva}" for n, niva in zip(p, "ECA") if n)
+
+
+def _elevrad_vy(rad: str) -> dict:
+    """En elevrad med sin not. En not som börjar med ett märke («+C korrekt
+    ekvation») visar var poängen gavs, alla andra var det blev fel."""
+    text, notis = exam_spec.elevrad_delar(rad)
+    m = _NOTMARKE_RE.match(notis)
+    if m:
+        return {"rad": escape_mixed(text), "slag": "plus", "marke": f"+{m.group(1)}",
+                "not": escape_mixed(notis[m.end():].strip())}
+    return {"rad": escape_mixed(text), "slag": "fel" if notis else "",
+            "marke": "", "not": escape_mixed(notis)}
+
+
 def _elevexempel(it) -> list[dict]:
-    """De bedömda elevlösningarna till avsnittet sist i häftet: elevens rader,
-    poängen de ges som trippel («0/1/0») och kommentaren.
+    """De bedömda elevlösningarna till avsnittet sist i häftet, grupperade per
+    deluppgift: elevens rader med noten vid raden, poängen («0 poäng»,
+    «+1 C») och kommentaren som motiverar dem.
 
     EGET AVSNITT, INTE UNDER VARJE UPPGIFT (lärarens dom 2026-09-23). NP:s
     häften samlar dem sist under «Bedömda elevlösningar», och där stod de
     förut mitt i tabellen, en rad per lägre poängsteg, så att varje uppgift
     blev en halv sida att läsa förbi när hon bara ville se vad som ger poäng.
 
+    PER DELUPPGIFT OCH MED PILAR (lärarens dom 2026-09-26, se
+    exam_spec.ELEVNOT): en grupp per deluppgift, i den ordning de kommer, med
+    luft emellan. Gamla lösningar utan deluppgift i etiketten blir en grupp
+    utan namn, som förut.
+
     Partierna summeras. Gamla dokument (och förlagans lo4) delar lösningen i
     flera partier med var sin dom, och de läggs ihop till ett papper, i
     ordning. Spegel av app/web/ui/blad-bygg.js elevRad."""
-    ut = []
+    grupper: list[dict] = []
     for e in (it.elevlosningar or []):
         poang = [0, 0, 0]
         for pa in e.partier:
@@ -1211,13 +1241,17 @@ def _elevexempel(it) -> list[dict]:
                 poang[i] += int(x)
         total = sum(poang)
         dom = " ".join(pa.dom for pa in e.partier if pa.dom)
-        ut.append({
-            "rader": [escape_mixed(r) for pa in e.partier for r in pa.rader],
-            "trippel": f"{poang[0]}/{poang[1]}/{poang[2]}",
+        namn = exam_spec.elevgrupp(e.etikett)
+        if not grupper or grupper[-1]["namn"] != namn:
+            grupper.append({"namn": namn, "exempel": []})
+        grupper[-1]["exempel"].append({
+            "rader": [_elevrad_vy(r) for pa in e.partier for r in pa.rader],
+            "poang": poangrubrik(poang),
+            "utan": total == 0,
             "kommentar": escape_mixed(_utan_rubriken(dom) if total == 0
                                       else _utan_stegen(dom)),
         })
-    return ut
+    return grupper
 
 
 def _enhet_vy(*, poang, typ, formaga, text, losning, bedomning,

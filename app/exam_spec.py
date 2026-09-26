@@ -146,6 +146,40 @@ class Elevlosning(_Model):
         return sum(p.summa for p in self.partier)
 
 
+# ── ELEVRADENS NOT OCH DELUPPGIFTEN (lärarens dom 2026-09-26) ─────────────
+# «0/0/0 och en massa text under hjälper mig inte.» Hon ville se VAR i
+# elevens lösning det blev rätt och fel: en pil vid raden med en kort not,
+# «här blev det fel» eller «+C korrekt ekvation», och varje deluppgift för
+# sig med luft emellan i stället för a), b) och c) i samma lösning under en
+# gemensam dom.
+#
+# Schemat är detsamma (ett nytt fält i ExamDoc hade gjort alla inspelade band
+# ogiltiga). Noten står i raden efter en pil utanför $…$, «rad ← not», och
+# deluppgiften i etiketten, «a) 0 p». Gamla lösningar utan pil och med
+# etiketten «1 p» läses som förut. Spegel i app/web/ui/blad-bygg.js
+# (elevradDelar, elevgrupp).
+ELEVNOT = "←"
+_ELEVGRUPP_RE = re.compile(r"^\s*([a-l])\)")
+
+
+def elevrad_delar(rad: str) -> tuple[str, str]:
+    """«rad ← not» → (rad, not). Pilen räknas bara utanför $…$."""
+    s = str(rad or "")
+    dollar = 0
+    for i, t in enumerate(s):
+        if t == "$":
+            dollar += 1
+        elif t == ELEVNOT and dollar % 2 == 0:
+            return s[:i].rstrip(), s[i + 1:].strip()
+    return s, ""
+
+
+def elevgrupp(etikett: str) -> str:
+    """Deluppgiften en elevlösning gäller, «a)», eller "" för hela uppgiften."""
+    m = _ELEVGRUPP_RE.match(str(etikett or ""))
+    return f"{m.group(1)})" if m else ""
+
+
 class _Uppgiftsbas(_Model):
     """Delade fält för uppgifter och deluppgifter."""
     poang: tuple[int, int, int]          # (E, C, A) — NP-notationen (2/1/0)

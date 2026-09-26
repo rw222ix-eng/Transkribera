@@ -255,14 +255,29 @@ $\dfrac{…}$
 [data-form="lo-elev"] .prnr{padding-top:calc(10px * var(--fsk, 1))}
 .lobed[data-elev] td{padding:9px 0 11px;border-top:1px solid #E2DFD8}
 .lobed[data-elev] tr:first-child td{border-top:0;padding-top:0}
-.lobed[data-elev] td:first-child{width:62%;padding-right:18px}
-.lobed[data-elev] td:last-child{width:38%;padding-left:18px;text-align:left;white-space:normal;border-left:1px solid #E2DFD8}
+/* ── PER DELUPPGIFT OCH MED PILAR (lärarens dom 2026-09-26) ──
+   En cell per lösning över hela bredden. Elevens rad till vänster och noten
+   vid raden till höger, på samma höjd (grid i .loskannrad), deluppgiftens
+   bokstav på en egen rad med luft ovanför, och poängen i ord med
+   kommentaren på samma rad under lösningen. Den allmänna poängspalten
+   (.lobed td:last-child) gäller inte här. */
+.lobed[data-elev] td:last-child{width:auto;padding-left:0;text-align:left;white-space:normal}
+.lobed[data-elev] tr[data-del] td{border-top:0;padding:calc(24px * var(--fsk, 1)) 0 4px}
+.lobed[data-elev] tr[data-del][data-forsta] td{padding-top:0}
+.lobed[data-elev] tr[data-del] + tr td{border-top:0;padding-top:0}
+.loelevdel{font-weight:700;font-size:calc(15.5px * var(--fsk, 1))}
+.lobed[data-elev] .loskannrad{display:grid;grid-template-columns:minmax(0,1fr) 42%;column-gap:16px;align-items:baseline}
+.loelevrad{min-width:0;overflow-wrap:anywhere}
+.loelevnot{font-family:Arimo,Arial,'Helvetica Neue',Helvetica,sans-serif;font-size:calc(13px * var(--fsk, 1));line-height:1.35}
+.loelevnot[data-slag="plus"]{color:#1B7A46}
+.loelevnot[data-slag="fel"]{color:#C0392B}
+.lobedelevrad{margin:8px 0 0;font-size:calc(13.5px * var(--fsk, 1));line-height:1.42;color:#000}
 /* Grönt gav poäng, rött gav inga. Färgen är avläsningen: utfallet syns innan
    man läst en rad. */
-.lobedelevpoang{display:block;font-weight:700;font-size:calc(14px * var(--fsk, 1));letter-spacing:.02em;color:#1B7A46;font-variant-numeric:tabular-nums}
+.lobedelevpoang{font-weight:700;font-size:calc(14px * var(--fsk, 1));letter-spacing:.02em;color:#1B7A46;font-variant-numeric:tabular-nums;margin-right:6px}
 .lobed tr[data-utan] .lobedelevpoang{color:#C0392B}
-/* Varför inte nästa poäng: det korta skälet, satt i rak stil under poängen. */
-.lobedvarfor{margin:6px 0 0;font-size:calc(13px * var(--fsk, 1));line-height:1.42;color:#000}
+/* Kommentaren som motiverar poängen, på samma rad som poängen. */
+.lobedvarfor{font-size:calc(13px * var(--fsk, 1));line-height:1.42;color:#000}
 .lobed .loskann{margin-top:0}
 /* ── ELEVRADEN FLYTER SOM TEXT ──
    `.loskannrad` är en FLEXRAD i förlagans lo4, och det är rätt där: dess rader
