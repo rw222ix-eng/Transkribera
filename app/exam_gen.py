@@ -9569,6 +9569,29 @@ INFOR_BILD = (
     "målas så att det inte går att räkna: ett enda i förgrunden, eller en "
     "hög på avstånd, delvis dold. Annars visar bilden ett annat antal än "
     "texten.\n")
+# KORT TEXT, SOM PROVET (Rickard 2026-09-26): «Proven har oftast lite text
+# och är i stället uppdelade i deluppgifter, vilket gör informationen lättare
+# att ta in.» Mätt samma morgon på de femton bladen mot de fem proven: tre
+# meningar i stammen mot två, 18 ord före frågan mot 15, 26 av 233 enheter
+# över provets ordtak (ORD_FORE_FRAGAN) mot 8 av 95, och deluppgifter på 28 %
+# av uppgifterna mot 53 %. Bladets tak är därför lägre än provets, utom för
+# C- och A-problemet utan deluppgifter: det får inte delas i ledda steg (då
+# sjunker nivån, planeringen är en del av uppgiften), så där gäller provets.
+BLAD_ORD_FORE_FRAGAN = 30
+BLAD_STAM_MENINGAR = 2
+BLAD_DEL_FAKTA = 1
+BLAD_HEL_FAKTA = {"E": 3, "C": 4, "A": 4}
+INFOR_TEXT = (
+    "KORT TEXT, SOM PROVET. Provets uppgifter har lite text och är i stället "
+    "uppdelade i deluppgifter, och bladet ska läsas lika lätt. Stammen ger "
+    f"sammanhanget i högst {BLAD_STAM_MENINGAR} korta meningar. Varje "
+    f"deluppgift har en fråga och högst {BLAD_DEL_FAKTA} mening fakta före "
+    "den: flytta varje faktum till den deluppgift där det behövs. Högst "
+    f"{BLAD_ORD_FORE_FRAGAN} ord före frågan. Ett C- eller A-problem delas inte "
+    "i ledda steg, för då sjunker nivån; skriv det i stället med högst "
+    f"{ORD_FORE_FRAGAN} ord före frågan. Stryk bakgrund som inte behövs för "
+    "att räkna, slå ihop meningar om samma sak och lägg ett villkor i frågan "
+    "när det blir kortare («Hur många hela kubikmeter ska köpas?»).\n")
 
 
 def build_infor_prov(slots: list[dict] | None, nummer: list[int] | None,
@@ -9652,11 +9675,12 @@ def build_infor_prov(slots: list[dict] | None, nummer: list[int] | None,
         # DEN ENDA REGELN SOM SÄGER EMOT OMPROVET, och den är hela skillnaden
         # mellan att pröva och att öva.
         "DU FÅR GÖRA INGÅNGEN LÄTTARE. Ett förberedande steg före den svåra "
-        "frågan, «beräkna först …, använd sedan …», hör hemma på ett "
-        "övningsblad även när provets uppgift frågar rakt ut. Metoden som ska "
-        "övas får däremot aldrig bytas mot en enklare.\n"
+        "frågan hör hemma på ett övningsblad även när provets uppgift frågar "
+        "rakt ut, och det står som en egen deluppgift med egen fråga, inte "
+        "som en mening till i texten. Metoden som ska övas får däremot aldrig "
+        "bytas mot en enklare.\n"
         + (INFOR_RAKNARE if any(s["del"] for s in valda) else "")
-        + INFOR_BILD + fordjup +
+        + INFOR_BILD + INFOR_TEXT + fordjup +
         # FÄLTET, och orden \"drillar\" i citattecken är det som tänder det i
         # grammatiken (_drillar_i_grammatiken). Ändras stavningen här faller
         # fältet ur schemat och täckningen blir tyst.
@@ -10199,7 +10223,7 @@ OVNINGSKODER = ("raknarfri", "bildfigur", "provlan", "kopia", "forbudsvakt",
                 "provuttryck",
                 ci_utanfor.KOD, "begriplighet", "radlangd", "person",
                 "forvaxling", "konsbalans", "doltkrav", "avrundning",
-                "endastsvar")
+                "endastsvar", "textmangd")
 
 
 def bladets_npvakter(exam: dict) -> list[dict]:
@@ -10210,6 +10234,75 @@ def bladets_npvakter(exam: dict) -> list[dict]:
     NP-vakterna är mätta på provets poäng och står utanför."""
     return (np_vakter.doltkravvakt(exam) + np_vakter.avrundningsvakt(exam)
             + np_vakter.endastsvarvakt(exam))
+
+
+def _meningar(text: str) -> list[str]:
+    """Meningarna med sina skiljetecken kvar, så att _ar_fraga ser «?».
+    _rentext har redan slagit ihop raderna, som i _ord_fore_fragan."""
+    ren = _rentext(_RAKNARMARKE.sub("", str(text or "")))
+    return [m for m in re.split(r"(?<=[.!?])\s+", ren) if m.strip()]
+
+
+def _fakta_fore_fragan(text: str) -> int:
+    """Meningar före den första frågan eller uppmaningen (_ar_fraga). «Svara
+    i grundpotensform.» efter frågan räknas alltså inte."""
+    mm = _meningar(text)
+    return next((i for i, m in enumerate(mm) if _ar_fraga(m)), len(mm))
+
+
+def textmangdvakt(exam: dict) -> list[dict]:
+    """För mycket text före frågan på bladet inför provet. Noll modellanrop.
+
+    Tre mått, alla ur lärarens dom 2026-09-26: stammen högst två meningar när
+    uppgiften har deluppgifter (sammanhanget, inte alla fakta), varje
+    deluppgift högst en mening fakta före sin fråga, och högst 30 ord före
+    frågan i varje enhet. Orden räknas som provets ordvakt, utan räknarmärket
+    som appen själv sätter först i texten."""
+    ut: list[dict] = []
+    for i, u in enumerate((exam or {}).get("uppgifter") or [], 1):
+        if not isinstance(u, dict):
+            continue
+        stam = _RAKNARMARKE.sub("", str(u.get("text") or ""))
+        delar = [d for d in (u.get("deluppgifter") or []) if isinstance(d, dict)]
+        if delar:
+            s = len(_meningar(stam))
+            if s > BLAD_STAM_MENINGAR:
+                ut.append(_err(
+                    f"uppgift {i}", "textmangd",
+                    f"uppgift {i} har {s} meningar i stammen (taket på bladet "
+                    f"är {BLAD_STAM_MENINGAR}). Låt stammen ge sammanhanget "
+                    "och flytta varje faktum till den deluppgift där det "
+                    "behövs." + BEHALL_PLANEN))
+            for j, d in enumerate(delar):
+                nr = f"{i}{chr(ord('a') + j)}"
+                f = _fakta_fore_fragan(d.get("text"))
+                o = _ord_fore_fragan(f"{stam} {d.get('text') or ''}".strip())
+                if f > BLAD_DEL_FAKTA or o > BLAD_ORD_FORE_FRAGAN:
+                    ut.append(_err(
+                        f"uppgift {nr}", "textmangd",
+                        f"uppgift {nr} har {o} ord och {f} meningar fakta "
+                        f"före frågan (taket på bladet är {BLAD_ORD_FORE_FRAGAN} "
+                        f"ord och {BLAD_DEL_FAKTA} mening). Stryk bakgrund som "
+                        "inte behövs för att räkna och slå ihop meningar om "
+                        "samma sak." + BEHALL_PLANEN))
+            continue
+        niva = _niva_ur_poang(u.get("poang")) or "E"
+        tak_o = BLAD_ORD_FORE_FRAGAN if niva == "E" else ORD_FORE_FRAGAN
+        tak_f = BLAD_HEL_FAKTA.get(niva, 3)
+        o, f = _ord_fore_fragan(stam), _fakta_fore_fragan(stam)
+        if o > tak_o or f > tak_f:
+            rad = ("Dela den i a) och b) om den ställer två frågor."
+                   if niva == "E" else
+                   "Dela den inte i ledda steg: planeringen är en del av "
+                   f"{niva}-uppgiften.")
+            ut.append(_err(
+                f"uppgift {i}", "textmangd",
+                f"uppgift {i} har {o} ord och {f} meningar före frågan (taket "
+                f"på bladet är {tak_o} ord och {tak_f} meningar på "
+                f"{niva}-nivå). Stryk bakgrund som inte behövs för att räkna, "
+                "slå ihop meningar om samma sak och lägg ett villkor i frågan "
+                f"när det blir kortare. {rad}" + BEHALL_PLANEN))
+    return ut
 
 
 def ovningsvakter(exam: dict, *, prov: dict | None = None,
@@ -10252,6 +10345,8 @@ def ovningsvakter(exam: dict, *, prov: dict | None = None,
     fel += bladets_npvakter(exam)
     # Provets språkvakt: bladet ska vara lika lätt att läsa som provet.
     fel += sprakvakt(exam)
+    # Och lika kort (Rickard 2026-09-26).
+    fel += textmangdvakt(exam)
     # Scenvakten står INTE här: provkörningen på de femton bladen fällde
     # hälften av dem på ett begrepp som inte stod ordagrant i texten
     # («färgåtgång» om en vägg som ska målas), och en reparationsrunda skriver

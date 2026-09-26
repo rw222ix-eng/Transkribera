@@ -671,7 +671,9 @@ def _ovningsfynd(exam: dict, infor: dict | None, typ: str) -> list[dict]:
                + exam_gen.bildfigurvakt(exam or {})
                + exam_gen.uttrycksvakt(exam or {}, infor)
                # Provets vakter från granskningen 2026-09-25 (5e8bae9).
-               + exam_gen.bladets_npvakter(exam or {}))
+               + exam_gen.bladets_npvakter(exam or {})
+               # Kort text som provet (Rickard 2026-09-26).
+               + exam_gen.textmangdvakt(exam or {}))
     except Exception:                       # pragma: no cover
         return ut
     ut += [_fynd(f["code"], f["message"], _uppgiftsnr(f.get("path", "")))
@@ -826,6 +828,12 @@ _ATGARD = {
                 "deluppgifter med var sin poäng. Övriga uppgifter står kvar.",
     "radlangd": "Dela meningen i två eller korta den, en mening per rad. "
                 "Samma matematik, samma tal, samma poäng.",
+    # Lärarens dom 2026-09-26: bladen hade för mycket text i varje uppgift.
+    "textmangd": "Korta texten före frågan: stammen ger sammanhanget, varje "
+                 "faktum står i den deluppgift där det behövs, och bakgrund "
+                 "som inte behövs för att räkna stryks. Ett C- eller "
+                 "A-problem delas inte i ledda steg. Samma tal, samma svar, "
+                 "samma poäng.",
     # Lärarens dom 2026-09-24: bilderna visade nästan bara kvinnor.
     "konsbalans": "Byt personen i uppgiften mot en av det andra könet: "
                   "namnet, pronomenen och människan i scenen. Talen, metoden, "
