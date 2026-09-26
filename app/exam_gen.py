@@ -9510,7 +9510,12 @@ def provets_namn_och_sammanhang(exam: dict | None) -> dict[str, list[str]]:
                  if isinstance(u, dict)]
     kanda = _fornamnen()
     ord_ = [o for t in uppgiftstexter(exam) for o in _versala_ord(t)]
-    mitt_i = {w for w, mitt in ord_ if mitt and w.casefold() not in _INTE_NAMN}
+    # En uppmaning är aldrig ett namn. Prov 126:3 (2026-09-26) har formeln
+    # sist på raden utan punkt, och «Bestäm» på nästa rad lästes som mitt i
+    # en mening: bladen fick provlånslarm på NP:s vanligaste verb, och
+    # prompten räknade upp «Bestäm» bland provets personer.
+    inte = _INTE_NAMN | _UPPMANINGAR
+    mitt_i = {w for w, mitt in ord_ if mitt and w.casefold() not in inte}
 
     def rot(w: str) -> str:
         stam = w[:-1]
@@ -9522,7 +9527,7 @@ def provets_namn_och_sammanhang(exam: dict | None) -> dict[str, list[str]]:
     for w, mitt in ord_:
         n = rot(w)
         if mitt:
-            if w.casefold() in _INTE_NAMN:
+            if w.casefold() in inte:
                 continue
         elif not (n.casefold() in kanda or n in mitt_i):
             continue

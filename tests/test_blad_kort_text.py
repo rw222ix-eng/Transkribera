@@ -172,3 +172,14 @@ def test_prompten_bar_regeln_med_vaktens_tal():
     assert "som en egen deluppgift" in block
     # Kassettregeln: utan prov är blocket tomt.
     assert exam_gen.build_infor_prov([], [], 6) == ""
+
+
+def test_uppmaningen_ar_inget_namn():
+    """Prov 126:3: formeln sist på raden utan punkt, «Bestäm» på nästa."""
+    prov = {"uppgifter": [{"text": "Talet $n$ är ett heltal.\n$a^{2n} = a^{k}$\n"
+                                   "Bestäm $k$ som ett uttryck i $n$.",
+                           "poang": [0, 0, 1], "typ": "rutin"},
+                          {"text": "Noah köper golvlister.", "poang": [1, 0, 0],
+                           "typ": "rutin"}]}
+    namn = exam_gen.provets_namn_och_sammanhang(prov)["namn"]
+    assert "Bestäm" not in namn and "Noah" in namn
