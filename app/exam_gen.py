@@ -99,6 +99,12 @@ SCEN_REGEL = (
     "antalet i de tre första figurerna. Teckna ett uttryck för antalet i "
     "figur n.» Aldrig «figur n har n rader med …», för då har uppgiften gjort "
     "halva generaliseringen åt eleven (lärarens dom, prov 126).\n"
+    # Lärarens dom 2026-09-26, prov 126 och 129 uppgift 7b: «Motivera
+    # uttrycket med hjälp av figurerna» är svårt för eleverna att förstå.
+    # Poängen är att eleven visar hur uttrycket följer av figurerna.
+    "  Ska eleven motivera uttrycket står det «Visa med hjälp av figurerna "
+    "hur du kom fram till uttrycket.», aldrig «Motivera uttrycket med hjälp "
+    "av figurerna».\n"
     "  begrepp: kort svensk nyckel, ett till tre ord — \"optimering "
     "inhägnad\", \"kast\", \"exponentiell tillväxt\", \"höjdbestämning med "
     "skugga\". Den är nyckeln appen slår upp i sin bildkatalog.\n"
@@ -441,6 +447,13 @@ INSTRUCTION = (
     "en rad vars nivå saknas i poang. Kriteriet är iakttagbart och kort: "
     "'+1 E tecknar sambandet', '+1 E lösning med godtagbart svar', "
     "'+1 C fullständig lösning med korrekt svar'.\n"
+    # Lärarens dom 2026-09-26, prov 132 uppgift 12b («Avgör om Saga har
+    # rätt», 0/0/2): «känns för enkel för att vara på A-nivå». Raden «+1 A
+    # svarar nej» gick att gissa. NP:s form för avgör-uppgifter är C för
+    # slutsatsen med enkel motivering och A för den fullständiga.
+    "  En rad som bara är slutsatsen ('+1 A svarar nej') går att gissa och "
+    "ger aldrig en egen poäng. Avgör-uppgiftens poäng ges som '+1 C svarar "
+    "nej med en enkel motivering' och '+1 A fullständig motivering'.\n"
     "- innehall: KODERNA för de centrala innehållspunkter uppgiften prövar "
     "(t.ex. [\"G25-M1C-ALG-3\"]) — hämtade ur listan över valt centralt "
     "innehåll nedan, en till tre stycken, aldrig egen text. Står ingen sådan "
