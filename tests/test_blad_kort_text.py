@@ -96,6 +96,16 @@ def test_raknarmarket_och_svara_i_raknas_inte():
     assert _fynd(_blad(u)) == []
 
 
+def test_pastaendet_ar_fragans_foremal():
+    """Provets form (131:5a): ett faktum, påståendet, frågan."""
+    u = _uppg("Ett släp klarar högst $500$ kg.", (0, 0, 0), losning="",
+              bedomning="",
+              deluppgifter=[_del("Hassan lastar $18$ balkar som väger $19$ kg "
+                                 "styck.\nHan påstår att släpet klarar lasten."
+                                 "\n\nAvgör om Hassan har rätt.")])
+    assert _fynd(_blad(u)) == []
+
+
 def test_decimaltalet_ar_ett_ord():
     """«0{,}3» blir «0 , 3» i _rentext. Bladets tak mäter texten, inte talen:
     nio decimaltal i en mening är fortfarande en kort mening."""

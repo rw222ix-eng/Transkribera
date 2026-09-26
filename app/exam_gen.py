@@ -10243,11 +10243,21 @@ def _meningar(text: str) -> list[str]:
     return [m for m in re.split(r"(?<=[.!?])\s+", ren) if m.strip()]
 
 
+# Påståendet som frågan prövar («Hassan påstår att släpet klarar lasten.»
+# Avgör om Hassan har rätt.) är frågans föremål, inte ett faktum till. Provet
+# skriver så (131:5a), och agenten på blad 135 fick annars välja mellan
+# två faktameningar och ett påstående inbakat i lastmeningen (26/9).
+_PASTAENDE = re.compile(r"(?<![\wåäö])(påstår|säger|menar|tror|hävdar)"
+                        r"(?![\wåäö])", re.I)
+
+
 def _fakta_fore_fragan(text: str) -> int:
     """Meningar före den första frågan eller uppmaningen (_ar_fraga). «Svara
-    i grundpotensform.» efter frågan räknas alltså inte."""
+    i grundpotensform.» efter frågan räknas alltså inte, och inte heller ett
+    påstående som frågan prövar (_PASTAENDE)."""
     mm = _meningar(text)
-    return next((i for i, m in enumerate(mm) if _ar_fraga(m)), len(mm))
+    k = next((i for i, m in enumerate(mm) if _ar_fraga(m)), len(mm))
+    return len([m for m in mm[:k] if not _PASTAENDE.search(m)])
 
 
 def textmangdvakt(exam: dict) -> list[dict]:
