@@ -96,6 +96,19 @@ def test_raknarmarket_och_svara_i_raknas_inte():
     assert _fynd(_blad(u)) == []
 
 
+def test_decimaltalet_ar_ett_ord():
+    """«0{,}3» blir «0 , 3» i _rentext. Bladets tak mäter texten, inte talen:
+    nio decimaltal i en mening är fortfarande en kort mening."""
+    tal = " och ".join(f"${k}{{,}}5$" for k in range(1, 10))
+    u = _uppg(f"Ali mäter sidorna {tal}.\n\nBeräkna summan.")
+    assert g_ord(u["text"]) > exam_gen.BLAD_ORD_FORE_FRAGAN
+    assert _fynd(_blad(u)) == []
+
+
+def g_ord(text):
+    return exam_gen._ord_fore_fragan(text)
+
+
 def test_vakten_star_i_bladets_kontroller():
     lang = _blad(_uppg(DIKE_FORE, (1, 0, 0)))
     assert "textmangd" in exam_gen.OVNINGSKODER

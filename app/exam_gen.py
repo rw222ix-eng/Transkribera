@@ -10257,7 +10257,12 @@ def textmangdvakt(exam: dict) -> list[dict]:
     uppgiften har deluppgifter (sammanhanget, inte alla fakta), varje
     deluppgift högst en mening fakta före sin fråga, och högst 30 ord före
     frågan i varje enhet. Orden räknas som provets ordvakt, utan räknarmärket
-    som appen själv sätter först i texten."""
+    som appen själv sätter först i texten, och ett decimaltal är ett ord:
+    _rentext gör «0{,}3» till «0 , 3», tre ord, och en E-deluppgift med två
+    decimaltal nådde taket på talen i stället för på texten (26/9)."""
+    def _ord(text: str) -> int:
+        return _ord_fore_fragan(text.replace("{,}", ","))
+
     ut: list[dict] = []
     for i, u in enumerate((exam or {}).get("uppgifter") or [], 1):
         if not isinstance(u, dict):
@@ -10276,7 +10281,7 @@ def textmangdvakt(exam: dict) -> list[dict]:
             for j, d in enumerate(delar):
                 nr = f"{i}{chr(ord('a') + j)}"
                 f = _fakta_fore_fragan(d.get("text"))
-                o = _ord_fore_fragan(f"{stam} {d.get('text') or ''}".strip())
+                o = _ord(f"{stam} {d.get('text') or ''}".strip())
                 if f > BLAD_DEL_FAKTA or o > BLAD_ORD_FORE_FRAGAN:
                     ut.append(_err(
                         f"uppgift {nr}", "textmangd",
@@ -10289,7 +10294,7 @@ def textmangdvakt(exam: dict) -> list[dict]:
         niva = _niva_ur_poang(u.get("poang")) or "E"
         tak_o = BLAD_ORD_FORE_FRAGAN if niva == "E" else ORD_FORE_FRAGAN
         tak_f = BLAD_HEL_FAKTA.get(niva, 3)
-        o, f = _ord_fore_fragan(stam), _fakta_fore_fragan(stam)
+        o, f = _ord(stam), _fakta_fore_fragan(stam)
         if o > tak_o or f > tak_f:
             rad = ("Dela den i a) och b) om den ställer två frågor."
                    if niva == "E" else
