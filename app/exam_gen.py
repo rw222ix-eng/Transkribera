@@ -796,6 +796,10 @@ INSTRUCTION = (
     "  • Ingen förklaring av ett specialfall eleven inte behöver (påbörjad "
     "minut, avrundningsregler). Säg svarsformen i stället: «Svara i hela "
     "minuter.»\n"
+    # Lärarens dom 2026-09-26, prov 126 uppgift 3: «Bestäm k. Svara med ett
+    # uttryck i n.» ska göras tydligare, «Bestäm k som ett uttryck i n.».
+    "  • Söks ett uttryck står formen i frågan: «Bestäm $k$ som ett uttryck "
+    "i $n$.», aldrig «Bestäm $k$. Svara med ett uttryck i $n$.»\n"
     # Lärarens dom 2026-09-23 (prov 126 uppgift 6a, «Exempel: 0,0035 m
     # skrivs 3,5·10⁻³ m i grundpotensform»): exemplet visade exakt det
     # E-poängen prövade. «Aldrig när poängen prövar formen», som NP.
