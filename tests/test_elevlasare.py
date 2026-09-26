@@ -305,3 +305,20 @@ def test_provets_begriplighetsprompt_ar_gruppens_igen():
     kort = [{"nr": "1", "text": "x"}]
     assert exam_gen.build_begriplighet_prompt(kort, "", "prov") == \
         exam_gen.build_begriplighet_prompt(kort)
+
+
+def test_bladets_raknarmarke_ger_verktyget():
+    """Arbetsbladet har ingen del. Räknarmärket först i texten säger om eleven
+    har räknare (femton blad inför proven, 2026-09-26: alla stod som «utan
+    räknare»). Provets del går före märket, som förut."""
+    blad = {"uppgifter": [
+        {"typ": "problem", "poang": [1, 0, 0], "text": "Räknare tillåten. Beräkna 7 % av 350 kr.", "losning": "24,5 kr"},
+        {"typ": "problem", "poang": [1, 0, 0], "text": "Utan räknare. Beräkna 10 % av 350 kr.", "losning": "35 kr"},
+        {"typ": "problem", "poang": [0, 0, 0], "text": "Räknare tillåten. Ali köper färg.",
+         "deluppgifter": [{"text": "Beräkna 7 % av 350 kr.", "poang": [1, 0, 0], "losning": "24,5 kr"}]},
+    ]}
+    rader = [elevlasare._utan_facit(e) for e in exam_gen.domarenheter(blad)]
+    assert [r["verktyg"] for r in rader] == ["med räknare", "utan räknare", "med räknare"]
+    prov = {"uppgifter": [{"del": "B", "typ": "problem", "poang": [1, 0, 0],
+                           "text": "Räknare tillåten. Beräkna.", "losning": "1"}]}
+    assert elevlasare._utan_facit(exam_gen.domarenheter(prov)[0])["verktyg"] == "utan räknare"

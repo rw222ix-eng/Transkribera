@@ -98,13 +98,24 @@ ELEVLASARE_SCHEMA = {
 FACITRUBRIK = "FACIT, att läsa FÖRST NÄR OMSKRIVNINGEN ÄR SKRIVEN:"
 
 
+def _verktyg(e: dict) -> str:
+    """Provets del säger om eleven har räknare. Arbetsbladet har ingen del;
+    där står räknarmärket först i texten (exam_gen.satt_raknarmarkering), och
+    utan den läsningen fick elevläsaren «utan räknare» på varje bladuppgift,
+    också på «Räknare tillåten. …» (femton blad inför proven, 2026-09-26)."""
+    del_ = (e.get("del") or "").upper()
+    if del_:
+        return "med räknare" if del_ in ("C", "D") else "utan räknare"
+    kort = e.get("kort") or {}
+    marke = exam_gen._RAKNARMARKE.match(kort.get("stam") or kort.get("text") or "")
+    return ("med räknare" if marke and "tillåten" in marke.group(0)
+            else "utan räknare")
+
+
 def _utan_facit(e: dict) -> dict:
     """Det eleven ser: stam, text och om hon har räknare. Aldrig facit, aldrig
     poäng, aldrig bedömningsanvisningen."""
-    rad = {"nr": e["nr"],
-           "verktyg": ("med räknare"
-                       if (e.get("del") or "").upper() in ("C", "D")
-                       else "utan räknare")}
+    rad = {"nr": e["nr"], "verktyg": _verktyg(e)}
     kort = e.get("kort") or {}
     if kort.get("stam"):
         rad["stam"] = kort["stam"]
