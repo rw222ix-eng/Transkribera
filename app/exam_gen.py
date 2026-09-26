@@ -800,6 +800,13 @@ INSTRUCTION = (
     # uttryck i n.» ska göras tydligare, «Bestäm k som ett uttryck i n.».
     "  • Söks ett uttryck står formen i frågan: «Bestäm $k$ som ett uttryck "
     "i $n$.», aldrig «Bestäm $k$. Svara med ett uttryck i $n$.»\n"
+    # Lärarens dom 2026-09-26, prov 129 uppgift 8a: «Avgör om Lea har räknat
+    # rätt.» säger inte att eleven ska visa något, fast bedömningen kräver
+    # 40⁵ ≠ 200. Hans ja gällde alla avgör-uppgifter i de fem proven.
+    "  • En avgör-fråga säger vad eleven ska visa. Kräver bedömningen en "
+    "beräkning står det «Avgör med en beräkning om Lea har räknat rätt.», "
+    "annars «Avgör om Nora har rätt och förklara varför.». Aldrig ett ensamt "
+    "«Avgör om … har rätt.».\n"
     # Lärarens dom 2026-09-23 (prov 126 uppgift 6a, «Exempel: 0,0035 m
     # skrivs 3,5·10⁻³ m i grundpotensform»): exemplet visade exakt det
     # E-poängen prövade. «Aldrig när poängen prövar formen», som NP.
