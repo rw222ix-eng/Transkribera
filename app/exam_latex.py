@@ -1230,11 +1230,18 @@ def _elevexempel(it) -> list[dict]:
     luft emellan. Gamla lösningar utan deluppgift i etiketten blir en grupp
     utan namn, som förut.
 
+    INGA ELEVLÖSNINGAR DÄR BARA SVARET RÄTTAS (lärarens dom 2026-09-26,
+    exam_spec.elevlosning_behovs): en enhet med «Endast svar krävs» hoppas
+    över, också på gamla papper som bär dem.
+
     Partierna summeras. Gamla dokument (och förlagans lo4) delar lösningen i
     flera partier med var sin dom, och de läggs ihop till ett papper, i
     ordning. Spegel av app/web/ui/blad-bygg.js elevRad."""
     grupper: list[dict] = []
+    del_typer = [d.typ for d in (it.deluppgifter or [])]
     for e in (it.elevlosningar or []):
+        if not exam_spec.elevlosning_behovs(it.typ, del_typer, e.etikett):
+            continue
         poang = [0, 0, 0]
         for pa in e.partier:
             for i, x in enumerate(pa.poang[:3]):

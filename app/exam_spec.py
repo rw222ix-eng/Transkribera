@@ -180,6 +180,33 @@ def elevgrupp(etikett: str) -> str:
     return f"{m.group(1)})" if m else ""
 
 
+# ── INGA ELEVLÖSNINGAR DÄR BARA SVARET RÄTTAS (lärarens dom 2026-09-26) ───
+# «Där kollar jag bara på svaren, om de har svarat rätt eller inte.» En
+# enhet med «Endast svar krävs» på pappret (typ rutin, exam_latex._krav)
+# får inga bedömda elevlösningar. Deluppgiften ärver uppgiftens typ när den
+# saknar egen, som på pappret och i plan.js franProv (`delut`). Spegel i
+# app/web/ui/blad-bygg.js (elevBehovs).
+def endast_svar(typ: str | None) -> bool:
+    return (typ or "") == "rutin"
+
+
+def elevlosning_behovs(uppgift_typ: str | None, del_typer: list | None,
+                       etikett: str) -> bool:
+    """Ska elevlösningen med den här etiketten stå i anvisningen?
+
+    `del_typer` är deluppgifternas egna typer (None där de saknas), tom för
+    en uppgift utan deluppgifter. En gammal lösning över hela uppgiften
+    («1 p», utan bokstav) behövs så länge någon deluppgift kräver lösning."""
+    typer = [t or uppgift_typ for t in (del_typer or [])]
+    if not typer:
+        return not endast_svar(uppgift_typ)
+    g = elevgrupp(etikett)
+    if g:
+        k = "abcdefghijkl".index(g[0])
+        return k < len(typer) and not endast_svar(typer[k])
+    return not all(endast_svar(t) for t in typer)
+
+
 class _Uppgiftsbas(_Model):
     """Delade fält för uppgifter och deluppgifter."""
     poang: tuple[int, int, int]          # (E, C, A) — NP-notationen (2/1/0)

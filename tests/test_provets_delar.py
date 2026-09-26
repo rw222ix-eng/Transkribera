@@ -755,7 +755,7 @@ def test_utan_elevexempel_inget_elevark():
     elever = [{"etikett": "0 p", "partier": [{"rader": ["x"], "poang": [0, 0, 0],
                                               "dom": "d"}]}]
     bara_c = _losark([_uppg(p=2, f="$x = 4$", bed="+1 E a\n+1 C b",
-                            elever=elever)], delB=0)
+                            ut="rakna", elever=elever)], delB=0)
     assert ('<h1 class="lotitel">Hela lösningen krävs</h1><p class="lolede">'
             'Bedömda elevlösningar står sist i häftet.</p>') in bara_c
 
@@ -833,10 +833,31 @@ def test_elevlosningarna_per_deluppgift_med_pilar():
     assert '<b class="lobedelevpoang">+1 C</b>' in elevark
 
 
+def test_kortsvaret_far_inget_elevark():
+    """Lärarens dom 2026-09-26: «där kollar jag bara på svaren». Ett kortsvar
+    (ut «kort», per deluppgift `delut`) får inga bedömda elevlösningar på
+    skärmen, också när dokumentet bär dem. Spegel av
+    exam_spec.elevlosning_behovs."""
+    elever = [{"etikett": "0 p", "partier": [{"rader": ["x"], "poang": [0, 0, 0],
+                                              "dom": "d"}]}]
+    kort = _losark([_uppg(p=1, f="$4$", bed="+1 E a", elever=elever)])
+    assert "lo-elev" not in kort and "står sist i häftet" not in kort
+    blandat = [{"etikett": "a) 0 p", "partier": [{"rader": ["x"], "poang": [0, 0, 0],
+                                                   "dom": "d"}]},
+               {"etikett": "b) 0 p", "partier": [{"rader": ["y"], "poang": [0, 0, 0],
+                                                   "dom": "d"}]}]
+    html = _losark([_uppg(p=2, f="", ut="rakna", delut=["kort", "rakna"],
+                          elever=blandat, beddel=["+1 E a", "+1 C b"],
+                          delpeca=[[1, 0, 0], [0, 1, 0]])], delB=0)
+    elevark = html.split('data-form="lo-elev"')[1]
+    assert '<b class="loelevdel">b)</b>' in elevark
+    assert '<b class="loelevdel">a)</b>' not in elevark
+
+
 def test_nollraden_upprepar_inte_beskedet_pa_skarmen():
     """Spegel av app/exam_latex._utan_rubriken: «0 poäng» säger redan att
     lösningen inte gav något, och kommentaren säger bara varför."""
-    html = _losark([_uppg(p=2, f="$x = 4$", bed="+1 E a\n+1 C b",
+    html = _losark([_uppg(p=2, f="$x = 4$", bed="+1 E a\n+1 C b", ut="rakna",
                           elever=[{"etikett": "0 p",
                                    "partier": [{"rader": ["fel"],
                                                 "poang": [0, 0, 0],
@@ -845,7 +866,7 @@ def test_nollraden_upprepar_inte_beskedet_pa_skarmen():
     assert "Inga poäng" not in html
     assert '<span class="lobedvarfor">Eleven deriverar aldrig.</span>' in html
     # Var kommentaren BARA beskedet blir det ingen rad alls under poängen.
-    tom = _losark([_uppg(p=2, f="$x = 4$", bed="+1 E a\n+1 C b",
+    tom = _losark([_uppg(p=2, f="$x = 4$", bed="+1 E a\n+1 C b", ut="rakna",
                          elever=[{"etikett": "0 p",
                                   "partier": [{"rader": ["fel"],
                                                "poang": [0, 0, 0],

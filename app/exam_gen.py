@@ -5474,13 +5474,17 @@ def _bedenhet(d: dict) -> dict:
             **{k: d[k] for k in _BED_EXTRA if d.get(k)}}
 
 
-def _bedkort(underlag: dict) -> dict:
-    """Uppgiften som passen ser den: stammen, dess tabell och enheterna."""
+def _bedkort(underlag: dict, *, med_svarsform: bool = False) -> dict:
+    """Uppgiften som passen ser den: stammen, dess tabell och enheterna.
+    `med_svarsform` märker kortsvarsenheterna, som bedömningsskrivaren inte
+    ska skriva elevlösningar till."""
     return {"nr": underlag["nr"], "uppgift": underlag["text"],
             **{k: underlag[k] for k in _BED_EXTRA if underlag.get(k)},
-            "enheter": [{k: e[k] for k in
-                         ("nyckel", "text", "losning", "poang", "bedomning")
-                         + _BED_EXTRA if k in e}
+            "enheter": [{**{k: e[k] for k in
+                            ("nyckel", "text", "losning", "poang", "bedomning")
+                            + _BED_EXTRA if k in e},
+                         **({"endast_svar": True}
+                            if med_svarsform and e.get("endast_svar") else {})}
                         for e in underlag["enheter"]]}
 
 
@@ -5496,9 +5500,13 @@ def bedomningsunderlag(exam: dict) -> list[dict]:
         if not isinstance(u, dict):
             continue
         delar = [d for d in (u.get("deluppgifter") or []) if isinstance(d, dict)]
-        enheter = ([dict(_bedenhet(d), nyckel="abcdefghijkl"[k])
+        # «endast_svar»: enheten rättas bara på svaret och får inga
+        # elevlösningar (exam_spec.elevlosning_behovs).
+        enheter = ([dict(_bedenhet(d), nyckel="abcdefghijkl"[k],
+                         endast_svar=exam_spec.endast_svar(d.get("typ") or u.get("typ")))
                     for k, d in enumerate(delar[:12])] if delar
-                   else [dict(_bedenhet(u), nyckel="")])
+                   else [dict(_bedenhet(u), nyckel="",
+                              endast_svar=exam_spec.endast_svar(u.get("typ")))])
         ut.append({"nr": i, "text": u.get("text") or "",
                    "typ": u.get("typ") or "", "enhet": u.get("enhet") or "",
                    "summa": sum(sum(e["poang"]) for e in enheter),
@@ -5518,7 +5526,7 @@ def build_bedomning_prompt(underlag: dict, *, skala: str = "") -> str:
     matcha den generator som skrev den."""
     tak = int(underlag["summa"])
     steg = ", ".join(f"{p} p" for p in range(tak)) or "0 p"
-    kort = _bedkort(underlag)
+    kort = _bedkort(underlag, med_svarsform=True)
     return (
         "Du är bedömningsskrivare för EN uppgift på ett matematikprov. Nedan "
         "står uppgiften med sitt facit (losning), sina poäng som (E, C, A) och "
@@ -5548,14 +5556,20 @@ def build_bedomning_prompt(underlag: dict, *, skala: str = "") -> str:
         # Lärarens dom 2026-09-26: «0/0/0 och en massa text under hjälper mig
         # inte.» Varje deluppgift för sig, och vid elevens rader en pil som
         # visar var poängen gavs och var det blev fel (exam_spec.ELEVNOT).
+        # Lärarens dom samma dag: full pott också. En enpoängare fick annars
+        # bara «0 poäng», och det som GER poäng var det intressanta.
         f"2. SKRIV ELEVLÖSNINGARNA i `elevlosningar`, EN ENHET I TAGET. För "
-        "varje enhet ovan skriver du en lösning per LÄGRE poängsteg för just "
-        "den enheten: en enhet värd 1 poäng får en lösning på 0 p, en enhet "
-        "värd 3 poäng får 0 p, 1 p och 2 p. `enhet` är enhetens «nyckel». "
-        f"Hela uppgiften är värd {tak} poäng ({steg} när den saknar "
-        "deluppgifter). Full pott skriver du INTE — facit står redan överst "
-        "på pappret. Ordningen är enheternas, och inom en enhet stigande, den "
-        "lägsta först.\n"
+        "varje enhet ovan skriver du en lösning per poängsteg för just den "
+        "enheten, FULL POTT MED: en enhet värd 1 poäng får en lösning på 0 p "
+        "och en på 1 p, en enhet värd 3 poäng får 0 p, 1 p, 2 p och 3 p. "
+        "`enhet` är enhetens «nyckel». "
+        f"Hela uppgiften är värd {tak} poäng ({steg}, {tak} p när den saknar "
+        "deluppgifter). Lösningen på full pott är en elevs rätta lösning, "
+        "skriven som en elev skriver, med en rad per poäng den får. Ordningen "
+        "är enheternas, och inom en enhet stigande, den lägsta först.\n"
+        # Lärarens dom 2026-09-26: «där kollar jag bara på svaren».
+        "- En enhet med «endast_svar»: true rättas bara på svaret och får INGA "
+        "elevlösningar. Har alla enheter det är `elevlosningar` en tom lista.\n"
         "- `rader` är elevens papper för just den enheten, rad för rad, "
         "precis som en elev skulle skriva det (matte inom $…$, högst FEM "
         "rader, ingen «a)» först). Varje rad har en `not`, oftast tom:\n"
@@ -5565,7 +5579,8 @@ def build_bedomning_prompt(underlag: dict, *, skala: str = "") -> str:
         "ord, «+C korrekt ekvation», «+E rätt förenklat». En rad per poäng "
         "lösningen får.\n"
         "  • Alla andra rader: tom not.\n"
-        "  En lösning under full pott har minst en rad med ett fel.\n"
+        "  En lösning under full pott har minst en rad med ett fel. Lösningen "
+        "på full pott har inga fel.\n"
         "- `poang` är trippeln [E, C, A] lösningen får för just den enheten, "
         "och summan ska vara just det poängsteget.\n"
         # Kommentaren sa förut TVÅ saker — vilken rad den fick och varför inte
@@ -5645,12 +5660,14 @@ def _trappa_duger(text: str, poang) -> bool:
 
 def _elevstegen(elever: list[dict], tak: int,
                 niva_tak: tuple[int, int, int] | None = None) -> list[dict]:
-    """Elevlösningarna som faktiskt duger: ett papper per LÄGRE poängsteg,
-    0 … tak−1, i stigande ordning och utan dubbletter.
+    """Elevlösningarna som faktiskt duger: ett papper per poängsteg,
+    0 … tak, i stigande ordning och utan dubbletter.
 
-    Full pott hör inte hit — den raden ÄR facit och står överst på pappret.
-    Kommer den ändå med (modellen läste inte instruktionen) tas den bort: två
-    facitrader säger emot varandra så fort den ena är sämre skriven.
+    FULL POTT HÖR HIT SEDAN 2026-09-26. Beställningen 2026-08-23 sa att full
+    pott var facitraden och inte skulle skrivas en gång till. Men en
+    enpoängare fick då bara «0 poäng», och läraren: «Det står inte för ett
+    poäng, eller två poäng … Det är ju det som är intressant egentligen.»
+    Vad som GER poäng syns bara i en lösning som får den.
 
     `niva_tak` är enhetens egen trippel: en lösning på en C-deluppgift kan
     inte få en E-poäng."""
@@ -5659,7 +5676,7 @@ def _elevstegen(elever: list[dict], tak: int,
         s = sum(e["poang"])
         if niva_tak and any(int(x) > int(t) for x, t in zip(e["poang"], niva_tak)):
             continue
-        if 0 <= s < tak and s not in per_steg and min(e["poang"]) >= 0:
+        if 0 <= s <= tak and s not in per_steg and min(e["poang"]) >= 0:
             per_steg[s] = e
     # Taket är SCHEMATS eget (exam_spec.ExamItem.elevlosningar). Passet skriver
     # rakt in i dokumentet utan att validera om, och en uppgift värd tolv poäng
@@ -5686,17 +5703,21 @@ def _utan_tankstreck(s: str) -> str:
     return "$".join(ut)
 
 
-def _elevsteg_per_enhet(elever: list[dict], enheter: list) -> list[tuple[str, dict]]:
+def _elevsteg_per_enhet(elever: list[dict], enheter: list,
+                        uppgift_typ: str | None = None) -> list[tuple[str, dict]]:
     """(nyckel, lösning) i enheternas ordning, stigande inom varje enhet.
 
     Lärarens dom 2026-09-26: varje deluppgift för sig. Svaret bär då en
     `enhet` per lösning. Saknar det dem (äldre svar, de inspelade banden)
     eller har uppgiften inga deluppgifter gäller lösningarna hela uppgiften,
-    som förut."""
+    som förut. En enhet som bara rättas på svaret får inga lösningar
+    (exam_spec.elevlosning_behovs)."""
     nycklar = {n for n, _m in enheter if n}
     if nycklar and any(e.get("enhet") in nycklar for e in elever):
         ut: list[tuple[str, dict]] = []
         for nyckel, mal in enheter:
+            if exam_spec.endast_svar(mal.get("typ") or uppgift_typ):
+                continue
             p = tuple(mal.get("poang") or (0, 0, 0))
             egna = [e for e in elever if e.get("enhet") == nyckel]
             ut += [(nyckel, e) for e in _elevstegen(egna, sum(p), p)]
@@ -5726,7 +5747,15 @@ def skriv_in_bedomning(uppgift: dict, svar: dict, *, trappa: bool = True) -> boo
         if ny and _trappa_duger(ny, mal.get("poang")):
             mal["bedomning"] = ny
             skrivet = True
-    steg = _elevsteg_per_enhet(svar.get("elevlosningar") or [], enheter)
+    del_typer = [m.get("typ") for n, m in enheter if n]
+    if not exam_spec.elevlosning_behovs(uppgift.get("typ"), del_typer, ""):
+        # Hela uppgiften rättas bara på svaret: inga elevlösningar, och de
+        # som ett äldre pass skrev tas bort (lärarens dom 2026-09-26).
+        if uppgift.pop("elevlosningar", None) is not None:
+            skrivet = True
+        return skrivet
+    steg = _elevsteg_per_enhet(svar.get("elevlosningar") or [], enheter,
+                               uppgift.get("typ"))
     if steg:
         # ETT parti per elevlösning. Partierna finns för att kunna dela en
         # lösning i stycken med var sin dom (förlagans lo4), men pappret
@@ -6446,12 +6475,10 @@ def bedomningssignaler(exam: dict) -> list[dict]:
     #    steg som saknas är just det läraren behöver se, för gränsen mellan 1 p
     #    och 2 p är den som är svår att dra.
     #
-    #    STEGEN ÄR 0 … tak−1 och inte 0 … tak (lärarens beställning
-    #    2026-08-23): full pott står som FACITRADEN överst i tabellen, och en
-    #    elevlösning på full pott hade varit samma rad en gång till, sämre
-    #    skriven. Gamla papper bär den ändå — deras översta lösning ÄR full
-    #    pott — och de ska inte börja varna för det, så en extra lösning på
-    #    taket passerar.
+    #    STEGEN ÄR 0 … tak, FULL POTT MED (lärarens dom 2026-09-26, se
+    #    _elevstegen; 2026-08-23 var det 0 … tak−1). Och en enhet som bara
+    #    rättas på svaret har inga elevlösningar alls (exam_spec.
+    #    elevlosning_behovs), så där räknas inga steg.
     for i, u in enumerate(exam.get("uppgifter") or [], 1):
         if not isinstance(u, dict):
             continue
@@ -6459,6 +6486,9 @@ def bedomningssignaler(exam: dict) -> list[dict]:
         if not elever:
             continue
         delar = [d for d in (u.get("deluppgifter") or []) if isinstance(d, dict)]
+        del_typer = [d.get("typ") for d in delar]
+        if not exam_spec.elevlosning_behovs(u.get("typ"), del_typer, ""):
+            continue
         # PER DELUPPGIFT när etiketterna säger det (lärarens dom 2026-09-26,
         # exam_spec.elevgrupp): varje deluppgift täcker sina egna steg. Gamla
         # lösningar över hela uppgiften räknas som förut.
@@ -6467,7 +6497,8 @@ def bedomningssignaler(exam: dict) -> list[dict]:
             grupper.setdefault(exam_spec.elevgrupp(e.get("etikett")), []).append(e)
         if delar and "" not in grupper:
             tak_per = {f"{'abcdefghijkl'[k]})": sum(d.get("poang") or (0, 0, 0))
-                       for k, d in enumerate(delar[:12])}
+                       for k, d in enumerate(delar[:12])
+                       if not exam_spec.endast_svar(d.get("typ") or u.get("typ"))}
         else:
             grupper = {"": elever}
             tak_per = {"": (sum(sum(d.get("poang") or (0, 0, 0)) for d in delar)
@@ -6479,7 +6510,7 @@ def bedomningssignaler(exam: dict) -> list[dict]:
             summor = [sum(sum(p.get("poang") or (0, 0, 0))
                           for p in (e.get("partier") or [])) for e in egna]
             steg = sorted(set(summor))
-            vantade = list(range(max(tak, 1)))
+            vantade = list(range(tak + 1))
             saknas = [p for p in vantade if p not in steg]
             if saknas or summor != sorted(summor):
                 vad = f"uppgift {i}{namn[:1]}"
@@ -6487,8 +6518,7 @@ def bedomningssignaler(exam: dict) -> list[dict]:
                                f"{vad} är värd {tak} poäng och har "
                                f"elevlösningar på {steg or [0]} poäng — de ska "
                                "stå i stigande ordning och täcka stegen "
-                               f"{vantade} (full pott står som facitraden och "
-                               "skrivs inte som elevlösning)."))
+                               f"{vantade}, full pott också."))
     return ut
 
 

@@ -1449,9 +1449,22 @@ window.BladBygg = (() => {
       : `<span class="loelevnot" data-slag="fel">← ${mat(not)}</span>`;
   }
 
+  /* INGA ELEVLÖSNINGAR DÄR BARA SVARET RÄTTAS (lärarens dom 2026-09-26):
+     «där kollar jag bara på svaren». En enhet med «Endast svar krävs» (ut
+     «kort», per deluppgift `delut`) får inga bedömda elevlösningar, också
+     på gamla papper som bär dem. Spegel av app/exam_spec.elevlosning_behovs. */
+  function elevBehovs(u, e) {
+    const del = u.delut || [];
+    if (!del.length) return u.ut !== 'kort';
+    const g = elevgrupp(e.etikett);
+    if (g) return del['abcdefghijkl'.indexOf(g[0])] === 'rakna';
+    return del.some(t => t !== 'kort');
+  }
+  const eleverna = u => (u.elever || []).filter(e => elevBehovs(u, e));
+
   function elevRad(u) {
     let forra = null;
-    const rader = u.elever.map(e => {
+    const rader = eleverna(u).map(e => {
       const poang = elevpoang(e), total = poang[0] + poang[1] + poang[2];
       const skrivna = (e.partier || []).reduce((a, p) => a.concat(p.rader || []), []);
       let dom = (e.partier || []).map(p => p.dom).filter(Boolean).join(' ');
@@ -1485,7 +1498,7 @@ window.BladBygg = (() => {
 
   const spann = l => (l.length === 1 ? `uppgift ${l[0].nr}` : `uppgift ${l[0].nr}–${l[l.length - 1].nr}`);
   function elevark(uppgifter) {
-    const med = uppgifter.filter(u => (u.elever || []).length);
+    const med = uppgifter.filter(u => eleverna(u).length);
     if (!med.length) return '';
     return `<div class="ark" data-form="lo-elev" data-brytbar="">
       <div class="lohuvud"><b>Bedömningsanvisning · elevlösningar</b><span>${versal(spann(med))}</span></div>
@@ -1511,7 +1524,7 @@ window.BladBygg = (() => {
        under nästan alla, och det var just den sortens upprepade text hon
        ville bort ifrån. Bara när det finns ett ark att hänvisa till. PDF:en
        säger samma sak efter kravgränsraden (bedomning.tex.j2). */
-    const inledning = uppgifter.some(u => (u.elever || []).length)
+    const inledning = uppgifter.some(u => eleverna(u).length)
       ? '<p class="lolede">Bedömda elevlösningar står sist i häftet.</p>' : '';
     if (b.length) ut.push(`<div class="ark" data-form="lo-b" data-brytbar="">
       <div class="lohuvud"><b>Bedömningsanvisning · kortsvar</b><span>${delB >= uppgifter.length ? versal(spann(b)) : DELNAMN.B + ' · ' + spann(b)}</span></div>

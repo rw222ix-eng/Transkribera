@@ -588,8 +588,9 @@ def test_bedomningsbandet_gar_hela_vagen(fejk_claude):
 
     Bandet är SKARPT, inspelat på provbandets uppgift 1 — en figuruppgift med
     två deluppgifter värda en E-poäng var. Svaret bär därför två trappor (a och
-    b, en rad var) och två elevlösningar: 0 p och 1 p. Full pott skrivs inte,
-    den står som facitraden.
+    b, en rad var) och två elevlösningar: 0 p och 1 p. Uppgiften är ett
+    kortsvar (typ rutin), och ett kortsvar får sedan 2026-09-26 inga
+    elevlösningar alls (exam_spec.elevlosning_behovs).
 
     ETT anrop per uppgift: sex uppgifter i provbandet ger sex anrop, och de
     kostar ingen RUNDA — passet skriver, det reparerar inte."""
@@ -614,7 +615,7 @@ def test_bedomningsbandet_gar_hela_vagen(fejk_claude):
         for d in delar:
             assert exam_gen._trappa_duger(d["bedomning"], d["poang"])
     u1 = exam["uppgifter"][0]
-    assert [e["etikett"] for e in u1["elevlosningar"]] == ["0 p", "1 p"]
+    assert u1["typ"] == "rutin" and "elevlosningar" not in u1
 
 
 def test_auto_laget_lagger_i_bedomningsbandet(fejk_claude):

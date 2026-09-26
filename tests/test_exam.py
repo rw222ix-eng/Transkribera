@@ -3666,8 +3666,9 @@ def test_bedomningssignal_faller_elevlosningar_som_hoppar_over_steg():
     """Lärarens fynd: «0 av 3», sedan 2 och 3 — ettpoängsteget saknas, och det
     är just den gränsen som är svår att dra.
 
-    Stegen som ska täckas är 0 … tak−1: full pott står som FACITRADEN överst i
-    tabellen (lärarens beställning 2026-08-23) och skrivs inte en gång till."""
+    Stegen som ska täckas är 0 … tak, full pott med (lärarens dom
+    2026-09-26: «det står inte för ett poäng … det är ju det som är
+    intressant»; 2026-08-23 var det 0 … tak−1)."""
     exam = _exam()
     exam["uppgifter"][2]["elevlosningar"] = [
         {"etikett": "0 p",
@@ -3677,11 +3678,14 @@ def test_bedomningssignal_faller_elevlosningar_som_hoppar_over_steg():
     ]
     fel = exam_gen.bedomningssignaler(exam)
     assert [f["code"] for f in fel] == ["bedomningssignal"]
-    assert "täcka stegen [0, 1, 2]" in fel[0]["message"]
-    # …och med ettpoängssteget ifyllt tiger vakten.
+    assert "täcka stegen [0, 1, 2, 3]" in fel[0]["message"]
+    # …och med ettpoängssteget och full pott ifyllda tiger vakten.
     exam["uppgifter"][2]["elevlosningar"].insert(1, {
         "etikett": "1 p",
         "partier": [{"rader": ["ansats"], "poang": [1, 0, 0], "dom": "d"}]})
+    exam["uppgifter"][2]["elevlosningar"].append({
+        "etikett": "3 p",
+        "partier": [{"rader": ["helt"], "poang": [1, 1, 1], "dom": "d"}]})
     doc, schemafel = exam_spec.validate_exam_json(exam)
     assert doc is not None and schemafel == []
     assert exam_gen.bedomningssignaler(exam) == []
@@ -3931,21 +3935,22 @@ def _bedsvar(rader_per_enhet, steg):
 
 
 def test_bedomningspasset_skriver_ett_papper_per_poangsteg():
-    """Uppgiften är värd 3 poäng — då står facit överst och tre elevrader
-    under: 0 p, 1 p och 2 p. Full pott skrivs aldrig som elevlösning."""
+    """Uppgiften är värd 3 poäng: fyra elevrader, 0 p, 1 p, 2 p och 3 p.
+    Full pott skrivs sedan 2026-09-26 också (lärarens dom)."""
     exam = {"uppgifter": [{"poang": [1, 1, 1], "text": "t", "losning": "l",
                            "bedomning": "+1 E a\n+1 C b\n+1 A c"}]}
     svar = _bedsvar({"": ["+1 E tecknar sambandet",
                           "+1 C räknar ut värdet",
                           "+1 A motiverar svaret"]},
-                    [(0, 0, 0), (1, 0, 0), (1, 1, 0)])
+                    [(0, 0, 0), (1, 0, 0), (1, 1, 0), (1, 1, 1)])
     llm, calls = _stub_llm([svar])
     assert exam_gen.bedomningspass(exam, model="m", llm=llm) == 1
     assert len(calls) == 1
     u = exam["uppgifter"][0]
     assert u["bedomning"] == ("+1 E tecknar sambandet\n+1 C räknar ut värdet\n"
                               "+1 A motiverar svaret")
-    assert [e["etikett"] for e in u["elevlosningar"]] == ["0 p", "1 p", "2 p"]
+    assert [e["etikett"] for e in u["elevlosningar"]] == ["0 p", "1 p", "2 p",
+                                                          "3 p"]
     assert u["elevlosningar"][1]["partier"][0]["poang"] == [1, 0, 0]
     assert u["elevlosningar"][1]["partier"][0]["dom"] == "kommentar för 1 p"
     # …och dokumentet ska gå igenom schemat och vakten som det står.
@@ -4090,6 +4095,11 @@ def test_bedomningspasset_skriver_elevlosningar_per_deluppgift_med_not():
             {"enhet": "a", "poang": [0, 0, 0], "kommentar": "Tecknet blir fel.",
              "rader": [{"rad": "$4a - 7 - 3a$", "not": "byter inte tecken"},
                        {"rad": "$= a - 7$", "not": ""}]},
+            {"enhet": "a", "poang": [1, 0, 0], "kommentar": "Rätt.",
+             "rader": [{"rad": "$7a - 5$", "not": "+E rätt förenklat"}]},
+            {"enhet": "b", "poang": [0, 1, 1], "kommentar": "Rätt.",
+             "rader": [{"rad": "$2x = 6$", "not": "+C korrekt ekvation"},
+                       {"rad": "$x = 3$", "not": "+A rätt svar"}]},
             {"enhet": "b", "poang": [0, 1, 0], "kommentar": "Rätt ekvation.",
              "rader": [{"rad": "$2x = 6$", "not": "+C korrekt ekvation"}]},
             {"enhet": "b", "poang": [0, 0, 0], "kommentar": "Ingen ansats.",
@@ -4102,21 +4112,71 @@ def test_bedomningspasset_skriver_elevlosningar_per_deluppgift_med_not():
     exam_gen.bedomningspass(exam, model="m", llm=llm, trappa=False)
     u = exam["uppgifter"][0]
     assert u["deluppgifter"][0]["bedomning"] == "+1 E gammalt a"
-    assert [e["etikett"] for e in u["elevlosningar"]] == ["a) 0 p", "b) 0 p",
-                                                          "b) 1 p"]
+    assert [e["etikett"] for e in u["elevlosningar"]] == [
+        "a) 0 p", "a) 1 p", "b) 0 p", "b) 1 p", "b) 2 p"]
     assert u["elevlosningar"][0]["partier"][0]["rader"] == [
         "$4a - 7 - 3a$ ← byter inte tecken", "$= a - 7$"]
     assert exam_spec.elevrad_delar("$4a - 7 - 3a$ ← byter inte tecken") == (
         "$4a - 7 - 3a$", "byter inte tecken")
     assert exam_spec.elevgrupp("b) 1 p") == "b)"
     assert exam_gen.bedomningssignaler(exam) == []
-    # Saknas b):s 1 p-steg säger vakten det, per deluppgift.
+    # Saknas b):s full pott säger vakten det, per deluppgift.
     u["elevlosningar"].pop()
     fynd = exam_gen.bedomningssignaler(exam)
     assert len(fynd) == 1 and "uppgift 1b" in fynd[0]["message"]
     # PDF:en sätter noten vid raden och poängen i ord.
     assert exam_latex.poangrubrik([0, 1, 1]) == "+1 C, +1 A"
     assert exam_latex.poangrubrik((0, 0, 0)) == "0 poäng"
+
+
+def test_kortsvaren_far_inga_elevlosningar():
+    """Lärarens dom 2026-09-26: «där kollar jag bara på svaren». En enhet med
+    «Endast svar krävs» (typ rutin, ärvd av en deluppgift utan egen typ) får
+    inga bedömda elevlösningar: passet skriver inga, äldre tas bort, vakten
+    räknar inga steg och PDF:en visar inga."""
+    assert exam_spec.elevlosning_behovs("rutin", [], "0 p") is False
+    assert exam_spec.elevlosning_behovs("redovisning", [], "0 p") is True
+    assert exam_spec.elevlosning_behovs("rutin", [None, "redovisning"], "a) 0 p") is False
+    assert exam_spec.elevlosning_behovs("rutin", [None, "redovisning"], "b) 0 p") is True
+    assert exam_spec.elevlosning_behovs("rutin", [None, "redovisning"], "0 p") is True
+    assert exam_spec.elevlosning_behovs("rutin", [None, None], "0 p") is False
+    gammal = [{"etikett": "0 p", "partier": [{"rader": ["x"], "poang": [0, 0, 0],
+                                              "dom": "d"}]}]
+    exam = {"uppgifter": [
+        {"typ": "rutin", "poang": [1, 0, 0], "text": "t", "losning": "l",
+         "bedomning": "+1 E a", "elevlosningar": gammal},
+        {"typ": "rutin", "poang": [0, 0, 0], "text": "stam", "losning": "",
+         "bedomning": "", "deluppgifter": [
+             {"poang": [1, 0, 0], "text": "a", "losning": "l",
+              "bedomning": "+1 E a"},
+             {"typ": "redovisning", "poang": [0, 1, 0], "text": "b",
+              "losning": "l", "bedomning": "+1 C b"}]}]}
+    underlag = exam_gen.bedomningsunderlag(exam)
+    assert [e["endast_svar"] for e in underlag[1]["enheter"]] == [True, False]
+    assert '"endast_svar": true' in exam_gen.build_bedomning_prompt(underlag[1])
+    assert "endast_svar" not in exam_gen.build_losning_prompt(underlag[1])
+    svar1 = json.dumps({"bedomning": [], "elevlosningar": [
+        {"enhet": "", "poang": [0, 0, 0], "kommentar": "k",
+         "rader": [{"rad": "x", "not": "fel"}]}]})
+    svar2 = json.dumps({"bedomning": [], "elevlosningar": [
+        {"enhet": "a", "poang": [0, 0, 0], "kommentar": "k",
+         "rader": [{"rad": "x", "not": "fel"}]},
+        {"enhet": "b", "poang": [0, 0, 0], "kommentar": "k",
+         "rader": [{"rad": "y", "not": "fel"}]},
+        {"enhet": "b", "poang": [0, 1, 0], "kommentar": "k",
+         "rader": [{"rad": "z", "not": "+C rätt"}]}]})
+    llm, _c = _stub_llm([svar1, svar2])
+    exam_gen.bedomningspass(exam, model="m", llm=llm, trappa=False)
+    assert "elevlosningar" not in exam["uppgifter"][0]
+    assert [e["etikett"] for e in exam["uppgifter"][1]["elevlosningar"]] == [
+        "b) 0 p", "b) 1 p"]
+    assert exam_gen.bedomningssignaler(exam) == []
+    # PDF:en hoppar över en kortsvarslösning också på ett gammalt papper.
+    pdf = _exam()
+    pdf["uppgifter"][0]["elevlosningar"] = gammal
+    assert pdf["uppgifter"][0]["typ"] == "rutin"
+    doc, _f = exam_spec.validate_exam_json(pdf)
+    assert "Bedömda elevlösningar" not in exam_latex.render_bedomning(doc)
 
 
 def test_andrade_uppgifter_ser_bara_det_bedomningen_bryr_sig_om():
