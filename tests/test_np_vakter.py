@@ -322,7 +322,7 @@ def test_lasreglerna_ur_lararens_dom_over_118_och_119():
     fel = np_vakter.lasregelvakt(_prov(fall))
     assert [f["path"] for f in fel] == [f"uppgift {i}" for i in range(1, 6)]
     assert {f["code"] for f in fel} == {"lasregel"}
-    assert "GeoGebra på datorn" in fel[0]["message"]
+    assert "hur du har löst uppgifterna" in fel[0]["message"]
     assert "vänsterledet" in fel[1]["message"]
     assert "har rätt" in fel[2]["message"]
     assert "(1) och (2)" in fel[3]["message"]

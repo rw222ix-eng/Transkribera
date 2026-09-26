@@ -855,9 +855,8 @@ def lasregelvakt(exam: dict) -> list[dict]:
         m = _VISA_VERKTYG_RE.search(t)
         if m:
             fynd(nr, "visa", f"«{m.group(0)}» kan läsas som att eleven ska visa "
-                 "upp något. Skriv «Redovisa kort på pappret hur du har använt "
-                 "din räknare.» eller «Redovisa kort på pappret hur du har "
-                 "använt GeoGebra på datorn.», efter vad delen tillåter.")
+                 "upp något. Stryk den: delens kravrad säger redan «Redovisa "
+                 "kort på pappret hur du har löst uppgifterna.»")
         if _LEDEN_RE.search(t) and not _NAMNGIVNA_LED_RE.search(t):
             fynd(nr, "leden", "«leden» säger inte vilka led. Skriv ut dem: "
                  "«vänsterledet … och högerledet …».")

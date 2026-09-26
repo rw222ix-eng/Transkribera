@@ -1211,7 +1211,7 @@ def test_render_prov_golden_markers():
     assert (r"Del A: Räknare är inte tillåten"
             in tex)
     assert r"Del B: Räknare är tillåten" in tex
-    assert "Redovisa kort på pappret hur du har använt din räknare." in tex
+    assert "Redovisa kort på pappret hur du har löst uppgifterna." in tex
     # uppgifterna i exam-klassens questions/parts, med kravetiketten i kursiv
     assert "\\begin{questions}" in tex and "\\setcounter{question}{0}" in tex
     assert "\\question[3] \\pfkrav{Endast svar krävs.}" in tex

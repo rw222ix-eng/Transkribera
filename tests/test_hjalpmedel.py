@@ -154,7 +154,7 @@ def test_delrubriken_i_pdf_foljer_lararens_val():
     tex = exam_latex.render_prov(_doc(exam_gen.hjalpmedelsregel(
         "Formelblad", "Digitala verktyg och formelblad")))
     assert r"Del B: Digitala verktyg är tillåtna" in tex
-    assert ("Redovisa kort på pappret hur du har använt GeoGebra på datorn."
+    assert ("Redovisa kort på pappret hur du har löst uppgifterna."
             in tex)
     assert "GeoGebra på datorn" in exam_gen.hjalpmedelsregel(
         "Formelblad", "Digitala verktyg och formelblad")
@@ -187,9 +187,9 @@ def test_delrubriken_star_kvar_nar_regeln_tiger_om_delen():
         "Del A löses utan räknare. Endast svar krävs om inget annat anges.")
     assert exam_latex._del_instruktion("C", False) == (
         "Del B löses med räknare. Fullständig redovisning krävs. Redovisa "
-        "kort på pappret hur du har använt GeoGebra på datorn.")
+        "kort på pappret hur du har löst uppgifterna.")
     assert exam_latex._del_instruktion("C", False, "räknare").endswith(
-        "Redovisa kort på pappret hur du har använt din räknare.")
+        "Redovisa kort på pappret hur du har löst uppgifterna.")
 
 
 def test_delen_utan_verktyg_ber_inte_eleven_redovisa_verktyget():
@@ -200,12 +200,15 @@ def test_delen_utan_verktyg_ber_inte_eleven_redovisa_verktyget():
         exam_gen.hjalpmedelsregel("Inga digitala", "Formelblad")))
     assert r"Del B: Räknare är inte tillåten" in tex
     assert "Visa också hur du använder ditt digitala verktyg" not in tex
+    # Lärarens dom 2026-09-26: redovisningen gäller lösningen och står på
+    # varje del med fullständiga lösningar, med eller utan räknare.
     assert exam_latex._del_instruktion("C", True) == (
-        "Del B löses utan räknare. Fullständig redovisning krävs.")
-    assert "Redovisa kort på pappret" not in tex
+        "Del B löses utan räknare. Fullständig redovisning krävs. Redovisa "
+        "kort på pappret hur du har löst uppgifterna.")
+    assert "Redovisa kort på pappret hur du har löst uppgifterna." in tex
     # … och på det oförändrade provet står redovisningen kvar, med lärarens
     # ord (2026-09-22) och det verktyg delen faktiskt har.
-    assert ("Redovisa kort på pappret hur du har använt din räknare."
+    assert ("Redovisa kort på pappret hur du har löst uppgifterna."
             in exam_latex.render_prov(_doc(
                 "Del B utan räknare. Del C med räknare.")))
 

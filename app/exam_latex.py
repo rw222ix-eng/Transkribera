@@ -236,11 +236,8 @@ def _del_instruktion(del_kod: str, utan_raknare: bool,
         return ""
     if del_kod == "B":
         krav = "Endast svar krävs om inget annat anges."
-    elif utan_raknare:
-        krav = "Fullständig redovisning krävs."
     else:
-        krav = ("Fullständig redovisning krävs. "
-                + REDOVISA_VERKTYGET.get(verktyg, REDOVISA_VERKTYGET["digitala verktyg"]))
+        krav = "Fullständig redovisning krävs. " + REDOVISA_LOSNINGEN
     return f"{namn} löses {'utan' if utan_raknare else 'med'} räknare. {krav}"
 
 
@@ -349,10 +346,15 @@ def _hjalpmedel_i_delen(hjalpmedel: str | None, del_kod: str) -> str | None:
 # eleven kan läsa «visa» som att hon ska visa upp något, en film. Pappret ber
 # om det som faktiskt ska göras, på pappret, och säger vilket verktyg det är:
 # hennes två meningar, ordagrant.
+# LÄRARENS DOM 2026-09-26: «Det handlar inte bara om räknaren, de ska
+# redovisa hur de har löst uppgifterna. Och det gäller alla uppgifter där det
+# står fullständig lösning krävs.» En mening för varje del med fullständiga
+# lösningar, med eller utan räknare (REDOVISA_LOSNINGEN). Tabellen nedan står
+# kvar för anropare som frågar per verktyg.
+REDOVISA_LOSNINGEN = "Redovisa kort på pappret hur du har löst uppgifterna."
 REDOVISA_VERKTYGET = {
-    "räknare": "Redovisa kort på pappret hur du har använt din räknare.",
-    "digitala verktyg": ("Redovisa kort på pappret hur du har använt "
-                         "GeoGebra på datorn."),
+    "räknare": REDOVISA_LOSNINGEN,
+    "digitala verktyg": REDOVISA_LOSNINGEN,
 }
 
 
@@ -1782,9 +1784,8 @@ def _build_view(doc: exam_spec.ExamDoc,
             # kosmetik — utan den kan en elev skriva ett svar räknaren gav och
             # ingen kan bedöma vägen dit.
             "kravrad": (None if nagot_kortsvar else escape_latex(
-                "Fullständiga lösningar krävs på alla uppgifter."
-                + ("" if utan_raknare else
-                   " " + REDOVISA_VERKTYGET[verktyg]))),
+                "Fullständiga lösningar krävs på alla uppgifter. "
+                + REDOVISA_LOSNINGEN)),
             "instruktion": escape_latex(
                 _del_instruktion(del_kod or "", utan_raknare, verktyg)) or None,
             "uppgifter": vy_items,

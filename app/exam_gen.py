@@ -791,10 +791,12 @@ INSTRUCTION = (
     "i grundpotensform.» Ett exempel på formen får bara stå när formen är ett "
     "svarsformat i en uppgift som prövar något annat: «Svara med ett "
     "intervall. Exempel: alla tal större än 1 och högst 4 skrivs ]1, 4].»\n"
-    "  • Ska eleven redovisa verktyget står det «Redovisa kort på pappret "
-    "hur du har använt din räknare.» eller «Redovisa kort på pappret hur du "
-    "har använt GeoGebra på datorn.», aldrig «visa hur du använder ditt "
-    "digitala verktyg». Räknaren är inte ett digitalt verktyg.\n"
+    # Lärarens dom 2026-09-26: redovisningen gäller lösningen, inte räknaren,
+    # och den står på delens kravrad (exam_latex.REDOVISA_LOSNINGEN).
+    "  • Redovisningen står på delens kravrad («Redovisa kort på pappret "
+    "hur du har löst uppgifterna.») och inte i uppgifterna. Skriv aldrig "
+    "«visa hur du använder ditt digitala verktyg». Räknaren är inte ett "
+    "digitalt verktyg.\n"
     # ── TEXTENS FORM (lärarens dom 2026-09-23 kväll, exam 128 och 129) ──
     # Exam 128 uppgift 1: «Skriv storheterna i den enhet som står i
     # uppgiften. Svara i grundpotensform.» Läraren: «Det är väl bättre att
@@ -3505,10 +3507,9 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             "fullständig lösning, och minst en av dem ska KRÄVA verktyget "
             "delen tillåter: med GeoGebra på datorn en regression, en graf att "
             "avläsa eller en ekvation som bara går att lösa numeriskt, med "
-            "enbart räknare en beräkning som inte går för hand. Skriv i den "
-            "uppgiftens text «Redovisa kort på pappret hur du har använt din "
-            "räknare.» eller «Redovisa kort på pappret hur du har använt "
-            "GeoGebra på datorn.», efter vad delen tillåter."
+            "enbart räknare en beräkning som inte går för hand. Delens "
+            "kravrad säger redan «Redovisa kort på pappret hur du har löst "
+            "uppgifterna.», så den meningen står inte i uppgifterna."
             if delar else
             "Provet har inga delar (del: null på alla uppgifter).")
         # Lärarens hjälpmedelsval, och bara när hon flyttat något (se
