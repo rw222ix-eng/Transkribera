@@ -111,6 +111,19 @@
   };
   const spann = (el, tex) => { const s = document.createElement('span'); rendera(s, balansera(tex), true); el.append(s); };
 
+  /* OPERATORN VID BRÅKET BEHÅLLER SIN LUFT (slutkollen av bladen 2026-09-26).
+     Bråket ritas för sig, så biten efter det börjar med «− 2(x − 5)» och biten
+     före slutar med «(5 − 3²) −». KaTeX ser då ingen operand på ena sidan och
+     sätter tecknet som ett förtecken: «15/3x −2(x − 5)» och «+15» såg ut som
+     negativa och positiva tal på fyra av femton blad. En tom grupp på bråkets
+     sida ger tecknet sin operand, samma knep som blad-bygg.js matBryt gör för
+     «=». Ett förtecken först i en formel rörs inte: det står aldrig vid ett
+     utklippt bråk. */
+  const OPERATOR = String.raw`(?:[+\-=<>]|\\(?:cdot|times|pm|mp|div|le|ge|leq|geq|lt|gt|approx|mathrel\{[^}]*\}))`;
+  const OP_FORST = new RegExp(`^\\s*${OPERATOR}`), OP_SIST = new RegExp(`${OPERATOR}\\s*$`);
+  const fore = tex => (OP_SIST.test(tex) ? tex + '{}' : tex);
+  const efter = tex => (OP_FORST.test(tex) ? '{}' + tex : tex);
+
   /* Finns ett bråk på klamerdjup > 0? Då tillhör det en annan konstruktion
      (\sqrt, \overline, ett yttre bråk) och får inte klippas ut. */
   function nastlatFrac(tex) {
@@ -150,7 +163,8 @@
       if (!m) break;
       const a = grupp(rest, m.index + m[0].length - 1); if (!a) break;
       const b = grupp(rest, a[1]); if (!b) break;
-      if (m.index) spann(el, rest.slice(0, m.index));
+      /* Biten före bråket följer på ett tidigare bråk när varv > 1. */
+      if (m.index) spann(el, fore(varv > 1 ? efter(rest.slice(0, m.index)) : rest.slice(0, m.index)));
       const brak = document.createElement('span'); brak.className = 'brak';
       const t = document.createElement('span'); t.className = 'brakt';
       const n = document.createElement('span'); n.className = 'brakn';
@@ -158,7 +172,7 @@
       rendera(t, a[0], true); rendera(n, b[0], true);
       rest = rest.slice(b[1]);
     }
-    if (rest) spann(el, rest);
+    if (rest) spann(el, varv > 1 ? efter(rest) : rest);
   }
 
   function jamna(rot) {
