@@ -567,10 +567,10 @@ def test_trappan_tar_ocksa_de_gamla_dokumentens_enradare():
     assert "Vanligt fel" not in html and "vanligt fel" not in html
 
 
-def test_deluppgifterna_far_var_sitt_svar_sina_rader_och_sin_trippel():
+def test_deluppgifterna_far_var_sitt_svar_och_sina_rader():
     """Uppgiften har ingen egen bedömning när deluppgifter finns — poängen
-    ligger på a), b), c). Varje deluppgift får därför sitt eget svar, sina
-    egna poängrader och sin egen trippel, i den ordningen."""
+    ligger på a), b), c). Varje deluppgift får därför sitt eget svar och sina
+    egna poängrader, i den ordningen. Ingen trippel sist (2026-09-26)."""
     html = _losark([_uppg(p=3, f="",
                           vag=[["a) $3^{5}$", "1 p"], ["b) $2^{-1}$", "2 p"]],
                           beddel=["+1 E korrekt svar i a)",
@@ -578,9 +578,9 @@ def test_deluppgifterna_far_var_sitt_svar_sina_rader_och_sin_trippel():
                           delpeca=[[1, 0, 0], [0, 1, 1]])])
     a = html.index('<b class="lobeddel">a)</b>')
     b = html.index('<b class="lobeddel">b)</b>')
-    assert a < html.index("Korrekt svar i a).") < html.index("(1/0/0)") < b
-    assert b < html.index("Tecknar.") < html.index("Korrekt svar i b).") \
-        < html.index("(0/1/1)")
+    assert a < html.index("Korrekt svar i a).") < b
+    assert b < html.index("Tecknar.") < html.index("Korrekt svar i b).")
+    assert "(1/0/0)" not in html and "(0/1/1)" not in html
     # Bokstaven står en gång, framför svaret, och inte framför kravet.
     assert "a) korrekt svar i a)" not in html
 
@@ -649,17 +649,16 @@ def test_kravraden_som_upprepar_svaret_blir_korrekt_svar():
         assert rad == vantat, krav
 
 
-def test_trippeln_star_sist_och_ur_dokumentets_poang():
-    """«(0/2/0)» sist, dämpad. Dokumentets egen poäng (`peca`) när den finns,
-    annars räknad ur raderna; utan båda ingen trippel alls."""
+def test_ingen_trippel_sist():
+    """Lärarens dom 2026-09-26: «(0/2/0)» sist behövs inte, varken med
+    dokumentets egen poäng (`peca`) eller räknad ur raderna. Märkena står
+    kvar."""
     html = _losark([_uppg(p=2, f="$x = 4$", peca=[0, 2, 0],
                           bed="+1 C tecknar\n+1 C löser")])
-    assert '<tr data-trippel><td><span class="lobedtrippel">(0/2/0)</span>' in html
-    assert html.index("Löser.") < html.index("(0/2/0)")
+    assert "(0/2/0)" not in html and "data-trippel" not in html
+    assert "Löser." in html and html.count('class="lobedniva">+C<') == 2
     raknad = _losark([_uppg(p=2, f="$x = 4$", bed="+1 E tecknar\n+1 A löser")])
-    assert "(1/0/1)" in raknad
-    utan = _losark([_uppg(p=2, f="$x = 4$")])
-    assert "lobedtrippel" not in utan
+    assert "(1/0/1)" not in raknad
 
 
 def test_elevexemplen_star_pa_eget_ark_sist():
@@ -747,7 +746,7 @@ def test_utan_elevexempel_inget_elevark():
     bara tabellen. Inget tomt ark och ingen inledningsrad som pekar på
     ingenting."""
     html = _losark([_uppg(p=2, f="$x = 4$", bed="+1 E tecknar\n+1 C svarar")])
-    assert html.count("<tr") == 4          # svaret, två poängrader, trippeln
+    assert html.count("<tr") == 3          # svaret och två poängrader
     assert "lo-elev" not in html and "står sist i häftet" not in html
     assert "lobedvarfor" not in html
     # Finns bara en lösningsdel (inga kortsvar) står inledningen på den.

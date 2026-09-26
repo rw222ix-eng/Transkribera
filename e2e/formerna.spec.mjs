@@ -323,7 +323,7 @@ test("bedömningsanvisningen · nationella provets form, elevlösningarna sist",
 
     // Uppgift 1: svaret först (bara första raden, med enheten), fett.
     const kort = page.locator("#formprov [data-form='lo-b'] .lobed tr");
-    await expect(kort).toHaveCount(4);
+    await expect(kort).toHaveCount(3);
     await expect(kort.nth(0)).toHaveAttribute("data-svar", "");
     await expect(kort.nth(0).locator(".lobedsvar")).toContainText("cm");
     await expect(kort.nth(0).locator(".lobedsvar .mat")).toHaveCount(1);
@@ -334,15 +334,14 @@ test("bedömningsanvisningen · nationella provets form, elevlösningarna sist",
     await expect(kort.nth(1).locator(".lobedniva")).toHaveText("+E");
     expect(await kort.nth(1).locator("td").last().evaluate(
       td => getComputedStyle(td).textAlign)).toBe("right");
-    // Trippeln sist, dämpad.
-    await expect(kort.nth(3).locator(".lobedtrippel")).toHaveText("(2/0/0)");
+    // Ingen trippel sist (lärarens dom 2026-09-26).
+    await expect(page.locator("#formprov .lobedtrippel")).toHaveCount(0);
 
-    // Uppgift 2: a) och b) med var sitt svar, sina rader och sin trippel.
+    // Uppgift 2: a) och b) med var sitt svar och sina rader.
     const lang = page.locator("#formprov [data-form='lo-c'] .lobed").first();
     await expect(lang.locator(".lobeddel")).toHaveText(["a)", "b)"]);
     await expect(lang.locator(".lobedsvar")).toHaveText(["Derivera", "Motivera"]);
     await expect(lang.locator(".lobedniva")).toHaveText(["+E", "+C", "+C", "+A"]);
-    await expect(lang.locator(".lobedtrippel")).toHaveText(["(1/0/0)", "(0/2/1)"]);
     // Elevlösningarna står inte i tabellen, och ingen notis per uppgift.
     await expect(page.locator("#formprov [data-form='lo-c'] .loskann")).toHaveCount(0);
     await expect(page.locator("#formprov [data-form='lo-c']"))
@@ -439,7 +438,6 @@ test("bedömningsanvisningen ur serverns prov · paginerad, satt och pekbar",
     const b = page.locator("#fh-ark [data-form='lo-b']");
     await expect(b.locator(".lobedsvar").first()).toContainText("B,");
     await expect(b.locator(".lobedsvar").nth(1)).toContainText("km");
-    await expect(b.locator(".lobedtrippel")).toHaveText(["(1/0/0)", "(1/0/0)", "(0/1/0)"]);
     // Rader som bara upprepar svaret ovanför blir NP:s korta form; raden som
     // säger något mer står kvar (lärarens dom 2026-09-23).
     await expect(b.locator(".lobedkrav"))

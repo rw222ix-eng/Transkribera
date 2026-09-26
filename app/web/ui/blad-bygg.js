@@ -1206,24 +1206,13 @@ window.BladBygg = (() => {
     const t = delar.join(', ');
     return /^\p{L}/u.test(t) ? t[0].toUpperCase() + t.slice(1) : t;
   }
-  /* Poängen som trippel. Dokumentets egen (u.peca, u.delpeca) när den finns,
-     annars räknad ur raderna; utan båda står ingen trippel alls, för en
-     gissad «(0/0/0)» på en uppgift värd en poäng är värre än ingen. */
-  function trippel(poang, rader) {
-    let p = Array.isArray(poang) && poang.length >= 3 ? poang : null;
-    if (!p && rader.length) {
-      const t = { E: 0, C: 0, A: 0 };
-      rader.forEach(r => { t[r.niva] += r.poang; });
-      p = [t.E, t.C, t.A];
-    }
-    return p ? `(${p[0] || 0}/${p[1] || 0}/${p[2] || 0})` : '';
-  }
-
-  /* En poängbärande enhet som tabellrader: svaret, en rad per poäng, sist
-     trippeln. Svaret i fetstil, och matematiken i det med KaTeX egen \pmb:
-     KaTeX ignorerar font-weight, och utan den blev «2,5 km» ett magert tal
-     och en fet enhet. PDF:en gör samma sak (exam_latex.escape_mixed fet). */
-  function enhetRader(namn, svar, bed, poang, jamfor) {
+  /* En poängbärande enhet som tabellrader: svaret och en rad per poäng.
+     Enhetens poäng som trippel, «(0/0/1)», står inte sist längre (lärarens
+     dom 2026-09-26: den behövs inte; samma i bedomning.tex.j2). Svaret i
+     fetstil, och matematiken i det med KaTeX egen \pmb: KaTeX ignorerar
+     font-weight, och utan den blev «2,5 km» ett magert tal och en fet enhet.
+     PDF:en gör samma sak (exam_latex.escape_mixed fet). */
+  function enhetRader(namn, svar, bed, jamfor) {
     /* NOTRADEN TRYCKS INTE. «Vanligt fel»-raden bär ingen poäng, och
        läraren om prov 40 (2026-09-06): «detta med vanliga fel kan vi ta bort
        helt och hållet så att vi sparar plats». Parsern läser den fortfarande
@@ -1236,8 +1225,6 @@ window.BladBygg = (() => {
     }
     rader.forEach(r => ut.push(`<tr><td class="lobedkrav">${mat(kravrad(r.krav, jamfor))}</td><td><b class="lobedniva">${
       esc(marke(r))}</b></td></tr>`));
-    const tr = trippel(poang, rader);
-    if (tr) ut.push(`<tr data-trippel><td><span class="lobedtrippel">${esc(tr)}</span></td><td></td></tr>`);
     return ut.join('');
   }
 
@@ -1258,12 +1245,12 @@ window.BladBygg = (() => {
         const los = utanBokstav((vag[k] || [])[0]);
         const svar = svaret(los, (u.delenhet || [])[k]);
         return enhetRader(`${BOKSTAVER[k] || k + 1})`, svar, beddel[k],
-                          (u.delpeca || [])[k], [svar, svaret(los)]);
+                          [svar, svaret(los)]);
       }).join('')
       : (() => {
         const bokstav = u.alt && u.ratt != null ? BOKSTAV[u.ratt] || '' : '';
         const svar = svaret(u.f, u.enhet);
-        return enhetRader('', bedsvar(bokstav, svar), u.bed, u.peca,
+        return enhetRader('', bedsvar(bokstav, svar), u.bed,
                           [svar, svaret(u.f)].concat(bokstav ? [bokstav, `(${bokstav})`] : []));
       })();
     return `<table class="lobed"><tbody>${kropp}</tbody></table>`;

@@ -31,8 +31,10 @@
            Lösning med korrekt svar.                                   +C
            (0/2/0)
 
-    Per uppgift, och per deluppgift när den bär poäng: svaret i fetstil, en
-    rad per poäng med märket i poängspalten, och sist enhetens poäng.
+    Per uppgift, och per deluppgift när den bär poäng: svaret i fetstil och en
+    rad per poäng med märket i poängspalten.
+    Lärarens dom 2026-09-26: enhetens poäng sist, «(0/0/1)», behövs inte. Den
+    sa samma sak som märkena en gång till, och den står inte längre här.
     Uppgiftstexten står INTE här (den har hon på provet bredvid sig), inte
     heller lösningsgången (den står i lösningsförslaget) eller förmågans namn.
     Allt det var text hon fick läsa förbi. Raderna byggs i exam_latex
@@ -45,7 +47,6 @@
 ((* for r in e.bedomning_rader *))
 \bedkrav{((( r.krav )))}{((( r.marke )))}
 ((* endfor *))
-\bedtrippel{((( e.trippel )))}
 ((* endmacro *))
 
 ((# UPPGIFTERNA TÄTARE ÄN PÅ PROVET. Förlagans luft mellan två uppgifter
@@ -91,12 +92,14 @@ Totalt ((( granser.total ))) poäng.}
 \bedlinje
 ((* endif *))
 ((* set ns.forsta = false *))
-((# Tomt poängargument: uppgiftens poäng står som trippel under raderna, och
-    högermarginalen hör till märkena. #))
+((# Tomt poängargument: högermarginalen hör till märkena. #))
 \begin{uppgift}{((( u.nummer )))}{}
 ((* if u.har_deluppgifter *))
+((# \penalty0: sidan får brytas mellan två deluppgifter, aldrig inne i en.
+    Förut var trippelraden brytpunkten; varje \bedkrav slutar med
+    \nopagebreak, och utan straffet här blev hela uppgiften ett block. #))
 ((* for d in u.deluppgifter *))
-((* if not loop.first *))\vspace{1.5mm}
+((* if not loop.first *))\penalty0\vspace{1.5mm}
 ((* endif *))
 ((( enhet(d, d.delnamn) )))
 ((* endfor *))

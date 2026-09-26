@@ -240,7 +240,6 @@ $\dfrac{…}$
 .lobeddel{font-weight:700;font-size:calc(15.5px * var(--fsk, 1));margin-right:9px}
 .lobedkrav{font-size:calc(13.5px * var(--fsk, 1));line-height:1.42}
 .lobedniva{font-weight:700;font-size:calc(13.5px * var(--fsk, 1));letter-spacing:.02em}
-.lobedtrippel{font-size:calc(12.5px * var(--fsk, 1));color:#6B6862;font-variant-numeric:tabular-nums}
 
 /* ── De bedömda elevlösningarna (lo-elev) ──
    Elevens papper till vänster i handskriften, poängen och kommentaren till

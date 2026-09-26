@@ -1344,17 +1344,18 @@ def test_render_bedomning_contains_solutions():
     # har läraren på provet bredvid sig, och det var text hon läste förbi.
     assert "Problemlösning" not in tex
     assert "Lös ekvationen" not in tex
-    # Uppgiftens poäng står som trippel under raderna, och uppgift-miljön
-    # bär ingen markör: högermarginalen hör till märkena (+E, +C, +A).
+    # Uppgift-miljön bär ingen markör: högermarginalen hör till märkena
+    # (+E, +C, +A). Enhetens trippel står inte sist (lärarens dom 2026-09-26).
     assert r"\begin{uppgift}{3}{}" in tex
-    assert r"\bedtrippel{(1/1/1)}" in tex
+    assert r"\bedtrippel" not in tex and "(1/1/1)" not in tex
 
 
 def test_bedomning_behaller_eca_och_far_makron():
-    """Lärarens dokument visar E/C/A — det är dess syfte. Elevens gör det inte."""
+    """Lärarens dokument visar E/C/A — det är dess syfte. Elevens gör det inte.
+    Nivån står i märket på varje rad; trippeln sist behövs inte (2026-09-26)."""
     doc, _ = exam_spec.validate_exam_json(_exam())
     tex = exam_latex.render_bedomning(doc)
-    assert r"\bedtrippel{(3/0/0)}" in tex
+    assert r"\bedkrav{Anger det ena nollstället.}{+E}" in tex
     assert r"\bedsvar{" in tex and r"\bedkrav{" in tex
     # kontrollera motsatsen på elevens prov
     prov = exam_latex.render_prov(doc)
@@ -1426,15 +1427,15 @@ def test_deluppgifts_notis_renderas_i_prov_och_arbetsblad():
 
 
 def test_bedomning_visar_deluppgifternas_facit():
-    """Varje deluppgift som bär poäng får sitt EGET svar, sina egna rader och
-    sin egen trippel, med bokstaven framför svaret som i NP:s «21. b)»."""
+    """Varje deluppgift som bär poäng får sitt EGET svar och sina egna rader,
+    med bokstaven framför svaret som i NP:s «21. b)». Ingen trippel sist."""
     doc, _ = exam_spec.validate_exam_json(_exam_med_deluppgifter())
     tex = exam_latex.render_bedomning(doc)
     # Svaret är första raden i losning, och bara den.
     assert r"\bedsvar{a)\enspace \(\pmb{x = 3}\) via \(\pmb{-b/(2a)}\).}" in tex
     assert (r"\bedsvar{b)\enspace Mittpunkt mellan nollställena; "
             r"grafen är symmetrisk.}") in tex
-    assert r"\bedtrippel{(0/2/0)}" in tex and r"\bedtrippel{(0/1/1)}" in tex
+    assert "(0/2/0)" not in tex and "(0/1/1)" not in tex
     assert r"\bedkrav{Korrekt linje.}{+C}" in tex
     assert r"\bedkrav{Flera representationer.}{+A}" in tex
     # Deluppgiftens text står på provet, inte här.
@@ -1543,9 +1544,9 @@ def test_malslaset_galler_gruppuppgiften_ocksa():
 def test_bedomning_platt_oforandrad():
     doc, _ = exam_spec.validate_exam_json(_exam())
     tex = exam_latex.render_bedomning(doc)
-    # Lövet: numret utan markör, poängen som trippel sist (NP:s form).
+    # Lövet: numret utan markör och ingen trippel sist (2026-09-26).
     assert r"\begin{uppgift}{1}{}" in tex
-    assert r"\bedtrippel{(3/0/0)}" in tex
+    assert "(3/0/0)" not in tex
 
 
 # ------------------------------------------------------ skyddsnät: \par ----
@@ -3735,8 +3736,9 @@ def test_bedomningen_pa_pappret_ar_en_rad_per_poang_med_np_marke():
 
 
 def test_bedomningens_rader_i_np_ordning():
-    """Svaret FÖRST, sedan raderna, sist trippeln, för varje enhet. Det är
-    ordningen läraren läser i: vad är rätt, vad ger poäng, hur mycket."""
+    """Svaret FÖRST, sedan raderna, för varje enhet. Det är ordningen
+    läraren läser i: vad är rätt, vad ger poäng. Trippeln sist är borta
+    (lärarens dom 2026-09-26)."""
     doc, _fel = exam_spec.validate_exam_json(_exam())
     tex = exam_latex.render_bedomning(doc)
     kropp = tex.split(r"\begin{uppgift}{1}{}", 1)[1].split(r"\end{uppgift}", 1)[0]
@@ -3744,8 +3746,8 @@ def test_bedomningens_rader_i_np_ordning():
     krav = [kropp.index(r"\bedkrav{Anger det ena nollstället.}{+E}"),
             kropp.index(r"\bedkrav{Anger det andra nollstället.}{+E}"),
             kropp.index(r"\bedkrav{Korrekt svar med båda nollställena.}{+E}")]
-    trippel = kropp.index(r"\bedtrippel{(3/0/0)}")
-    assert svar < krav[0] < krav[1] < krav[2] < trippel
+    assert svar < krav[0] < krav[1] < krav[2]
+    assert "(3/0/0)" not in kropp
 
 
 def test_svaret_ar_forsta_raden_och_bar_enheten():
@@ -4293,7 +4295,7 @@ def test_poangmarket_star_i_egen_spalt_i_lod():
     preamble = (Path(__file__).resolve().parent.parent / "app" / "templates"
                 / "_preamble.tex.j2").read_text(encoding="utf-8")
     bit = preamble[preamble.index(r"\newcommand{\bedkrav}"):]
-    bit = bit[:bit.index(r"\newcommand{\bedtrippel}")]
+    bit = bit[:bit.index(r"\newcommand{\bedlinje}")]
     assert r"\begin{minipage}[t]{\dimexpr\linewidth-\bedpoangspalt\relax}" in bit
     assert r"\makebox[\bedpoangspalt][r]" in bit
     assert r"\hfill" not in bit, "märket flyter fortfarande med texten"
