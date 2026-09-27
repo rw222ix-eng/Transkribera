@@ -35,6 +35,16 @@ if ($InstalleraTask) {
     $tr = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + $skript + '"'
     schtasks /create /tn $TASKNAMN /tr $tr /sc DAILY /st 05:00 /f
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    # schtasks standard vagrar starta pa batteri (0x800710E0) och hoppar over
+    # en missad korning. Sa gick 26-27 sep utan export (datorn pa batteri
+    # eller avstangd kl. 05). Nu: batteri tillats, missad korning tas nar
+    # datorn startar, sovande dator vacks, och en korning till vid inloggning.
+    # En AVSTANGD dator kan inte exportera: db:n finns bara har.
+    $s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+        -StartWhenAvailable -WakeToRun -ExecutionTimeLimit (New-TimeSpan -Hours 1)
+    $trig = @((New-ScheduledTaskTrigger -Daily -At 05:00),
+              (New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME))
+    Set-ScheduledTask -TaskName $TASKNAMN -Settings $s -Trigger $trig | Out-Null
     schtasks /query /tn $TASKNAMN /fo LIST
     exit 0
 }
