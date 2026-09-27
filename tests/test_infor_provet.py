@@ -18,8 +18,8 @@ from app import exam_gen, exam_spec
 from app.web import routes_exam
 
 from tests.test_exam import _exam
-from tests.test_routes_exam import (_course_id, _done, _godkant_prov,
-                                    _stub_generate)
+from tests.test_routes_exam import (_course_id, _done, _events,
+                                    _godkant_prov, _stub_generate)
 
 
 @pytest.fixture
@@ -555,5 +555,195 @@ def test_kopiefynden_foljer_med_genereringens_svar(client, monkeypatch):
     koder = [f["kod"] for f in svar["efterkontroll"]]
     assert "kopia" in koder
     assert svar["exam"]["infor_prov"] == prov_id
+    kvar = client.get(f"/api/exams/{svar['id']}").json()
+    assert "kopia" in [f["kod"] for f in kvar["efterkontroll"]]
+
+
+# ─────────────── gruppuppgiften inför provet (2026-09-27) ──────────────
+# Rickard 2026-09-27: «gruppuppgift, baserat på provet». Tavlor och papper
+# byggs på provet i första hand, boken i andra.
+
+
+def _grupp_block(nummer=(), undvik=None, antal=4):
+    return exam_gen.build_infor_prov(exam_gen.provslots(_prov_131()),
+                                     list(nummer), antal, undvik,
+                                     profil="gruppuppgift")
+
+
+def test_gruppuppgiftens_block_talar_om_gruppuppgiften():
+    prov = _prov_131()
+    block = _grupp_block([1, 3, 5], exam_gen.provets_namn_och_sammanhang(prov))
+    assert block.startswith("DEN HÄR GRUPPUPPGIFTEN ÖVAR INFÖR ETT PROV")
+    assert "PROVET FÖRST, BOKEN I ANDRA HAND" in block
+    assert "stegring" in block and "FÖRDELA gruppuppgiftens 4" in block
+    # Samma grundregler som bladets: sorter, andra namn, fältet.
+    assert "SAMMA SORT, ALDRIG SAMMA UPPGIFT" in block
+    assert "Noah och Ali" in block
+    assert "Inget av det får stå i gruppuppgiften" in block
+    assert exam_gen._drillar_i_grammatiken(block)
+    # Inget ord om bladet, och bladets KORT TEXT står inte här: den förbjuder
+    # de ledda stegen som är gruppuppgiftens ställning.
+    assert "blad" not in block.casefold()
+    assert "KORT TEXT" not in block
+    # Texterna går aldrig till modellen.
+    for u in prov["uppgifter"]:
+        assert u["text"][:40] not in block, u["text"][:40]
+    # En sort ger stegringen inom sorten.
+    en = _grupp_block([3])
+    assert "ALLA gruppuppgiftens 4 uppgifter" in en and "FÖRDELA" not in en
+    # Tomt underlag ger tom sträng, som bladets.
+    assert exam_gen.build_infor_prov([], [], 4, profil="gruppuppgift") == ""
+
+
+def test_arbetsbladets_block_ar_oforandrat_av_gruppens_gren():
+    slots = exam_gen.provslots(_prov_131())
+    und = exam_gen.provets_namn_och_sammanhang(_prov_131())
+    for nr in ([], [3], [1, 3]):
+        blad = exam_gen.build_infor_prov(slots, nr, 6, und)
+        assert blad == exam_gen.build_infor_prov(slots, nr, 6, und,
+                                                 profil="arbetsblad")
+        assert blad.startswith("DET HÄR ARBETSBLADET ÖVAR INFÖR ETT PROV")
+        assert "Inget av det får stå på bladet" in blad
+
+
+def _grupp(**k):
+    return exam_gen.build_prompt("Matematik, nivå 2c", "NA25", ["Derivator"],
+                                 antal=4, profil="gruppuppgift", **k)
+
+
+def test_gruppuppgift_utan_prov_ger_byte_identisk_prompt():
+    """Kassettregeln: utan valt prov är gruppuppgiftens prompt och grammatik
+    de som gick i väg förut."""
+    forut = _grupp()
+    assert _grupp(infor="") == forut
+    assert "INFÖR ETT PROV" not in forut
+    assert not exam_gen._drillar_i_grammatiken(forut)
+    med = _grupp(infor=_grupp_block([1, 3]))
+    assert "GRUPPUPPGIFT" in med and med != forut
+    assert med.rindex("Uppdrag:") > med.rindex("INFÖR ETT PROV")
+
+
+def _fanga_generering(profil, inforprov, nummer):
+    anrop = []
+
+    def llm(model, prompt, **k):
+        anrop.append((prompt, json.dumps(k.get("response_format"),
+                                         ensure_ascii=False)))
+        return ""
+
+    exam_gen.generate_exam("Matematik, nivå 2b", "TE27", ["Andragrad"],
+                           model="", antal=4, profil=profil,
+                           inforprov=inforprov, infor_nummer=nummer,
+                           llm=llm, max_rounds=1, doma=False, bokuppgifter=[])
+    return anrop
+
+
+def test_generatorn_ger_gruppuppgiften_blocket_och_faltet():
+    prompt, schema = _fanga_generering("gruppuppgift", _prov_131(), [1, 3])[0]
+    assert "DEN HÄR GRUPPUPPGIFTEN ÖVAR INFÖR ETT PROV" in prompt
+    assert "provets uppgift 3:" in prompt and "provets uppgift 2:" not in prompt
+    assert "köper golvlister" not in prompt
+    assert '"drillar"' in schema
+    # Utan prov: inget block, inget fält.
+    prompt, schema = _fanga_generering("gruppuppgift", None, [])[0]
+    assert "INFÖR ETT PROV" not in prompt and '"drillar"' not in schema
+
+
+def _grupp_doc(drillar):
+    doc = copy.deepcopy(_exam())
+    doc["uppgifter"] = doc["uppgifter"][:len(drillar)]
+    for u, d in zip(doc["uppgifter"], drillar):
+        u["drillar"] = d
+    return doc
+
+
+def test_gruppuppgiftens_tackningskrav_ar_halften():
+    """Fyra uppgifter i en stegring kan inte öva sex sorter, och ska inte
+    fällas för det (Rickard 2026-09-27). Kravet är hälften av uppgifterna,
+    på olika sorter."""
+    valda = [1, 2, 3, 4, 5, 6]
+    assert exam_gen.drilltackning(_grupp_doc([1, 1, 2, None]), valda,
+                                  "gruppuppgift") == []
+    # Samma papper som blad fälls: där är kravet en sort per uppgift.
+    assert exam_gen.drilltackning(_grupp_doc([1, 1, 2, None]), valda)
+    fel = exam_gen.drilltackning(_grupp_doc([1, 1, 1, 1]), valda,
+                                 "gruppuppgift")
+    assert [f["code"] for f in fel] == ["drilltackning"]
+    assert fel[0]["message"].startswith("Gruppuppgiften har 4 uppgifter")
+    assert "minst 2" in fel[0]["message"]
+    # En vald sort: fyra uppgifter på den är rent.
+    assert exam_gen.drilltackning(_grupp_doc([3, 3, 3, 3]), [3],
+                                  "gruppuppgift") == []
+    # Fail-open som bladets.
+    assert exam_gen.drilltackning(_exam(), valda, "gruppuppgift") == []
+
+
+def test_passet_lagar_gruppuppgiften_utan_bladets_vakter():
+    rundor = []
+    res = exam_gen._infor_pass(_grupp_doc([1, 1, 1, 1]), [], model="",
+                               llm=lambda *a, **k: rundor.append(1),
+                               profil="gruppuppgift", antal=4, skeleton=None,
+                               nummer=[1, 3], rounds_used=1, max_rounds=3)
+    assert len(rundor) == 1
+    assert [e["code"] for e in res["errors"]] == ["drilltackning"]
+
+
+def test_gruppuppgiftens_falt_nar_generatorn(client, monkeypatch):
+    calls = _stub_generate(monkeypatch)
+    prov_id, gid, cid = _godkant_prov(
+        client, titel="Prov 1", datum="2026-10-20",
+        klass="TE27H", kurs="Matematik, nivå 2b")
+    r = client.post("/api/exams/generate", json={
+        "course_id": cid, "group_id": gid, "antal": 4, "typ": "gruppuppgift",
+        "infor_prov_id": prov_id, "infor_nummer": [3, 1]})
+    assert r.status_code == 200
+    _done(r)
+    assert calls[-1]["profil"] == "gruppuppgift"
+    assert calls[-1]["inforprov"]["titel"] == "Prov 1"
+    assert calls[-1]["infor_nummer"] == [3, 1]
+    assert _exam()["uppgifter"][0]["text"] in calls[-1]["tidigare"]
+
+
+def test_gruppuppgiftens_tomma_lista_ar_lektionens_uppgifter(client,
+                                                             monkeypatch):
+    """Tom lista är tavlans «det som hör till lektionen», inte bladets hela
+    prov. _godkant_prov sätter uppgift 1 på «Kapitel 1, avsnitt 1.2
+    (s. 7–11)». Utan sidor i begäran väljer momentets ord den och ingen
+    annan (lesson_board.valj_provrader)."""
+    calls = _stub_generate(monkeypatch)
+    prov_id, gid, cid = _godkant_prov(
+        client, titel="Prov 1", datum="2026-10-20",
+        klass="TE27J", kurs="Matematik, nivå 2b")
+    r = client.post("/api/exams/generate", json={
+        "course_id": cid, "group_id": gid, "antal": 4, "typ": "gruppuppgift",
+        "infor_prov_id": prov_id, "infor_nummer": [],
+        "infor_moment": "Kapitel 1, avsnitt 1.2"})
+    handelser = _events(r)
+    assert calls[-1]["inforprov"]["titel"] == "Prov 1"
+    assert calls[-1]["infor_nummer"] == [1]
+    assert any("gruppuppgiften bygger på provets uppgifter 1."
+               in (e.get("msg") or "") for e in handelser)
+
+
+def test_gruppuppgift_utan_provets_uppgifter_skrivs_ur_boken(client,
+                                                            monkeypatch):
+    """Inget av provet på lektionen: inga block, loggen säger det, men
+    provets texter står kvar i undvik-listan och kopplingen på pappret."""
+    calls = _stub_generate(monkeypatch)
+    prov_id, gid, cid = _godkant_prov(
+        client, titel="Prov 1", datum="2026-10-20",
+        klass="TE27K", kurs="Matematik, nivå 2b")
+    r = client.post("/api/exams/generate", json={
+        "course_id": cid, "group_id": gid, "antal": 4, "typ": "gruppuppgift",
+        "infor_prov_id": prov_id, "infor_moment": "Geometri"})
+    handelser = _events(r)
+    assert calls[-1]["inforprov"] is None
+    assert _exam()["uppgifter"][0]["text"] in calls[-1]["tidigare"]
+    assert any("Gruppuppgiften skrivs ur boken" in (e.get("msg") or "")
+               for e in handelser)
+    svar = [e for e in handelser if e["type"] == "done"][0]["result"]
+    assert svar["exam"]["infor_prov"] == prov_id
+    # Kopieringsvakten räknar på gruppuppgiften också (stubben skriver av).
+    assert "kopia" in [f["kod"] for f in svar["efterkontroll"]]
     kvar = client.get(f"/api/exams/{svar['id']}").json()
     assert "kopia" in [f["kod"] for f in kvar["efterkontroll"]]

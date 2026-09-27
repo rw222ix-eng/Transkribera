@@ -327,6 +327,40 @@ def lektionens_delar(db_file: Path, body: dict) -> list[dict]:
     return delar if isinstance(delar, list) and len(delar) > 1 else []
 
 
+def _lektionens_provrader(db_file: Path, body: dict, rader: list[dict], *,
+                          moment: str = "",
+                          nummer: list[int] | None = None) -> list[dict]:
+    """Provets rader som hör till lektionen (lesson_board.valj_provrader),
+    med lektionens sidor ur kalenderns delar och bokvalet i begäran, och
+    rubrikerna som reserv när sidorna saknas. EN väg för tavlan och
+    gruppuppgiften, så att de två väljer samma uppgifter ur samma prov."""
+    delar = lektionens_delar(db_file, body)
+    sidor = [(int(d.get("fran") or 0), int(d.get("till") or d.get("fran") or 0))
+             for d in delar if isinstance(d, dict)]
+    bv = bok_val(body)
+    if bv:
+        sidor.append((bv[1], bv[2]))
+    rubriker = [moment] + [str(d.get("rubrik") or "") for d in delar
+                           if isinstance(d, dict)]
+    return lesson_board.valj_provrader(rader, nummer or [], sidor=sidor,
+                                       rubriker=rubriker)
+
+
+def lektionens_provnummer(db_file: Path, body: dict, exam: dict, *,
+                          moment: str = "") -> list[int]:
+    """Provets uppgiftsnummer som hör till lektionen, för gruppuppgiften inför
+    provet (routes_exam, Rickard 2026-09-27).
+
+    Tom `infor_nummer` betyder där samma sak som på tavlan: det som hör till
+    lektionen, inte hela provet. En gruppuppgift på fyra uppgifter om s. 45–48
+    ska inte öva provets statistikuppgift. Tom lista när inget hör till
+    lektionen, och då skrivs gruppuppgiften ur boken, som tavlan."""
+    rader = [{"nr": s["nr"], "delmoment": s["delmoment"]}
+             for s in exam_gen.provslots(exam or {})]
+    return [r["nr"] for r in _lektionens_provrader(db_file, body, rader,
+                                                   moment=moment)]
+
+
 def infor_prov_tavla(db_file: Path, body: dict, *, moment: str = "",
                      nummer=None) -> dict | None:
     """«Inför provet» för tavlan (lesson_board.build_infor_prov), eller None.
@@ -360,18 +394,10 @@ def infor_prov_tavla(db_file: Path, body: dict, *, moment: str = "",
               "sort": lesson_board.provsort(u)}
              for s, u in zip(exam_gen.provslots(exam), uppg)]
     rader = [r for r in rader if r["sort"]]
-    delar = lektionens_delar(db_file, body)
-    sidor = [(int(d.get("fran") or 0), int(d.get("till") or d.get("fran") or 0))
-             for d in delar if isinstance(d, dict)]
-    bv = bok_val(body)
-    if bv:
-        sidor.append((bv[1], bv[2]))
-    rubriker = [moment] + [str(d.get("rubrik") or "") for d in delar
-                           if isinstance(d, dict)]
-    valda = lesson_board.valj_provrader(
-        rader, exam_gen.nummerlista(nummer if nummer is not None
-                                    else body.get("infor_nummer")),
-        sidor=sidor, rubriker=rubriker)
+    valda = _lektionens_provrader(
+        db_file, body, rader, moment=moment,
+        nummer=exam_gen.nummerlista(nummer if nummer is not None
+                                    else body.get("infor_nummer")))
     titel = str((view or {}).get("titel") or exam.get("titel") or "")
     datum = str((view or {}).get("datum") or exam.get("datum") or "")
     return {"id": eid, "titel": titel, "datum": datum,

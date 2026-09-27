@@ -7060,8 +7060,8 @@ def _drillar_i_grammatiken(prompt: str) -> bool:
     som ska repareras eller skrivas om redan ifyllda fält och bäddas in som
     JSON (build_repair_prompt, build_refine_prompt, build_latexfix_prompt).
 
-    Ingen profilgren: bara arbetsbladet får «Inför provet»-blocket, och därmed
-    bara arbetsbladets prompter ordet."""
+    Ingen profilgren: bara arbetsbladet och gruppuppgiften (2026-09-27) får
+    «Inför provet»-blocket, och därmed bara deras prompter ordet."""
     return '"drillar"' in prompt
 
 
@@ -9683,8 +9683,13 @@ def _och(delar: list[str]) -> str:
     return ", ".join(delar[:-1]) + " och " + delar[-1]
 
 
-def _andra_namn_och_sammanhang(undvik: dict | None) -> str:
-    """Regeln om provets personer och sammanhang, eller tom sträng."""
+def _andra_namn_och_sammanhang(undvik: dict | None,
+                               profil: str = "arbetsblad") -> str:
+    """Regeln om provets personer och sammanhang, eller tom sträng.
+
+    `profil` väljer bara orden: gruppuppgiften (Rickard 2026-09-27) får
+    samma regel om sitt eget papper. Arbetsbladets mening är ordagrant den
+    gamla (kassetteregeln)."""
     namn = list((undvik or {}).get("namn") or [])
     saker = list((undvik or {}).get("sammanhang") or [])
     if not namn and not saker:
@@ -9695,11 +9700,13 @@ def _andra_namn_och_sammanhang(undvik: dict | None) -> str:
                    else f"Provet har personen {namn[0]}.")
     if saker:
         vad.append("Provets uppgifter handlar om " + ", ".join(saker) + ".")
+    pa, ovat = (("i gruppuppgiften", "arbetat med gruppuppgiften")
+                if profil == "gruppuppgift" else ("på bladet", "övat på bladet"))
     return (
         "ANDRA NAMN OCH ANDRA SAMMANHANG ÄN PROVET. " + " ".join(vad) + " "
-        "Inget av det får stå på bladet. Välj andra namn och andra "
+        f"Inget av det får stå {pa}. Välj andra namn och andra "
         "situationer. Samma sort av uppgift är meningen, men en elev som "
-        "övat på bladet ska inte känna igen provets personer och situationer "
+        f"{ovat} ska inte känna igen provets personer och situationer "
         "när hon får provet.\n")
 
 
@@ -9780,7 +9787,8 @@ INFOR_TEXT = (
 
 def build_infor_prov(slots: list[dict] | None, nummer: list[int] | None,
                      antal: int, undvik: dict | None = None,
-                     fordjupning: list[dict] | None = None) -> str:
+                     fordjupning: list[dict] | None = None, *,
+                     profil: str = "arbetsblad") -> str:
     """«Inför provet»-blocket, eller TOM STRÄNG.
 
     Tom när inget prov pekats ut, och det är kassetteregeln och inte en
@@ -9806,7 +9814,11 @@ def build_infor_prov(slots: list[dict] | None, nummer: list[int] | None,
     Sedan 2026-09-24 kväll står provuppgiftens DEL i raden (utan eller med
     räknare), och tre regler följer: räknaren följer delen (INFOR_RAKNARE),
     bilden bär aldrig matematiken (INFOR_BILD) och `fordjupning`, bokens
-    fördjupning inom provets sidor, övas inte."""
+    fördjupning inom provets sidor, övas inte.
+
+    `profil="gruppuppgift"` (Rickard 2026-09-27: «gruppuppgift, baserat på
+    provet») ger gruppuppgiftens block, se _infor_grupp. Alla andra värden
+    ger arbetsbladets, byte för byte som förut."""
     valda_nr = set(drillnummer(slots, nummer))
     valda = [s for s in (slots or []) if s["nr"] in valda_nr]
     if not valda:
@@ -9829,6 +9841,8 @@ def build_infor_prov(slots: list[dict] | None, nummer: list[int] | None,
             + "; ".join(f"{f['metod']} (s. {f['sidor']})"
                         for f in fordjupning)
             + ". Ingen uppgift på bladet får kräva det.\n")
+    if profil == "gruppuppgift":
+        return _infor_grupp(valda, rader, antal, undvik)
     # BLANDAT ELLER EN SAK. Samma block, två olika order, och skillnaden är
     # lärarens val i panelen: valde hon inga nummer ska bredden övas, valde hon
     # några ska just de nötas. Att skriva båda orderna i samma stycke och låta
@@ -9873,7 +9887,98 @@ def build_infor_prov(slots: list[dict] | None, nummer: list[int] | None,
         "du den tyngsta av dem.\n")
 
 
-def drilltackning(exam: dict, nummer: list[int] | None) -> list[dict]:
+# ── GRUPPUPPGIFTEN INFÖR PROVET (Rickard 2026-09-27) ─────────────────────
+# «Gruppuppgift, baserat på provet»: tavlor och papper byggs på provet i
+# första hand och på boken i andra. Samma grundregler som bladets block
+# (sorter och aldrig texter, andra namn och sammanhang, räknaren ur provets
+# del, bilden bär ingen matematik), men i gruppuppgiftens form: få uppgifter,
+# en stegring från ingången alla grupper klarar till den som utmanar de
+# starkaste, och deluppgifter som leder samtalet (build_prompt, grenen
+# gruppuppgift). Bladets KORT TEXT (INFOR_TEXT) står inte här med flit: den
+# säger att ett C- eller A-problem inte får delas i ledda steg, och
+# gruppuppgiftens ställning ÄR de stegen. Begripligheten har gruppuppgiften
+# redan (BEGRIPLIGHET_GRUPP och begriplighetsdomaren).
+INFOR_RAKNARE_GRUPP = (
+    "RÄKNAREN FÖLJER PROVETS DEL. En uppgift som övar en sort ur provets del "
+    "utan räknare ska gå att räkna utan räknare: heltal inom ±30, decimaltal "
+    "med en decimal, runda belopp (3 500 kr, 1 200 kWh, aldrig 4 668 kr), och "
+    "ett exakt svar. Välj svaret först och talen sedan.\n")
+INFOR_BILD_GRUPP = (INFOR_BILD
+                    .replace("PÅ BLADET", "I GRUPPUPPGIFTEN")
+                    .replace("inte bladet", "inte gruppuppgiften"))
+
+
+def _infor_grupp(valda: list[dict], rader: list[str], antal: int,
+                 undvik: dict | None) -> str:
+    """Gruppuppgiftens «Inför provet»-block (build_infor_prov, profil
+    gruppuppgift). `valda` och `rader` är desamma som bladets, räknade en
+    gång i build_infor_prov.
+
+    Fördjupningen ur provets ram går inte hit: ramen byggs bara för bladet
+    (routes_exam, `infor_ram`), och gruppuppgiften läser lektionens egna
+    sidor, som redan ligger före provet."""
+    if len(valda) > 1:
+        # Få uppgifter och en stegring: sorterna läggs i stegringens ordning,
+        # inte jämnt fördelade som på bladets tolv uppgifter.
+        uppdrag = (
+            f"FÖRDELA gruppuppgiftens {antal} uppgifter över sorterna ovan, en "
+            "sort per uppgift så långt de räcker, i gruppuppgiftens stegring: "
+            "den lättaste sorten först, den tyngsta sist. Är sorterna fler än "
+            f"{antal} väljer du de som bäst bär ett samtal i gruppen. Är de "
+            "färre övar flera uppgifter samma sort, och då stiger de i "
+            "svårighet.\n")
+    else:
+        uppdrag = (
+            f"ALLA gruppuppgiftens {antal} uppgifter ska öva sorten ovan, i "
+            "gruppuppgiftens stegring: den första är ingången varje grupp "
+            "klarar, den sista kräver lika mycket som provets uppgift.\n")
+    return (
+        "DEN HÄR GRUPPUPPGIFTEN ÖVAR INFÖR ETT PROV. Provet är redan skrivet, "
+        "eleverna har inte sett det, och de ska inte se det här heller. Nedan "
+        "står de av provets uppgifter som gruppuppgiften ska förbereda, som en "
+        "plan över SORTER, form för form, aldrig texten:\n"
+        + "\n".join(rader) + "\n"
+        # Provet först, boken i andra hand (Rickard 2026-09-27). Förebilden
+        # ur boken står kvar: relevansdomaren prövar den, och en uppgift som
+        # övar provets metod har en syskonuppgift på lektionens sidor.
+        "PROVET FÖRST, BOKEN I ANDRA HAND. Sorterna ovan bestämmer vad "
+        "uppgifterna övar. Förebilden ur boken pekar som vanligt på en av "
+        "bokens uppgifter med samma metod.\n"
+        "SAMMA SORT, ALDRIG SAMMA UPPGIFT. En uppgift i gruppuppgiften ska "
+        "pröva samma metod som sin sort ovan. Allt annat ska vara NYTT: andra "
+        "tal, ett annat sammanhang, en annan infallsvinkel. Skriv inte av "
+        "provet, och skriv inte provets uppgift med utbytta siffror. Då har "
+        "klassen fått provet i förväg.\n"
+        + _andra_namn_och_sammanhang(undvik, "gruppuppgift")
+        + uppdrag +
+        "DU FÅR GÖRA INGÅNGEN LÄTTARE. Ett förberedande steg före den svåra "
+        "frågan hör hemma i en gruppuppgift även när provets uppgift frågar "
+        "rakt ut, och det står som en egen deluppgift med egen fråga. Metoden "
+        "som ska övas får däremot aldrig bytas mot en enklare.\n"
+        + (INFOR_RAKNARE_GRUPP if any(s["del"] for s in valda) else "")
+        + INFOR_BILD_GRUPP +
+        # Samma stavning som bladets rad: orden \"drillar\" i citattecken
+        # tänder fältet i grammatiken (_drillar_i_grammatiken).
+        "MÄRK VARJE UPPGIFT med fältet \"drillar\": provets uppgiftsnummer ur "
+        "listan ovan, som ett heltal. Övar uppgiften två av sorterna skriver "
+        "du den tyngsta av dem.\n")
+
+
+def _drillkrav(valda: int, plats: int, profil: str) -> int:
+    """Hur många av de valda sorterna pappret måste öva.
+
+    Bladet: lika många som det har uppgifter (6dd3f2c, prov 88). Gruppuppgiften
+    har fyra uppgifter i en stegring där den första är en ingång, och kravet
+    «alla sorter» hade fällt den för att den inte kan vara ett blad
+    (Rickard 2026-09-27). Där räcker hälften av uppgifterna, avrundat uppåt:
+    två av fyra uppgifter på två olika av provets sorter."""
+    if profil == "gruppuppgift":
+        return min(valda, max(1, -(-plats // 2)))
+    return min(valda, plats)
+
+
+def drilltackning(exam: dict, nummer: list[int] | None,
+                  profil: str = "arbetsblad") -> list[dict]:
     """Blev varje vald sort faktiskt övad? Deterministiskt, noll modellanrop.
 
     Räknar uppgifternas egna `drillar` mot de nummer läraren valde. Ett fynd
@@ -9907,8 +10012,18 @@ def drilltackning(exam: dict, nummer: list[int] | None) -> list[dict]:
     # «så många valda sorter som bladet har uppgifter», inte «alla».
     plats = len(uppgifter)
     ovade = drillade & set(valda)
-    if len(ovade) >= min(len(valda), plats):
+    krav = _drillkrav(len(valda), plats, profil)
+    if len(ovade) >= krav:
         return []
+    # GRUPPUPPGIFTEN får ETT fynd som säger kravet (Rickard 2026-09-27): den
+    # ska bära provet, men den behöver inte öva varje sort.
+    if profil == "gruppuppgift":
+        return [_err(
+            "uppgifter", "drilltackning",
+            f"Gruppuppgiften har {plats} uppgifter men övar bara {len(ovade)} "
+            f"av provets sorter, och minst {krav} ska övas. Byt ut en uppgift "
+            "mot en som övar provets uppgift "
+            f"{', '.join(map(str, saknas))} och märk den med fältet drillar.")]
     if len(valda) > plats:
         dubbla = sorted({n for n in markta if markta.count(n) > 1 and n in valda})
         return [_err(
@@ -11671,7 +11786,10 @@ def _infor_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
     uppgifter genom `drillar`, och provet har redan dömts mot typerna.
     `doma=False` stänger av anropet, som för alla domare."""
     log = log_cb or (lambda _m: None)
-    tack = drilltackning(exam, nummer)
+    # Gruppuppgiften har ett eget krav och egna ord (_drillkrav), och `prov`
+    # är None för den: ovningsvakter är mätta på bladet.
+    tack = drilltackning(exam, nummer, profil)
+    pappret = "gruppuppgiften" if profil == "gruppuppgift" else "bladet"
     ovning = (ovningsvakter(exam, prov=prov, **_ramens_listor(ram))
               if prov else [])
     if prov and doma:
@@ -11685,14 +11803,15 @@ def _infor_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
         return {"exam": exam, "errors": errors + fel, "rounds": rounds_used}
     if tack:
         log(f"Inför provet: {len(tack)} av provets uppgifter saknar övning "
-            "på bladet, byter ut …")
+            f"{'i' if profil == 'gruppuppgift' else 'på'} {pappret}, "
+            "byter ut …")
     if ovning:
         log("Inför provet: " + ", ".join(sorted({f["code"] for f in ovning}))
             + f" på {len({f['path'] for f in ovning})} ställen, lagar …")
     kandidat = _llm_round(build_repair_prompt(exam, fel + errors, profil),
                           model, llm, antal, skeleton, koder, profil=profil,
                           log_cb=log_cb,
-                          etikett=f"Justerar bladet (runda {rounds_used + 1} "
+                          etikett=f"Justerar {pappret} (runda {rounds_used + 1} "
                                   f"av {max_rounds}) …")
     rounds_used += 1
     if kandidat is None:
@@ -12481,6 +12600,8 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
 
     `inforprov` är PROVET ARBETSBLADET ÖVAR INFÖR, som dokument och inte som
     id, samma regel som `referensprov`: den här filen läser aldrig basen.
+    Sedan 2026-09-27 också provet GRUPPUPPGIFTEN övar inför; då väljer
+    routes_exam numren ur lektionens sidor när läraren inte valt några.
     `infor_nummer` är de av provets uppgiftsnummer läraren valt att drilla,
     tom lista betyder «blandat», alltså hela provet. De två gör två saker som
     hör ihop: planen går in i prompten som SORTER (build_infor_prov, aldrig
@@ -12604,10 +12725,13 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     inforslots = provslots(inforprov) if inforprov else []
     # Provets personer och sammanhang (lärarens dom 2026-09-24) som namn och
     # enstaka ord. Bladet ska ha andra; vakten är routes_exam._lanfynd.
+    # GRUPPUPPGIFTEN får samma block i sin egen form (Rickard 2026-09-27),
+    # med sitt eget täckningskrav i _infor_pass. Provets vakter (`prov=` i
+    # passet, ramen, räknarraden) är bladets och stannar där.
     inforblock = build_infor_prov(
         inforslots, infor_nummer, antal,
         provets_namn_och_sammanhang(inforprov) if inforprov else None,
-        fordjupning=(ram or {}).get("fordjupning"))
+        fordjupning=(ram or {}).get("fordjupning"), profil=profil)
     drillade = drillnummer(inforslots, infor_nummer) if inforblock else []
     prompt = build_prompt(kurs, klass, punkter, antal=antal, tid_min=tid_min,
                           delar=delar, memory=memory, teman=teman,

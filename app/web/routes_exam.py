@@ -625,7 +625,7 @@ def _kopiefynd(exam: dict, infor: dict | None) -> list[dict]:
         sedda.add(nr)
         ut.append(_fynd(
             "kopia", f"Uppgift {nr} är provets egen uppgift med nya tal: "
-            f"«{f.get('text') or ''}». Bladet delas ut före provdagen, så "
+            f"«{f.get('text') or ''}». Pappret delas ut före provdagen, så "
             "uppgiften får inte stå här.", nr))
     return ut
 
@@ -1186,7 +1186,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # Bladet bär sin provkoppling själv sedan 2026-09-24 kväll
         # (ExamDoc.infor_prov): efterkontrollen efter ett omskrivningsvarv
         # och ett GET räknar då kopiorna och provets namn också.
-        if not infor_prov_id and (view.get("typ") or "") == "arbetsblad":
+        # Gruppuppgiften bär den på samma sätt sedan 2026-09-27.
+        if not infor_prov_id and (view.get("typ") or "") in (
+                "arbetsblad", "gruppuppgift"):
             infor_prov_id = (view.get("exam") or {}).get("infor_prov")
         fynd = efterkontroll(view, doc, summor, bok=bok, sidor=boksidor,
                              base=base, infor=_inforunderlag(infor_prov_id),
@@ -1709,9 +1711,16 @@ def create_router(base: Path, arbiter) -> APIRouter:
         #
         # Skickas fälten inte alls är prompten, grammatiken och rundorna byte
         # för byte de som gick i väg förut (kassetteregeln).
-        infor_prov_id = body.get("infor_prov_id") if typ == "arbetsblad" else None
+        #
+        # OCH GRUPPUPPGIFTEN (Rickard 2026-09-27: «gruppuppgift, baserat på
+        # provet»). Samma två fält, men tom lista betyder där det tavlan
+        # menar: provets uppgifter på lektionens sidor, inte hela provet (se
+        # nedan, efter uppslagningen).
+        infor_typ = typ in ("arbetsblad", "gruppuppgift")
+        infor_prov_id = body.get("infor_prov_id") if infor_typ else None
         infor_nummer = (exam_gen.nummerlista(body.get("infor_nummer"))
-                        if typ == "arbetsblad" else [])
+                        if infor_typ else [])
+        pappret = "gruppuppgiften" if typ == "gruppuppgift" else "bladet"
         # Felmeningen från uppslagningen nedan, tom när allt stämmer. Den reses
         # efter anslutningsblocket, se där.
         infor_fel = ""
@@ -1861,12 +1870,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     if rad is None or not rad.get("exam"):
                         infor_fel = "provet finns inte längre"
                     elif (rad.get("typ") or "prov") != "prov":
-                        infor_fel = ("bladet kan bara förbereda inför ett "
+                        infor_fel = (f"{pappret} kan bara förbereda inför ett "
                                      "prov, inte inför ett annat papper")
                     elif str(rad.get("status") or "") != "godkänt":
                         infor_fel = ("provet är inte godkänt ännu. Godkänn "
-                                     "det först, annars övar bladet inför ett "
-                                     "papper som kan ändras")
+                                     f"det först, annars övar {pappret} inför "
+                                     "ett papper som kan ändras")
                     else:
                         inforprov = rad["exam"]
                         infor_datum = str(rad.get("datum") or "")
@@ -1885,6 +1894,36 @@ def create_router(base: Path, arbiter) -> APIRouter:
         if infor_fel:
             return JSONResponse({"error": f"Inför provet: {infor_fel}."},
                                 status_code=400)
+        # GRUPPUPPGIFTEN UTAN VALDA NUMMER (Rickard 2026-09-27). Tom lista är
+        # tavlans «det som hör till lektionen» och inte bladets «blandat»: en
+        # gruppuppgift på fyra uppgifter om lektionens sidor ska öva provets
+        # uppgifter på de sidorna. Samma urval som tavlan
+        # (routes_planning.lektionens_provnummer). Hör inget till lektionen
+        # skrivs gruppuppgiften ur boken, UTAN block, och loggen säger det:
+        # hela provet på en lektion om något annat vore fel lektion.
+        #
+        # `inforprov_block` är provet som går till generatorn. `inforprov`
+        # står kvar i båda fallen: undvik-listan och kopieringsvakten ska
+        # skydda provet också när gruppuppgiften skrivs ur boken, för den
+        # delas ut före provdagen likafullt.
+        inforprov_block = inforprov
+        infor_logg = ""
+        if inforprov and typ == "gruppuppgift":
+            titel = str(inforprov.get("titel") or "")
+            if not infor_nummer:
+                infor_nummer = routes_planning.lektionens_provnummer(
+                    db_file, body, inforprov,
+                    moment=str(body.get("infor_moment")
+                               or body.get("moment") or "").strip())
+                if not infor_nummer:
+                    inforprov_block = None
+                    infor_logg = (f"Provet «{titel}» har ingen uppgift på "
+                                  "lektionens sidor. Gruppuppgiften skrivs ur "
+                                  "boken.")
+            if inforprov_block is not None:
+                infor_logg = (f"Inför provet «{titel}»: gruppuppgiften bygger "
+                              "på provets uppgifter "
+                              f"{', '.join(map(str, infor_nummer))}.")
         # «Följ den här förlagan» och «undvik det du gjort förut» är motsatta
         # order. Referensläget löser det genom att släppa undvik-listan —
         # förlagan gör detsamma, av samma skäl: läraren har PEKAT på ett papper.
@@ -1917,6 +1956,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
 
         def job(emit):
             steg = Stege(emit, _STEG_SKRIV)
+            # Gruppuppgiftens urval ur provet, samma rad som tavlans jobb
+            # skriver först (routes_planning, «Inför provet …»).
+            if infor_logg:
+                emit({"type": "log", "msg": infor_logg})
             try:
                 if arbiter.ensure_llm() is None:
                     raise RuntimeError("Språkmodellen är inte installerad.")
@@ -2089,7 +2132,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     # av samma skäl som raden ovan. Bara FORMEN går in i
                     # prompten (exam_gen.build_infor_prov); texterna som står
                     # här går bara till variationsvakten.
-                    inforprov=inforprov, infor_nummer=infor_nummer,
+                    # `inforprov_block`: None när gruppuppgiftens lektion
+                    # inte har något av provet (se ovan).
+                    inforprov=inforprov_block, infor_nummer=infor_nummer,
                     infor_ram=infor_ram,
                     # ── TVÅ SPÅR, INGEN PROCENT PÅ NÅGOT AV DEM ───────
                     # Det stod länge bara EN kanal här: loggraden. Generatorn

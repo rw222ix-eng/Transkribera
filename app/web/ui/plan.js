@@ -485,6 +485,16 @@
          är Genomgång, och servern läser ett gammalt «skriftligt» som den
          (exam_spec.redovisningsform). */
       { id: 'redovisning', namn: 'Redovisning', typ: 'seg', val: ['Genomgång', 'Muntligt', 'Poster'] },
+      /* ── INFÖR PROVET, I GRUPPUPPGIFTEN ──────────────────
+         Rickard 2026-09-27: «gruppuppgift, baserat på provet». Tavlor och
+         papper byggs på provet i första hand och på boken i andra. Samma två
+         rader som bladets och tavlans. Tom lista betyder tavlans sak och inte
+         bladets: servern väljer provets uppgifter på lektionens sidor
+         (routes_planning.lektionens_provnummer), och brickorna smalnar av det.
+         Inget arv: gruppuppgiftens sidor är lektionens, som tavlans. */
+      { id: 'inforProv', namn: 'Inför provet', typ: 'inforprov' },
+      { id: 'inforNummer', namn: 'Vad ur provet?', typ: 'infortyper',
+        bara: s => !!s.inforProv },
       /* Samma kryss som arbetsbladet. Gruppuppgiften saknade det utan skäl:
          renderaren skickade redan `!!i.illustration` för båda typerna, men
          gruppuppgiftens upplägg hade inget fält att skicka, så bilden var
@@ -573,7 +583,7 @@
                   klassblad: true, elever: [], syfte: 'Stötta',
                   inforProv: null, inforNummer: [] },
     Gruppuppgift: { antal: 4, grupp: 3, langd: 60, redovisning: 'Genomgång', illustration: true,
-                    facit: 'Separat facit' },
+                    facit: 'Separat facit', inforProv: null, inforNummer: [] },
     Anteckningar: { onskemal: '', lektioner: [] }
   };
   /* Utgår pappret från boken är lösningsförslaget till BOKENS uppgifter något
@@ -994,7 +1004,8 @@
     });
   }
   /* ── INFÖR PROVET, PER TYP ────────────────────────────
-     Arbetsbladet och tavlan har raden, och det här är allt som skiljer dem.
+     Arbetsbladet, tavlan och gruppuppgiften (2026-09-27) har raden, och det
+     här är allt som skiljer dem.
 
      `dagar` är förvalets fönster: närmaste kommande provet väljs bara om det
      ligger inom så många dagar. Bladet tar tre veckor, för längre bort än så
@@ -1032,6 +1043,19 @@
       alla: 'Det som hör till lektionen',
       allaNot: 'Provets uppgifter på lektionens sidor styr tavlans exempel.',
       valdaNot: n => `${n} av provets uppgifter styr tavlans exempel, samma sorter med nya tal.`,
+    },
+    /* Gruppuppgiften (Rickard 2026-09-27) tar tavlans fönster och tavlans
+       nollbricka: den görs på en lektion i kapitlet, och tom lista är det som
+       hör till lektionen. */
+    Gruppuppgift: {
+      dagar: 42, arv: false,
+      tomt: 'Klassens godkända prov som ligger framåt i tiden. Gruppuppgiften övar provets sorter, med andra tal och sammanhang.',
+      fot: 'Gruppuppgiften övar provets sorter, med andra tal och sammanhang.',
+      ingaProv: 'Inga godkända prov framåt i tiden för klassen. Skriv provet först, så kan gruppuppgiften förbereda det.',
+      utan: 'Skriv gruppuppgiften utan något prov',
+      alla: 'Det som hör till lektionen',
+      allaNot: 'Provets uppgifter på lektionens sidor styr gruppuppgiften.',
+      valdaNot: n => `${n} av provets uppgifter styr gruppuppgiften, samma sorter med nya tal.`,
     },
   };
   /* Läget per typ: provets uppgiftstyper som raden ritar brickor ur, meningen
@@ -3000,7 +3024,8 @@
            förhandsvisningens underrad läser den, och ett arbetsblad som öppnas
            i november ska kunna säga vilket prov det tränade inför — provet
            självt kan då vara skrivet, rättat och bortglömt.
-           Bara typerna med raden (INFOR: arbetsbladet och tavlan), och bara
+           Bara typerna med raden (INFOR: arbetsbladet, tavlan och
+           gruppuppgiften), och bara
            den typens eget val: ett fält från en tidigare typ i samma session
            hör inte hemma här (se `fokus` ovan). `nummer` är det lärarens
            brickor valde, tomt = hela provet på bladet och lektionens del av
@@ -3698,6 +3723,19 @@
       typ: 'gruppuppgift',
       /* Samma kryss som arbetsbladets, se JOBB.Arbetsblad. */
       illustration: !!i0.illustration,
+      /* INFÖR PROVET (Rickard 2026-09-27), samma regel som bladets: fälten
+         finns bara när ett prov är valt, annars är kroppen byte för byte den
+         som gick före raden. Tom `infor_nummer` = servern väljer provets
+         uppgifter på lektionens sidor, som för tavlan. Momentet och
+         starttiden går med för det urvalet (kalenderns delar, orden när
+         sidorna saknas) och heter `infor_moment` för att inte röra
+         `moment`, som styr undvik-listan. */
+      ...(i0.inforProv && i0.inforProv.id ? {
+        infor_prov_id: i0.inforProv.id,
+        infor_nummer: (i0.inforNummer || []).slice(),
+        infor_moment: moment.value.trim(),
+        starttid: String(utkast.tid || utkast.lektionstid || '').split('–')[0].trim(),
+      } : {}),
       ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(), ...yrket(), ...u,
       grupp: {
         elever: Number(i0.grupp) || 3,
