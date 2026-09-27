@@ -52,9 +52,10 @@ const strom = h => h.map(x => `data: ${JSON.stringify(x)}\n\n`).join("");
  *
  * `grind` är en funktion som får varvets nummer och lämnar tillbaka ett löfte
  * omskrivningen väntar på — så hålls varv ett «pågående» medan testet skriver
- * nästa mening.
+ * nästa mening. `svar` får varvets nummer och kan lämna tillbaka ett eget
+ * svar till route.fulfill (ett 409, en annan diff); null ger standardsvaret.
  */
-async function fejka(page, { grind = null } = {}) {
+async function fejka(page, { grind = null, svar = null } = {}) {
   const anrop = [];
   let version = 100, varv = 0;
   const json = (route, kropp) => route.fulfill({
@@ -75,6 +76,8 @@ async function fejka(page, { grind = null } = {}) {
       const n = ++varv;
       anrop.push({ vag, kropp });
       if (grind) await grind(n);
+      const eget = svar && svar(n, ++version);
+      if (eget) return route.fulfill(eget);
       return route.fulfill({ status: 200, contentType: "text/event-stream",
         body: strom([{ type: "done", result: {
           id: 9, exam: omskrivet(n), typ: "prov", status: "utkast", errors: [],
@@ -424,3 +427,83 @@ test("utan server fungerar kön ändå — prototypens takt, i ordning",
       .toHaveText(["Först detta", "Sedan detta"]);
     expect(natanrop).toEqual([]);
   });
+
+// ── NEJ OCH ÄRLIG DIFF (söndagsanalysen 2026-09-27, förslag 3 och 4) ────────
+
+const nej = (error, kod) => ({ status: 409, contentType: "application/json",
+                               body: JSON.stringify({ error, kod }) });
+
+test("ett godkänt papper säger nej, och meningen ligger kvar i rutan",
+  async ({ page }) => {
+    /* Rutan tömdes vid avsändningen och ett 409 kostade läraren meningen.
+       Nu går den tillbaka med rutan hon pekat ut, serverns mening står i
+       tråden, och varvet räknas inte som en ändring. */
+    const MENING = "Pappret är godkänt och låst. Tryck «Fortsätt ändra» först, "
+      + "då blir det ett utkast igen.";
+    const anrop = await fejka(page, { svar: () => nej(MENING, "godkant") });
+    await page.goto("/");
+    await hydrerad(page);
+    await skrivProv(page);
+    await oppnaCanvas(page);
+
+    await valj(page, "uppg2");
+    await be(page, "Gör uppgift 2 kortare");
+    await expect.poll(() => refines(anrop).length, { timeout: 20_000 }).toBe(1);
+
+    const varv = page.locator('#g-lista .gvarv[data-avvisad="godkant"]');
+    await expect(varv).toHaveCount(1, { timeout: 20_000 });
+    await expect(varv.locator(".gsvar")).toContainText("Fortsätt ändra");
+    await expect(page.locator("#g-falt")).toHaveValue("Gör uppgift 2 kortare");
+    await expect(chips(page).locator(".gmaltext")).toHaveText(["Uppgift 2"]);
+    await expect(page.locator("#g-antal")).toHaveText("Inga ändringar än");
+    await expect(page.locator('#granskaskal .gpin[data-id="1"]')).toHaveCount(0);
+  });
+
+test("ett varv som redan pågår säger upptaget, och meningen ligger kvar",
+  async ({ page }) => {
+    const anrop = await fejka(page, { svar: () => nej(
+      "Ett varv pågår redan på pappret. Vänta tills det är klart och skicka "
+      + "sedan igen.", "upptaget") });
+    await page.goto("/");
+    await hydrerad(page);
+    await skrivProv(page);
+    await oppnaCanvas(page);
+
+    await be(page, "Byt sammanhang i uppgift 3");
+    await expect.poll(() => refines(anrop).length, { timeout: 20_000 }).toBe(1);
+    const varv = page.locator('#g-lista .gvarv[data-avvisad="upptaget"]');
+    await expect(varv.locator(".gsvar")).toContainText("pågår redan",
+                                                      { timeout: 20_000 });
+    await expect(page.locator("#g-falt")).toHaveValue("Byt sammanhang i uppgift 3");
+  });
+
+test("tråden visar bara det servern säger att varvet ändrade", async ({ page }) => {
+  /* Skärmen ändrar sig också där appens egna pass skrev (räknarmärket på ett
+     äldre blad), men det är serverns `andrade` som avgör vad som står som
+     ändrat: kortet, blinken och före/efter-paren. */
+  const anrop = await fejka(page, { svar: (n, version) => ({
+    status: 200, contentType: "text/event-stream",
+    body: strom([{ type: "done", result: {
+      id: 9, typ: "prov", status: "utkast", errors: [], rounds: 1,
+      exam: { ...FORSTA, uppgifter: FORSTA.uppgifter.map((u, i) =>
+        i === 0 ? { ...u, text: `Utan räknare. ${u.text}` }
+        : i === 3 ? { ...u, text: "Takstolarna står tätare." } : u) },
+      andrade: ["uppg4"], current_version: version } }]) }) });
+  await page.goto("/");
+  await hydrerad(page);
+  await skrivProv(page);
+  await oppnaCanvas(page);
+
+  await valj(page, "uppg4");
+  await be(page, "Ändra BARA uppgift 4");
+  await expect.poll(() => refines(anrop).length, { timeout: 20_000 }).toBe(1);
+
+  const varv = page.locator('#g-lista .gvarv[data-id="1"]');
+  await expect(varv.locator(".gandradehuv")).toHaveText("1 del ändrades",
+                                                        { timeout: 20_000 });
+  await expect(varv.locator(".gdiff p[data-el]").first())
+    .toHaveAttribute("data-el", "uppg4", { timeout: 20_000 });
+  expect(await varv.locator(".gdiff p[data-el]").evaluateAll(
+    ps => ps.map(p => p.dataset.el))).toEqual(["uppg4"]);
+  await expect(varv.locator(".gdifford")).toHaveCount(0);
+});

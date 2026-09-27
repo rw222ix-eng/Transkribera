@@ -809,12 +809,21 @@
     }
     varv.appendChild(d);
   }
-  function vantaDiff(varv, fore, n, ark) {
+  function vantaDiff(varv, fore, n, ark, sagt) {
     /* Ögonblicksbilden togs på ETT ark. Bytte läraren flik medan varvet gick
        hade «före» varit provets rutor och «efter» facitets — en diff som visar
        två olika papper och kallar skillnaden en ändring. Då är det bättre att
        inte visa någon diff alls. */
     if (arkIndex() !== (ark || 0)) return;
+    /* SERVERNS LISTA AVGÖR. Skärmen ändrar sig också där appens egna pass
+       skrev (räknarmärket först i varje uppgift på ett äldre blad), och en
+       diff av skärmen visade då elva par för ett varv på uppgift 7. Säger
+       servern vad VARVET ändrade (`andrade`, städat mot städat i
+       routes_exam) står bara de rutorna, och deras barn, i diffen. Tom lista
+       är ett svar: då visas ingen diff. Rickard 2026-09-27: «det är
+       fortfarande jätteotydligt vad man har ändrat». */
+    if (sagt && !sagt.length) return;
+    const varvets = id => !sagt || sagt.some(s => id === s || id.startsWith(s + '.'));
     const efter = ogonblick();
     /* Ett element som HADE text och nu är tomt är nästan alltid en halvritad
        tavla, inte en ändring: motorn tömmer sin värd och ritar om, och en
@@ -823,12 +832,12 @@
        Vänta i stället ut ritningen; är elementet borta på riktigt försvinner
        också dess data-el, och då står det inte kvar i `efter` alls. */
     const andrade = Object.keys(efter).filter(id =>
-      fore[id] !== undefined
+      varvets(id) && fore[id] !== undefined
       && (fore[id] || '').trim() !== (efter[id] || '').trim()
       && !((fore[id] || '').trim() && !(efter[id] || '').trim()));
     if (andrade.length) return ritaDiff(varv, fore, efter, andrade, ark);
     if ((n || 0) > 40) return;
-    requestAnimationFrame(() => vantaDiff(varv, fore, (n || 0) + 1, ark));
+    requestAnimationFrame(() => vantaDiff(varv, fore, (n || 0) + 1, ark, sagt));
   }
 
   /* ── Underlaget som kontext ─────────────────────────
@@ -1222,6 +1231,31 @@
     f.setSelectionRange(f.value.length, f.value.length);
   }
 
+  /* ── ETT NEJ ÄR INTE ETT FEL ───────────────────────
+     Servern svarar 409 med `kod` när varvet aldrig blev av (routes_exam
+     refine): «godkant», pappret är låst tills läraren tryckt «Fortsätt
+     ändra», och «upptaget», ett annat varv skriver redan om det. Rutan
+     tömdes vid avsändningen och nejet kostade henne meningen; 24/9 gick
+     samma mening om blad 133 nio gånger på det viset (söndagsanalysen
+     2026-09-27, förslag 4). Rickard 2026-09-27: «det kan vi väl åtgärda».
+
+     Varvet räknas inte som en ändring och dess nålar tas bort. Meningen och
+     rutorna går tillbaka i skrivrutan, men bara om den är tom: har hon hunnit
+     skriva något nytt är det hennes. Serverns mening står kvar i varvets
+     bubbla (fraga.js felade), och raden bär `data-avvisad` med koden. */
+  const AVVISAT = ['godkant', 'upptaget'];
+  function lamnaTillbaka(post, onskan, varv, kod) {
+    kommentarer = kommentarer.filter(k => k !== post);
+    $$(`.gpin[data-id="${post.id}"]`, plan).forEach(p => p.remove());
+    varv.setAttribute('data-avvisad', kod);
+    $('#g-antal').textContent = !kommentarer.length ? 'Inga ändringar än'
+      : kommentarer.length === 1 ? '1 ändring' : `${kommentarer.length} ändringar`;
+    const f = $('#g-falt');
+    if (!f.value.trim() && !malen.length) {
+      aterta({ text: post.text, ark: post.ark, mal: onskan.mal || [] });
+    }
+  }
+
   /* ── AVFYRNING ─────────────────────────────────────
      Här läses målen OM ur pappret. Posten kan ha legat i kö medan ett annat
      varv skrev om dokumentet, och då är texten läraren såg när hon skrev
@@ -1438,7 +1472,7 @@
         ritaLagaFynd(varv, post, res);
         armeraBlink(sagt, post.ark);
         if (host && host.onAndra) host.onAndra(post.text, post.namn, post.elen, res);
-        vantaDiff(varv, fore, 0, foreArk);
+        vantaDiff(varv, fore, 0, foreArk, sagt);
         (window.rullaLada || ((b, y) => { b.scrollTop = y; }))(lista, lista.scrollHeight);
         fokusera(post.id);
         naste(fore, 0);
@@ -1448,7 +1482,11 @@
          det första — och kön ska rulla vidare, för nästa önskemål kan mycket
          väl vara det som går igenom. Avbryt-knappen på det AKTIVA varvet rör
          bara det varvet; kön står kvar (kryssen tar posterna en och en). */
-      efterFel: () => { varvetOver(); naste(null, 0); },
+      efterFel: e => {
+        varvetOver();
+        if (e && AVVISAT.includes(e.kod)) lamnaTillbaka(post, onskan, varv, e.kod);
+        naste(null, 0);
+      },
       efterStopp: () => { varvetOver(); naste(null, 0); }
     });
     satSkickar(true);

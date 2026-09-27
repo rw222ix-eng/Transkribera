@@ -226,6 +226,78 @@ def test_refine_som_inte_andrade_nagot_marker_ingenting(client, monkeypatch):
     assert res["andrade"] == []
 
 
+def _onsken(client, exam_id) -> list[str]:
+    """Spårets önskemål för pappret, i ordning (app/spar.py)."""
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    try:
+        return [json.loads(r[0])["message"] for r in conn.execute(
+            "SELECT detalj FROM spar WHERE art = 'onske' AND dok_id = ? "
+            "ORDER BY id", (str(exam_id),)).fetchall()]
+    finally:
+        conn.close()
+
+
+def test_riktat_varv_pa_aldre_blad_marker_bara_sin_uppgift(client, monkeypatch):
+    """STÄDAT MOT STÄDAT (söndagsanalysen 2026-09-27, förslag 3).
+
+    «Ändra BARA uppgift 7» på blad 93 märkte elva rutor 23/9: varvets svar går
+    genom ovningspappret_stadat (räknarmärket först i varje uppgift, bandet
+    kapat), och bladet var skrivet före de reglerna. Diffen mot det råa
+    originalet skyllde städningen på varvet. Här är originalet ostädat på
+    samma sätt (stubben för genereringen kör inga pass), och varvet rör bara
+    uppgift 2, som den riktiga refine_exam gör: ändringen, sedan passen."""
+    from app import dokumentdiff
+    result, _ = _make_exam(client, monkeypatch, typ="arbetsblad", delar=False)
+    original = client.get(f"/api/exams/{result['id']}").json()["exam"]
+
+    def fake_refine(exam, message, *, profil="prov", **_kw):
+        ny = copy.deepcopy(exam)
+        ny["uppgifter"][1]["text"] = "Bestäm nollställena till $g(x) = x^2 - 4$."
+        exam_gen.ovningspappret_stadat(ny, profil)
+        return {"exam": ny, "errors": [], "rounds": 1}
+    monkeypatch.setattr(exam_gen, "refine_exam", fake_refine)
+
+    res = _done(client.post(f"/api/exams/{result['id']}/refine",
+                            json={"message": "Ändra BARA uppgift 2", "nummer": 2}))
+    assert res["andrade"] == ["uppg2"]
+    # Och fällan finns på riktigt: den råa diffen hade märkt hela bladet.
+    raa = dokumentdiff.andrade_element("arbetsblad", original, res["exam"])
+    assert len(raa) > 1 and "uppg1" in raa
+    # Spåret får samma ärliga lista som klienten.
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    try:
+        utfall = conn.execute(
+            "SELECT detalj FROM spar WHERE art = 'utfall' AND dok_id = ? "
+            "ORDER BY id DESC", (str(result["id"]),)).fetchone()
+    finally:
+        conn.close()
+    assert json.loads(utfall[0])["andrade"] == ["uppg2"]
+
+
+def test_refine_over_taket_ger_upptaget_och_inget_onskemal(client, monkeypatch):
+    """Semaforens nej går över av sig självt: `kod` «upptaget». Och varvet
+    blev aldrig av, så det står inte som önskemål i spåret."""
+    result, _ = _make_exam(client, monkeypatch)
+    monkeypatch.setattr(client.app.state.arbiter, "try_acquire_llm",
+                        lambda: None)
+    r = client.post(f"/api/exams/{result['id']}/refine",
+                    json={"message": "gör den kortare"})
+    assert r.status_code == 409 and r.json()["kod"] == "upptaget"
+    assert _onsken(client, result["id"]) == []
+
+
+def test_kastat_varv_pa_aldre_blad_marker_ingenting(client, monkeypatch):
+    """Ett varv som inte sparade något lämnar `view` orört, och då får det
+    städade originalet inte jämföras mot det: ingenting ändrades."""
+    result, _ = _make_exam(client, monkeypatch, typ="arbetsblad", delar=False)
+    monkeypatch.setattr(exam_gen, "refine_exam",
+                        lambda exam, *a, **k: {"exam": exam, "errors": [],
+                                               "rounds": 1})
+    res = _done(client.post(f"/api/exams/{result['id']}/refine",
+                            json={"message": "gör den svårare"}))
+    assert res["andrade"] == []
+
+
 def test_riktad_omskrivning_slapper_bara_igenom_malet(client, monkeypatch):
     """Hela vägen genom rutten, med den RIKTIGA sammanfogningen: modellen
     skriver om alla uppgifter, servern släpper igenom en. Då blir `andrade`
@@ -1413,6 +1485,11 @@ def test_refine_pa_godkant_papper_ger_409(client, monkeypatch):
                     json={"message": "gör den kortare"})
     assert r.status_code == 409
     assert "låst" in r.json()["error"] and "Fortsätt ändra" in r.json()["error"]
+    # Koden skiljer det här nejet från «upptaget»: det går aldrig över av sig
+    # självt, och ett skript som väntar på det väntar förgäves (24/9).
+    assert r.json()["kod"] == "godkant"
+    # Och det blev inget önskemål i spåret: varvet kom aldrig till modellen.
+    assert _onsken(client, result["id"]) == []
     # Och ingen ny version smög in: pekaren står kvar på det som trycktes.
     assert len(_versioner(client, result["id"])) == 1
     assert client.get(f"/api/exams/{result['id']}/pdf").status_code == 200
@@ -1529,10 +1606,13 @@ def test_tva_varv_pa_samma_papper_ger_409(client, monkeypatch):
         andra = client.post(f"/api/exams/{result['id']}/refine",
                             json={"message": "gör den svårare"})
         assert andra.status_code == 409
-        assert "skrivs redan om" in andra.json()["error"]
+        assert "pågår redan" in andra.json()["error"]
+        assert andra.json()["kod"] == "upptaget"
     finally:
         slapp.set()
         t.join(20)
+    # Det avvisade varvet står inte i spåret, bara det som faktiskt gick.
+    assert _onsken(client, result["id"]) == ["gör den kortare"]
     assert _done(svar["forsta"])["exam"]["uppgifter"][0]["text"] \
         == "Det första varvets text."
     # Låset släpps när varvet landat — nästa ändring går igenom.

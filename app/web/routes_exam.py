@@ -16,6 +16,7 @@ webbläsaren); servern exponerar bara GET /tex.
 """
 from __future__ import annotations
 
+import copy
 import itertools
 import json
 import logging
@@ -68,7 +69,10 @@ _STEG_GODKANN = [
 
 # Molnjobben köar inte bakom kortet längre (se gpu_arbiter): de delar en
 # semafor med tak, och beskedet över taket säger vad som faktiskt pågår.
-_LLM_BUSY = {"error": gpu_arbiter.LLM_UPPTAGET}
+# `kod` skiljer ett nej som går över («upptaget») från ett som inte gör det
+# («godkant», se refine): 24/9 väntade ett skript i 47 minuter på ett godkänt
+# papper, för 409 var 409 (söndagsanalysen 2026-09-27, förslag 4).
+_LLM_BUSY = {"error": gpu_arbiter.LLM_UPPTAGET, "kod": "upptaget"}
 
 
 def _safe_component(raw: str, fallback: str) -> str:
@@ -2218,6 +2222,26 @@ def create_router(base: Path, arbiter) -> APIRouter:
 
     # -------------------------------------------------------------- refine --
 
+    def _stadat_som_varvet(exam: dict | None, typ: str,
+                           infor: dict | None) -> dict | None:
+        """En KOPIA av originalet genom samma deterministiska pass som varvets
+        svar går igenom, i samma ordning: räknarraden ur provet
+        (exam_gen.refine_exam), övningspapprets band och räknarmärken
+        (ovningspappret_stadat) och plåtmatchningen (i jobbet nedan). Diffen
+        jämför sedan städat mot städat, och det appens regler ändrade på ett
+        äldre papper räknas inte som varvets ändring.
+
+        Originalet rörs aldrig: det är lärarens version i basen, och ett varv
+        som kastas ska lämna skärmen som den var."""
+        if not isinstance(exam, dict):
+            return exam
+        ren = copy.deepcopy(exam)
+        if infor and typ == "arbetsblad":
+            exam_gen.satt_raknarrad_ur_provet(ren, infor)
+        exam_gen.ovningspappret_stadat(ren, typ)
+        platar.matcha_exam(ren, base=base)
+        return ren
+
     @router.post("/api/exams/{exam_id:int}/refine")
     async def refine(exam_id: Id64, req: Request):
         body = await _kropp(req)
@@ -2256,11 +2280,16 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # provet» om ett prov som stod utskrivet på skärmen. Frågan ställs FÖRE
         # `_peka_pa_versionen`: att flytta pekaren på ett godkänt prov är precis
         # det som gör skadan, och en vakt som gör den först är ingen vakt.
+        #
+        # `kod` säger VILKET nej det är. «godkant» går aldrig över av sig
+        # självt, «upptaget» gör det. Canvasen lägger tillbaka meningen i rutan
+        # och visar meningen nedan; skripten slutar vänta (tools/jobb_starta).
+        # Rickard 2026-09-27 om 409: «det kan vi väl åtgärda».
         if _kolumn(exam_id, "status") == "godkänt":
             return JSONResponse(
                 {"error": "Pappret är godkänt och låst. Tryck «Fortsätt ändra» "
-                          "i förhandsvisningen om det ska skrivas om — då "
-                          "läggs det tillbaka som utkast."},
+                          "först, då blir det ett utkast igen.",
+                 "kod": "godkant"},
                 status_code=409)
         # Skrivs om GÖR det varv läraren ser, inte det senaste som skrevs. Utan
         # den här raden byggde ett önskemål efter en ångring vidare på just det
@@ -2289,15 +2318,6 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # svaret ska sparas har ett annat varv hunnit före (se vakten i jobbet).
         basversion = view.get("current_version")
 
-        # Lärarens egen mening + målet hon pekade på — den enda platsen där
-        # hennes ord passerar appen utan att annars sparas (app/spar.py).
-        # Utfallet (vad varvet ändrade) loggas när jobbet är klart, nedan.
-        spar.logga(db_file, "onske", doktyp=view.get("typ") or "prov",
-                   dok_id=exam_id,
-                   detalj={"message": message, "nummer": nummer,
-                           "mal": (mal or {}).get("namn"),
-                           "malen": [m.get("namn") for m in (malen or [])]})
-
         # Två varv på samma papper köar inte — det andra får ett ärligt nej med
         # en gång. En kö hade betytt att läraren står och väntar på en runda hon
         # redan glömt att hon startade, och att hennes andra mening skrivs mot
@@ -2306,14 +2326,29 @@ def create_router(base: Path, arbiter) -> APIRouter:
         marke = _ta_varvet(exam_id)
         if marke is None:
             return JSONResponse(
-                {"error": "Pappret skrivs redan om — vänta tills det varvet "
-                          "landat innan du skickar nästa ändring."},
+                {"error": "Ett varv pågår redan på pappret. Vänta tills det är "
+                          "klart och skicka sedan igen.",
+                 "kod": "upptaget"},
                 status_code=409)
 
         llm = arbiter.try_acquire_llm()
         if not llm:
             _slapp_varvet(exam_id, marke)
             return JSONResponse(_LLM_BUSY, status_code=409)
+
+        # Lärarens egen mening + målet hon pekade på — den enda platsen där
+        # hennes ord passerar appen utan att annars sparas (app/spar.py).
+        # Utfallet (vad varvet ändrade) loggas när jobbet är klart, nedan.
+        #
+        # EFTER grindarna, inte före: ett varv som fick nej (godkänt, låst,
+        # semaforen) blev aldrig något önskemål till modellen. 24/9 stod blad
+        # 133 uppgift 8 nio gånger i spåret utan ett enda utfall, och rapporten
+        # läste det som nio försök (söndagsanalysen 2026-09-27, fynd 2d).
+        spar.logga(db_file, "onske", doktyp=view.get("typ") or "prov",
+                   dok_id=exam_id,
+                   detalj={"message": message, "nummer": nummer,
+                           "mal": (mal or {}).get("namn"),
+                           "malen": [m.get("namn") for m in (malen or [])]})
 
         # Nivåvalet reser med VARJE varv, ur kolumnen och inte ur begäran:
         # klienten valde en gång, vid genereringen, och ska inte behöva säga
@@ -2429,8 +2464,24 @@ def create_router(base: Path, arbiter) -> APIRouter:
                                     None, res.get("nivafel"))
                 # Vilka element som faktiskt ändrades — diffat, inte utläst ur
                 # lärarens mening (app/dokumentdiff.py). Klienten märker dem.
-                svar["andrade"] = dokumentdiff.andrade_element(
-                    newview.get("typ") or "prov", view["exam"], newview.get("exam"))
+                #
+                # STÄDAT MOT STÄDAT. Varvets svar har gått genom appens egna
+                # deterministiska pass (räknarmärket först i varje uppgift, det
+                # kapade bandet, plåtarna), och ett papper skrivet under äldre
+                # regler fick dem första gången det skrevs om. Diffen mot det
+                # råa originalet skyllde alltihop på varvet: «Ändra BARA
+                # uppgift 7» på blad 93 (23/9) märkte elva rutor. Originalet
+                # går därför genom samma pass innan det jämförs, och `andrade`
+                # blir det VARVET ändrade. Rickard 2026-09-27: «det är
+                # fortfarande jätteotydligt vad man har ändrat».
+                #
+                # Ett varv som inte sparade något har inget att visa: `newview`
+                # är då `view`, och ett städat original hade sett ändrat ut.
+                typ_ut = newview.get("typ") or "prov"
+                svar["andrade"] = [] if newview is view else (
+                    dokumentdiff.andrade_element(
+                        typ_ut, _stadat_som_varvet(view["exam"], typ_ut, infor),
+                        newview.get("exam")))
                 # Utfallet till spåret: ihop med `onske`-raden ovan säger de
                 # «bad om X, fick Y ändrat» — det är det paret rapporten
                 # (tools/spar.py) grupperar på när canvaschatten ska bli bättre.

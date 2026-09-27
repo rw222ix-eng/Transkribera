@@ -335,12 +335,18 @@ def starta(vag: str, kropp: dict) -> int:
         try:
             svar = urllib.request.urlopen(req, timeout=180)
         except urllib.error.HTTPError as e:
-            if e.code == 409 and time.time() - start < UPPTAGET_TAK_S:
+            kropp_fel = e.read().decode("utf-8", "replace")
+            try:
+                kod = json.loads(kropp_fel).get("kod")
+            except (ValueError, AttributeError):
+                kod = None
+            # «godkant» går aldrig över av sig självt (routes_exam refine).
+            if (e.code == 409 and kod != "godkant"
+                    and time.time() - start < UPPTAGET_TAK_S):
                 logga(f"  409 upptaget — väntar {UPPTAGET_S} s")
                 time.sleep(UPPTAGET_S)
                 continue
-            raise RuntimeError(
-                f"{e.code} {e.read().decode('utf-8', 'replace')[:400]}") from e
+            raise RuntimeError(f"{e.code} {kropp_fel[:400]}") from e
         try:
             for rad in svar:
                 text = rad.decode("utf-8", "replace").strip()

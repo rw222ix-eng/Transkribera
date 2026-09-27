@@ -279,7 +279,11 @@
     if (!r.ok) {
       const fel = await r.json().catch(() => ({}));
       const e = new Error(fel.error || `${r.status} ${r.statusText}`);
+      /* `kod` skiljer nejen åt: refine svarar 409 «godkant» eller «upptaget»,
+         och granskningen lägger då tillbaka meningen (granska.js
+         lamnaTillbaka). Statusen följer med som i json() ovan. */
       e.kod = fel.kod;
+      e.status = r.status;
       throw e;
     }
     const laget = { id: null, seq: 0, slut: false, svar: null, fel: null,

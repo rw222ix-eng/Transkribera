@@ -606,6 +606,58 @@ def test_refine_svaret_bar_de_rutor_som_skrevs_om(llm_ready, monkeypatch):
     assert res["andrade"] == ["tav5"]
 
 
+def test_varv_pa_aldre_tavla_skyller_inte_pilpasset_pa_varvet(llm_ready,
+                                                                monkeypatch):
+    """STÄDAT MOT STÄDAT, tavlans väg (söndagsanalysen 2026-09-27, förslag 3).
+
+    Svaret går genom pilar_till_ger i rutten. En tavla i 1c skriven före
+    pilpasset bär ⇒ i rutor varvet aldrig rörde, och diffen mot det råa
+    originalet hade märkt dem alla. Originalet går nu genom samma pass."""
+    from app import db as appdb
+    conn = appdb.connect(llm_ready.base_dir / "transkribera.db")
+    try:
+        cid = appdb.get_or_create_course(conn, "Matematik 1c")
+    finally:
+        conn.close()
+    gammal = _valid_board()
+    sek = gammal["boards"][0]["sections"]
+    sek[1]["items"] = [f"{x} ⇒ svaret" for x in sek[1]["items"]]
+    sek[3]["text"] = "Rätvinklig ⇒ Pythagoras"
+    _stub_generate(monkeypatch, {"board": gammal, "errors": [], "rounds": 1})
+    pid = _done(llm_ready.post("/api/planning/generate",
+                               json={"moment": "x", "course_id": cid}))["id"]
+
+    ny = copy.deepcopy(gammal)
+    ny["boards"][0]["sections"][0]["text"] = "Pythagoras sats i trappan"
+    monkeypatch.setattr(lesson_board, "refine_board",
+                        lambda *a, **k: {"board": copy.deepcopy(ny),
+                                         "errors": [], "rounds": 1})
+    res = _done(llm_ready.post(f"/api/planning/{pid}/refine",
+                               json={"message": "byt rubriken"}))
+    assert res["andrade"] == ["tav0"]
+    # Pilarna ÄR bytta på tavlan, varvet bara skylls inte för dem.
+    assert "ger" in res["board"]["boards"][0]["sections"][3]["text"]
+
+
+def test_refine_over_taket_ger_upptaget_och_inget_onskemal(llm_ready,
+                                                          monkeypatch):
+    """409 från semaforen bär `kod` «upptaget» (det går över), och det
+    avvisade varvet står inte som önskemål i spåret."""
+    from app import db as appdb
+    pid = _make_planning(llm_ready, monkeypatch)
+    monkeypatch.setattr(llm_ready.app.state.arbiter, "try_acquire_llm",
+                        lambda: None)
+    r = llm_ready.post(f"/api/planning/{pid}/refine",
+                       json={"message": "gör den kortare"})
+    assert r.status_code == 409 and r.json()["kod"] == "upptaget"
+    conn = appdb.connect(llm_ready.base_dir / "transkribera.db")
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM spar WHERE art = 'onske' "
+                            "AND dok_id = ?", (pid,)).fetchone()[0] == 0
+    finally:
+        conn.close()
+
+
 def test_refine_utan_andring_marker_ingen_ruta(llm_ready, monkeypatch):
     pid = _make_planning(llm_ready, monkeypatch)
     monkeypatch.setattr(lesson_board, "refine_board",

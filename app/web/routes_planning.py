@@ -55,7 +55,9 @@ _DATA_PREFIX = "data:image/png;base64,"
 _MAX_WARNINGS = 20          # klientens [WB]-lista begränsas (promptstorlek)
 # Molnjobben köar inte bakom kortet längre (se gpu_arbiter): de delar en
 # semafor med tak, och beskedet över taket säger vad som faktiskt pågår.
-_LLM_BUSY = {"error": gpu_arbiter.LLM_UPPTAGET}
+# `kod` som i routes_exam: «upptaget» går över av sig självt, och canvasen
+# lägger tillbaka meningen i rutan i stället för att tappa den.
+_LLM_BUSY = {"error": gpu_arbiter.LLM_UPPTAGET, "kod": "upptaget"}
 
 # Underlag (bokssidor/uppgifter som lektionen ska bygga på): tillåtna format,
 # storleks- och sidbudget. Allt sparas och behandlas lokalt under base_dir.
@@ -1483,6 +1485,14 @@ def create_router(base: Path, arbiter) -> APIRouter:
 
     # -------------------------------------------------------------- refine --
 
+    def _stadad_tavla(board: dict | None, st: dict) -> dict | None:
+        """Omskrivningens deterministiska pass på en tavla: pilarna blir «ger»
+        där kursen inte har implikation, och lektionstiden står först. ETT
+        ställe, för svaret och originalet i diffen måste gå samma väg."""
+        return lesson_board.satt_tid(
+            lesson_board.pilar_till_ger(board, st.get("course") or ""),
+            st.get("starttid"), st.get("sluttid"))
+
     @router.post("/api/planning/{pid}/refine")
     async def refine(pid: str, req: Request):
         """Chatt-iteration: 'byt exempel 2 …' — ny version av tavlan."""
@@ -1536,7 +1546,15 @@ def create_router(base: Path, arbiter) -> APIRouter:
                            "mal": (mal or {}).get("namn"),
                            "malen": [m.get("namn") for m in (malen or [])]})
 
-        fore = copy.deepcopy(st["board"])       # jämförelsen behöver den orörd
+        # Jämförelsen behöver originalet orört, och STÄDAT med samma pass som
+        # svaret får nedan (pilarna till «ger», tiden först). Pilpasset körs
+        # på varje varvs svar, och en tavla i 1c skriven före det (e5831fd,
+        # 24/9) hade fått varje ruta med ⇒ märkt vid sitt första varv, fast
+        # varvet gällde en enda formel. Spåret 20–27/9 visar det inte än, men
+        # det är samma fälla som provets diff föll i (routes_exam,
+        # _stadat_som_varvet). Rickard 2026-09-27: «det är fortfarande
+        # jätteotydligt vad man har ändrat».
+        fore = _stadad_tavla(copy.deepcopy(st["board"]), st)
 
         def job(emit):
             steg = Stege(emit, _STEG_TAVLA_OM)
@@ -1570,10 +1588,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 if res["board"] is not None:
                     # «ger» i stället för ⇒ under 2c, som i genereringen
                     # (lesson_board.pilar_till_ger, Rickard 2026-09-25).
-                    st["board"] = lesson_board.satt_tid(
-                        lesson_board.pilar_till_ger(res["board"],
-                                                    st.get("course") or ""),
-                        st.get("starttid"), st.get("sluttid"))
+                    st["board"] = _stadad_tavla(res["board"], st)
                 # Varje användariteration får en färsk reparationsbudget.
                 st["rounds"] = res["rounds"]
                 # Formen skrivs tillbaka: bar begäran nya val (läraren kryssade
@@ -1591,8 +1606,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # renderingsreparationen igen tills nästa godkännande.
                 st["godkand"] = False
                 spara_planering(pid, st)
-                andrade = dokumentdiff.andrade_element("tavla", fore,
-                                                       st["board"])
+                # Inget svar alls: tavlan står orörd, och det städade
+                # originalet hade sett ändrat ut mot den.
+                andrade = [] if res["board"] is None else \
+                    dokumentdiff.andrade_element("tavla", fore, st["board"])
                 spar.logga(db_file, "utfall", doktyp="tavla", dok_id=pid,
                            detalj={"andrade": andrade,
                                    "fel": len(res["errors"] or [])})

@@ -2,7 +2,7 @@
 
 Läser bara handskakningen `{"type":"jobb","id":N}` och stänger strömmen:
 jobbet lever vidare i `jobb`/`jobb_events` (app/web/sse.py) och följs där.
-409 (molnplatsen upptagen) väntas ut i upp till en timme.
+409 «upptaget» väntas ut i upp till en timme, 409 «godkant» avbryter direkt.
 
     python -m tools.jobb_starta api/planning/generate kropp.json
     python -m tools.jobb_starta api/exams/generate kropp.json
@@ -21,9 +21,14 @@ while True:
     try:
         svar = urllib.request.urlopen(req, timeout=180)
     except urllib.error.HTTPError as e:
-        if e.code == 409 and time.time() - start < 3600:
+        kropp_fel = e.read().decode("utf-8", "replace")
+        try: kod = json.loads(kropp_fel).get("kod")
+        except (ValueError, AttributeError): kod = None
+        # Bara «upptaget» väntas ut. Ett godkänt papper blir aldrig ledigt av
+        # sig självt: 24/9 väntade ett skript 47 minuter och 110 anrop på det.
+        if e.code == 409 and kod != "godkant" and time.time() - start < 3600:
             print("409 upptaget, väntar 30 s", flush=True); time.sleep(30); continue
-        raise SystemExit(f"{e.code} {e.read().decode('utf-8','replace')[:400]}")
+        raise SystemExit(f"{e.code} {kropp_fel[:400]}")
     try:
         for rad in svar:
             t = rad.decode("utf-8", "replace").strip()
