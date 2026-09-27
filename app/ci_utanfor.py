@@ -270,6 +270,12 @@ def build_utanfor(kurs: str, profil: str = "prov", *,
         if tavla:
             monster += (" Skrivs samma villkor om i en annan form skrivs "
                         "«betyder» (m ∈ ]0, 800] betyder 0 < m ≤ 800).")
+            # Tavlans egen nedåtpil ⇓ mellan vänsterns block är ingen
+            # implikation. Domaren kallade den det på alla tre tavlorna
+            # 27/9 (jobb 1154–1156) och ville stryka tavlans skelett.
+            monster += (" Tavlans egen nedåtpil ⇓ mellan vänsterns block, "
+                        "från begreppsraderna till formeln, är ingen "
+                        "implikation och står kvar.")
     if tavla:
         return (
             f"UTANFÖR KURSEN. Det här står inte i det centrala innehållet för "
