@@ -246,6 +246,19 @@ def test_textbudgeten_raknar_inte_matte_rubriker_och_tabellceller():
     assert not any(e["code"] == "textbudget" for e in errors), errors
 
 
+def test_lektionstiden_kostar_inget_i_budgeten():
+    """Tiden sätts av systemet efter valideringen (lesson_board.satt_tid),
+    som «Förra gången». Den skarpa pq-tavlan 2026-09-27 gick igenom på 186
+    av 190 och fälldes sedan på 197 när klockslaget kommit dit."""
+    med = ws.validate_board_json(_doc(_board(sections=[
+        {"kind": "text", "text": "08:10–09:40"},
+        {"kind": "text", "text": "En rad som kostar"}])))[0]
+    utan = ws.validate_board_json(_doc(_board(sections=[
+        {"kind": "text", "text": "En rad som kostar"}])))[0]
+    assert (ws._text_volym(med.boards[0].sections)
+            == ws._text_volym(utan.boards[0].sections) == 17)
+
+
 def test_latex_in_text_flagged():
     """Bench Fas 2: modellen skrev LaTeX med $-tecken i text-sektioner —
     renderas som rå text på tavlan. Fångas deterministiskt."""

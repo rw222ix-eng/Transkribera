@@ -1171,6 +1171,12 @@ def _ar_inte_etiketter(sections: list) -> list:
 # tavlan, så den får inte kosta i budgeten: annars kunde en senare omskrivning
 # eller reparation stryka modellens egna rader för att betala lärarens.
 FORRA_PREFIX = "Förra gången: "
+# Lektionstiden («08:10–09:40», lesson_board.satt_tid) är samma sorts rad:
+# systemet sätter den efter valideringen. Den kostade ändå 11 tecken, och
+# med taket 190 (2026-09-27) fällde den skarpa pq-tavlan på 197 av 190 fast
+# modellens egen text var 186: nästa omskrivning hade strukit lärarens rader
+# för att betala klockslaget. Samma mönster som lesson_board._TIDTEXT_RE.
+_TIDTEXT_RE = re.compile(r"^\d{1,2}[:.]\d{2}(\s*[–—-]\s*\d{1,2}[:.]\d{2})?$")
 
 
 def _text_volym(sections: list, vanster: bool = False) -> int:
@@ -1221,7 +1227,8 @@ def _volym_rek(sections: list, fria: set[int]) -> int:
     summa = 0
     for sec in sections or []:
         if isinstance(sec, TextSection):
-            if id(sec) in lokala or _ar_rubrikrad(sec):
+            if id(sec) in lokala or _ar_rubrikrad(sec) \
+                    or _TIDTEXT_RE.match(sec.text.strip()):
                 continue
             summa += len(sec.text)
         elif isinstance(sec, ListSection):
