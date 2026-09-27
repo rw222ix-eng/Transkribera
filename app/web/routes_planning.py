@@ -325,6 +325,60 @@ def lektionens_delar(db_file: Path, body: dict) -> list[dict]:
     return delar if isinstance(delar, list) and len(delar) > 1 else []
 
 
+def infor_prov_tavla(db_file: Path, body: dict, *, moment: str = "",
+                     nummer=None) -> dict | None:
+    """«Inför provet» för tavlan (lesson_board.build_infor_prov), eller None.
+
+    `infor_prov_id` pekar ut provet och `infor_nummer` lärarens val ur det.
+    Tom lista betyder «det som hör till lektionen»: provets uppgifter på
+    lektionens sidor (boken i begäran och kalenderns delar), annars de som
+    delar ett ord med momentet. `nummer` går före begäran; omskrivningen
+    skickar numren planeringen sparade.
+
+    None när inget prov är valt eller provet inte finns. Hör ingen uppgift
+    till lektionen kommer ett svar med tomma block: tavlan skrivs då ur
+    boken, och loggen säger varför."""
+    try:
+        eid = int(body.get("infor_prov_id") or 0)
+    except (TypeError, ValueError):
+        return None
+    if eid <= 0:
+        return None
+    conn = db.connect(db_file)
+    try:
+        view = db.get_exam(conn, eid)
+    finally:
+        conn.close()
+    exam = (view or {}).get("exam") or {}
+    if not exam.get("uppgifter"):
+        return None
+    uppg = [u for u in exam["uppgifter"] if isinstance(u, dict)]
+    rader = [{"nr": s["nr"], "niva": s["niva"], "del": s["del"],
+              "delmoment": s["delmoment"],
+              "sort": lesson_board.provsort(u)}
+             for s, u in zip(exam_gen.provslots(exam), uppg)]
+    rader = [r for r in rader if r["sort"]]
+    delar = lektionens_delar(db_file, body)
+    sidor = [(int(d.get("fran") or 0), int(d.get("till") or d.get("fran") or 0))
+             for d in delar if isinstance(d, dict)]
+    bv = bok_val(body)
+    if bv:
+        sidor.append((bv[1], bv[2]))
+    rubriker = [moment] + [str(d.get("rubrik") or "") for d in delar
+                           if isinstance(d, dict)]
+    valda = lesson_board.valj_provrader(
+        rader, exam_gen.nummerlista(nummer if nummer is not None
+                                    else body.get("infor_nummer")),
+        sidor=sidor, rubriker=rubriker)
+    titel = str((view or {}).get("titel") or exam.get("titel") or "")
+    datum = str((view or {}).get("datum") or exam.get("datum") or "")
+    return {"id": eid, "titel": titel, "datum": datum,
+            "nummer": [r["nr"] for r in valda],
+            "block": lesson_board.build_infor_prov(valda, titel, datum),
+            "dom": lesson_board.build_infor_prov_dom(valda),
+            "text": lesson_board.provtexter(exam)}
+
+
 def forra_lektionen(db_file: Path, body: dict, group: str | None = None) -> str:
     """Kalenderns rubrik för klassens FÖRRA lektion i samma kurs, eller "".
 
@@ -1169,6 +1223,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # Vidma-formen (lesson_board.REGELSAMLING_BLOCK): avgörs ur momentet
         # här, en gång, och SPARAS med planeringen som de andra formvalen.
         regelsamling = lesson_board.ar_regelsamling(moment)
+        # «Inför provet» (lärarens princip 2026-09-27): provet först, boken i
+        # andra hand. None utan valt prov, och då är kedjan den gamla.
+        infor = infor_prov_tavla(db_file, body, moment=moment)
 
         llm = arbiter.try_acquire_llm()
         if not llm:
@@ -1176,6 +1233,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
 
         def job(emit):
             steg = Stege(emit, _STEG_TAVLA)
+            if infor:
+                emit({"type": "log", "msg": (
+                    f"Inför provet «{infor['titel']}»: tavlan bygger på "
+                    f"provets uppgifter {', '.join(map(str, infor['nummer']))}."
+                    if infor["nummer"] else
+                    f"Provet «{infor['titel']}» har ingen uppgift på "
+                    "lektionens sidor. Tavlan skrivs ur boken.")})
             try:
                 if arbiter.ensure_llm() is None:
                     raise RuntimeError("Språkmodellen är inte installerad.")
@@ -1208,6 +1272,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     svart=svart_txt, fokus=fokus_txt, delar=delar_txt,
                     vanligt_fel=vanligt_fel, niva=niva, inriktning=inriktning,
                     regelsamling=regelsamling,
+                    prov=(infor or {}).get("block") or "",
+                    prov_dom=(infor or {}).get("dom") or "",
+                    provtext=(infor or {}).get("text") or "",
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 # Lektionstiden uppe till vänster är lärarens, inte modellens:
@@ -1227,6 +1294,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     "forra": forra,
                     "vanligt_fel": vanligt_fel, "niva": niva,
                     "inriktning": inriktning, "regelsamling": regelsamling,
+                    # Numren sparas som de valdes, så att omskrivningen
+                    # läser samma uppgifter ur provet (se refine).
+                    **({"infor_prov": {k: infor[k] for k in
+                                       ("id", "titel", "datum", "nummer")}}
+                       if infor and infor["nummer"] else {}),
                 })
                 return {"id": pid, "board": board,
                         "errors": res["errors"], "rounds": res["rounds"]}
@@ -1436,6 +1508,15 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # inte i prompten. `bok_text` läser inga nya sidor (de lästes när
         # spannet valdes), så en omskrivning kostar ingen bokläsning.
         bok_txt = bok_text(db_file, body)
+        # Provet tavlan förbereder följer med omskrivningen, med de nummer
+        # skrivningen valde. Det står efter boken, som i skrivningen. Utan
+        # «infor_prov» i läget är prompten den gamla.
+        ip = st.get("infor_prov") if isinstance(st.get("infor_prov"), dict) else None
+        infor = (infor_prov_tavla(db_file, {"infor_prov_id": ip.get("id")},
+                                  nummer=ip.get("nummer") or [])
+                 if ip and ip.get("nummer") else None)
+        if infor and infor["block"]:
+            bok_txt = f"{bok_txt}\n\n{infor['block']}" if bok_txt else infor["block"]
         # Vad läraren redan bett om för det här utkastet. Utan den började varje
         # varv om från noll: «kortare än så» hade inget «så» att gå efter.
         historik = varvhistorik(body)
