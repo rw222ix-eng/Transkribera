@@ -1,6 +1,6 @@
-exporterad: 2026-09-25T05:00:01
-rader: 5734
+exporterad: 2026-09-27T11:31:46
+rader: 7083
 forsta_rad: 2026-09-01T20:06:44
-sista_rad: 2026-09-24T23:56:29
+sista_rad: 2026-09-27T11:26:45
 fonster_dagar: 30
 schema: dagligen 05:00 lokal tid (tools/spar_export.ps1); ingen ny stämpel = inga nya rader den dagen
