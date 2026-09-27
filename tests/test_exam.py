@@ -3640,6 +3640,21 @@ def test_prompterna_ber_om_korta_rader_och_ingen_notrad():
     assert "«+C korrekt ekvation»" in prompt
 
 
+def test_trappans_regler_star_i_bada_prompterna():
+    """Rickard 2026-09-27, efter jämförelsen med Kunskapsmatrisen: prov 126
+    höll, anvisningen gjorde det inte. Trappan kräver bara det frågan ber om,
+    godtar följdfel, sätter poängen på det svåra steget och har ett komplett
+    facit, och det gäller både när provet skrivs och när passet skriver om."""
+    underlag = exam_gen.bedomningsunderlag(_exam())[0]
+    for text in (exam_gen.INSTRUCTION, exam_gen.build_bedomning_prompt(underlag)):
+        assert exam_gen.BEDOMNINGSREGLER in text
+    for fras in ("Bara det frågan ber om", "följdfel godtas",
+                 "det svåra steget", "villkoret"):
+        assert fras in exam_gen.BEDOMNINGSREGLER
+    # Nivåerna rörs inte: passet behåller raderna per nivå.
+    assert "nivåerna EXAKT" in exam_gen.build_bedomning_prompt(underlag)
+
+
 def test_bedomningssignal_faller_flera_poang_pa_samma_rad():
     """«+3 E för båda nollställena» är en rad för tre poäng — och då syns inte
     var gränsen mellan 1 p, 2 p och 3 p går."""

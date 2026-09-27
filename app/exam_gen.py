@@ -287,6 +287,39 @@ MENING_RAD_TAK = 80
 # Uttrycksmeningen hade ett eget tak när det vanliga var 60; nu är de samma.
 DEFINITION_RAD_TAK = MENING_RAD_TAK
 
+# ── VAD TRAPPAN FÅR KRÄVA (Rickard 2026-09-27) ──────────────────────────────
+# Prov 126 jämfördes rad för rad med Kunskapsmatrisens uppgiftsbank (1 967
+# uppgifter i Ma 1c). Uppgifterna höll, anvisningen hade fyra sorters fel,
+# och läraren: «Det är bara bedömningsanvisningen som behöver ändras.»
+#   - 8 (0/1/0 i KM:s mening E): «Avgör med en beräkning» men poängen krävde
+#     motiveringen «tecknet ska vändas». En elev som räknat rätt blev utan.
+#   - 10 a–c bygger på varandra utan ett ord om följdfel: den som kryssar fel
+#     rad i a) kan inte få b) eller c).
+#   - 12 (0/1/2): C för ekvationen, A för att lösa och A för svaret. Med
+#     p = vad var och en betalar blir ekvationen 3(p + 600) = 5p och svaret
+#     står direkt, så sista A-poängen gavs för ett steg som inte behövs.
+#   - 2b, 2c: förkortningen stod utan villkoret för nämnaren.
+# NIVÅERNA RÖRS INTE av reglerna. KM ger nästan alltid en lägre poäng för
+# påbörjat arbete, men NP gör det inte: 4 av 39 flerpoängsenheter i Ma 1c och
+# 11 av 40 i Ma 2a är bara A (np_uppgiftsprofil.json). Det är NP som är facit.
+BEDOMNINGSREGLER = (
+    "  VAD TRAPPAN FÅR KRÄVA:\n"
+    "  • Bara det frågan ber om. Säger frågan «avgör med en beräkning» ger "
+    "rätt beräkning och slutsats poängen; kräv inte en förklaring som frågan "
+    "aldrig bad om. Vill du ha förklaringen, be om den i frågan.\n"
+    "  • Följdfel. Bygger en deluppgift på svaret i en tidigare, ges poängen "
+    "för korrekt arbete utifrån elevens eget tidigare svar. Skriv det på "
+    "raden: '+1 C korrekt lösning från vald rad (följdfel godtas)'.\n"
+    "  • Poängen sitter på det svåra steget. Den högsta nivån ges för det "
+    "avgörande steget (modellen, ekvationen, den generella slutsatsen), inte "
+    "för rutinsteg efter det. Varje rad ska behövas oavsett vilken korrekt "
+    "väg eleven väljer: kan ett annat val av obekant göra ett steg onödigt, "
+    "slå ihop det med raden före.\n"
+    "  • Facit är matematiskt komplett. Förkortas ett bråk står villkoret i "
+    "losning ('för $a \\neq 5$'), men eleven behöver inte skriva det för "
+    "poängen om frågan inte ber om det.\n"
+)
+
 INSTRUCTION = (
     "Skriv ett matteprov som JSON enligt schemat. Dokumentets egna fält är "
     # Fältet HETER tid_min. Här stod «tid_minuter», och det är inget fält i
@@ -454,6 +487,7 @@ INSTRUCTION = (
     "  En rad som bara är slutsatsen ('+1 A svarar nej') går att gissa och "
     "ger aldrig en egen poäng. Avgör-uppgiftens poäng ges som '+1 C svarar "
     "nej med en enkel motivering' och '+1 A fullständig motivering'.\n"
+    + BEDOMNINGSREGLER +
     "- innehall: KODERNA för de centrala innehållspunkter uppgiften prövar "
     "(t.ex. [\"G25-M1C-ALG-3\"]) — hämtade ur listan över valt centralt "
     "innehåll nedan, en till tre stycken, aldrig egen text. Står ingen sådan "
@@ -5543,8 +5577,14 @@ def build_bedomning_prompt(underlag: dict, *, skala: str = "") -> str:
         "samma «nyckel». `rader` är EN RAD PER POÄNG i stigande ordning, "
         "formen «+1 <nivå> <vad som ger just den poängen>»: en enhet med "
         "poäng [1, 2, 0] har exakt tre rader, en +1 E och två +1 C. Behåll "
-        "alltså antalet rader och nivåerna EXAKT som poängen säger — ändra "
-        "bara SPRÅKET. Skriv det en lärare ser på ett papper, kort och "
+        "alltså antalet rader och nivåerna EXAKT som poängen säger. Språket "
+        "skriver du om; VAD en rad ger poäng för ändrar du bara när trappan "
+        "bryter mot reglerna nedan.\n"
+        # Rickard 2026-09-27, efter jämförelsen med Kunskapsmatrisen: samma
+        # regler som i INSTRUCTION, så att passet lagar det huvudanropet
+        # missade i stället för att putsa språket på det.
+        + BEDOMNINGSREGLER +
+        "Skriv det en lärare ser på ett papper, kort och "
         "konkret: «+1 C korrekt potens av produkten i täljaren», «+1 C i "
         "övrigt korrekt förenkling med rätt svar», «+1 E rätt alternativ». "
         "Aldrig kursplanesvenska som «allmän härledning ur divisionsregeln "
