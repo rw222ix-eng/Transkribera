@@ -95,6 +95,14 @@ def _utan_budget(errors: list) -> list:
 # genom (1, 1) och (2, 4), märkta punkter, ticks och streckade hjälplinjer,
 # och bär ÄR/INTE under formeln: gränsvärdet 2 «Tangentens lutning:
 # derivatan.» mot sekantens 3 «Sekantens lutning: inte derivatan.».
+#
+# OCH OM 2026-09-27 (0,55 USD), med lärarens dom över IndA:s pq-tavla och
+# NA26F:s parentestavla: «"Så löser vi" … Ta bort det helt och hållet.»
+# Bandet har inget recept och ingen pil i spalt 2, som börjar med «2. Att
+# tänka på». Det ritar x² med sekant och tangent genom (3, 9), ÄR/INTE
+# under formeln, och vänstern bär 179 tecken av det sänkta taket 190. Två
+# rader till står före formeln i spalt 1, så tavellapp.json pekar på
+# children[7] i stället för children[5].
 
 
 def test_tavlan_ur_kassetten_ar_giltig_wb_json(fejk_claude):
@@ -147,7 +155,8 @@ def test_bandet_haller_vansterns_textbudget(fejk_claude):
 
 def test_bandet_bar_vansterns_skelett(fejk_claude):
     """Omspelningen 2026-09-20: en RIKTIG modellrunda mot den nya prompten
-    ska ge receptet och «Att tänka på», inte bara begrepp och formel. Det är
+    ska ge «Att tänka på» (och till 2026-09-27 receptet), inte bara begrepp
+    och formel. Det är
     det enda sättet att veta att skelettet följs av något annat än testerna
     — bandet från 2026-09-12 bar två begreppsrader och en tom tredjedel, och
     det var precis den tavlan läraren fällde.
@@ -160,8 +169,9 @@ def test_bandet_bar_vansterns_skelett(fejk_claude):
         max_rounds=1)["board"]
     rad = board["boards"][0]["sections"][-1]["children"]
     # TVÅ LIKA BREDA SPALTER sedan formdomen 2026-09-20 (kväll):
-    # «1. Vad är det?» och «2. Så löser vi» med «3. Att tänka på»
-    # under sig. Bandet ska bära formen, inte bara prompten.
+    # «1. Vad är det?» och sedan 2026-09-27 «2. Att tänka på» (till dess
+    # «2. Så löser vi» med «3. Att tänka på» under sig). Bandet ska bära
+    # formen, inte bara prompten.
     assert len(rad) == 2 and all(c["kind"] == "col" for c in rad), rad
     assert rad[0]["children"][0]["text"] == "1. Vad är det?", rad[0]
     # GRAFEN OCH ÄR/INTE (lärarens dom 2026-09-23 kväll): en riktig
@@ -176,19 +186,15 @@ def test_bandet_bar_vansterns_skelett(fejk_claude):
     spalt = rad[1]["children"]
     rubriker = [s.get("text") for s in spalt
                 if s.get("kind") == "text" and s.get("weight") == 700]
-    assert "3. Att tänka på" in rubriker, rubriker
-    listor = [s for s in spalt if s.get("kind") == "list"]
-    assert listor and 2 <= len(listor[0]["items"]) <= 3, spalt
-    # Receptet är ELEVENS EGNA FRÅGOR (lärarens dom 2026-09-23, «alldeles för
-    # generellt» om «Skriv om/Avgör/Räkna: …»). Till dess mätte testet att
-    # varje punkt bar sitt kolon, formen «Verb: två–tre ord». Nu är varje
-    # punkt en fråga, och bara den sista får vara svaret på valet, «Fall: gör
-    # så. Fall: gör så.».
-    *fragor, sista = listor[0]["items"]
-    assert fragor and all(p.endswith("?") for p in fragor), fragor
-    assert sista.endswith("?") or sista.count(": ") == 2, sista
-    assert not any(re.match(r"^[A-ZÅÄÖ][a-zåäö]+( [a-zåäö]+)?: [^?]*$", p)
-                   for p in fragor), fragor
+    # INGET RECEPT (lärarens dom 2026-09-27: «"Så löser vi" … Ta bort det
+    # helt och hållet»). Till dess mätte testet elevfrågorna i listan under
+    # «2. Så löser vi» och «3. Att tänka på» under dem. Nu börjar spalt 2
+    # med «2. Att tänka på», och det finns ingen lista på hela vänstern utom
+    # agendan.
+    assert rubriker[0] == "2. Att tänka på", rubriker
+    assert not [r for r in rubriker if "så löser vi" in r.lower()], rubriker
+    assert not [s for c in rad for s in c["children"]
+                if s.get("kind") == "list"], rad
     # Och HÖGERN BÄR UTRÄKNINGEN (lärarens dom 2026-09-23). Till dess mätte
     # testet att varje receptpunkt började ett metodsteg på högern. Nu ska
     # högern inte ha en enda steglista, varje exempel ska ha minst två

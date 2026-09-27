@@ -636,7 +636,18 @@ _MAX_ITEM_CHARS = 50
 # 442 (IndA) med de nya etikettreglerna och faller båda — det är hela
 # poängen: det som ska falla är texten, inte skelettet, och båda tavlorna
 # bär sitt skelett med god marginal under taket när prosan är struken.
-_MAX_BOARD_TEXT = 270
+#
+# SÄNKT 2026-09-27 (270 → 190). Lärarens dom (Rickard) över IndA:s pq-tavla
+# och NA26F:s parentestavla: «"Så löser vi" … Ta bort det helt och hållet»
+# och «Väldigt mycket på vänstra tavlan. Jag kommer inte få plats med det om
+# jag ska skriva.» Receptet (lesson_board 8f) ströks, och taket följer det
+# ned i stället för att lämna platsen åt annan text. Mätt som förut:
+# few-shotarnas vänstertavlor bär 102–128 tecken (var 175–193), hans
+# handrättade IndA-tavla 150 och NA26F-tavlan 109. Med en Vanligt fel-rad
+# (~30 tecken, som i shotarna) går IndA-tavlan till ~180, och den ska
+# fortfarande gå igenom. 190 alltså: receptets två eller tre frågor à ~30
+# tecken är just de ~80 som försvann.
+_MAX_BOARD_TEXT = 190
 _MAX_COLUMN_TEXT = 170
 # MODELLTAVLOR FÅR MER (lärarens beslut 2026-09-17). Hennes godkända tavla
 # för Liber Ma1c s. 69–72 (formler ur verkligheten: ställa upp, jämföra,
@@ -867,8 +878,9 @@ def _randfallsblocket(sections: list) -> tuple[list, list]:
     for sec in sections or []:
         if isinstance(sec, (TextSection, HeadingSection)):
             # Numret räknas bort: sedan formdomen 2026-09-20 (kväll) heter
-            # rubriken «3. Att tänka på» — numreringen är dispositionen,
-            # det närmaste en pil motorn kan rita i flödet.
+            # rubriken «3. Att tänka på», sedan 2026-09-27 «2. Att tänka på»
+            # (receptet ströks). Numreringen är dispositionen, det närmaste
+            # en pil motorn kan rita i flödet.
             lag = re.sub(r"^\s*\d+\.\s*", "",
                          str(getattr(sec, "text", "")).strip().lower())
             if lag.startswith(_ATT_TANKA_PA):
@@ -1192,7 +1204,7 @@ def _ar_rubrikrad(sec) -> bool:
     Rubriker kostar ingenting i budgeten — men bara som HeadingSection, och
     schemat tillåter ingen heading inne i en col (bara löv). Vänsterns
     skelett bor i två col (lesson_board regel 6), så dess rubriker — «1. Vad
-    är det?», «3. Att tänka på», «Vanligt fel:» — måste skrivas som text med
+    är det?», «2. Att tänka på», «Vanligt fel:» — måste skrivas som text med
     weight 700. Att de då plötsligt vägde som meningar var ett mätfel som
     kom ur schemat, inte ur tavlan (uppmätt 2026-09-20, kväll: de tre
     numrerade rubrikerna kostade 43 tecken av 390 på varje vänstertavla).

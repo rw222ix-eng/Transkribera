@@ -2487,17 +2487,25 @@ function layoutFlow(sections, board, opts) {
        Mätningen görs HÄR, efter att noden sitter i tavlan: i measure() är
        spalternas offsetHeight fortfarande 0 (mätt 2026-09-21).
        Fit-passet placerar samma rad vid flera skalor; kvoten är skalfri, så
-       raden sägs EN gång per tavla (samma text = samma fynd). */
+       raden sägs EN gång per tavla (samma text = samma fynd).
+
+       BARA DEN FÖRSTA SPALTEN MÄTS sedan lärarens dom 2026-09-27 (Rickard):
+       «"Så löser vi" … Ta bort det helt och hållet.» Utan receptet är
+       vänsterns spalt 2 bara «2. Att tänka på» och Vanligt fel, kortare
+       med flit (lesson_board regel 6), och hans handrättade IndA-tavla har
+       spalterna 406 och 174 px. En symmetrisk vakt hade skickat den till
+       reparation, och reparationen hade fyllt spalt 2 med text han just
+       strök. Klagomålet 2026-09-21 gällde en tom FÖRSTA spalt, och den
+       fälls som förut. */
     if (sec.kind === 'row' && (sec.children || []).some(c => c && c.kind === 'col')) {
       const hojder = [...node.children].map(n => n.offsetHeight).filter(h => h > 0);
       if (hojder.length >= 2) {
-        const kort = Math.min(...hojder), lang = Math.max(...hojder);
-        const kvot = kort / lang;
+        const kvot = hojder[0] / Math.max(...hojder);
         if (kvot < SPALTBALANS) {
-          const rad = `[WB] rad med ${hojder.length} spalter: den korta spalten är `
-            + `${Math.round(kvot * 100)} % av den långa `
-            + '— flytta ett block till den korta spalten eller korta den långa, '
-            + 'så att spalterna blir ungefär lika höga.';
+          const rad = `[WB] rad med ${hojder.length} spalter: den första spalten är `
+            + `${Math.round(kvot * 100)} % av den längsta. `
+            + 'Flytta kroppen eller en begreppsrad till den första spalten, '
+            + 'eller korta den längsta.';
           if (!_spaltSagt.has(rad)) { _spaltSagt.add(rad); console.warn(rad); }
         }
       }

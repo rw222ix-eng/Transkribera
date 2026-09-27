@@ -617,10 +617,11 @@ def test_kontrolltavlan_ar_giltig_som_den_star():
 def test_gamla_kontrolltavlan_faller_pa_det_nya_taket():
     """Och åt andra hållet: tavlan som gick igenom på 390 gör det inte på
     270. Det är vad läraren beställde 2026-09-21 — «bara ha kvar det mest
-    väsentliga, ta bort lite text»."""
+    väsentliga, ta bort lite text». Taket sänktes igen 2026-09-27, 270 →
+    190, när receptet ströks (lesson_board 8f)."""
     fel = ws.validate_board_json(_kontrolltavlan())[1]
     assert [f["code"] for f in fel] == ["textbudget"], fel
-    assert "270" in fel[0]["message"]
+    assert "~190" in fel[0]["message"]
 
 
 def test_randfallen_under_att_tanka_pa_gar_igenom():
@@ -649,6 +650,11 @@ def test_randfallen_kanns_igen_ocksa_under_den_numrerade_rubriken():
     del spalt[-3:]
     spalt.insert(len(spalt) - 1, {"kind": "math", "latex": "\\Downarrow"})
     spalt += RANDFALLEN
+    _d, fel = ws.validate_board_json(doc)
+    assert _utan_budget(fel) == [], fel
+    # Sedan lärarens dom 2026-09-27 heter den «2. Att tänka på» (receptet,
+    # som var spalt 2:s första block, ströks).
+    rubrik["text"] = "2. Att tänka på"
     _d, fel = ws.validate_board_json(doc)
     assert _utan_budget(fel) == [], fel
 

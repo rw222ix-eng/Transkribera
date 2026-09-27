@@ -157,7 +157,11 @@ def test_alla_few_shots_foljer_dramaturgin():
         assert len(rad) == 2 and all(c["kind"] == "col" for c in rad), uppdrag
         assert rad[0]["width"] == rad[1]["width"] == 400, uppdrag
         assert rad[0]["children"][0]["text"] == "1. Vad är det?", uppdrag
-        assert rad[1]["children"][0]["text"] == "2. Så löser vi", uppdrag
+        # «2. Så löser vi» till lärarens dom 2026-09-27: receptet ströks, och
+        # spalt 2 börjar med randfallen.
+        assert rad[1]["children"][0]["text"] == "2. Att tänka på", uppdrag
+        assert not [c for c in rad[1]["children"] if c["kind"] == "list"], \
+            uppdrag
         assert all(c["children"][0].get("weight") == 700 for c in rad), uppdrag
         # Spalt 1: kroppen (om momentet har en) överst, sedan anatomin och
         # begreppen. INGEN DEFINITIONSMENING (2026-09-21): regel 5 skriver
@@ -170,12 +174,13 @@ def test_alla_few_shots_foljer_dramaturgin():
                     and ": " not in c["text"] and c.get("weight") != 700
                     and ettan[i - 1]["kind"] != "math"]
         assert not meningar, (uppdrag, meningar)
-        # PILEN (6c): en ensam ⇓ i varje spalt, och den kostar inget i
-        # budgeten — det är därför den fick plats samtidigt som texten gick.
-        for spalt in rad:
+        # PILEN (6c): en ensam ⇓ i spalt 1, och den kostar inget i budgeten.
+        # Spalt 2 bar en till, mellan receptet och «Att tänka på», till
+        # 2026-09-27; med receptet borta har den inget att peka från.
+        for spalt, antal in zip(rad, (1, 0)):
             pilar = [c for c in spalt["children"] if c["kind"] == "math"
                      and ws._ar_pilrad(c["latex"])]
-            assert len(pilar) == 1, (uppdrag, spalt["children"][0]["text"])
+            assert len(pilar) == antal, (uppdrag, spalt["children"][0]["text"])
         # Och begreppsraden är ett NAMN, inte en mening: ord, kolon, högst
         # FEM ord (2026-09-05).
         for text in _begreppsrader(doc):
@@ -323,15 +328,19 @@ def test_budgettaken_ar_matta_och_shotarna_haller_dem():
     RECEPTET BLEV ELEVENS FRÅGOR 2026-09-23, och frågor är längre än «Verb:
     två ord»: 193/173/186/192. Taket rördes inte. Det var frågornas längd
     som fick ge (högst sex ord, två punkter i uttrycks-shoten), och shotarna
-    ligger fortfarande under 72 %."""
-    assert (ws._MAX_BOARD_TEXT, ws._MAX_COLUMN_TEXT) == (270, 170)
+    ligger fortfarande under 72 %.
+
+    RECEPTET STRÖKS 2026-09-27 (lärarens dom: «"Så löser vi" … Ta bort det
+    helt och hållet»), och taket följde det ned, 270 → 190. Shotarna bär
+    128/122/124/102, och lärarens handrättade IndA-tavla 150."""
+    assert (ws._MAX_BOARD_TEXT, ws._MAX_COLUMN_TEXT) == (190, 170)
     assert (ws._MAX_TEXT_CHARS, ws._MAX_ITEM_CHARS) == (60, 50)
     vanstrar = [ws._text_volym(
         ws.validate_board_json(doc)[0].boards[0].sections, vanster=True)
         for _u, doc in lb.FEW_SHOTS]
-    # Shotarna ligger på 60–70 % av taket: tätt, men med luft för en riktig
-    # tavla med ett riktigt urval.
-    assert all(0.55 <= v / ws._MAX_BOARD_TEXT <= 0.72 for v in vanstrar), vanstrar
+    # Shotarna ligger på 50–70 % av taket: tätt, men med luft för en riktig
+    # tavla med ett riktigt urval och en Vanligt fel-rad till.
+    assert all(0.5 <= v / ws._MAX_BOARD_TEXT <= 0.72 for v in vanstrar), vanstrar
     for uppdrag, doc in lb.FEW_SHOTS:
         parsed, _fel = ws.validate_board_json(doc)
         for i, board in enumerate(parsed.boards):
@@ -356,14 +365,17 @@ def test_en_sjuttiotecknig_rad_falls_nu():
 # VÄNSTERNS NEDRE DEL ÄR TVÅ LIKA BREDA SPALTER sedan lärarens formdom
 # 2026-09-20 (kväll): «vänstra halvan av vänstra tavlan är bara x² = a …
 # sen inget annat» och «jag saknar en tydlig röd tråd på hela vänstern, det
-# är bara uppstaplat». Spalt 1 är «1. Vad är det?», spalt 2 «2. Så löser vi»
-# med «3. Att tänka på» under sig. Skelettet läses i den ordningen.
+# är bara uppstaplat». Spalt 1 är «1. Vad är det?», spalt 2 «2. Att tänka
+# på» sedan lärarens dom 2026-09-27 (till dess «2. Så löser vi» med «3. Att
+# tänka på» under sig). Skelettet läses i den ordningen.
 def _spalt1(doc: dict) -> list[dict]:
     return _vanstersektioner(doc)[-1]["children"][0]["children"]
 
 
 def _spalt2(doc: dict) -> list[dict]:
-    return _vanstersektioner(doc)[-1]["children"][1]["children"]
+    """Tom när raden bara har EN col: regelsamlingsformen sedan 2026-09-27."""
+    spalter = _vanstersektioner(doc)[-1]["children"]
+    return spalter[1]["children"] if len(spalter) > 1 else []
 
 
 def _spalten(doc: dict) -> list[dict]:
@@ -372,7 +384,7 @@ def _spalten(doc: dict) -> list[dict]:
 
 
 def _rubrikrad(sek: dict) -> bool:
-    """Receptets och «Att tänka på»-blockets rubrik, och «Vanligt fel:».
+    """«Att tänka på»-blockets rubrik, och «Vanligt fel:».
     Inne i en col finns ingen heading (schemat tillåter bara löv), så
     rubriken är en text med weight 700 — se lesson_board 8f."""
     return sek.get("kind") == "text" and sek.get("weight") == 700
@@ -409,13 +421,14 @@ def _ankarraden(doc: dict) -> str | None:
 
 
 def _receptpunkter(doc: dict) -> list[str]:
-    """Receptets punkter: listan i vänsterspalten (8f)."""
+    """Receptets punkter: listan i vänsterspalten. Receptet ströks
+    2026-09-27 (8f), och shotarna ska inte ha några."""
     return [i for sek in _spalten(doc) if sek["kind"] == "list"
             for i in sek["items"]]
 
 
 def _att_tanka_pa(doc: dict) -> list[dict]:
-    """Sektionerna under rubriken «3. Att tänka på» i spalt 2, fram till
+    """Sektionerna under rubriken «2. Att tänka på» i spalt 2, fram till
     «Vanligt fel:»."""
     ut, i_blocket = [], False
     for sek in _spalt2(doc):
@@ -477,16 +490,15 @@ def test_vanstern_borjar_i_begreppen():
         rader = _begreppsrader(doc)
         assert 1 <= len(rader) <= 3, (uppdrag, rader)
         assert _formler_i_spalten(doc) <= 2, (uppdrag, _formler_i_spalten(doc))
-    # Verben står PÅ VÄNSTERN, men sedan 2026-09-20 inte nödvändigtvis som
-    # begreppsrader: «Förlänga» är ett handgrepp i bråkmetoden och flyttade
-    # ned i receptet (8f). Kravet är att steget på högern har något att peka
-    # tillbaka på, och receptet är lika mycket vänstern som raden ovanför.
-    # Sedan 2026-09-23 är receptet elevens frågor, och verbet står i svaret
-    # på dem: «Nej: förläng.» Stammen räcker.
+    # Verben lektionen heter efter står PÅ VÄNSTERN som begreppsrader.
+    # «Förläng» stod i receptet 2026-09-20 till 2026-09-27 («Nej: förläng.»);
+    # sedan receptet ströks visar exempel 3:s första led det, och ordet
+    # säger läraren.
     shoten = _algebrashoten()
-    vanstern = " ".join(_begreppsrader(shoten) + _receptpunkter(shoten)).lower()
-    for verb in ("utveckla", "faktorisera", "förläng"):
+    vanstern = " ".join(_begreppsrader(shoten)).lower()
+    for verb in ("utveckla", "faktorisera"):
         assert verb in vanstern, verb
+    assert _receptpunkter(shoten) == []
     # Och orden kommer ur MOMENTET, inte ur en fast lista: Pythagoras och
     # uttrycken delar inte ett enda begrepp.
     pythagoras = next(d for u, d in lb.FEW_SHOTS if "Pythagoras" in u)
@@ -501,22 +513,19 @@ def test_orden_star_pa_vanstern_och_leden_pa_hogern():
     """«Nu ska man utveckla det här uttrycket. Då trycker man på vad utveckla
     betyder» (2026-09-05). Till 2026-09-23 bar högerns metodsteg ordet
     («Utveckla: multiplicera in 4:an»). Sedan lärarens dom den dagen står
-    orden BARA på vänstern, i begreppsraderna och receptet, och högern bär
-    uträkningen: «så kan jag berätta muntligt för eleverna». Läraren pekar
-    från ledet tillbaka till ordet."""
+    orden BARA på vänstern, i begreppsraderna (och till 2026-09-27 i
+    receptet), och högern bär uträkningen: «så kan jag berätta muntligt för
+    eleverna». Läraren pekar från ledet tillbaka till ordet."""
     for uppdrag, doc in lb.FEW_SHOTS:
         assert _metodsteg(doc) == [], uppdrag
     algebra = _algebrashoten()
-    vanstern = " ".join(_begreppsrader(algebra)
-                        + _receptpunkter(algebra)).lower()
     assert {"utveckla", "faktorisera"} <= _prefix(algebra)
-    assert "förläng" in vanstern
-    # Förkunskapsverbet får ingen begreppsrad. Till 2026-09-23 stod det i
-    # receptet («Sätt in: kända sidor»); sedan dess är receptet elevens egna
-    # frågor, och Pythagoras frågar efter den längsta sidan i stället.
+    # Förkunskapsverbet får ingen begreppsrad, och sedan 2026-09-27 inget
+    # recept heller: «Sätt in: kända sidor» och sedan «Vilken sida är
+    # längst?» stod där till dess.
     pyt = next(d for u, d in lb.FEW_SHOTS if "Pythagoras" in u)
     assert "sätt in" not in _prefix(pyt)
-    assert "Vilken sida är längst?" in _receptpunkter(pyt)
+    assert _receptpunkter(pyt) == []
 
 
 # Förkunskaperna: klassen kan dem sedan tidigare kurser, och läraren säger
@@ -688,7 +697,10 @@ def test_prompten_bar_exempelkraven():
     assert "- UTRÄKNINGEN: under uppgiften står uträkningen som math-rader" in p
     assert "ETT led per rad" in p and "kedjan slutar i SVARET med enhet" in p
     assert "INGA metodsteg i ord och ingen punktlista" in p
-    assert "Leden går igenom RECEPTETS punkter i receptets ordning" in p
+    # «Leden går igenom RECEPTETS punkter i receptets ordning» till
+    # 2026-09-27, då receptet ströks (8f).
+    assert "RECEPTETS punkter" not in p
+    assert "En omskrivning (25 % blir 0,25) är ett eget led" in p
     assert "Normalt 2–4 led" in p and "RÄKNA EFTER VARJE LED" in p
     # Och när boken är källan: tavlan ska räcka för sidornas alla uppgifter.
     assert "SAMTLIGA uppgifter på just de" in p
@@ -768,8 +780,10 @@ def test_prompten_bar_de_korta_namnen():
     # 2026-09-20 när skelettet kom, och TOLV igen 2026-09-21: «korta ner det,
     # kanske 30 %». Sexton minus 30 % är elva komma två, och tolv är hennes
     # eget tal från september. Skelettet ryms när texten omkring det stryks.
-    assert "SKRIVNA ENHETERNA" in p and "HÖGST TOLV" in p
-    assert "HÖGST SEXTON" not in p
+    # TOLV BLEV TIO 2026-09-27, när receptets punkter ströks (8f).
+    assert "SKRIVNA ENHETERNA" in p and "HÖGST TIO" in p
+    assert "HÖGST SEXTON" not in p and "HÖGST TOLV" not in p
+    assert "varje receptpunkt" not in p
     # Pilarna räknas inte: de är matematik, inte skrivna enheter.
     assert "pilarna räknas inte" in p
 
@@ -1146,8 +1160,9 @@ def test_refine_board_bar_elementet_lararen_pekade_pa():
 
 def _tavla_med_skelett() -> dict:
     """Vänstertavlan läraren BAD OM i jobb 480: kvadratrot/rot som par,
-    ankaret x^2 = 64 ⇒ ±8 före formeln, receptet i tre verb och «Att tänka
-    på» med varför-raden och exakt-mot-närmevärde."""
+    ankaret x^2 = 64 ⇒ ±8 före formeln och «Att tänka på» med varför-raden
+    och exakt-mot-närmevärde. Receptet i tre verb var också med till
+    lärarens dom 2026-09-27, då det ströks (8f)."""
     doc = _valid_doc()
     doc["boards"][0]["sections"][0]["text"] = "Andragradsekvationer"
     doc["boards"][0]["sections"][-1]["children"][1]["children"] = [
@@ -1161,16 +1176,13 @@ def _tavla_med_skelett() -> dict:
          "gapAfter": 10},
         {"kind": "math", "latex": "x^2 = a \\Rightarrow x = \\pm \\sqrt{a}",
          "size": 24, "gapAfter": 12},
-        {"kind": "text", "text": "Så här", "size": 18, "weight": 700,
-         "gapAfter": 6},
-        {"kind": "list", "bullet": "–", "size": 17, "gap": 4, "items": [
-            "Samla: allt x i ett led",
-            "Dela: gör kvadraten ensam",
-            "Dra roten: båda tecknen"], "gapAfter": 10},
-        {"kind": "text", "text": "Att tänka på", "size": 18, "weight": 700,
-         "gapAfter": 6},
+        {"kind": "text", "text": "2. Att tänka på", "size": 18,
+         "weight": 700, "gapAfter": 6},
         {"kind": "math", "latex": "x^2 = -20", "size": 20, "gapAfter": 2},
-        {"kind": "text", "text": "En kvadrat blir aldrig negativ.",
+        # «En kvadrat blir aldrig negativ.» (31 tecken) till 2026-09-27: en
+        # etikett över 30 tecken kostar full budget, och under taket 190
+        # fällde den tavlan. Regeln 8g säger fyra ord.
+        {"kind": "text", "text": "Aldrig negativ.",
          "size": 16, "gapAfter": 6},
         {"kind": "text", "text": "Exakt om inget annat sägs.", "size": 16},
     ]
@@ -1183,21 +1195,25 @@ def test_omskrivningsprompten_bar_samma_skelett_som_skrivningen():
     ingenting — det var SKRIVNINGEN som höll igen, för omskrivningsprompten
     bär INSTRUCTION, och den sa «HÖGST TOLV» och nej till varje tal på
     vänstern. Skelettet måste alltså nå omskrivningen, inte bara
-    genereringen."""
-    p = lb.build_refine_prompt(_valid_doc(), "lägg till receptet")
-    for rad in ("8d. ANKARET", "6c. PILARNA", "8f. RECEPTET",
+    genereringen.
+
+    Sedan lärarens dom 2026-09-27 bär skelettet INGET recept (8f), och det
+    förbudet ska nå omskrivningen på samma sätt: en lärare som ber om
+    «Att tänka på» ska inte få tillbaka «Så löser vi»."""
+    p = lb.build_refine_prompt(_valid_doc(), "lägg till att tänka på")
+    for rad in ("8d. ANKARET", "6c. PILEN", "8f. INGET RECEPT",
                 "8g. ATT TÄNKA PÅ",
-                "HÖGST TOLV", "ETT undantag: ANKARET i 8d"):
+                "HÖGST TIO", "ETT undantag: ANKARET i 8d"):
         assert rad in p, rad
-    assert "HÖGST SEXTON" not in p
+    assert "HÖGST SEXTON" not in p and "8f. RECEPTET" not in p
 
 
 def test_omskrivning_som_ber_om_skelettet_nar_tavlan():
     """Samma varv, hela vägen: lappen «siffror_vanster» strök ankaret läraren
     bad om (jobb 480, event 3). Nu går raden igenom vakten, och varvet
     behöver ingen reparationsrunda som kan stryka den igen."""
-    onskemal = ("lägg till ankaret x^2 = 64 före formeln, ett recept i tre "
-                "verb och en rad under att tänka på om negativt högerled")
+    onskemal = ("lägg till ankaret x^2 = 64 före formeln och en rad under "
+                "att tänka på om negativt högerled")
     llm, calls = _stub_llm([json.dumps(_tavla_med_skelett())])
     res = lb.refine_board(_valid_doc(), onskemal, model="m", llm=llm)
     assert res["errors"] == [], res["errors"]
@@ -1205,7 +1221,7 @@ def test_omskrivning_som_ber_om_skelettet_nar_tavlan():
              if s["kind"] == "math"]
     assert "x^2 = 64 \\Rightarrow x = \\pm 8" in latex
     assert "x^2 = -20" in latex
-    assert _receptpunkter(res["board"]), res["board"]
+    assert _receptpunkter(res["board"]) == [], res["board"]
     # EN modellrunda: ingen reparation och ingen omkörning behövdes.
     assert len(calls) == 1, [c["prompt"][:60] for c in calls]
 
@@ -1618,81 +1634,53 @@ def test_domaren_provar_ocksa_begreppskopplingen():
 # «Rätt men för lite och för spretigt; eleverna får inte det som gör att de
 # kan börja i boken.» Tavlan för Origo 2a 1.3 Andragradsekvationer bar två
 # begreppsrader, en bokstavsformel och en tom nedre tredjedel. Skelettet är
-# svaret: paret, ankaret, receptet och «Att tänka på».
+# svaret: paret, ankaret, receptet och «Att tänka på». Receptet ströks med
+# lärarens dom 2026-09-27 («"Så löser vi" … Ta bort det helt och hållet»).
 
 def test_prompten_bar_vansterns_skelett():
-    """Fem ord ska gå att hitta i prompten, för det är de fem delar läraren
+    """Orden ska gå att hitta i prompten, för det är de delar läraren
     saknade. Står de bara i few-shotarna följs de när shoten liknar
-    momentet och annars inte."""
+    momentet och annars inte. Receptet är sedan 2026-09-27 ett FÖRBUD."""
     p = lb.build_prompt("Ma2a", "IndA", "andragradsekvationer")
     assert "ANKARET" in p and "8d. ANKARET" in p
-    assert "8f. RECEPTET" in p
+    assert "8f. RECEPTET" not in p and "8f. INGET RECEPT" in p
+    assert "«Så löser vi»-spalt" in p
     assert "8g. ATT TÄNKA PÅ" in p
+    assert "rubrikraden «2. Att tänka på»" in p
     assert "PARET hör till samma regel" in p
     assert "RANDFALL" in p
     # Ordningen står samlad, så att modellen ser skelettet som en helhet.
     # PILEN (6c) kom in i ordningen 2026-09-21: «lägga till kanske någon pil
     # eller två». ÄR/INTE 2026-09-23 kväll: «det här var proportionellt, det
     # betyder det här, och det är den här kvoten, det vill säga inte den här
-    # kvoten.»
+    # kvoten.» RECEPTET (8f) och spalt 2:ans pil ströks 2026-09-27.
     assert ("BEGREPPSRADERNA (8c), ANKARET (8d), PILEN (6c), FORMELN och "
-            "ÄR/INTE (8e) i spalt 1, RECEPTET (8f), PILEN (6c), ATT TÄNKA PÅ "
+            "ÄR/INTE (8e) i spalt 1, och i spalt 2 ATT TÄNKA PÅ "
             "(8g)") in p
     # …och 8b säger inte längre nej till varje tal på vänstern.
     assert "ETT undantag: ANKARET i 8d" in p
 
 
-# Den form läraren fällde 2026-09-23 («alldeles för generellt»): ett abstrakt
-# verb, kolon och ett par ord. Listan är verben ur BA26B:s tavla och ur de
-# fyra shotarnas gamla recept.
-_GENERELLT_RECEPT = re.compile(
-    r"^(Skriv om|Avgör|Räkna|Sätt in|Lös ut|Namnge|Bestäm|Avläs|Hitta|"
-    r"Jämför|Förlänga|Förenkla|Samla|Dela|Välj|Titta):", re.IGNORECASE)
-
-
-def _ar_elevfraga(punkt: str) -> bool:
-    """En hel fråga på högst sex ord, utan kolon: «Söker jag en bit eller
-    allt?»."""
-    return (punkt.endswith("?") and ":" not in punkt
-            and 3 <= len(punkt.split()) <= 6)
-
-
-def _ar_valsvar(punkt: str) -> bool:
-    """«En bit: gånger. Allt: delat med.» Två fall, vart och ett en kort
-    mening med sitt kolon, högst åtta ord sammanlagt."""
-    fall = [f for f in punkt.split(". ") if f.strip()]
-    return (len(fall) == 2 and all(": " in f for f in fall)
-            and punkt.endswith(".") and len(punkt.split()) <= 8)
-
-
-def test_few_shotarna_bar_recept_och_att_tanka_pa():
+def test_few_shotarna_bar_att_tanka_pa_men_inget_recept():
     """En modell härmar det den ser. Skelettet står i prompten OCH i alla
     fyra shotarna — ankaret bara där formeln har ett varför, för en
     påhittad sifferrad är fortfarande felet 8b fäller.
 
     Sedan lärarens dom 2026-09-23 kväll bär «Att tänka på» EN eller TVÅ
     rader («hellre EN tydlig rad än två», 8g), och andragrads-shoten gav sitt
-    ankare åt ÄR/INTE: kvar med ankare är uttrycks-shoten."""
+    ankare åt ÄR/INTE: kvar med ankare är uttrycks-shoten.
+
+    RECEPTET mättes här till 2026-09-27 (2–3 elevfrågor, «Ja: plus. Nej:
+    minus.»). Lärarens dom den dagen: «"Så löser vi" … Ta bort det helt och
+    hållet.» Nu ska ingen shot bära det, och spalt 2 börjar med «2. Att
+    tänka på»."""
     med_ankare = 0
     for uppdrag, doc in lb.FEW_SHOTS:
         parsed, fel = ws.validate_board_json(doc)
         assert parsed is not None and fel == [], (uppdrag, fel)
-        punkter = _receptpunkter(doc)
-        assert 2 <= len(punkter) <= 3, (uppdrag, punkter)
-        # ELEVENS EGNA FRÅGOR (lärarens dom 2026-09-23). Formen «Verb: två–tre
-        # ord» mättes här till dess. Nu är varje punkt en hel fråga på högst
-        # sex ord, och bara den sista får vara svaret på valet, «Fall: gör
-        # så. Fall: gör så.».
-        *fragor, sista = punkter
-        for punkt in fragor:
-            assert _ar_elevfraga(punkt), (uppdrag, punkt)
-        assert _ar_elevfraga(sista) or _ar_valsvar(sista), (uppdrag, sista)
-        for punkt in punkter:
-            assert not _GENERELLT_RECEPT.match(punkt), (uppdrag, punkt)
-            assert not re.search(r"[\d^\\$]", punkt), (uppdrag, punkt)
-            # Motorn radbryter ingen listpunkt: 36–37 tecken spiller ur spalten
-            # och krymper hela vänstern (renderat 2026-09-23).
-            assert len(punkt) <= 34, (uppdrag, punkt)
+        assert _receptpunkter(doc) == [], uppdrag
+        assert not [s for s in _spalten(doc) if _rubrikrad(s)
+                    and "så löser vi" in s.get("text", "").lower()], uppdrag
         rader = _att_tanka_pa(doc)
         assert 1 <= len([r for r in rader if r["kind"] == "text"]) <= 2, uppdrag
         if _ankarraden(doc) is not None:
@@ -1721,7 +1709,7 @@ def test_hogern_har_inga_ordsteg_och_vakten_faller_dem():
     # som «Fyller vi i tillsammans» öppnar inget exempel.
     galleri = next(d for u, d in lb.FEW_SHOTS if "Randvinkel" in u)
     assert lb.utrakningsvakt(galleri) == []
-    # Vänstern bär receptet, och det ÄR en lista.
+    # Vänstern döms inte: agendan är en lista (och till 2026-09-27 receptet).
     assert lb.utrakningsvakt({"boards": [{"sections": [
         {"kind": "heading", "text": "Exempel"},
         {"kind": "list", "items": ["Lös: x"]}]}]}) == []
@@ -1746,29 +1734,68 @@ def test_generate_board_far_ordstegen_som_fel_att_ratta():
     assert _metodsteg(res["board"]) == []
 
 
-def test_domaren_provar_receptet_och_randfallen():
-    """De två grindarna letar efter något som SAKNAS på vänstern — förut
+def test_domaren_faller_ett_recept_och_provar_randfallen():
+    """Randfallsgrinden letar efter något som SAKNAS på vänstern. Förut
     letade domaren bara efter en tjock vänster och ett saknat begrepp, och
-    därför kunde fyra randfall i urvalet gå obemärkta förbi."""
+    därför kunde fyra randfall i urvalet gå obemärkta förbi.
+
+    RECEPTGRINDEN («Pröva RECEPTET», «Saknas receptet är det ett fynd»)
+    stod här 2026-09-20 till 2026-09-27. Lärarens dom den dagen: «"Så löser
+    vi" … Ta bort det helt och hållet.» Nu är ett recept tjocklek, och
+    domaren ska aldrig be om ett."""
     t = lb.build_tackning_prompt({"boards": []}, "LÄRARENS URVAL: 1301–1315")
-    assert "Pröva RECEPTET" in t
-    assert "Saknas receptet är det ett fynd" in t
-    # Och den gamla formen fälls (lärarens dom 2026-09-23, «alldeles för
-    # generellt»): domaren beställde förut just den.
-    assert "Ett GENERELLT recept är också ett fynd" in t
-    assert "«Skriv om: andelen i decimalform»" in t
-    assert "ELEVENS EGNA FRÅGOR" in t
-    assert "«Verb: högst fyra ord»" not in t
+    assert "Pröva RECEPTET" not in t
+    assert "Saknas receptet" not in t
+    assert "receptpunkt" not in t
+    assert "ett recept (en «Så löser vi»-spalt" in t
     assert "Pröva RANDFALLEN" in t
     assert "Räkna typer, inte uppgifter" in t
     # Tjockleksgränserna följde med skelettet, och sänktes 2026-09-21 med
     # lärarens 30 %: två begreppsrader, två randfall.
     assert "fler än TVÅ begreppsrader" in t
-    assert "fler än tre receptpunkter" in t
     assert "fler än TVÅ rader under «Att tänka på»" in t
     assert "fler än två vanliga fel" in t
     # Och kompletteringen har samma tak åt det nya hållet.
     assert "HÖGST TVÅ rader under «Att tänka på»" in t
+
+
+# ── FACIT 2026-09-27: INGET RECEPT ──────────────────────────────────────────
+# Lärarens dom (Rickard) över två genererade tavlor. IndA pq-formeln
+# (planering 446f7151cb07): «Vi måste ta bort två helt och hållet. "Så löser
+# vi" … Annars kan vi ha kvar "att tänka på" och det andra på vänstra
+# tavlan.» NA26F parenteser i regelsamlingsformen (6aac410c5b4d): «Den behöver
+# vara mindre omfattande. Väldigt mycket på vänstra tavlan. … "Så löser vi",
+# all den texten, måste vi ta bort. "Att tänka på" också. Resten kan vi ha
+# kvar.» Fixturerna är de två tavlorna som de handrättades, högern orörd
+# («jättenöjd»).
+
+def test_facittavlorna_2026_09_27_gar_igenom_utan_anmarkning():
+    """Facit ska gå igenom varje vakt, budgeten inräknad: taket sänktes
+    till 190 med receptet, och de här tavlorna är vad det ska rymma."""
+    for fil in ("facit-inda-pq-2026-09-27.json",
+                "facit-na26f-parenteser-2026-09-27.json"):
+        doc = _kontrolltavlan(fil)
+        parsed, fel = ws.validate_board_json(doc)
+        assert parsed is not None and fel == [], (fil, fel)
+        assert lb.utrakningsvakt(doc) == [] and lb.grafvakt(doc) == [], fil
+        assert _receptpunkter(doc) == [], fil
+    inda = _kontrolltavlan("facit-inda-pq-2026-09-27.json")
+    assert _spalt2(inda)[0]["text"] == "2. Att tänka på"
+    # Regelsamlingen har bara spalt 1: en row med EN col.
+    na26f = _kontrolltavlan("facit-na26f-parenteser-2026-09-27.json")
+    assert len(_vanstersektioner(na26f)[-1]["children"]) == 1
+
+
+def test_regelsamlingen_har_bara_spalt_1():
+    """REGELSAMLING_BLOCK (Vidma-formen) bar receptet och «Att tänka på» i
+    spalt 2 till 2026-09-27. Nu säger blocket att spalt 1 är hela vänstern,
+    och domaren får inte be om en rad under «Att tänka på» där."""
+    form = lb.tavelform(regelsamling=True)
+    p = form.instruktion()
+    assert "Spalt 1 är HELA vänstern: inget recept, ingen «Att tänka på»" in p
+    assert "row med EN col" in p
+    assert "«2. Så löser vi»: receptet (8f) är frågorna" not in p
+    assert "Vänstern har ingen «Att tänka på»" in form.domarinstruktion()
 
 
 # ── LÄRARENS TRE FORMDOMAR (2026-09-20, kväll) ──────────────────────────────
@@ -1790,12 +1817,18 @@ def test_prompten_bar_de_tva_spalterna():
     """«Vänstra halvan av vänstra tavlan är bara x² = a … sen inget annat;
     allt annat står på högra delen och utrymmet under parentesen utnyttjas
     inte» · «jag saknar en tydlig röd tråd på hela vänstern, det är bara
-    uppstaplat.» Formen var figur + allt-annat; nu är den två trådar."""
+    uppstaplat.» Formen var figur + allt-annat; nu är den två trådar.
+
+    Spalt 2 hette «2. Så löser vi» med «3. Att tänka på» under sig till
+    lärarens dom 2026-09-27. Nu är den «2. Att tänka på», kortare med flit,
+    och regeln om lika höga spalter är borta: den hade fått modellen att
+    fylla spalten med den text läraren strök."""
     p = lb.build_prompt("Ma2a", "IndA", "andragradsekvationer")
     assert "TVÅ LIKA BREDA col" in p
-    assert "«1. Vad är det?»" in p and "«2. Så löser vi»" in p
-    assert "«3. Att tänka på»" in p
-    assert "SPALTERNA SKA VARA UNGEFÄR LIKA HÖGA" in p
+    assert "«1. Vad är det?»" in p and "«2. Att tänka på»" in p
+    assert "«2. Så löser vi»" not in p and "«3. Att tänka på»" not in p
+    assert "SPALTERNA SKA VARA UNGEFÄR LIKA HÖGA" not in p
+    assert "Spalt 2 är KORTARE än spalt 1, och det är meningen" in p
     # Formen står som JSON, inte bara som prosa: en modell härmar det den ser.
     assert '"kind": "col", "width": 400' in p
     # Och kroppen ligger överst i spalt 1 på ett geometrimoment.
@@ -1803,12 +1836,14 @@ def test_prompten_bar_de_tva_spalterna():
 
 
 def test_spaltbalansen_har_ett_atgardsrad():
-    """Varningen kan bara harnesset ge i dag (motorn mäter inte en col inuti
-    en row), men rådet ska stå färdigt och säga vad man GÖR."""
+    """Motorn varnar sedan 2026-09-21 (tavla-wb.js, SPALTBALANSEN), och
+    sedan 2026-09-27 bara när den FÖRSTA spalten är kort. Rådet ska säga vad
+    man GÖR, och aldrig be om mer text i spalt 2."""
     p = lb.build_repair_prompt(_valid_doc(), ["[WB] något"])
-    assert "spalterna på vänstertavlan är ojämna" in p
-    assert "flytta ett helt block mellan" in p
-    assert "Stryk aldrig ett block för att jämna ut" in p
+    assert "'den första spalten är N % av den längsta'" in p
+    assert "Flytta kroppen eller en begreppsrad dit" in p
+    assert "Fyll aldrig på med ny text" in p
+    assert "spalterna på vänstertavlan är ojämna" not in p
 
 
 def test_pilraden_bryter_inte_ankarregeln():
@@ -1854,31 +1889,20 @@ def test_prompten_skiljer_anatomin_fran_formlerna():
     assert "uppställningen i anatomin och ankaret räknas INTE som formler" in t
 
 
-def test_prompten_kraver_elevens_egna_fragor_i_receptet():
-    """Lärarens dom 2026-09-23 över BA26B:s procenttavla: «Detta är alldeles
-    för generellt. På tavlan. Det borde ju vara bättre att ha något mer
-    konkret som eleverna faktiskt fattar.» Hon valde elevens egna frågor.
-
-    Testet hette test_prompten_kraver_hel_svenska_i_receptet och mätte
-    formen «Verb: TVÅ–TRE ord» (2026-09-21) med kolonet i varje punkt. Den
-    formen är upphävd; kvar är att punkten ska gå att säga, och att den
-    inte bär matematik."""
+def test_prompten_har_inget_recept_med_elevens_fragor():
+    """Lärarens dom 2026-09-23 över BA26B:s procenttavla gjorde receptet till
+    elevens egna frågor («Vad är procenten i decimalform?», «Söker jag en
+    bit eller allt?»), och testet mätte den formen. Lärarens dom 2026-09-27
+    över IndA:s pq-tavla («Ekvationen i pq-form?», «Vad är p och q?», «Vad
+    blir det under roten?») och NA26F:s parentestavla strök det: «Ta bort
+    det helt och hållet.» Formreglerna för punkterna ska vara borta med
+    receptet, och förbudet ska nämna elevfrågorna, för det är dem modellen
+    har lärt sig skriva."""
     p = lb.build_prompt("Ma2a", "IndA", "andragradsekvationer")
-    assert "formen «Verb: TVÅ–TRE ord»" not in p
-    assert "VARJE punkt har sitt kolon" not in p
-    assert "de FRÅGOR eleven ställer sig när hon slår upp en uppgift" in p
-    assert "Hela frågor på högst SEX ORD och ~32 tecken" in p
-    assert "konkreta ord («bit», «allt») före abstrakta verb" in p
-    # Lärarens egen förhandsvisning står ordagrant, med svaret på valet sist.
-    assert ("«Vad är procenten i decimalform?», «Söker jag en bit eller "
-            "allt?», «En bit: gånger. Allt: delat med.»") in p
-    assert "Sista punkten FÅR vara svaret på valet" in p
-    # Kopplingen till högern står kvar, läst mot frågorna.
-    assert "exemplens första led svarar på första frågan" in p
-    # …och ingen matematik i listpunkten: motorn renderar ingen
-    # LaTeX i text, så «x^2» hade stått kvar som x^2 på tavlan.
-    assert "skriv «kvadraten», aldrig «x^2»" in p
-    assert "Inga tal och ingen matematik i punkterna" in p
+    assert "de FRÅGOR eleven ställer sig när hon slår upp en uppgift" not in p
+    assert "Sista punkten FÅR vara svaret på valet" not in p
+    assert "Inga tal och ingen matematik i punkterna" not in p
+    assert "lista med metodsteg eller elevfrågor" in p
 
 
 def test_domaren_undantar_randfallen_fran_siffervakten():
@@ -1929,11 +1953,18 @@ def _budgetproblem() -> list[dict]:
 def test_budgetlappen_far_inte_stryka_skelettet():
     """Den billigaste strykningen är alltid ankaret: två korta rader. Men
     skelettet är beställningen, och budgeten är ett tak — inte en
-    prioritering. Vakten gäller ankaret, receptet och «Att tänka på»."""
+    prioritering. Vakten gäller ankaret och «Att tänka på».
+
+    Receptet («Lösa» och listan, index 5 och 6) skyddades till 2026-09-27,
+    då läraren strök det (INSTRUCTION 8f). En budgetlapp som tar bort ett
+    recept på en äldre tavla gör numera det han bad om."""
     doc = _v2_med_ankare()
-    for i in (2, 3, 5, 6, 7, 8):
+    for i in (2, 3, 7, 8):
         nyckel = f"{_V2_SPALT}[{i}]"
         assert lb.skelettvakten(doc, [nyckel], _budgetproblem()) == nyckel, i
+    for i in (5, 6):
+        nyckel = f"{_V2_SPALT}[{i}]"
+        assert lb.skelettvakten(doc, [nyckel], _budgetproblem()) == "", i
     # Och punktskrivningen räknas lika: modellen skriver båda formerna.
     punkt = _V2_SPALT.replace("[", ".").replace("]", "") + ".2"
     assert lb.skelettvakten(doc, [punkt], _budgetproblem())
@@ -1996,7 +2027,9 @@ def test_lappprompten_forbjuder_strykning_av_skelettet():
     # begreppsraden — innan något kortas ord för ord.
     assert "stryk först definitionsmeningen helt" in p
     assert "sedan den tredje agendapunkten" in p
-    assert "Ankaret med sin etikett, receptet, pilarna och raderna" in p
+    # «receptet» stod i uppräkningen till 2026-09-27 (8f).
+    assert "Ankaret med sin etikett, pilen och raderna" in p
+    assert "receptets rubrik eller lista" not in p
 
 
 def test_domarens_forslag_skrivs_i_radens_egen_form():
@@ -2006,19 +2039,24 @@ def test_domarens_forslag_skrivs_i_radens_egen_form():
     t = lb.build_tackning_prompt({"boards": []}, "LÄRARENS URVAL: 1301–1315")
     assert "FORSLAGET SKRIVS I DEN FORM RADEN SKA HA" in t
     assert "aldrig «Kvadratrot ur a: positiva talet vars kvadrat är a»" in t
-    # «en receptpunkt är «Verb: två–tre ord»» till 2026-09-23.
-    assert "en receptpunkt är «Verb: två–tre ord»" not in t
-    assert ("en receptpunkt är en hel fråga på högst sex ord eller sist "
-            "svaret «Fall: gör så. Fall: gör så.»") in t
+    # «en receptpunkt är …» till 2026-09-27, då receptet ströks (8f).
+    assert "en receptpunkt är" not in t
     assert "en etikett på högst fyra ord" in t
 
 
 def test_skelettets_ord_hittar_ratt_vansterrad():
     """«Lägg till receptet» och «en rad under att tänka på» kände ingenting
-    igen (jobb 480), och varvet gick som helomskrivning. Nu binder orden."""
+    igen (jobb 480), och varvet gick som helomskrivning. Nu binder orden.
+
+    Receptet ströks 2026-09-27, men ordet binder fortfarande på en äldre
+    tavla som bär det (kontrolltavlan v2, «Lösa» och listan), så att «ta
+    bort receptet» pekar ut listan."""
+    gammal = _v2_med_ankare()
+    vagar = lb.gissade_malvagar(gammal, lb.las_maltyper("ta bort receptet"))
+    assert "Samla" in json.dumps([_ruta(gammal, v) for _n, v in vagar],
+                                 ensure_ascii=False)
     doc = _algebrashoten()
-    for mening, vantad in (("lägg till en punkt i receptet", "förläng"),
-                           ("en rad till under att tänka på", "Minuset"),
+    for mening, vantad in (("en rad till under att tänka på", "Minuset"),
                            ("stryk ankaret", "2(3 + 5)")):
         gissning = lb.las_maltyper(mening)
         assert gissning, mening
@@ -2074,7 +2112,8 @@ def test_domaren_faller_ordsteg_och_siffror_pa_vanstern():
     assert "FÄRDIGA URÄKNINGAR" not in t
     assert "steg i ORD som säger vad man GÖR" not in t
     assert "Fäll METODSTEG I ORD i exemplen" in t
-    assert "ETT led per rad i receptets ordning" in t
+    # «i receptets ordning» till 2026-09-27, då receptet ströks (8f).
+    assert "ETT led per rad, och" in t and "receptets ordning" not in t
     assert "Räkna efter varje led" in t
     assert "SIFFROR PÅ VÄNSTERN" in t
     assert "på vänstern står bokstäver" in t
@@ -2799,9 +2838,10 @@ def test_prompten_kraver_tre_metodtyper_i_stigande_svarighet():
     assert "aldrig ur en färdig lista" in p
     # Uppföljaren bara när metodtypen byter.
     assert "skrivs bara när METODTYPEN byter" in p
-    # Och leden går genom receptet (2026-09-23; till dess «stegen», med
-    # uppgiftens tal i varje steg).
-    assert "Leden går igenom RECEPTETS punkter i receptets ordning" in p
+    # Leden gick genom receptet 2026-09-23 till 2026-09-27, då receptet
+    # ströks (8f). Kvar är uträkningen, ett led per rad.
+    assert "RECEPTETS punkter" not in p
+    assert "ETT led per rad, uppifrån och ned" in p
 
 
 def test_generate_board_far_formupprepningen_som_fel_att_ratta():

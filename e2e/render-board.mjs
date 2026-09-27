@@ -143,7 +143,10 @@ try {
             const kol = [...rad.children].filter(arKol);
             if (kol.length !== 2) continue;
             const h = kol.map(c => c.getBoundingClientRect().height);
-            const kvot = Math.min(...h) / Math.max(...h);
+            /* Bara en kort FÖRSTA spalt sedan 2026-09-27: utan receptet är
+               spalt 2 kortare med flit (lesson_board regel 6, samma vakt i
+               tavla-wb.js). */
+            const kvot = h[0] / Math.max(...h);
             if (kvot < 0.6) {
               obalans.push(`vänstertavlans spalter är ${Math.round(h[0])} `
                 + `och ${Math.round(h[1])} px (${Math.round(kvot * 100)} %)`);
