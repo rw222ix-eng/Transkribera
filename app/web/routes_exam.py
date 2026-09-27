@@ -1486,7 +1486,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # list_exams sorterar NYAST först; framåt i tiden vill vi ha närmast
         # först, så ordningen vänds här och inte i SQL (samma fråga används av
         # högen, och den ska inte byta ordning för det här).
-        kommande.sort(key=lambda r: (r["datum"], r["id"]))
+        # Samma dag: NYAST först. IndA hade prov 118 och dess omskrivning 130
+        # båda godkända till 20 okt, och förvalet tog det gamla (2026-09-27).
+        kommande.sort(key=lambda r: (r["datum"], -r["id"]))
         return {"prov": kommande[0] if kommande else None,
                 "kommande": kommande}
 

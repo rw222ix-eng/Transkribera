@@ -2746,25 +2746,26 @@ def valj_provrader(rader: list[dict], nummer: list[int] | None = None, *,
                    rubriker: list[str] | None = None) -> list[dict]:
     """Provets uppgifter som hör till lektionen, i provets ordning.
 
-    Valde läraren nummer gäller de, och inget annat. Annars väljs de
-    uppgifter vars delmoment pekar på lektionens sidor; en uppgift utan
-    sidspann i delmomentet väljs när den delar ett ord med lektionens moment.
-    Tom lista när inget i provet hör till lektionen: då skrivs tavlan ur
-    boken som förut, hellre än ur ett prov om något annat."""
+    Valde läraren nummer gäller de, och inget annat. Har lektionen sidor
+    väljs de uppgifter vars delmoment pekar på dem, och bara de. Utan sidor
+    väljs uppgifter som delar ett ord med lektionens moment. Tom lista när
+    inget i provet hör till lektionen: då skrivs tavlan ur boken som förut,
+    hellre än ur ett prov om något annat.
+
+    ORDEN RÄKNAS INTE NÄR SIDORNA FINNS (IndA 2026-09-27, jobb 1139). Momentet
+    var bokens avsnitt «1.3 Andragradsekvationer», och ordet fångade provets
+    budgetuppgift och problemlösningen för nästa lektion, två uppgifter utan
+    sidspann. En uppgift utan sidor väljer läraren med brickan."""
     if nummer:
         valda = set(nummer)
         return [r for r in rader if r["nr"] in valda]
     spann = [(a, b) for a, b in (sidor or []) if a]
+    if spann:
+        return [r for r in rader
+                if any(a <= d and c <= b for a, b in spann
+                       for c, d in _sidspann(r.get("delmoment") or ""))]
     ord_ = set().union(*(_stammar(r) for r in rubriker or [""]))
-    ut = []
-    for r in rader:
-        egna = _sidspann(r.get("delmoment") or "")
-        if egna and spann:
-            if any(a <= d and c <= b for a, b in spann for c, d in egna):
-                ut.append(r)
-        elif _stammar(r.get("delmoment") or "") & ord_:
-            ut.append(r)
-    return ut
+    return [r for r in rader if _stammar(r.get("delmoment") or "") & ord_]
 
 
 def _provrad(r: dict) -> str:

@@ -50,6 +50,14 @@ def test_uppgift_utan_sidor_valjs_pa_momentets_ord():
     assert [r["nr"] for r in valda] == [7, 12]
 
 
+def test_med_sidor_raknas_inte_orden():
+    """Jobb 1139: momentet «1.3 Andragradsekvationer» fångade uppgift 12,
+    som saknar sidor och hör till nästa lektion."""
+    valda = lesson_board.valj_provrader(
+        RADER, [], sidor=[(45, 48)], rubriker=["1.3 Andragradsekvationer"])
+    assert [r["nr"] for r in valda] == [3, 6]
+
+
 def test_lararens_nummer_gar_fore():
     valda = lesson_board.valj_provrader(RADER, [12, 1], sidor=[(45, 48)])
     assert [r["nr"] for r in valda] == [1, 12]

@@ -20,6 +20,10 @@ import * as L from "./larardag.mjs";
  *      och INGENTING när inget är valt (kassettregeln).
  *   5. Provets centrala innehåll ärvs till Gy25-brickorna, så läraren slipper
  *      kryssa i samma punkter en andra gång.
+ *   7. Tavlan har samma rad (läraren 2026-09-27: genomgången förklarar det
+ *      provet kräver, boken i andra hand). Eget förval med sex veckors
+ *      fönster, eget läge som inte läcker till bladet, inget arv ur provet,
+ *      och samma kassettregel för /api/planning/generate.
  *
  * Backendens tre rutter (`nasta`, `uppgiftstyper`, provet självt) är fejkade:
  * specen mäter panelen och kroppen, inte servern. De har sina egna tester.
@@ -35,6 +39,8 @@ const prov = (id, datum, titel) => ({
   group_id: GRUPP_ID, course_id: KURS_ID, klass: KLASS, kurs: KURS,
 });
 const NARA = prov(88, "2026-09-22", "PROV 1 · Andragradsekvationer");
+/* 37 dagar bort: utanför bladets tre veckor, innanför tavlans sex. */
+const MELLAN = prov(93, "2026-10-15", "PROV 2 · Funktioner");
 const FJARRAN = prov(91, "2026-12-01", "PROV 3 · Statistik");
 
 /* Grupperingen servern gör: delmoment först, avsnitt som reserv. Nummer 1 och
@@ -68,15 +74,25 @@ const BLAD = {
   ],
 };
 
+/* Tavlan som /api/planning/generate svarar med. Tom, men giltig: specen mäter
+   kroppen och metaraden, inte ritningen. */
+const TAVLA = {
+  title: "Andragradsfunktioner",
+  boards: [{ width: 900, height: 780, name: "vanster", sections: [] },
+           { width: 1800, height: 780, name: "hoger", sections: [] }],
+};
+
 /**
- * Fejkar de tre läsrutterna och generatorn, och samlar begäran.
+ * Fejkar de tre läsrutterna och generatorerna, och samlar begäran.
  *
- * Returnerar `{ generate, nasta }`: kropparna som gick till generatorn och
- * URL:erna `nasta` frågades på. Den senare är hela poängen med krav 2 —
- * `idag=` måste FINNAS i frågan, annars läser servern sin egen klocka.
+ * Returnerar `{ generate, nasta, tavla, examen }`: kropparna som gick till
+ * bladets och tavlans generator, URL:erna `nasta` frågades på och läsningarna
+ * av provet självt. `nasta` är hela poängen med krav 2: `idag=` måste FINNAS
+ * i frågan, annars läser servern sin egen klocka. `examen` är beviset på att
+ * tavlan inte ärver ur provet (krav 7).
  */
 async function fejka(page, { kommande = [NARA, FJARRAN] } = {}) {
-  const generate = [], nasta = [];
+  const generate = [], nasta = [], tavla = [], examen = [];
   await page.route("**/api/groups", route => route.fulfill({
     status: 200, contentType: "application/json",
     body: JSON.stringify([{ id: GRUPP_ID, namn: KLASS }]) }));
@@ -90,8 +106,17 @@ async function fejka(page, { kommande = [NARA, FJARRAN] } = {}) {
   });
   await page.route("**/api/exams/*/uppgiftstyper", route => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify(TYPER) }));
-  await page.route(/\/api\/exams\/\d+$/, route => route.fulfill({
-    status: 200, contentType: "application/json", body: JSON.stringify(EXAMEN) }));
+  await page.route(/\/api\/exams\/\d+$/, route => {
+    examen.push(route.request().url());
+    return route.fulfill({
+      status: 200, contentType: "application/json", body: JSON.stringify(EXAMEN) });
+  });
+  await page.route("**/api/planning/generate", route => {
+    tavla.push(route.request().postDataJSON());
+    return route.fulfill({ status: 200, contentType: "text/event-stream",
+      body: strom([{ type: "done", result: {
+        id: "p1", board: TAVLA, errors: [], rounds: 1 } }]) });
+  });
   await page.route("**/api/exams/generate", route => {
     generate.push(route.request().postDataJSON());
     return route.fulfill({ status: 200, contentType: "text/event-stream",
@@ -99,7 +124,7 @@ async function fejka(page, { kommande = [NARA, FJARRAN] } = {}) {
         id: 401, exam: BLAD, typ: "arbetsblad", status: "utkast",
         errors: [], rounds: 1 } }]) });
   });
-  return { generate, nasta };
+  return { generate, nasta, tavla, examen };
 }
 
 /** Planeringen öppnad på en typ, med klass och kurs satta. */
@@ -137,10 +162,10 @@ const raden = (page, id) => page.locator(`.typrad[data-id="${id}"]`);
 const brickan = (page, text) =>
   raden(page, "inforNummer").locator(".gychip", { hasText: text });
 
-/** Trycker Skriv och väntar ut begäran. */
-async function skriv(page) {
+/** Trycker Skriv och väntar ut begäran. Tavlan går till planeringens rutt. */
+async function skriv(page, vag = "/api/exams/generate") {
   const svar = page.waitForResponse(
-    r => new URL(r.url()).pathname.endsWith("/api/exams/generate"),
+    r => new URL(r.url()).pathname.endsWith(vag),
     { timeout: 60_000 });
   await page.locator("#skriv").click();
   await L.forbiNivavarningen(page);
@@ -328,4 +353,119 @@ test("kopiefyndet hamnar på sin uppgift och går att laga", async ({ page }) =>
   expect(ut.karta.uppg2).toEqual([
     "Uppgift 2 är provets uppgift 1 med andra tal."]);
   expect(ut.lagbara).toEqual(["kopia"]);
+});
+
+/* ── 7 · Tavlan ────────────────────────────────────── */
+
+test("tavlan har raden, och förvalet når sex veckor där bladets når tre",
+  async ({ page }) => {
+    await fejka(page, { kommande: [MELLAN, FJARRAN] });
+    await L.oppna(page);
+
+    await panelen(page, "Tavla");
+    await expect(raden(page, "inforProv")).toHaveCount(1);
+    const chip = raden(page, "inforProv").locator(".lchip");
+    await expect(chip).toHaveCount(1);
+    await expect(chip).toContainText("PROV 2");
+    await expect(chip).toContainText("15 okt");
+    /* Nollställaren heter efter vad tom lista betyder på tavlan: servern
+       väljer provets uppgifter på lektionens sidor, inte hela provet. */
+    await expect(brickan(page, "Det som hör till lektionen"))
+      .toHaveAttribute("aria-pressed", "true");
+    await expect(brickan(page, "Blandat (hela provet)")).toHaveCount(0);
+    await expect(raden(page, "inforNummer").locator(".typnot"))
+      .toHaveText("Provets uppgifter på lektionens sidor styr tavlans exempel.");
+
+    /* Samma prov ligger för långt bort för bladet, och tavlans val läcker
+       inte dit: bladet har sitt eget prov i upplägget. */
+    await panelen(page, "Arbetsblad");
+    await expect(raden(page, "inforProv")).toHaveCount(1);
+    await expect(raden(page, "inforProv").locator(".lchip")).toHaveCount(0);
+
+    // Och tillbaka: tavlans prov står kvar.
+    await panelen(page, "Tavla");
+    await expect(raden(page, "inforProv").locator(".lchip")).toContainText("PROV 2");
+  });
+
+test("att ta bort provet från tavlan håller inte bladets förval borta",
+  async ({ page }) => {
+    await fejka(page);
+    await L.oppna(page);
+
+    await panelen(page, "Tavla");
+    const tavlans = raden(page, "inforProv").locator(".lchip");
+    await expect(tavlans).toContainText("PROV 1");
+    await tavlans.click();
+    await expect(tavlans).toHaveCount(0);
+
+    /* Ett gemensamt läge hade burit tavlans «rörd» över till bladet, och då
+       hade bladet stått utan prov fast det ligger två veckor bort. */
+    await panelen(page, "Arbetsblad");
+    await expect(raden(page, "inforProv").locator(".lchip")).toContainText("PROV 1");
+
+    // Tavlans eget val står kvar: förvalet smyger inte tillbaka provet.
+    await panelen(page, "Tavla");
+    await expect(raden(page, "inforProv").locator(".lchip")).toHaveCount(0);
+  });
+
+test("tavlans begäran bär provet, och tavlan ärver inget ur det",
+  async ({ page }) => {
+    const { tavla, examen } = await fejka(page, { kommande: [MELLAN, FJARRAN] });
+    await L.oppna(page);
+    await panelen(page, "Tavla");
+
+    /* Ingen arvsmening: tavlans bok är lektionens sidor, och provets
+       punkter och sidor följer inte med (INFOR.Tavla.arv). */
+    await expect(raden(page, "inforProv").locator(".typnot"))
+      .toHaveText("Förbereder inför provet 15 okt · PROV 2 · Funktioner");
+    await expect(brickan(page, "Det som hör till lektionen"))
+      .toHaveAttribute("aria-pressed", "true");
+    await skriv(page, "/api/planning/generate");
+
+    await expect.poll(() => tavla.length).toBe(1);
+    expect(tavla[0].infor_prov_id).toBe(MELLAN.id);
+    /* Tom lista följer med: servern väljer då själv provets uppgifter på
+       lektionens sidor. */
+    expect(tavla[0].infor_nummer).toEqual([]);
+    /* Bara provets egen läsning räknas: basen delas med testerna ovan, och
+       deras blad (401) läses tillbaka när utkastet återställs. */
+    expect(examen.filter(u => u.endsWith(`/api/exams/${MELLAN.id}`))).toEqual([]);
+
+    /* Pappret bär provet: samma metarad som bladets. */
+    await L.vantaPapper(page);
+    await expect(page.locator("#dokmeta")).toContainText("Inför provet 15 okt");
+  });
+
+test("tavlans valda uppgifter följer med som infor_nummer", async ({ page }) => {
+  const { tavla } = await fejka(page, { kommande: [MELLAN] });
+  await L.oppna(page);
+  await panelen(page, "Tavla");
+  await expect(brickan(page, "Tolka en parabel")).toHaveCount(1);
+
+  await brickan(page, "Lösa andragradsekvationer").click();
+  await brickan(page, "Tolka en parabel").click();
+  await expect(brickan(page, "Det som hör till lektionen"))
+    .toHaveAttribute("aria-pressed", "false");
+  await expect(raden(page, "inforNummer").locator(".typnot"))
+    .toHaveText("3 av provets uppgifter styr tavlans exempel, samma sorter med nya tal.");
+  await skriv(page, "/api/planning/generate");
+
+  await expect.poll(() => tavla.length).toBe(1);
+  expect(tavla[0].infor_prov_id).toBe(MELLAN.id);
+  expect(tavla[0].infor_nummer).toEqual([1, 2, 3]);
+});
+
+test("tavla utan prov skickar inga infor-fält alls", async ({ page }) => {
+  const { tavla } = await fejka(page, { kommande: [FJARRAN] });
+  await L.oppna(page);
+  await panelen(page, "Tavla");
+  await expect(raden(page, "inforProv")).toHaveCount(1);
+  await expect(raden(page, "inforProv").locator(".lchip")).toHaveCount(0);
+  await expect(raden(page, "inforNummer")).toHaveCount(0);
+  await skriv(page, "/api/planning/generate");
+
+  await expect.poll(() => tavla.length).toBe(1);
+  /* KASSETTREGELN, samma som bladets: nycklarna ska inte finnas. */
+  expect("infor_prov_id" in tavla[0]).toBe(false);
+  expect("infor_nummer" in tavla[0]).toBe(false);
 });

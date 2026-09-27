@@ -354,7 +354,21 @@
          Tavlan har inga poäng: nivån gäller EXEMPLENS svårighet. Fyra av
          veckans önskemål gällde just den: «eleverna är väldigt duktiga, de
          behöver inte så mycket grundläggande», «A-nivå i boken». */
-      { id: 'niva', namn: 'Nivå på exemplen', typ: 'seg', val: ['E-nivå', 'C-nivå', 'A-nivå', 'Blandat'] }
+      { id: 'niva', namn: 'Nivå på exemplen', typ: 'seg', val: ['E-nivå', 'C-nivå', 'A-nivå', 'Blandat'] },
+      /* ── INFÖR PROVET, PÅ TAVLAN ─────────────────────────
+         Lärarens ord 2026-09-27: «utgångspunkten ska lägga tyngd på provet vi
+         har genererat». Genomgången förklarar och visar med exempel så att
+         eleverna klarar provet i första hand, bokens uppgifter i andra.
+         Samma två rader som arbetsbladets och samma plats: under formvalen,
+         för raden är en KÄLLA. Antalet exempel och nivån är lärarens och rörs
+         inte av att ett prov väljs. Boken rörs inte heller: tavlans sidor är
+         lektionens ur kalendern, så arvet ur provet körs bara för bladet (se
+         INFOR nedan). */
+      { id: 'inforProv', namn: 'Inför provet', typ: 'inforprov' },
+      /* Tom lista = servern väljer själv de av provets uppgifter som hör till
+         lektionens sidor och moment. Brickorna smalnar av det. */
+      { id: 'inforNummer', namn: 'Vad ur provet?', typ: 'infortyper',
+        bara: s => !!s.inforProv }
     ],
     Prov: [
       /* När provet skrivs och hur långt det är var tre rader, sedan två: ett
@@ -515,8 +529,8 @@
          och veckan innan ska klassen träna på provets UPPGIFTSTYPER — aldrig
          på provets uppgifter. Raden pekar ut vilket prov bladet förbereder;
          servern får formen ur det (exam_gen.build_infor_prov) och aldrig
-         texterna. Bara arbetsbladet har raden: ett prov som förbereder ett
-         annat prov är inte en sak.
+         texterna. Arbetsbladet och tavlan har raden, provet inte: ett prov
+         som förbereder ett annat prov är inte en sak.
          Raden ligger under nivåvalet därför att den är en KÄLLA och inte en
          form — antalet och nivån är fortfarande lärarens, och de rörs inte av
          att ett prov väljs. */
@@ -543,7 +557,8 @@
        ur 5 av 5 tavlor under veckan 1–6 sep (17 av 35 önskemål). Servern har
        kvar det gamla beteendet som default — se lesson_board.Tavelform — så
        förvalet måste stå HÄR och skickas med varje begäran. */
-    Tavla: { langd: 45, starttid: '', exempel: 2, vanligtFel: false, niva: 'Blandat' },
+    Tavla: { langd: 45, starttid: '', exempel: 2, vanligtFel: false, niva: 'Blandat',
+             inforProv: null, inforNummer: [] },
     /* `takt` = minuter per poäng, lärarens egen (se PROV_TAKT nedan). Den
        ligger i upplägget och inte i koden därför att den ÄR ett val: hon ska
        kunna dra den mot NP:s 4,4 för ett tyngre prov eller mot sin gamla 2,4
@@ -912,8 +927,10 @@
   /* ── VÄLJAREN: KLASSENS KOMMANDE PROV ─────────────────
      Samma panel som elev- och mötesväljaren, men ENVALIG: bladet förbereder
      ett prov. «Inget prov» ligger sist som en egen rad — att ta bort provet
-     ska gå från samma ställe som att välja det. */
-  function valjProv(s, rad, efterat) {
+     ska gå från samma ställe som att välja det. `typ` väljer ord och läge
+     (INFOR nedan): bladet och tavlan har var sitt val. */
+  function valjProv(typ, s, rad, efterat) {
+    const I = INFOR[typ], L = inforLage(typ);
     const wrap = $('.typinforprov', rad);
     if (!wrap || $('.valjpanel', wrap)) return;
     const panel = document.createElement('div');
@@ -935,8 +952,7 @@
     kommandeProv($('#p-klass').value || '', $('#p-kurs').value || '').then(lista => {
       if (!panel.isConnected) return;
       if (!lista.length) {
-        panel.innerHTML = `<p class="ltomsok">${serverPa()
-          ? 'Inga godkända prov framåt i tiden för klassen — skriv provet först, så kan bladet förbereda det.'
+        panel.innerHTML = `<p class="ltomsok">${serverPa() ? I.ingaProv
           : 'Utan server finns ingen provlista att välja ur.'}</p>`;
         return;
       }
@@ -945,19 +961,19 @@
           <span><span class="lvnamn"></span><span class="lvmeta">${[kortDatum(p.datum), p.kurs || '', p.klass || ''].filter(Boolean).join(' · ')}</span></span>
           <span class="lvlangd">${p.antal_uppgifter || 0} uppg.</span>
         </button>`).join('')
-        + '<div class="valjfot"><button class="lank" type="button" data-inga>Inget prov</button><span class="summa">Bladet tränar provets uppgiftstyper</span></div>';
+        + `<div class="valjfot"><button class="lank" type="button" data-inga>Inget prov</button><span class="summa">${I.fot}</span></div>`;
       $$('.lrad-val', panel).forEach(r => {
         const p = lista.find(x => String(x.id) === r.dataset.id);
         $('.lvnamn', r).textContent = (p && p.titel) || 'Provet';
         r.addEventListener('click', () => {
           /* Lärarens egen hand. Förvalet håller sig borta efter det här — också
              om hon väljer exakt det prov förvalet hade föreslagit. */
-          inforRord = true;
+          L.rord = true;
           if (!s.inforProv || s.inforProv.id !== p.id) {
             s.inforProv = p;
             s.inforNummer = [];
-            inforTyper = null;
-            inforArv(p);
+            L.typer = null;
+            if (I.arv) inforArv(typ, p);
           }
           stang();
           ritaTypval();
@@ -965,11 +981,11 @@
         });
       });
       $('[data-inga]', panel).addEventListener('click', () => {
-        inforRord = true;
+        L.rord = true;
         s.inforProv = null;
         s.inforNummer = [];
-        inforTyper = null;
-        inforArvtext = '';
+        L.typer = null;
+        L.arvtext = '';
         stang();
         ritaTypval();
         planKoll();
@@ -977,48 +993,91 @@
       if (efterat) efterat();
     });
   }
-  /* Provets uppgiftstyper som raden ritar brickor ur, och meningen om vad som
-     följde med ur provet. Båda hör till det VALDA provet och nollas när det
-     byts — de lever utanför ritaTypval, som river sina rader vid varje
-     omritning. */
-  let inforTyper = null, inforArvtext = '';
-  /* Förvalet: närmaste kommande provet, men bara inom tre veckor. Längre bort
-     än så är bladet inte «inför provet» utan vanlig träning, och ett förval som
-     gissar fel kostar läraren mer än inget förval alls. Nyckeln är klassen,
-     kursen och dagen: byter hon klass räknas det om. Har hon rört väljaren
-     själv (`inforRord`) håller förvalet sig borta resten av sessionen. */
-  const INFOR_DAGAR = 21;
-  let inforForvalNyckel = '', inforRord = false;
+  /* ── INFÖR PROVET, PER TYP ────────────────────────────
+     Arbetsbladet och tavlan har raden, och det här är allt som skiljer dem.
+
+     `dagar` är förvalets fönster: närmaste kommande provet väljs bara om det
+     ligger inom så många dagar. Bladet tar tre veckor, för längre bort än så
+     är det inte «inför provet» utan vanlig träning. Tavlan tar sex: en
+     genomgång i början av kapitlet förbereder provet i slutet av det (IndA
+     hade lektion 28 sep och prov 20 okt, 23 dagar). Ett förval som gissar fel
+     kostar läraren mer än inget förval alls, därför ett tak över huvud taget.
+
+     `arv` säger om provets bok och centrala innehåll följer med (inforArv).
+     Bara bladet: tavlans sidor är lektionens ur kalendern, och de ska inte
+     bytas mot provets.
+
+     Resten är orden. Bladets står kvar som de var; tavlans säger att provet
+     styr exemplen och att boken kommer i andra hand, lärarens ordning. */
+  const INFOR = {
+    Arbetsblad: {
+      dagar: 21, arv: true,
+      tomt: 'Klassens godkända prov som ligger framåt i tiden. Bladet tränar provets uppgiftstyper, aldrig provets uppgifter.',
+      fot: 'Bladet tränar provets uppgiftstyper',
+      ingaProv: 'Inga godkända prov framåt i tiden för klassen — skriv provet först, så kan bladet förbereda det.',
+      utan: 'Skriv bladet utan något prov',
+      alla: 'Blandat (hela provet)',
+      allaNot: 'Hela provets bredd, jämnt fördelat över uppgiftstyperna.',
+      valdaNot: n => `${n} av provets uppgifter drillas — samma sorter och metoder, nya tal.`,
+    },
+    Tavla: {
+      dagar: 42, arv: false,
+      tomt: 'Klassens godkända prov som ligger framåt i tiden. Tavlan förklarar det provet kräver, boken i andra hand.',
+      fot: 'Tavlan förklarar det provet kräver, boken i andra hand.',
+      ingaProv: 'Inga godkända prov framåt i tiden för klassen. Skriv provet först, så kan tavlan förbereda det.',
+      utan: 'Skriv tavlan utan något prov',
+      /* Tom lista betyder inte hela provet här: servern väljer de av provets
+         uppgifter som hör till lektionens sidor och moment. En genomgång om
+         s. 12–15 ska inte visa provets statistikuppgift. */
+      alla: 'Det som hör till lektionen',
+      allaNot: 'Provets uppgifter på lektionens sidor styr tavlans exempel.',
+      valdaNot: n => `${n} av provets uppgifter styr tavlans exempel, samma sorter med nya tal.`,
+    },
+  };
+  /* Läget per typ: provets uppgiftstyper som raden ritar brickor ur, meningen
+     om vad som följde med ur provet, förvalets nyckel och om läraren rört
+     väljaren själv (`rord`). Det lever utanför ritaTypval, som river sina
+     rader vid varje omritning.
+     Ett läge PER TYP och inte ett gemensamt: bladet och tavlan har var sitt
+     prov i upplägget, och tar hon bort provet från tavlan ska det inte hålla
+     bladets förval borta, eller tvärtom. Nyckeln är klassen, kursen och
+     dagen: byter hon klass räknas förvalet om. Har hon rört väljaren håller
+     förvalet sig borta resten av sessionen. */
+  const inforLagen = {};
+  const inforLage = typ => inforLagen[typ]
+    || (inforLagen[typ] = { typer: null, arvtext: '', nyckel: '', rord: false });
   /* En ny planering börjar om också för den här raden: står upplägget tillbaka
      på standard är lärarens gamla val borta, och då ska förvalet få räkna en
-     gång till. Utan det stod «Inget prov» kvar från förra pappret. */
-  function glomInforForvalet() {
-    inforRord = false;
-    inforForvalNyckel = '';
-    inforTyper = null;
-    inforArvtext = '';
+     gång till. Utan det stod «Inget prov» kvar från förra pappret. Bara den
+     typ vars upplägg nollades: de andra typernas prov står kvar i `inst`.
+     Läget töms på plats och byts inte ut, så att en förvalsfråga som redan
+     är i luften ser den tomma nyckeln och låter bli att skriva. */
+  function glomInforForvalet(typ) {
+    if (!INFOR[typ]) return;
+    Object.assign(inforLage(typ), { typer: null, arvtext: '', nyckel: '', rord: false });
   }
-  function inforForval(s) {
+  function inforForval(typ, s) {
+    const I = INFOR[typ], L = inforLage(typ);
     const klass = ($('#p-klass') || {}).value || '', kurs = ($('#p-kurs') || {}).value || '';
     const nyckel = `${klass}|${kurs}|${idagIso()}`;
-    if (inforRord || nyckel === inforForvalNyckel) return;
-    inforForvalNyckel = nyckel;
+    if (L.rord || nyckel === L.nyckel) return;
+    L.nyckel = nyckel;
     kommandeProv(klass, kurs).then(lista => {
-      /* Hann läraren byta klass, röra väljaren eller lämna arbetsbladet medan
-         listan lästes handlar svaret inte längre om det hon tittar på. */
-      if (inforRord || inforForvalNyckel !== nyckel) return;
+      /* Hann läraren byta klass eller röra väljaren medan listan lästes
+         handlar svaret inte längre om det hon tittar på. */
+      if (L.rord || L.nyckel !== nyckel) return;
       const forst = (lista || [])[0] || null;
       const dagar = forst && forst.datum
         ? (new Date(forst.datum + 'T12:00:00') - new Date(idagIso() + 'T12:00:00')) / 864e5
         : null;
-      const forval = dagar !== null && dagar >= 0 && dagar <= INFOR_DAGAR ? forst : null;
+      const forval = dagar !== null && dagar >= 0 && dagar <= I.dagar ? forst : null;
       if (((s.inforProv || {}).id || null) === ((forval || {}).id || null)) return;
       s.inforProv = forval;
       s.inforNummer = [];
-      inforTyper = null;
-      inforArvtext = '';
-      if (forval) inforArv(forval);
-      if (valt('skrivtyp') === 'Arbetsblad') ritaTypval();
+      L.typer = null;
+      L.arvtext = '';
+      if (forval && I.arv) inforArv(typ, forval);
+      if (valt('skrivtyp') === typ) ritaTypval();
       planKoll();
     });
   }
@@ -1029,14 +1088,17 @@
      Två vägar till punkterna: provdokumentet i högen bär dem som koder på
      varje uppgift (`ci`, se franProv), och finns det inte läses examen ur
      basen. KODER, inte etiketter: `vald` bär korta etiketter, och
-     översättningen sker mot den nivå som faktiskt har punkten. */
-  function inforArv(p) {
-    inforArvtext = '';
+     översättningen sker mot den nivå som faktiskt har punkten.
+     Anroparen frågar INFOR[typ].arv först; `typ` här säger vems prov som
+     jämförs när svaret kommer. */
+  function inforArv(typ, p) {
+    const L = inforLage(typ);
+    L.arvtext = '';
     const dok = sparat.find(v => v.provId === p.id && !v.losningsblad) || null;
     /* Boken går byggVidares väg och säger till om den följde med. */
     if (dok && dok.bokuppg) {
       arvBok(dok);
-      if (bokArvet) inforArvtext = `boken följde med (${bokArvet.sidor})`;
+      if (bokArvet) L.arvtext = `boken följde med (${bokArvet.sidor})`;
     }
     const ur = dok
       ? Promise.resolve([...new Set((dok.uppgifter || []).flatMap(u => u.ci || []))])
@@ -1048,7 +1110,7 @@
         : Promise.resolve([]));
     ur.then(koder => {
       /* Provet kan ha bytts under läsningen. */
-      if (((inst.Arbetsblad.inforProv || {}).id) !== p.id) return;
+      if (((inst[typ].inforProv || {}).id) !== p.id) return;
       const korta = [...new Set(koder.map(c => (window.Gy ? window.Gy.kortFor(c) : null))
         .filter(Boolean))];
       if (!korta.length) return ritaTypval();
@@ -1061,7 +1123,7 @@
         const bar = id => alla.every(g => window.Gy.punkter(id).some(x => x.kort === g));
         if (!bar(nivaId)) nivaId = (window.Gy.lista().find(n => bar(n.id)) || {}).id || nivaId;
       }
-      inforArvtext = [inforArvtext,
+      L.arvtext = [L.arvtext,
         `${korta.length} ${korta.length === 1 ? 'punkt' : 'punkter'} ur provet`]
         .filter(Boolean).join(', ');
       ritaGy();
@@ -1092,7 +1154,7 @@
     normalisera(s);
     /* Förvalet räknas FÖRE radlistan filtreras: raden «Vad ska tränas?» finns
        bara när ett prov är valt, och förvalet är det som väljer det. */
-    if (typ === 'Arbetsblad') inforForval(s);
+    if (INFOR[typ]) inforForval(typ, s);
     const lista = (TYPVAL[typ] || []).filter(k => !k.bara || k.bara(s));
     if (typ === 'Tavla') {
       /* Schemat vinner så länge det säger något nytt — sätter läraren tiden för
@@ -1614,6 +1676,7 @@
       if (k.typ === 'inforprov') {
         const chips = $('.tkchips', rad), knapp = $('.tkvalj', rad);
         const not = typnot(rad);
+        const I = INFOR[typ], L = inforLage(typ);
         const ritaChips = () => {
           chips.innerHTML = '';
           const p = s.inforProv;
@@ -1623,11 +1686,11 @@
             b.type = 'button';
             b.innerHTML = '<span></span><i>✕</i>';
             $('span', b).textContent = `${p.titel || 'Provet'} · ${kortDatum(p.datum)}`;
-            b.dataset.tip = 'Skriv bladet utan något prov';
+            b.dataset.tip = I.utan;
             b.addEventListener('click', () => {
               /* Att ta bort provet är ett val, inte ett tomrum: förvalet får
                  inte smyga tillbaka det vid nästa omritning. */
-              inforRord = true;
+              L.rord = true;
               s.inforProv = null;
               s.inforNummer = [];
               ritaTypval();
@@ -1636,24 +1699,27 @@
             chips.appendChild(b);
           }
           knapp.textContent = p ? 'Byt prov …' : 'Välj prov …';
+          /* `arvtext` är alltid tom för tavlan (inget arv), så tavlans rad får
+             aldrig bladets tankstreck. */
           satNot(not, p ? 'ok' : '', p
             ? `Förbereder inför provet ${kortDatum(p.datum)}`
               + (p.titel ? ` · ${p.titel}` : '')
-              + (inforArvtext ? ` — ${inforArvtext}` : '')
-            : (serverPa()
-              ? 'Klassens godkända prov som ligger framåt i tiden. Bladet tränar provets uppgiftstyper, aldrig provets uppgifter.'
-              : ''));
+              + (L.arvtext ? ` — ${L.arvtext}` : '')
+            : (serverPa() ? I.tomt : ''));
         };
-        knapp.addEventListener('click', () => valjProv(s, rad, ritaChips));
+        knapp.addEventListener('click', () => valjProv(typ, s, rad, ritaChips));
         ritaChips();
       }
       /* ── VAD I PROVET ──────────────────────────────────
          «Blandat (hela provet)» ÄR tomlistan: den är förvalet, och den är
          nollställaren. Klickar läraren en typ försvinner blandat-läget av sig
-         själv, och klickar hon bort den sista typen är hon tillbaka i det. */
+         själv, och klickar hon bort den sista typen är hon tillbaka i det.
+         Tavlans nollställare heter «Det som hör till lektionen», för där
+         betyder tomlistan att servern väljer (INFOR.Tavla.alla). */
       if (k.typ === 'infortyper') {
         const chips = $('.tkchips', rad);
         const not = typnot(rad);
+        const I = INFOR[typ], L = inforLage(typ);
         const valda = () => (s.inforNummer || []);
         const rita = grupper => {
           chips.innerHTML = '';
@@ -1666,7 +1732,7 @@
             b.addEventListener('click', klick);
             return b;
           };
-          chips.appendChild(bricka('Blandat (hela provet)', !valda().length, () => {
+          chips.appendChild(bricka(I.alla, !valda().length, () => {
             s.inforNummer = [];
             rita(grupper);
             planKoll();
@@ -1686,17 +1752,15 @@
             }));
           });
           const n = valda().length;
-          satNot(not, n ? 'ok' : '', n
-            ? `${n} av provets uppgifter drillas — samma sorter och metoder, nya tal.`
-            : 'Hela provets bredd, jämnt fördelat över uppgiftstyperna.');
+          satNot(not, n ? 'ok' : '', n ? I.valdaNot(n) : I.allaNot);
         };
-        rita((inforTyper && inforTyper.grupper) || []);
+        rita((L.typer && L.typer.grupper) || []);
         /* Listan läses när provet valts. Kommer den efter att raden ritats
            fylls brickorna på plats — en rad som står tom medan servern svarar
            är inte fel, den är bara inte färdig. */
-        if (s.inforProv && !inforTyper) provtyper(s.inforProv.id).then(d => {
+        if (s.inforProv && !L.typer) provtyper(s.inforProv.id).then(d => {
           if (!d || !chips.isConnected) return;
-          inforTyper = d;
+          L.typer = d;
           rita(d.grupper || []);
         });
       }
@@ -2936,15 +3000,16 @@
            förhandsvisningens underrad läser den, och ett arbetsblad som öppnas
            i november ska kunna säga vilket prov det tränade inför — provet
            självt kan då vara skrivet, rättat och bortglömt.
-           Bara arbetsbladet: raden finns inte för de andra typerna, och ett
-           fält från en tidigare typ i samma session hör inte hemma här (se
-           `fokus` ovan). `nummer` är det lärarens brickor valde, tomt =
-           hela provet. */
-        inforProv: vtyp === 'Arbetsblad' && inst.Arbetsblad.inforProv
-          ? { id: inst.Arbetsblad.inforProv.id,
-              titel: inst.Arbetsblad.inforProv.titel || '',
-              datum: inst.Arbetsblad.inforProv.datum || '',
-              nummer: (inst.Arbetsblad.inforNummer || []).slice() }
+           Bara typerna med raden (INFOR: arbetsbladet och tavlan), och bara
+           den typens eget val: ett fält från en tidigare typ i samma session
+           hör inte hemma här (se `fokus` ovan). `nummer` är det lärarens
+           brickor valde, tomt = hela provet på bladet och lektionens del av
+           det på tavlan. */
+        inforProv: INFOR[vtyp] && inst[vtyp].inforProv
+          ? { id: inst[vtyp].inforProv.id,
+              titel: inst[vtyp].inforProv.titel || '',
+              datum: inst[vtyp].inforProv.datum || '',
+              nummer: (inst[vtyp].inforNummer || []).slice() }
           : null,
         kontext: 'start', niva: false, svarighet: 0, andrat: [], anteckning: 'Första utkastet'
       };
@@ -3499,6 +3564,15 @@
            den kassetterna spelades in mot. */
         vanligt_fel: !!i0.vanligtFel,
         ...(i0.niva && i0.niva !== 'Blandat' ? { niva: i0.niva } : {}),
+        /* INFÖR PROVET, samma regel som bladets nedan: fälten finns bara när
+           ett prov är valt, annars är kroppen byte för byte den som gick före
+           raden (kassettregeln). Tom `infor_nummer` följer med när provet är
+           valt: servern väljer då själv provets uppgifter på lektionens sidor
+           och moment (lesson_board). */
+        ...(i0.inforProv && i0.inforProv.id ? {
+          infor_prov_id: i0.inforProv.id,
+          infor_nummer: (i0.inforNummer || []).slice(),
+        } : {}),
         ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(), ...yrket(), ...u,
       }, { signal, log })).then(kravDone),
       /* Provet och arbetsbladet delar rutt och skiljs åt av `typ`: samma
@@ -4322,7 +4396,7 @@
     const typ = valt('skrivtyp');
     Object.assign(inst[typ], JSON.parse(JSON.stringify(STANDARD[typ])));
     arvtFran = null;
-    glomInforForvalet();
+    glomInforForvalet(typ);
     ritaTypval();
     $('#arvrad').hidden = true;
     window.toast && window.toast('Tillbaka till standarduppägget');
@@ -4417,7 +4491,7 @@
     const typ = v.typ;
     Object.assign(inst[typ], JSON.parse(JSON.stringify(STANDARD[typ])));
     arvtFran = null;
-    glomInforForvalet();
+    glomInforForvalet(typ);
     valdaLektioner.clear();
     /* Efter klass och kurs: bokhyllan ritar om sig när kursen byts (bok.js), och
        spannet ska sättas i den hylla som gäller. */
