@@ -12934,6 +12934,168 @@ def _poangpass(fore: dict, res: dict, *, model: str, llm, profil: str,
     return {**res, "exam": kandidat, "rounds": rounds}
 
 
+# ── OMSKRIVNINGEN VAKTAR SITT EGET VARV ──────────────────────────────────
+# Sju av sju prov 23–24/9 (124–127, 130–132) fick ett andra «Laga fynden»
+# inom fem minuter efter det första, och varje gång gällde det nya fyndet
+# något det första varvet just skrivit om: språkvakten på uppgift 6, ett dolt
+# krav i uppgift 3, tre räknesteg för en poäng i 9a, en bokstavskonstant i
+# 12a. Prov 88 samma sak 19/9: ett tips som lagats kom tillbaka efter ett varv
+# på uppgift 6. `_validate` kör inte de räknade vakterna, så varvet visste
+# ingenting; efterkontrollen (routes_exam) räknade först när varvet landat,
+# och läraren fick läsa listan och trycka igen. Rickard 2026-09-27: «det kan
+# ju vara bra att implementera».
+#
+# SAMMA LINJAL SOM EFTERKONTROLLEN, i exam_gen:s termer: de vakter där som
+# bara behöver pappret (språket, tipsen, NP-formen, radlängden, könen,
+# kursens innehåll och, på bladet inför provet, provets egna). Det är de fynd
+# läraren annars ser efter varvet. Vakter som behöver boken eller kalendern
+# (delmomenten, förebildens sidor) har refine_exam inte, och de står kvar i
+# efterkontrollen. Poängvakten har sitt eget pass (_poangpass) och räknas
+# inte en gång till här.
+def varvsvakter(exam: dict, profil: str, *, infor: dict | None = None,
+                poang_tak: int | None = None) -> list[dict]:
+    """De deterministiska vakterna på ett omskrivet papper. Noll anrop."""
+    kurs = str((exam or {}).get("kurs") or "")
+    if profil == "arbetsblad" and infor:
+        # Bladet inför provet: provets vakter, i den ordning genereringen
+        # kör dem (ovningsvakter har språkvakten, radvakten och könen med).
+        return ovningsvakter(exam, prov=infor)
+    fel = ci_utanfor.ci_vakt(exam, kurs, profil) + konsbalansvakt(exam)
+    if profil == "prov":
+        return (fel + sprakvakt(exam) + a_nivavakt(exam)
+                + np_vakter.np_vakter(exam, kurs, poang_tak))
+    # En mening per rad på alla papper utom provet (se _raknade_fynd).
+    return fel + radvakt(exam)
+
+
+def _fyndets_uppgift(f: dict) -> int | None:
+    """«uppgift 7b» → 7, «uppgifter[6].text» → 7. None för ett fynd som
+    gäller pappret och inte en uppgift."""
+    path = str(f.get("path") or "")
+    m = re.match(r"uppgifter\[(\d+)\]", path)
+    if m:
+        return int(m.group(1)) + 1
+    m = re.match(r"(?i)uppgift (\d+)", path)
+    return int(m.group(1)) if m else None
+
+
+def _rorda_uppgifter(fore: dict, efter: dict) -> set[int]:
+    """Uppgifterna varvet skrev om, HELA uppgiften jämförd.
+
+    Inte andrade_uppgifter: den läser bara det bedömningspasset läser, och
+    ett tips i `notis` (prov 88 uppgift 6 och 11) hade inte räknats som en
+    ändring. Plåten räknas bort, den står inte i grammatiken och faller ur
+    varje omskriven uppgift utan att modellen valt det (platar.matcha_exam
+    sätter den igen i rutten)."""
+    def kanon(u):
+        if not isinstance(u, dict):
+            return None
+        u = copy.deepcopy(u)
+        if isinstance(u.get("scen"), dict):
+            u["scen"].pop("plat", None)
+        return json.dumps(u, ensure_ascii=False, sort_keys=True)
+    a = [kanon(u) for u in (fore.get("uppgifter") or [])]
+    b = [kanon(u) for u in (efter.get("uppgifter") or [])]
+    return {i for i, u in enumerate(b, 1) if i > len(a) or a[i - 1] != u}
+
+
+def _varvets_egna_fynd(fore_nycklar: set, efter: dict, rorda: set[int], *,
+                       profil: str, infor: dict | None,
+                       poang_tak: int | None) -> list[dict]:
+    """Fynden på `efter` som varvet självt införde: på en uppgift det rörde,
+    och inte där redan före varvet.
+
+    NYCKELN ÄR (uppgift, kod), inte _felnyckel. Meddelandet citerar texten,
+    och en uppgift som hade en för lång mening före varvet och har en annan
+    för lång mening efter har inte fått ett nytt fel, den har samma gamla. Att
+    räkna det som nytt hade kostat ett anrop på något varvet inte orsakat, och
+    det är just det refine-kastas-felet (2026-09-18) lärde oss att inte göra."""
+    papper = copy.deepcopy(efter)
+    # Mät på det som faktiskt sparas: övningspapprets två pass körs sist i
+    # refine_exam, och originalet ligger redan städat i basen.
+    if infor and profil == "arbetsblad":
+        satt_raknarrad_ur_provet(papper, infor)
+    ovningspappret_stadat(papper, profil)
+    return [f for f in varvsvakter(papper, profil, infor=infor,
+                                   poang_tak=poang_tak)
+            if f.get("code") != "poangvakt"
+            and _fyndets_uppgift(f) in rorda
+            and (_fyndets_uppgift(f), f.get("code")) not in fore_nycklar]
+
+
+def _varvsvakt(fore: dict, res: dict, *, model: str, llm, profil: str,
+               niva_mal: dict | None, infor: dict | None, max_rounds: int,
+               log_cb: Callable[[str], None] | None = None,
+               steg_cb: Callable[[str], None] | None = None) -> dict:
+    """Vakterna på varvets resultat, och EN låst lagningsrunda för det varvet
+    självt införde. Se blocket ovan.
+
+    RENT VARV, NOLL ANROP. Hittar vakterna inget nytt lämnas `res` orört, och
+    ett varv utan fynd går exakt de anrop och den prompt det gick förut
+    (kassettregeln).
+
+    LÅST TILL FYNDENS UPPGIFTER, samma lås som mål-låset (sammanfoga_riktat).
+    De är alla uppgifter varvet självt rörde, och bara de: en uppgift varvet
+    rörde utan att bryta något ska inte skrivas om en gång till, och en
+    uppgift läraren inte pekade på rörs aldrig. Därför gäller inte skälet
+    mot extrarundor vid nivågrinden nedan här.
+
+    KASTAR ALDRIG VARVET. Bryter lagningen valideringen, eller lagar den inte
+    ett enda fynd, står varvets papper kvar och fynden blir varningar i
+    `errors`. Önskemålet gick igenom; det är fyndet som står kvar, och det ser
+    läraren. Ett gammalt fynd (fanns före varvet, eller på en uppgift varvet
+    inte rörde) räknas inte alls, också där efterkontrollen visar det."""
+    log = log_cb or (lambda _m: None)
+    exam = res.get("exam")
+    if exam is None or exam is fore:
+        return res
+    rorda = _rorda_uppgifter(fore, exam)
+    if not rorda:
+        return res
+    tak = exam_spec.poang_tak_for(fore.get("tid_min"), fore.get("takt"))
+    fore_nycklar = {(_fyndets_uppgift(f), f.get("code"))
+                    for f in varvsvakter(fore, profil, infor=infor,
+                                         poang_tak=tak)}
+    matt = dict(profil=profil, infor=infor, poang_tak=tak)
+    nya = _varvets_egna_fynd(fore_nycklar, exam, rorda, **matt)
+    if not nya:
+        return res
+    if res["rounds"] >= max_rounds:
+        return {**res, "errors": res["errors"] + nya}
+    las = {"uppgifter": sorted({_fyndets_uppgift(f) for f in nya}),
+           "falt": ()}
+    (steg_cb or (lambda _n: None))("reparerar")
+    log(f"Varvet lämnade {len(nya)} fynd på uppgift "
+        f"{', '.join(map(str, las['uppgifter']))}: lagar dem …")
+    kandidat = _llm_round(build_repair_prompt(exam, nya, profil), model, llm,
+                          profil=profil, log_cb=log_cb,
+                          etikett="Lagar varvets fynd i")
+    rounds = res["rounds"] + 1
+    varning = {**res, "rounds": rounds, "errors": res["errors"] + nya}
+    if kandidat is None:
+        return varning
+    kandidat, _skal = sammanfoga_riktat(exam, kandidat, las)
+    if kandidat is None:
+        return varning
+    # «Rent före, trasigt efter» är en försämring, som i varje annan runda:
+    # bryter lagningen valideringen står varvets papper kvar.
+    fore_val = {_felnyckel(f)
+                for f in _validate(exam, profil, niva_mal=niva_mal)[1]}
+    varnar = balansvarningar(profil, las)
+    _doc, brutna = _validate(kandidat, profil, niva_mal=niva_mal)
+    if any(_felnyckel(f) not in fore_val and f.get("code") not in varnar
+           for f in brutna):
+        log("Lagningen bröt valideringen: varvet står kvar, fynden som varningar.")
+        return varning
+    kvar = _varvets_egna_fynd(fore_nycklar, kandidat, rorda, **matt)
+    if len(kvar) >= len(nya):
+        return varning
+    if kvar:
+        log(f"{len(kvar)} fynd står kvar efter lagningen, som varningar.")
+    return {**res, "exam": kandidat, "rounds": rounds,
+            "errors": res["errors"] + kvar}
+
+
 def refine_exam(exam: dict, instruction: str, *, model: str,
                 nummer=None, profil: str = "prov",
                 mal: dict | None = None, malen=None,
@@ -13024,6 +13186,14 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
     res = _poangpass(exam, res, model=model, llm=llm, profil=profil,
                      riktning=riktning, niva_mal=niva_mal,
                      max_rounds=max_rounds, log_cb=log_cb)
+    # ── VARVETS EGNA FYND (se _varvsvakt) ────────────────────────────
+    # Efter poängpasset, så att vakterna läser den poäng uppgiften slutar
+    # med, och FÖRE nivågrinden och bedömningspasset: en uppgift som lagas här
+    # får sina elevexempel skrivna i samma pass som resten av varvet, inte ett
+    # anrop till efteråt.
+    res = _varvsvakt(exam, res, model=model, llm=llm, profil=profil,
+                     niva_mal=niva_mal, infor=infor, max_rounds=max_rounds,
+                     log_cb=log_cb, steg_cb=steg)
     # ── GRINDEN, men bara den DETERMINISTISKA halvan ─────────────────
     # E-signalerna körs: de kostar ingenting, och det är precis dem läraren kan
     # råka ut för här — «gör uppgift 7 svårare» på ett rent E-papper är en

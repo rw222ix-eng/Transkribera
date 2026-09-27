@@ -2003,7 +2003,10 @@ def test_generate_exam_avvisar_ogenomforbart_utan_llm():
 
 def test_refine_exam_targets_item():
     updated = _exam()
-    updated["uppgifter"][3]["text"] = "Ny optimeringsuppgift med decimaltal."
+    # «Motivera» står kvar: A-raden kräver en motivering, och en text utan
+    # den är ett dolt krav varvet självt infört (exam_gen._varvsvakt).
+    updated["uppgifter"][3]["text"] = ("Ny optimeringsuppgift med decimaltal. "
+                                       "Motivera ditt svar.")
     llm, calls = _stub_llm([json.dumps(updated)])
     res = exam_gen.refine_exam(_exam(), "byt mot ett med decimaltal",
                                nummer=4, model="m", llm=llm)
