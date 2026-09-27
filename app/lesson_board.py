@@ -2791,9 +2791,15 @@ def build_prompt(course: str, group: str, moment: str, memory: str = "",
     # inte en källa utan en precisering av själva uppdraget — momentraden
     # «A · B» utskriven som två moment med var sitt sidspann.
     dlr = f"\n{delar}\n" if delar else ""
+    # Kursens gränser (build_utanfor_tavla) står FÖRE källorna, som i provet
+    # (exam_gen, intill innehållet): boken rymmer det som ströks, och ett
+    # bokblock som läses efter förbudet ska inte läsas som en order. Tom
+    # sträng för en kurs utan strykningar, och prompten är då den gamla.
+    utk = build_utanfor_tavla(course)
+    utk = f"\n{utk}\n" if utk else ""
     return (
         f"{form.instruktion()}\n{_few_shot_block(form)}\n"
-        f"{sva}{mem}{utf}{und}{bk}{forl}{prv}{fok}{dlr}\n"
+        f"{utk}{sva}{mem}{utf}{und}{bk}{forl}{prv}{fok}{dlr}\n"
         f"Uppdrag: skriv lektionstavlan för {course}, klass {group} — {moment}.\n"
         "Svara med enbart JSON."
     )
@@ -3196,7 +3202,8 @@ def _lapp_runda(board: dict, problems: list, *, model: str, llm,
 def build_refine_prompt(board_json: dict, instruction: str,
                         mal: dict | None = None, bok: str = "",
                         historik=None, malen=None,
-                        form: Tavelform = STANDARDFORM) -> str:
+                        form: Tavelform = STANDARDFORM,
+                        utanfor: str = "") -> str:
     """Chatt-iteration: lärarens ändringsönskemål ovanpå befintlig tavla.
 
     `malen` är flervalet: markerar läraren flera rutor i canvasen gäller
@@ -3217,11 +3224,15 @@ def build_refine_prompt(board_json: dict, instruction: str,
     bli en allmän mening om att räkna i boken. Numren fanns inte i prompten.
 
     `historik` är lärarens TIDIGARE önskemål för utkastet (llm_client.varvrad).
-    Utan den hade tredje varvets «kortare än så» inget «så» att gå efter."""
+    Utan den hade tredje varvets «kortare än så» inget «så» att gå efter.
+
+    `utanfor` är kursens gränser (build_utanfor_tavla), före boken som i
+    skrivningen. Tom sträng ger den gamla prompten."""
     kallor = f"{bok.strip()}\n\n" if bok and bok.strip() else ""
+    utk = f"{utanfor.strip()}\n\n" if utanfor and utanfor.strip() else ""
     return (
         f"{form.instruktion()}\n"
-        f"{kallor}"
+        f"{utk}{kallor}"
         "Här är den nuvarande lektionstavlan:\n"
         f"{json.dumps(board_json, ensure_ascii=False)}\n\n"
         f"{llm_client.varvrad(historik)}"
@@ -3359,17 +3370,20 @@ def _malrad_nycklar(vagar) -> str:
 def build_mallapp_prompt(board_json: dict, instruction: str, vagar,
                          mal: dict | None = None, malen=None, bok: str = "",
                          historik=None, skarpare: str = "",
-                         form: Tavelform = STANDARDFORM) -> str:
+                         form: Tavelform = STANDARDFORM,
+                         utanfor: str = "") -> str:
     """Lärarens önskemål som en LAPP, låst till de rutor hon markerade.
 
     Samma underlag som helomskrivningen får (bokblocket, tavlan, varvhistoriken,
     målraden) plus elementkartan och nyckelraden — och LAPP_INSTRUKTION i
     stället för «skriv om HELA tavlan». `skarpare` är andra försöket: den säger
-    vilken nyckel som gick utanför målet förra gången."""
+    vilken nyckel som gick utanför målet förra gången. `utanfor` som i
+    build_refine_prompt."""
     kallor = f"{bok.strip()}\n\n" if bok and bok.strip() else ""
+    utk = f"{utanfor.strip()}\n\n" if utanfor and utanfor.strip() else ""
     return (
         f"{form.instruktion()}\n"
-        f"{kallor}"
+        f"{utk}{kallor}"
         "Här är den nuvarande lektionstavlan:\n"
         f"{json.dumps(board_json, ensure_ascii=False)}\n\n"
         "Elementkarta (nyckel → element):\n"
@@ -3445,14 +3459,15 @@ def lappvakten(board: dict, lappar, ta_bort, vagar) -> str:
 def _mallapp_runda(board: dict, instruction: str, vagar, *, model: str, llm,
                    mal=None, malen=None, bok="", historik=None,
                    skarpare: str = "",
-                   form: Tavelform = STANDARDFORM) -> tuple[str, object]:
+                   form: Tavelform = STANDARDFORM,
+                   utanfor: str = "") -> tuple[str, object]:
     """Ett lappvarv mot modellen. ("lapp", tavla) · ("hel", tavla) när modellen
     skrev om alltihop ändå (tillåtet enligt LAPP_INSTRUKTION, och då gäller
     reservens sammanfogning) · ("utanfor", nyckel) när vakten fällde ·
     ("nej", skäl) när svaret inte gick att använda alls."""
     raw = llm(model,
               build_mallapp_prompt(board, instruction, vagar, mal, malen, bok,
-                                   historik, skarpare, form),
+                                   historik, skarpare, form, utanfor),
               system=SYSTEM,
               options={"temperature": 0.2},
               response_format=lapp_response_format(),
@@ -3481,9 +3496,12 @@ def _riktad_refine(board: dict, instruction: str, vagar, *, model: str, llm,
                    mal=None, malen=None, bok="", historik=None,
                    max_rounds: int = MAX_ROUNDS, log_cb=None,
                    token_cb=None, form: Tavelform = STANDARDFORM,
-                   behall: tuple[str, ...] = REFINE_BEHALL) -> dict:
+                   behall: tuple[str, ...] = REFINE_BEHALL,
+                   kurs: str = "") -> dict:
     """Omskrivningen NÄR läraren pekat: lapp först, helomskrivning som reserv,
-    och tavlan orörd hellre än fel."""
+    och tavlan orörd hellre än fel. `kurs` ger kursens gränser: blocket i
+    prompten och utanforvakten på det varvet skrev."""
+    utanfor = build_utanfor_tavla(kurs)
     log = log_cb or (lambda _m: None)
     # Namnen DEDUPERAS, i ordning. Lärarens klick ger ett namn per ruta, men
     # diffvaktens gissning ger SAMMA namn åt hela blocket («exempel 2» är sju
@@ -3499,9 +3517,10 @@ def _riktad_refine(board: dict, instruction: str, vagar, *, model: str, llm,
         sort, vad = _mallapp_runda(board, instruction, vagar, model=model,
                                    llm=llm, mal=mal, malen=malen, bok=bok,
                                    historik=historik, skarpare=skarpare,
-                                   form=form)
+                                   form=form, utanfor=utanfor)
         if sort == "lapp":
             _doc, errors = ws.validate_board_json(vad)
+            errors = errors + _nya_utanfor(board, vad, kurs)
             return _repair_until_valid(vad, errors, model=model, llm=llm,
                                        rounds_used=rundor,
                                        max_rounds=max_rounds, log_cb=log_cb,
@@ -3523,7 +3542,7 @@ def _riktad_refine(board: dict, instruction: str, vagar, *, model: str, llm,
         # Reserven är DAGENS prompt, byte för byte — bara tillämpningen är ny.
         kandidat = _llm_round(
             build_refine_prompt(board, instruction, mal, bok, historik, malen,
-                                form),
+                                form, utanfor),
             model, llm, token_cb=token_cb)
     if kandidat is None:
         return {"board": board, "rounds": rundor,
@@ -3535,6 +3554,7 @@ def _riktad_refine(board: dict, instruction: str, vagar, *, model: str, llm,
         return {"board": board, "rounds": rundor,
                 "errors": [{"path": "mal", "code": "mal", "message": skal}]}
     _doc, errors = ws.validate_board_json(ihop)
+    errors = errors + _nya_utanfor(board, ihop, kurs)
     return _repair_until_valid(ihop, errors, model=model, llm=llm,
                                rounds_used=rundor, max_rounds=max_rounds,
                                log_cb=log_cb, token_cb=token_cb, vagar=vagar,
@@ -3678,18 +3698,28 @@ def satt_forra(board: dict | None, rubrik: str | None) -> dict | None:
 # x^2 = 64 \Rightarrow x = \pm 8 av vana ska inte kosta en reparationsrunda:
 # bytet är deterministiskt och gratis. \Leftarrow byts inte («ger» läses åt
 # höger), och \Downarrow är vänsterns röda tråd mellan sektionerna, ingen
-# implikation (6c, _ar_pilrad).
+# implikation (6c, _ar_pilrad). Står ⇐ eller ordet «implikation» kvar fäller
+# utanforvakten raden till reparationsrundan.
+#
+# ⇔ BLIR «BETYDER», INTE «GER» (TE26A:s tavla om tecken och intervall,
+# 2026-09-27). Bytet gav «m ∈ ]0, 800] ger 0 < m ≤ 800», och ingenting ges
+# där: raden säger samma villkor två gånger. «ger» är ett steg framåt,
+# «betyder» är samma sak i en annan form.
+_PILKANT = r"\s*(?:\\;|\\,|\\quad|\\qquad|~)*\s*"
 _PIL_LATEX = re.compile(
-    r"\s*(?:\\;|\\,|\\quad|\\qquad|~)*\s*"
-    r"(?:\\(?:Rightarrow|Longrightarrow|implies|Leftrightarrow"
-    r"|Longleftrightarrow|iff)(?![A-Za-z])|⇒|⇔|⟹|⟺)"
-    r"\s*(?:\\;|\\,|\\quad|\\qquad|~)*\s*")
-_PIL_TEXT = re.compile(r"\s*(?:⇒|⇔|⟹|⟺)\s*")
+    _PILKANT + r"(?:\\(?:Rightarrow|Longrightarrow|implies)(?![A-Za-z])|⇒|⟹)"
+    + _PILKANT)
+_EKV_LATEX = re.compile(
+    _PILKANT + r"(?:\\(?:Leftrightarrow|Longleftrightarrow|iff)(?![A-Za-z])"
+    r"|⇔|⟺)" + _PILKANT)
+_PIL_TEXT = re.compile(r"\s*(?:⇒|⟹)\s*")
+_EKV_TEXT = re.compile(r"\s*(?:⇔|⟺)\s*")
 
 
 def pilar_till_ger(board: dict | None, kurs: str) -> dict | None:
-    """Pilarna ⇒ och ⇔ blir «ger» på tavlor i kurser där implikation inte
-    står i det centrala innehållet (ci_utanfor). Tavlan i 2c lämnas orörd."""
+    """⇒ blir «ger» och ⇔ «betyder» på tavlor i kurser där implikation och
+    ekvivalens inte står i det centrala innehållet (ci_utanfor.
+    pilar_forbjudna: 1a, 1b, 1c och 2a). Tavlan i 2b och 2c lämnas orörd."""
     if not isinstance(board, dict) or not ci_utanfor.pilar_forbjudna(kurs):
         return board
 
@@ -3700,10 +3730,115 @@ def pilar_till_ger(board: dict | None, kurs: str) -> dict | None:
             return [byt(x, nyckel) for x in v]
         if isinstance(v, str):
             if nyckel == "latex":
+                v = _EKV_LATEX.sub(r" \\text{ betyder } ", v)
                 return _PIL_LATEX.sub(r" \\text{ ger } ", v).strip()
-            return _PIL_TEXT.sub(" ger ", v)
+            return _PIL_TEXT.sub(" ger ", _EKV_TEXT.sub(" betyder ", v))
         return v
     return byt(board)
+
+
+# ── KURSENS GRÄNSER PÅ TAVLAN (förslag 5 i veckoanalysen 2026-09-27) ────────
+# Proven har vetat vad som står utanför kursen sedan 17/9 (app/ci_utanfor.py):
+# en rad i prompten, en rad hos domarna och en vakt. Tavlan visste det inte.
+# TE26A:s tavla om tecken och intervall (Ma 1c, 27/9) fick rader om
+# implikation ⇒ och ekvivalens ⇔, och läraren strök dem för hand. Rickard
+# samma dag: «Oavsett om det är du som genererar eller om det är jag som
+# genererar en tavla, så hjälper det oss avsevärt mycket.»
+#
+# Tre delar, samma som provets: blocket i skrivningen och omskrivningen
+# (build_utanfor_tavla), blocket hos domaren (build_utanfor_dom) och vakten
+# (utanforvakt), som fäller raden till reparationsrundan. Profilen är
+# «tavla»: en tavla är inget prov, så det som bara gäller övningspapper
+# (ci_utanfor.BARA_OVNING) gäller här med. Kurs utan strykningar ger tom
+# sträng och tom fellista, och prompterna är då byte för byte de gamla.
+_UTANFOR_PROFIL = "tavla"
+
+
+def build_utanfor_tavla(kurs: str) -> str:
+    """Skrivningens och omskrivningens block. Tom sträng utan strykningar."""
+    return ci_utanfor.build_utanfor(kurs or "", _UTANFOR_PROFIL, tavla=True)
+
+
+# Domarens rad börjar med ett fast ord, så att randfallsgrinden
+# (_hittat_randfall) känner igen fyndet: en rad under «Att tänka på» med ⇔
+# har inget uppgiftsnummer i urvalet och hade annars sorterats bort.
+UTANFOR_FYND = "Utanför kursen:"
+
+
+def build_utanfor_dom(kurs: str) -> str:
+    """Domarens block: samma lista, och att en sådan rad är ett fynd."""
+    block = build_utanfor_tavla(kurs)
+    if not block:
+        return ""
+    return (f"{block}\nStår något av det här på tavlan är det ett fynd, "
+            f"också på en rad som i övrigt är bra: börja \"vad\" med "
+            f"«{UTANFOR_FYND}» och citera raden, och \"forslag\" är raden "
+            "skriven utan det, eller att den stryks.")
+
+
+# Nycklar som inte bär text läraren ser. Resten av tavlans strängar läses.
+_EJ_TEXT = frozenset({"kind", "id", "color", "fill", "stroke", "align",
+                      "style", "font", "anchor", "ref", "variant", "tone"})
+
+
+def _tavelstrangar(v, vag: str, ut: list[tuple[str, str]],
+                   nyckel: str = "") -> None:
+    """(väg, text) för varje sträng på tavlan. Math-rader får $ runt sig, så
+    att ci_utanfor:s mattemönster (kvadreringsreglerna) läser dem som matte."""
+    if isinstance(v, dict):
+        for k, x in v.items():
+            if k not in _EJ_TEXT:
+                _tavelstrangar(x, f"{vag}.{k}" if vag else k, ut, k)
+    elif isinstance(v, list):
+        for i, x in enumerate(v):
+            _tavelstrangar(x, f"{vag}[{i}]", ut, nyckel)
+    elif isinstance(v, str) and v.strip():
+        ut.append((vag, f"${v}$" if nyckel == "latex" else v))
+
+
+def utanforvakt(board: dict | None, kurs: str) -> list[dict]:
+    """Ett fynd per rad där något utanför kursens centrala innehåll står.
+    Koden är provets (ci_utanfor.KOD), och fynden går till reparationsrundan
+    som de andra vakternas. Kurs utan strykningar: tom lista."""
+    if not isinstance(board, dict):
+        return []
+    lista = ci_utanfor.utanfor(kurs or "", _UTANFOR_PROFIL)
+    if not lista:
+        return []
+    rader: list[tuple[str, str]] = []
+    _tavelstrangar(board, "", rader)
+    fel: list[dict] = []
+    for vag, text in rader:
+        traff = ci_utanfor._traff([text], lista)
+        if not traff:
+            continue
+        namn, ord_ = traff
+        rad = text.strip("$")
+        fel.append({
+            "path": vag, "code": ci_utanfor.KOD,
+            "message": (
+                f"«{rad[:80]}» tar upp {namn} («{ord_}»), och det står inte "
+                f"i det centrala innehållet för {kurs}. Stryk raden eller "
+                "skriv den utan det."
+                + (" Mellan stegen skrivs «ger», och samma villkor i en "
+                   "annan form skrivs «betyder», aldrig en pil."
+                   if namn == ci_utanfor._IMPLIKATION[0] else ""))})
+    return fel[:ci_utanfor.CI_MAX_FYND]
+
+
+def _nya_utanfor(fore: dict | None, efter: dict | None,
+                 kurs: str) -> list[dict]:
+    """Vaktens fynd på `efter` som inte fanns på `fore`, jämförda på raden
+    och inte på vägen (en ny ruta mitt i flyttar vägarna). En omskrivning
+    ska laga det varvet skrev, inte det läraren redan lät stå.
+
+    Båda läses med pilarna bytta: ⇒ och ⇔ byter rutten gratis efter varvet
+    (routes_planning, pilar_till_ger), och de ska inte kosta en runda. Tavlan
+    själv byts inte här, för diffvakten jämför varvet mot originalet."""
+    sedda = {f["message"] for f in utanforvakt(pilar_till_ger(fore, kurs),
+                                                kurs)}
+    return [f for f in utanforvakt(pilar_till_ger(efter, kurs), kurs)
+            if f["message"] not in sedda]
 
 
 def _rensa_toppnycklar(board: dict | None) -> dict | None:
@@ -5075,25 +5210,31 @@ TACKNING_INSTRUKTION = (
 
 def build_tackning_prompt(board_json: dict, bok: str, delar: str = "",
                           form: Tavelform = STANDARDFORM,
-                          prov: str = "") -> str:
+                          prov: str = "", utanfor: str = "") -> str:
     # Delarna sist före tavlan, av samma skäl som i skrivningen: de är
     # uppdraget, inte en källa. Tom sträng ger ordagrant den gamla prompten.
     # Provet (build_infor_prov_dom) står mellan boken och delarna, som i
     # skrivningen.
+    # Kursens gränser (build_utanfor_dom) står direkt efter instruktionen,
+    # före boken, som i skrivningen. Tom för en kurs utan strykningar.
+    utk = f"\n\n{utanfor.strip()}" if utanfor.strip() else ""
     prv = f"\n\n{prov.strip()}" if prov.strip() else ""
     dlr = f"\n\n{delar.strip()}" if delar.strip() else ""
     return (
-        f"{form.domarinstruktion()}\n\n{bok.strip()}{prv}{dlr}\n\nTavlan:\n"
+        f"{form.domarinstruktion()}{utk}\n\n{bok.strip()}{prv}{dlr}\n\n"
+        "Tavlan:\n"
         f"{json.dumps(board_json, ensure_ascii=False)}\n"
     )
 
 
 def doma_tackning(board: dict, *, model: str, llm, bok: str, delar: str = "",
                   form: Tavelform = STANDARDFORM, prov: str = "",
+                  utanfor: str = "",
                   log_cb: Callable[[str], None] | None = None) -> list[dict]:
     """Domens fynd som problemposter för build_repair_prompt — [] när tavlan
     täcker urvalet, och [] också när domen inte gick att läsa: en tavla ska
-    aldrig fällas av att domaren svarade otydligt."""
+    aldrig fällas av att domaren svarade otydligt. `utanfor` är
+    build_utanfor_dom."""
     log = log_cb or (lambda _m: None)
     log("Täckningsdomaren läser urvalet mot tavlan …")
     # FAIL-OPEN, också mot nätet. Domaren körs EFTER att tavlan är färdig och
@@ -5102,7 +5243,8 @@ def doma_tackning(board: dict, *, model: str, llm, bok: str, delar: str = "",
     # regel som för en otydlig dom: tavlan lämnas som den är, och skälet syns
     # i loggen i stället för att kosta genereringen.
     try:
-        raw = llm(model, build_tackning_prompt(board, bok, delar, form, prov),
+        raw = llm(model, build_tackning_prompt(board, bok, delar, form, prov,
+                                               utanfor),
                   options={"temperature": 0.2})
     except Exception as e:
         log(f"Täckningsdomaren kunde inte nås ({e}) — tavlan lämnas som den är.")
@@ -5123,13 +5265,17 @@ def doma_tackning(board: dict, *, model: str, llm, bok: str, delar: str = "",
                   if str(u).strip().isdigit()]
         upp = ", ".join(str(u) for u in (s.get("uppgifter") or [])[:12])
         forslag = str(s.get("forslag") or "").strip()
+        # Ett fynd utanför kursen är ingen lucka: «lägg till» hade bett
+        # kompletteringen skriva mer om det som ska bort.
+        leder = ("stryk eller skriv om" if vad.startswith(UTANFOR_FYND)
+                 else "lägg till")
         fynd.append({"path": f"täckning (uppgift {upp})" if upp else "täckning",
                      "code": "tackning",
                      # Numren följer med som data, inte bara som text i
                      # vägen: randfallsgrinden nedan måste kunna slå upp dem
                      # mot remsan utan att tolka en sträng en gång till.
                      "uppgifter": nummer,
-                     "message": f"{vad} — lägg till: {forslag}" if forslag
+                     "message": f"{vad} — {leder}: {forslag}" if forslag
                      else vad})
     # Fler än så är inte en lucka utan en annan lektion — då ska läraren se
     # domen och döma själv, inte få tavlan omskriven i grunden.
@@ -5177,6 +5323,11 @@ def _hittat_randfall(fynd: list, bok: str, log=lambda _m: None) -> list:
         if "provets uppgift" in text:
             kvar.append(f)
             continue
+        # Kursens gränser (build_utanfor_dom) är inget randfall ur urvalet:
+        # en rad med ⇔ under «Att tänka på» ska bort även utan nummer.
+        if text.startswith(UTANFOR_FYND.lower()):
+            kvar.append(f)
+            continue
         if any(o in text for o in _RANDFALLSORD) and not (nummer & urval):
             log(f"Randfallet utan uppgift i urvalet lämnas: "
                 f"{str(f.get('message') or '')[:120]}")
@@ -5187,11 +5338,13 @@ def _hittat_randfall(fynd: list, bok: str, log=lambda _m: None) -> list:
 
 def _tackning_pass(board: dict, errors: list, *, model: str, llm, bok: str,
                    delar: str = "", form: Tavelform = STANDARDFORM,
-                   prov: str = "", provtext: str = "",
+                   prov: str = "", provtext: str = "", kurs: str = "",
                    budget: int = TACKNING_MAX_ROUNDS,
                    log_cb: Callable[[str], None] | None = None,
                    token_cb: Callable[[str], None] | None = None) -> dict:
     """Dom + högst EN reparationsrunda på fynden. `rounds` är domarens EGNA.
+    `kurs` ger domaren kursens gränser (build_utanfor_dom) och vakten
+    utanforvakt på kompletteringen; tom kurs ger den gamla kedjan.
 
     Ligger efter valideringsreparationen med flit: domaren ska läsa den
     tavla läraren annars hade fått, inte ett halvfärdigt mellanläge.
@@ -5206,7 +5359,8 @@ def _tackning_pass(board: dict, errors: list, *, model: str, llm, bok: str,
     kommer efter."""
     log = log_cb or (lambda _m: None)
     fynd = doma_tackning(board, model=model, llm=llm, bok=bok, delar=delar,
-                         form=form, prov=prov, log_cb=log_cb)
+                         form=form, prov=prov,
+                         utanfor=build_utanfor_dom(kurs), log_cb=log_cb)
     # Påhittade randfall sorteras bort HÄR, innan de kan bli en rad på
     # vänstern: ett fynd som inte går att peka ut i urvalet är inte en lucka
     # (se Randfallsgrinden ovan).
@@ -5241,6 +5395,8 @@ def _tackning_pass(board: dict, errors: list, *, model: str, llm, bok: str,
         kandidat = None
     if kandidat is None:
         return {"board": board, "errors": errors + fynd, "rounds": rundor}
+    # Pilarna byts först, som i skrivningen (pilar_till_ger).
+    kandidat = pilar_till_ger(kandidat, kurs)
     _doc, fel = ws.validate_board_json(kandidat)
     # Kompletteringen skriver exempel, och domarens förslag kan ha kommit i
     # den gamla formen eller med ett felräknat led. Sådant ska rättas i samma
@@ -5257,6 +5413,9 @@ def _tackning_pass(board: dict, errors: list, *, model: str, llm, bok: str,
     fel = fel + [f for f in utrakningsvakt(kandidat) + raknevakt(kandidat)
                  + grafvakt(kandidat) + provkopior(kandidat, provtext)
                  if (f["path"], f["code"]) not in fore_vakt]
+    # Kursens gränser med (utanforvakt): domarens förslag kommer ur boken, och
+    # boken har avsnitten kursen strök.
+    fel = fel + _nya_utanfor(board, kandidat, kurs)
     try:
         res = _repair_until_valid(kandidat, fel, model=model, llm=llm,
                                   rounds_used=rundor, max_rounds=budget,
@@ -5386,7 +5545,10 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
               + vanligtfel_kvar(board, form) + stodordsfragor(board)
               + hanvisningar(board) + symbolvakt(board, bok)
               + rott_led_ostruket(board) + utrakningsvakt(board)
-              + raknevakt(board) + grafvakt(board))
+              + raknevakt(board) + grafvakt(board)
+              # Kursens gränser (utanforvakt): ⇐, «implikation» och det
+              # andra kursen strök. ⇒ och ⇔ är redan bytta ovan.
+              + utanforvakt(board, course))
     res = _repair_until_valid(board, errors, model=model, llm=llm,
                               rounds_used=rounds, max_rounds=max_rounds,
                               log_cb=log, token_cb=token_cb, form=form)
@@ -5408,12 +5570,12 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
             + stodordsfragor(res["board"]) + hanvisningar(res["board"])
             + symbolvakt(res["board"], bok) + rott_led_ostruket(res["board"])
             + utrakningsvakt(res["board"]) + raknevakt(res["board"])
-            + grafvakt(res["board"])
+            + grafvakt(res["board"]) + utanforvakt(res["board"], course)
             if (f["path"], f["code"]) not in sedda]
     if doma and res.get("board") is not None:
         dom = _tackning_pass(res["board"], res["errors"], model=model, llm=llm,
                              bok=bok, delar=delar, form=form, prov=prov_dom,
-                             provtext=provtext, log_cb=log,
+                             provtext=provtext, kurs=course, log_cb=log,
                              token_cb=token_cb)
         # `rounds` är den budget generering och renderingsreparation delar:
         # domaren har sin egen och lämnar därför siffran orörd.
@@ -5825,6 +5987,7 @@ def refine_board(board: dict, instruction: str, *, model: str,
                  bok: str = "", historik=None,
                  vanligt_fel: bool = True, niva: str = "",
                  inriktning: str = "", regelsamling: bool = False,
+                 kurs: str = "",
                  llm=llm_client.generate,
                  max_rounds: int = MAX_ROUNDS,
                  log_cb: Callable[[str], None] | None = None,
@@ -5841,19 +6004,25 @@ def refine_board(board: dict, instruction: str, *, model: str,
 
     Utan mål går PROMPTEN som förut, byte för byte — men svaret prövas av
     DIFFVAKTEN (blocket ovan, lärarens ord 2026-09-12): nämner meningen ett
-    mål och varvet ändrade något annat körs det om som en lapp."""
+    mål och varvet ändrade något annat körs det om som en lapp.
+
+    `kurs` ger kursens gränser, som i skrivningen: blocket i prompten
+    (build_utanfor_tavla) och utanforvakten på det varvet skrev. En rad
+    läraren redan lät stå repareras inte (_nya_utanfor). Tom kurs, eller en
+    kurs utan strykningar, ger prompten byte för byte som förut."""
     log = log_cb or (lambda _m: None)
     form = tavelform(vanligt_fel, niva, inriktning, regelsamling)
+    utanfor = build_utanfor_tavla(kurs)
     vagar = malvagar(board, mal, malen, log=log)
     if vagar:
         return _riktad_refine(board, instruction, vagar, model=model, llm=llm,
                               mal=mal, malen=malen, bok=bok, historik=historik,
                               max_rounds=max_rounds, log_cb=log_cb,
-                              token_cb=token_cb, form=form)
+                              token_cb=token_cb, form=form, kurs=kurs)
     log("Uppdaterar tavlan …")
     candidate = _llm_round(
         build_refine_prompt(board, instruction, mal, bok, historik, malen,
-                            form),
+                            form, utanfor),
         model, llm, token_cb=token_cb)
     if candidate is None:
         return {"board": board,
@@ -5861,6 +6030,7 @@ def refine_board(board: dict, instruction: str, *, model: str,
                             "message": "modellen svarade inte med giltig JSON"}],
                 "rounds": 1}
     _doc, errors = ws.validate_board_json(candidate)
+    errors = errors + _nya_utanfor(board, candidate, kurs)
     res = _repair_until_valid(candidate, errors, model=model, llm=llm,
                               rounds_used=1, max_rounds=max_rounds,
                               log_cb=log_cb, token_cb=token_cb, form=form,
@@ -5876,7 +6046,7 @@ def refine_board(board: dict, instruction: str, *, model: str,
     riktad = _riktad_refine(board, instruction, vagar, model=model, llm=llm,
                             mal=mal, malen=malen, bok=bok, historik=historik,
                             max_rounds=max_rounds, log_cb=log_cb,
-                            token_cb=token_cb, form=form)
+                            token_cb=token_cb, form=form, kurs=kurs)
     # Rundorna RÄKNAS IHOP: det kastade varvet kostade en runda, och budgeten
     # är tavlans gemensamma (jobbremsan och reparationsloopen läser samma tal).
     riktad["rounds"] = res.get("rounds", 1) + riktad.get("rounds", 0)

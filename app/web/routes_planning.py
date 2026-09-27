@@ -1567,6 +1567,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     malen=malen, bok=bok_txt, historik=historik,
                     vanligt_fel=vanligt_fel, niva=niva, inriktning=inriktning,
                     regelsamling=regelsamling,
+                    # Kursens gränser (lesson_board.build_utanfor_tavla,
+                    # förslag 5 i veckoanalysen 2026-09-27) gäller varvet
+                    # som skrivningen.
+                    kurs=st.get("course") or "",
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 # Sa hon åt oss att sluta? Raden frågade förr om NÅGON

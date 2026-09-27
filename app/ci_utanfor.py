@@ -242,9 +242,15 @@ def pilar_forbjudna(kurs: str) -> bool:
     return any(n == _IMPLIKATION[0] for n, _k, _p in utanfor(kurs))
 
 
-def build_utanfor(kurs: str, profil: str = "prov") -> str:
+def build_utanfor(kurs: str, profil: str = "prov", *,
+                  tavla: bool = False) -> str:
     """Promptraden. Tom sträng utan strykningar (kassetteregeln: prompten ska
-    då vara byte för byte den som gick i väg förut)."""
+    då vara byte för byte den som gick i väg förut).
+
+    `tavla` ger samma lista i tavlans ord (lesson_board.build_utanfor_tavla).
+    TE26A:s tavla om tecken och intervall 27/9 bar rader om implikation ⇒ och
+    ekvivalens ⇔, och läraren fick stryka dem för hand. Proven hade haft
+    raden i prompten sedan 17/9, tavlan hade den inte."""
     lista = utanfor(kurs, profil)
     if not lista:
         return ""
@@ -258,6 +264,19 @@ def build_utanfor(kurs: str, profil: str = "prov") -> str:
         monster = (monster + "\n" if monster else "") + (
             "Mellan stegen i en lösning skrivs «ger» eller «alltså», aldrig "
             "en pil.")
+        # «ger» är fel ord när raden säger samma sak två gånger: «m ∈ ]0,
+        # 800] ger 0 < m ≤ 800» stod på TE26A:s tavla 27/9, där ⇔ hade
+        # bytts ut. Samma villkor i ny form «betyder» (pilar_till_ger).
+        if tavla:
+            monster += (" Skrivs samma villkor om i en annan form skrivs "
+                        "«betyder» (m ∈ ]0, 800] betyder 0 < m ≤ 800).")
+    if tavla:
+        return (
+            f"UTANFÖR KURSEN. Det här står inte i det centrala innehållet för "
+            f"{kurs} och får inte stå någonstans på tavlan, varken som "
+            "begreppsrad, formel, exempel eller under «Att tänka på», och "
+            "orden nämns inte, även om boken har avsnittet:\n"
+            f"{rader}\n" + monster).rstrip("\n")
     return (
         f"UTANFÖR KURSEN. Det här står inte i det centrala innehållet för "
         f"{kurs} och får inte förekomma någonstans på pappret, varken i "

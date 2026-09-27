@@ -455,7 +455,7 @@ def test_render_report_triggers_repair(llm_ready, monkeypatch):
                     max_rounds=lesson_board.MAX_ROUNDS,
                     vanligt_fel=True, niva="", inriktning="",
                     regelsamling=False, log_cb=None,
-                    token_cb=None):
+                    token_cb=None, kurs=""):
         captured["warnings"] = warnings
         captured["rounds_used"] = rounds_used
         return {"board": repaired, "errors": [], "rounds": rounds_used + 1}
@@ -565,7 +565,7 @@ def test_refine_updates_board(llm_ready, monkeypatch):
                     bok="", historik=None, vanligt_fel=True, niva="",
                     inriktning="", regelsamling=False,
                     llm=None, max_rounds=lesson_board.MAX_ROUNDS, log_cb=None,
-                    token_cb=None):
+                    token_cb=None, kurs=""):
         captured["instruction"] = instruction
         captured["mal"] = mal
         return {"board": updated, "errors": [], "rounds": 1}
@@ -1254,7 +1254,7 @@ def test_refine_far_hela_meddelandet_inklusive_kallviktningen(llm_ready, monkeyp
                     bok="", historik=None, vanligt_fel=True, niva="",
                     inriktning="", regelsamling=False,
                     llm=None, max_rounds=lesson_board.MAX_ROUNDS, log_cb=None,
-                    token_cb=None):
+                    token_cb=None, kurs=""):
         sett["message"] = message
         return {"board": _valid_board(), "errors": [], "rounds": 1}
     monkeypatch.setattr(lesson_board, "refine_board", fake_refine)
@@ -1324,7 +1324,7 @@ def test_tavlan_gar_att_andra_efter_en_omstart(llm_ready, monkeypatch):
                     bok="", historik=None, vanligt_fel=True, niva="",
                     inriktning="", regelsamling=False,
                     llm=None, max_rounds=lesson_board.MAX_ROUNDS, log_cb=None,
-                    token_cb=None):
+                    token_cb=None, kurs=""):
         sett["board"] = board
         return {"board": uppdaterad, "errors": [], "rounds": 1}
     monkeypatch.setattr(lesson_board, "refine_board", fake_refine)

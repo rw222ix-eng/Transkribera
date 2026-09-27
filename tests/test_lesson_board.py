@@ -2889,17 +2889,20 @@ def test_prompten_styr_talen_efter_hjalpmedlen():
 def test_standardformen_ger_ordagrant_den_gamla_prompten():
     """vanligt_fel=True + Blandat = prompten som kassetterna spelades in mot.
     Referensen byggs av delarna själva, i den ordning build_prompt sätter dem,
-    så att testet fäller en form som lägger till eller drar ifrån ett tecken."""
+    så att testet fäller en form som lägger till eller drar ifrån ett tecken.
+
+    Kursen är 3c sedan 2026-09-27: Ma1b har strykningar ur det centrala
+    innehållet (build_utanfor_tavla), och de prövas i test_tavla_utanfor."""
     referens = (
         f"{lb.INSTRUCTION}\n{lb._few_shot_block()}\n\n"
-        "Uppdrag: skriv lektionstavlan för Ma1b, klass 9A — Pythagoras sats.\n"
+        "Uppdrag: skriv lektionstavlan för Ma3c, klass 9A — Pythagoras sats.\n"
         "Svara med enbart JSON."
     )
-    assert lb.build_prompt("Ma1b", "9A", "Pythagoras sats") == referens
+    assert lb.build_prompt("Ma3c", "9A", "Pythagoras sats") == referens
     # Och samma sak via de vägar rutterna faktiskt tar.
     for form in (lb.Tavelform(), lb.tavelform(True, ""),
                  lb.tavelform(True, "Blandat"), lb.tavelform(None, None)):
-        assert lb.build_prompt("Ma1b", "9A", "Pythagoras sats",
+        assert lb.build_prompt("Ma3c", "9A", "Pythagoras sats",
                                form=form) == referens
         assert form.instruktion() == lb.INSTRUCTION
         assert form.hints() == lb.REPAIR_HINTS
