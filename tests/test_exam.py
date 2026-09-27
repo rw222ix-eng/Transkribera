@@ -3649,7 +3649,7 @@ def test_trappans_regler_star_i_bada_prompterna():
     for text in (exam_gen.INSTRUCTION, exam_gen.build_bedomning_prompt(underlag)):
         assert exam_gen.BEDOMNINGSREGLER in text
     for fras in ("Bara det frågan ber om", "följdfel godtas",
-                 "det svåra steget", "villkoret"):
+                 "det svåra steget", "villkoret", "hakparenteser"):
         assert fras in exam_gen.BEDOMNINGSREGLER
     # Nivåerna rörs inte: passet behåller raderna per nivå.
     assert "nivåerna EXAKT" in exam_gen.build_bedomning_prompt(underlag)

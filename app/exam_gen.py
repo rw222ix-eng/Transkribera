@@ -318,6 +318,10 @@ BEDOMNINGSREGLER = (
     "  • Facit är matematiskt komplett. Förkortas ett bråk står villkoret i "
     "losning ('för $a \\neq 5$'), men eleven behöver inte skriva det för "
     "poängen om frågan inte ber om det.\n"
+    # Rickard 2026-09-27 om prov 129:1 och 12a: «nej det räknas inte».
+    "  • Intervall skrivs med bokens hakparenteser, $]-3,\\ 8]$. Frågar "
+    "uppgiften efter ett intervall säger raden det: '+1 E rätt intervall "
+    "$]-3,\\ 8]$, inte $(-3,\\ 8]$'.\n"
 )
 
 INSTRUCTION = (
