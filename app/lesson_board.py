@@ -2737,14 +2737,20 @@ def build_infor_prov_dom(rader: list[dict]) -> str:
 
 
 def provtexter(exam: dict | None) -> str:
-    """Provets alla uppgiftstexter i en sträng, bara för provkopievakten."""
+    """Provets alla uppgiftstexter i en sträng, bara för provkopievakten.
+
+    LÖSNINGARNA MED (jobb 1181, 2026-09-28). Tavlans exempel 1a räknade
+    provets 6a led för led, «80 µm = 80 · 10⁻⁶ m = 8 · 10¹ · 10⁻⁶ m», och de
+    leden står bara i provets lösning. Med enbart uppgiftstexten hade
+    vakten inget att jämföra uträkningen med."""
     bitar: list[str] = []
     for u in (exam or {}).get("uppgifter") or []:
         if not isinstance(u, dict):
             continue
-        bitar.append(str(u.get("text") or ""))
-        bitar += [str(d.get("text") or "")
-                  for d in (u.get("deluppgifter") or []) if isinstance(d, dict)]
+        bitar += [str(u.get("text") or ""), str(u.get("losning") or "")]
+        for d in u.get("deluppgifter") or []:
+            if isinstance(d, dict):
+                bitar += [str(d.get("text") or ""), str(d.get("losning") or "")]
     return "\n".join(b for b in bitar if b)
 
 
@@ -4058,12 +4064,95 @@ def bokkopior(board: dict | None, bok: str) -> list[dict]:
 
 def provkopior(board: dict | None, provtext: str) -> list[dict]:
     """Exempel vars uttryck står ordagrant i provet tavlan förbereder
-    (build_infor_prov). Tavlan visas för klassen före provet, så en sådan rad
-    har delat ut en provuppgift. Samma mekanik som bokkopievakten."""
-    return _kopior(board, provtext, "provkopia", lambda latex: (
-        f"'{latex[:60]}' står ordagrant i provet, och tavlan visas för "
-        "klassen före provet. Skriv ett eget exempel av samma sort med andra "
-        "tal och en annan situation."))
+    (build_infor_prov), eller vars mening är provets mening med ett ord
+    borta. Tavlan visas för klassen före provet, så en sådan rad har delat ut
+    en provuppgift.
+
+    SKARPARE ÄN BOKKOPIEVAKTEN sedan jobb 1181 (2026-09-28). Tavlan skrev
+    «Ett hårstrå är 80 µm tjockt. Skriv i meter, i grundpotensform.» mot
+    provets 6a «Ett hårstrå är ungefär 80 $\\mu$m tjockt.», och vakten såg
+    ingenting av tre skäl: den läste bara math-rader, och situationen stod i
+    text-rader; «ungefär» var struket, och exakt jämförelse faller på ett
+    ord; uträkningens första led bar regelnumret \\text{①} och «\\ » före
+    enheten, som provets lösning inte har. Bokkopievakten står kvar som den
+    var: den mäts mot en PDF-avläsning, och kassetterna spelar dess kedja."""
+    if not provtext or not isinstance(board, dict):
+        return []
+    nyckel = _kopienyckel(_provform(provtext))
+    meningar = [m for m in (_provord(r) for r in provtext.splitlines())
+                if len(m) >= _NARA_MINSTA]
+    ut: list[dict] = []
+    for spath, kind, rad in _rader_hoger(board):
+        if kind == "math":
+            k = _kopienyckel(_provform(rad))
+            if len(k) >= _KOPIA_MINSTA and k in nyckel:
+                ut.append({"path": spath, "code": "provkopia", "message": (
+                    f"'{rad[:60]}' står ordagrant i provet, och tavlan visas "
+                    "för klassen före provet. Skriv ett eget exempel av samma "
+                    "sort med andra tal och en annan situation.")})
+            continue
+        ord_ = _provord(rad)
+        tal = {o for o in ord_ if o[0].isdigit()}
+        if len(ord_) < _NARA_MINSTA or not tal:
+            continue
+        if any(tal <= m and len(ord_ & m) / len(ord_) > _NARA_ANDEL
+               for m in meningar):
+            ut.append({"path": spath, "code": "provkopia", "message": (
+                f"'{rad[:60]}' är provets egen uppgift med samma tal, och "
+                "tavlan visas för klassen före provet. Skriv ett eget exempel "
+                "av samma sort i en annan situation och med andra tal.")})
+    return ut
+
+
+# Regelnumret (\text{①}, REGELSAMLING_BLOCK) och «Svar:» står först på
+# tavlans rader och aldrig i provets lösning; «\ » är ett mellanslag till.
+_PROV_BORT = re.compile(r"\\text\{\s*[①-⑳\s]+\}|\\text\{\s*Svar:?\s*\}|"
+                        r"Svar:|\\ |\$")
+# Kortare mening än fem ord är en instruktion («Skriv i meter»), inte en
+# uppgift. Fyra av fem gemensamma ord räcker inte: «40 kr per timme» står i
+# varannan prisuppgift, och det är situationen som gör uppgiften.
+_NARA_MINSTA = 5
+_NARA_ANDEL = 0.8
+_ORD_RE = re.compile(r"\d+(?:[.,]\d+)?|[a-zåäöéµ]{2,}")
+
+
+def _provform(s: str) -> str:
+    return _PROV_BORT.sub("", str(s or "").replace("\\mu", "µ"))
+
+
+def _provord(s: str) -> set[str]:
+    """Orden och talen i en rad, med LaTeX:ens kommandon borta och \\mu som
+    µ, så att «80 $\\mu$m» och «80 µm» blir samma två ord."""
+    s = re.sub(r"\\(?:text|mathrm)\{([^}]*)\}", r" \1 ",
+               str(s or "").replace("\\mu", " µ"))
+    s = re.sub(r"\\[a-zA-Z]+", " ", s).replace("{,}", ",").lower()
+    return set(_ORD_RE.findall(s))
+
+
+def _rader_hoger(board: dict) -> list[tuple[str, str, str]]:
+    """(sökväg, kind, text) för varje text- och math-rad på högertavlan."""
+    ut: list[tuple[str, str, str]] = []
+
+    def vandra(sections, path):
+        for si, sec in enumerate(sections or []):
+            if not isinstance(sec, dict):
+                continue
+            spath = f"{path}[{si}]"
+            kind = sec.get("kind")
+            if kind == "math":
+                ut.append((spath, kind, str(sec.get("latex") or "")))
+            elif kind == "text":
+                ut.append((spath, kind, str(sec.get("text") or "")))
+            if sec.get("children"):
+                vandra(sec["children"], f"{spath}.children")
+
+    for bi, tavla in enumerate(board.get("boards") or []):
+        if bi == 0 or not isinstance(tavla, dict):
+            continue
+        for ci, kol in enumerate(tavla.get("columns") or []):
+            vandra((kol or {}).get("sections"),
+                   f"boards[{bi}].columns[{ci}].sections")
+    return ut
 
 
 def _kopior(board: dict | None, kalla: str, kod: str, meddelande) -> list[dict]:

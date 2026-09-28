@@ -133,6 +133,39 @@ def test_provkopievakten_faller_provets_uttryck():
     assert lesson_board.provkopior(_tavla("x^2 + 6x + k = 0"), "") == []
 
 
+def test_provkopievakten_ser_hårstrået_i_text_och_losning():
+    """Jobb 1181: provets 6a stod på tavlan med «ungefär» struket, i
+    text-rader, och uträkningen var provets lösning med regelnumret först."""
+    exam = {"uppgifter": [{
+        "text": "Ett hårstrå är ungefär 80 $\\mu$m tjockt.",
+        "deluppgifter": [{
+            "text": "Skriv hårstråets tjocklek i meter i grundpotensform.",
+            "losning": "$8 \\cdot 10^{-5}$\n$80\\ \\mu\\text{m} = 80 \\cdot "
+                       "10^{-6}\\ \\text{m} = 8 \\cdot 10^{1} \\cdot "
+                       "10^{-6}\\ \\text{m}$"}]}]}
+    tavla = {"schema": "wb-json-v1", "boards": [
+        {"columns": [{"sections": []}]},
+        {"columns": [{"sections": [
+            {"kind": "heading", "text": "Exempel 1"},
+            {"kind": "text", "text": "a) Ett hårstrå är 80 µm tjockt."},
+            {"kind": "text", "text": "Skriv i meter, i grundpotensform."},
+            {"kind": "math", "latex": "\\text{①}\\; 80\\ \\mu\\text{m} = "
+                                      "80 \\cdot 10^{-6}\\text{ m}"}]}]}]}
+    fynd = lesson_board.provkopior(tavla, lesson_board.provtexter(exam))
+    assert [f["path"][-3:] for f in fynd] == ["[1]", "[3]"]
+
+
+def test_provkopievakten_later_prisens_vardagsord_vara():
+    """Fyra av fem ord gemensamma är inte en kopia: «40 kr per timme» står i
+    varannan prisuppgift."""
+    prov = "Ett gym kostar 40 kr per timme."
+    tavla = {"schema": "wb-json-v1", "boards": [
+        {"columns": [{"sections": []}]},
+        {"columns": [{"sections": [
+            {"kind": "text", "text": "Hyrcykel. A: 40 kr per timme."}]}]}]}
+    assert lesson_board.provkopior(tavla, prov) == []
+
+
 def test_randfallsgrinden_slapper_provets_fynd():
     bok = "LÄRARENS URVAL: klassen ska räkna uppg. 1330–1346 på lektionen."
     fynd = [{"message": "Att tänka på saknar negativt under roten "
