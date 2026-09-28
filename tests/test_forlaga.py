@@ -276,3 +276,112 @@ def test_ett_okant_forlage_id_gor_ingen_skada(llm_ready, monkeypatch):
     assert r.status_code == 200
     _done(r)
     assert "FÖRLAGA" not in prompter[0]
+
+
+# ─────────────── «Tavlan löser förlagans uppgifter» (jobb 1181) ───────────────
+
+def grupp_papper() -> dict:
+    return {
+        "typ": "Gruppuppgift", "moment": "Inför provet", "klass": "NA26F",
+        "kurs": "Matematik, nivå 1c", "datum": "2026-09-29",
+        "uppgifter": [
+            {"nr": 1, "p": 2, "niva": "E", "t": "Skriv i meter.",
+             "del": ["En blodkropp är $7$ µm bred."]},
+            {"nr": 2, "p": 2, "niva": "C", "t": "Lös ekvationen.",
+             "del": ["$3(x - 4) = x + 6$"]},
+        ],
+    }
+
+
+def test_losvalet_byter_inspirationen_mot_losningen():
+    """Jobb 1181: lärarens «samma tal, led för led» stod före «kopiera aldrig,
+    inte ens med utbytta tal», och det sista stycket vann."""
+    vanlig = forlaga.build_forlaga(grupp_papper(), "samma tal", mal="Tavla")
+    los = forlaga.build_forlaga(grupp_papper(), "samma tal", mal="Tavla",
+                                los=True)
+    assert "INSPIRATION" in vanlig and "INSPIRATION" not in los
+    assert "LÖSAS" in los and "$3(x - 4) = x + 6$" in los
+    # En tavla som förlaga har inga uppgifter att lösa: valet gör ingenting.
+    assert "INSPIRATION" in forlaga.build_forlaga(tavla_papper(), los=True)
+
+
+def test_ordet_galler_det_som_skrivs_inte_forlagan():
+    text = forlaga.build_forlaga(grupp_papper(), mal="Tavla")
+    assert "en lektionstavla ska kännas" in text
+    assert "en gruppuppgift ska kännas" not in text
+    # Utan mål (tools/, gamla anrop) gäller förlagans typ, som förut.
+    assert "en gruppuppgift ska kännas" in forlaga.build_forlaga(grupp_papper())
+
+
+def test_losblocken_ar_tomma_utan_valet():
+    assert lesson_board.build_los_block(None) == ""
+    assert lesson_board.build_los_block([]) == ""
+    assert lesson_board.build_los_dom([]) == ""
+    assert lesson_board.build_fokus_dom("") == ""
+
+
+def test_prompterna_ar_de_gamla_utan_valet():
+    """Kassettregeln: tomt val ger byte för byte samma prompt."""
+    assert (lesson_board.build_prompt("Ma", "NA", "m", los="")
+            == lesson_board.build_prompt("Ma", "NA", "m"))
+    assert (lesson_board.build_tackning_prompt({"a": 1}, "bok", fokus="", los="")
+            == lesson_board.build_tackning_prompt({"a": 1}, "bok"))
+
+
+def test_losblocket_star_sist_fore_uppdraget():
+    u = grupp_papper()["uppgifter"]
+    p = lesson_board.build_prompt(
+        "Ma", "NA", "m", fokus="LÄRAREN OM VAD SOM SKA VÄGA TYNGST x",
+        los=lesson_board.build_los_block(u))
+    assert p.index("VÄGA TYNGST") < p.index(lesson_board.LOSMARKOR) \
+        < p.index("Uppdrag:")
+    assert "EXAKT 2 exempel" in p
+
+
+def test_domaren_far_forlagan_och_viktningen():
+    u = grupp_papper()["uppgifter"]
+    d = lesson_board.build_tackning_prompt(
+        {"a": 1}, "bok", fokus=lesson_board.build_fokus_dom("Inget om uttryck"),
+        los=lesson_board.build_los_dom(u))
+    assert "Inget om uttryck" in d and "INGEN lucka" in d
+    assert "$3(x - 4) = x + 6$" in d and "ALDRIG ett nytt" in d
+
+
+def _hoger(*rader):
+    return {"boards": [{"sections": []}, {"columns": [{"sections": [
+        {"kind": k, ("latex" if k == "math" else "text"): t} for k, t in rader]}]}]}
+
+
+def test_forlagevakten_faller_en_uppgift_som_saknas():
+    u = grupp_papper()["uppgifter"]
+    hel = _hoger(("heading", "Exempel 1"), ("text", "a) Blodkropp 7 µm"),
+                 ("math", "7 \\cdot 10^{-6}\\text{ m}"),
+                 ("heading", "Exempel 2"),
+                 ("math", "\\text{①}\\; 3(x - 4) = x + 6"))
+    assert lesson_board.forlagevakt(hel, u) == []
+    egen = _hoger(("text", "a) Blodkropp 7 µm"),
+                  ("math", "2(x - 5) = x + 1"))
+    fynd = lesson_board.forlagevakt(egen, u)
+    assert [f["code"] for f in fynd] == ["forlaga"]
+    assert "uppgift 2" in fynd[0]["message"]
+    assert lesson_board.forlagevakt(egen, None) == []
+
+
+def test_planeringsrutten_skickar_losvalet(llm_ready, monkeypatch):
+    did = llm_ready.post("/api/dokument", json={
+        "dokument": grupp_papper(), "status": "godkant"}).json()["id"]
+    prompter = _fangad_prompt(monkeypatch, lesson_board)
+    board = copy.deepcopy(lesson_board.FEW_SHOTS[0][1])
+    monkeypatch.setattr(lesson_board, "_llm_round", lambda *a, **k: board)
+    # Few-shot-tavlan löser inte förlagan, och vakten hade drivit en
+    # rättningsrunda. Vakten prövas för sig ovan.
+    monkeypatch.setattr(lesson_board, "forlagevakt", lambda *a, **k: [])
+    for los in (True, False):
+        r = llm_ready.post("/api/planning/generate", json={
+            "moment": "repetition", "forlaga_dokument_id": did,
+            "forlaga_hur": "samma tal", "forlaga_los": los})
+        assert r.status_code == 200
+        _done(r)
+    med, utan = prompter
+    assert lesson_board.LOSMARKOR in med and "INSPIRATION" not in med
+    assert lesson_board.LOSMARKOR not in utan and "INSPIRATION" in utan

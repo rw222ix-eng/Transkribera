@@ -144,7 +144,8 @@ def utfall_text(db_file: Path, body: dict) -> str:
     return rattning.build_utfall(rattat, namn)
 
 
-def forlaga_text(db_file: Path, body: dict) -> str:
+def forlaga_text(db_file: Path, body: dict, *, mal: str = "",
+                 los: bool = False) -> str:
     """Promptblocket för källdörr 4 — det tidigare pappret läraren utgår från.
     Delas med provroutern.
 
@@ -152,8 +153,24 @@ def forlaga_text(db_file: Path, body: dict) -> str:
     läser sitt EGET papper ur dokumenttabellen, precis som det ligger i högen),
     och `forlaga` inline finns för pappret som aldrig nått databasen. `hur` är
     lärarens egen mening om hur förlagan ska följas — den står i planen och ska
-    stå i prompten."""
-    hur = str(body.get("forlaga_hur") or "")
+    stå i prompten. `mal` och `los`: se forlaga.build_forlaga."""
+    return forlaga.build_forlaga(forlaga_dokument(db_file, body),
+                                 str(body.get("forlaga_hur") or ""),
+                                 mal=mal, los=los)
+
+
+def forlaga_losuppgifter(db_file: Path, body: dict) -> list[dict]:
+    """Förlagans uppgifter när läraren valt «Tavlan löser förlagans
+    uppgifter» (`forlaga_los`), annars tom lista. Valet är ett eget fält och
+    inte en tolkning av `forlaga_hur`: meningen i jobb 1181 sa just det, och
+    ingen regel hade kunnat läsa den säkert."""
+    if not body.get("forlaga_los"):
+        return []
+    return forlaga.losbara(forlaga_dokument(db_file, body))
+
+
+def forlaga_dokument(db_file: Path, body: dict) -> dict | None:
+    """Förlagans papper: databasens när id:t finns där, annars det inline."""
     dok = body.get("forlaga") if isinstance(body.get("forlaga"), dict) else None
     did = body.get("forlaga_dokument_id")
     if did:
@@ -166,7 +183,7 @@ def forlaga_text(db_file: Path, body: dict) -> str:
             conn.close()
         if rad and rad.get("dokument"):
             dok = rad["dokument"]
-    return forlaga.build_forlaga(dok, hur)
+    return dok
 
 
 # Varvhistoriken kommer från KLIENTEN och inte ur databasen, och skälet är att
@@ -362,7 +379,7 @@ def lektionens_provnummer(db_file: Path, body: dict, exam: dict, *,
 
 
 def infor_prov_tavla(db_file: Path, body: dict, *, moment: str = "",
-                     nummer=None) -> dict | None:
+                     nummer=None, los: bool = False) -> dict | None:
     """«Inför provet» för tavlan (lesson_board.build_infor_prov), eller None.
 
     `infor_prov_id` pekar ut provet och `infor_nummer` lärarens val ur det.
@@ -402,8 +419,9 @@ def infor_prov_tavla(db_file: Path, body: dict, *, moment: str = "",
     datum = str((view or {}).get("datum") or exam.get("datum") or "")
     return {"id": eid, "titel": titel, "datum": datum,
             "nummer": [r["nr"] for r in valda],
-            "block": lesson_board.build_infor_prov(valda, titel, datum),
-            "dom": lesson_board.build_infor_prov_dom(valda),
+            "block": lesson_board.build_infor_prov(valda, titel, datum,
+                                                   los=los),
+            "dom": lesson_board.build_infor_prov_dom(valda, los=los),
             "text": lesson_board.provtexter(exam)}
 
 
@@ -1226,7 +1244,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
         utfall_txt = utfall_text(db_file, body)
         # Källdörr 4: det tidigare pappret läraren pekade ut. Planen har alltid
         # sagt «Läser förlagan» — nu gör den det.
-        forlaga_txt = forlaga_text(db_file, body)
+        # «Tavlan löser förlagans uppgifter» (lesson_board.build_los_block):
+        # ett val i planeringen, tom lista utan det.
+        los_uppg = forlaga_losuppgifter(db_file, body)
+        forlaga_txt = forlaga_text(db_file, body, mal="Tavla",
+                                   los=bool(los_uppg))
         # Lärarens egna två rutor. Svårigheten är den enda källan som finns när
         # lektionen INTE spelades in: minnets «Svårighet att följa upp» kommer
         # ur transkriptet, och utan inspelning står den tom hur mycket läraren
@@ -1253,7 +1275,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
         regelsamling = lesson_board.ar_regelsamling(moment)
         # «Inför provet» (lärarens princip 2026-09-27): provet först, boken i
         # andra hand. None utan valt prov, och då är kedjan den gamla.
-        infor = infor_prov_tavla(db_file, body, moment=moment)
+        infor = infor_prov_tavla(db_file, body, moment=moment,
+                                 los=bool(los_uppg))
 
         llm = arbiter.try_acquire_llm()
         if not llm:
@@ -1268,6 +1291,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     if infor["nummer"] else
                     f"Provet «{infor['titel']}» har ingen uppgift på "
                     "lektionens sidor. Tavlan skrivs ur boken.")})
+            if los_uppg:
+                emit({"type": "log", "msg": (
+                    f"Högertavlan löser förlagans {len(los_uppg)} uppgifter, "
+                    "med förlagans tal.")})
             try:
                 if arbiter.ensure_llm() is None:
                     raise RuntimeError("Språkmodellen är inte installerad.")
@@ -1303,6 +1330,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     prov=(infor or {}).get("block") or "",
                     prov_dom=(infor or {}).get("dom") or "",
                     provtext=(infor or {}).get("text") or "",
+                    forlaga_uppgifter=los_uppg or None,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 # Lektionstiden uppe till vänster är lärarens, inte modellens:
@@ -1327,6 +1355,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     **({"infor_prov": {k: infor[k] for k in
                                        ("id", "titel", "datum", "nummer")}}
                        if infor and infor["nummer"] else {}),
+                    # Löser-valet sparas med uppgifterna, så att
+                    # omskrivningen skriver om högern mot samma förlaga.
+                    **({"forlaga_los": los_uppg} if los_uppg else {}),
                 })
                 return {"id": pid, "board": board,
                         "errors": res["errors"], "rounds": res["rounds"]}
@@ -1548,11 +1579,20 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # skrivningen valde. Det står efter boken, som i skrivningen. Utan
         # «infor_prov» i läget är prompten den gamla.
         ip = st.get("infor_prov") if isinstance(st.get("infor_prov"), dict) else None
+        # «Tavlan löser förlagans uppgifter» följer med på samma sätt: utan
+        # det hade omskrivningen fått provblocket som väljer exemplen ur
+        # provet, och dragit högern tillbaka dit.
+        los_uppg = [u for u in (st.get("forlaga_los") or [])
+                    if isinstance(u, dict)]
         infor = (infor_prov_tavla(db_file, {"infor_prov_id": ip.get("id")},
-                                  nummer=ip.get("nummer") or [])
+                                  nummer=ip.get("nummer") or [],
+                                  los=bool(los_uppg))
                  if ip and ip.get("nummer") else None)
         if infor and infor["block"]:
             bok_txt = f"{bok_txt}\n\n{infor['block']}" if bok_txt else infor["block"]
+        if los_uppg:
+            los_txt = lesson_board.build_los_block(los_uppg)
+            bok_txt = f"{bok_txt}\n\n{los_txt}" if bok_txt else los_txt
         # Vad läraren redan bett om för det här utkastet. Utan den började varje
         # varv om från noll: «kortare än så» hade inget «så» att gå efter.
         historik = varvhistorik(body)

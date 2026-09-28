@@ -102,9 +102,36 @@ def uppgifter_text(uppgifter) -> str:
     return "\n".join(rader)
 
 
-def build_forlaga(dokument: dict | None, hur: str = "") -> str:
+def losbara(dokument: dict | None) -> list[dict]:
+    """Förlagans uppgifter, när förlagan är ett papper med uppgifter som en
+    tavla kan lösa (gruppuppgift, arbetsblad, prov). Tom lista för en tavla
+    eller ett papper utan uppgifter."""
+    d = dokument if isinstance(dokument, dict) else {}
+    if d.get("wb"):
+        return []
+    return [u for u in (d.get("uppgifter") or []) if isinstance(u, dict)]
+
+
+def _malord(mal: str, typ: str) -> str:
+    # Ordet gäller det som SKRIVS. Till 2026-09-28 valdes det ur förlagans
+    # typ, och tavlan i jobb 1181 fick höra att «en gruppuppgift ska kännas
+    # som samma lektion». Utan mål (tools/, gamla anrop) gäller förlagans typ.
+    m = str(mal or "").strip()
+    m = m[:1].upper() + m[1:].lower() if m else ""
+    return _TYPORD.get(m) or _TYPORD.get(typ, "dokumentet")
+
+
+def build_forlaga(dokument: dict | None, hur: str = "", *, mal: str = "",
+                  los: bool = False) -> str:
     """Promptblocket för källdörr 4. Tomt block när det inte finns någon
-    förlaga — då ska ingenting stå i prompten om en."""
+    förlaga — då ska ingenting stå i prompten om en.
+
+    `mal` är typen som skrivs («Tavla», «arbetsblad»). `los` är lärarens val
+    «Tavlan löser förlagans uppgifter»: då står inte INSPIRATION-stycket
+    sist, för det förbjuder precis det läraren beställt (jobb 1181: «samma
+    tal, led för led» mot «kopiera aldrig, inte ens med utbytta tal», och
+    det sista stycket vann). Vad tavlan då ska göra står i tavlans eget
+    block (lesson_board.build_los_block), närmast uppdraget."""
     d = dokument if isinstance(dokument, dict) else None
     if not d:
         return ""
@@ -139,12 +166,18 @@ def build_forlaga(dokument: dict | None, hur: str = "") -> str:
     if kropp:
         block.append(("Så här ser förlagan ut:\n" + kropp) if typ != "Tavla"
                      else ("Det här stod på förlagans tavla:\n" + kropp))
+    if los and losbara(d):
+        block.append(
+            "Förlagans uppgifter ska LÖSAS på tavlan, inte skrivas om: samma "
+            "uppgifter, samma tal, samma ordning. Hur står i blocket "
+            "«HÖGERTAVLAN LÖSER FÖRLAGAN» nedan.")
+        return "\n".join(block)
     block.append(
         "Förlagan är INSPIRATION, inte innehåll att återanvända: följ dess "
         "upplägg, svårighetsnivå, begreppsval och antal/poäng, och håll dig "
         "till samma innehåll — men skriv HELT NYA uppgifter med nya kontexter "
         "och nya tal. Kopiera aldrig en uppgift ur förlagan, inte ens med "
-        f"utbytta tal — {_TYPORD.get(typ, 'dokumentet')} ska kännas som samma "
+        f"utbytta tal — {_malord(mal, typ)} ska kännas som samma "
         "lektion, aldrig som en kopia. Är förlagan av en annan typ än det du "
         "skriver nu är det innehållet som följer med, inte formen: en tavlas "
         "exempel blir uppgifter, ett provs uppgifter blir genomgång.")

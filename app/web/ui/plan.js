@@ -3519,6 +3519,7 @@
       return {
         forlaga_dokument_id: f.id || undefined,
         forlaga_hur: hur || undefined,
+        forlaga_los: (refLos && typ === 'Tavla') || undefined,
         forlaga: {
           typ: f.typ, moment: f.moment || '', klass: f.klass || '',
           kurs: f.kurs || '', datum: f.datum || '',
@@ -4453,6 +4454,7 @@
     'Samma svårighetsprofil'
   ];
   let refDok = null;
+  let refLos = false, refLosFor = null;   // se ritaRef
   /* Det rättade provet är inte en förlaga: det är ett utfall. Förlagan styr hur
      nästa papper SER UT, resultatet styr vad det HANDLAR OM — därför två platser
      och aldrig samma variabel. */
@@ -4666,6 +4668,27 @@
       });
       chips.appendChild(b);
     });
+    /* «Tavlan löser förlagans uppgifter» är ett VAL, inte en mening i rutan.
+       Jobb 1181 (2026-09-28) skrev «samma ordning och med samma tal, led för
+       led» i rutan och fick tre egna exempel: prompten sa emot meningen, och
+       ingen regel kan läsa en fri mening säkert. Valet skickas som
+       `forlaga_los` och bara när det är en tavla som skrivs
+       (lesson_board.build_los_block). Ett nytt papper börjar utan valet. */
+    if (refLosFor !== refDok) { refLos = false; refLosFor = refDok; }
+    if ((refDok.uppgifter || []).length && !refDok.wb) {
+      const b = document.createElement('button');
+      b.className = 'gychip';
+      b.type = 'button';
+      b.textContent = 'Tavlan löser förlagans uppgifter';
+      b.dataset.tip = 'Högertavlan räknar förlagans uppgifter med samma tal och i samma ordning. Gäller när du skriver en tavla.';
+      b.setAttribute('aria-pressed', String(refLos));
+      b.addEventListener('click', () => {
+        refLos = !refLos;
+        b.setAttribute('aria-pressed', String(refLos));
+        planKoll();
+      });
+      chips.appendChild(b);
+    }
   }
   $('#reftabort') && $('#reftabort').addEventListener('click', () => {
     refDok = null;

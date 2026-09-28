@@ -1747,7 +1747,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         utfall_block = routes_planning.utfall_text(db_file, body)
         # Källdörr 4 / pardokumentets andra hand: arbetsbladet som ska skrivas
         # PÅ den godkända tavlan, eller provet som följer ett tidigare papper.
-        forlaga_block = routes_planning.forlaga_text(db_file, body)
+        forlaga_block = routes_planning.forlaga_text(db_file, body, mal=typ)
         # Lärarens egna ord om vad som var svårt, och hennes viktning av
         # källorna. Samma två rutor som tavlan får — provet som ska pröva just
         # det klassen inte kunde behöver dem lika mycket, och arbetsbladet mest

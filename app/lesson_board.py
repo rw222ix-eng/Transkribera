@@ -30,6 +30,7 @@ from pydantic import BaseModel, ConfigDict
 
 from app import ci_utanfor
 from app import dokumentdiff
+from app.forlaga import uppgifter_text as _forlagans_uppgifter
 from app import llm_client
 from app import rakneverk
 from app import whiteboard_spec as ws
@@ -2690,12 +2691,31 @@ def _provrad(r: dict) -> str:
 
 
 def build_infor_prov(rader: list[dict], titel: str = "",
-                     datum: str = "") -> str:
-    """Skrivningens provblock, eller TOM STRÄNG utan uppgifter."""
+                     datum: str = "", *, los: bool = False) -> str:
+    """Skrivningens provblock, eller TOM STRÄNG utan uppgifter.
+
+    `los` är «Tavlan löser förlagans uppgifter» (build_los_block): då väljer
+    förlagan exemplen, och provets sorter styr bara vänstern. Jobb 1181 fick
+    det vanliga blocket, «Exemplen på högertavlan väljs ur dem», och det
+    stod närmare uppdraget än lärarens beställning."""
     if not rader:
         return ""
     vad = f"provet «{titel}»" if titel else "ett prov"
     nar = f" den {datum}" if datum else ""
+    if los:
+        return (
+            f"{PROVMARKOR}. Klassen skriver {vad}{nar}. Provet är redan "
+            "skrivet och eleverna har inte sett det. De här av provets "
+            "uppgifter hör till lektionen, som en plan över SORTER, aldrig "
+            "texten:\n"
+            + "\n".join(_provrad(r) for r in rader) + "\n"
+            "HÖGERTAVLAN LÖSER FÖRLAGAN, så provets sorter väljer inte "
+            "exemplen. De styr VÄNSTERN: reglerna och metoden som sorterna "
+            "kräver står där. En sort som förlagans uppgifter inte övar får "
+            "ingen egen uppgift på tavlan.\n"
+            "ALDRIG PROVETS UPPGIFT. Tavlan visas för klassen före provet: "
+            "ingen rad på den får vara en av provets uppgifter, inte ens med "
+            "utbytta siffror.")
     return (
         f"{PROVMARKOR}. Klassen skriver {vad}{nar}. Provet är redan skrivet "
         "och eleverna har inte sett det. De här av provets uppgifter hör till "
@@ -2719,12 +2739,27 @@ def build_infor_prov(rader: list[dict], titel: str = "",
         "utbytta siffror.")
 
 
-def build_infor_prov_dom(rader: list[dict]) -> str:
+def build_infor_prov_dom(rader: list[dict], *, los: bool = False) -> str:
     """Domarens provblock, eller TOM STRÄNG utan uppgifter. Numren skrivs i
     «vad» och inte i «uppgifter»: det fältet är bokens remsa, och
-    randfallsgrinden mäter det mot remsan."""
+    randfallsgrinden mäter det mot remsan.
+
+    `los` som i build_infor_prov. Jobb 1181: domaren krävde provets uppgift 5
+    som exempel och skrev dit (a+b)(c+d), på en tavla som skulle lösa
+    gruppuppgiften och inget annat."""
     if not rader:
         return ""
+    if los:
+        return (
+            f"{PROVMARKOR}. Provets uppgifter som hör till lektionen, som "
+            "sorter:\n"
+            + "\n".join(_provrad(r) for r in rader) + "\n"
+            "Högertavlan löser förlagans uppgifter, så sorterna prövas bara "
+            "mot VÄNSTERN: står regeln eller metoden en sort kräver där? En "
+            "sort som förlagans uppgifter inte övar är ingen lucka. Skriv "
+            "«provets uppgift N» i «vad» och lämna «uppgifter» tom. forslag "
+            "är en regel på vänstern, aldrig ett nytt, bytt eller extra "
+            "exempel.")
     return (
         f"{PROVMARKOR}. Provets uppgifter som hör till lektionen, som sorter:\n"
         + "\n".join(_provrad(r) for r in rader) + "\n"
@@ -2754,11 +2789,85 @@ def provtexter(exam: dict | None) -> str:
     return "\n".join(b for b in bitar if b)
 
 
+# ── HÖGERTAVLAN LÖSER FÖRLAGAN ──────────────────────────────────────────────
+# Rickard 2026-09-28: tavla + gruppuppgift för NA26F där högern löser
+# gruppuppgiftens fyra uppgifter tillsammans med klassen. Jobb 1181 skickade
+# förlagan (dokument 298) och meningen «i samma ordning och med samma tal,
+# led för led», och fick tre egna exempel och provets 6a. Fyra regler sa
+# emot meningen: förlagablockets «skriv HELT NYA uppgifter», provblockets
+# «Exemplen väljs ur [provets sorter]», regelsamlingens «ett exempel per
+# regeltyp» och taket på tre exempel. Domaren, som aldrig såg förlagan,
+# drog sedan tavlan mot provet.
+#
+# Läget är ett VAL i planeringen («Tavlan löser förlagans uppgifter»),
+# inte en tolkning av lärarens mening. Utan valet är alla block tomma och
+# prompterna byte för byte de gamla (kassettregeln).
+LOSMARKOR = "HÖGERTAVLAN LÖSER FÖRLAGAN"
+
+
+def build_los_block(uppgifter: list[dict] | None) -> str:
+    """Skrivningens block, närmast uppdraget, eller TOM STRÄNG."""
+    n = len(uppgifter or [])
+    if not n:
+        return ""
+    return (
+        f"{LOSMARKOR} (lärarens beställning, den går före reglerna ovan). "
+        f"Högertavlan har EXAKT {n} exempel, ett per uppgift i förlagan: "
+        f"«Exempel k» är förlagans uppgift k, k = 1 … {n}, i förlagans "
+        "ordning, med förlagans tal och alla dess deluppgifter. Talen byts "
+        "aldrig. Uppgiftsraden får kortas till det eleven behöver för att "
+        "räkna. Under varje deluppgift står uträkningen led för led, fram "
+        "till svaret.\n"
+        "Därför gäller INTE för högern: taket på tre exempel, röda tråden "
+        "mellan exemplen, «egna exempel», regelsamlingens «ett exempel per "
+        "regeltyp» och att provets sorter väljer exemplen. Allt annat om "
+        "exemplens form gäller. Vänstern skrivs som vanligt och bär det "
+        "förlagans uppgifter behöver. Rymmer högern inte alla uppgifter i en "
+        "spalt delas den i två (columns), aldrig genom att stryka en uppgift.")
+
+
+def build_los_dom(uppgifter: list[dict] | None) -> str:
+    """Domarens block, eller TOM STRÄNG. Domaren får förlagans uppgifter
+    utskrivna: den har inget annat att pröva exemplen mot."""
+    n = len(uppgifter or [])
+    if not n:
+        return ""
+    return (
+        f"{LOSMARKOR}. Läraren har beställt att exempel 1 … {n} är förlagans "
+        f"uppgifter 1 … {n}, i förlagans ordning och med förlagans tal:\n"
+        + _forlagans_uppgifter(uppgifter) + "\n"
+        "För högern gäller därför inte taket på tre exempel, röda tråden, "
+        "egna uppgifter eller metodtyperna: föreslå ALDRIG ett nytt, bytt "
+        "eller extra exempel och ändra aldrig förlagans tal. Pröva i stället "
+        "att varje exempel är sin uppgift med samma tal och alla "
+        "deluppgifter, och att uträkningen är rätt led för led. forslag är "
+        "det saknade ledet eller den saknade deluppgiften.")
+
+
+def build_fokus_dom(fokus: str) -> str:
+    """Lärarens viktning till domaren, eller TOM STRÄNG. `fokus` är
+    skrivningens block (lararord.build_fokus).
+
+    Jobb 1181: fokus sa «Inget om att förenkla, utveckla eller faktorisera
+    uttryck», men domaren såg aldrig rutan och bad om (a+b)(c+d) för att
+    provets uppgift 5 saknades. Viktningen är en dom över källorna, och den
+    gäller domarens källor lika mycket som skrivningens."""
+    f = str(fokus or "").strip()
+    if not f:
+        return ""
+    return (
+        f"{f}\n"
+        "Domaren lyder viktningen: en provsort, bokuppgift eller regel som "
+        "viktningen utesluter är INGEN lucka och blir aldrig ett forslag. "
+        "Står något på tavlan som viktningen utesluter är det ett fynd, och "
+        "forslag är att stryka det.")
+
+
 def build_prompt(course: str, group: str, moment: str, memory: str = "",
                  underlag: str = "", utfall: str = "", bok: str = "",
                  forlaga: str = "", svart: str = "", fokus: str = "",
                  delar: str = "", form: Tavelform = STANDARDFORM,
-                 prov: str = "") -> str:
+                 prov: str = "", los: str = "") -> str:
     """Genereringsprompt: instruktion + few-shots + lärarens egna ord om vad som
     var svårt + minneskontext + ev. uppladdat underlag (bokssidor/uppgifter) +
     ev. rättat provs utfall (Etapp 0.7) + ev. lärobokens uppslag (Etapp 0.8) +
@@ -2797,6 +2906,10 @@ def build_prompt(course: str, group: str, moment: str, memory: str = "",
     # inte en källa utan en precisering av själva uppdraget — momentraden
     # «A · B» utskriven som två moment med var sitt sidspann.
     dlr = f"\n{delar}\n" if delar else ""
+    # Löser-blocket (build_los_block) står allra sist, efter delarna: det är
+    # lärarens beställning av högern och upphäver regler som står ovanför.
+    # Det som står närmast uppdraget läses som uppdraget (jobb 1181).
+    lsr = f"\n{los}\n" if los else ""
     # Kursens gränser (build_utanfor_tavla) står FÖRE källorna, som i provet
     # (exam_gen, intill innehållet): boken rymmer det som ströks, och ett
     # bokblock som läses efter förbudet ska inte läsas som en order. Tom
@@ -2805,7 +2918,7 @@ def build_prompt(course: str, group: str, moment: str, memory: str = "",
     utk = f"\n{utk}\n" if utk else ""
     return (
         f"{form.instruktion()}\n{_few_shot_block(form)}\n"
-        f"{utk}{sva}{mem}{utf}{und}{bk}{forl}{prv}{fok}{dlr}\n"
+        f"{utk}{sva}{mem}{utf}{und}{bk}{forl}{prv}{fok}{dlr}{lsr}\n"
         f"Uppdrag: skriv lektionstavlan för {course}, klass {group} — {moment}.\n"
         "Svara med enbart JSON."
     )
@@ -4104,6 +4217,63 @@ def provkopior(board: dict | None, provtext: str) -> list[dict]:
     return ut
 
 
+_DOLLAR_RE = re.compile(r"\$([^$]+)\$")
+# \dfrac i förlagan är \frac på tavlan, och t^{2} är t^2.
+_FORLAGA_FORM = ((re.compile(r"\\[dt]frac"), r"\\frac"),
+                 (re.compile(r"\^\{(\w)\}"), r"^\1"))
+# «$7$ µm» är inget uttryck att leta efter; «$3(x - 4) = x + 6$» är det.
+_FORLAGA_MINSTA = 4
+
+
+def _forlagenyckel(latex: str) -> str:
+    s = _provform(latex)
+    for m, till in _FORLAGA_FORM:
+        s = m.sub(till, s)
+    return _kopienyckel(s)
+
+
+def forlagevakt(board: dict | None, uppgifter: list[dict] | None) -> list[dict]:
+    """Förlagans uppgifter som inte står på högertavlan, när läraren valt
+    «Tavlan löser förlagans uppgifter» (build_los_block).
+
+    En uppgift står där när ett av dess uttryck ($…$ i stam eller
+    deluppgift) står i en rad på högern, efter samma normalisering som
+    provkopievakten. En uppgift utan uttryck («En röd blodkropp är $7$ µm»)
+    står där när alla dess tal gör det. Vakten mäter inte ordningen: talen i
+    uppgift 1 står ofta också i uppgift 3, och då är ordningen en gissning."""
+    if not uppgifter or not isinstance(board, dict):
+        return []
+    rader = _rader_hoger(board)
+    nycklar = [_forlagenyckel(r) for _p, kind, r in rader if kind == "math"]
+    ord_ = set().union(*(_provord(r) for _p, _k, r in rader)) if rader else set()
+    ut: list[dict] = []
+    for i, u in enumerate(uppgifter):
+        delar = u.get("del") if isinstance(u.get("del"), list) else []
+        texter = [str(u.get("t") or "")] + [str(d) for d in delar]
+        uttryck = [k for t in texter for k in
+                   (_forlagenyckel(m) for m in _DOLLAR_RE.findall(t))
+                   if len(k) >= _FORLAGA_MINSTA]
+        if uttryck:
+            finns = any(k in n for k in uttryck for n in nycklar)
+            visa = ", ".join(f"${m}$" for t in texter
+                             for m in _DOLLAR_RE.findall(t)
+                             if len(_forlagenyckel(m)) >= _FORLAGA_MINSTA)
+        else:
+            tal = {o for t in texter for o in _provord(t) if o[0].isdigit()}
+            finns = tal <= ord_
+            visa = ", ".join(sorted(tal))
+        if finns:
+            continue
+        nr = u.get("nr") or i + 1
+        stam = " ".join(str(u.get("t") or "").split())[:60]
+        ut.append({"path": "boards[1]", "code": "forlaga", "message": (
+            f"Förlagans uppgift {nr} («{stam}») saknas på högertavlan. "
+            f"Läraren har beställt att exempel {i + 1} löser just den, med "
+            f"förlagans tal ({visa}) och alla deluppgifter, led för led. "
+            "Skriv inget eget exempel i dess ställe.")})
+    return ut
+
+
 # Regelnumret (\text{①}, REGELSAMLING_BLOCK) och «Svar:» står först på
 # tavlans rader och aldrig i provets lösning; «\ » är ett mellanslag till.
 _PROV_BORT = re.compile(r"\\text\{\s*[①-⑳\s]+\}|\\text\{\s*Svar:?\s*\}|"
@@ -5299,7 +5469,8 @@ TACKNING_INSTRUKTION = (
 
 def build_tackning_prompt(board_json: dict, bok: str, delar: str = "",
                           form: Tavelform = STANDARDFORM,
-                          prov: str = "", utanfor: str = "") -> str:
+                          prov: str = "", utanfor: str = "",
+                          fokus: str = "", los: str = "") -> str:
     # Delarna sist före tavlan, av samma skäl som i skrivningen: de är
     # uppdraget, inte en källa. Tom sträng ger ordagrant den gamla prompten.
     # Provet (build_infor_prov_dom) står mellan boken och delarna, som i
@@ -5309,8 +5480,14 @@ def build_tackning_prompt(board_json: dict, bok: str, delar: str = "",
     utk = f"\n\n{utanfor.strip()}" if utanfor.strip() else ""
     prv = f"\n\n{prov.strip()}" if prov.strip() else ""
     dlr = f"\n\n{delar.strip()}" if delar.strip() else ""
+    # Viktningen (build_fokus_dom) efter provet och löser-blocket
+    # (build_los_dom) sist, samma ordning som i skrivningen. Tomma ger den
+    # gamla prompten.
+    fok = f"\n\n{fokus.strip()}" if fokus.strip() else ""
+    lsr = f"\n\n{los.strip()}" if los.strip() else ""
     return (
-        f"{form.domarinstruktion()}{utk}\n\n{bok.strip()}{prv}{dlr}\n\n"
+        f"{form.domarinstruktion()}{utk}\n\n{bok.strip()}{prv}{fok}{dlr}"
+        f"{lsr}\n\n"
         "Tavlan:\n"
         f"{json.dumps(board_json, ensure_ascii=False)}\n"
     )
@@ -5318,7 +5495,7 @@ def build_tackning_prompt(board_json: dict, bok: str, delar: str = "",
 
 def doma_tackning(board: dict, *, model: str, llm, bok: str, delar: str = "",
                   form: Tavelform = STANDARDFORM, prov: str = "",
-                  utanfor: str = "",
+                  utanfor: str = "", fokus: str = "", los: str = "",
                   log_cb: Callable[[str], None] | None = None) -> list[dict]:
     """Domens fynd som problemposter för build_repair_prompt — [] när tavlan
     täcker urvalet, och [] också när domen inte gick att läsa: en tavla ska
@@ -5333,7 +5510,7 @@ def doma_tackning(board: dict, *, model: str, llm, bok: str, delar: str = "",
     # i loggen i stället för att kosta genereringen.
     try:
         raw = llm(model, build_tackning_prompt(board, bok, delar, form, prov,
-                                               utanfor),
+                                               utanfor, fokus, los),
                   options={"temperature": 0.2})
     except Exception as e:
         log(f"Täckningsdomaren kunde inte nås ({e}) — tavlan lämnas som den är.")
@@ -5428,6 +5605,7 @@ def _hittat_randfall(fynd: list, bok: str, log=lambda _m: None) -> list:
 def _tackning_pass(board: dict, errors: list, *, model: str, llm, bok: str,
                    delar: str = "", form: Tavelform = STANDARDFORM,
                    prov: str = "", provtext: str = "", kurs: str = "",
+                   fokus: str = "", forlaga_uppgifter: list | None = None,
                    budget: int = TACKNING_MAX_ROUNDS,
                    log_cb: Callable[[str], None] | None = None,
                    token_cb: Callable[[str], None] | None = None) -> dict:
@@ -5449,7 +5627,10 @@ def _tackning_pass(board: dict, errors: list, *, model: str, llm, bok: str,
     log = log_cb or (lambda _m: None)
     fynd = doma_tackning(board, model=model, llm=llm, bok=bok, delar=delar,
                          form=form, prov=prov,
-                         utanfor=build_utanfor_dom(kurs), log_cb=log_cb)
+                         utanfor=build_utanfor_dom(kurs),
+                         fokus=build_fokus_dom(fokus),
+                         los=build_los_dom(forlaga_uppgifter),
+                         log_cb=log_cb)
     # Påhittade randfall sorteras bort HÄR, innan de kan bli en rad på
     # vänstern: ett fynd som inte går att peka ut i urvalet är inte en lucka
     # (se Randfallsgrinden ovan).
@@ -5498,9 +5679,13 @@ def _tackning_pass(board: dict, errors: list, *, model: str, llm, bok: str,
     # sorter, och ett förslag kan landa på provets egna tal.
     fore_vakt = {(f["path"], f["code"])
                  for f in utrakningsvakt(board) + raknevakt(board)
-                 + grafvakt(board) + provkopior(board, provtext)}
+                 + grafvakt(board) + provkopior(board, provtext)
+                 + forlagevakt(board, forlaga_uppgifter)}
+    # Förlagevakten med: en komplettering som bytte ut en av förlagans
+    # uppgifter mot provets sort är precis vad jobb 1181 gjorde.
     fel = fel + [f for f in utrakningsvakt(kandidat) + raknevakt(kandidat)
                  + grafvakt(kandidat) + provkopior(kandidat, provtext)
+                 + forlagevakt(kandidat, forlaga_uppgifter)
                  if (f["path"], f["code"]) not in fore_vakt]
     # Kursens gränser med (utanforvakt): domarens förslag kommer ur boken, och
     # boken har avsnitten kursen strök.
@@ -5543,6 +5728,7 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
                    inriktning: str = "",
                    regelsamling: bool | None = None,
                    prov: str = "", prov_dom: str = "", provtext: str = "",
+                   forlaga_uppgifter: list | None = None,
                    llm=llm_client.generate,
                    max_rounds: int = MAX_ROUNDS,
                    log_cb: Callable[[str], None] | None = None,
@@ -5552,6 +5738,10 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     `prov`, `prov_dom` och `provtext` är «Inför provet» (build_infor_prov,
     build_infor_prov_dom, provtexter): skrivningens block, domarens block och
     provets texter för provkopievakten. Tomma ger den gamla kedjan.
+
+    `forlaga_uppgifter` är lärarens val «Tavlan löser förlagans uppgifter»
+    (forlaga.losbara): löser-blocket i skrivningen och domaren, och
+    förlagevakten. None eller tom lista ger den gamla kedjan.
 
     `regelsamling` (Vidma-formen, REGELSAMLING_BLOCK): None läser det ur
     momentet själv (ar_regelsamling), så att tools/ och kassetterna får rätt
@@ -5608,7 +5798,8 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
         log("Momentet är en regelsamling: vänstern skrivs som ett numrerat "
             "formelblad med regel ① härledd ur definitionen.")
     prompt = build_prompt(course, group, moment, memory, underlag, utfall, bok,
-                          forlaga, svart, fokus, delar, form, prov)
+                          forlaga, svart, fokus, delar, form, prov,
+                          build_los_block(forlaga_uppgifter))
     board = _llm_round(prompt, model, llm, token_cb=token_cb)
     rounds = 1
     # Ogiltig JSON (t.ex. trunkerat svar) → kör om från början inom budgeten
@@ -5630,6 +5821,7 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     # uppgift ska rättas i samma varv som ett schemafel, inte redovisas som en
     # varning läraren får läsa själv. Kostar inget anrop.
     errors = (errors + bokkopior(board, bok) + provkopior(board, provtext)
+              + forlagevakt(board, forlaga_uppgifter)
               + formupprepning(board)
               + vanligtfel_kvar(board, form) + stodordsfragor(board)
               + hanvisningar(board) + symbolvakt(board, bok)
@@ -5654,6 +5846,7 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
         res["errors"] = res["errors"] + [
             f for f in bokkopior(res["board"], bok)
             + provkopior(res["board"], provtext)
+            + forlagevakt(res["board"], forlaga_uppgifter)
             + formupprepning(res["board"])
             + vanligtfel_kvar(res["board"], form)
             + stodordsfragor(res["board"]) + hanvisningar(res["board"])
@@ -5664,7 +5857,8 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     if doma and res.get("board") is not None:
         dom = _tackning_pass(res["board"], res["errors"], model=model, llm=llm,
                              bok=bok, delar=delar, form=form, prov=prov_dom,
-                             provtext=provtext, kurs=course, log_cb=log,
+                             provtext=provtext, kurs=course, fokus=fokus,
+                             forlaga_uppgifter=forlaga_uppgifter, log_cb=log,
                              token_cb=token_cb)
         # `rounds` är den budget generering och renderingsreparation delar:
         # domaren har sin egen och lämnar därför siffran orörd.

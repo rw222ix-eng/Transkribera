@@ -335,6 +335,41 @@ test("dag 5b — källdörr 4: ett tidigare papper som förlaga följer med till
     expect(gen.kropp.forlaga_dokument_id).toBe(forlagan.id);
     expect(gen.kropp.forlaga_hur).toContain("nya tal");
     expect(gen.kropp.forlaga.typ).toBe(forlagan.typ);
+    expect(gen.kropp.forlaga_los, "valet skickades utan att läraren tog det")
+      .toBeUndefined();
+    L.rent(fel);
+  });
+
+// ── Dag 5c ───────────────────────────────────────────────────────────────
+test("dag 5c — «Tavlan löser förlagans uppgifter» är ett val som når servern",
+  async ({ page }) => {
+    test.setTimeout(180_000);
+    const fel = L.vakt(page);
+    const anrop = L.spana(page);
+    await L.fejkatMoln(page);
+    await L.oppna(page);
+
+    /* Jobb 1181 (2026-09-28): meningen «samma ordning och med samma tal» i
+       rutan räckte inte. Valet är en knapp bland förlagans chips, och den
+       finns bara när förlagan har uppgifter att lösa. */
+    await page.evaluate(() => window.Dokument.sattForlaga({
+      typ: "Gruppuppgift", moment: "Inför provet", klass: "NA25",
+      uppgifter: [{ nr: 1, p: 2, niva: "C", t: "Lös ekvationen.",
+                    del: ["$3(x - 4) = x + 6$"] }],
+    }, "Högertavlan löser gruppuppgiften."));
+    const knapp = page.locator("#refchips .gychip", { hasText: "Tavlan löser" });
+    await expect(knapp).toHaveCount(1);
+    await expect(knapp).toHaveAttribute("aria-pressed", "false");
+    await knapp.evaluate(b => b.click());
+    await expect(knapp).toHaveAttribute("aria-pressed", "true");
+
+    await L.valjKlass(page, "NA25");
+    await L.skriv(page, { moment: "repetition inför provet" });
+    await L.vantaPapper(page, 60_000);
+
+    const gen = L.traff(anrop, "/api/planning/generate").pop();
+    expect(gen.kropp.forlaga_los).toBe(true);
+    expect(gen.kropp.forlaga.uppgifter.length).toBe(1);
     L.rent(fel);
   });
 
