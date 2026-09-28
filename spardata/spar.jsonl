@@ -7290,3 +7290,7 @@
 {"tid": "2026-09-27T21:40:16", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 1530}}
 {"tid": "2026-09-27T21:40:17", "art": "api", "vag": "POST /api/exams/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 63}}
 {"tid": "2026-09-27T21:40:29", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 1484}}
+{"tid": "2026-09-28T17:24:10", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-09-28T17:24:10", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-09-28T17:24:15", "art": "api", "vag": "POST /api/claude/kontrollera", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 202}}
+{"tid": "2026-09-28T17:24:25", "art": "api", "vag": "POST /api/exams/generate", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 1610}}
