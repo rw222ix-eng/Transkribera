@@ -71,7 +71,11 @@ def test_siffervakten_laser_ger_som_pilen():
 
 def test_promptexemplen_visar_ger():
     assert not PIL.search(lesson_board.INSTRUCTION)
-    assert "x^2 = 64 \\text{ ger } x = \\pm 8" in lesson_board.INSTRUCTION
+    # Ankaret står i den gamla formen (regelsamlingens bas) sedan lärarens
+    # dom 2026-09-29; den nya formens vänster har inget ankare.
+    assert not PIL.search(lesson_board.INSTRUCTION_REGELSAMLING)
+    assert "x^2 = 64 \\text{ ger } x = \\pm 8" in \
+        lesson_board.INSTRUCTION_REGELSAMLING
     p = bok_losning.build_prompt("Liber Matematik 1c", "1.4", [],
                                  [{"nr": 1401, "niva": 1}])
     assert not PIL.search(p) and "«ger»" in p

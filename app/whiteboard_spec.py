@@ -647,7 +647,20 @@ _MAX_ITEM_CHARS = 50
 # (~30 tecken, som i shotarna) går IndA-tavlan till ~180, och den ska
 # fortfarande gå igenom. 190 alltså: receptets två eller tre frågor à ~30
 # tecken är just de ~80 som försvann.
-_MAX_BOARD_TEXT = 190
+#
+# OMMÄTT 2026-09-29 (190 → 205) mot lärarens godkända tavla (Rickard, TE26A
+# «Formler», planeringen 9e7b9ff0a7cf): «mycket mindre text och mer saker som
+# faktiskt hjälper eleverna». Med den gamla räkningen bar hans tavla 262
+# tecken och hade fällts, fast den har MINDRE synlig text än den godkända
+# IndA-tavlan 2026-09-27 (237 mot 255 tecken utanför rubrikerna). Skälet var
+# att den gamla räkningen friade «Att tänka på»-etiketterna, som nu är borta,
+# och vägde de fyra frågornas rubriker som prosa. Nu räknas allt utom
+# rubrikerna (också de numrerade frågorna, _ar_rubrikrad), tiden, «Förra
+# gången» och fråga 4:s två etiketter (_fraga4_etiketter): hans tavla bär
+# 194. Taket är 194 + ~5 %. Det som håller vänstern kort är inte talet utan
+# formen: fyra frågor, högst åtta rader under dem, högst ~28 tecken per rad
+# (lesson_board.vanstervakt), och ingen «Att tänka på».
+_MAX_BOARD_TEXT = 205
 _MAX_COLUMN_TEXT = 170
 # MODELLTAVLOR FÅR MER (lärarens beslut 2026-09-17). Hennes godkända tavla
 # för Liber Ma1c s. 69–72 (formler ur verkligheten: ställa upp, jämföra,
@@ -838,65 +851,18 @@ def _tal_pa_bada_sidor(latex: str) -> bool:
                for i in range(len(led) - 1))
 
 
-# «ATT TÄNKA PÅ» BÄR RANDFALL, INTE UTRÄKNINGAR (lärarens dom 2026-09-20,
-# andra rundan, över den skarpa kontrolltavlan för Origo 2a 1.3). Blocket kom
-# till samma morgon och blev genast tunt: domaren fällde x^2 = -20 och
-# x = ±√27 som «andra sifferrad på vänstern» (jobb 480, seq 7–8), och kvar
-# stod «saknar lösning» och en fråga utan svar. Randfallet ÄR ett tal — «en
-# kvadrat blir aldrig negativ» går inte att visa i bokstäver — så raderna
-# under rubriken är illustrationer, inte exempel på fel tavla.
+# «ATT TÄNKA PÅ» ÄR BORTA (lärarens dom 2026-09-29, Rickard): «de här att
+# tänka på, det kommer ju egentligen när vi löser uppgifterna sen. Så det
+# behöver vi inte. Så vi kan ta bort det helt och hållet.» Här stod sedan
+# 2026-09-20 undantaget för randfallen under rubriken: HÖGST TRE math-rader
+# med tal som siffervakten släppte, och två etiketter som budgeten friade
+# (_randfallsblocket). Utan blocket finns inget att undanta, och en rad under
+# en sådan rubrik vägs nu som vilken rad som helst på vänstern.
 #
-# Undantaget är smalt med flit: HÖGST TRE math-rader, och bara de som står
-# efter rubrikraden i samma flöde. Ankarregeln (ovan) gäller fortfarande för
-# raden FÖRE formeln, och allt annat med tal fälls som förut.
-_ATT_TANKA_PA = "att tänka på"
-_RANDFALL_TAK = 3
-# ETIKETTERNA SOM ÅKER GRATIS ÄR TVÅ (2026-09-21). Prompten säger HÖGST TVÅ
-# rader under «Att tänka på» sedan lärarens dom om vänsterns 30 %; skriver
-# modellen en tredje kostar dess etikett full budget och tavlan faller på
-# «textbudget» — det fyndet säger stryk, och det är rätt åtgärd. Math-taket
-# står kvar på tre: en tredje sifferrad ska fällas som för mycket TEXT, inte
-# som ett sifferexempel på vänstern (koden siffror_vanster säger «flytta
-# raden till exemplet», och det är fel råd för ett randfall).
-_FRIA_ETIKETTER = 2
-# Etiketten under en randfallsrad är en bildtext till matematiken, inte prosa:
-# «x^2 = 0: en enda rot» är fyra ord. Längre än så är det en mening, och då
-# vägs den som en mening. Talet är ordregeln mätt i tecken, och det gick
-# 45 → 30 med samma dom: sex ord var en bisats, fyra är en bildtext.
+# Etiketten under ANKARET (regelsamlingens utskrivning, _ankaretiketten) är
+# fortfarande en bildtext och inte prosa, och taket för den står kvar: fyra
+# ord, mätt i tecken.
 _ETIKETT_MAX = 30
-
-
-def _randfallsblocket(sections: list) -> tuple[list, list]:
-    """(math-raderna, etiketterna) under rubriken «Att tänka på» i ETT flöde.
-
-    Blocket börjar vid rubrikraden och slutar vid «Vanligt fel:» eller vid
-    flödets slut. Listorna är kapade — vakten och budgeten ska inte kunna
-    öppnas på vid gavel av en rubrik: math vid :data:`_RANDFALL_TAK`,
-    etiketterna vid :data:`_FRIA_ETIKETTER`."""
-    matte: list = []
-    etiketter: list = []
-    i_blocket = False
-    for sec in sections or []:
-        if isinstance(sec, (TextSection, HeadingSection)):
-            # Numret räknas bort: sedan formdomen 2026-09-20 (kväll) heter
-            # rubriken «3. Att tänka på», sedan 2026-09-27 «2. Att tänka på»
-            # (receptet ströks). Numreringen är dispositionen, det närmaste
-            # en pil motorn kan rita i flödet.
-            lag = re.sub(r"^\s*\d+\.\s*", "",
-                         str(getattr(sec, "text", "")).strip().lower())
-            if lag.startswith(_ATT_TANKA_PA):
-                i_blocket = True
-                continue
-            if lag.startswith("vanligt fel"):
-                break
-            if (i_blocket and isinstance(sec, TextSection)
-                    and len(sec.text) <= _ETIKETT_MAX
-                    and len(etiketter) < _FRIA_ETIKETTER):
-                etiketter.append(sec)
-        elif (i_blocket and isinstance(sec, MathSection)
-                and len(matte) < _RANDFALL_TAK):
-            matte.append(sec)
-    return matte, etiketter
 
 
 def _fritt_vanligt_fel(sections: list) -> object | None:
@@ -990,15 +956,15 @@ def _check_siffror_vanster(sections: list, path: str,
 def _siffror_rek(sections: list, path: str, errors: list[dict],
                  ankare) -> None:
     undantag = _fritt_vanligt_fel(sections)
-    # Randfallen slås upp per FLÖDE, som «Vanligt fel»: rubriken och raderna
-    # under den står i samma col, och en rubrik i en annan spalt är en annan
-    # sak. Se _randfallsblocket.
-    randfall = _randfallsblocket(sections)[0]
+    # Randfallen under «Att tänka på» var undantagna här 2026-09-20 till
+    # 2026-09-29, då läraren strök blocket (se _ETIKETT_MAX ovan). Raderna
+    # under den nya formens fråga 4 («1 000 = 80·v²/2», lärarens tavla
+    # 2026-09-29) behöver inget undantag: en likhet utan mellanled är ingen
+    # uträkning (_ar_utrakning), och den släpptes redan.
     for si, sec in enumerate(sections or []):
         spath = f"{path}[{si}]"
         if isinstance(sec, MathSection):
-            if sec is undantag or (ankare is not None and sec is ankare) \
-                    or any(sec is r for r in randfall):
+            if sec is undantag or (ankare is not None and sec is ankare):
                 continue
             # Regel 8b: på vänstern står bokstäver. En rad som RÄKNAR med
             # tal är ett exempel, och exempel bor på högertavlan, utom
@@ -1143,17 +1109,56 @@ def _etikett_under(sections: list, i: int):
     return None
 
 
-def _ar_inte_etiketter(sections: list) -> list:
-    """Etiketterna under ÄR/INTE-raderna på vänstertavlan, eller []."""
-    randfall = {id(s) for s in _randfallsblocket(sections)[0]}
+# FRÅGA 4 (lärarens tavla 2026-09-29, lesson_board _VANSTER). ÄR/INTE blev
+# en egen fråga, «4. Formel eller ekvation?», med två math-rader och en
+# etikett under var: «Formel: gäller alltid.» och «Ekvation: ett v söks.».
+# Ingen av dem bär ≠ eller «inte», så den gamla igenkänningen nedan ser dem
+# inte. Här räcker rubriken: en numrerad fet rad som frågar «X eller Y?», och
+# etiketterna under de två första svarta math-raderna efter den, fram till
+# nästa rubrikrad.
+_ELLER_FRAGA_RE = re.compile(r"^\s*\d+\.\s.*\beller\b.*\?\s*$", re.IGNORECASE)
+
+
+def _fraga4_etiketter(sections: list) -> list:
     for j, sec in enumerate(sections or []):
         if isinstance(sec, (CalloutSection, RowSection, ColSection)):
-            inne = _ar_inte_etiketter(sec.children)
+            inne = _fraga4_etiketter(sec.children)
             if inne:
                 return inne
             continue
-        if not (isinstance(sec, MathSection) and sec.color != "red"
-                and id(sec) not in randfall):
+        if not (isinstance(sec, TextSection) and sec.weight == 700
+                and _ELLER_FRAGA_RE.match(sec.text)):
+            continue
+        ut: list = []
+        for i in range(j + 1, len(sections)):
+            nasta = sections[i]
+            if isinstance(nasta, TextSection) and nasta.weight == 700:
+                break
+            if isinstance(nasta, MathSection) and nasta.color != "red" \
+                    and not _ar_pilrad(nasta.latex):
+                etikett = _etikett_under(sections, i)
+                if etikett is not None:
+                    ut.append(etikett)
+                if len(ut) == 2:
+                    break
+        return ut
+    return []
+
+
+def _ar_inte_etiketter(sections: list) -> list:
+    """Etiketterna under ÄR/INTE-raderna på vänstertavlan, eller []."""
+    return _fraga4_etiketter(sections) or _ar_inte_2309(sections)
+
+
+def _ar_inte_2309(sections: list) -> list:
+    """ÄR/INTE i den gamla formen (2026-09-23 kväll), sist i spalt 1."""
+    for j, sec in enumerate(sections or []):
+        if isinstance(sec, (CalloutSection, RowSection, ColSection)):
+            inne = _ar_inte_2309(sec.children)
+            if inne:
+                return inne
+            continue
+        if not (isinstance(sec, MathSection) and sec.color != "red"):
             continue
         etikett = _etikett_under(sections, j)
         if not (_NEQ_RE.search(sec.latex) or (
@@ -1184,12 +1189,9 @@ def _text_volym(sections: list, vanster: bool = False) -> int:
     """Summan av läsbar text i ett sektionsflöde — text och listpunkter, ned
     genom callout/row/col. Rubriker och matte räknas inte: se _MAX_BOARD_TEXT.
 
-    Randfallens etiketter räknas inte heller (2026-09-20, andra rundan): de
-    är bildtexter till en math-rad, inte prosa, och när budgeten vägde dem
-    som meningar lappade den bort just de rader domaren nyss hade beställt
-    (jobb 480, seq 13). Undantaget är kapat till TVÅ rader à 30 tecken
-    (2026-09-21, lärarens 30 %) — en längre rad är en mening och vägs som en
-    mening, och den tredje raden ska kosta. Se _randfallsblocket.
+    Randfallens etiketter räknades inte heller 2026-09-20 till 2026-09-29,
+    då läraren strök «Att tänka på» (se _ETIKETT_MAX). Nu kostar de som
+    vilken rad som helst.
 
     `vanster` friar också ankarets etikett (tredje rundan, jobb 481). Den
     flaggan finns för att ankaret bara går att känna igen på vänstertavlan:
@@ -1215,16 +1217,24 @@ def _ar_rubrikrad(sec) -> bool:
     weight 700. Att de då plötsligt vägde som meningar var ett mätfel som
     kom ur schemat, inte ur tavlan (uppmätt 2026-09-20, kväll: de tre
     numrerade rubrikerna kostade 43 tecken av 390 på varje vänstertavla).
-    Taket är smalt med flit: en fet rad längre än så är en mening."""
-    return (isinstance(sec, TextSection) and sec.weight == 700
-            and len(sec.text) <= 20)
+    Taket är smalt med flit: en fet rad längre än så är en mening.
+
+    DE FYRA FRÅGORNA (lärarens tavla 2026-09-29) är längre: «4. Formel eller
+    ekvation?» är 25 tecken. En NUMRERAD fet rad får därför vara 32 tecken
+    och ändå vara en rubrik; frågan är vänsterns disposition, inte prosa."""
+    if not (isinstance(sec, TextSection) and sec.weight == 700):
+        return False
+    return len(sec.text) <= 20 or (
+        len(sec.text) <= 32 and bool(_NUMRERAD_RE.match(sec.text)))
+
+
+_NUMRERAD_RE = re.compile(r"^\s*\d+\.\s")
 
 
 def _volym_rek(sections: list, fria: set[int]) -> int:
-    # Randfallen slås upp per FLÖDE (rubriken och raderna står i samma col),
-    # ankarets etikett en gång och bärs sedan ned: den bor i en col, och ett
-    # nytt uppslag där hade inte hittat bokstavsformeln ovanför.
-    lokala = fria | {id(s) for s in _randfallsblocket(sections)[1]}
+    # Ankarets etikett slås upp en gång och bärs sedan ned: den bor i en col,
+    # och ett nytt uppslag där hade inte hittat bokstavsformeln ovanför.
+    lokala = fria
     summa = 0
     for sec in sections or []:
         if isinstance(sec, TextSection):

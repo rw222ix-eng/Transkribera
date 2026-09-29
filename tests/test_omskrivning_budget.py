@@ -14,7 +14,7 @@ import json
 from app import lesson_board as lb
 from app import whiteboard_spec as ws
 
-from tests.test_lesson_board import _stub_llm, _valid_doc
+from tests.test_lesson_board import _facit, _stub_llm, _valid_doc
 
 
 def _pratig() -> dict:
@@ -61,7 +61,9 @@ def test_andra_fel_repareras_fortfarande_och_budgeten_foljer_med_ut():
 
 def test_genereringen_reparerar_budgeten_som_forut():
     svar = _pratig()
-    llm, calls = _stub_llm([json.dumps(svar), json.dumps(_valid_doc())])
+    # Rättningen svarar med den nya formens tavla (lärarens «Formler»,
+    # 2026-09-29): standardformens formvakter fäller den gamla.
+    llm, calls = _stub_llm([json.dumps(svar), json.dumps(_facit())])
     res = lb.generate_board("Ma1c", "TE26A", "ekvationer", model="",
                             doma=False, llm=llm)
     assert len(calls) == 2

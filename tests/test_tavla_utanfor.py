@@ -20,7 +20,12 @@ UTAN_LISTA = ("Matematik 3c", "Matematik, nivå 2c", "Ma3c")
 
 
 def _doc() -> dict:
-    return copy.deepcopy(lb.FEW_SHOTS[0][1])
+    """Lärarens tavla «Formler» (shot 1 sedan 2026-09-29) med agendans
+    bokpunkt kortad: tavlan ligger 11 tecken under budgeten, och raden
+    testerna lägger till ska prövas mot kursens gränser, inte mot budgeten."""
+    doc = copy.deepcopy(lb.FEW_SHOTS[0][1])
+    doc["boards"][0]["sections"][1]["items"][1] = "Boken s. 64–68"
+    return doc
 
 
 def _med_rad(doc: dict, sektion: dict) -> dict:

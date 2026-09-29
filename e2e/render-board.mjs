@@ -143,10 +143,15 @@ try {
             const kol = [...rad.children].filter(arKol);
             if (kol.length !== 2) continue;
             const h = kol.map(c => c.getBoundingClientRect().height);
-            /* Bara en kort FÖRSTA spalt sedan 2026-09-27: utan receptet är
-               spalt 2 kortare med flit (lesson_board regel 6, samma vakt i
-               tavla-wb.js). */
-            const kvot = h[0] / Math.max(...h);
+            /* Bara en kort FÖRSTA spalt 2026-09-27 till 2026-09-29: utan
+               receptet var spalt 2 («Att tänka på») kortare med flit.
+               Lärarens form 2026-09-29 har fyra frågor, två per spalt
+               (lesson_board _VANSTER), och på hans godkända tavla är
+               spalterna ungefär lika höga. Balansen mäts därför åt båda
+               hållen igen: den kortare mot den längre. Motorns egen vakt
+               (tavla-wb.js, SPALTBALANSEN) mäter fortfarande bara spalt 1,
+               för en kort spalt 2 är mindre text och ska inte repareras. */
+            const kvot = Math.min(...h) / Math.max(...h);
             if (kvot < 0.6) {
               obalans.push(`vänstertavlans spalter är ${Math.round(h[0])} `
                 + `och ${Math.round(h[1])} px (${Math.round(kvot * 100)} %)`);

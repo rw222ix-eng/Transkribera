@@ -103,6 +103,16 @@ def _utan_budget(errors: list) -> list:
 # under formeln, och vänstern bär 179 tecken av det sänkta taket 190. Två
 # rader till står före formeln i spalt 1, så tavellapp.json pekar på
 # children[7] i stället för children[5].
+#
+# OCH OM 2026-09-29, två gånger, med lärarens nya form (Rickard, TE26A
+# «Formler»): vänsterns fyra frågor och ETT exempel i tre nivåer. Den första
+# omspelningen skrev ett påhittat fält på grafens punkt (labelPos) och inga
+# ticks: den gamla andragrads-shoten, som visade grafens JSON, är inte längre
+# standardformens, och grafens form står sedan dess i regel 6. Den andra
+# står här: pulkan i backen, s(t) = 2t², med medelfarten i E, farten efter 2 s
+# ur definitionen i C (med «Vanligt fel» struket i rött) och s'(t) = 4t och
+# fördubblad tid i A. Formeln står under grafen i spalt 1, så tavellapp.json
+# pekar på children[2].
 
 
 def test_tavlan_ur_kassetten_ar_giltig_wb_json(fejk_claude):
@@ -154,26 +164,23 @@ def test_bandet_haller_vansterns_textbudget(fejk_claude):
 
 
 def test_bandet_bar_vansterns_skelett(fejk_claude):
-    """Omspelningen 2026-09-20: en RIKTIG modellrunda mot den nya prompten
-    ska ge «Att tänka på» (och till 2026-09-27 receptet), inte bara begrepp
-    och formel. Det är
-    det enda sättet att veta att skelettet följs av något annat än testerna
-    — bandet från 2026-09-12 bar två begreppsrader och en tom tredjedel, och
-    det var precis den tavlan läraren fällde.
-
-    Ankaret prövas INTE här: derivatans definition har inget varför ett tal
-    gör synligt, och regeln säger då att inget ankare ska skrivas."""
+    """En RIKTIG modellrunda mot prompten ska bära formen, inte bara
+    prompten: det är det enda sättet att veta att den följs av något annat
+    än testerna. Till 2026-09-29 mätte testet «Att tänka på» i spalt 2 (och
+    till 2026-09-27 receptet). Sedan lärarens dom den dagen är vänstern fyra
+    frågor och högern ETT exempel i tre nivåer."""
     fejk_claude(kassett="tavla")
     board = lesson_board.generate_board(
         "Matematik 3c", "NA25", "Derivatans definition", model="",
         max_rounds=1)["board"]
     rad = board["boards"][0]["sections"][-1]["children"]
-    # TVÅ LIKA BREDA SPALTER sedan formdomen 2026-09-20 (kväll):
-    # «1. Vad är det?» och sedan 2026-09-27 «2. Att tänka på» (till dess
-    # «2. Så löser vi» med «3. Att tänka på» under sig). Bandet ska bära
-    # formen, inte bara prompten.
+    # TVÅ SPALTER med de fyra frågorna, två i var (lärarens dom
+    # 2026-09-29). Vakterna för formen har ingenting att säga.
     assert len(rad) == 2 and all(c["kind"] == "col" for c in rad), rad
     assert rad[0]["children"][0]["text"] == "1. Vad är det?", rad[0]
+    form = lesson_board.tavelform(True, "")
+    assert lesson_board.formvakter(board, form) == []
+    assert lesson_board.formupprepning(board, True) == []
     # GRAFEN OCH ÄR/INTE (lärarens dom 2026-09-23 kväll): en riktig
     # modellrunda ska ge märkta punkter och ticks, och ett fall som ÄR
     # begreppet och ett som INTE är det under formeln.
@@ -186,13 +193,13 @@ def test_bandet_bar_vansterns_skelett(fejk_claude):
     spalt = rad[1]["children"]
     rubriker = [s.get("text") for s in spalt
                 if s.get("kind") == "text" and s.get("weight") == 700]
-    # INGET RECEPT (lärarens dom 2026-09-27: «"Så löser vi" … Ta bort det
-    # helt och hållet»). Till dess mätte testet elevfrågorna i listan under
-    # «2. Så löser vi» och «3. Att tänka på» under dem. Nu börjar spalt 2
-    # med «2. Att tänka på», och det finns ingen lista på hela vänstern utom
+    # INGET RECEPT (2026-09-27) och INGEN «Att tänka på» (2026-09-29): spalt
+    # 2 bär fråga 3 och 4, och det finns ingen lista på vänstern utom
     # agendan.
-    assert rubriker[0] == "2. Att tänka på", rubriker
-    assert not [r for r in rubriker if "så löser vi" in r.lower()], rubriker
+    assert rubriker[0].startswith("3. Varför"), rubriker
+    assert rubriker[1].startswith("4. ") and " eller " in rubriker[1]
+    assert not [r for r in rubriker if "att tänka på" in r.lower()
+                or "så löser vi" in r.lower()], rubriker
     assert not [s for c in rad for s in c["children"]
                 if s.get("kind") == "list"], rad
     # Och HÖGERN BÄR UTRÄKNINGEN (lärarens dom 2026-09-23). Till dess mätte
@@ -202,14 +209,17 @@ def test_bandet_bar_vansterns_skelett(fejk_claude):
     hogern = board["boards"][1]
     assert not [s for kol in hogern["columns"] for s in kol["sections"]
                 if s.get("kind") == "list"], hogern
-    assert lesson_board.utrakningsvakt(board) == []
+    assert lesson_board.utrakningsvakt(board, True) == []
     assert lesson_board.raknevakt(board) == []
-    exempel: list = []
+    # ETT exempel, delarna a)–d) i samma situation, var och en med sin
+    # uträkning.
+    delar: list = []
     for kol in hogern["columns"]:
-        lesson_board._exempelrader(kol["sections"], "k", exempel)
-    assert len(exempel) >= 2, exempel
-    for ex in exempel:
-        assert len(ex["kedja"]) >= 2, ex
+        lesson_board._exempelrader(kol["sections"], "k", delar, True)
+    delar = [d for d in delar if d["text"]]
+    assert len(delar) >= 3, delar
+    for d in delar:
+        assert len(d["kedja"]) >= 2, d
 
 
 def test_en_trasig_tavla_repareras_i_nasta_runda(fejk_claude):
@@ -479,13 +489,14 @@ def test_mal_last_omskrivning_ror_bara_rutan_lararen_pekade_pa(fejk_claude):
     # Bandets form (omspelat 2026-09-20, kväll): raden är sektion 4 på
     # vänstern. Definitionen var SISTA barnet i spalt 1 till omspelningen
     # 2026-09-23 kväll; sedan dess står ÄR/INTE-raderna under formeln (8e),
-    # och formeln är den med \lim. Lappbandet pekar på samma väg, så byter
-    # tavlabandet form måste tavellapp.json följa med.
+    # och formeln är den med \lim. Sedan 2026-09-29 står den under «1. Vad
+    # är det?» och skrivs med s och t. Lappbandet pekar på samma väg, så
+    # byter tavlabandet form måste tavellapp.json följa med.
     rad = board["boards"][0]["sections"][4]
     assert rad["kind"] == "row"          # klumpen läraren inte kunde peka i
     spalt = rad["children"][0]["children"]
     plats = next(i for i, s in enumerate(spalt)
-                 if "\\lim" in s.get("latex", "") and "f'" in s["latex"])
+                 if "\\lim" in s.get("latex", ""))
     fore = copy.deepcopy(spalt[plats])
 
     # Bandet från 2026-09-23 kväll skriver definitionen med a, och

@@ -1,0 +1,390 @@
+{
+ "title": "Formler",
+ "boards": [
+  {
+   "width": 900,
+   "height": 780,
+   "padding": {
+    "top": 30,
+    "right": 30,
+    "bottom": 30,
+    "left": 40
+   },
+   "chrome": "aluminium",
+   "tray": true,
+   "name": "vanster",
+   "sections": [
+    {
+     "kind": "text",
+     "text": "08:10–09:40",
+     "size": 16,
+     "color": "black",
+     "gapAfter": 10
+    },
+    {
+     "kind": "heading",
+     "text": "Formler",
+     "size": 34,
+     "align": "center",
+     "underline": {
+      "amplitude": 2,
+      "thickness": 3,
+      "reserve": 14
+     },
+     "gapAfter": 16
+    },
+    {
+     "kind": "list",
+     "bullet": "–",
+     "size": 19,
+     "gap": 4,
+     "indent": 22,
+     "align": "center",
+     "items": [
+      "Förra gången: Olikheter",
+      "Sätta in och lösa ut",
+      "Boken s. 64–68, uppg. 2501–2512"
+     ],
+     "gapAfter": 12
+    },
+    {
+     "kind": "divider",
+     "width": 620,
+     "gapAfter": 16
+    },
+    {
+     "kind": "heading",
+     "text": "Vad är en formel?",
+     "size": 22,
+     "gapAfter": 14
+    },
+    {
+     "kind": "row",
+     "gap": 24,
+     "children": [
+      {
+       "kind": "col",
+       "width": 400,
+       "gap": 6,
+       "children": [
+        {
+         "kind": "text",
+         "text": "1. Vad är det?",
+         "size": 20,
+         "gapAfter": 8,
+         "weight": 700
+        },
+        {
+         "kind": "math",
+         "latex": "W = \\frac{m \\cdot v^2}{2}",
+         "size": 30,
+         "gapAfter": 6
+        },
+        {
+         "kind": "text",
+         "text": "Räknar ut W ur m och v.",
+         "size": 18,
+         "gapAfter": 22
+        },
+        {
+         "kind": "text",
+         "text": "2. Delarna",
+         "size": 20,
+         "gapAfter": 8,
+         "weight": 700
+        },
+        {
+         "kind": "text",
+         "text": "W: beroende, räknas ut",
+         "size": 18,
+         "gapAfter": 4
+        },
+        {
+         "kind": "text",
+         "text": "m, v: oberoende, sätts in",
+         "size": 18,
+         "gapAfter": 4
+        },
+        {
+         "kind": "text",
+         "text": "2: konstant, ändras aldrig",
+         "size": 18
+        }
+       ]
+      },
+      {
+       "kind": "col",
+       "width": 400,
+       "gap": 6,
+       "children": [
+        {
+         "kind": "text",
+         "text": "3. Varför formler?",
+         "size": 20,
+         "gapAfter": 8,
+         "weight": 700
+        },
+        {
+         "kind": "text",
+         "text": "En uträkning, alla tal.",
+         "size": 18,
+         "gapAfter": 4
+        },
+        {
+         "kind": "text",
+         "text": "Fysik, el, fart, pengar.",
+         "size": 18,
+         "gapAfter": 22
+        },
+        {
+         "kind": "text",
+         "text": "4. Formel eller ekvation?",
+         "size": 20,
+         "gapAfter": 8,
+         "weight": 700
+        },
+        {
+         "kind": "math",
+         "latex": "W = \\frac{m \\cdot v^2}{2}",
+         "size": 22,
+         "gapAfter": 2
+        },
+        {
+         "kind": "text",
+         "text": "Formel: gäller alltid.",
+         "size": 18,
+         "gapAfter": 10
+        },
+        {
+         "kind": "math",
+         "latex": "1\\,000 = \\frac{80 \\cdot v^2}{2}",
+         "size": 22,
+         "gapAfter": 2
+        },
+        {
+         "kind": "text",
+         "text": "Ekvation: ett v söks.",
+         "size": 18
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "width": 1800,
+   "height": 780,
+   "padding": {
+    "top": 30,
+    "right": 30,
+    "bottom": 30,
+    "left": 30
+   },
+   "chrome": "aluminium",
+   "tray": true,
+   "name": "hoger",
+   "columns": [
+    {
+     "weight": 1,
+     "sections": [
+      {
+       "kind": "heading",
+       "text": "Exempel: cyklistens rörelseenergi",
+       "size": 28,
+       "underline": {},
+       "gapAfter": 14
+      },
+      {
+       "kind": "math",
+       "latex": "W = \\frac{m \\cdot v^2}{2}",
+       "size": 26,
+       "gapAfter": 6
+      },
+      {
+       "kind": "math",
+       "latex": "W = \\text{rörelseenergi i J}",
+       "size": 20,
+       "gapAfter": 4
+      },
+      {
+       "kind": "math",
+       "latex": "m = \\text{massa i kg}",
+       "size": 20,
+       "gapAfter": 4
+      },
+      {
+       "kind": "math",
+       "latex": "v = \\text{fart i m/s}",
+       "size": 20,
+       "gapAfter": 14
+      },
+      {
+       "kind": "text",
+       "text": "E-nivå",
+       "size": 20,
+       "weight": 700,
+       "color": "blue",
+       "gapAfter": 8
+      },
+      {
+       "kind": "text",
+       "text": "a) Cyklisten och cykeln väger 80 kg.",
+       "size": 20,
+       "gapAfter": 4
+      },
+      {
+       "kind": "text",
+       "text": "Farten är 5 m/s. Hur stor är energin?",
+       "size": 20,
+       "gapAfter": 12
+      },
+      {
+       "kind": "math",
+       "latex": "W = \\frac{80 \\cdot 5^2}{2}",
+       "size": 22,
+       "gapAfter": 8
+      },
+      {
+       "kind": "math",
+       "latex": "W = \\frac{80 \\cdot 25}{2} = 1\\,000",
+       "size": 22,
+       "gapAfter": 8
+      },
+      {
+       "kind": "math",
+       "latex": "\\text{Svar: } 1\\,000\\text{ J}",
+       "size": 22
+      }
+     ]
+    },
+    {
+     "weight": 1,
+     "sections": [
+      {
+       "kind": "text",
+       "text": "C-nivå",
+       "size": 20,
+       "weight": 700,
+       "color": "blue",
+       "gapAfter": 8
+      },
+      {
+       "kind": "text",
+       "text": "b) Samma cyklist har energin 2 500 J.",
+       "size": 20,
+       "gapAfter": 4
+      },
+      {
+       "kind": "text",
+       "text": "Hur fort cyklar hen?",
+       "size": 20,
+       "gapAfter": 12
+      },
+      {
+       "kind": "math",
+       "latex": "2\\,500 = \\frac{80 \\cdot v^2}{2}",
+       "size": 22,
+       "gapAfter": 8
+      },
+      {
+       "kind": "math",
+       "latex": "2\\,500 = 40 \\cdot v^2",
+       "size": 22,
+       "gapAfter": 8
+      },
+      {
+       "kind": "math",
+       "latex": "v^2 = \\frac{2\\,500}{40} = 62{,}5",
+       "size": 22,
+       "gapAfter": 8
+      },
+      {
+       "kind": "math",
+       "latex": "v = \\sqrt{62{,}5} \\approx 7{,}9",
+       "size": 22,
+       "gapAfter": 8
+      },
+      {
+       "kind": "math",
+       "latex": "\\text{Svar: ungefär } 7{,}9\\text{ m/s}",
+       "size": 22
+      }
+     ]
+    },
+    {
+     "weight": 1,
+     "sections": [
+      {
+       "kind": "text",
+       "text": "A-nivå",
+       "size": 20,
+       "weight": 700,
+       "color": "blue",
+       "gapAfter": 8
+      },
+      {
+       "kind": "text",
+       "text": "c) Lös ut farten v ur formeln.",
+       "size": 20,
+       "gapAfter": 12
+      },
+      {
+       "kind": "math",
+       "latex": "2W = m \\cdot v^2",
+       "size": 22,
+       "gapAfter": 8
+      },
+      {
+       "kind": "math",
+       "latex": "v^2 = \\frac{2W}{m}",
+       "size": 22,
+       "gapAfter": 8
+      },
+      {
+       "kind": "math",
+       "latex": "v = \\sqrt{\\frac{2W}{m}}",
+       "size": 22,
+       "gapAfter": 22
+      },
+      {
+       "kind": "text",
+       "text": "d) Farten fördubblas. Hur ändras energin?",
+       "size": 20,
+       "gapAfter": 12
+      },
+      {
+       "kind": "math",
+       "latex": "W = \\frac{m \\cdot (2v)^2}{2}",
+       "size": 22,
+       "gapAfter": 8
+      },
+      {
+       "kind": "math",
+       "latex": "W = 4 \\cdot \\frac{m \\cdot v^2}{2}",
+       "size": 22,
+       "gapAfter": 8
+      },
+      {
+       "kind": "math",
+       "latex": "5\\text{ m/s ger } 1\\,000\\text{ J}",
+       "size": 22,
+       "gapAfter": 8
+      },
+      {
+       "kind": "math",
+       "latex": "10\\text{ m/s ger } 4\\,000\\text{ J}",
+       "size": 22,
+       "gapAfter": 8
+      },
+      {
+       "kind": "math",
+       "latex": "\\text{Svar: fyra gånger så stor}",
+       "size": 22
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

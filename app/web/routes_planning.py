@@ -379,7 +379,8 @@ def lektionens_provnummer(db_file: Path, body: dict, exam: dict, *,
 
 
 def infor_prov_tavla(db_file: Path, body: dict, *, moment: str = "",
-                     nummer=None, los: bool = False) -> dict | None:
+                     nummer=None, los: bool = False,
+                     regelsamling: bool = False) -> dict | None:
     """«Inför provet» för tavlan (lesson_board.build_infor_prov), eller None.
 
     `infor_prov_id` pekar ut provet och `infor_nummer` lärarens val ur det.
@@ -419,9 +420,12 @@ def infor_prov_tavla(db_file: Path, body: dict, *, moment: str = "",
     datum = str((view or {}).get("datum") or exam.get("datum") or "")
     return {"id": eid, "titel": titel, "datum": datum,
             "nummer": [r["nr"] for r in valda],
-            "block": lesson_board.build_infor_prov(valda, titel, datum,
-                                                   los=los),
-            "dom": lesson_board.build_infor_prov_dom(valda, los=los),
+            # Regelsamlingen får den gamla formens block, alla andra den
+            # nya (lärarens dom 2026-09-29, lesson_board.build_infor_prov).
+            "block": lesson_board.build_infor_prov(
+                valda, titel, datum, los=los, regelsamling=regelsamling),
+            "dom": lesson_board.build_infor_prov_dom(
+                valda, los=los, regelsamling=regelsamling),
             "text": lesson_board.provtexter(exam)}
 
 
@@ -1259,7 +1263,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # lektion med ETT moment ger tom sträng, och då är prompten byte för
         # byte den som gick i väg innan blocket fanns (kassettregeln).
         delar_txt = lesson_board.build_delar_block(
-            lektionens_delar(db_file, body))
+            lektionens_delar(db_file, body),
+            regelsamling=lesson_board.ar_regelsamling(moment))
         # Lärarens två val om tavlans FORM (spåret 1–6 sep 2026: 17 av 35
         # tavelönskemål var «ta bort Vanligt fel», och fyra gällde
         # svårigheten). Båda läses här och SPARAS med planeringen: omskrivningen
@@ -1276,7 +1281,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # «Inför provet» (lärarens princip 2026-09-27): provet först, boken i
         # andra hand. None utan valt prov, och då är kedjan den gamla.
         infor = infor_prov_tavla(db_file, body, moment=moment,
-                                 los=bool(los_uppg))
+                                 los=bool(los_uppg),
+                                 regelsamling=regelsamling)
 
         llm = arbiter.try_acquire_llm()
         if not llm:
@@ -1584,9 +1590,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # provet, och dragit högern tillbaka dit.
         los_uppg = [u for u in (st.get("forlaga_los") or [])
                     if isinstance(u, dict)]
+        # Formen läses före provet: provblocket skiljer den nya formen från
+        # regelsamlingens (lesson_board.build_infor_prov).
+        vanligt_fel, niva, inriktning, regelsamling = tavelform_ur_laget(st, body)
         infor = (infor_prov_tavla(db_file, {"infor_prov_id": ip.get("id")},
                                   nummer=ip.get("nummer") or [],
-                                  los=bool(los_uppg))
+                                  los=bool(los_uppg),
+                                  regelsamling=regelsamling)
                  if ip and ip.get("nummer") else None)
         if infor and infor["block"]:
             bok_txt = f"{bok_txt}\n\n{infor['block']}" if bok_txt else infor["block"]
@@ -1596,10 +1606,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # Vad läraren redan bett om för det här utkastet. Utan den började varje
         # varv om från noll: «kortare än så» hade inget «så» att gå efter.
         historik = varvhistorik(body)
-        # Formen tavlan skrevs med följer med varvet: omskrivningen skriver om
-        # HELA tavlan (eller lappar den), och ett önskemål om något helt annat
-        # får inte smyga tillbaka «Vanligt fel» eller sänka nivån.
-        vanligt_fel, niva, inriktning, regelsamling = tavelform_ur_laget(st, body)
+        # Formen tavlan skrevs med (läst ovan, före provet) följer med varvet:
+        # omskrivningen skriver om HELA tavlan (eller lappar den), och ett
+        # önskemål om något helt annat får inte smyga tillbaka «Vanligt fel»
+        # eller sänka nivån.
 
         llm = arbiter.try_acquire_llm()
         if not llm:

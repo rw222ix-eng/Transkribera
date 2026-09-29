@@ -85,7 +85,19 @@ def test_blocket_bar_sorterna_och_ordern():
     assert block.startswith(lesson_board.PROVMARKOR)
     assert "provets uppgift 3 (A-nivå, utan räknare)" in block
     assert "PROVET FÖRST, BOKEN I ANDRA HAND" in block
-    assert "ALDRIG SAMMA UPPGIFT" in block
+    # Den nya formen (lärarens dom 2026-09-29): ETT exempel vars delar tar
+    # sorterna nivå för nivå, och aldrig provets situation (jobb 1183,
+    # bromssträckan). Regelsamlingen får den gamla formens block.
+    assert "SAMMA SORT, ALDRIG SAMMA SITUATION" in block
+    assert "E-delen på provets E-sort" in block
+    assert "Att tänka på" not in block
+    gammal = lesson_board.build_infor_prov(RADER[1:3], "Andragrad",
+                                           "2026-10-20", regelsamling=True)
+    assert "ALDRIG SAMMA UPPGIFT" in gammal and "Att tänka på" in gammal
+    dom = lesson_board.build_infor_prov_dom(RADER[1:3])
+    assert "en del i exemplet" in dom and "aldrig ett andra exempel" in dom
+    assert "Att tänka på" in lesson_board.build_infor_prov_dom(
+        RADER[1:3], regelsamling=True)
     assert "2026-10-20" in block
 
 

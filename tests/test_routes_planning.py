@@ -22,7 +22,10 @@ def _done(resp) -> dict:
 
 
 def _valid_board() -> dict:
-    return copy.deepcopy(lesson_board.FEW_SHOTS[0][1])
+    """Den gamla formens Pythagoras-tavla: rutterna stubbar genereringen, och
+    testerna läser titeln (FEW_SHOTS[0] är lärarens «Formler» sedan
+    2026-09-29)."""
+    return copy.deepcopy(lesson_board.FEW_SHOTS_REGELSAMLING[0][1])
 
 # Minsta giltiga PNG (1×1 px) — räcker för att testa magisk signatur + skrivning.
 _PNG_1PX = base64.b64decode(
