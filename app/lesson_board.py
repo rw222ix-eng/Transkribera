@@ -24,6 +24,7 @@ import math
 import re
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable
 
 from pydantic import BaseModel, ConfigDict
@@ -1107,132 +1108,170 @@ _TEXTBUDGET_2709 = (
 # 2026-09-27), «Vanligt fel» på vänstern (hör till exemplet när läraren
 # kryssar i det), fallgalleriet och de tre exemplen i tre metodtyper (ETT
 # exempel bär nivåerna).
+#
+# BERÄTTELSEN (lärarens handrättning 2026-09-30, Rickard, tavlorna till
+# fredag 2/10: TE26A «Modeller och rimlighet», dokument 303, och NA26F
+# «Sinus, cosinus, tangens», dokument 304). De fyra fasta frågorna («Vad är
+# det?», «Delarna», «Varför …?», «X eller Y?») höll inte för ett nytt
+# moment: «kvoter som mäter vinkeln v» sa ingenting, «Varför trigonometri?»
+# med sin lista över tillämpningar ströks, och «Delarna» som lista under
+# figuren flyttade in vid figuren. Vänstern följer i stället genomgångens
+# ORDNING, som läraren håller den: börja där eleverna är (förra lektionens
+# begrepp, eller en figur de känner igen), bygg upp steg för steg till det
+# nya och visa varifrån det kommer, sedan namnet eller formeln, sist ett
+# jättelätt exempel. NA26F: en triangel med sidorna döpta, en större med
+# samma vinkel, «kvoten a/c är samma tal», namnen sin, cos och tan, sist
+# 8-15-17. TE26A: förra gångens formel, «väljer vi talen själva?», modellen
+# (hyran), rimligt eller orimligt. Numreringen står kvar från 2026-09-29;
+# innehållet och ordningen är berättelsens. «Vänstern får aldrig visa svaret
+# på en högeruppgift», en «rookie mistake»: eleverna skriver bara av.
 _VANSTER = (
-    # Frågan är «Vad är X?» om dagens begrepp, samma dom som 2026-09-20
-    # («Vad är roten ur 25? Vad är det för dålig fråga?»). Facit: «Vad är en
-    # formel?».
-    "4. Öppningsfrågan: EN heading på högst FEM ORD, «Vad är X?» om "
-    "MOMENTETS EGET begrepp, det ord rubriken bär («Vad är en formel?», «Vad "
-    "är en olikhet?»), aldrig om en förkunskap. Ingen mening under den: de "
-    "fyra frågorna svarar.\n"
-    # DE FYRA FRÅGORNA, i lärarens egen ordning: «det här är en formel, vad
-    # är det? Vad används formler till? Varför ska vi lära oss om formler?
-    # Det här består en formel av. Vad är skillnaden mellan en formel och en
-    # ekvation?» Hans handrättade tavla ställde dem som «1. Vad är det?»,
-    # «2. Delarna», «3. Varför formler?» och «4. Formel eller ekvation?».
-    # Numreringen är dispositionen, som i den gamla formens två trådar.
-    "5. DE FYRA FRÅGORNA ger momentet ett SYFTE. Under öppningsfrågan står en "
-    "row (gap 24) med TVÅ {\"kind\": \"col\", \"width\": 400}: spalt 1 bär "
-    "fråga 1 och 2, spalt 2 bär fråga 3 och 4. Varje fråga är en rubrikrad "
-    "(text, size 20, weight 700) med sitt nummer, och svaret står under den "
-    "i FÅ ord:\n"
-    "  «1. Vad är det?»: momentets begrepp som EN formel eller ett uttryck i "
-    "math (size ~30), och under det EN rad om vad det gör («Räknar ut W ur m "
-    "och v.»). Handlar momentet om figurer eller grafer står KROPPEN (6) här "
-    "före raden.\n"
-    "  «2. Delarna»: begreppets delar med sina namn, HÖGST TRE rader i formen "
-    "«del: vad den är» («W: beroende, räknas ut», «m, v: oberoende, sätts "
-    "in», «2: konstant, ändras aldrig»).\n"
-    "  «3. Varför formler?»: vad begreppet används till, HÖGST TVÅ korta "
-    "rader («En uträkning, alla tal.», «Fysik, el, fart, pengar.»).\n"
-    # «4. X eller Y?» är den gamla formens ÄR/INTE (lärarens dom 2026-09-23
-    # kväll: «det här var proportionellt … det vill säga inte den här
-    # kvoten») flyttad till en egen fråga. Siffervakten släpper raderna: en
-    # likhet utan mellanled är ingen uträkning (whiteboard_spec._ar_utrakning),
-    # och etiketterna kostar ingenting i budgeten (_ar_inte_etiketter).
-    "  «4. Formel eller ekvation?»: skillnaden mot det begrepp eleverna "
-    "blandar ihop det med. TVÅ math-rader med EXEMPLETS egna tal, var och en "
-    "med en etikett under sig i formen «namn: skälet» (W = \\frac{m \\cdot "
-    "v^2}{2} med «Formel: gäller alltid.», 1\\,000 = \\frac{80 \\cdot "
-    "v^2}{2} med «Ekvation: ett v söks.»). En likhet per rad, inga "
-    "mellanled.\n"
-    "  Fråga 1 och 2 heter så. Fråga 3 och 4 formulerar du efter momentet "
-    "(«3. Varför olikheter?», «4. Olikhet eller ekvation?»), högst fem ord.\n"
-    # «Att tänka på» BORT, också randfallen: «det kommer ju egentligen när vi
-    # löser uppgifterna sen. Så det behöver vi inte.» Vanligt fel på vänstern
-    # bort oavsett krysset: krysset lägger felet i exemplet (se _HOGER).
-    "5b. INGET ANNAT på vänstern: ingen «Att tänka på», inga randfall, inget "
-    "recept eller metodsteg, inget «Vanligt fel», ingen definitionsmening "
-    "och inga begreppsrader utöver delarna. Det som ska tänkas på kommer när "
-    "uppgifterna löses, och läraren säger det.\n"
-    # KROPPEN och GRAFEN är de gamla reglerna 7, 7c och 7d i kort form
-    # (lärarens domar 2026-09-05 och 2026-09-23 kväll).
-    "6. KROPPEN bara i geometri och grafer: en shape med bokstäver (a, b, c), "
-    "eller en GRAF som ritar exemplets situation med exemplets tal, VARJE "
-    "punkt märkt med koordinat eller namn («(1, 80)», «origo»), ticks med "
-    "etiketter vid punkternas värden och streckade hjälplinjer till axlarna "
-    "(arrows med dashed: true, headSize: 0). Algebra, ekvationer, procent "
-    "och formler har ingen kropp, och en area- eller volymmodell definierar "
-    "aldrig ett algebrabegrepp.\n"
-    # GRAFENS JSON står här sedan kassetten spelades om 2026-09-29: den
-    # gamla formens andragrads-shot bar grafen, och utan den skrev modellen
-    # ett påhittat fält (points[].labelPos) och inga ticks. Formen är den
-    # shotens graf, kortad.
-    "  Grafens form: {\"kind\": \"graph\", \"width\": 360, \"height\": 220, "
-    "\"xRange\": [-0.6, 6.6], \"yRange\": [-5.5, 6], \"plots\": [{\"expr\": "
-    "\"x^2 - 6*x + 5\"}], \"points\": [{\"x\": 3, \"y\": -4, \"label\": "
-    "\"(3, −4)\"}], \"ticks\": [{\"axis\": \"x\", \"at\": 3, \"label\": \"3\"}, "
-    "{\"axis\": \"y\", \"at\": -4, \"label\": \"−4\"}], \"arrows\": "
-    "[{\"from\": [0, -4], \"to\": [3, -4], \"dashed\": true, \"headSize\": "
-    "0}]}. Inga andra fält på punkterna än x, y, label, color och outward.\n"
-    "7. EN bokstavsuppsättning för hela tavlan: vänsterns bokstäver är "
-    "exemplets, och en ny bokstav dyker aldrig upp från ingenstans.\n"
-    "8. Inga uträkningar på vänstern: en rad med mellanled eller en pil till "
-    "ett svar hör till exemplet på högern. Räknelagar eleven kan slå upp i "
-    "formelsamlingen skrivs inte.\n")
+    "4. Öppningsrubriken: EN heading på högst FEM ORD om dagens begrepp, det "
+    "ord tavelrubriken bär: en fråga («Vad är sinus, cosinus, tangens?») "
+    "eller vägen dit från förra lektionen («Från formel till modell»), aldrig "
+    "om en förkunskap. Ingen mening under den.\n"
+    "5. VÄNSTERN ÄR GENOMGÅNGEN SOM EN BERÄTTELSE, i den ordning läraren "
+    "håller den. Under rubriken står en row (gap 24) med TVÅ {\"kind\": "
+    "\"col\", \"width\": 400} och i dem TRE eller FYRA numrerade steg. Varje "
+    "steg är en rubrikrad (text, size 20, weight 700) med sitt nummer och en "
+    "kort fråga eller rubrik efter momentet, och under den står steget i FÅ "
+    "ord, en figur eller en formel. Ordningen:\n"
+    "  a) BÖRJA DÄR ELEVERNA ÄR: förra lektionens begrepp (6) eller en figur "
+    "de känner igen.\n"
+    "  b) BYGG UPP till det nya och visa VARIFRÅN det kommer, med det eleven "
+    "ser i figuren eller talen: två likformiga trianglar med samma vinkel, "
+    "\\frac{a}{c} = \\frac{5}{13} = \\frac{10}{26}, «Kvoten är samma tal, hur "
+    "stor triangeln än är.» En rad som bara namnger («kvoter som mäter "
+    "vinkeln») förklarar ingenting.\n"
+    "  c) SEDAN NAMNET eller formeln («2. Kvoterna har namn»: \\sin v = "
+    "\\frac{a}{c}, \\cos v = \\frac{b}{c}, \\tan v = \\frac{a}{b}).\n"
+    "  d) SIST ETT JÄTTELÄTT EXEMPEL med egna tal: en figur med talen och "
+    "svaret i en math-rad (8-15-17 ger \\sin v = \\frac{8}{17}), eller en "
+    "prövning i två math-rader med en etikett «namn: skälet» under var "
+    "(«4. Rimligt eller orimligt?»: t = 20 \\text{ ger } K = 70 med "
+    "«Rimligt: 70 kr för 20 min.»).\n"
+    "  Spalt 1 bär de första stegen och spalt 2 resten, så att spalterna "
+    "blir ungefär lika höga.\n"
+    # «Knyt an till förra lektionen som kontrast» (TE26A 2026-09-30):
+    # modellen byggdes mot gårdagens formler. Kalenderns rubrik kommer i
+    # blocket FÖRRA LEKTIONEN (build_forra_block), bara när den finns.
+    "6. FÖRRA LEKTIONEN SOM KONTRAST, när raden «FÖRRA LEKTIONEN» står nedan "
+    "och dagens moment bygger på den: steg 1 heter «1. Förra gången: "
+    "<begreppet>» och visar det med sin formel och några korta rader (W = "
+    "\\frac{m \\cdot v^2}{2}, «Den har variabler.», «Den är bestämd i "
+    "förväg.»), och steg 2 för över till det nya och säger vad som är LIKA "
+    "och vad som är OLIKA («Lika: variabler, sätt in, räkna ut.», «Olika: "
+    "talen väljer vi själva.»). Utan koppling börjar berättelsen i en "
+    "figur.\n"
+    # «Namnen står vid figuren, inte i en lista under» (NA26F 2026-09-30).
+    # Förankringen och bågarna i radianer rättas också deterministiskt
+    # (whiteboard_spec._forankra_figurtexter, _bagar_radianer).
+    "7. NAMNEN STÅR VID FIGUREN. Geometri och trigonometri ritas som en "
+    "graph med polygonen (axes: false), rätt vinkel i rightAngles och "
+    "vinkeln i arcs, och namnen eller talen som texts vid sidorna («c = "
+    "hypotenusan», «a = motstående katet till v», «b = 12»). Ingen lista "
+    "med namn under figuren. En figurtext har anchor «end» när den står "
+    "till vänster om ett lodrätt ben, annars «middle». Bågens from och to "
+    "står i RADIANER (π ≈ 3,1416), aldrig i grader.\n"
+    # GRAFENS JSON står här sedan kassetten spelades om 2026-09-29: utan
+    # den skrev modellen ett påhittat fält (points[].labelPos) och inga
+    # ticks.
+    "  Algebra med en graf: VARJE punkt märkt («(1, 80)», «origo»), ticks "
+    "vid punkternas värden och streckade hjälplinjer. Grafens form: "
+    "{\"kind\": \"graph\", \"width\": 360, \"height\": 220, \"xRange\": "
+    "[-0.6, 6.6], \"yRange\": [-5.5, 6], \"plots\": [{\"expr\": \"x^2 - 6*x "
+    "+ 5\"}], \"points\": [{\"x\": 3, \"y\": -4, \"label\": \"(3, −4)\"}], "
+    "\"ticks\": [{\"axis\": \"x\", \"at\": 3, \"label\": \"3\"}, {\"axis\": "
+    "\"y\", \"at\": -4, \"label\": \"−4\"}], \"arrows\": [{\"from\": [0, -4], "
+    "\"to\": [3, -4], \"dashed\": true, \"headSize\": 0}]}. Inga andra fält "
+    "på punkterna än x, y, label, color och outward. Algebra utan graf har "
+    "ingen figur, och en area- eller volymmodell definierar aldrig ett "
+    "algebrabegrepp.\n"
+    # Vakten svarsvakt fäller det deterministiskt.
+    "8. VÄNSTERN VISAR ALDRIG SVARET PÅ EN HÖGERUPPGIFT: eleverna skriver "
+    "bara av. Vänsterns exempel har EGNA tal eller ett EGET samband i samma "
+    "vardag (hyran K = 10 + 3t när högerns E-del är B = 100 − 6x; "
+    "trianglarna 5-12-13 och 8-15-17 när högerns a) har 12-16-20 och ger "
+    "0,6). Det gäller också mellanresultat, kvoter och rimlighetsexempel.\n"
+    # «Varför trigonometri?», «Att tänka på» och fyllnadsprat ströks.
+    "9. INGET ANNAT på vänstern: ingen «Varför X?» med tillämpningar, ingen "
+    "«Att tänka på», inga randfall, inget recept eller metodsteg, inget "
+    "«Vanligt fel», inget allmänt prat. Hellre en figur eller en formel än "
+    "en mening. Uträkningar med mellanled hör till högern, och räknelagar "
+    "ur formelsamlingen skrivs inte.\n"
+    "10. Begreppets bokstäver (a, b, c, v) är desamma på båda tavlorna, och "
+    "en ny bokstav dyker aldrig upp från ingenstans.\n")
 
 _HOGER = (
     "Högertavlan är ETT genomgående exempel i tre nivåer:\n"
-    # EN SITUATION, ENKEL OCH PRAKTISK. Jobb 1183 skrev bromssträckan, som
-    # låg för nära provets uppgift 10 (s = 0,039v²); pizzans area var
-    # «enkel och praktisk» men läraren ville ha något «mer fysiknära», och
-    # det godkända blev cyklistens rörelseenergi. Provkopievakten
+    # EN SITUATION, ENKEL OCH VARDAGSNÄRA. 2026-09-29: bromssträckan låg för
+    # nära provets uppgift 10, cyklistens rörelseenergi fick stå.
+    # 2026-09-30 (TE26A): «3D-skrivarens filament» var «så jävla tråkigt och
+    # abstrakt», elsparkcykelns batteri fick stå. Provkopievakten
     # (provsituation) fäller provets egen situation deterministiskt.
-    "- EN situation för hela högern, enkel och praktisk, något eleven ser "
-    "framför sig (en cyklist, en lampa, en hink som fylls), gärna fysik, "
-    "teknik eller vardag. Situationen är ALDRIG provets eller bokens: inte "
-    "samma föremål, samma storhet eller samma fråga som en uppgift där, inte "
-    "ens med andra tal.\n"
-    # Formen är hans handrättning av jobb 1183: «en kolumn per nivå med blå
-    # rubrik», exemplets rubrik, formel och storheter överst i kolumn 1.
+    "- EN situation för hela högern, ENKEL OCH VARDAGSNÄRA: något eleverna "
+    "själva gör eller ser (elsparkcykelns batteri, draken i snöret, en "
+    "cyklist). Enkelt och konkret går före yrkesnära och tekniskt "
+    "(«3D-skrivarens filament» var för abstrakt). Situationen är ALDRIG "
+    "provets eller bokens: inte samma föremål, samma storhet eller samma "
+    "fråga som en uppgift där, inte ens med andra tal.\n"
+    # Formen är lärarens handrättning 2026-09-29: «en kolumn per nivå med
+    # blå rubrik». Balansen 2026-09-30: A-kolumnens två delar fick texten
+    # bredvid sina trianglar.
     "- Tre columns (weight 1). Överst i kolumn 1 exemplets rubrik (heading, "
-    "size 28, underline: «Exempel: cyklistens rörelseenergi»), formeln och "
-    "storheterna med enhet, en per math-rad (m = \\text{massa i kg}). Varje "
-    "kolumn börjar sedan med sin nivårubrik, en text «E-nivå», «C-nivå», "
-    "«A-nivå» (size 20, weight 700, color blue).\n"
+    "size 28, underline: «Exempel: elsparkcykelns batteri») och storheterna "
+    "med enhet, en per math-rad (B = \\text{batteri kvar i \\%}), eller i "
+    "geometri figuren med talen och deras betydelse vid sidorna («a = 12 m», "
+    "«(höjden)»). Varje kolumn börjar sedan med sin nivårubrik, EN gång: en "
+    "text «E-nivå», «C-nivå», «A-nivå» (size 20, weight 700, color blue).\n"
+    "- Kolumnerna blir UNGEFÄR LIKA HÖGA. Bär en kolumn två delar med var "
+    "sin figur står uppgiftstexten BREDVID figuren: en row (gap 10) med en "
+    "col (width 250) för texten och en col (width 290) för figuren.\n"
     # «ett enda exempel som jag utgår ifrån och sen blir det successivt lite
-    # svårare. Alltså E, C och A.» Facit: a) sätt in, b) baklänges ur en
-    # kvadrat med avrundning, c) lös ut v, d) fördubblad fart med
-    # sifferkontroll ur a).
+    # svårare. Alltså E, C och A.» E-delen ska inte svälla (2026-09-30:
+    # vinkeln u och tan u ströks ur a).
     "- Delarna heter a), b), c), d) och står i SAMMA situation, med samma "
-    "föremål. E (a): grundformen, sätt in och räkna ut. C (b): provets och "
-    "bokens C-sort, t.ex. baklänges (svaret givet, en storhet söks, lös ut ur "
-    "en kvadrat) och avrunda rimligt. A (c, gärna d): generellt (lös ut "
-    "variabeln ur formeln) och/eller ett resonemang (vad händer när farten "
-    "fördubblas?) med en sifferkontroll ur E-delens tal.\n"
-    # SAMMA SITUATION ÄR KRAVET, men handgreppet byts. Den gamla formens
-    # uppföljarregel (2026-09-20: «samma situation med nya siffror är
-    # inget») står kvar i den här meningen; formvakten fäller samma kedja med
-    # nya tal (formupprepning läser delarna a–d).
+    "föremål. E (a): grundformen, sätt in och räkna ut, och INGET mer (ingen "
+    "extra storhet eller vinkel). C (b): provets och bokens C-sort, t.ex. "
+    "baklänges (svaret givet, en storhet söks) och avrunda rimligt. A (c, "
+    "gärna d): generellt (lös ut variabeln, jämför två fall) och/eller ett "
+    "resonemang (vad händer när en längd fördubblas?).\n"
+    # «Varje deluppgift står på egna ben» (2026-09-30): «som i b)» och en
+    # A-uppgift som bar en kvot från a) var «onödigt svår». Vakten
+    # (hogervakt, del_hanvisning) fäller hänvisningen deterministiskt.
+    "- VARJE DEL STÅR PÅ EGNA BEN: alla tal delen behöver står i dess egen "
+    "text («d) Snöret är 20 m och draken flyger 12 m högt. Snöret blir 40 m "
+    "långt, vinkeln mot marken är densamma.»). Skriv aldrig «som i b)», "
+    "«vinkeln från a)» eller «draken i b)», och ingen del kräver att eleven "
+    "bär ett tal eller en kvot från en annan del.\n"
+    # SAMMA SITUATION ÄR KRAVET, men handgreppet byts (2026-09-20: «samma
+    # situation med nya siffror är inget»); formvakten fäller samma kedja
+    # med nya tal (formupprepning läser delarna a–d).
     "- VARJE del byter HANDGREPP (sätt in, baklänges, lös ut, resonera); "
     "samma handgrepp med nya tal är ingen ny del. Tillsammans berör delarna "
     "de metodtyper urvalet och provet kräver. Ryms en typ inte i situationen "
     "berörs den i en del ändå, med samma föremål: skriv aldrig en andra "
     "situation eller ett andra exempel.\n"
-    "- Talen återbrukas ur tidigare delar och MÅSTE stämma (5 m/s ger 1 000 "
-    "J, alltså ger 10 m/s 4 000 J). Talen i E går jämnt ut; i C får svaret "
+    # «En triangel med talen vid varje högeruppgift», och d) fick två
+    # likformiga trianglar (2026-09-30).
+    "- GEOMETRI OCH TRIGONOMETRI: VARJE del har sin egen triangel med "
+    "delens tal vid sidorna och den sökta som «c = ?». En insikt som är "
+    "geometrisk (samma vinkel, dubbla snöret ger dubbla höjden) ritas med "
+    "två likformiga trianglar som delar vinkeln.\n"
+    "- Talen MÅSTE stämma. Talen i E går jämnt ut; i C får svaret "
     "avrundas.\n"
     # UPPGIFTSTEXTEN, lärarens dom 2026-09-23 (BA26B, «beställ 15 % extra
-    # laminat för spill»), står kvar ordagrant i sak.
-    "- UPPGIFTSTEXTEN förstås vid första läsningen: ett eller två korta "
-    "fakta och EN fråga som säger rakt ut vad som söks, i vardagsord. Nästa "
-    "del säger bara det nya («Samma cyklist har energin 2 500 J.»). Det "
-    "svåra ligger i räkningen, aldrig i frågan.\n"
+    # laminat för spill»), står kvar i sak.
+    "- UPPGIFTSTEXTEN förstås vid första läsningen: korta fakta och EN fråga "
+    "som säger rakt ut vad som söks, i vardagsord. Det svåra ligger i "
+    "räkningen, aldrig i frågan. Den står i text-rader; en fråga med "
+    "matematik i får stå som math (\\text{Bestäm } \\sin v), men kort, högst "
+    "~30 tecken.\n"
     # UTRÄKNINGEN, lärarens dom 2026-09-23: «Istället för all den här texten
     # så är det ju bättre att ha själva uträkningen.»
     "- UTRÄKNINGEN: under varje del står uträkningen som math-rader, ETT led "
     "per rad, som läraren hade skrivit den, och kedjan slutar i SVARET med "
-    "enhet (\\text{Svar: } 1\\,000\\text{ J}). INGA metodsteg i ord och "
+    "enhet (\\text{Svar: ungefär } 23\\text{ m}). INGA metodsteg i ord och "
     "ingen punktlista: orden säger läraren. Normalt 2–5 led. RÄKNA EFTER "
     "VARJE LED: ett räknefel på tavlan är värre än inget exempel.\n"
     "- Uträkningen visar bara de led som bär momentet; det klassen redan "
@@ -1243,35 +1282,34 @@ _HOGER = (
     "huvudet.\n"
     "- Exemplet är EGET: bokens och provets uppgifter skrivs aldrig av, och "
     "att byta talen räcker inte.\n"
-    "- Exemplet VILAR på vänstern: formeln och bokstäverna i «1. Vad är "
-    "det?» är exemplets, och fråga 4:s tal är exemplets.\n"
+    "- Exemplet använder vänsterns begrepp och bokstäver, men vänsterns tal "
+    "är andra (8).\n"
     # VANLIGT FEL följer lärarens kryss (Tavelform.vanligt_fel), men bara på
     # högern: det felaktiga ledet i den del där felet händer, struket i rött
-    # (2026-09-22, «Rött utan streck är bara en annan färg»). Hans godkända
-    # tavla var skriven med krysset av, och en överstruken felrad ströks.
+    # (2026-09-22, «Rött utan streck är bara en annan färg»).
     "- VANLIGT FEL står EN gång, i den del där felet händer: det felaktiga "
     "ledet i rött, struket med \\cancel{…} runt hela ledet, direkt under "
     "det rätta. Aldrig på vänstern.\n")
 
 # FORMLER UR VERKLIGHETEN i den nya formen. Lärarens domar 2026-09-17 över
-# Liber Ma1c s. 69–72 (se _MODELLER_2709) står kvar i sak, men de bor nu i
-# frågorna och i delarna: bokstäverna förklaras under «2. Delarna», och
-# jämförelsens brytpunkt och tolkning är en del på högern.
+# Liber Ma1c s. 69–72 (se _MODELLER_2709) står kvar i sak. Vänsterns modell
+# är sedan 2026-09-30 ett EGET samband i samma vardag som högerns (hyran
+# K = 10 + 3t mot batteriets B = 100 − 6x), inte bokens teoriexempel: det
+# hade kunnat vara en av högerns uppgifter.
 _MODELLER = (
     "Formler ur verkligheten, när momentet är att STÄLLA UPP, JÄMFÖRA eller "
-    "pröva RIMLIGHETEN i en modell (avgifter, tömning, temperatur):\n"
+    "pröva RIMLIGHETEN i en modell (avgifter, batteri, temperatur):\n"
     "- BARA BOKENS BETECKNINGAR: inga bokstäver, formler eller termer som "
     "boken inte infört fram till de uppslagna sidorna. Står inte y = kx + m, "
     "k, m eller «riktningskoefficient» på sidorna finns de inte för klassen: "
-    "skriv formeln med sina tal (K = 200 + 0{,}80x), aldrig i allmän form. "
+    "skriv formeln med sina tal (K = 10 + 3t), aldrig i allmän form. "
     "Bär sidorna också en andragrads- eller exponentialformel är «en formel» "
     "aldrig «en rät linje».\n"
-    "- «1. Vad är det?» bär då BOKENS TEORIEXEMPEL (formeln ur "
-    "förklaringstexten, aldrig ur uppgifterna) med neutrala namn: «Abonnemang "
-    "A» och «B» i stället för bokens påhittade företag. «2. Delarna» förklarar "
-    "VARJE bokstav och konstant med vad den är och sin enhet («200: fast "
-    "avgift i kr»). «Variabel» eller «rörlig» räcker inte: det rörliga är "
-    "0,80x, inte 0,80.\n"
+    "- Vänsterns modell är ett EGET enkelt samband i samma vardag (hyran "
+    "K = 10 + 3t), aldrig bokens teoriexempel och aldrig högerns. Varje "
+    "bokstav förklaras med vad den är och sin enhet («K: kostnad i kr, t: "
+    "minuter»). «Variabel» eller «rörlig» räcker inte: det rörliga är 3t, "
+    "inte 3.\n"
     # Bokens ordning (teckna, jämföra, giltighetsområde) stod som vänsterns
     # rader i den gamla formen; i den nya är den delarnas ordning.
     "- Delarna följer bokens ordning: teckna (skriv sambandet som en formel), "
@@ -1289,9 +1327,9 @@ _MODELLER = (
 
 _TEXTBUDGET = (
     "Textbudget. Tavlan visar det som SKRIVS, inte allt som sägs:\n"
-    # RADLÄNGDEN. Facit: den längsta raden i vänsterns spalter är 26 tecken
-    # («2: konstant, ändras aldrig»), den längsta uppgiftsraden 41.
-    "- En text-sektion är EN rad: högst ~28 tecken i vänsterns spalter och "
+    # RADLÄNGDEN. Facit 2026-09-30: den längsta raden i vänsterns spalter är
+    # 35 tecken («Lika: variabler, sätt in, räkna ut.»), vakten tar 36.
+    "- En text-sektion är EN rad: högst ~32 tecken i vänsterns spalter och "
     "~45 i en uppgiftsrad på högern. Aldrig löpande prosa.\n"
     # Den första skarpa tavlan i formen (Olikheter, 2026-09-29): två
     # förklarande led i C-kolumnen gick in i A-kolumnen (hogervakt,
@@ -1299,11 +1337,12 @@ _TEXTBUDGET = (
     "- En math-rad i en nivåkolumn är KORT, högst ~30 tecken: ett långt led "
     "delas på två rader, och en förklaring i \\text{} («dela med −150, vänd "
     "tecknet») säger läraren i stället.\n"
-    # ÅTTA RADER, mätt på facit: 1 + 3 + 2 + 2.
-    "- Vänstern bär HÖGST ÅTTA textrader under de fyra frågorna (1: en, 2: "
-    "tre, 3: två, 4: två etiketter); rubrikerna och matematiken räknas "
-    "inte. Blir det fler: stryk, aldrig krympa texten.\n"
-    "- Hellre math än text.\n")
+    # Mätt på facit 2026-09-30: TE26A bär 3, 3, 5 och 2 rader under sina
+    # fyra steg (13), NA26F 3, 0 och 0.
+    "- Vänstern bär HÖGST FEM textrader under ett steg och HÖGST FJORTON "
+    "sammanlagt; rubrikerna, figurerna och matematiken räknas inte. Blir det "
+    "fler: stryk, aldrig krympa texten.\n"
+    "- Hellre math eller en figur än text.\n")
 
 # ORDAGRANT den prompt som gick i väg före 2026-09-29. Regelsamlingen bygger
 # på den (se kommentaren vid _REGLER).
@@ -1440,22 +1479,23 @@ REPAIR_HINTS = (
     "math-raderna i den tavlan/kolumnen, eller dela en lång uträkning på "
     "flera math-rader.\n"
     "- 'innehållet ryms inte (höjd …)' eller 'skalade ner till N %': "
-    "kolumnen är överfull. Flytta en del (a–d) till nästa kolumn, eller "
-    "stryk ett led som klassen redan kan. Vänstern: korta svaren under "
-    "frågorna, aldrig frågorna själva.\n"
-    "- 'den första spalten är N % av den längsta': spalt 1 (fråga 1 och 2) "
-    "är för kort mot spalt 2. Korta svaren under fråga 3 och 4; fyll aldrig "
-    "på med ny text.\n"
+    "kolumnen är överfull. Ställ uppgiftstexten bredvid delens figur (en row "
+    "med två col), flytta en del (a–d) till nästa kolumn, eller stryk ett "
+    "led som klassen redan kan. Vänstern: korta raderna under stegen, aldrig "
+    "stegens rubriker.\n"
+    "- 'den första spalten är N % av den längsta': spalt 1 är för kort mot "
+    "spalt 2. Flytta ett steg eller en figur till spalt 1; fyll aldrig på "
+    "med ny text.\n"
     "- 'callout (inringande ruta) ritar läraren aldrig': byt rutan mot en kort "
     "rubrik och låt innehållet stå fritt under den.\n"
     "- 'element-överlapp': öka gapAfter på sektionen före, korta texterna, "
     "eller ta bort annotations som ligger ovanpå annat innehåll.\n"
-    # Budgetens strykordning i den nya formen: frågornas rubriker och
-    # fråga 4:s två rader är beställda (skelettvakten skyddar dem).
+    # Budgetens strykordning i den nya formen: stegens rubriker och raderna
+    # under ett «X eller Y?»-steg är beställda (skelettvakten skyddar dem).
     "- 'tavlan bär N tecken löpande text': stryk meningar som bara ska "
     "SÄGAS. PÅ VÄNSTERTAVLAN stryks i den här ordningen: agendans ord, "
-    "sedan den tredje raden under «2. Delarna», sedan den andra under «3. "
-    "Varför …?». Frågornas rubriker och de två raderna under fråga 4 rörs "
+    "sedan rader som bara säger det figuren redan visar, sedan den längsta "
+    "raden. Stegens rubriker och raderna under ett «X eller Y?»-steg rörs "
     "ALDRIG.\n"
     "- 'metodsteg i ord' eller 'saknar uträkningen': skriv delens uträkning "
     "som math-rader, ETT led per rad, sist svaret med enhet, och stryk "
@@ -1468,14 +1508,25 @@ REPAIR_HINTS = (
     "- 'står ordagrant i boken' eller 'står ordagrant i provet': byt "
     "situationen för HELA exemplet, alla delar, och talen med den.\n"
     "- 'provets egen situation': byt föremålet och storheten för hela "
-    "exemplet mot en annan enkel och praktisk situation, och räkna om "
+    "exemplet mot en annan enkel och vardagsnära situation, och räkna om "
     "varje del.\n"
     "- 'uträknat sifferexempel på vänstertavlan': stryk raden, eller flytta "
     "den till den del på högertavlan den hör till.\n"
+    # Lärarens domar 2026-09-30, se svarsvakt och hogervakt.
+    "- 'visar svaret': byt VÄNSTERNS tal eller samband mot egna i samma "
+    "vardag (andra sidor på triangeln, en annan formel); högern rörs inte.\n"
+    "- 'hänvisar till en annan del': skriv delens egna tal i dess text och "
+    "stryk hänvisningen; ingen del bär ett tal från en annan.\n"
+    "- 'del utan figur': rita delens egen triangel med delens tal vid "
+    "sidorna och den sökta som «c = ?».\n"
+    "- 'namnen under figuren': flytta namnen till figurens texts vid sidorna "
+    "och stryk raderna under den.\n"
+    "- 'Varför': stryk steget och låt berättelsen visa varifrån begreppet "
+    "kommer, eller sluta i ett jättelätt exempel.\n"
     "- 'punkt utan etikett' eller 'graf utan ticks': ge varje punkt en "
     "label, koordinaten eller namnet, sätt ticks med label vid punkternas "
     "värden och streckade hjälplinjer (arrows med dashed: true, headSize: "
-    "0). Talen är exemplets.\n"
+    "0).\n"
     "- 'innehåller ett en dash/em dash': skriv om raden utan tankstreck, "
     "dela den i två eller sätt punkt eller kolon.\n"
     "- 'som inte finns på bokens sidor': byt delens handgrepp mot en typ som "
@@ -1490,7 +1541,7 @@ REPAIR_HINTS = (
     "stryk förklaringen i \\text{}; läraren säger den.\n"
     "- 'fler än en situation' eller 'nivårubrik': samla högern till ETT "
     "exempel med delarna a), b), c) i samma situation, och ge varje kolumn "
-    "sin blå nivårubrik.\n"
+    "sin blå nivårubrik, en gång.\n"
     "- 'Att tänka på' eller 'Vanligt fel' på vänstern: stryk raderna; de "
     "hör inte till vänstern i den här formen.\n"
 )
@@ -1649,15 +1700,15 @@ NIVA_RADER: dict[str, str] = {
     "C-nivå":
         "NIVÅN: läraren har valt C-NIVÅ. Högern har kolumnerna «E-nivå» och "
         "«C-nivå», ingen A. E-delen är EN kort del (grundformen), och C-delarna "
-        "är två: eleven VÄLJER metod, räknar baklänges ur E-delens tal eller "
+        "är två: eleven VÄLJER metod, räknar baklänges i samma situation eller "
         "håller två villkor samtidigt. Den tredje kolumnen bär den andra "
         "C-delen.\n",
     "A-nivå":
         "NIVÅN: läraren har valt A-NIVÅ, «eleverna är väldigt duktiga, de "
         "behöver inte så mycket grundläggande». E och C är EN kort del var, "
         "och A-kolumnen bär två delar: lös ut generellt, och ett resonemang "
-        "(vad händer när en storhet fördubblas?) med sifferkontroll ur "
-        "E-delens tal. Vänstern rörs inte.\n",
+        "(vad händer när en storhet fördubblas?) med sifferkontroll, talen "
+        "utskrivna i delen. Vänstern rörs inte.\n",
 }
 # Blandat = defaultläget = ingen rad alls, precis som provets «Balanserat» och
 # arbetsbladets «Blandat»: en orörd väljare ska ge exakt den prompt som gick i
@@ -1684,15 +1735,30 @@ MAX_INRIKTNING = 80
 # Lärarens eget exempel står ordagrant i raden: prompttext utan exempel följs
 # dåligt (samma skäl som few-shotarna finns för), och det är hennes nivå som
 # ska synas.
-def inriktningsrad(inriktning: str) -> str:
+def inriktningsrad(inriktning: str, ny_form: bool = False) -> str:
     """Yrkesregeln som EN promptrad, eller tom sträng.
 
     Tom inriktning ger tom sträng ger byte-identisk prompt. Det är
     kassettregeln: en klass utan inriktning i profilen ska ge exakt den prompt
-    som gick i väg innan fältet fanns."""
+    som gick i väg innan fältet fanns.
+
+    `ny_form` (lärarens dom 2026-09-30, TE26A Teknik): «3D-skrivarens
+    filament» var yrkesnära och «så jävla tråkigt och abstrakt», medan
+    elsparkcykelns batteri fick stå. I den nya formen FÄRGAR inriktningen
+    situationen, men enkelt och vardagsnära går först. Regelsamlingen
+    behåller den gamla raden ordagrant."""
     inr = " ".join(str(inriktning or "").split())[:MAX_INRIKTNING]
     if not inr:
         return ""
+    if ny_form:
+        return (
+            f"KLASSEN: klassen går {inr}. Inriktningen får gärna färga "
+            "högerns situation, men ENKELT OCH VARDAGSNÄRA går före "
+            "yrkesnära: något eleverna själva har gjort eller sett "
+            "(elsparkcykelns batteri, draken i snöret), med ett svar som går "
+            "att kontrollera. «3D-skrivarens filament» var för tråkigt och "
+            "abstrakt för en teknikklass. Aldrig yrkets planeringslogik "
+            "(spill, påslag, marginal).\n")
     return (
         f"YRKET: klassen går {inr}. Varje exempel på HÖGERTAVLAN ska vara en "
         "situation ur det yrket, en eleverna kan möta på riktigt, med riktiga "
@@ -1728,10 +1794,18 @@ def inriktningsrad(inriktning: str) -> str:
 # exemplens METODTYP mot lärarens urval och fäller «lösa exempel utan gemensam
 # tråd». Ett yrkesnära exempel klarar båda, men bara om domaren vet att
 # sammanhanget är BESTÄLLT och inte modellens egen utvikning.
-def inriktning_domarrad(inriktning: str) -> str:
+def inriktning_domarrad(inriktning: str, ny_form: bool = False) -> str:
     inr = " ".join(str(inriktning or "").split())[:MAX_INRIKTNING]
     if not inr:
         return ""
+    if ny_form:
+        # Lärarens dom 2026-09-30, se inriktningsrad.
+        return (
+            f"\nLäraren har sagt att klassen går {inr}. Situationen får gärna "
+            "komma därifrån, men den ska vara ENKEL OCH VARDAGSNÄRA: döm "
+            "metodtypen, täckningen och räkningen som vanligt, och fäll en "
+            "situation som är så teknisk eller abstrakt att eleven inte känner "
+            "igen den utan förklaring.\n")
     return (
         f"\nLäraren har sagt att klassen går {inr}, och exemplen SKA därför "
         "utspela sig i det yrket med riktiga mått, material och verktyg. Ett "
@@ -1884,7 +1958,7 @@ class Tavelform:
 
     @property
     def yrkesrad(self) -> str:
-        return inriktningsrad(self.inriktning)
+        return inriktningsrad(self.inriktning, self.ny_form)
 
     @property
     def regelblock(self) -> str:
@@ -1923,7 +1997,7 @@ class Tavelform:
         # Nivåvalet följer med till domaren i den nya formen: STEGRINGEN
         # prövar E, C och A, och en E-tavla ska inte fällas för att C saknas.
         niva = f"\n{self.nivarad}" if self.nivarad else ""
-        return text + niva + inriktning_domarrad(self.inriktning)
+        return text + niva + inriktning_domarrad(self.inriktning, True)
 
     def lappinstruktion(self) -> str:
         return (LAPP_INSTRUKTION_REGELSAMLING if self.regelsamling
@@ -1931,8 +2005,9 @@ class Tavelform:
 
     @property
     def ny_form(self) -> bool:
-        """Lärarens form 2026-09-29: vänsterns fyra frågor och ett exempel i
-        tre nivåer. Allt utom regelsamlingen."""
+        """Lärarens form 2026-09-29, med berättelsen 2026-09-30: vänstern i
+        tre eller fyra numrerade steg och ett exempel i tre nivåer. Allt utom
+        regelsamlingen."""
         return not self.regelsamling
 
 
@@ -1967,360 +2042,41 @@ def _cirkel(cx: float, cy: float, r: float, n: int = 48) -> list[list[float]]:
             for i in range(n)]
 
 
-# FEW-SHOTARNA FÖR DEN NYA FORMEN (lärarens dom 2026-09-29). Shot 1 är
-# lärarens egen godkända tavla, ordagrant ur planeringen 9e7b9ff0a7cf
-# (dokument 302, version 2, «Skitbra»), utan de två rader systemet lägger
-# dit själv: lektionstiden (satt_tid) och «Förra gången» (satt_forra). Shot
-# 2 är samma form på ett geometrimoment, för att visa att kroppen står under
-# «1. Vad är det?» och att fråga 3 och 4 formuleras efter momentet. Varje
-# tal är efterräknat: 1,5² + 2² = 2,25 + 4 = 6,25 = 2,5²; 2,5² − 0,7² =
-# 6,25 − 0,49 = 5,76 = 2,4². Shot 2 bär krysset «Vanligt fel» i C-delen, och
+# FEW-SHOTARNA FÖR DEN NYA FORMEN. Båda är lärarens egna handrättade och
+# godkända tavlor 2026-09-30 (Rickard, fredagen 2/10): TE26A «Modeller och
+# rimlighet» (dokument 303) och NA26F «Sinus, cosinus, tangens» (dokument
+# 304). De ligger ordagrant i tests/tavlor/facit-te26a-modeller-2026-10-02.json
+# och facit-na26f-trigonometri-2026-10-02.json. Shotarna i app/data/tavelshotar
+# är samma tavlor utan de två rader systemet lägger dit själv (lektionstiden,
+# satt_tid, och «Förra gången», satt_forra), med figurernas koordinater
+# avrundade till tre decimaler. Shot 2 bär dessutom krysset «Vanligt fel» i
+# C-delen (c = 15 · sin 40° struket i rött: c måste vara längre än 15), och
 # _shot_utan_vanligt_fel tar bort det när läraren valt bort det.
+#
+# De ersatte 2026-09-30 shotarna från 2026-09-29 (cyklistens rörelseenergi
+# och stegen mot väggen), som bar vänsterns fyra fasta frågor med «2.
+# Delarna» och «3. Varför formler?». Läraren strök dem samma kväll, se
+# _VANSTER. Formler-tavlan står kvar som testfixtur
+# (facit-te26a-formler-2026-09-29.json) och i git (f2cc050).
+#
+# Varje tal är efterräknat. TE26A: t = 20 ger 10 + 60 = 70, t = −5 ger
+# 10 − 15 = −5; 100 − 6 · 5 = 70; 100/6 ≈ 16,7, x = 16 ger 4, x = 17 ger −2;
+# 100 − 6x = 80 − 4x ger 20 = 2x, x = 10 och båda 40. NA26F: 5² + 12² = 13²,
+# 10/26 = 5/13, 8² + 15² = 64 + 225 = 289 = 17²; 12² + 16² = 20², 12/20 = 0,6,
+# 16/20 = 0,8, 12/16 = 0,75; sin 40° ≈ 0,643 och 15/0,643 ≈ 23,3; tan 40° ≈
+# 0,839 och 15/0,839 ≈ 17,9; 40 · 0,6 = 24.
+_SHOTMAPP = Path(__file__).with_name("data") / "tavelshotar"
+
+
+def _las_shot(namn: str) -> dict:
+    return json.loads((_SHOTMAPP / namn).read_text(encoding="utf-8"))
+
+
 FEW_SHOTS: list[tuple[str, dict]] = [
-    (
-        "Ma1c, klass TE26A, Formler: sätta in och lösa ut (lärarens "
-        "godkända tavla)",
-        {
-            "title": "Formler",
-            "boards": [
-                {
-                    "width": 900, "height": 780,
-                    "padding": {"top": 30, "right": 30, "bottom": 30, "left": 40},
-                    "chrome": "aluminium", "tray": True, "name": "vanster",
-                    "sections": [
-                        {"kind": "heading", "text": "Formler", "size": 34,
-                         "align": "center",
-                         "underline": {"amplitude": 2, "thickness": 3,
-                                       "reserve": 14}, "gapAfter": 16},
-                        {"kind": "list", "bullet": "–", "size": 19, "gap": 4,
-                         "indent": 22, "align": "center", "items": [
-                             "Sätta in och lösa ut",
-                             "Boken s. 64–68, uppg. 2501–2512"],
-                         "gapAfter": 12},
-                        {"kind": "divider", "width": 620, "gapAfter": 16},
-                        {"kind": "heading", "text": "Vad är en formel?",
-                         "size": 22, "gapAfter": 14},
-                        {"kind": "row", "gap": 24, "children": [
-                            {"kind": "col", "width": 400, "gap": 6,
-                             "children": [
-                                {"kind": "text", "text": "1. Vad är det?",
-                                 "size": 20, "gapAfter": 8, "weight": 700},
-                                {"kind": "math",
-                                 "latex": "W = \\frac{m \\cdot v^2}{2}",
-                                 "size": 30, "gapAfter": 6},
-                                {"kind": "text",
-                                 "text": "Räknar ut W ur m och v.",
-                                 "size": 18, "gapAfter": 22},
-                                {"kind": "text", "text": "2. Delarna",
-                                 "size": 20, "gapAfter": 8, "weight": 700},
-                                {"kind": "text",
-                                 "text": "W: beroende, räknas ut",
-                                 "size": 18, "gapAfter": 4},
-                                {"kind": "text",
-                                 "text": "m, v: oberoende, sätts in",
-                                 "size": 18, "gapAfter": 4},
-                                {"kind": "text",
-                                 "text": "2: konstant, ändras aldrig",
-                                 "size": 18}]},
-                            {"kind": "col", "width": 400, "gap": 6,
-                             "children": [
-                                {"kind": "text", "text": "3. Varför formler?",
-                                 "size": 20, "gapAfter": 8, "weight": 700},
-                                {"kind": "text",
-                                 "text": "En uträkning, alla tal.",
-                                 "size": 18, "gapAfter": 4},
-                                {"kind": "text",
-                                 "text": "Fysik, el, fart, pengar.",
-                                 "size": 18, "gapAfter": 22},
-                                {"kind": "text",
-                                 "text": "4. Formel eller ekvation?",
-                                 "size": 20, "gapAfter": 8, "weight": 700},
-                                {"kind": "math",
-                                 "latex": "W = \\frac{m \\cdot v^2}{2}",
-                                 "size": 22, "gapAfter": 2},
-                                {"kind": "text",
-                                 "text": "Formel: gäller alltid.",
-                                 "size": 18, "gapAfter": 10},
-                                {"kind": "math",
-                                 "latex": "1\\,000 = \\frac{80 \\cdot v^2}{2}",
-                                 "size": 22, "gapAfter": 2},
-                                {"kind": "text",
-                                 "text": "Ekvation: ett v söks.",
-                                 "size": 18}]}]},
-                    ],
-                },
-                {
-                    "width": 1800, "height": 780,
-                    "padding": {"top": 30, "right": 30, "bottom": 30, "left": 30},
-                    "chrome": "aluminium", "tray": True, "name": "hoger",
-                    "columns": [
-                        {"weight": 1, "sections": [
-                            {"kind": "heading",
-                             "text": "Exempel: cyklistens rörelseenergi",
-                             "size": 28, "underline": {}, "gapAfter": 14},
-                            {"kind": "math",
-                             "latex": "W = \\frac{m \\cdot v^2}{2}",
-                             "size": 26, "gapAfter": 6},
-                            {"kind": "math",
-                             "latex": "W = \\text{rörelseenergi i J}",
-                             "size": 20, "gapAfter": 4},
-                            {"kind": "math", "latex": "m = \\text{massa i kg}",
-                             "size": 20, "gapAfter": 4},
-                            {"kind": "math", "latex": "v = \\text{fart i m/s}",
-                             "size": 20, "gapAfter": 14},
-                            {"kind": "text", "text": "E-nivå", "size": 20,
-                             "weight": 700, "color": "blue", "gapAfter": 8},
-                            {"kind": "text",
-                             "text": "a) Cyklisten och cykeln väger 80 kg.",
-                             "size": 20, "gapAfter": 4},
-                            {"kind": "text",
-                             "text": "Farten är 5 m/s. Hur stor är energin?",
-                             "size": 20, "gapAfter": 12},
-                            {"kind": "math",
-                             "latex": "W = \\frac{80 \\cdot 5^2}{2}",
-                             "size": 22, "gapAfter": 8},
-                            {"kind": "math",
-                             "latex": "W = \\frac{80 \\cdot 25}{2} = 1\\,000",
-                             "size": 22, "gapAfter": 8},
-                            {"kind": "math",
-                             "latex": "\\text{Svar: } 1\\,000\\text{ J}",
-                             "size": 22},
-                        ]},
-                        {"weight": 1, "sections": [
-                            {"kind": "text", "text": "C-nivå", "size": 20,
-                             "weight": 700, "color": "blue", "gapAfter": 8},
-                            {"kind": "text",
-                             "text": "b) Samma cyklist har energin 2 500 J.",
-                             "size": 20, "gapAfter": 4},
-                            {"kind": "text", "text": "Hur fort cyklar hen?",
-                             "size": 20, "gapAfter": 12},
-                            {"kind": "math",
-                             "latex": "2\\,500 = \\frac{80 \\cdot v^2}{2}",
-                             "size": 22, "gapAfter": 8},
-                            {"kind": "math", "latex": "2\\,500 = 40 \\cdot v^2",
-                             "size": 22, "gapAfter": 8},
-                            {"kind": "math",
-                             "latex": "v^2 = \\frac{2\\,500}{40} = 62{,}5",
-                             "size": 22, "gapAfter": 8},
-                            {"kind": "math",
-                             "latex": "v = \\sqrt{62{,}5} \\approx 7{,}9",
-                             "size": 22, "gapAfter": 8},
-                            {"kind": "math",
-                             "latex": "\\text{Svar: ungefär } 7{,}9\\text{ m/s}",
-                             "size": 22},
-                        ]},
-                        {"weight": 1, "sections": [
-                            {"kind": "text", "text": "A-nivå", "size": 20,
-                             "weight": 700, "color": "blue", "gapAfter": 8},
-                            {"kind": "text",
-                             "text": "c) Lös ut farten v ur formeln.",
-                             "size": 20, "gapAfter": 12},
-                            {"kind": "math", "latex": "2W = m \\cdot v^2",
-                             "size": 22, "gapAfter": 8},
-                            {"kind": "math", "latex": "v^2 = \\frac{2W}{m}",
-                             "size": 22, "gapAfter": 8},
-                            {"kind": "math", "latex": "v = \\sqrt{\\frac{2W}{m}}",
-                             "size": 22, "gapAfter": 22},
-                            {"kind": "text",
-                             "text": "d) Farten fördubblas. Hur ändras energin?",
-                             "size": 20, "gapAfter": 12},
-                            {"kind": "math",
-                             "latex": "W = \\frac{m \\cdot (2v)^2}{2}",
-                             "size": 22, "gapAfter": 8},
-                            {"kind": "math",
-                             "latex": "W = 4 \\cdot \\frac{m \\cdot v^2}{2}",
-                             "size": 22, "gapAfter": 8},
-                            {"kind": "math",
-                             "latex": "5\\text{ m/s ger } 1\\,000\\text{ J}",
-                             "size": 22, "gapAfter": 8},
-                            {"kind": "math",
-                             "latex": "10\\text{ m/s ger } 4\\,000\\text{ J}",
-                             "size": 22, "gapAfter": 8},
-                            {"kind": "math",
-                             "latex": "\\text{Svar: fyra gånger så stor}",
-                             "size": 22},
-                        ]},
-                    ],
-                },
-            ],
-        },
-    ),
-    (
-        "Ma1b, klass 9A, Pythagoras sats: ett exempel i tre nivåer",
-        {
-            "title": "Pythagoras sats",
-            "boards": [
-                {
-                    "width": 900, "height": 780,
-                    "padding": {"top": 30, "right": 30, "bottom": 30, "left": 40},
-                    "chrome": "aluminium", "tray": True, "name": "vanster",
-                    "sections": [
-                        {"kind": "heading", "text": "Pythagoras sats", "size": 34,
-                         "align": "center",
-                         "underline": {"amplitude": 2, "thickness": 3,
-                                       "reserve": 14}, "gapAfter": 16},
-                        {"kind": "list", "bullet": "–", "size": 19, "gap": 4,
-                         "indent": 22, "align": "center", "items": [
-                             "Sidor i rätvinkliga trianglar",
-                             "Boken s. 88–90, uppg. 3110–3118"],
-                         "gapAfter": 12},
-                        {"kind": "divider", "width": 620, "gapAfter": 16},
-                        {"kind": "heading",
-                         "text": "Vad säger Pythagoras sats?",
-                         "size": 22, "gapAfter": 14},
-                        {"kind": "row", "gap": 24, "children": [
-                            {"kind": "col", "width": 400, "gap": 6,
-                             "children": [
-                                {"kind": "text", "text": "1. Vad är det?",
-                                 "size": 20, "gapAfter": 8, "weight": 700},
-                                # KROPPEN står här på ett geometrimoment.
-                                {"kind": "shape", "type": "right-triangle",
-                                 "width": 200, "height": 110,
-                                 "labels": {"left": "b", "bottom": "a",
-                                            "right": "c"},
-                                 "gapAfter": 8},
-                                {"kind": "math", "latex": "a^2 + b^2 = c^2",
-                                 "size": 30, "gapAfter": 6},
-                                {"kind": "text",
-                                 "text": "Ger en sida ur de två andra.",
-                                 "size": 18, "gapAfter": 22},
-                                {"kind": "text", "text": "2. Delarna",
-                                 "size": 20, "gapAfter": 8, "weight": 700},
-                                {"kind": "text", "text": "a, b: kateterna",
-                                 "size": 18, "gapAfter": 4},
-                                {"kind": "text",
-                                 "text": "c: hypotenusan, längst",
-                                 "size": 18}]},
-                            {"kind": "col", "width": 400, "gap": 6,
-                             "children": [
-                                {"kind": "text", "text": "3. Varför satsen?",
-                                 "size": 20, "gapAfter": 8, "weight": 700},
-                                {"kind": "text",
-                                 "text": "Längder utan måttband.",
-                                 "size": 18, "gapAfter": 4},
-                                {"kind": "text",
-                                 "text": "Bygge, stegar, skärmar.",
-                                 "size": 18, "gapAfter": 22},
-                                {"kind": "text",
-                                 "text": "4. Rätvinklig eller inte?",
-                                 "size": 20, "gapAfter": 8, "weight": 700},
-                                {"kind": "math",
-                                 "latex": "1{,}5^2 + 2^2 = 2{,}5^2",
-                                 "size": 22, "gapAfter": 2},
-                                {"kind": "text",
-                                 "text": "Rätvinklig: satsen gäller.",
-                                 "size": 18, "gapAfter": 10},
-                                {"kind": "math",
-                                 "latex": "1{,}5^2 + 2^2 \\neq 3^2",
-                                 "size": 22, "gapAfter": 2},
-                                {"kind": "text",
-                                 "text": "Sneda: gäller inte.",
-                                 "size": 18}]}]},
-                    ],
-                },
-                {
-                    "width": 1800, "height": 780,
-                    "padding": {"top": 30, "right": 30, "bottom": 30, "left": 30},
-                    "chrome": "aluminium", "tray": True, "name": "hoger",
-                    "columns": [
-                        {"weight": 1, "sections": [
-                            {"kind": "heading",
-                             "text": "Exempel: stegen mot väggen",
-                             "size": 28, "underline": {}, "gapAfter": 14},
-                            {"kind": "shape", "type": "right-triangle",
-                             "width": 180, "height": 110,
-                             "labels": {"left": "b", "bottom": "a",
-                                        "right": "c"},
-                             "gapAfter": 8},
-                            {"kind": "math",
-                             "latex": "a = \\text{foten från väggen i m}",
-                             "size": 20, "gapAfter": 4},
-                            {"kind": "math",
-                             "latex": "b = \\text{höjden på väggen i m}",
-                             "size": 20, "gapAfter": 4},
-                            {"kind": "math",
-                             "latex": "c = \\text{stegens längd i m}",
-                             "size": 20, "gapAfter": 14},
-                            {"kind": "text", "text": "E-nivå", "size": 20,
-                             "weight": 700, "color": "blue", "gapAfter": 8},
-                            {"kind": "text",
-                             "text": "a) Foten står 1,5 m från väggen.",
-                             "size": 20, "gapAfter": 4},
-                            {"kind": "text",
-                             "text": "Toppen når 2 m upp. Hur lång är stegen?",
-                             "size": 20, "gapAfter": 12},
-                            {"kind": "math", "latex": "c^2 = 1{,}5^2 + 2^2",
-                             "size": 22, "gapAfter": 8},
-                            {"kind": "math",
-                             "latex": "c^2 = 2{,}25 + 4 = 6{,}25",
-                             "size": 22, "gapAfter": 8},
-                            {"kind": "math",
-                             "latex": "c = \\sqrt{6{,}25} = 2{,}5",
-                             "size": 22, "gapAfter": 8},
-                            {"kind": "math",
-                             "latex": "\\text{Svar: } 2{,}5\\text{ m}",
-                             "size": 22},
-                        ]},
-                        {"weight": 1, "sections": [
-                            {"kind": "text", "text": "C-nivå", "size": 20,
-                             "weight": 700, "color": "blue", "gapAfter": 8},
-                            {"kind": "text",
-                             "text": "b) Foten flyttas till 0,7 m.",
-                             "size": 20, "gapAfter": 4},
-                            {"kind": "text",
-                             "text": "Hur högt når samma stege nu?",
-                             "size": 20, "gapAfter": 12},
-                            {"kind": "math",
-                             "latex": "b^2 = 2{,}5^2 - 0{,}7^2",
-                             "size": 22, "gapAfter": 8},
-                            # VANLIGT FEL i exemplet, när läraren kryssat i
-                            # det: det felaktiga ledet struket i rött, i den
-                            # del där felet händer.
-                            {"kind": "text", "text": "Vanligt fel:",
-                             "size": 18, "color": "red", "weight": 700,
-                             "gapAfter": 2},
-                            {"kind": "math",
-                             "latex": "\\cancel{b = 2{,}5 - 0{,}7}",
-                             "size": 20, "color": "red", "gapAfter": 8},
-                            {"kind": "math",
-                             "latex": "b^2 = 6{,}25 - 0{,}49 = 5{,}76",
-                             "size": 22, "gapAfter": 8},
-                            {"kind": "math",
-                             "latex": "b = \\sqrt{5{,}76} = 2{,}4",
-                             "size": 22, "gapAfter": 8},
-                            {"kind": "math",
-                             "latex": "\\text{Svar: } 2{,}4\\text{ m}",
-                             "size": 22},
-                        ]},
-                        {"weight": 1, "sections": [
-                            {"kind": "text", "text": "A-nivå", "size": 20,
-                             "weight": 700, "color": "blue", "gapAfter": 8},
-                            {"kind": "text",
-                             "text": "c) Lös ut höjden b ur satsen.",
-                             "size": 20, "gapAfter": 12},
-                            {"kind": "math", "latex": "b^2 = c^2 - a^2",
-                             "size": 22, "gapAfter": 8},
-                            {"kind": "math", "latex": "b = \\sqrt{c^2 - a^2}",
-                             "size": 22, "gapAfter": 22},
-                            {"kind": "text",
-                             "text": "d) Foten flyttas närmare. Når stegen högre?",
-                             "size": 20, "gapAfter": 12},
-                            {"kind": "math",
-                             "latex": "a = 1{,}5 \\text{ ger } b = 2",
-                             "size": 22, "gapAfter": 8},
-                            {"kind": "math",
-                             "latex": "a = 0{,}7 \\text{ ger } b = 2{,}4",
-                             "size": 22, "gapAfter": 8},
-                            {"kind": "math",
-                             "latex": "\\text{Svar: högre, aldrig över } "
-                                      "2{,}5\\text{ m}",
-                             "size": 22},
-                        ]},
-                    ],
-                },
-            ],
-        },
-    ),
+    ("Ma1c, klass TE26A, Modeller och rimlighet; förra lektionen: Formler "
+     "(lärarens godkända tavla)", _las_shot("te26a-modeller.json")),
+    ("Ma1c, klass NA26F, Sinus, cosinus, tangens (lärarens godkända tavla)",
+     _las_shot("na26f-trigonometri.json")),
 ]
 
 
@@ -3362,7 +3118,8 @@ def build_delar_block(delar, regelsamling: bool = False) -> str:
             "ordningen:\n" + "\n".join(rader) + "\n"
             "Tavlan ska bära BÅDA momenten, i lektionens ordning. Formen är "
             "densamma: EN kort rubrik, agendan nämner momenten, och "
-            "vänsterns fyra frågor gäller det begrepp som binder dem ihop. "
+            "vänsterns berättelse leder fram till det begrepp som binder dem "
+            "ihop. "
             "Högern är fortfarande ETT exempel i en situation: delarna täcker "
             "båda momenten i lektionens ordning («samma cyklist, nu med en "
             "olikhet»), minst en del per moment.")
@@ -3676,11 +3433,36 @@ def build_fokus_dom(fokus: str) -> str:
         "forslag är att stryka det.")
 
 
+# FÖRRA LEKTIONEN (lärarens dom 2026-09-30, TE26A «Modeller och
+# rimlighet»): «knyt an till förra lektionen som kontrast». Modellen byggdes
+# mot gårdagens formler: en formel är redan bestämd, en modell väljer vi
+# talen i själva; lika är variablerna och att man sätter in och räknar ut.
+# Rubriken är kalenderns (routes_planning.forra_lektionen), samma rad som
+# satt_forra lägger i agendan, och ingenting annat ur händelsen läses.
+# VILLKORAT: utan förra lektion, och i regelsamlingen, är blocket tomt och
+# prompten den gamla.
+FORRAMARKOR = "FÖRRA LEKTIONEN med klassen"
+_MAX_FORRA = 120
+
+
+def build_forra_block(rubrik: str | None, ny_form: bool = True) -> str:
+    r = " ".join(str(rubrik or "").split())[:_MAX_FORRA]
+    if not r or not ny_form:
+        return ""
+    return (
+        f"{FORRAMARKOR} hade rubriken «{r}» (kalenderns). Bygger "
+        "dagens moment på den börjar vänsterns berättelse där, som kontrast "
+        "(regel 6): förra gångens begrepp med sin formel, sedan vad som är "
+        "lika och vad som är olika. Hör den inte ihop med dagens moment "
+        "nämns den inte på vänstern; agendans «Förra gången» lägger systemet "
+        "dit.")
+
+
 def build_prompt(course: str, group: str, moment: str, memory: str = "",
                  underlag: str = "", utfall: str = "", bok: str = "",
                  forlaga: str = "", svart: str = "", fokus: str = "",
                  delar: str = "", form: Tavelform = STANDARDFORM,
-                 prov: str = "", los: str = "") -> str:
+                 prov: str = "", los: str = "", forra: str = "") -> str:
     """Genereringsprompt: instruktion + few-shots + lärarens egna ord om vad som
     var svårt + minneskontext + ev. uppladdat underlag (bokssidor/uppgifter) +
     ev. rättat provs utfall (Etapp 0.7) + ev. lärobokens uppslag (Etapp 0.8) +
@@ -3729,9 +3511,12 @@ def build_prompt(course: str, group: str, moment: str, memory: str = "",
     # sträng för en kurs utan strykningar, och prompten är då den gamla.
     utk = build_utanfor_tavla(course)
     utk = f"\n{utk}\n" if utk else ""
+    # Förra lektionen (build_forra_block) efter minnet: båda handlar om
+    # klassens senaste lektioner, och kalenderns rubrik är den säkra av dem.
+    frr = f"\n{forra}\n" if forra else ""
     return (
         f"{form.instruktion()}\n{_few_shot_block(form)}\n"
-        f"{utk}{sva}{mem}{utf}{und}{bk}{forl}{prv}{fok}{dlr}{lsr}\n"
+        f"{utk}{sva}{mem}{frr}{utf}{und}{bk}{forl}{prv}{fok}{dlr}{lsr}\n"
         f"Uppdrag: skriv lektionstavlan för {course}, klass {group} — {moment}.\n"
         "Svara med enbart JSON."
     )
@@ -3903,11 +3688,13 @@ _LAPP_SKELETT_2709 = (
     "på». De är beställda (6c, 8d, 8e, 8g). Är tavlan för lång kortar du "
     "agendan, definitionsmeningen och begreppsradernas ORD i stället.\n")
 # Den nya formens skelett (lärarens dom 2026-09-29): frågorna och fråga 4.
-# «Att tänka på» är inte längre skyddat, det är det som ska bort.
+# «Att tänka på» är inte längre skyddat, det är det som ska bort. Sedan
+# 2026-09-30 är frågorna berättelsens numrerade steg, och fråga 4 varje
+# «X eller Y?»-steg (_fragornas_vagar).
 _LAPP_SKELETT = (
-    "- \"ta_bort\" får ALDRIG gälla vänsterns fyra frågerubriker eller de två "
-    "raderna under fråga 4 med sina etiketter. Är tavlan för lång kortar du "
-    "agendan och svarens ORD i stället.\n")
+    "- \"ta_bort\" får ALDRIG gälla vänsterns numrerade stegrubriker eller "
+    "raderna under ett «X eller Y?»-steg med sina etiketter. Är tavlan för "
+    "lång kortar du agendan och radernas ORD i stället.\n")
 _LAPP_SLUT = (
     "- Alla regler ovan gäller fortfarande för de element du skriver.\n"
     "Går rättningen inte att uttrycka som lappar (hela ordningen på tavlan "
@@ -4089,7 +3876,9 @@ def _fragornas_vagar(board: dict) -> list[str]:
         text = str(sec.get("text") or "")
         if kind == "text" and sec.get("weight") == 700:
             m = _FRAGA_RE.match(text)
-            i_fyra = bool(m) and m.group(1) == "4"
+            # Fråga 4 är sedan 2026-09-30 varje «X eller Y?»-steg, vilket
+            # nummer det än bär i berättelsen.
+            i_fyra = bool(m) and bool(ws._ELLER_FRAGA_RE.match(text))
             if m:
                 ut.append(p)
             continue
@@ -4489,7 +4278,7 @@ def _riktad_refine(board: dict, instruction: str, vagar, *, model: str, llm,
                                    historik=historik, skarpare=skarpare,
                                    form=form, utanfor=utanfor)
         if sort == "lapp":
-            _doc, errors = ws.validate_board_json(vad)
+            _doc, errors = _validera(vad, form)
             errors = errors + _nya_utanfor(board, vad, kurs)
             return _repair_until_valid(vad, errors, model=model, llm=llm,
                                        rounds_used=rundor,
@@ -4523,7 +4312,7 @@ def _riktad_refine(board: dict, instruction: str, vagar, *, model: str, llm,
         log(f"{skal[0].upper()}{skal[1:]}")
         return {"board": board, "rounds": rundor,
                 "errors": [{"path": "mal", "code": "mal", "message": skal}]}
-    _doc, errors = ws.validate_board_json(ihop)
+    _doc, errors = _validera(ihop, form)
     errors = errors + _nya_utanfor(board, ihop, kurs)
     return _repair_until_valid(ihop, errors, model=model, llm=llm,
                                rounds_used=rundor, max_rounds=max_rounds,
@@ -4875,6 +4664,21 @@ def _llm_round(prompt: str, model: str, llm, token_cb=None) -> dict | None:
 # som default redan när modulen laddas.
 
 
+# SIFFRORNA PÅ VÄNSTERN I DEN NYA FORMEN (lärarens handrättning 2026-09-30,
+# dokument 303 och 304). Regel 8b, «på vänstern står bokstäver»
+# (whiteboard_spec._check_siffror_vanster), är regelsamlingens. Berättelsen
+# bär sina egna tal: «5/13 = 10/26», «t = 20 ger K = 70», triangeln 8-15-17,
+# och läraren skrev dem själv. Det som fälls i den nya formen är SVARET på en
+# högeruppgift (svarsvakt), inte tal i sig. Validatorn vet inte vilken form
+# tavlan har, så koden sorteras bort här, där formen är känd.
+def _validera(board, form: "Tavelform"):
+    doc, fel = ws.validate_board_json(board)
+    if form.ny_form:
+        fel = [f for f in fel
+               if not (isinstance(f, dict) and f.get("code") == "siffror_vanster")]
+    return doc, fel
+
+
 def _dela(errors: list, behall) -> tuple[list, list]:
     """(det som repareras, det som hålls tillbaka)."""
     if not behall:
@@ -4933,14 +4737,14 @@ def _repair_until_valid(board: dict | None, errors: list, *, model: str, llm,
                     "om hela tavlan.")
                 continue
             sort, kandidat = svar
-            _doc, nya_fel = ws.validate_board_json(kandidat)
+            _doc, nya_fel = _validera(kandidat, form)
             nya_fel, kvar = _dela(nya_fel, behall)
             if sort == "lapp":
                 # Aldrig sämre än den tavla lappen ersätter. Jämförelsen görs
                 # mot en FÄRSK validering av originalet: fellistan i loopen kan
                 # vara klientens renderingsvarningar eller domarens fynd, som
                 # validatorn inte kan se.
-                bas = _kodrakning(ws.validate_board_json(board)[1])
+                bas = _kodrakning(_validera(board, form)[1])
                 if not _inte_samre(bas, _kodrakning(nya_fel)):
                     lapp = False
                     log("Den lappade tavlan bar nya fel — den kastas, och "
@@ -4963,7 +4767,7 @@ def _repair_until_valid(board: dict | None, errors: list, *, model: str, llm,
             if candidate is None:
                 errors = [{"path": "mal", "code": "mal", "message": skal}]
                 continue
-        doc, new_errors = ws.validate_board_json(candidate)
+        doc, new_errors = _validera(candidate, form)
         board = candidate
         errors, kvar = _dela(new_errors, behall)
     return {"board": board, "errors": errors + kvar, "rounds": rounds_used}
@@ -5380,6 +5184,11 @@ def formupprepning(board: dict | None, delar: bool = False) -> list[dict]:
                 if forra is None:
                     nya.setdefault(nyckel, latex)
                     continue
+                # SAMMA GIVNA FORMEL MED SAMMA TAL är ingen upprepning: varje
+                # del står på egna ben (lärarens dom 2026-09-30) och skriver
+                # ut s(t) = 20t − 5t² igen. Bara nya tal i samma form fälls.
+                if _kopienyckel(forra) == _kopienyckel(latex):
+                    continue
                 ut.append({
                     "path": vag, "code": "upprepad_form",
                     "message":
@@ -5417,6 +5226,13 @@ def formupprepning(board: dict | None, delar: bool = False) -> list[dict]:
                 forra = sedd_text.get(nyckel)
                 if forra is None:
                     ny_text.setdefault(nyckel, text)
+                    continue
+                # SAMMA FAKTUM MED SAMMA TAL är ingen upprepning (lärarens
+                # dom 2026-09-30: varje del står på egna ben). «Vinkeln mot
+                # marken är 40°.» står i både b) och c) med flit. Samma
+                # FRÅGA två gånger fälls fortfarande.
+                if text.strip() == forra.strip() \
+                        and not text.strip().endswith("?"):
                     continue
                 ut.append({
                     "path": f"{vag}.text", "code": "upprepad_situation",
@@ -5476,8 +5292,13 @@ def utrakningsvakt(board: dict | None, delar: bool = False) -> list[dict]:
             for p, kind, sec in platt:
                 if kind == "heading":
                     aktuellt = None
+                    # I den nya formen är exempelrubriken situationens
+                    # rubrik, och under den står storheterna eller bara
+                    # figuren (NA26F 2026-09-30: draken i snöret, ingen
+                    # math-rad). Uträkningen döms då del för del, men en
+                    # steglista under rubriken fälls som förut.
                     if _EXEMPELRUBRIK_RE.match(str(sec.get("text") or "")):
-                        aktuellt = {"vag": p, "rakning": 0}
+                        aktuellt = {"vag": p, "rakning": 0, "rubrik": delar}
                         exempel.append(aktuellt)
                 elif delar and kind == "text" and _DELMARKOR_RE.match(
                         str(sec.get("text") or "")):
@@ -5500,7 +5321,8 @@ def utrakningsvakt(board: dict | None, delar: bool = False) -> list[dict]:
                     "message": "exemplet saknar uträkningen. Skriv den under "
                                "uppgiften som math-rader, ETT led per rad, "
                                "sist svaret med enhet."}
-                   for ex in exempel if not ex["rakning"]]
+                   for ex in exempel
+                   if not ex["rakning"] and not ex.get("rubrik")]
     return ut
 
 
@@ -5513,20 +5335,45 @@ def utrakningsvakt(board: dict | None, delar: bool = False) -> list[dict]:
 #
 # VÄNSTERN. «Jävligt mycket text på vänstra delarna av tavlan … de här att
 # tänka på, det kommer ju egentligen när vi löser uppgifterna sen.» Vakten
-# fäller det som INTE ska stå där (Att tänka på, Vanligt fel), en saknad
-# fråga, fler rader under en fråga än facit har, och en rad som är en mening.
-# Taken är facits: en rad under fråga 1, tre under 2, två under 3, två
-# etiketter under 4. Radlängden 30 är facits längsta rad (26 tecken) med
-# luft; prompten säger ~28.
-_FRAGA_RE = re.compile(r"^\s*([1-4])\.\s")
-_FRAGANS_TAK = {1: 1, 2: 3, 3: 2, 4: 2}
-_VANSTERRAD_MAX = 30
+# fäller det som INTE ska stå där (Att tänka på, Vanligt fel), för få eller
+# för många steg, för många rader och en rad som är en mening.
+#
+# BERÄTTELSEN (lärarens handrättning 2026-09-30, dokument 303 och 304).
+# Stegen är tre eller fyra och heter efter momentet, så vakten kräver inte
+# längre «1. Vad är det?» och «2. Delarna». Taken är mätta på de två
+# tavlorna: TE26A bär 3, 3, 5 och 2 rader under sina fyra steg (13), NA26F
+# 3, 0 och 0; den längsta raden är 35 tecken («Lika: variabler, sätt in,
+# räkna ut.»). Två nya fynd: ett «Varför X?»-steg («Varför trigonometri?»
+# med tillämpningar ströks) och namn i en lista under en figur («Namnen står
+# vid figuren, inte i en lista under»).
+_FRAGA_RE = re.compile(r"^\s*([1-9])\.\s")
+_STEGENS_ANTAL = (3, 4)
+_STEGETS_TAK = 5
+_VANSTERNS_TAK = 14
+_VANSTERRAD_MAX = 36
+_VARFOR_RE = re.compile(r"^\s*\d\.\s*varför\b", re.IGNORECASE)
+# «c = hypotenusan», «a, b: kateterna», «b = närliggande katet»: en bokstav
+# (eller flera) och ett ord efter = eller kolon. «Samma vinkel ger samma
+# form.» är ingen namnrad.
+_NAMNRAD_RE = re.compile(
+    r"^\s*[a-zA-Zα-ω](?:\s*,\s*[a-zA-Zα-ω])*\s*[:=]\s*[a-zåäöA-ZÅÄÖ(]")
+
+
+def _spalten(vag: str) -> str:
+    """Vägen till spalten (col) en rad står i: allt före sista .children[."""
+    i = vag.rfind(".children[")
+    return vag[:i] if i >= 0 else vag
+
+
+def _ar_figur(sec: dict) -> bool:
+    return sec.get("kind") == "shape" or (
+        sec.get("kind") == "graph" and bool(sec.get("polygons")))
 
 
 def vanstervakt(board: dict | None) -> list[dict]:
-    """Vänsterns fyra frågor: koderna `vanster_att_tanka_pa`,
-    `vanster_vanligt_fel`, `vanster_fragor`, `vanster_for_manga` och
-    `vanster_rad_lang`."""
+    """Vänsterns berättelse: koderna `vanster_att_tanka_pa`,
+    `vanster_vanligt_fel`, `vanster_fragor`, `vanster_varfor`,
+    `vanster_for_manga`, `vanster_rad_lang` och `vanster_namnlista`."""
     if not isinstance(board, dict):
         return []
     tavlor = board.get("boards") or []
@@ -5534,9 +5381,12 @@ def vanstervakt(board: dict | None) -> list[dict]:
     platt: list = []
     _platta_rader(vanster.get("sections"), "boards[0].sections", platt)
     ut: list[dict] = []
-    fragor: dict[int, str] = {}
+    steg: list[int] = []
     aktuell: int | None = None
     rader: dict[int, int] = {}
+    summa = 0
+    figur_i: set[str] = set()
+    namnlista = False
     for p, kind, sec in platt:
         text = str(sec.get("text") or "").strip()
         lag = re.sub(r"^\s*\d+\.\s*", "", text).lower()
@@ -5556,37 +5406,189 @@ def vanstervakt(board: dict | None) -> list[dict]:
                                   "Stryk det här."})
             aktuell = None
             continue
-        if ".children" not in p or kind != "text":
-            continue            # bara spalterna under öppningsfrågan
+        if ".children" not in p:
+            continue            # bara spalterna under öppningsrubriken
+        spalt = _spalten(p)
+        if _ar_figur(sec):
+            figur_i.add(spalt)
+            continue
+        if kind != "text":
+            continue
         m = _FRAGA_RE.match(text)
         if m and sec.get("weight") == 700:
             aktuell = int(m.group(1))
-            fragor.setdefault(aktuell, p)
+            steg.append(aktuell)
+            figur_i.discard(spalt)
+            if _VARFOR_RE.match(text):
+                ut.append({"path": p, "code": "vanster_varfor",
+                           "message": f"'{text[:40]}' är ett «Varför»-steg, "
+                                      "och läraren har strukit dem: en lista "
+                                      "över tillämpningar förklarar inte "
+                                      "begreppet. Stryk steget och låt "
+                                      "berättelsen visa varifrån begreppet "
+                                      "kommer."})
             continue
         if aktuell is None or str(sec.get("color") or "") == "red":
             continue
         rader[aktuell] = rader.get(aktuell, 0) + 1
-        if rader[aktuell] == _FRAGANS_TAK[aktuell] + 1:
+        summa += 1
+        if rader[aktuell] == _STEGETS_TAK + 1:
             ut.append({"path": p, "code": "vanster_for_manga",
-                       "message": f"under fråga {aktuell} står fler än "
-                                  f"{_FRAGANS_TAK[aktuell]} "
-                                  f"{'rad' if _FRAGANS_TAK[aktuell] == 1 else 'rader'}. "
-                                  "Mindre text på vänstern: stryk den rad "
-                                  "som säger minst."})
+                       "message": f"under steg {aktuell} står fler än "
+                                  f"{_STEGETS_TAK} rader. Mindre text på "
+                                  "vänstern: stryk den rad som säger minst, "
+                                  "eller låt en figur eller formel säga "
+                                  "det."})
+        elif summa == _VANSTERNS_TAK + 1:
+            ut.append({"path": p, "code": "vanster_for_manga",
+                       "message": f"vänstern bär fler än {_VANSTERNS_TAK} "
+                                  "textrader under stegen. Stryk de rader "
+                                  "som bara ska sägas."})
         if len(text) > _VANSTERRAD_MAX:
             ut.append({"path": p, "code": "vanster_rad_lang",
                        "message": f"'{text[:40]}' är {len(text)} tecken; en "
-                                  "rad under frågorna är högst ~28. Korta "
-                                  "den till ett namn och några ord."})
-    saknas = [n for n in (1, 2, 3, 4) if n not in fragor]
-    if saknas:
+                                  "rad under stegen är högst ~32. Korta den "
+                                  "till några ord."})
+        if spalt in figur_i and _NAMNRAD_RE.match(text) and not namnlista:
+            namnlista = True
+            ut.append({"path": p, "code": "vanster_namnlista",
+                       "message": f"'{text[:40]}' namnger figurens delar i "
+                                  "en lista under figuren. Namnen står VID "
+                                  "figuren: flytta dem till figurens texts "
+                                  "vid sidorna och stryk raderna under "
+                                  "den."})
+    if not (_STEGENS_ANTAL[0] <= len(steg) <= _STEGENS_ANTAL[1]) \
+            or steg != list(range(1, len(steg) + 1)):
         ut.append({"path": "boards[0].sections", "code": "vanster_fragor",
-                   "message": "vänstern ska ställa de fyra frågorna «1. Vad "
-                              "är det?», «2. Delarna», «3. Varför …?» och "
-                              "«4. X eller Y?» som numrerade rubrikrader i "
-                              "två spalter; nu saknas "
-                              + ", ".join(str(n) for n in saknas) + "."})
+                   "message": "vänstern ska vara genomgången i TRE eller "
+                              "FYRA numrerade steg (1., 2., 3. …) som "
+                              "rubrikrader i två spalter, i berättelsens "
+                              "ordning: där eleverna är, varifrån det nya "
+                              "kommer, namnet eller formeln, ett jättelätt "
+                              "exempel. Nu: "
+                              + (", ".join(f"{n}." for n in steg)
+                                 or "inga steg") + "."})
     return ut
+
+
+# SVARET PÅ VÄNSTERN (lärarens dom 2026-09-30, TE26A: «rookie mistake,
+# eleverna skriver bara av»). Vänsterns exempel på en modell var först
+# E-uppgiftens B = 100 − 6x; läraren bytte till hyran K = 10 + 3t. NA26F:
+# vänsterns trianglar är 5-12-13 och 8-15-17 när högerns a) har 12-16-20.
+# Vakten jämför fyra saker, alla deterministiskt och bara med tal i:
+# (1) ett samband med tal («B = 100 − 6x») som står på båda sidor;
+# (2) ett bråk med tal som har samma VÄRDE som ett bråk på högern
+#     (12/20 och 3/5 visar båda svaret 0,6);
+# (3) ett decimaltal som är ett resultat på högern (efter =, ≈ eller i
+#     svaret); heltal jämförs inte, för 70 kr och 70 % är två olika saker;
+# (4) en figur på vänstern med minst tre av samma tal som en figur på
+#     högern (samma triangel).
+_TEXTBIT_RE = re.compile(r"\\text\s*\{[^{}]*\}|\\quad|\\qquad|,\\ |\\;")
+_BRAKTAL_RE = re.compile(
+    r"\\[dt]?frac\{\s*(\d+(?:\{,\}\d+)?)\s*\}\{\s*(\d+(?:\{,\}\d+)?)\s*\}")
+_DECIMAL_RE = re.compile(r"\d+\{,\}\d+|\d+,\d+")
+_HELTAL_RE = re.compile(r"\d+(?:[.,]\d+)?")
+# Ett samband med SPECIFIKA tal: ett flersiffrigt tal eller ett decimaltal
+# (B = 100 − 6x). En allmän formel som W = m·v²/2 står med flit på båda
+# sidor, och dess 2 är ingen uppgifts svar.
+_SAMBAND_RE = re.compile(r"^[A-Za-z](?:\^\d)?=.*(?:\d{2,}|\d,\d)")
+
+
+def _tal(s: str) -> float:
+    return float(s.replace("{,}", ".").replace(",", "."))
+
+
+def _samband(latex: str) -> set[str]:
+    """Sambanden i en rad, «B=100-6x», med texten i \\text{} som gräns."""
+    ut = set()
+    for bit in _TEXTBIT_RE.split(latex or ""):
+        nyckel = _kopienyckel(bit)
+        if _SAMBAND_RE.match(nyckel) and len(nyckel) >= 5:
+            ut.add(nyckel)
+    return ut
+
+
+_RELATIONER_RE = re.compile(r"=|\\approx|≈")
+
+
+def _resultat(latex: str) -> list[str]:
+    """Decimaltalen som en högerrad RÄKNAR FRAM: efter sista = eller ≈ i en
+    kedja med minst två, eller i svarsraden. «h = 0,1» är ett givet tal,
+    inget resultat (kassetten 2026-09-30: vänsterns tabell bar h = 0,1)."""
+    if "Svar" in latex:
+        return _DECIMAL_RE.findall(latex)
+    delar = _RELATIONER_RE.split(latex or "")
+    return _DECIMAL_RE.findall(delar[-1]) if len(delar) >= 3 else []
+
+
+def _figurtal(sec: dict) -> set[str]:
+    return {m for t in sec.get("texts") or [] if isinstance(t, dict)
+            for m in _HELTAL_RE.findall(str(t.get("text") or ""))}
+
+
+def _math_och_figurer(sections, path: str, math: list, figurer: list) -> None:
+    for si, sec in enumerate(sections or []):
+        if not isinstance(sec, dict):
+            continue
+        p = f"{path}[{si}]"
+        if sec.get("kind") == "math" and sec.get("color") != "red":
+            math.append((p, str(sec.get("latex") or "")))
+        elif _ar_figur(sec):
+            figurer.append((p, sec))
+        if isinstance(sec.get("children"), list):
+            _math_och_figurer(sec["children"], f"{p}.children", math, figurer)
+
+
+def svarsvakt(board: dict | None) -> list[dict]:
+    """Vänstern visar svaret eller ett mellanled i en högeruppgift. Koden
+    `vanster_svar`."""
+    if not isinstance(board, dict):
+        return []
+    tavlor = [t for t in board.get("boards") or [] if isinstance(t, dict)]
+    if len(tavlor) < 2:
+        return []
+    vm, vf, hm, hf = [], [], [], []
+    _math_och_figurer(tavlor[0].get("sections"), "boards[0].sections", vm, vf)
+    for bi, t in enumerate(tavlor[1:], 1):
+        for ci, kol in enumerate(t.get("columns") or []):
+            _math_och_figurer((kol or {}).get("sections"),
+                              f"boards[{bi}].columns[{ci}].sections", hm, hf)
+        _math_och_figurer(t.get("sections"), f"boards[{bi}].sections", hm, hf)
+    h_samband = set().union(*(_samband(l) for _p, l in hm)) if hm else set()
+    h_brak = {_tal(a) / _tal(b) for _p, l in hm
+              for a, b in _BRAKTAL_RE.findall(l) if _tal(b)}
+    h_decimal = {_tal(x) for _p, l in hm for x in _resultat(l)}
+    ut: list[dict] = []
+
+    def fynd(p: str, vad: str) -> None:
+        ut.append({"path": p, "code": "vanster_svar",
+                   "message": f"{vad} visar svaret eller ett mellanled i en "
+                              "högeruppgift, och eleverna skriver bara av. "
+                              "Ge vänsterns exempel EGNA tal eller ett eget "
+                              "samband i samma vardag; högern rörs inte."})
+
+    for p, latex in vm:
+        gemensamt = _samband(latex) & h_samband
+        if gemensamt:
+            fynd(p, f"'{latex[:40]}' på vänstern står också på högern och")
+            continue
+        brak = [(a, b) for a, b in _BRAKTAL_RE.findall(latex)
+                if _tal(b) and any(abs(_tal(a) / _tal(b) - v) < 1e-9
+                                   for v in h_brak)]
+        if brak:
+            a, b = brak[0]
+            fynd(p, f"Bråket {a}/{b} på vänstern har samma värde som ett på "
+                    "högern och")
+            continue
+        dec = [x for x in _DECIMAL_RE.findall(latex)
+               if any(abs(_tal(x) - v) < 1e-9 for v in h_decimal)]
+        if dec:
+            fynd(p, f"Talet {dec[0]} på vänstern är ett resultat på högern och")
+    for p, sec in vf:
+        tal = _figurtal(sec)
+        if len(tal) >= 3 and any(len(tal & _figurtal(h)) >= 3 for _q, h in hf):
+            fynd(p, "Vänsterns figur har samma tal som en figur på högern och")
+    return ut[:3]
 
 
 # HÖGERN. «Jag har ett enda exempel som jag utgår ifrån och sen blir det
@@ -5628,16 +5630,35 @@ _NIVORNAS_RUBRIKER = {"": ("E-nivå", "C-nivå", "A-nivå"),
                       "A-nivå": ("E-nivå", "C-nivå", "A-nivå")}
 
 
+# EGNA BEN OCH EN FIGUR PER DEL (lärarens dom 2026-09-30, NA26F). «Varje
+# deluppgift står på egna ben»: aldrig «som i b)», «vinkeln som i a)»,
+# «draken i b)». Och i geometri «en triangel med talen vid varje
+# högeruppgift»; a) får använda exemplets figur överst i kolumn 1.
+# Nivårubriken står EN gång per nivå.
+_DEL_HANVISNING_RE = re.compile(
+    r"(?<![\w(])[a-f]\)|\b(?:uppgift|deluppgift|del)\s+[a-f]\b",
+    re.IGNORECASE)
+
+
+def _hanvisar_till_del(text: str) -> bool:
+    return bool(_DEL_HANVISNING_RE.search(_DELMARKOR_RE.sub("", text, 1)))
+
+
 def hogervakt(board: dict | None, niva: str = "") -> list[dict]:
     """Ett exempel i nivåer: koderna `flera_exempel`, `nivarubrik`,
-    `for_fa_delar` och `rad_bred`. `niva` är Tavelform.niva ("" =
-    Blandat)."""
+    `for_fa_delar`, `rad_bred`, `del_hanvisning` och `del_utan_figur`.
+    `niva` är Tavelform.niva ("" = Blandat)."""
     if not isinstance(board, dict):
         return []
     rubriker: list[tuple[str, str]] = []
     nivor: dict[str, str] = {}
     delar = 0
     breda: list[dict] = []
+    ben: list[dict] = []
+    dubbla: list[dict] = []
+    # (väg till delens markör, har delen en figur) i läsordning.
+    delfigurer: list[list] = []
+    geometri = False
     for bi, tavla in enumerate(board.get("boards") or []):
         if bi == 0 or not isinstance(tavla, dict):
             continue
@@ -5662,9 +5683,30 @@ def hogervakt(board: dict | None, niva: str = "") -> list[dict]:
             if kind == "heading":
                 rubriker.append((p, text))
             elif kind == "text" and text in _NIVARUBRIKER:
+                if text in nivor:
+                    dubbla.append({
+                        "path": p, "code": "nivarubrik",
+                        "message": f"nivårubriken «{text}» står två gånger. "
+                                   "Den står EN gång, överst i sin kolumn; "
+                                   "stryk den andra."})
                 nivor.setdefault(text, p)
             elif kind == "text" and _DELMARKOR_RE.match(text):
                 delar += 1
+                delfigurer.append([p, False])
+            elif kind == "graph" and sec.get("polygons") or kind == "shape":
+                geometri = True
+                if delfigurer:
+                    delfigurer[-1][1] = True
+            if kind == "text" and _hanvisar_till_del(text) or (
+                    kind == "math" and any(_hanvisar_till_del(t) for t in
+                                           _TEXT_I_MATTE_RE.findall(
+                                               str(sec.get("latex") or "")))):
+                ben.append({
+                    "path": p, "code": "del_hanvisning",
+                    "message": f"'{(text or str(sec.get('latex')))[:50]}' "
+                               "hänvisar till en annan del. Varje del står "
+                               "på egna ben: skriv delens egna tal i dess "
+                               "text och stryk hänvisningen."})
     ut: list[dict] = []
     if len(rubriker) > 1:
         ut.append({"path": rubriker[1][0], "code": "flera_exempel",
@@ -5695,7 +5737,13 @@ def hogervakt(board: dict | None, niva: str = "") -> list[dict]:
                    "message": f"exemplet har {delar} delar. Det ska ha minst "
                               "a), b) och c) i samma situation: E, C och A, "
                               "var och en med sitt eget handgrepp."})
-    return ut + breda[:4]
+    if geometri:
+        ut += [{"path": p, "code": "del_utan_figur",
+                "message": "delen saknar sin figur. I geometri har varje del "
+                           "sin egen triangel med delens tal vid sidorna och "
+                           "den sökta som «c = ?»."}
+               for p, har in delfigurer[1:] if not har][:2]
+    return ut + dubbla[:2] + ben[:3] + breda[:4]
 
 
 # PROVETS SITUATION (lärarens dom 2026-09-29). Jobb 1183 skrev bromssträckan
@@ -5799,7 +5847,7 @@ def formvakter(board: dict | None, form: "Tavelform", provtext: str = "",
     exemplen lärarens egna uppgifter."""
     if not form.ny_form:
         return []
-    ut = vanstervakt(board)
+    ut = vanstervakt(board) + svarsvakt(board)
     if not forlaga_uppgifter:
         ut += hogervakt(board, form.niva) + provsituation(board, provtext)
     return ut
@@ -6667,24 +6715,22 @@ TACKNING_INSTRUKTION_REGELSAMLING = (
 TACKNING_INSTRUKTION = (
     "Du är täckningsdomare för en genomgångstavla i matematik. Nedan står "
     "bokens uppslagna sidor med lärarens VALDA uppgifter, och därefter "
-    "tavlan som JSON. Tavlans form är lärarens egen: vänstern ställer fyra "
-    "frågor om momentet, och högern är ETT exempel i EN situation med "
-    "delarna a), b), c) … i stigande nivå, E, C och A. Gå uppgift för "
-    "uppgift genom urvalet och fråga: kan en elev PÅBÖRJA den här uppgiften "
-    "med det som står på tavlan, formeln, begreppet eller en del i exemplet "
-    "med samma handgrepp? Läraren pratar och räknar också: kravet är att "
-    "metoden STÅR på tavlan, inte att varje uppgift har en egen del. Döm på "
-    "innehåll som saknas helt (en metodtyp, ett handgrepp), aldrig på "
-    "detaljer.\n"
-    "Flagga också RÄKNEFEL: räkna efter varje siffra på tavlan, särskilt "
-    "tal som sägs följa ur en tidigare del (5 m/s ger 1 000 J, alltså ger "
-    "10 m/s 4 000 J). Ett räknefel på en genomgångstavla är alltid ett "
-    "fynd, aldrig en detalj.\n"
+    "tavlan som JSON. Tavlans form är lärarens egen: vänstern är "
+    "genomgången som en berättelse i tre eller fyra numrerade steg, och "
+    "högern är ETT exempel i EN situation med delarna a), b), c) … i "
+    "stigande nivå, E, C och A. Gå uppgift för uppgift genom urvalet och "
+    "fråga: kan en elev PÅBÖRJA den här uppgiften med det som står på "
+    "tavlan, formeln, begreppet eller en del i exemplet med samma handgrepp? "
+    "Läraren pratar och räknar också: kravet är att metoden STÅR på tavlan, "
+    "inte att varje uppgift har en egen del. Döm på innehåll som saknas helt "
+    "(en metodtyp, ett handgrepp), aldrig på detaljer.\n"
+    "Flagga också RÄKNEFEL: räkna efter varje siffra på tavlan. Ett räknefel "
+    "på en genomgångstavla är alltid ett fynd, aldrig en detalj.\n"
     "Står ingen rad «LÄRARENS URVAL» nedan finns inget kontrakt att döma "
     "täckningen mot: hoppa då över täckningen och alla urvalsfrågor helt, "
     "och döm bara formen: räknefel, METODSTEG I ORD, uträkningar på "
-    "vänstern, VÄNSTERN, STEGRINGEN, en uppgiftstext som kräver förklaring "
-    "och grafen.\n"
+    "vänstern, VÄNSTERN, STEGRINGEN, EGNA BEN, en uppgiftstext som kräver "
+    "förklaring och grafen.\n"
     "Står i stället «CENTRALT INNEHÅLL (Gy25)» nedan är PUNKTERNA kontraktet, "
     "men bara den DEL av dem som lektionens moment rör: gå punkt för punkt "
     "och fråga «kan eleven påbörja det den här punkten beskriver OM DEN "
@@ -6698,14 +6744,14 @@ TACKNING_INSTRUKTION = (
     "punktlista med steg i ord eller en del utan uträkning är ett fynd; "
     "forslag är uträkningen, leden skrivna färdiga. Räkna efter varje led.\n"
     # Siffervakten fäller bara ett led som RÄKNAR (whiteboard_spec.
-    # _ar_utrakning): en pil till ett svar, eller två likhetstecken som
-    # slutar i ett tal. Domaren får inte beställa bort det vakten släpper.
+    # _ar_utrakning), och släpper raderna under ett «X eller Y?»-steg
+    # (_eller_rader). Domaren får inte beställa bort det vakten släpper.
     "Fäll UTRÄKNINGAR PÅ VÄNSTERN: en math-rad med mellanled eller en pil "
     "till ett svar hör till exemplet på högern. En likhet UTAN mellanled är "
-    "ingen uträkning: formeln under «1. Vad är det?» och de två raderna "
-    "under fråga 4 (1\\,000 = \\frac{80 \\cdot v^2}{2}) SKA bära exemplets "
-    "tal och fälls aldrig. forslag är att stryka raden eller flytta den till "
-    "den del den hör till.\n"
+    "ingen uträkning, och raderna under ett «X eller Y?»-steg (t = 20 "
+    "\\text{ ger } K = 70) är vänsterns jättelätta exempel och fälls aldrig. "
+    "forslag är att stryka raden eller flytta den till den del den hör "
+    "till.\n"
     "Pröva DUBBLETTERNA först: gör två delar samma sak med andra tal, samma "
     "handgrepp? Det är en del skriven två gånger. forslag är att byta den "
     "senare mot ett handgrepp urvalet har men tavlan saknar, i SAMMA "
@@ -6720,12 +6766,19 @@ TACKNING_INSTRUKTION = (
     "ett andra exempel eller fler exempel. Högern har HÖGST FYRA delar "
     "(a–d): saknas en typ ändå är forslag att byta ut den del som ligger "
     "längst från urvalet, aldrig en femte del. Ryms det som saknas inte "
-    "alls: lämna det, läraren pratar också.\n"
-    "Pröva STEGRINGEN: är a) grundformen på E-nivå, b) en C-uppgift "
-    "(baklänges, lös ut ur en kvadrat, avrunda) och c) och d) A (generellt, "
-    "eller ett resonemang med sifferkontroll ur E-delen)? Har kolumnerna "
-    "sina rubriker «E-nivå», «C-nivå», «A-nivå»? En stegring som inte "
-    "stiger är ett fynd.\n"
+    "alls: lämna det, läraren pratar också. Kolumnerna ska bli ungefär lika "
+    "höga: bär A-kolumnen redan en del som fyller den är forslag att BYTA "
+    "den, aldrig att lägga en till under.\n"
+    "Pröva STEGRINGEN: är a) grundformen på E-nivå och inget mer, b) en "
+    "C-uppgift (baklänges, lös ut, avrunda) och c) och d) A (generellt, "
+    "eller ett resonemang)? Har kolumnerna sina rubriker «E-nivå», «C-nivå», "
+    "«A-nivå», en gång var? En stegring som inte stiger är ett fynd.\n"
+    # Lärarens dom 2026-09-30: «Varje deluppgift står på egna ben.»
+    "Pröva EGNA BEN: bär varje del alla sina tal i sin egen text? En del som "
+    "hänvisar till en annan («som i b)», «vinkeln från a)») eller kräver att "
+    "eleven bär ett tal eller en kvot från en annan del är ett fynd, och "
+    "forslag är delens text med talen utskrivna. I geometri har varje del "
+    "sin egen triangel med delens tal.\n"
     "Pröva EGNA UPPGIFTER mot bokens uppgifter och exempel på sidorna: "
     "«ÅTERANVÄND INTE UPPGIFTER, GÖR EGNA!» En kopia ELLER en nära variant, "
     "samma situation och samma form med bara andra tal, är ett fynd, och "
@@ -6734,13 +6787,12 @@ TACKNING_INSTRUKTION = (
     "läsningen? En text som behöver förklaras innan man kan börja räkna är "
     "ett fynd. forslag är samma handgrepp i enklare ord: ett föremål, ett "
     "faktum, en fråga som säger rakt ut vad som söks.\n"
-    # Lärarens domar 2026-09-17 (Liber Ma1c s. 69–72) i sak som förut; det
-    # som bodde i vänsterns rader bor nu under «2. Delarna» och i delarna.
+    # Lärarens domar 2026-09-17 (Liber Ma1c s. 69–72) i sak som förut.
     "Pröva MODELLERNA när sidorna handlar om formler ur verkligheten (ställa "
     "upp, jämföra, rimlighet), och varje punkt är ett fynd: (1) en "
     "beteckning eller term som INTE står på sidorna (y = kx + m, k, m, "
     "riktningskoefficient), och forslag är formeln med sina tal; (2) en "
-    "bokstav eller konstant utan förklaring och enhet under «2. Delarna»; "
+    "bokstav eller konstant utan förklaring och enhet; "
     "(3) ett giltighetsområde med en oförklarad bokstav (0 ≤ x ≤ a), en "
     "regel som bara stämmer ibland (kx + m ≥ 0), eller ett decimalt tak där "
     "x räknar saker (7,5 besök), där heltalen ska stå; (4) en jämförelse "
@@ -6750,34 +6802,40 @@ TACKNING_INSTRUKTION = (
     "avläsas utan raden för x = 0 när formeln har ett startvärde; (6) tavlan "
     "gör avsnittet smalare än sidorna; (7) bokens påhittade företagsnamn i "
     "stället för A och B.\n"
-    # VÄNSTERN (lärarens ord 2026-09-29): «mycket mindre text och mer saker
-    # som faktiskt hjälper eleverna … Så att man får liksom ett syfte.»
-    "Pröva VÄNSTERN: står de fyra frågorna där, «1. Vad är det?» med formeln "
-    "och EN rad, «2. Delarna» med högst tre rader, «3. Varför …?» med högst "
-    "två och «4. X eller Y?» med två math-rader med exemplets tal och sina "
-    "etiketter? En saknad fråga är ett fynd. Fäll också en FÖR TJOCK "
-    "vänster, och forslag är då att STRYKA: fler rader än så, en «Att tänka "
-    "på», ett randfall, ett «Vanligt fel», ett recept eller metodsteg, en "
-    "definitionsmening, en räknelag ur formelsamlingen, eller en kropp på "
-    "ett moment som inte handlar om geometri eller grafer. Kräv ALDRIG en "
-    "ny rad på vänstern för ett randfall: det säger läraren när uppgifterna "
-    "löses.\n"
+    # VÄNSTERN (lärarens handrättning 2026-09-30): berättelsen, namnen vid
+    # figuren, aldrig högerns svar, inget «Varför trigonometri?».
+    "Pröva VÄNSTERN: är den en berättelse i tre eller fyra numrerade steg i "
+    "genomgångens ordning: där eleverna är (förra lektionens begrepp som "
+    "kontrast när raden «FÖRRA LEKTIONEN» står nedan, annars en figur), "
+    "varifrån det nya kommer, namnet eller formeln, sist ett jättelätt "
+    "exempel med egna tal? Ett steg som bara namnger utan att visa varifrån "
+    "(«kvoter som mäter vinkeln») är ett fynd. Står namnen VID figuren och "
+    "inte i en lista under? Visar vänstern SVARET eller ett mellanled i en "
+    "högeruppgift? Det är alltid ett fynd, och forslag är egna tal i samma "
+    "vardag. Fäll också en FÖR TJOCK vänster, och forslag är då att STRYKA: "
+    "fler än fem rader under ett steg, en «Varför X?» med tillämpningar, en "
+    "«Att tänka på», ett randfall, ett «Vanligt fel», ett recept eller "
+    "metodsteg, allmänt prat, en räknelag ur formelsamlingen. Kräv ALDRIG "
+    "en ny rad på vänstern för ett randfall: det säger läraren när "
+    "uppgifterna löses. Vänsterns ORDVAL döms inte: jämförelsen med förra "
+    "lektionen är lärarens egen förenkling («Lika: variabler, sätt in, "
+    "räkna ut.», «Olika: talen väljer vi själva.»), och den skrivs aldrig "
+    "om så länge den inte är fel matematik.\n"
     "Står raden «LEKTIONENS DELAR» nedan bär lektionen FLERA moment. Pröva då "
     "varje del för sig: syns delens moment på tavlan, i agendan, på vänstern "
     "eller i en del av exemplet? Ett moment som saknas helt är det tyngsta "
     "fyndet av alla, och forslag är vad som ska in, konkret. Gäller också "
     "utan bok: rubrikerna är kontraktet då.\n"
-    "Pröva ÖPPNINGSFRÅGAN, tavlans andra rubrik: nämner den MOMENTETS eget "
+    "Pröva ÖPPNINGSRUBRIKEN, tavlans andra rubrik: nämner den MOMENTETS eget "
     "begrepp, det ord tavelrubriken bär? En fråga om en förkunskap («Vad är "
     "roten ur 25?» på en lektion om andragradsekvationer) är ett fynd, och "
-    "forslag är frågan skriven om, högst fem ord, om dagens begrepp.\n"
-    "Pröva GRAFEN på vänstern, om det finns en: ritar den exemplets "
-    "situation med exemplets tal, bär VARJE punkt en etikett, har axlarna "
-    "ticks vid punkternas värden och streckade hjälplinjer? Annars är det "
-    "ett fynd, och forslag är grafen med exemplets tal.\n"
+    "forslag är rubriken skriven om, högst fem ord, om dagens begrepp.\n"
+    "Pröva GRAFEN på vänstern, om det finns en: bär VARJE punkt en etikett, "
+    "har axlarna ticks vid punkternas värden och streckade hjälplinjer? "
+    "Annars är det ett fynd, och forslag är grafen med egna tal.\n"
     "FORSLAGET SKRIVS I DEN FORM RADEN SKA HA på tavlan, aldrig som en "
-    "förklaring: en rad under en fråga är högst ~28 tecken («W: beroende, "
-    "räknas ut»), en rad under fråga 4 är en math-rad plus etiketten «namn: "
+    "förklaring: en rad under ett steg är högst ~32 tecken («Samma vinkel "
+    "ger samma form.»), en prövning är en math-rad plus etiketten «namn: "
     "skälet», och en del är uppgiftsraden och uträkningen, ett led per "
     "math-rad. Föreslår du att en rad BYTS ut skriver du den nya raden "
     "färdig, i den formen.\n"
@@ -6793,7 +6851,8 @@ _DOMARE_VANLIGT_FEL_BORT: tuple[tuple[str, str], ...] = ()
 def build_tackning_prompt(board_json: dict, bok: str, delar: str = "",
                           form: Tavelform = STANDARDFORM,
                           prov: str = "", utanfor: str = "",
-                          fokus: str = "", los: str = "") -> str:
+                          fokus: str = "", los: str = "",
+                          forra: str = "") -> str:
     # Delarna sist före tavlan, av samma skäl som i skrivningen: de är
     # uppdraget, inte en källa. Tom sträng ger ordagrant den gamla prompten.
     # Provet (build_infor_prov_dom) står mellan boken och delarna, som i
@@ -6808,8 +6867,11 @@ def build_tackning_prompt(board_json: dict, bok: str, delar: str = "",
     # gamla prompten.
     fok = f"\n\n{fokus.strip()}" if fokus.strip() else ""
     lsr = f"\n\n{los.strip()}" if los.strip() else ""
+    # Förra lektionen (build_forra_block) efter boken, så att domaren vet
+    # varför vänsterns första steg handlar om något annat än dagens moment.
+    frr = f"\n\n{forra.strip()}" if forra.strip() else ""
     return (
-        f"{form.domarinstruktion()}{utk}\n\n{bok.strip()}{prv}{fok}{dlr}"
+        f"{form.domarinstruktion()}{utk}\n\n{bok.strip()}{frr}{prv}{fok}{dlr}"
         f"{lsr}\n\n"
         "Tavlan:\n"
         f"{json.dumps(board_json, ensure_ascii=False)}\n"
@@ -6819,6 +6881,7 @@ def build_tackning_prompt(board_json: dict, bok: str, delar: str = "",
 def doma_tackning(board: dict, *, model: str, llm, bok: str, delar: str = "",
                   form: Tavelform = STANDARDFORM, prov: str = "",
                   utanfor: str = "", fokus: str = "", los: str = "",
+                  forra: str = "",
                   log_cb: Callable[[str], None] | None = None) -> list[dict]:
     """Domens fynd som problemposter för build_repair_prompt — [] när tavlan
     täcker urvalet, och [] också när domen inte gick att läsa: en tavla ska
@@ -6833,7 +6896,7 @@ def doma_tackning(board: dict, *, model: str, llm, bok: str, delar: str = "",
     # i loggen i stället för att kosta genereringen.
     try:
         raw = llm(model, build_tackning_prompt(board, bok, delar, form, prov,
-                                               utanfor, fokus, los),
+                                               utanfor, fokus, los, forra),
                   options={"temperature": 0.2})
     except Exception as e:
         log(f"Täckningsdomaren kunde inte nås ({e}) — tavlan lämnas som den är.")
@@ -6945,6 +7008,7 @@ def _tackning_pass(board: dict, errors: list, *, model: str, llm, bok: str,
                    delar: str = "", form: Tavelform = STANDARDFORM,
                    prov: str = "", provtext: str = "", kurs: str = "",
                    fokus: str = "", forlaga_uppgifter: list | None = None,
+                   forra: str = "",
                    budget: int = TACKNING_MAX_ROUNDS,
                    log_cb: Callable[[str], None] | None = None,
                    token_cb: Callable[[str], None] | None = None) -> dict:
@@ -6969,7 +7033,7 @@ def _tackning_pass(board: dict, errors: list, *, model: str, llm, bok: str,
                          utanfor=build_utanfor_dom(kurs),
                          fokus=build_fokus_dom(fokus),
                          los=build_los_dom(forlaga_uppgifter),
-                         log_cb=log_cb)
+                         forra=forra, log_cb=log_cb)
     # Påhittade randfall sorteras bort HÄR, innan de kan bli en rad på
     # vänstern: ett fynd som inte går att peka ut i urvalet är inte en lucka
     # (se Randfallsgrinden ovan).
@@ -7006,7 +7070,7 @@ def _tackning_pass(board: dict, errors: list, *, model: str, llm, bok: str,
         return {"board": board, "errors": errors + fynd, "rounds": rundor}
     # Pilarna byts först, som i skrivningen (pilar_till_ger).
     kandidat = pilar_till_ger(kandidat, kurs)
-    _doc, fel = ws.validate_board_json(kandidat)
+    _doc, fel = _validera(kandidat, form)
     # Kompletteringen skriver exempel, och domarens förslag kan ha kommit i
     # den gamla formen eller med ett felräknat led. Sådant ska rättas i samma
     # runda som ett schemafel (lärarens dom 2026-09-23: «det ska bara funka
@@ -7076,6 +7140,7 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
                    regelsamling: bool | None = None,
                    prov: str = "", prov_dom: str = "", provtext: str = "",
                    forlaga_uppgifter: list | None = None,
+                   forra: str = "",
                    llm=llm_client.generate,
                    max_rounds: int = MAX_ROUNDS,
                    log_cb: Callable[[str], None] | None = None,
@@ -7085,6 +7150,10 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     `prov`, `prov_dom` och `provtext` är «Inför provet» (build_infor_prov,
     build_infor_prov_dom, provtexter): skrivningens block, domarens block och
     provets texter för provkopievakten. Tomma ger den gamla kedjan.
+
+    `forra` är kalenderns rubrik för klassens förra lektion
+    (routes_planning.forra_lektionen). Den går till skrivningen och domaren
+    som build_forra_block; tom ger den gamla kedjan.
 
     `forlaga_uppgifter` är lärarens val «Tavlan löser förlagans uppgifter»
     (forlaga.losbara): löser-blocket i skrivningen och domaren, och
@@ -7144,9 +7213,12 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     if form.regelsamling:
         log("Momentet är en regelsamling: vänstern skrivs som ett numrerat "
             "formelblad med regel ① härledd ur definitionen.")
+    # Förra lektionens rubrik (build_forra_block): tom sträng ger den gamla
+    # prompten.
+    forra_blk = build_forra_block(forra, form.ny_form)
     prompt = build_prompt(course, group, moment, memory, underlag, utfall, bok,
                           forlaga, svart, fokus, delar, form, prov,
-                          build_los_block(forlaga_uppgifter))
+                          build_los_block(forlaga_uppgifter), forra_blk)
     board = _llm_round(prompt, model, llm, token_cb=token_cb)
     rounds = 1
     # Ogiltig JSON (t.ex. trunkerat svar) → kör om från början inom budgeten
@@ -7163,7 +7235,7 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
                 "rounds": rounds}
     log("Tavlan är skriven — validerar …")
     board = pilar_till_ger(board, course)
-    _doc, errors = ws.validate_board_json(board)
+    _doc, errors = _validera(board, form)
     # Bokkopievakten går in HÄR, före reparationsrundorna: en avskriven
     # uppgift ska rättas i samma varv som ett schemafel, inte redovisas som en
     # varning läraren får läsa själv. Kostar inget anrop.
@@ -7210,8 +7282,8 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
         dom = _tackning_pass(res["board"], res["errors"], model=model, llm=llm,
                              bok=bok, delar=delar, form=form, prov=prov_dom,
                              provtext=provtext, kurs=course, fokus=fokus,
-                             forlaga_uppgifter=forlaga_uppgifter, log_cb=log,
-                             token_cb=token_cb)
+                             forlaga_uppgifter=forlaga_uppgifter,
+                             forra=forra_blk, log_cb=log, token_cb=token_cb)
         # `rounds` är den budget generering och renderingsreparation delar:
         # domaren har sin egen och lämnar därför siffran orörd.
         res = {"board": pilar_till_ger(dom["board"], course),
@@ -7664,7 +7736,7 @@ def refine_board(board: dict, instruction: str, *, model: str,
                 "errors": [{"path": "svar", "code": "json",
                             "message": "modellen svarade inte med giltig JSON"}],
                 "rounds": 1}
-    _doc, errors = ws.validate_board_json(candidate)
+    _doc, errors = _validera(candidate, form)
     errors = errors + _nya_utanfor(board, candidate, kurs)
     res = _repair_until_valid(candidate, errors, model=model, llm=llm,
                               rounds_used=1, max_rounds=max_rounds,

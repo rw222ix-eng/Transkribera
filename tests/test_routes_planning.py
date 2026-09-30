@@ -119,7 +119,9 @@ def _stub_generate(monkeypatch, result):
                       "niva": _kw.get("niva", ""),
                       # Klassens yrke ur klassprofilen (lärarens fynd
                       # 2026-09-12), läst på samma sätt och av samma skäl.
-                      "inriktning": _kw.get("inriktning", "")})
+                      "inriktning": _kw.get("inriktning", ""),
+                      # Förra lektionens rubrik (lärarens dom 2026-09-30).
+                      "forra": _kw.get("forra", "")})
         if log_cb:
             log_cb("Genererar lektionstavlan …")
         return result
@@ -364,11 +366,14 @@ def test_forra_gangen_star_forst_i_agendan(llm_ready, monkeypatch):
         {"datum": "2026-09-24", "tid": "10:00–11:00", "fran": 61, "till": 63,
          "rubrik": "Proportionalitet"},
     ])
-    _stub_generate(monkeypatch,
-                   {"board": _valid_board(), "errors": [], "rounds": 1})
+    anrop = _stub_generate(monkeypatch,
+                           {"board": _valid_board(), "errors": [], "rounds": 1})
     res = _procenttavla(llm_ready)
     punkter = _agendapunkter(res["board"])
     assert punkter[0] == "Förra gången: Andelen i procent"
+    # …och samma rubrik når skrivningen, så att vänsterns berättelse kan
+    # börja där (lärarens dom 2026-09-30, lesson_board.build_forra_block).
+    assert anrop[0]["forra"] == "Andelen i procent, forts"
     assert punkter[1:] == _agendapunkter(_valid_board())
     assert lesson_board.ws.validate_board_json(res["board"])[1] == []
 

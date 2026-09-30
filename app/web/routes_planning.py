@@ -1283,6 +1283,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
         infor = infor_prov_tavla(db_file, body, moment=moment,
                                  los=bool(los_uppg),
                                  regelsamling=regelsamling)
+        # «Förra gången»: kalenderns rubrik. Läses FÖRE skrivningen sedan
+        # lärarens dom 2026-09-30 («knyt an till förra lektionen som
+        # kontrast»): vänsterns berättelse får börja där
+        # (lesson_board.build_forra_block). satt_forra lägger samma rubrik i
+        # agendan efteråt.
+        forra = forra_lektionen(db_file, body, group)
 
         llm = arbiter.try_acquire_llm()
         if not llm:
@@ -1337,6 +1343,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     prov_dom=(infor or {}).get("dom") or "",
                     provtext=(infor or {}).get("text") or "",
                     forlaga_uppgifter=los_uppg or None,
+                    forra=forra,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 # Lektionstiden uppe till vänster är lärarens, inte modellens:
@@ -1344,7 +1351,6 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # starttid som redan följer med planeringen + schemats sluttid.
                 board = lesson_board.satt_tid(res["board"], starttid, sluttid)
                 # «Förra gången» likaså: kalenderns rubrik, inte modellens.
-                forra = forra_lektionen(db_file, body, group)
                 board = lesson_board.satt_forra(board, forra)
                 steg.na("sparar")
                 pid = uuid.uuid4().hex[:12]

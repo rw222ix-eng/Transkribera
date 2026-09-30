@@ -242,16 +242,18 @@ def test_modelltavlan_kanns_igen_pa_formeln_med_tal():
     """Kännetecknet är formeln med tal på vänstern: en bokstav till vänster
     om = och minst två tal som inte är ensiffriga till höger. Geometrins
     O = 2πr, bråkets ½bh och den förbjudna allmänna formen y = kx + m räknas
-    inte, och ingen few-shot gör det heller."""
+    inte. Bland shotarna är bara lärarens modelltavla 2026-09-30 (TE26A,
+    hyran K = 10 + 3t: två tal, ett flersiffrigt) en modelltavla."""
     for latex in ("K = 200 + 0{,}80x", "V = 400 - 50t", "h = 45 - 4{,}9t^2",
-                  "T = 21 - 21 \\cdot 2^{-t}", "V(t) = 400 - 50t"):
+                  "T = 21 - 21 \\cdot 2^{-t}", "V(t) = 400 - 50t",
+                  "K = 10 + 3t"):
         assert ws._ar_modellformel(latex), latex
     for latex in ("O = 2\\pi r", "A = \\frac{1}{2}bh", "y = kx + m",
                   "c = \\sqrt{a^2 + b^2}", "ax + b", "y = 25 - n",
-                  "(a + b)(c + d) = ac + ad", ""):
+                  "(a + b)(c + d) = ac + ad", "", "y = 2x + 1"):
         assert not ws._ar_modellformel(latex), latex
-    for _u, doc in lb.FEW_SHOTS:
-        assert not ws.ar_modelltavla(ws.validate_board_json(doc)[0].boards[0])
+    assert [ws.ar_modelltavla(ws.validate_board_json(doc)[0].boards[0])
+            for _u, doc in lb.FEW_SHOTS] == [True, False]
 
 
 def test_bara_modelltavlan_far_den_storre_budgeten():
@@ -274,11 +276,13 @@ def test_prompten_bar_modellreglerna():
     assert "BARA BOKENS BETECKNINGAR" in p
     assert "y = kx + m" in p and "riktningskoefficient" in p
     assert "aldrig «en rät linje»" in p
-    # 2–3. Bokens teoriexempel med neutrala namn; varje bokstav förklarad.
-    assert "BOKENS TEORIEXEMPEL" in p
-    assert "«Abonnemang A» och «B»" in p
-    assert "VARJE bokstav och konstant med vad den är och sin enhet" in p
-    assert "det rörliga är 0,80x, inte 0,80" in p
+    # 2–3. Vänsterns modell är ett EGET samband (lärarens dom 2026-09-30,
+    # hyran K = 10 + 3t mot högerns B = 100 − 6x), inte bokens teoriexempel;
+    # varje bokstav förklarad.
+    assert "Vänsterns modell är ett EGET enkelt samband" in p
+    assert "aldrig bokens teoriexempel och aldrig högerns" in p
+    assert "Varje bokstav förklaras med vad den är och sin enhet" in p
+    assert "det rörliga är 3t, inte 3" in p
     # 4–6. Giltighetsområdet: konkret, aldrig ibland-regel, heltal.
     assert "aldrig med en oförklarad bokstav (0 ≤ x ≤ a)" in p
     assert "(kx + m ≥ 0)" in p

@@ -661,6 +661,13 @@ _MAX_ITEM_CHARS = 50
 # 194. Taket är 194 + ~5 %. Det som håller vänstern kort är inte talet utan
 # formen: fyra frågor, högst åtta rader under dem, högst ~28 tecken per rad
 # (lesson_board.vanstervakt), och ingen «Att tänka på».
+#
+# MÄTT MOT LÄRARENS TVÅ TAVLOR 2026-09-30, OCH ORÖRT. Vänstern är sedan dess
+# en berättelse i tre eller fyra steg (lesson_board _VANSTER). NA26F «Sinus,
+# cosinus, tangens» bär 131 tecken, figurerna och kvoterna kostar ingenting.
+# TE26A «Modeller och rimlighet» bär 354: förra gångens formel, lika och
+# olika, hyran med sina bokstäver. Den är en modelltavla (K = 10 + 3t, se
+# _ar_modellformel) och vägs mot 400. Ingen av dem behövde ett högre tak.
 _MAX_BOARD_TEXT = 205
 _MAX_COLUMN_TEXT = 170
 # MODELLTAVLOR FÅR MER (lärarens beslut 2026-09-17). Hennes godkända tavla
@@ -951,11 +958,17 @@ def _check_siffror_vanster(sections: list, path: str,
     sedan 2026-09-23, se kommentaren ovan om facitvakten."""
     # Ankaret slås upp EN gång per flöde och bärs sedan ned genom row/col:
     # undantaget gäller tavlan, inte varje spalt för sig.
-    _siffror_rek(sections, path, errors, _ankaret(sections))
+    # PRÖVNINGEN I TVÅ RADER (lärarens tavla 2026-09-30, TE26A «Modeller och
+    # rimlighet»): under «4. Rimligt eller orimligt?» står «t = 20 ger K = 70»
+    # och «t = −5 ger K = −5», var och en med sin etikett. Det är vänsterns
+    # jättelätta exempel med egna tal, inte en uträkning av en högeruppgift,
+    # och läraren skrev dem själv. Raderna under ett «X eller Y?»-steg släpps.
+    fria = {id(m) for m in _eller_rader(sections)}
+    _siffror_rek(sections, path, errors, _ankaret(sections), fria)
 
 
 def _siffror_rek(sections: list, path: str, errors: list[dict],
-                 ankare) -> None:
+                 ankare, fria: frozenset | set = frozenset()) -> None:
     undantag = _fritt_vanligt_fel(sections)
     # Randfallen under «Att tänka på» var undantagna här 2026-09-20 till
     # 2026-09-29, då läraren strök blocket (se _ETIKETT_MAX ovan). Raderna
@@ -965,7 +978,8 @@ def _siffror_rek(sections: list, path: str, errors: list[dict],
     for si, sec in enumerate(sections or []):
         spath = f"{path}[{si}]"
         if isinstance(sec, MathSection):
-            if sec is undantag or (ankare is not None and sec is ankare):
+            if sec is undantag or (ankare is not None and sec is ankare) \
+                    or id(sec) in fria:
                 continue
             # Regel 8b: på vänstern står bokstäver. En rad som RÄKNAR med
             # tal är ett exempel, och exempel bor på högertavlan, utom
@@ -983,7 +997,8 @@ def _siffror_rek(sections: list, path: str, errors: list[dict],
                                    "flytta den till det exempel den hör "
                                    "till."))
         elif isinstance(sec, (CalloutSection, RowSection, ColSection)):
-            _siffror_rek(sec.children, f"{spath}.children", errors, ankare)
+            _siffror_rek(sec.children, f"{spath}.children", errors, ankare,
+                         fria)
 
 
 # TANKSTRECKSVAKTEN (spåret 2026-09-06: «skriv kortare utan em dash», sex
@@ -1018,14 +1033,26 @@ _MODELL_VL_RE = re.compile(r"^\s*[A-Za-z]\s*(\([a-z]\))?\s*=")
 _MODELL_TAL_RE = re.compile(r"\d{2,}|\d+(?:\{,\}|,)\d+")
 
 
+# MINST ETT FLERSIFFRIGT sedan lärarens tavla 2026-09-30 (TE26A «Modeller
+# och rimlighet», dokument 303). Vänsterns egen modell var hyran K = 10 + 3t,
+# två tal varav ett ensiffrigt, och tavlan vägdes mot det vanliga taket 205
+# fast hon godkänt 354 tecken (förra gångens formel, lika och olika, hyran
+# med sina bokstäver). Två tal där minst ett inte är ett ensiffrigt heltal
+# räcker nu. y = 2x + 1 (två ensiffriga) och y = 25 − n (ett tal) är
+# fortfarande ingen modell.
+_TAL_RE = re.compile(r"\d+(?:\{,\}|,)\d+|\d+")
+
+
 def _ar_modellformel(latex: str) -> bool:
-    """«K = 200 + 0{,}80x»: en bokstav (eller V(t)) till vänster om =, och
-    till höger minst två tal som inte är ensiffriga heltal."""
+    """«K = 200 + 0{,}80x», «K = 10 + 3t»: en bokstav (eller V(t)) till
+    vänster om =, och till höger minst två tal varav minst ett inte är ett
+    ensiffrigt heltal."""
     m = _MODELL_VL_RE.match(latex or "")
     if not m:
         return False
     hoger = _talrensad(latex[m.end():])
-    return len(_MODELL_TAL_RE.findall(hoger)) >= 2
+    return len(_TAL_RE.findall(hoger)) >= 2 \
+        and len(_MODELL_TAL_RE.findall(hoger)) >= 1
 
 
 def _math_i_flodet(sections: list, ut: list[str]) -> None:
@@ -1146,6 +1173,25 @@ def _fraga4_etiketter(sections: list) -> list:
     return []
 
 
+def _eller_rader(sections: list) -> list:
+    """De svarta math-raderna under varje numrerat «X eller Y?»-steg på
+    vänstern, fram till nästa feta rad."""
+    ut: list = []
+    for j, sec in enumerate(sections or []):
+        if isinstance(sec, (CalloutSection, RowSection, ColSection)):
+            ut += _eller_rader(sec.children)
+            continue
+        if not (isinstance(sec, TextSection) and sec.weight == 700
+                and _ELLER_FRAGA_RE.match(sec.text)):
+            continue
+        for nasta in sections[j + 1:]:
+            if isinstance(nasta, TextSection) and nasta.weight == 700:
+                break
+            if isinstance(nasta, MathSection) and nasta.color != "red":
+                ut.append(nasta)
+    return ut
+
+
 def _ar_inte_etiketter(sections: list) -> list:
     """Etiketterna under ÄR/INTE-raderna på vänstertavlan, eller []."""
     return _fraga4_etiketter(sections) or _ar_inte_2309(sections)
@@ -1222,11 +1268,14 @@ def _ar_rubrikrad(sec) -> bool:
 
     DE FYRA FRÅGORNA (lärarens tavla 2026-09-29) är längre: «4. Formel eller
     ekvation?» är 25 tecken. En NUMRERAD fet rad får därför vara 32 tecken
-    och ändå vara en rubrik; frågan är vänsterns disposition, inte prosa."""
+    och ändå vara en rubrik; frågan är vänsterns disposition, inte prosa.
+
+    36 sedan lärarens tavla 2026-09-30 (NA26F): berättelsens sista steg
+    heter «3. Vad blir sin v, cos v och tan v?», 35 tecken."""
     if not (isinstance(sec, TextSection) and sec.weight == 700):
         return False
     return len(sec.text) <= 20 or (
-        len(sec.text) <= 32 and bool(_NUMRERAD_RE.match(sec.text)))
+        len(sec.text) <= 36 and bool(_NUMRERAD_RE.match(sec.text)))
 
 
 _NUMRERAD_RE = re.compile(r"^\s*\d+\.\s")

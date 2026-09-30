@@ -119,7 +119,9 @@ def test_omskrivningen_behaller_en_sifferrad_lararen_bett_om():
     _p, fel = ws.validate_board_json(svar)
     assert [f["code"] for f in fel] == ["siffror_vanster"], fel
     llm, calls = _stub_llm([json.dumps(svar)])
+    # Regel 8b är regelsamlingens sedan 2026-09-30 (lesson_board._validera):
+    # den nya formens berättelse bär egna tal på vänstern.
     res = lb.refine_board(fore, "lägg till raden med 64 sist i spalten",
-                          model="", llm=llm)
+                          model="", llm=llm, regelsamling=True)
     assert len(calls) == 1 and res["board"] == svar
     assert [f["code"] for f in res["errors"]] == ["siffror_vanster"]
