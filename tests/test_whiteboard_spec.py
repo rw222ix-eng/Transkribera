@@ -746,6 +746,79 @@ def test_bagar_i_grader_blir_radianer():
     assert ws.validate_board_json(ut)[1] == []
 
 
+def _figur(ut: dict) -> dict:
+    return ut["boards"][0]["sections"][0]
+
+
+def test_figurtexter_forankras_utanfor_benet():
+    """Lärarens handrättning 2026-09-30 (NA26F, dokument 304): motorn
+    förankrar figurtexter i `start`, modellen skriver mitten, och «a = 12 m»
+    kröp in över triangelns lodräta ben. Text vänster om ett lodrätt ben
+    får `end` strax utanför benet, text inne i figuren eller vid en annan
+    kant `middle` på samma plats. En satt anchor rörs inte. Två likformiga
+    trianglar: «12» vid den lillas ben ligger inne i den stora men utanför
+    sin egen, och förankras vid den lillas ben."""
+    graf = {"kind": "graph", "width": 290, "height": 175,
+            "xRange": [-0.6, 3.8], "yRange": [-0.35, 2.75], "axes": False,
+            "polygons": [{"pts": [[0, 0], [3.2, 0], [0, 2.4]]},
+                         {"pts": [[1.6, 0], [3.2, 0], [1.6, 1.2]]}],
+            "texts": [{"x": -0.3, "y": 1.2, "text": "24"},
+                      {"x": 1.35, "y": 0.6, "text": "12"},
+                      {"x": 2.6, "y": 0.85, "text": "20"},
+                      {"x": 1.6, "y": -0.25, "text": "b = ?"},
+                      {"x": -0.3, "y": 0.5, "text": "egen", "anchor": "start"}]}
+    ut = ws.normalize_board(_doc(_board(sections=[graf])))
+    t = _figur(ut)["texts"]
+    assert t[0]["anchor"] == "end" and -0.2 < t[0]["x"] < 0
+    assert t[1]["anchor"] == "end" and 1.4 < t[1]["x"] < 1.6
+    assert (t[2]["anchor"], t[2]["x"]) == ("middle", 2.6)
+    assert (t[3]["anchor"], t[3]["x"]) == ("middle", 1.6)
+    assert (t[4]["anchor"], t[4]["x"]) == ("start", -0.3)
+    assert "anchor" not in graf["texts"][0]
+    assert ws.validate_board_json(ut)[1] == []
+    # En funktionsgraf utan polygoner rörs inte.
+    kurva = {"kind": "graph", "width": 300, "height": 200,
+             "xRange": [-1, 5], "yRange": [-1, 5],
+             "plots": [{"expr": "x"}], "texts": [{"x": 2, "y": 3, "text": "y = x"}]}
+    ut = ws.normalize_board(_doc(_board(sections=[kurva])))
+    assert "anchor" not in _figur(ut)["texts"][0]
+
+
+def test_bagens_etikett_i_en_spetsig_vinkel_blir_en_text_vid_horet():
+    """Samma handrättning: v i triangeln 5-12-13 (22,6°) lades av motorn
+    långt ut på bisektrisen. Under 30° blir etiketten en egen text vid
+    bisektrisen, avståndet r + 0,22 från hörnet; en bredare vinkel behåller
+    sin etikett."""
+    import math
+    graf = {"kind": "graph", "width": 400, "height": 175,
+            "xRange": [-1.05, 5.15], "yRange": [-0.45, 1.3], "axes": False,
+            "polygons": [{"pts": [[0, 0], [1.2, 0], [0, 0.5]]},
+                         {"pts": [[2.5, 0], [4.9, 0], [2.5, 1.2]]}],
+            "arcs": [{"cx": 1.2, "cy": 0, "r": 0.3,
+                      "from": math.pi - math.atan2(0.5, 1.2), "to": math.pi,
+                      "interior": [0.7, 0.08], "label": "v",
+                      "labelColor": "blue"},
+                     {"cx": 4.9, "cy": 0, "r": 0.4, "from": 180 - 26.57,
+                      "to": 180, "interior": [4.4, 0.1], "label": "u"}]}
+    ut = ws.normalize_board(_doc(_board(sections=[graf])))
+    g = _figur(ut)
+    assert "label" not in g["arcs"][0]
+    v = [t for t in g["texts"] if t["text"] == "v"]
+    assert len(v) == 1 and v[0]["anchor"] == "middle"
+    assert v[0]["color"] == "blue" and 0.6 < v[0]["x"] < 0.75
+    assert 0 < v[0]["y"] < 0.15
+    # 26,57° i grader räknas först om till radianer och är också spetsig.
+    assert "label" not in g["arcs"][1]
+    assert [t["text"] for t in g["texts"]] == ["v", "u"]
+    bred = {**graf, "arcs": [{"cx": 0, "cy": 0.5, "r": 0.2,
+                              "from": -math.pi / 2,
+                              "to": -math.atan2(0.5, 1.2),
+                              "interior": [0.3, 0.2], "label": "w"}]}
+    ut = ws.normalize_board(_doc(_board(sections=[bred])))
+    assert _figur(ut)["arcs"][0]["label"] == "w"
+    assert ws.validate_board_json(ut)[1] == []
+
+
 def test_ar_inte_etiketterna_kostar_inget_i_budgeten():
     """ÄR/INTE (lärarens dom 2026-09-23 kväll): ett fall som ÄR begreppet och
     ett som INTE är det, var sin math-rad med en etikett under. Etiketterna

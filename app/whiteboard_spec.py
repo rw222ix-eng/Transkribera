@@ -1548,6 +1548,160 @@ def _bagar_radianer(nod) -> None:
             _bagar_radianer(v)
 
 
+# FIGURTEXTERNAS FÖRANKRING (lärarens handrättning 2026-09-30, NA26F «Sinus,
+# cosinus, tangens», dokument 304). Motorn (tavla-wb.js, texts i WB.graph)
+# förankrar en fri figurtext i `start`, alltså i textens vänsterkant, men
+# modellen skriver positionen som textens MITT. «a = 12 m» vänster om
+# triangelns lodräta ben kröp därför in i triangeln och över benet. Här får
+# varje text som saknar `anchor` en: ligger den utanför figuren och närmast
+# ett lodrätt ben, inom benets höjd, sätts den strax utanför benet (`end`
+# till vänster, `start` till höger, 6 px luft), annars `middle` på samma
+# plats. Bara i grafer med polygoner: en funktionsgrafs etiketter är inte
+# skrivna mot någon kant. En text som redan har `anchor` rörs inte, så
+# lärarens egna figurer står som hon satte dem.
+_ANKAR_LUFT_PX = 6.0
+_ANKAR_BEN_TOL_PX = 4.0
+
+
+def _grafskalor(g: dict) -> tuple[float, float] | None:
+    """Pixel per dataenhet i x och y, som motorns xScale/yScale."""
+    try:
+        (x0, x1), (y0, y1) = g["xRange"], g["yRange"]
+        pad = g.get("padding")
+        pad = 30.0 if not isinstance(pad, (int, float)) or isinstance(pad, bool) \
+            else float(pad)
+        kx = (float(g["width"]) - 1.5 * pad) / (float(x1) - float(x0))
+        ky = (float(g["height"]) - 1.5 * pad) / (float(y1) - float(y0))
+    except (KeyError, TypeError, ValueError, ZeroDivisionError):
+        return None
+    return (kx, ky) if kx > 0 and ky > 0 else None
+
+
+def _polygonkanter(g: dict) -> list[tuple[tuple, tuple, list]]:
+    """(a, b, polygonens punkter) för varje kant i grafens polygoner."""
+    kanter = []
+    for p in g.get("polygons") or []:
+        pts = [tuple(map(float, q[:2])) for q in (p or {}).get("pts") or []
+               if isinstance(q, (list, tuple)) and len(q) >= 2]
+        if len(pts) >= 2:
+            kanter += [(a, b, pts) for a, b in zip(pts, pts[1:] + pts[:1])]
+    return kanter
+
+
+def _inuti(x: float, y: float, pts: list) -> bool:
+    inne = False
+    for (x1, y1), (x2, y2) in zip(pts, pts[1:] + pts[:1]):
+        if (y1 > y) != (y2 > y) and x < x1 + (y - y1) * (x2 - x1) / (y2 - y1):
+            inne = not inne
+    return inne
+
+
+def _pixelavstand(x, y, a, b, kx, ky) -> float:
+    px, py = x * kx, y * ky
+    ax, ay, bx, by = a[0] * kx, a[1] * ky, b[0] * kx, b[1] * ky
+    dx, dy = bx - ax, by - ay
+    n = dx * dx + dy * dy
+    t = 0.0 if n == 0 else max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / n))
+    return math.hypot(px - ax - t * dx, py - ay - t * dy)
+
+
+def _forankra_figurtexter(nod) -> None:
+    if isinstance(nod, dict):
+        if nod.get("kind") == "graph" and nod.get("polygons") \
+                and isinstance(nod.get("texts"), list):
+            skalor = _grafskalor(nod)
+            kanter = _polygonkanter(nod)
+            for t in nod["texts"] if skalor and kanter else []:
+                if not isinstance(t, dict) or t.get("anchor") is not None:
+                    continue
+                x, y = t.get("x"), t.get("y")
+                if not all(isinstance(v, (int, float)) and not isinstance(v, bool)
+                           for v in (x, y)):
+                    continue
+                kx, ky = skalor
+                t["anchor"] = "middle"
+                # Närmaste kanten avgör, och bara dess egen polygon: «12» vid
+                # den lilla triangelns ben ligger inne i den stora (lärarens
+                # figur med två likformiga trianglar) men utanför sin egen.
+                a, b, pts = min(kanter, key=lambda k: _pixelavstand(
+                    x, y, k[0], k[1], kx, ky))
+                if _inuti(x, y, pts):
+                    continue
+                lodratt = abs(a[0] - b[0]) * kx < 0.5
+                lo, hi = sorted((a[1], b[1]))
+                tol = _ANKAR_BEN_TOL_PX / ky
+                if lodratt and lo - tol <= y <= hi + tol and x != a[0]:
+                    vanster = x < a[0]
+                    t["anchor"] = "end" if vanster else "start"
+                    t["x"] = round(a[0] + (-1 if vanster else 1)
+                                   * _ANKAR_LUFT_PX / kx, 4)
+        for v in nod.values():
+            _forankra_figurtexter(v)
+    elif isinstance(nod, list):
+        for v in nod:
+            _forankra_figurtexter(v)
+
+
+# BÅGENS ETIKETT I EN SPETSIG VINKEL (samma handrättning). Motorn lägger
+# arcs[].label på bisektrisen så långt ut att etiketten går fri från båda
+# strålarna, och i en spetsig vinkel är det långt: v i triangeln 5-12-13
+# (22,6°) hamnade en bit ut på kateten, långt från hörnet. Läraren skrev i
+# stället en egen text vid bisektrisen på avståndet r + 0,22, och det satt.
+# Under 30° görs samma sak här: etiketten flyttas till en text i bågens färg.
+# Vinkeln och bisektrisen räknas som motorn räknar dem, i pixelrymden och
+# med interior som väljer den korta eller långa svepningen.
+_SPETSIG_BAGE = math.radians(30)
+_BAGE_LUFT = 0.22
+
+
+def _bagetiketter(nod) -> None:
+    if isinstance(nod, dict):
+        if nod.get("kind") == "graph" and isinstance(nod.get("arcs"), list):
+            skalor = _grafskalor(nod)
+            for a in nod["arcs"] if skalor else []:
+                if not isinstance(a, dict) or not a.get("label"):
+                    continue
+                try:
+                    cx, cy, r = float(a["cx"]), float(a["cy"]), float(a["r"])
+                    fran, till = float(a["from"]), float(a["to"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+                delta = till - fran
+                while delta > math.pi:
+                    delta -= 2 * math.pi
+                while delta < -math.pi:
+                    delta += 2 * math.pi
+                inre = a.get("interior")
+                if isinstance(inre, (list, tuple)) and len(inre) >= 2:
+                    mal = math.atan2(float(inre[1]) - cy, float(inre[0]) - cx)
+                    kort = fran + delta / 2
+                    if math.cos(mal - kort) < math.cos(mal - kort - math.pi):
+                        delta = delta - 2 * math.pi if delta >= 0 \
+                            else delta + 2 * math.pi
+                if abs(delta) >= _SPETSIG_BAGE:
+                    continue
+                kx, ky = skalor
+                mitt = fran + delta / 2
+                d = (r + _BAGE_LUFT) * kx
+                text = {"x": round(cx + d * math.cos(mitt) / kx, 4),
+                        "y": round(cy + d * math.sin(mitt) / ky, 4),
+                        "text": str(a.pop("label")),
+                        "size": a.pop("labelSize", None) or 17,
+                        "color": a.pop("labelColor", None) or a.get("color")
+                        or "blue",
+                        "italic": True, "anchor": "middle"}
+                a.pop("labelWeight", None)
+                a.pop("labelItalic", None)
+                if not isinstance(nod.get("texts"), list):
+                    nod["texts"] = []
+                nod["texts"].append(text)
+        for v in nod.values():
+            _bagetiketter(v)
+    elif isinstance(nod, list):
+        for v in nod:
+            _bagetiketter(v)
+
+
 def normalize_board(data: dict) -> dict:
     """Deterministisk normalisering FÖRE validering/rendering (bench Fas 2):
 
@@ -1561,7 +1715,10 @@ def normalize_board(data: dict) -> dict:
       ska inte kosta en reparationsrunda; okända nycklar i övrigt fälls
       fortfarande av extra="forbid"),
     * tick-etiketter utan dx/dy får ett avstånd från axeln (_tickavstand),
-    * vinkelbågar i grader räknas om till radianer (_bagar_radianer).
+    * vinkelbågar i grader räknas om till radianer (_bagar_radianer),
+    * en bågetikett i en spetsig vinkel blir en text vid hörnet
+      (_bagetiketter), och figurtexter utan anchor förankras
+      (_forankra_figurtexter).
 
     Ren dict-transform — påverkar inte listpunkter (att korta dem är ett
     innehållsbeslut som lämnas till modellen via text-lang-regeln)."""
@@ -1571,6 +1728,8 @@ def normalize_board(data: dict) -> dict:
     _byt_thickness(data)
     _tickavstand(data)
     _bagar_radianer(data)
+    _bagetiketter(data)
+    _forankra_figurtexter(data)
     for board in data.get("boards") or []:
         if not isinstance(board, dict):
             continue

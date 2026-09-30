@@ -2396,6 +2396,7 @@ function layoutFlow(sections, board, opts) {
     boardColor,
     gap: defaultGap = 12,
     measureHost,    // optional: where to measure against (default: board)
+    spaltbalans = true, // mät raders spaltbalans (av i högertavlans kolumner)
   } = opts;
   const mHost = measureHost || board;
 
@@ -2496,8 +2497,14 @@ function layoutFlow(sections, board, opts) {
        spalterna 406 och 174 px. En symmetrisk vakt hade skickat den till
        reparation, och reparationen hade fyllt spalt 2 med text han just
        strök. Klagomålet 2026-09-21 gällde en tom FÖRSTA spalt, och den
-       fälls som förut. */
-    if (sec.kind === 'row' && (sec.children || []).some(c => c && c.kind === 'col')) {
+       fälls som förut.
+
+       BARA VÄNSTERNS RADER sedan lärarens handrättning 2026-09-30 (NA26F,
+       dokument 304): i högerns A-kolumn står uppgiftstexten i en col BREDVID
+       sin triangel, så att kolumnerna blir lika höga, och texten är
+       naturligt kortare än figuren (59 %). Högertavlans kolumnflöden mäts
+       därför inte (spaltbalans: false i kolumnläget nedan). */
+    if (spaltbalans && sec.kind === 'row' && (sec.children || []).some(c => c && c.kind === 'col')) {
       const hojder = [...node.children].map(n => n.offsetHeight).filter(h => h > 0);
       if (hojder.length >= 2) {
         const kvot = hojder[0] / Math.max(...hojder);
@@ -2590,6 +2597,7 @@ function renderBoard(boardSpec, container) {
           maxY: innerY + innerH,
           boardColor: color,
           gap: col.gap ?? 12,
+          spaltbalans: false,
         },
         col.name || `col@x=${Math.round(x)}`
       );
