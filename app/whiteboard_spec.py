@@ -31,6 +31,7 @@ Tre lager:
 from __future__ import annotations
 
 import json
+import math
 import re
 from typing import Annotated, Literal, Union
 
@@ -1516,6 +1517,37 @@ def _tickavstand(nod) -> None:
             _tickavstand(v)
 
 
+# BÅGARNA I GRADER (jobb 1185, NA26F Trigonometri 2026-10-02). Motorn
+# (app/web/ui/tavla-wb.js, arcs i WB.graph) läser arcs[].from/to i radianer,
+# moturs från +x, men modellen skriver grader: {"from": 143.13, "to": 180}
+# för vinkeln v i en rätvinklig triangel ritades som en nästan hel cirkel
+# utanför figuren. En båge i radianer ryms inom ±2π, så ett belopp över det
+# kan bara vara grader och räknas om här, på samma ställe som tick-avståndet.
+# Prompten nämner inte enheten och rörs inte (kassettregeln). Små bågar i
+# grader (under 6,29°) syns inte på beloppet och står kvar.
+_RADIAN_TAK = 2 * math.pi + 0.01
+
+
+def _bagar_radianer(nod) -> None:
+    if isinstance(nod, dict):
+        if nod.get("kind") == "graph" and isinstance(nod.get("arcs"), list):
+            for a in nod["arcs"]:
+                if not isinstance(a, dict):
+                    continue
+                vinklar = [a.get(k) for k in ("from", "to")]
+                if not all(isinstance(v, (int, float))
+                           and not isinstance(v, bool) for v in vinklar):
+                    continue
+                if max(abs(v) for v in vinklar) > _RADIAN_TAK:
+                    a["from"], a["to"] = (round(math.radians(v), 6)
+                                          for v in vinklar)
+        for v in nod.values():
+            _bagar_radianer(v)
+    elif isinstance(nod, list):
+        for v in nod:
+            _bagar_radianer(v)
+
+
 def normalize_board(data: dict) -> dict:
     """Deterministisk normalisering FÖRE validering/rendering (bench Fas 2):
 
@@ -1528,7 +1560,8 @@ def normalize_board(data: dict) -> dict:
       thickness — två inspelningar av tre 2026-08-21 — och en entydig synonym
       ska inte kosta en reparationsrunda; okända nycklar i övrigt fälls
       fortfarande av extra="forbid"),
-    * tick-etiketter utan dx/dy får ett avstånd från axeln (_tickavstand).
+    * tick-etiketter utan dx/dy får ett avstånd från axeln (_tickavstand),
+    * vinkelbågar i grader räknas om till radianer (_bagar_radianer).
 
     Ren dict-transform — påverkar inte listpunkter (att korta dem är ett
     innehållsbeslut som lämnas till modellen via text-lang-regeln)."""
@@ -1537,6 +1570,7 @@ def normalize_board(data: dict) -> dict:
     data = json.loads(json.dumps(data))          # djupkopia, rör ej original
     _byt_thickness(data)
     _tickavstand(data)
+    _bagar_radianer(data)
     for board in data.get("boards") or []:
         if not isinstance(board, dict):
             continue

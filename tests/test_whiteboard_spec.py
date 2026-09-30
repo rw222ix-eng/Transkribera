@@ -715,6 +715,37 @@ def test_tick_etiketterna_far_avstand_fran_axeln():
     assert ws.validate_board_json(ut)[1] == []
 
 
+def test_bagar_i_grader_blir_radianer():
+    """Jobb 1185 (NA26F Trigonometri 2026-10-02): modellen skrev vinkeln v
+    som {"from": 143.13, "to": 180}, motorn läser radianer och ritade en
+    nästan hel cirkel utanför triangeln. Normaliseringen räknar om grader
+    och rör inte bågar som redan står i radianer."""
+    import math
+    tri = [[0, 0], [4, 0], [0, 3]]
+    graf = {"kind": "graph", "width": 360, "height": 280,
+            "xRange": [-0.5, 4.5], "yRange": [-0.5, 3.5],
+            "polygons": [{"pts": tri}],
+            "arcs": [{"cx": 4, "cy": 0, "r": 0.6, "from": 143.13, "to": 180,
+                      "interior": [1.33, 1]},
+                     {"cx": 0, "cy": 0, "r": 0.4, "from": 0,
+                      "to": math.pi / 2, "interior": [1.33, 1]},
+                     {"cx": 0, "cy": 3, "r": 0.5, "from": -90, "to": -36.87,
+                      "interior": [1.33, 1]}]}
+    data = _doc(_board(sections=[
+        {"kind": "row", "children": [
+            {"kind": "col", "width": 400, "children": [graf]}]}]))
+    ut = ws.normalize_board(data)
+    bagar = ut["boards"][0]["sections"][0]["children"][0]["children"][0]["arcs"]
+    assert bagar[0]["from"] == pytest.approx(math.radians(143.13), abs=1e-6)
+    assert bagar[0]["to"] == pytest.approx(math.pi, abs=1e-6)
+    assert bagar[1]["from"] == 0 and bagar[1]["to"] == math.pi / 2
+    assert bagar[2]["from"] == pytest.approx(-math.pi / 2, abs=1e-6)
+    assert bagar[2]["to"] == pytest.approx(math.radians(-36.87), abs=1e-6)
+    # Originalet rörs inte, och tavlan validerar.
+    assert graf["arcs"][0]["from"] == 143.13
+    assert ws.validate_board_json(ut)[1] == []
+
+
 def test_ar_inte_etiketterna_kostar_inget_i_budgeten():
     """ÄR/INTE (lärarens dom 2026-09-23 kväll): ett fall som ÄR begreppet och
     ett som INTE är det, var sin math-rad med en etikett under. Etiketterna
