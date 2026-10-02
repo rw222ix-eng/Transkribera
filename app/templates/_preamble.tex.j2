@@ -42,6 +42,9 @@
 ((* if not (forlaga is defined and forlaga) *))
 \usepackage{newtxtext,newtxmath}
 ((* endif *))
+((# Vektorpilen (Rickard 2026-10-03): \vec var för liten. Samma pil som
+    skärmen (matte.js vektorpil): \overrightarrow på fast höjd. #))
+\renewcommand{\vec}[1]{\overrightarrow{\vphantom{b}#1}}
 ((* if forlaga is defined and forlaga *))
 ((# Förlagans egen sättyta: 25 mm runt om (595,28 − 2·70,87 pt = 453,5 pt
     textbredd, exakt lärarens). #))

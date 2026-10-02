@@ -49,9 +49,24 @@
   const RUTA = document.createElement('div');
   const KANDA = ['throwOnError', 'displayMode'];
   katex.__cachad = true;
+  /* VEKTORPILEN (Rickard 2026-10-03, NA26F:s blad inför prov 2): «den lilla
+     pilen ovanför bokstäverna är alldeles för liten och inte lika stor
+     ovanför alla bokstäver». KaTeX \vec är ett accenttecken som följer
+     glyfens bredd. En bokstav får i stället en \overrightarrow i fast bredd
+     (0,7 em), centrerad och alltid på samma höjd (\vphantom{b}); flera
+     tecken, som AB, får pilen över hela namnet på samma höjd. */
+  const VEKTOR = /\\(?:vec|overrightarrow)\s*(?:\{([^{}]*)\}|([A-Za-z0-9]))/g;
+  const vektorpil = tex => String(tex).replace(VEKTOR, (_, grupp, en) => {
+    const x = (grupp !== undefined ? grupp : en).trim();
+    return /^[A-Za-z0-9]$/.test(x)
+      ? '\\overrightarrow{\\vphantom{b}\\kern0.35em\\mathclap{' + x + '}\\kern0.35em}'
+      : '\\overrightarrow{\\vphantom{b}' + x + '}';
+  });
+  katex.vektorpil = vektorpil;
   katex.render = function (tex, el, opts) {
+    tex = vektorpil(tex);
     const flaggor = opts ? Object.keys(opts) : [];
-    if (flaggor.some(f => !KANDA.includes(f))) return original.apply(this, arguments);
+    if (flaggor.some(f => !KANDA.includes(f))) return original.call(this, tex, el, opts);
     const nyckel = (opts && opts.displayMode ? 'D' : 'I') + ':' + tex;
     let nod = lada.get(nyckel);
     if (nod === undefined) {
