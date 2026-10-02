@@ -7396,6 +7396,10 @@ def _validate(exam: dict, profil: str, koder: list[str] | None = None,
     # deluppgifterna balansen och stammen ska räknas på. Det som inte gick
     # att dela är ett fynd bland de andra i samma reparationsrunda.
     delfel = delfragor_till_deluppgifter(exam, profil)
+    # Deluppgiftens egen bokstav först i texten («a) Lös …») stryks på alla
+    # profiler: mallen sätter bokstaven (exam 156, se exam_spec.
+    # utan_egen_bokstav). Tyst rättelse, som sorteringen ovan.
+    exam_spec.stryk_delbokstaver(exam)
     doc, errors = exam_spec.validate_exam_json(exam, profil, niva_mal)
     errors = errors + delfel
     if doc is not None and profil == "prov":

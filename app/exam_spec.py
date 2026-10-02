@@ -1473,6 +1473,42 @@ def ordna_delar(exam: dict) -> bool:
     return True
 
 
+# ── DELUPPGIFTENS EGEN BOKSTAV I TEXTEN (NA26F prov 2, exam 156, 2026-10-02)
+# Deluppgifternas texter började med «a) », «b) » …, och pappret satte sin
+# egen bokstav framför: «a) a) Lös ekvationen …» på uppgift 1, 2, 3, 11 och
+# 12. Mallen och skärmen sätter bokstaven, så en deluppgift som börjar med
+# SIN EGEN bokstav och «)» får prefixet struket. Bara den egna: «b)» först i
+# a) är något annat och står kvar. Valideringen stryker det i datan
+# (exam_gen._validate, alla profiler), och renderingen gör samma sak defensivt
+# för gamla papper (exam_latex, plan.js franProv).
+_DELBOKSTAVER = "abcdefghijkl"
+
+
+def utan_egen_bokstav(text, index: int):
+    """Deluppgiftens text utan sin egen bokstav först («a) Lös …» → «Lös …»
+    på deluppgift 0). Annat än en sträng passerar."""
+    if not isinstance(text, str) or not 0 <= index < len(_DELBOKSTAVER):
+        return text
+    return re.sub(rf"^\s*{_DELBOKSTAVER[index]}\)\s*", "", text, count=1)
+
+
+def stryk_delbokstaver(exam: dict) -> list[str]:
+    """utan_egen_bokstav på varje deluppgift, på plats. Returnerar de
+    deluppgifter som rättades («1a», «2b»)."""
+    rattade: list[str] = []
+    uppgifter = exam.get("uppgifter") if isinstance(exam, dict) else None
+    for i, u in enumerate(uppgifter if isinstance(uppgifter, list) else [], 1):
+        delar = u.get("deluppgifter") if isinstance(u, dict) else None
+        for j, d in enumerate(delar if isinstance(delar, list) else []):
+            if not isinstance(d, dict):
+                continue
+            ny = utan_egen_bokstav(d.get("text"), j)
+            if ny != d.get("text"):
+                d["text"] = ny
+                rattade.append(f"{i}{_DELBOKSTAVER[j]}")
+    return rattade
+
+
 def rensa_svarsfalt(exam: dict) -> list[int]:
     """Ta bort svarsfälten på provets redovisningsuppgifter. Returnerar de
     uppgiftsnummer som rensades (1-baserat, listans ordning).

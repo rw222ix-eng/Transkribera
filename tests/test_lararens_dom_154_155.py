@@ -389,3 +389,54 @@ def test_infor_passet_skickar_bladets_profil_till_elevlasaren(monkeypatch):
                          max_rounds=0, prov=_blad(NEG_6), doma=True,
                          inriktning="Bygg och anläggning")
     assert sett.get("profil") == "arbetsblad"
+
+
+# ── 3. DELUPPGIFTENS EGEN BOKSTAV (NA26F prov 2, exam 156) ───────────────
+# Deluppgifterna började med «a) », «b) » …, och pappret skrev «a) a) Lös
+# ekvationen …» på uppgift 1, 2, 3, 11 och 12.
+
+def _prov156():
+    delar = [{"poang": [1, 0, 0], "text": "a) Lös ekvationen $2x + 3 = 11$.",
+              "losning": "$x = 4$", "bedomning": "+1 E korrekt svar"},
+             {"poang": [1, 0, 0], "text": "b)  Lös ekvationen $5x = 2x + 9$.",
+              "losning": "$x = 3$", "bedomning": "+1 E korrekt svar"},
+             {"poang": [1, 0, 0], "text": "a) står kvar, den är inte min.",
+              "losning": "$1$", "bedomning": "+1 E korrekt svar"}]
+    return {"titel": "Prov 2", "kurs": "Matematik, nivå 1c", "klass": "NA26F",
+            "hjalpmedel": "", "uppgifter": [
+                {"del": "B", "formaga": "P", "typ": "rutin",
+                 "poang": [0, 0, 0], "text": "Lös ekvationerna.",
+                 "losning": "", "bedomning": "", "deluppgifter": delar}]}
+
+
+def test_valideringen_stryker_deluppgiftens_egen_bokstav_pa_provet():
+    exam = _prov156()
+    exam_gen._validate(exam, "prov")
+    assert [d["text"] for d in exam["uppgifter"][0]["deluppgifter"]] == [
+        "Lös ekvationen $2x + 3 = 11$.", "Lös ekvationen $5x = 2x + 9$.",
+        "a) står kvar, den är inte min."]
+
+
+def test_valideringen_stryker_den_pa_bladet_ocksa():
+    exam = _prov156()
+    exam["uppgifter"][0]["del"] = None
+    exam_gen._validate(exam, "arbetsblad")
+    assert exam["uppgifter"][0]["deluppgifter"][0]["text"].startswith("Lös")
+
+
+def test_latex_visar_aldrig_dubbel_bokstav_pa_ett_gammalt_papper():
+    from app import exam_latex
+    doc, fel = exam_spec.validate_exam_json(_prov156(), "prov")
+    assert doc is not None, fel
+    tex = exam_latex.render_prov(doc)
+    assert "a) Lös" not in tex and "b)  Lös" not in tex
+    assert "Lös ekvationen" in tex
+    assert exam_spec.utan_egen_bokstav("c) Lös", 2) == "Lös"
+    assert exam_spec.utan_egen_bokstav("c) Lös", 0) == "c) Lös"
+
+
+def test_skarmen_stryker_bokstaven_i_franprov():
+    import pathlib
+    js = (pathlib.Path(__file__).parents[1] / "app" / "web" / "ui"
+          / "plan.js").read_text(encoding="utf-8")
+    assert "'abcdefghijkl'.charAt(k) + '\\\\)\\\\s*'" in js

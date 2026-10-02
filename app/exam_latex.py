@@ -1632,7 +1632,10 @@ def _build_view(doc: exam_spec.ExamDoc,
                 for j, d in enumerate(it.deluppgifter):
                     ev = _enhet_vy(
                         poang=d.poang, typ=d.typ or it.typ,
-                        formaga=d.formaga or it.formaga, text=d.text,
+                        formaga=d.formaga or it.formaga,
+                        # Mallen sätter bokstaven; ett gammalt papper med
+                        # «a) » först i texten fick «a) a) …» (exam 156).
+                        text=exam_spec.utan_egen_bokstav(d.text, j),
                         losning=d.losning, bedomning=d.bedomning,
                         alternativ=d.alternativ, ratt_alternativ=d.ratt_alternativ,
                         notis=d.notis,

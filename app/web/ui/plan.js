@@ -2831,7 +2831,12 @@
          till uppgiften. */
       if (u.elevlosningar) ut.elever = u.elevlosningar;
       if (delar.length) {
-        ut.del = delar.map(d => d.text || '');
+        /* Arket sätter bokstaven, så deluppgiftens egen «a) » först i texten
+           stryks (exam 156 fick «a) a) Lös …»). Spegel av
+           exam_spec.utan_egen_bokstav; alla ark läser u.del härifrån. */
+        ut.del = delar.map((d, k) => (k < 12 ? String(d.text || '')
+          .replace(new RegExp('^\\s*' + 'abcdefghijkl'.charAt(k) + '\\)\\s*'), '')
+          : d.text || ''));
         /* Deluppgifternas EGNA poäng — arket ska inte dela totalen jämnt. */
         ut.delp = delar.map(d => provSumma(d.poang));
         ut.delpeca = delar.map(d => (d.poang || [0, 0, 0]).slice(0, 3));
