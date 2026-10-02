@@ -290,7 +290,285 @@ window.Figurer = (() => {
     return rader.join('\n');
   }
 
-  const katalog = { graf, cirkel, triangel, cylinder, tallinje, staplar };
+  /* ══════════ PROVETS FIGURRECEPT (exam_spec.Figur) ══════════
+     Generatorn skriver figurer som recept, {"typ":"linjar","k":2,"m":1}, och
+     app/exam_figures.py gör TikZ av dem till LaTeX-pappret. Arbetsbladet och
+     gruppuppgiften har ingen LaTeX: deras PDF är skärmens avritning, och den
+     ritas härifrån. Utan posterna nedan stod uppgiften med «Figuren visar
+     grafen till …» och ingen graf (NA26F, exam 160, 2026-10-02).
+
+     Recepten är SPEGLAR av exam_figures.py, inte egna tolkningar: samma
+     definitionsmängd, samma axelfönster, samma ticks, samma etiketter på samma
+     ställen. Ändras ett recept där ska det ändras här, och testet
+     tests/test_figurer_exam_spec.py jämför de två.
+
+     Det enda som skiljer är en LIKFORMIG faktor U per recept. Pappret sätter
+     siffrorna i \footnotesize, skärmen i 17 pt (figur.js). Utan faktorn blev
+     en stapel på 1 cm bredare text än stapel; med den har figuren samma form,
+     bara ritad större, och bladets ruta krymper den till sin plats. */
+  const BOXW = 10, BOXH = 8;      // funktionsgrafernas ritruta (BOXW, BOXH)
+  const TRIW = 5;                 // triangelns längsta sida (TRIW)
+  /* Koordinat till CeTZ: fyra decimaler räcker långt under en tusendels mm. */
+  const r4 = v => String(Math.round(v * 1e4) / 1e4);
+  /* _nice_ticks: ~n runda tickvärden i [lo, hi], steg 1/2/2,5/5·10^k.
+     10^k räknas som 1/10^-k för negativa k, så att talet blir det korrekt
+     avrundade (som Pythons 10 ** -k) och ticksen landar på samma tal. */
+  function niceTicks(lo, hi, n = 5) {
+    const span = hi - lo;
+    if (span <= 0) return [lo];
+    const raw = span / n;
+    const e = Math.floor(Math.log10(raw));
+    const mag = e < 0 ? 1 / Math.pow(10, -e) : Math.pow(10, e);
+    let step = mag;
+    for (const m of [1, 2, 2.5, 5, 10]) {
+      step = m * mag;
+      if (span / step <= n + 1) break;
+    }
+    const ut = [];
+    let v = Math.ceil(lo / step) * step;
+    while (v <= hi + 1e-9) {
+      ut.push(Math.round(v * 1e10) / 1e10);
+      v += step;
+    }
+    return ut;
+  }
+  /* _minor: rutnätets mellanlinjer på halva tickavståndet, inom rutan. */
+  function minorLinjer(maj, boxMax) {
+    if (maj.length < 2) return [];
+    const h = (maj[1] - maj[0]) / 2, ut = [];
+    for (let v = maj[0] - h; v <= maj[maj.length - 1] + h + 1e-9; v += h) {
+      if (v >= -1e-9 && v <= boxMax + 1e-9 && maj.every(m => Math.abs(v - m) > 1e-6)) ut.push(Math.round(v * 1e10) / 1e10);
+    }
+    return ut;
+  }
+  /* _flabel: elevens tal. Aldrig 1e+06, decimalkomma, högst fyra decimaler.
+     Minustecknet är ett riktigt minus, inte bindestrecket. */
+  function etikett(x) {
+    const s = x === Math.trunc(x) ? String(Math.trunc(x))
+      : x.toFixed(4).replace(/0+$/, '').replace(/\.$/, '').replace('.', ',');
+    return s.replace(/^-/, '−');
+  }
+  /* Fri text (stapeldiagrammets kategorier) sätts som en Typst-sträng, inte som
+     markup: «*», «_», «#» och «$» i ett kategorinamn blir då bokstäver. */
+  const strang = s => '#' + JSON.stringify(String(s).replace(/[\u0000-\u001f\u007f]/g, ' '));
+
+  /* ── Funktionsgrafen (_funktionsgraf) ──
+     Fönstret är kurvans eget: y-led från minsta till största värdet över
+     definitionsmängden plus 8 % luft, så kurvan alltid fyller rutan. Därför
+     klarar grafen alla fyra kvadranter: axlarna går genom origo var det än
+     hamnar i rutan, och ligger nollan utanför fönstret står axeln i kanten. */
+  function grafFonster(fn, xlo, xhi, samples = 80) {
+    const xs = [], ys = [];
+    for (let i = 0; i <= samples; i++) xs.push(xlo + (xhi - xlo) * i / samples);
+    xs.forEach(x => ys.push(fn(x)));
+    let ylo = Math.min(...ys), yhi = Math.max(...ys);
+    if (yhi - ylo < 1e-9) yhi = ylo + 1;
+    const pad = (yhi - ylo) * 0.08;
+    ylo -= pad;
+    yhi += pad;
+    const sx = BOXW / (xhi - xlo), sy = BOXH / (yhi - ylo);
+    const X = x => (x - xlo) * sx, Y = y => (y - ylo) * sy;
+    const xticks = niceTicks(xlo, xhi), yticks = niceTicks(ylo + pad, yhi - pad);
+    return {
+      xlo, xhi, ylo, yhi, xticks, yticks,
+      x0: xlo <= 0 && 0 <= xhi ? X(0) : 0,
+      y0: ylo <= 0 && 0 <= yhi ? Y(0) : 0,
+      xmaj: xticks.map(X), ymaj: yticks.map(Y),
+      punkter: xs.map((x, i) => [X(x), Y(ys[i])])
+    };
+  }
+  /* Kurvan klipps mot rutan (pappret: \clip). Fönstret är satt efter kurvan,
+     så klippningen biter i praktiken aldrig. Men en kurva utanför rutan får
+     aldrig stå på pappret, så den görs ändå (Liang–Barsky per sträcka). */
+  function klipp(pts, w, h) {
+    const sjok = [];
+    let nu = [];
+    const avsluta = () => { if (nu.length > 1) sjok.push(nu); nu = []; };
+    for (let i = 1; i < pts.length; i++) {
+      const [x1, y1] = pts[i - 1], [x2, y2] = pts[i];
+      const dx = x2 - x1, dy = y2 - y1;
+      let t0 = 0, t1 = 1, ok = true;
+      [[-dx, x1], [dx, w - x1], [-dy, y1], [dy, h - y1]].forEach(([p, q]) => {
+        if (!ok) return;
+        if (Math.abs(p) < 1e-12) { if (q < -1e-9) ok = false; return; }
+        const t = q / p;
+        if (p < 0) { if (t > t1) ok = false; else if (t > t0) t0 = t; }
+        else { if (t < t0) ok = false; else if (t < t1) t1 = t; }
+      });
+      if (!ok) { avsluta(); continue; }
+      const a = [x1 + t0 * dx, y1 + t0 * dy], b = [x1 + t1 * dx, y1 + t1 * dy];
+      if (!nu.length || t0 > 1e-9) { avsluta(); nu.push(a); }
+      nu.push(b);
+      if (t1 < 1 - 1e-9) avsluta();
+    }
+    avsluta();
+    return sjok;
+  }
+  function funktionsgraf(fn, xlo, xhi) {
+    const L = grafFonster(fn, xlo, xhi);
+    const P = (x, y) => `(${r4(x)}, ${r4(y)})`;
+    const rader = [];
+    /* Rutnätet först, bakom allt: mellanlinjer ljusare, huvudlinjer vid ticksen
+       mörkare (pappret: black!30 och black!50). Ingen ram, axlarna går genom
+       origo, som i lärarens förlaga. */
+    const tunn = 'stroke: (thickness: 0.5pt, paint: luma(180))';
+    const grov = 'stroke: (thickness: 0.6pt, paint: luma(128))';
+    minorLinjer(L.xmaj, BOXW).forEach(g => rader.push(`line(${P(g, 0)}, ${P(g, BOXH)}, ${tunn})`));
+    minorLinjer(L.ymaj, BOXH).forEach(g => rader.push(`line(${P(0, g)}, ${P(BOXW, g)}, ${tunn})`));
+    L.xmaj.forEach(g => rader.push(`line(${P(g, 0)}, ${P(g, BOXH)}, ${grov})`));
+    L.ymaj.forEach(g => rader.push(`line(${P(0, g)}, ${P(BOXW, g)}, ${grov})`));
+    rader.push(`line(${P(0, L.y0)}, ${P(BOXW + 0.3, L.y0)}, mark: (end: "straight"))`);
+    rader.push(`content(${P(BOXW + 0.3, L.y0)}, anchor: "west", padding: 0.1)[$x$]`);
+    rader.push(`line(${P(L.x0, 0)}, ${P(L.x0, BOXH + 0.3)}, mark: (end: "straight"))`);
+    rader.push(`content(${P(L.x0, BOXH + 0.3)}, anchor: "south", padding: 0.1)[$y$]`);
+    /* Siffrorna står UTANFÖR rutan (under och till vänster), strecken på axeln.
+       Nollan skrivs inte ut. */
+    const UT = 0.18;
+    L.xticks.forEach((v, i) => {
+      if (Math.abs(v) < 1e-9) return;
+      const g = L.xmaj[i];
+      rader.push(`line(${P(g, L.y0 - 0.08)}, ${P(g, L.y0 + 0.08)})`);
+      rader.push(`content(${P(g, -UT)}, anchor: "north")[${etikett(v)}]`);
+    });
+    L.yticks.forEach((v, i) => {
+      if (Math.abs(v) < 1e-9) return;
+      const g = L.ymaj[i];
+      rader.push(`line(${P(L.x0 - 0.08, g)}, ${P(L.x0 + 0.08, g)})`);
+      rader.push(`content(${P(-UT, g)}, anchor: "east")[${etikett(v)}]`);
+    });
+    /* Blå kurva, det enda färgade på pappret (förlagans \addplot[blue]). */
+    klipp(L.punkter, BOXW, BOXH).forEach(s =>
+      rader.push(`line(${s.map(p => P(p[0], p[1])).join(', ')}, stroke: (thickness: 1.8pt, paint: blue))`));
+    return rader.join('\n');
+  }
+  /* Definitionsmängderna är exam_figures: linjär och andragrad på [−1, 7],
+     exponentialen på [−3, 3]. */
+  const GRAFER = {
+    linjar: o => [x => o.k * x + o.m, -1, 7],
+    andragrad: o => [x => o.a * x * x + o.b * x + o.c, -1, 7],
+    exponential: o => [x => o.C * Math.pow(o.bas, x), -3, 3]
+  };
+  const linjar = o => funktionsgraf(...GRAFER.linjar(o));
+  const andragrad = o => funktionsgraf(...GRAFER.andragrad(o));
+  const exponential = o => funktionsgraf(...GRAFER.exponential(o));
+
+  /* ── Normalfördelningen ──
+     Klockan i sigma-enheter, så formen alltid är densamma; x-axeln bär de
+     verkliga talen μ ± kσ. */
+  function normalfordelning(o) {
+    const U = 2.2, P = (x, y) => `(${r4(x * U)}, ${r4(y * U)})`;
+    const rader = [];
+    rader.push(`line(${P(-3.6, 0)}, ${P(3.7, 0)}, mark: (end: "straight"))`);
+    rader.push(`content(${P(3.7, 0)}, anchor: "west", padding: 0.1)[$x$]`);
+    const kl = [];
+    for (let i = 0; i <= 90; i++) { const x = -3.4 + 6.8 * i / 90; kl.push(P(x, 2.4 * Math.exp(-x * x / 2))); }
+    rader.push(`line(${kl.join(', ')}, stroke: (thickness: 1.8pt))`);
+    rader.push(`line(${P(0, 0)}, ${P(0, 2.4)}, stroke: (thickness: 0.7pt, dash: "dashed"))`);
+    [-2, -1, 0, 1, 2].forEach(k => {
+      rader.push(`line(${P(k, 0.08)}, ${P(k, -0.08)})`);
+      rader.push(`content(${P(k, -0.08)}, anchor: "north", padding: 0.1)[${etikett(o.mu + k * o.sigma)}]`);
+    });
+    return rader.join('\n');
+  }
+
+  /* ── Triangeln ur sidorna a, b, c ──
+     A = (0, 0), B = (c, 0), C ovanför med |AC| = b och |BC| = a. Längsta sidan
+     normaliseras till TRIW, etiketten visar det verkliga måttet. Bara c står
+     utsatt, som på pappret. */
+  function triangelSidor(o) {
+    const a = Number(o.a), b = Number(o.b), c = Number(o.c);
+    const cx = (b * b + c * c - a * a) / (2 * c);
+    const cy = Math.sqrt(Math.max(b * b - cx * cx, 0));
+    const U = 1.6, s = TRIW / Math.max(a, b, c);
+    const P = (x, y) => `(${r4(x * s * U)}, ${r4(y * s * U)})`;
+    return [
+      `line(${P(0, 0)}, ${P(c, 0)}, ${P(cx, cy)}, close: true, stroke: (thickness: 1.4pt))`,
+      `content(${P(0, 0)}, anchor: "north-east", padding: 0.1)[$A$]`,
+      `content(${P(c, 0)}, anchor: "north-west", padding: 0.1)[$B$]`,
+      `content(${P(cx, cy)}, anchor: "south", padding: 0.1)[$C$]`,
+      `content(${P(c / 2, 0)}, anchor: "north", padding: 0.12)[$c$ = ${etikett(c)}]`
+    ].join('\n');
+  }
+  /* Två triangelformer delar namnet «triangel». Tavlans och de gamla bladens
+     har hörn (A, B, C som koordinater) och sidetiketter (sidaAB …); provets
+     har tre TAL a, b, c och inget annat. Formen avgör, inte namnet. */
+  const ar_sidtriangel = o => ['a', 'b', 'c'].every(k => typeof o[k] === 'number' && o[k] > 0)
+    && !o.A && !o.B && !o.C;
+
+  /* ── Enhetscirkeln ──
+     Pappret ritar i skala 2,1; vinkelbågen har en fast radie på 8 mm och
+     beteckningen v på 1,35 radier, längs bisektrisen. */
+  function enhetscirkel(o) {
+    const v = Number(o.vinkel), S = 2.1 * 1.25, U = 1.25;
+    const P = (x, y) => `(${r4(x * S)}, ${r4(y * S)})`;
+    const cv = Math.cos(v * Math.PI / 180), sv = Math.sin(v * Math.PI / 180);
+    const br = 0.8 * U, m = v / 2 * Math.PI / 180;
+    return [
+      `line(${P(-1.35, 0)}, ${P(1.4, 0)}, mark: (end: "straight"))`,
+      `content(${P(1.4, 0)}, anchor: "west", padding: 0.1)[$x$]`,
+      `line(${P(0, -1.35)}, ${P(0, 1.4)}, mark: (end: "straight"))`,
+      `content(${P(0, 1.4)}, anchor: "south", padding: 0.1)[$y$]`,
+      `circle((0, 0), radius: ${r4(S)}, stroke: (thickness: 1.2pt))`,
+      `line((0, 0), ${P(cv, sv)}, stroke: (thickness: 1.2pt))`,
+      `circle(${P(cv, sv)}, radius: ${r4(0.022 * S)}, fill: black, stroke: none)`,
+      `line(${P(cv, sv)}, ${P(cv, 0)}, stroke: (thickness: 0.7pt, dash: "dashed"))`,
+      `line(${P(cv, sv)}, ${P(0, sv)}, stroke: (thickness: 0.7pt, dash: "dashed"))`,
+      `arc((0, 0), start: 0deg, stop: ${r4(v)} * 1deg, radius: ${r4(br)}, anchor: "origin", stroke: (thickness: 0.8pt))`,
+      `content((${r4(br * 1.35 * Math.cos(m))}, ${r4(br * 1.35 * Math.sin(m))}))[$v$]`
+    ].join('\n');
+  }
+
+  /* ── Stapeldiagrammet ──
+     Fast höjd 4 (gånger U), en enhet per stapel, y-axeln heter «antal». */
+  function stapeldiagram(o) {
+    const kat = o.kategorier || [], var_ = (o.varden || []).map(Number);
+    if (!var_.length) return null;
+    const U = 2, H = 4, topp = Math.max(...var_), skala = topp > 0 ? H / topp : 1;
+    const P = (x, y) => `(${r4(x * U)}, ${r4(y * U)})`;
+    const rader = [];
+    rader.push(`line(${P(0, 0)}, ${P(0, H + 0.6)}, mark: (end: "straight"))`);
+    rader.push(`content(${P(0, H + 0.6)}, anchor: "south", padding: 0.1)[antal]`);
+    rader.push(`line(${P(0, 0)}, ${P(var_.length + 0.6, 0)}, mark: (end: "straight"))`);
+    niceTicks(0, topp).forEach(yt => {
+      if (yt <= 0) return;
+      rader.push(`line(${P(0.08, yt * skala)}, ${P(-0.08, yt * skala)})`);
+      rader.push(`content(${P(-0.08, yt * skala)}, anchor: "east", padding: 0.1)[${etikett(yt)}]`);
+    });
+    var_.forEach((v, i) => {
+      rader.push(`rect(${P(0.7 + i, 0)}, ${P(1.3 + i, v * skala)}, fill: luma(204), stroke: (thickness: 0.6pt))`);
+      rader.push(`content(${P(1 + i, 0)}, anchor: "north", padding: 0.1)[${strang(kat[i] === undefined ? '' : kat[i])}]`);
+    });
+    return rader.join('\n');
+  }
+
+  /* ── Lådagrammet ──
+     Fast bredd 13 från min till max, lådan från q1 till q3, medianen kraftigast.
+     De fem talen står under axeln. */
+  function ladagram(o) {
+    const W = 13, U = 1, y = 1;
+    const mn = Number(o.min), mx = Number(o.max), span = mx - mn;
+    const X = v => (span > 0 ? (v - mn) / span * W : W / 2);
+    const P = (x, yy) => `(${r4(x * U)}, ${r4(yy * U)})`;
+    const rader = [
+      `line(${P(-0.3, 0)}, ${P(W + 0.6, 0)}, mark: (end: "straight"))`,
+      `content(${P(W + 0.6, 0)}, anchor: "west", padding: 0.1)[$x$]`,
+      `line(${P(X(mn), y)}, ${P(X(o.q1), y)}, stroke: (thickness: 1.2pt))`,
+      `line(${P(X(o.q3), y)}, ${P(X(mx), y)}, stroke: (thickness: 1.2pt))`,
+      `rect(${P(X(o.q1), y - 0.5)}, ${P(X(o.q3), y + 0.5)}, stroke: (thickness: 1.2pt))`,
+      `line(${P(X(o.median), y - 0.5)}, ${P(X(o.median), y + 0.5)}, stroke: (thickness: 2pt))`
+    ];
+    [mn, o.q1, o.median, o.q3, mx].map(Number).forEach(v => {
+      rader.push(`line(${P(X(v), 0.14)}, ${P(X(v), -0.14)})`);
+      rader.push(`content(${P(X(v), -0.14)}, anchor: "north", padding: 0.1)[${etikett(v)}]`);
+    });
+    return rader.join('\n');
+  }
+
+  const katalog = {
+    graf, cirkel, cylinder, tallinje, staplar,
+    triangel: o => (ar_sidtriangel(o) ? triangelSidor(o) : triangel(o)),
+    linjar, andragrad, exponential, normalfordelning, enhetscirkel, stapeldiagram, ladagram
+  };
 
   /* ── Vilken figur uppgiften vill ha ─────────────────
      Momentets ord säger vad som ska ritas. Heuristiken är med flit grov: hittar
@@ -334,5 +612,12 @@ window.Figurer = (() => {
     return g(fig);
   }
 
-  return { kalla, katalog, forslagFor, matt: { BREDD, HOJD }, typer: () => Object.keys(katalog) };
+  /* Provrecepten utåt, för testet som jämför skärmen med exam_figures.py:
+     fönstret och ticksen för en graf, och tickfunktionen själv. */
+  const prov = {
+    fonster: fig => (GRAFER[fig.typ] ? grafFonster(...GRAFER[fig.typ](fig)) : null),
+    niceTicks, etikett
+  };
+
+  return { kalla, katalog, forslagFor, prov, matt: { BREDD, HOJD }, typer: () => Object.keys(katalog) };
 })();
