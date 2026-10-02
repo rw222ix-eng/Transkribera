@@ -121,6 +121,14 @@ def validera(lista) -> list[str]:
                     fel.append(f"{var} ({typ}): texten är {len(t)} tecken, högst {MAX_TEXT}")
                 if t.count("$") % 2:
                     fel.append(f"{var} ({typ}): udda antal $ i {t!r}")
+                # BA26B 2026-10-02: «$\tfrac{1}{4}$» i en JSON-fil skriven
+                # med en Bash-heredoc blev TABB + «frac», och bladet visade
+                # «frac14 m». Ett kontrolltecken i en etikett är alltid ett
+                # tappat bakstreck (\t, \f, \b, \n, \r).
+                if any(ord(ch) < 32 for ch in t):
+                    fel.append(f"{var} ({typ}): kontrolltecken i {t!r}, troligen "
+                               "ett tappat bakstreck (\\tfrac blir tabb + frac i JSON); "
+                               "skriv \\\\tfrac i JSON-filen")
         if "sida" in e and e["sida"] not in SIDOR:
             fel.append(f"{var} ({typ}): sida {e['sida']!r}, välj bland {sorted(SIDOR)}")
         if "textvid" in e and e["textvid"] not in ("svans", "spets"):
