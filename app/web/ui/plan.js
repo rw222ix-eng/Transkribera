@@ -4298,8 +4298,13 @@
        rutten på ett tyngre papper än det genereringen skriver, och det var
        precis den skillnaden läraren såg på prov 85. */
     const tid = Number(i.provminuter) || parseInt(i.provtid, 10) || 0;
+    /* KURSEN MED (2026-10-03): skelettet bygger NP:s uppgiftsform per kurs
+       (exam_spec._np_uppgiftsform), och utan kursen svarade rutten 12
+       uppgifter medan genereringen byggde 15. */
+    const kurs = ($('#p-kurs') || {}).value || v.kurs || '';
     return window.API.json(`/api/exams/skelett?antal=${antal}`
       + '&typ=prov'
+      + (kurs ? `&kurs=${encodeURIComponent(kurs)}` : '')
       + `&nivamix=${encodeURIComponent(i.nivamix || '')}`
       + `&takt=${taktFor(v)}`
       + (tid ? `&tid=${tid}` : ''))
@@ -4382,8 +4387,10 @@
     /* TAKTEN SKICKAS MED. Den stod i toasten men inte i frågan — satte läraren
        2,4 min/p fick hon ett antal räknat på 3,5 med «takt 2,4» tryckt bredvid.
        Nivåmixen likaså: fördelningen ska svara mot valet. */
+    const kurs = ($('#p-kurs') || {}).value || '';
     window.API.json(`/api/exams/foreslag-antal?tid=${tid}`
       + `&typ=prov&nivamix=${encodeURIComponent(s.nivamix || '')}`
+      + (kurs ? `&kurs=${encodeURIComponent(kurs)}` : '')
       + `&takt=${takt}`)
       .then(r => {
         const n = Number(r && r.antal);

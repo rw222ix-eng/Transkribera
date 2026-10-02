@@ -1358,7 +1358,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
     # provtid, 200 uppgifter = tio gånger det längsta prov läraren skrivit.
     def foreslag_antal(tid: int = Query(ge=1, le=1440), typ: str = "prov",
                        nivamix: str | None = None,
-                       takt: float | None = None):
+                       takt: float | None = None,
+                       kurs: str = Query(default="", max_length=120)):
         """Hur många uppgifter provtiden rymmer.
 
         `typ` är skärmens dokumenttyp. Den valde förut mellan provets och
@@ -1378,9 +1379,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # TAKTEN FÖLJER MED. Skärmen skrev den i toasten men skickade den inte,
         # så en lärare som satte 2,4 min/p fick ett antal räknat på 3,5 med
         # «takt 2,4 min/p» tryckt bredvid.
+        # KURSEN (2026-10-03): skelettet bygger NP:s uppgiftsform per kurs,
+        # och utan den svarade rutten på ett annat papper än det som skrivs.
         return exam_spec.foreslag_antal(
             tid, profil, takt=takt,
-            mix=(val or {}).get("mix"), niva_mal=(val or {}).get("mal"))
+            mix=(val or {}).get("mix"), niva_mal=(val or {}).get("mal"),
+            kurs=kurs)
 
     # -------------------------------------------------- skelettets summor --
 
@@ -1388,7 +1392,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
     def skelett(antal: int = Query(ge=1, le=200), typ: str = "prov",
                 nivamix: str | None = None,
                 takt: float | None = None, delar: bool | None = None,
-                tid: int | None = Query(default=None, ge=1, le=1440)):
+                tid: int | None = Query(default=None, ge=1, le=1440),
+                kurs: str = Query(default="", max_length=120)):
         """Vad upplägget skulle ge INNAN pappret är skrivet: {antal, poang,
         summor {e, c, a}, tid, takt, tak}.
 
@@ -1408,7 +1413,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
         val = exam_spec.nivaval(profil, nivamix)
         return exam_spec.skelettsummor(
             antal, profil, delar=delar, takt=takt, tid_min=tid,
-            mix=(val or {}).get("mix"), niva_mal=(val or {}).get("mal"))
+            mix=(val or {}).get("mix"), niva_mal=(val or {}).get("mal"),
+            kurs=kurs)
 
     # ---------------------------------------------------- innehållsstatus --
 
