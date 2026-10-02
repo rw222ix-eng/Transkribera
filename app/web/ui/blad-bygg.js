@@ -1527,7 +1527,7 @@ window.BladBygg = (() => {
     if (!med.length) return '';
     return `<div class="ark" data-form="lo-elev" data-brytbar="">
       <div class="lohuvud"><b>Bedömningsanvisning · elevlösningar</b><span>${versal(spann(med))}</span></div>
-      <h1 class="lotitel">Bedömda elevlösningar</h1>
+      <h1 class="lotitel">Exempel på lösningar med bedömning</h1>
       ${med.map(elevRad).join('')}</div>`;
   }
 
@@ -1550,7 +1550,7 @@ window.BladBygg = (() => {
        ville bort ifrån. Bara när det finns ett ark att hänvisa till. PDF:en
        säger samma sak efter kravgränsraden (bedomning.tex.j2). */
     const inledning = uppgifter.some(u => eleverna(u).length)
-      ? '<p class="lolede">Bedömda elevlösningar står sist i häftet.</p>' : '';
+      ? '<p class="lolede">Exempel på lösningar med bedömning står sist i häftet.</p>' : '';
     if (b.length) ut.push(`<div class="ark" data-form="lo-b" data-brytbar="">
       <div class="lohuvud"><b>Bedömningsanvisning · kortsvar</b><span>${delB >= uppgifter.length ? versal(spann(b)) : DELNAMN.B + ' · ' + spann(b)}</span></div>
       <h1 class="lotitel">Endast svar krävs</h1>${inledning}

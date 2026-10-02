@@ -610,7 +610,7 @@ def test_formerna_kompilerar_och_star_i_pdfen(tmp_path):
             assert "12 600" not in text
             assert "Derivatan" in text
             assert "steg 2" in text
-            assert "Bedömda elevlösningar" in text
+            assert "Exempel på lösningar med bedömning" in text
         else:
             assert "12 600" in text, f"{namn}: datatabellens siffror saknas"
             # Enheten står på svarsraden — och svarsraden finns bara här.

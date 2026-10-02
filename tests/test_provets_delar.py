@@ -680,10 +680,10 @@ def test_elevexemplen_star_pa_eget_ark_sist():
     assert [a.split('"', 2)[1] for a in arken[1:]] == ["lo-b", "lo-c", "lo-elev"]
     elevark = arken[3]
     assert "<b>Bedömningsanvisning · elevlösningar</b><span>Uppgift 2</span>" in elevark
-    assert '<h1 class="lotitel">Bedömda elevlösningar</h1>' in elevark
+    assert '<h1 class="lotitel">Exempel på lösningar med bedömning</h1>' in elevark
     # Inledningen på FÖRSTA arket, direkt under rubriken, och bara där.
     assert ('<h1 class="lotitel">Endast svar krävs</h1><p class="lolede">'
-            'Bedömda elevlösningar står sist i häftet.</p>') in arken[1]
+            'Exempel på lösningar med bedömning står sist i häftet.</p>') in arken[1]
     assert html.count("står sist i häftet") == 1
     # Inga elevpapper i tabellen.
     assert "loskann" not in arken[1] + arken[2]
@@ -757,7 +757,7 @@ def test_utan_elevexempel_inget_elevark():
     bara_c = _losark([_uppg(p=2, f="$x = 4$", bed="+1 E a\n+1 C b",
                             ut="rakna", elever=elever)], delB=0)
     assert ('<h1 class="lotitel">Hela lösningen krävs</h1><p class="lolede">'
-            'Bedömda elevlösningar står sist i häftet.</p>') in bara_c
+            'Exempel på lösningar med bedömning står sist i häftet.</p>') in bara_c
 
 
 def test_provets_facitark_heter_bedomningsanvisning():

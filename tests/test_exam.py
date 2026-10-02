@@ -3850,13 +3850,13 @@ def test_elevexemplen_star_i_eget_avsnitt_sist():
     ]
     doc, _fel = exam_spec.validate_exam_json(exam)
     tex = exam_latex.render_bedomning(doc)
-    tabell, avsnitt = tex.split(r"{\large\bfseries Bedömda elevlösningar}", 1)
+    tabell, avsnitt = tex.split(r"{\large\bfseries Exempel på lösningar med bedömning}", 1)
     # Avsnittet börjar på egen sida, efter hela tabellen.
     assert tabell.rstrip().endswith(r"\clearpage")
     assert r"\bedelev" not in tabell.split(r"\begin{document}", 1)[1]
     # Inledningen säger det en gång, efter kravgränsraden och före första
     # uppgiften. Ingen notis per uppgift.
-    rad = r"{\small Bedömda elevlösningar står sist i häftet.}"
+    rad = r"{\small Exempel på lösningar med bedömning står sist i häftet.}"
     assert tex.count("står sist i häftet") == 1
     assert (tabell.index("Kravgränser:") < tabell.index(rad)
             < tabell.index(r"\begin{uppgift}{1}{}"))
@@ -3881,7 +3881,7 @@ def test_utan_elevexempel_inget_avsnitt():
     inga elevexempel. Då står varken avsnittet eller inledningens rad om det."""
     doc, _fel = exam_spec.validate_exam_json(_exam())
     tex = exam_latex.render_bedomning(doc)
-    assert "Bedömda elevlösningar" not in tex
+    assert "Exempel på lösningar med bedömning" not in tex
     assert "står sist i häftet" not in tex
     assert r"\clearpage" not in tex.split(r"\begin{document}", 1)[1]
 
@@ -4214,7 +4214,7 @@ def test_kortsvaren_far_inga_elevlosningar():
     pdf["uppgifter"][0]["elevlosningar"] = gammal
     assert pdf["uppgifter"][0]["typ"] == "rutin"
     doc, _f = exam_spec.validate_exam_json(pdf)
-    assert "Bedömda elevlösningar" not in exam_latex.render_bedomning(doc)
+    assert "Exempel på lösningar med bedömning" not in exam_latex.render_bedomning(doc)
 
 
 def test_andrade_uppgifter_ser_bara_det_bedomningen_bryr_sig_om():
