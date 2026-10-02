@@ -1946,6 +1946,78 @@ def build_yrke(inriktning: str, profil: str = "prov") -> str:
     )
 
 
+# ── DELFRÅGORNA, SAGDA TILL MODELLEN (lärarens dom 2026-10-02) ────────────
+# Varje delfråga ska stå som en egen deluppgift med en svarslinje direkt under
+# sig (se DELFRAGEKOD vid _validate). Arbetsbladets grammatik stänger
+# `deluppgifter` på varje rad (skelettet delar aldrig bladet), så regeln säger
+# den form appen läser: a), b) på egna rader och samma bokstav i facit och
+# bedömning. Gruppuppgiften har ingen grammatik och skriver dem som
+# deluppgifter rakt av. Bara de två papperen; provets prompt är orörd.
+DELFRAGOR_BLAD = (
+    "DELFRÅGOR (lärarens dom 2026-10-02): har en uppgift flera frågor blir "
+    "de a), b), c), och på pappret står varje delfråga som en egen "
+    "deluppgift med en svarslinje direkt under sig. Skriv dem så här, så att "
+    "appen kan sätta dem som deluppgifter:\n"
+    "- I text: det delfrågorna delar först, sedan varje delfråga på en EGEN "
+    "rad som börjar med «a) », «b) » … Aldrig två delfrågor på samma rad.\n"
+    "- I losning: samma bokstav först på raden där delens facit börjar "
+    "(«a) $-12$»).\n"
+    "- I bedomning: en rad per poäng, och varje rad nämner sin del («+1 E "
+    "korrekt svar i a)»). Uppgiftens poäng är summan av raderna.\n"
+    "- Inga svarsfalt med «a)», «b)»: varje deluppgift får sin svarslinje "
+    "ändå.\n")
+DELFRAGOR_GRUPP = (
+    "DELFRÅGOR (lärarens dom 2026-10-02): har en uppgift flera frågor skrivs "
+    "de som deluppgifter i fältet deluppgifter, var och en med egen poang, "
+    "text, losning och bedomning. Skriv aldrig a), b) i uppgiftens text: "
+    "då hamnar svarsraderna samlade under uppgiften i stället för under "
+    "varje fråga.\n")
+
+
+# ── SPRÅKET PÅ BLADET (lärarens dom 2026-10-02) ───────────────────────────
+# Rickard om bladet «Bråk i blandad form» (exam 154, BA26B) uppgift 1: «Skriv
+# längderna som bråk med nämnaren 4. Skriv hela längden som ett enda bråk utan
+# heltal framför. Till exempel kan 1⅓ skrivas 4/3.» «För elever är det som
+# att läsa ett annat språk … de kommer inte fatta någonting. Vi behöver
+# verkligen konkretisera språket. Det gäller alla arbetsblad, för byggklassen
+# framför allt.» Eleverna har svag svenska.
+#
+# Regeln mäter BEGRIPLIGHET och inget annat: orden ska vara elevens, inte
+# kortare eller mer lika nationella provet (förtydliganden står kvar, och
+# textmängden har sin egen vakt). Det som går att räkna är facktermerna utan
+# exempel (facktermsvakt); elevläsaren läser resten som en elev med svag
+# svenska (app/elevlasare.py, `profil`). Starkast med en inriktning: klassen
+# på ett yrkesprogram får raden om yrkets ord också.
+def build_sprak_blad(inriktning: str = "") -> str:
+    """Språkregeln för arbetsbladet som promptblock."""
+    inr = " ".join(str(inriktning or "").split())[:MAX_INRIKTNING]
+    yrke = (f"Klassen går {inr}, och där väger regeln tyngst: ta orden ur "
+            "yrket, det material, de mått och de verktyg eleverna själva "
+            "använder, aldrig ur matematikboken. Ett yrkesord eleverna "
+            "använder varje dag är ett vardagsord.\n"
+            if inr else "")
+    return (
+        "SPRÅKET (lärarens dom 2026-10-02): många elever har svag svenska. "
+        "En instruktion de inte förstår är en uppgift de inte kan börja på, "
+        "hur lätt matematiken än är.\n"
+        "- Vardagsord och korta meningar. En sak per mening.\n"
+        "- Konkreta saker eleven kan se framför sig: brädor, meter, kronor, "
+        "liter. Skriv vad det är, inte «längderna» eller «värdet».\n"
+        "- Inga matematiska fackord (nämnare, täljare, blandad form, "
+        "bråkform, procentenhet, andel, term, faktor) utan att samma mening "
+        "visar ordet med ett exempel i matte: «I $\\tfrac{3}{4}$ är "
+        "nämnaren 4.»\n"
+        "- VISA I STÄLLET FÖR ATT BESKRIVA. Skriv det eleven ska fylla i, "
+        "inte en mening om hur det ska se ut: «$\\tfrac{1}{2}$ m $= "
+        "\\tfrac{?}{4}$ m» i stället för «Skriv längderna som bråk med "
+        "nämnaren 4.», och «$1\\tfrac{1}{2}$ m $= \\tfrac{?}{2}$ m» i stället "
+        "för «Skriv hela längden som ett enda bråk utan heltal framför.» Det "
+        "senare är lärarens exempel på text eleverna inte förstår.\n"
+        f"{yrke}"
+        "Ett förtydligande som hjälper eleven får stå kvar: det är orden som "
+        "ska bli enkla, inte texten som ska bli kortare.\n")
+
+
 ORIGINALITET_UR_BOKEN = (
     "Utgår pappret från en bok är boken INSPIRATION, aldrig förlaga: härma "
     "uppgiftstypen, begreppen, notationen och nivån, men skriv originella "
@@ -3169,14 +3241,20 @@ def stada_gruppband(exam: dict) -> bool:
 
 
 def ovningspappret_stadat(exam: dict | None, profil: str) -> dict | None:
-    """De två deterministiska passen på övningspappret, i tur och ordning:
-    bandet kapas och räknarbeskedet skrivs in i uppgifterna.
+    """De deterministiska passen på övningspappret, i tur och ordning:
+    delfrågorna blir deluppgifter, bandet kapas och räknarbeskedet skrivs in
+    i uppgifterna.
 
     ETT ställe, så att genereringen och omskrivningen gör exakt samma sak —
     annars hade ett refine kunnat lämna ett papper utan markeringar efter en
     generering som satt dem."""
     if not isinstance(exam, dict) or profil not in OVNINGSPROFILER:
         return exam
+    # Delfrågorna som deluppgifter (DELFRAGEKOD) också här, så att varje väg
+    # som städar ett papper, också diffens kopia av originalet
+    # (routes_exam._stadat_som_varvet), ser samma form som _validate gav.
+    # Idempotent; fynden har redan sagts i reparationsrundan.
+    delfragor_till_deluppgifter(exam, profil)
     korta_instruktion(exam, profil)
     satt_raknarmarkering(exam, profil)
     return exam
@@ -3501,6 +3579,8 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             f"Provtiden hör hemma i tid_min={min_} och ingen annanstans — "
             "hitta inte på egna fält (tid_minuter, tidsatgang …), de avvisas. "
             "Svara med enbart JSON.")
+        # Delfrågorna som deluppgifter (lärarens dom 2026-10-02).
+        block.append(DELFRAGOR_GRUPP)
         # Lärarens illustrationskryss (se BILD_PA/BILD_AV).
         block.append(BILD_PA if illustration else BILD_AV)
         # Gruppuppgiften får sin uppgiftsplan som TEXT, inte som grammatik.
@@ -3562,6 +3642,10 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
         # kassetten spelades in med (jfr BILD_PA nedan).
         if ar_ekvationsmoment(punkter, bokuppgifter):
             block.append(TEXT_TILL_EKVATION)
+        # Delfrågorna och språket (lärarens dom 2026-10-02): bara bladets
+        # prompt, egna block så att provets står orörd.
+        block.append(DELFRAGOR_BLAD)
+        block.append(build_sprak_blad(inriktning))
         # Lärarens illustrationskryss (se BILD_PA/BILD_AV).
         block.append(BILD_PA if illustration else BILD_AV)
         # «Stigande svårighet» stod här förut, och det är en instruktion utan
@@ -6989,6 +7073,298 @@ def fraga_for_sig(exam: dict | None) -> dict | None:
     return exam
 
 
+# ── DELFRÅGORNA BLIR DELUPPGIFTER (lärarens dom 2026-10-02) ──────────────
+# Rickard om bladet «Negativa tal» (exam 155) uppgift 6, som stod som EN
+# uppgift med texten «Utan räknare. a) Beräkna −7 − 5. b) Beräkna 4 − (−12).
+# c) Beräkna −3 − (−9).» och svarsraderna a:, b:, c: samlade längst ner: «Om
+# man har en deluppgift a så står det beräkna −7 − 5. Direkt under den ska det
+# vara en svarslinje, ett långt understreck. Sen ett mellanrum och sen kommer
+# deluppgift b … precis under den kan man skriva svaret. Så ska det se ut.»
+# Riktiga deluppgifter ritas redan så (155:8 efter omskrivningen). Samma fel
+# stod i 155:1, 7, 10, 12 och 154:1, 6, 10, och i 43 av 77 blad i basen.
+#
+# VARFÖR MODELLEN SKRIVER DEM I TEXTEN. Arbetsbladet genereras med skelettet
+# som grammatik (generate_exam, `grammatik`), och skelettet delar aldrig ett
+# blad i deluppgifter (exam_spec._dela_i_deluppgifter körs bara på provet).
+# En rad utan `delar` får `deluppgifter: const null` och en låst poäng, så
+# modellen KAN inte skriva deluppgifter på bladet. Den skriver a) och b) i
+# stammen och lägger svarsraderna i `svarsfalt`.
+#
+# DETERMINISTISKT, EFTER MODELLEN. Delfrågorna läses ur stammen, facit ur
+# `losning` (som då också bär «a) svar», «b) svar») och poängen ur
+# `bedomning`, rad för rad. Går poängen att dela entydigt blir uppgiften en
+# stam med riktiga deluppgifter, var och en med text, poäng, losning och
+# bedomning. Går den inte att dela blir det ett fynd (`delfragor`) i den
+# reparationsrunda som redan finns, och fyndet säger hur raderna ska märkas
+# för att nästa varv ska gå att dela. Körs i _validate, alltså efter varje
+# modellsvar: genereringen, varje reparationsrunda och omskrivningen.
+# Prompten och grammatiken är orörda; arbetsbladets prompt säger formen
+# (DELFRAGOR_BLAD).
+#
+# Bara arbetsbladet och gruppuppgiften. Provet har inte felet: grammatiken
+# tvingar fram deluppgifterna där skelettet delar raden, och i basen har bara
+# prov 5 och 8 (augusti, före skelettets delning) a) och b) i texten.
+DELFRAGEKOD = "delfragor"
+# Bokstaven som inleder en delfråga: först på en rad, eller efter ett
+# skiljetecken eller ett matteblock och ett blanksteg («… $-12$. b) …»). Ett
+# «b)» mitt i en mening är inte en delfråga. Matten är maskerad med § innan
+# (_maska), så ett «f(a)» i en formel kan aldrig läsas som en bokstav.
+_DELMARKE = re.compile(r"(?m)(?:^|(?<=[.!?:;,§] ))[ \t]*([a-h])\)[ \t]+")
+# «a)» först på en rad: delfrågor som inte gick att läsa ut ska bli ett fynd,
+# inte tystnad. Bara radstarten, för gruppuppgiftens text får hänvisa till
+# tabellens rader («Skriv svaren på a) och b) i tabellen»).
+_DELMARKE_RADSTART = re.compile(r"(?m)^[ \t]*a\)[ \t]+")
+# En bedömningsrad: «+1 E korrekt svar på a)».
+_BEDRAD = re.compile(r"^\s*\+\s*(\d+)\s*([ECA])\b")
+# Vilken deluppgift en bedömningsrad nämner: «på a)», «i b)», «(c)»,
+# «deluppgift a». Läses på den maskerade raden.
+_DELREF = re.compile(r"(?<![\w§])\(?([a-h])\)(?![\w§])"
+                     r"|\b(?:del)?uppgift(?:en)?\s+([a-h])\b")
+# Hänvisningen själv, att stryka när raden flyttats till sin deluppgift:
+# «+1 E korrekt svar på a): 1,2 m» blir «+1 E korrekt svar: 1,2 m».
+_DELREF_STRYK = re.compile(
+    r"\s*(?:\b(?:på|i|för)\s+)?(?<![\w§])\(?[a-h]\)(?![\w§])")
+# Svarsfält som bara är en bokstav: «a)», «Svar a)», «b:».
+_BOKSTAVSFALT = re.compile(r"^\s*(?:svar\s*)?\(?[a-h]\s*[):]?\s*:?\s*$", re.I)
+# Uppmaningar som får lyftas till stammen när den annars blir tom
+# (_lyft_verbet). Frågeorden står utanför: «Hur …» är ingen stam.
+_LYFTBARA = frozenset(_UPPMANINGAR) - {"hur", "vilken", "vilket", "vilka"}
+_ENSAM_MATTE = re.compile(r"^(\$[^$]+\$)\s*\.?$")
+
+
+def _maska(s: str) -> str:
+    """Matteblocken utbytta mot lika många §, så att positionerna står kvar."""
+    return _MATTEBLOCK_RE.sub(lambda m: "§" * len(m.group(0)), s)
+
+
+def _delstycken(text) -> tuple[str, list[str]] | None:
+    """(det som står före a), [delarnas texter]) eller None.
+
+    None när texten inte bär minst två delar i ordningen a), b), c) … och
+    när en del är tom. Bokstäverna måste komma i ordning och utan lucka: ett
+    ensamt «b)» eller «a) … c)» är inte en lista att dela."""
+    if not isinstance(text, str) or not text.strip():
+        return None
+    traffar = list(_DELMARKE.finditer(_maska(text)))
+    bokstaver = [m.group(1) for m in traffar]
+    if len(traffar) < 2 or bokstaver != list("abcdefgh"[:len(traffar)]):
+        return None
+    delar = [text[m.end():(traffar[k + 1].start() if k + 1 < len(traffar)
+                           else len(text))].strip()
+             for k, m in enumerate(traffar)]
+    if not all(delar):
+        return None
+    return text[:traffar[0].start()].strip(), delar
+
+
+def _bedomning_per_del(bedomning, antal: int):
+    """Bedömningsraderna fördelade på delarna: ([rader per del], "") eller
+    (None, skäl).
+
+    En rad hör till den del den nämner («korrekt svar på b)»), till den del
+    vars rubrik den står under («b)» ensam på en rad, eller först på raden),
+    och en rad utan poäng («Godtagbart: …») till raden före. Nämner ingen
+    rad sin del gäller ordningen, men bara när det är lika många rader som
+    delar, varje rad är värd en poäng och ingen rad nämner en annan del än
+    sin plats: «+1 E korrekt ordning» följt av «+1 E korrekt svar på b)» är
+    155:1:s form."""
+    rader = [r for r in str(bedomning or "").split("\n") if r.strip()]
+    if not rader:
+        return None, "bedömningen saknas"
+    poster: list[dict] = []
+    rubrik: int | None = None
+    for rad in rader:
+        rest = rad
+        m = re.match(r"^\s*\(?([a-h])\)\s*:?\s*", _maska(rad))
+        if m:
+            rubrik = ord(m.group(1)) - ord("a")
+            rest = rad[m.end():]
+            if not rest.strip():
+                continue
+        p = _BEDRAD.match(rest)
+        refs = {ord(a or b) - ord("a")
+                for a, b in _DELREF.findall(_maska(rest))}
+        if len(refs) > 1:
+            return None, f"raden «{rest.strip()[:60]}» nämner flera delar"
+        if p is None:
+            # En rad utan poäng («Vanligt fel: i b) …») följer den del den
+            # nämner, annars raden före. Den står som den är skriven.
+            if refs or rubrik is not None:
+                poster.append({"text": rest.strip(), "n": 0, "niva": "",
+                               "del": next(iter(refs)) if refs else rubrik})
+                continue
+            if poster:
+                poster[-1]["text"] += "\n" + rest.strip()
+                continue
+            return None, f"raden «{rest.strip()[:60]}» har ingen poäng"
+        poster.append({"text": _utan_delref(rest), "n": int(p.group(1)),
+                       "niva": p.group(2),
+                       "del": next(iter(refs)) if refs else rubrik})
+    if any(p["del"] is not None and p["del"] >= antal for p in poster):
+        return None, "bedömningen nämner en del som inte finns"
+    poangrader = [p for p in poster if p["n"]]
+    if any(p["del"] is None for p in poangrader):
+        if (len(poangrader) != antal or any(p["n"] != 1 for p in poangrader)
+                or any(p["del"] not in (None, k)
+                       for k, p in enumerate(poangrader))):
+            return None, ("bedömningsraderna säger inte vilken del de gäller, "
+                          "och de är inte en rad per del")
+        for k, p in enumerate(poangrader):
+            p["del"] = k
+    per_del: list[list[dict]] = [[] for _ in range(antal)]
+    for p in poster:
+        per_del[p["del"]].append(p)
+    if not all(any(p["n"] for p in rader) for rader in per_del):
+        tom = "abcdefgh"[[any(p["n"] for p in r) for r in per_del].index(False)]
+        return None, f"ingen bedömningsrad gäller {tom})"
+    return per_del, ""
+
+
+def _utan_delref(rad: str) -> str:
+    """Bedömningsraden utan sin hänvisning till delen, nu när den står där."""
+    maskad = _maska(rad)
+    bitar, start = [], 0
+    for m in _DELREF_STRYK.finditer(maskad):
+        bitar.append(rad[start:m.start()])
+        start = m.end()
+    bitar.append(rad[start:])
+    ut = "".join(bitar)
+    ut = re.sub(r"\s+([:,.;)])", r"\1", ut)
+    return re.sub(r"[ \t]{2,}", " ", ut).strip()
+
+
+def _lyft_verbet(delar: list[str]) -> tuple[str, list[str]] | None:
+    """(«Beräkna.», [«$-7 - 5$», …]) när varje del är samma uppmaning följd
+    av ett ensamt uttryck, annars None. Stammen blir då nationella provets
+    «Beräkna.» med uttrycken under, som 155:8 efter lärarens omskrivning."""
+    verb, matte = set(), []
+    for d in delar:
+        forsta, _, rest = d.partition(" ")
+        m = _ENSAM_MATTE.match(rest.strip())
+        if not m or forsta.lower() not in _LYFTBARA:
+            return None
+        verb.add(forsta.lower())
+        matte.append(m.group(1))
+    if len(verb) != 1:
+        return None
+    return verb.pop().capitalize() + ".", matte
+
+
+def _till_deluppgifter(u: dict) -> str | None:
+    """Gör om en uppgift med a), b) … i texten till riktiga deluppgifter, på
+    plats. None när uppgiften gjordes om eller inte har delfrågor i texten;
+    annars skälet till att poängen inte gick att dela."""
+    if not isinstance(u, dict) or u.get("deluppgifter"):
+        return None
+    text = u.get("text")
+    stycken = _delstycken(text)
+    if stycken is None:
+        maskad = _maska(text) if isinstance(text, str) else ""
+        if (_DELMARKE_RADSTART.search(maskad)
+                and re.search(r"(?<![\w§])b\)", maskad)):
+            return "delfrågorna går inte att läsa ut ur texten"
+        return None
+    fore, delar = stycken
+    # En räknarrad sist («Miniräknare behövs inte och får inte användas.»,
+    # 77:1) gäller hela uppgiften, inte den sista delfrågan.
+    sista = delar[-1].split("\n")
+    while len(sista) > 1 and _RAKNARORD.search(sista[-1]):
+        fore = f"{fore}\n{sista.pop().strip()}".strip()
+    delar[-1] = "\n".join(sista).strip()
+    if any(u.get(f) for f in ("alternativ", "ratt_alternativ", "svarsrutor",
+                              "elevlosningar")):
+        return "uppgiften har svarsalternativ eller elevlösningar på stammen"
+    los = _delstycken(u.get("losning"))
+    if los is None or len(los[1]) != len(delar):
+        return "lösningen märker inte varje del med a), b) …"
+    per_del, skal = _bedomning_per_del(u.get("bedomning"), len(delar))
+    if per_del is None:
+        return skal
+    nivaer = "ECA"
+    tripplar = [[sum(p["n"] for p in rader if p["niva"] == n) for n in nivaer]
+                for rader in per_del]
+    poang = list(u.get("poang") or [0, 0, 0])
+    if sum(poang) == 0 or [sum(t[j] for t in tripplar)
+                           for j in range(3)] != poang:
+        return (f"bedömningens rader ger {_trippel(tripplar)} men uppgiften "
+                f"är värd {tuple(poang)}")
+    # Stammen. Räknarmärket räknas inte som en stam: utan någonting annat
+    # lyfts uppmaningen dit om alla delar har samma («Beräkna.»).
+    marke = _RAKNARMARKE.match(fore)
+    if not _RAKNARMARKE.sub("", fore).strip():
+        lyft = _lyft_verbet(delar)
+        if lyft:
+            fore = f"{marke.group(0).strip() if marke else ''} {lyft[0]}".strip()
+            delar = lyft[1]
+    # Svarsfälten: en rad per delfråga på stammen blir en svarslinje under
+    # varje deluppgift. Bokstavsfälten («a)», «Svar a)») behövs inte alls på
+    # en rutinuppgift, där deluppgiften får sin egen svarsrad (blad-bygg.js
+    # delsvar, arbetsblad.tex.j2 endast_svar); på en uppgift som ska
+    # redovisas blir de «Svar» under varje del, så att raden står kvar där
+    # eleven skriver svaret.
+    falt = [str(f) for f in (u.get("svarsfalt") or []) if str(f).strip()]
+    bokstavsfalt = bool(falt) and all(_BOKSTAVSFALT.match(f) for f in falt)
+    nya: list[dict] = []
+    for k, d in enumerate(delar):
+        del_ = {"poang": tripplar[k], "text": d,
+                "losning": los[1][k],
+                "bedomning": "\n".join(p["text"] for p in per_del[k])}
+        if u.get("enhet"):
+            del_["enhet"] = u["enhet"]
+        if bokstavsfalt and u.get("typ") != "rutin":
+            del_["svarsfalt"] = ["Svar"]
+        elif falt and not bokstavsfalt and len(falt) == len(delar):
+            del_["svarsfalt"] = [_BOKSTAVSPREFIX.sub("", falt[k]) or "Svar"]
+        nya.append(del_)
+    u["text"] = fore
+    u["poang"] = [0, 0, 0]
+    u["losning"] = los[0]
+    u["bedomning"] = ""
+    u["deluppgifter"] = nya
+    if bokstavsfalt or (falt and len(falt) == len(delar)):
+        u.pop("svarsfalt", None)
+    u.pop("enhet", None)
+    return None
+
+
+# «Svar a) Antal plattor» → «Antal plattor» när fältet flyttar till sin del.
+_BOKSTAVSPREFIX = re.compile(r"^\s*(?:svar\s*)?\(?[a-h]\)\s*:?\s*", re.I)
+
+
+def _trippel(tripplar: list[list[int]]) -> str:
+    return " + ".join(str(tuple(t)) for t in tripplar)
+
+
+def delfragor_till_deluppgifter(exam: dict | None, profil: str) -> list[dict]:
+    """Delfrågorna i stammen som riktiga deluppgifter, på plats, på
+    arbetsbladet och gruppuppgiften. Returnerar fynden för de uppgifter vars
+    poäng inte gick att dela (koden DELFRAGEKOD), i reparationsrundans form.
+    Idempotent: en uppgift som redan har deluppgifter rörs inte."""
+    if profil not in OVNINGSPROFILER or not isinstance(exam, dict):
+        return []
+    uppgifter = exam.get("uppgifter")
+    fel: list[dict] = []
+    for i, u in enumerate(uppgifter if isinstance(uppgifter, list) else []):
+        skal = _till_deluppgifter(u)
+        if not skal:
+            continue
+        hur = ("Skriv dem som deluppgifter: stammen i text, och varje "
+               "delfråga med egen poang, text, losning och bedomning."
+               if profil == "gruppuppgift" else
+               "Skriv varje delfråga på en egen rad i text som börjar med "
+               "«a) », «b) » …, facit i losning med samma bokstav först på "
+               "raden («a) $-12$») och en bedömningsrad per poäng som nämner "
+               "sin del («+1 E korrekt svar i a)»), så att appen kan sätta "
+               "dem som deluppgifter.")
+        fel.append(_err(
+            f"uppgifter[{i}].text", DELFRAGEKOD,
+            f"uppgift {i + 1} har delfrågorna a), b) … i texten. Varje "
+            "delfråga ska stå som en egen deluppgift med en svarslinje direkt "
+            f"under sig, men poängen går inte att dela: {skal}. {hur} Behåll "
+            "uppgiftens poäng och frågor."))
+    return fel
+
+
 def _validate(exam: dict, profil: str, koder: list[str] | None = None,
               niva_mal: dict | None = None):
     """validate_exam_json + variationskontroll (BARA prov) + CI-taggningen.
@@ -7015,7 +7391,13 @@ def _validate(exam: dict, profil: str, koder: list[str] | None = None,
     # av samma skäl som sorteringen ovan.
     if profil == "prov":
         exam_spec.rensa_svarsfalt(exam)
+    # DELFRÅGORNA I STAMMEN BLIR DELUPPGIFTER, på övningspappren (lärarens
+    # dom 2026-10-02, se DELFRAGEKOD). Före valideringen: det är de nya
+    # deluppgifterna balansen och stammen ska räknas på. Det som inte gick
+    # att dela är ett fynd bland de andra i samma reparationsrunda.
+    delfel = delfragor_till_deluppgifter(exam, profil)
     doc, errors = exam_spec.validate_exam_json(exam, profil, niva_mal)
+    errors = errors + delfel
     if doc is not None and profil == "prov":
         errors = errors + exam_spec.validate_variation(doc)
     if doc is not None:
@@ -10758,6 +11140,79 @@ def bladets_formvakt(exam: dict) -> list[dict]:
     return ut
 
 
+# FACKORDEN PÅ BLADET (lärarens dom 2026-10-02, se build_sprak_blad). Det
+# räknebara i «för elever är det som att läsa ett annat språk»: ett
+# matematiskt fackord i en mening som inte visar det med ett exempel i matte.
+# «Skriv längderna som bråk med nämnaren 4.» (154:1) faller, «I
+# $\tfrac{3}{4}$ är nämnaren 4.» står, och «Förkorta $\tfrac{6}{8}$.» står:
+# där står exemplet i samma mening. Mäter begriplighet, inte ordval (minnet
+# vid elevlasare: förtydliganden står kvar), så fyndet ber om ett exempel
+# eller en visad form, aldrig om kortare text. Bara på arbetsbladet:
+# gruppuppgiftens begreppsrad ska NAMNGE täljare och nämnare
+# (FORLAGA_GRUPP), och provets ordval prövas av sprakvakt.
+FACKORD_BLAD = {
+    "nämnare": r"nämnar(?:e|en|na)",
+    "täljare": r"täljar(?:e|en|na)",
+    "blandad form": r"blandad\s+form",
+    "bråkform": r"bråkform(?:en)?",
+    "decimalform": r"decimalform(?:en)?",
+    "procentenhet": r"procentenhet(?:en|er|erna)?",
+    "andel": r"andel(?:en|ar|arna)?",
+    "förändringsfaktor": r"förändringsfaktor(?:n|er|erna)?",
+    "grundpotensform": r"grundpotensform(?:en)?",
+    "term": r"term(?:en|er|erna)?",
+    "faktor": r"faktor(?:n|er|erna)?",
+    "förkorta": r"förkort(?:a|ar|at|as)",
+}
+_FACKORD_RE = {namn: re.compile(rf"(?<![\wåäö]){m}(?![\wåäö])", re.I)
+               for namn, m in FACKORD_BLAD.items()}
+_FACKMENING = re.compile(r"[^.!?\n]+[.!?]?")
+
+
+def _fackord_utan_exempel(text) -> list[str]:
+    """Fackorden i texten som står i en mening utan matte ($…$)."""
+    if not isinstance(text, str):
+        return []
+    maskad = _maska(_RAKNARMARKE.sub("", text))
+    ut: list[str] = []
+    for m in _FACKMENING.finditer(maskad):
+        mening = m.group(0)
+        if "§" in mening:
+            continue
+        ut += [namn for namn, r in _FACKORD_RE.items()
+               if namn not in ut and r.search(mening)]
+    return ut
+
+
+def facktermsvakt(exam: dict) -> list[dict]:
+    """Fackord utan exempel på arbetsbladet. Noll modellanrop, ett fynd per
+    uppgift. Koden och märket är språkvaktens, så slutgrinden räknar om det
+    som vilket språkfynd som helst (_raknas_om)."""
+    ut: list[dict] = []
+    for i, u in enumerate((exam or {}).get("uppgifter") or [], 1):
+        if not isinstance(u, dict):
+            continue
+        delar = [d for d in (u.get("deluppgifter") or []) if isinstance(d, dict)]
+        ord_: list[str] = []
+        for x in [u] + delar:
+            for falt in ("text", "notis"):
+                ord_ += [o for o in _fackord_utan_exempel(x.get(falt))
+                         if o not in ord_]
+        if not ord_:
+            continue
+        lista = ", ".join(f"«{o}»" for o in ord_)
+        ut.append(_err(
+            f"uppgift {i}", "begriplighet",
+            f"uppgift {i} skriver {lista} utan ett exempel i samma mening: "
+            f"{SPRAKVAKTENS_MARKE}. Eleverna har svag svenska (lärarens dom "
+            "2026-10-02). Visa i stället för att beskriva: skriv det eleven "
+            "ska fylla i («$\\tfrac{1}{2}$ m $= \\tfrac{?}{4}$ m»), eller "
+            "visa ordet med ett exempel i matte i samma mening («I "
+            "$\\tfrac{3}{4}$ är nämnaren 4.»). Samma tal och samma svar."
+            + BEHALL_PLANEN))
+    return ut
+
+
 def ovningsvakter(exam: dict, *, prov: dict | None = None,
                   forbjudna: list[dict] | None = None,
                   delmoment: list[dict] | None = None,
@@ -10798,6 +11253,8 @@ def ovningsvakter(exam: dict, *, prov: dict | None = None,
     fel += bladets_npvakter(exam)
     # Provets språkvakt: bladet ska vara lika lätt att läsa som provet.
     fel += sprakvakt(exam)
+    # Och med ord eleverna har (lärarens dom 2026-10-02).
+    fel += facktermsvakt(exam)
     # Och lika kort (Rickard 2026-09-26).
     fel += textmangdvakt(exam)
     # Och i provets form (samma dag, domarna ur provgranskningen).
@@ -11881,8 +12338,11 @@ def _infor_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
               if prov else [])
     if prov and doma:
         from app import elevlasare              # lånar domarenheter härifrån
+        # `profil` ger bladets läsning med svag svenska (lärarens dom
+        # 2026-10-02, elevlasare._svag_svenska).
         ovning = ovning + elevlasare.doma_elevlasare(
-            exam, model=model, inriktning=inriktning, llm=llm, log_cb=log_cb)
+            exam, model=model, inriktning=inriktning, profil=profil, llm=llm,
+            log_cb=log_cb)
     fel = tack + ovning
     if not fel:
         return {"exam": exam, "errors": errors, "rounds": rounds_used}
@@ -12998,6 +13458,11 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
         else:
             larm = ci_utanfor.ci_vakt(r.get("exam"), kurs, profil)
             koder_ut = {ci_utanfor.KOD}
+            # Fackorden utan exempel på varje arbetsblad (lärarens dom
+            # 2026-10-02), som varning: bladet utan valt prov har ingen
+            # vaktrunda att laga dem i, och läraren ser dem i efterkontrollen.
+            if profil == "arbetsblad" and r.get("exam") is not None:
+                larm = larm + facktermsvakt(r["exam"])
         r["errors"] = [e for e in (r.get("errors") or [])
                        if e.get("code") not in koder_ut] + larm
         for f in larm:
@@ -13175,7 +13640,10 @@ def varvsvakter(exam: dict, profil: str, *, infor: dict | None = None,
     if profil == "prov":
         return (fel + sprakvakt(exam) + a_nivavakt(exam)
                 + np_vakter.np_vakter(exam, kurs, poang_tak))
-    # En mening per rad på alla papper utom provet (se _raknade_fynd).
+    # En mening per rad på alla papper utom provet (se _raknade_fynd), och
+    # fackorden med exempel på arbetsbladet (lärarens dom 2026-10-02).
+    if profil == "arbetsblad":
+        fel = fel + facktermsvakt(exam)
     return fel + radvakt(exam)
 
 
@@ -13362,7 +13830,10 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
     # är inte sämre än det var, och önskemålet gick igenom.
     # Nyckeln bär MEDDELANDET också: en balans som blivit sämre får en annan
     # rad än den som redan stod där, och ska fälla som förut.
-    fore = {_felnyckel(f) for f in _validate(exam, profil, niva_mal=niva_mal)[1]}
+    # På en KOPIA: _validate gör om delfrågor till deluppgifter på plats, och
+    # originalet är det som lämnas tillbaka orört när varvet kastas.
+    fore = {_felnyckel(f) for f in _validate(copy.deepcopy(exam), profil,
+                                             niva_mal=niva_mal)[1]}
     gamla = [f for f in errors if _felnyckel(f) in fore]
     errors = [f for f in errors if _felnyckel(f) not in fore]
     # ── BALANSEN FÄLLER INTE EN RIKTAD ÄNDRING PÅ ETT ÖVNINGSPAPPER ──

@@ -133,13 +133,54 @@ def _facit(e: dict) -> dict:
     return rad
 
 
-def build_elevlasare_prompt(enheter: list[dict], inriktning: str = "") -> str:
+# SVAG SVENSKA PÅ BLADET (lärarens dom 2026-10-02, exam 154 uppgift 1):
+# «Skriv längderna som bråk med nämnaren 4. Skriv hela längden som ett enda
+# bråk utan heltal framför.» «För elever är det som att läsa ett annat språk
+# … de kommer inte fatta någonting.» Eleverna på arbetsbladet har svag
+# svenska, och läsaren ska läsa som en av dem (exam_gen.build_sprak_blad är
+# samma regel sagd till skrivningen, facktermsvakt det som går att räkna).
+# Raden mäter fortfarande begriplighet, aldrig ordval mot boken eller
+# nationella provet: ett ord eleven inte FÖRSTÅR fäller, ett ord som bara
+# skiljer sig från provets gör det inte. Förtydligandet får här byta en
+# beskrivning mot samma sak visad, som villkorsmeningen ovan får byggas in i
+# frågan; det är fortfarande ett tillägg av exempel, aldrig en nedkortning.
+# Tom sträng på provet, alltså byte-identisk prompt där.
+def _svag_svenska(profil: str, inriktning: str) -> str:
+    if profil != "arbetsblad":
+        return ""
+    inr = " ".join(str(inriktning or "").split())[:exam_gen.MAX_INRIKTNING]
+    yrke = (f" Klassen går {inr}: yrkets egna ord är vardagsord för dem, "
+            "matematikbokens ord är det inte." if inr else "")
+    return (
+        "STEG 4, SVAG SVENSKA. Det här är ett arbetsblad, och många elever "
+        "har svag svenska. Läs då som en elev som kan vardagssvenska men "
+        f"inte matematikens fackord.{yrke} forstar \"nej\" också när:\n"
+        "- ett fackord (nämnare, täljare, blandad form, bråkform, "
+        "procentenhet, andel, term, faktor) står utan att uppgiften visar "
+        "vad det betyder med ett exempel i matte\n"
+        "- en instruktion BESKRIVER med ord hur svaret ska se ut i stället "
+        "för att visa det. Lärarens exempel: «Skriv längderna som bråk med "
+        "nämnaren 4. Skriv hela längden som ett enda bråk utan heltal "
+        "framför.» Förtydligandet är då samma sak visad: «$\\tfrac{1}{2}$ m "
+        "$= \\tfrac{?}{4}$ m».\n"
+        "- en mening säger mer än en sak, eller handlar om något eleven inte "
+        "kan se framför sig\n"
+        "Det är fortfarande aldrig \"nej\" att ordvalet skiljer sig från "
+        "bokens eller nationella provets: det som fäller är ett ord eleven "
+        "inte förstår.\n")
+
+
+def build_elevlasare_prompt(enheter: list[dict], inriktning: str = "",
+                            profil: str = "prov") -> str:
     """Elevläsarens prompt. Ordet «elevläsare» står här och ingen annanstans
     i appen; uppspelningen väljer band på det (tests/fejk.py `_auto`).
 
     `inriktning` gör en sak, samma som för gruppens domare: yrkets egna ord
     är vardagsord för de här eleverna (exam_gen._yrkesrad_domare). Tom
-    sträng utan inriktning, alltså byte-identisk prompt."""
+    sträng utan inriktning, alltså byte-identisk prompt.
+
+    `profil` «arbetsblad» lägger till läsningen med svag svenska
+    (_svag_svenska). Provets prompt är byte för byte densamma."""
     return (
         "Du är elevläsare för ett prov i matematik. Du läser varje uppgift "
         "SOM EN ELEV i årskurs 1 på gymnasiet: ensam, utan att få fråga, med "
@@ -237,6 +278,7 @@ def build_elevlasare_prompt(enheter: list[dict], inriktning: str = "") -> str:
         "samma tal, med vanliga ord för det som räknas. Yrkets vanliga ord "
         "(material, verktyg, mått) gör aldrig en situation obekant.\n"
         f"{exam_gen._yrkesrad_domare(inriktning)}"
+        f"{_svag_svenska(profil, inriktning)}"
         "Svara med enbart JSON."
     )
 
@@ -281,10 +323,14 @@ def _fortydligande(forslag: str) -> str:
     return s
 
 
-def elevlasarfynd(enheter: list[dict], domar: dict[str, dict]) -> list[dict]:
+def elevlasarfynd(enheter: list[dict], domar: dict[str, dict],
+                  profil: str = "prov") -> list[dict]:
     """Domen mot facit. Bara ett uttryckligt «nej» fäller; tystnad och
     «oklart» passerar, som i räknedomen. Fyndet citerar elevens läsning, så
-    att läraren ser VAD eleven läste in, och slutar i ett förtydligande."""
+    att läraren ser VAD eleven läste in, och slutar i ett förtydligande.
+
+    På arbetsbladet får förtydligandet byta en beskrivning mot samma sak
+    visad (_svag_svenska); provets slutrad är orörd."""
     ut = []
     for e in enheter:
         dom = domar.get(e["nr"])
@@ -322,9 +368,13 @@ def elevlasarfynd(enheter: list[dict], domar: dict[str, dict]) -> list[dict]:
         # ÅTGÄRDEN, inte konstaterandet, och åtgärden är ett tillägg. Samma
         # ord som redan står ska stå kvar: det är lärarens förtydliganden
         # som annars ryker i en omskrivning.
-        text += (f" Förtydliga uppgiften: {_fortydligande(dom['fortydligande'])}"
-                 " Lägg till, stryk inte: samma tal, samma ord som redan står "
-                 "där, och inte kortare.")
+        text += f" Förtydliga uppgiften: {_fortydligande(dom['fortydligande'])}"
+        text += (" Lägg till, stryk inte: samma tal, samma ord som redan står "
+                 "där, och inte kortare." if profil != "arbetsblad" else
+                 " Lägg till det eleven behöver och behåll talen. En "
+                 "beskrivning med fackord får bytas mot samma sak visad "
+                 "(«$\\tfrac{1}{2}$ m $= \\tfrac{?}{4}$ m»), aldrig mot "
+                 "kortare text.")
         ut.append(exam_gen._err(f"uppgift {e['nr']}", "elevlasare",
                                 text + exam_gen.BEHALL_PLANEN))
     # Samma tak som domarfynden, och det delas.
@@ -332,6 +382,7 @@ def elevlasarfynd(enheter: list[dict], domar: dict[str, dict]) -> list[dict]:
 
 
 def doma_elevlasare(exam: dict, *, model: str, inriktning: str = "",
+                    profil: str = "prov",
                     llm=llm_client.generate,
                     log_cb: Callable[[str], None] | None = None) -> list[dict]:
     """Ett elevläsaranrop → fynd där eleven inte läser uppgiften som facit."""
@@ -342,7 +393,7 @@ def doma_elevlasare(exam: dict, *, model: str, inriktning: str = "",
     log("Läser uppgifterna som en elev …")
     try:
         raw = llm(
-            model, build_elevlasare_prompt(enheter, inriktning),
+            model, build_elevlasare_prompt(enheter, inriktning, profil),
             system=ELEVLASARE_SYSTEM,
             options={"temperature": 0.0},
             response_format={"type": "json_schema",
@@ -357,4 +408,4 @@ def doma_elevlasare(exam: dict, *, model: str, inriktning: str = "",
         # kosta läraren provet.
         log(f"Elevläsningen kunde inte köras ({e}), provet levereras ändå.")
         return []
-    return elevlasarfynd(enheter, parse_elevlasare(raw))
+    return elevlasarfynd(enheter, parse_elevlasare(raw), profil)

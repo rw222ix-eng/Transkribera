@@ -484,6 +484,58 @@ def _sprakfynd(exam: dict, typ: str) -> list[dict]:
         "matematiken. Läs dem högt en gång.")]
 
 
+def _facktermfynd(exam: dict, typ: str) -> list[dict]:
+    """Fackord utan exempel på arbetsbladet (exam_gen.facktermsvakt, lärarens
+    dom 2026-10-02): ett fynd per uppgift, så att «Laga fynden» kan peka på
+    just den. Alla blad, med eller utan valt prov."""
+    if typ != "arbetsblad":
+        return []
+    try:
+        fel = exam_gen.facktermsvakt(exam)
+    except Exception:                       # pragma: no cover
+        return []
+    ut = []
+    for f in fel:
+        nr = _uppgiftsnr(f.get("path", ""))
+        ord_ = re.findall(r"«([^»]+)»", f.get("message", "").split(" utan ")[0])
+        ut.append(_fynd(
+            "sprak", f"Uppgift {nr} skriver {', '.join(ord_)} utan ett exempel. "
+            "Eleverna har svag svenska: visa det de ska fylla i, eller ge "
+            "ordet ett exempel i samma mening.", nr))
+    return ut
+
+
+def _delfragefynd(exam: dict, typ: str) -> list[dict]:
+    """Delfrågor i uppgiftens text i stället för som deluppgifter (lärarens
+    dom 2026-10-02, exam_gen.DELFRAGEKOD). Gäller papper som skrevs innan
+    appen började göra om dem: varje omskrivning gör om dem, så «Laga
+    fynden» räcker. Räknas på en kopia; det sparade pappret rörs inte."""
+    if typ not in exam_gen.OVNINGSPROFILER or not isinstance(exam, dict):
+        return []
+    try:
+        kopia = copy.deepcopy(exam)
+        fel = exam_gen.delfragor_till_deluppgifter(kopia, typ)
+    except Exception:                       # pragma: no cover
+        return []
+    trasiga = {_uppgiftsnr(f.get("path", "")) for f in fel}
+    ut = []
+    for i, (fore, efter) in enumerate(zip(exam.get("uppgifter") or [],
+                                          kopia.get("uppgifter") or []), 1):
+        if i in trasiga:
+            ut.append(_fynd(
+                exam_gen.DELFRAGEKOD, f"Uppgift {i} har delfrågorna a), b) … "
+                "i texten, och poängen går inte att dela på dem. Varje "
+                "delfråga ska vara en egen deluppgift med en svarslinje under "
+                "sig.", i))
+        elif fore != efter:
+            ut.append(_fynd(
+                exam_gen.DELFRAGEKOD, f"Uppgift {i} har delfrågorna a), b) … "
+                "i texten, och svarsraderna hamnar samlade under uppgiften. "
+                "En omskrivning gör dem till deluppgifter med en svarslinje "
+                "under varje.", i))
+    return ut
+
+
 def _tipsfynd(exam: dict, typ: str) -> list[dict]:
     """Tryckta tips, en gång till på det som ligger framme (exam_gen.a_nivavakt,
     som sedan 2026-09-19 fäller «Tips:» på alla nivåer). Prov 88 fick sina
@@ -719,6 +771,10 @@ def efterkontroll(view: dict, doc, summor: dict | None, *,
     # språkvakt (2026-09-24 kväll). Andra blad som förut.
     ut += _sprakfynd(view.get("exam") or {},
                      "prov" if typ == "arbetsblad" and infor else typ)
+    # Lärarens dom 2026-10-02: fackorden med exempel på varje blad, och
+    # delfrågorna som deluppgifter på bladet och gruppuppgiften.
+    ut += _facktermfynd(view.get("exam") or {}, typ)
+    ut += _delfragefynd(view.get("exam") or {}, typ)
     ut += _tipsfynd(view.get("exam") or {}, typ)
     ut += _npfynd(view.get("exam") or {}, typ)
     # Provets meningar står i ett stycke sedan 2026-09-25 (exam_latex
