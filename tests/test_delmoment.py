@@ -1368,3 +1368,21 @@ def test_uppgiften_ber_om_delmomentet_med_dess_ord():
     r = exam_gen.build_delmoment(_delmoment(), 12)
     assert "Uppgiften ska BE eleven göra det delmomentet handlar om" in r
     assert "Skriv … i grundpotensform" in r
+
+
+def test_ramen_hoppar_over_kapitlet_emellan():
+    """NA26F prov 2 (2026-10-02): kap 4 och 6, spannet 142–302 rymmer kap 5."""
+    avsnitt = [{"avsnitt": "4.1", "fran": 142, "till": 145},
+               {"avsnitt": "5.1", "fran": 224, "till": 234},
+               {"avsnitt": "6.1", "fran": 272, "till": 280}]
+    delmoment = [{"namn": "Trigonometri", "fran": 272, "till": 275},
+                 {"namn": "Koordinatsystemet", "fran": 142, "till": 143}]
+    kvar = exam_gen.avsnitt_med_lektioner(avsnitt, delmoment)
+    assert [a["avsnitt"] for a in kvar] == ["4.1", "6.1"]
+    assert exam_gen.avsnitt_med_lektioner(avsnitt, []) == avsnitt
+    # Inget avsnitt med lektion: ramen står som den var.
+    assert exam_gen.avsnitt_med_lektioner(
+        avsnitt, [{"fran": 10, "till": 12}]) == avsnitt
+    # Momentradens avsnitt saknar sidor och står alltid kvar.
+    utan = [{"avsnitt": "1.1", "fran": 0, "till": 0}]
+    assert exam_gen.avsnitt_med_lektioner(utan, delmoment) == utan

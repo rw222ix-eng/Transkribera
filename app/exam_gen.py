@@ -2019,6 +2019,34 @@ def avsnitt_ur_moment(moment: str) -> list[dict]:
     return ut
 
 
+def avsnitt_med_lektioner(avsnitt: list[dict],
+                          delmoment: list[dict]) -> list[dict]:
+    """Ramens avsnitt som har minst ett undervisat delmoment på sina sidor.
+
+    NA26F prov 2 (Rickard 2026-10-02) gäller kap 4 och 6, och Liber 1c har
+    kap 5 mellan dem. Bokspannet blir 142–302 och ramen fick då 5.1–5.4, som
+    klassen läser först i januari. Delmomenten vet redan vad som hölls före
+    provdagen, så ramen följer dem.
+
+    Ett avsnitt utan sidor (avsnitt_ur_moment) eller en tom delmomentlista
+    lämnar ramen orörd, och blir inget kvar står den som den var."""
+    if not avsnitt or not delmoment:
+        return avsnitt
+
+    def tal(x) -> int:
+        try:
+            return int(x or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    kvar = [a for a in avsnitt
+            if not tal(a.get("till"))
+            or any(tal(d.get("fran")) <= tal(a.get("till"))
+                   and tal(d.get("till")) >= tal(a.get("fran"))
+                   for d in delmoment)]
+    return kvar or avsnitt
+
+
 def mal_per_avsnitt(avsnitt: list[dict], antal: int) -> list[int]:
     """Hur många uppgifter varje avsnitt ska bära.
 

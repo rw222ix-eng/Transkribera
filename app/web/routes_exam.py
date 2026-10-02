@@ -2036,6 +2036,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
                                    body.get("moment") or ""))
                     delmoment = routes_planning.undervisade_delmoment(
                         db_file, body, group_id=group_id, course_id=course_id)
+                    # Ett spann över två kapitel med ett tredje emellan
+                    # (NA26F prov 2, kap 4 och 6): ramen följer lektionerna.
+                    avsnitt = exam_gen.avsnitt_med_lektioner(avsnitt,
+                                                             delmoment)
                     forbjudna = routes_planning.forbjudna_metoder(
                         db_file, body, group_id=group_id, course_id=course_id,
                         undervisade=delmoment)
@@ -2064,8 +2068,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         course_id=course_id)
                     infor_ram = {
                         "delmoment": ram_del,
-                        "avsnitt": routes_planning.bok_avsnitt(db_file,
-                                                               ram_body),
+                        "avsnitt": exam_gen.avsnitt_med_lektioner(
+                            routes_planning.bok_avsnitt(db_file, ram_body),
+                            ram_del),
                         "forbjudna": routes_planning.forbjudna_metoder(
                             db_file, ram_body, group_id=ram_grupp,
                             course_id=course_id, undervisade=ram_del),
