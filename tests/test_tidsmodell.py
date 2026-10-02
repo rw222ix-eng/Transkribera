@@ -179,10 +179,10 @@ def test_frontenden_raknar_med_samma_tal():
         exam_spec.MIN_PER_POANG["c"],
         exam_spec.MIN_PER_POANG["a"]], "plan.js PER_NIVA har glidit"
 
-    u = re.search(r"antal \* ([\d.]+) \+ (\d+)\) / 5", js)
-    assert u, "uppskatta() ser inte ut som den brukar"
-    assert float(u.group(1)) == exam_spec.MIN_PER_UPPGIFT
-    assert float(u.group(2)) == exam_spec.MIN_START_OCH_SLUT
+    # SEDAN 2026-10-03 räknar uppskatta() med lärarens linjal, poäng gånger
+    # takt, samma som exam_spec.papperstid: panelen har alltid en takt.
+    assert "Math.ceil((e + c + a) * taktFor(v) - 1e-9)" in js,         "uppskatta() ska räkna poäng gånger takt (papperstid)"
+    assert exam_spec.papperstid({"total": 33}, 15, 3) == 99
 
     # TAKTEN ÄR DUBBLERAD PÅ SAMMA SÄTT och måste läsas med. Faktorn ligger på
     # poängtermen i båda implementationerna; glider den isär får skärmen och
@@ -194,8 +194,6 @@ def test_frontenden_raknar_med_samma_tal():
         assert float(t.group(1)) == varde, f"plan.js {namn} har glidit"
     # Faktorn räknas likadant: takt / NP, spärrad till [1, 2·NP].
     assert "Math.min(Math.max(v, 1), 2 * NP_TAKT) / NP_TAKT" in js
-    # … och den ligger på POÄNGTERMEN, inte på uppgiftstermen eller overheaden.
-    assert "* taktfaktor(taktFor(v));" in js
 
 
 # ── takten: lärarens val, inte husets ─────────────────────────────────────
@@ -243,7 +241,8 @@ def test_takten_ger_ett_tatare_prov_an_np():
     """Utfallet läraren ville se: 80 minuter ska bära ~20 poäng med 3,5-takten,
     inte 16–18 som NP-modellen gav. Räknat på det skelett som skulle byggas."""
     np = exam_spec.foreslag_antal(80, "prov", takt=exam_spec.NP_MIN_PER_POANG)
-    hennes = exam_spec.foreslag_antal(80, "prov")
+    hennes = exam_spec.foreslag_antal(80, "prov",
+                                      takt=exam_spec.PROV_MIN_PER_POANG)
     assert hennes["takt"] == exam_spec.PROV_MIN_PER_POANG
     assert hennes["poang"] > np["poang"], (np, hennes)
     assert 19 <= hennes["poang"] <= 25, hennes
@@ -376,7 +375,10 @@ def test_skelettsummor_ar_samma_skelett_som_byggs(antal):
 def test_de_tva_knapparna_sager_samma_sak(tid):
     """«Föreslå antal» och «Uppskatta tiden» ska ge SAMMA poäng, samma E/C/A
     och samma tid för samma antal, mix och takt — det är hela buggen."""
-    forslag = exam_spec.foreslag_antal(tid, "prov")
+    # Panelen skickar alltid takten till båda knapparna (plan.js taktFor),
+    # och med en vald takt räknar båda med lärarens linjal (2026-10-03).
+    forslag = exam_spec.foreslag_antal(tid, "prov",
+                                       takt=exam_spec.PROV_MIN_PER_POANG)
     uppskattning = exam_spec.skelettsummor(forslag["antal"], "prov",
                                            takt=forslag["takt"])
     assert uppskattning["poang"] == forslag["poang"]

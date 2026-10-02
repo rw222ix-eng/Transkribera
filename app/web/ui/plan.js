@@ -4256,8 +4256,6 @@
       e += p[0] || 0; c += p[1] || 0; a += p[2] || 0;
     });
     const antal = (v.uppgifter || []).length;
-    const rena = (e * PER_NIVA.E + c * PER_NIVA.C + a * PER_NIVA.A)
-      * taktfaktor(taktFor(v));
     /* 1,1 och 8 står kvar orörda av NP-kalibreringen, med flit. NP-provens
        poängtäthet (2,0–2,3 poäng per uppgift) är för lik våra pappers för att
        skilja uppgiftstermen från poängtermen, och åttan är lärarens overhead
@@ -4266,8 +4264,12 @@
     /* `gissat` = ingen enda uppgift bar sin nivåvektor, alltså är pappret
        inte skrivet än och E/C/A kommer ur ecaDel. Då ska svaret hämtas från
        servern i stället — och står toasten ändå här ska den säga det. */
-    return { min: Math.max(20, Math.round((rena + antal * 1.1 + 8) / 5) * 5),
-             e, c, a, antal, poang: e + c + a, gissat: skrivna === 0 };
+    /* LÄRARENS LINJAL (2026-10-03): panelen har alltid en takt, och hennes
+       takt är hela provtiden per poäng, poäng gånger takt. Samma räkning som
+       taket, genereringen och efterkontrollen (exam_spec.papperstid).
+       NP-modellen med 1,1 och 8 står kvar för servern utan takt. */
+    const min = Math.max(5, Math.ceil((e + c + a) * taktFor(v) - 1e-9));
+    return { min, e, c, a, antal, poang: e + c + a, gissat: skrivna === 0 };
   }
   function sattProvtid(m) {
     inst.Prov.provminuter = m;

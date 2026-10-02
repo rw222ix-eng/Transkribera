@@ -3494,6 +3494,13 @@ def skelettsummor(antal: int, profil: str = "prov",
     skrivet. Är provet väl skrivet räknar skärmen på dokumentets egna tripplar
     (`peca`) — då är skelettet inte längre en gissning utan en historia."""
     tak = poang_tak_for(tid_min, takt)
+    # LÄRARENS LINJAL NÄR HON VALT TAKT (2026-10-03). «Uppskatta tiden» sa ca
+    # 115 minuter för 33 poäng i takt 3, och genereringen byggde samma 33
+    # poäng som 99 minuter: tidsatgang väger poängen med NP:s nivåvikter och
+    # lägger 1,1 min per uppgift och 8 min start och slut ovanpå, medan
+    # hennes takt redan är hela provtiden per poäng. Samma linjal som taket
+    # och efterkontrollen (papperstid, exam 128). Utan takt: NP-modellen.
+    vald_takt = takt
     takt = takt_for(profil) if takt is None else takt
     if delar is None:
         delar = profil == "prov"
@@ -3503,7 +3510,7 @@ def skelettsummor(antal: int, profil: str = "prov",
     summor = poangsummor(_skeleton_doc(skelett))
     return {"antal": len(skelett), "poang": summor["total"],
             "summor": {n: int(summor.get(n) or 0) for n in ("e", "c", "a")},
-            "tid": tidsatgang(summor, len(skelett), takt=takt),
+            "tid": papperstid(summor, len(skelett), vald_takt, profil),
             "takt": takt, "tak": tak}
 
 
@@ -3545,6 +3552,9 @@ def foreslag_antal(tid_min: int, profil: str = "prov",
     # husets gissning och inte lärarens beslut, då hade varje gammalt anrop
     # tyst fått ett annat antal än det fick förut.
     tak = poang_tak_for(tid_min, takt)
+    # Den takt läraren VALDE går vidare till skelettsummor, inte husets: bara
+    # en vald takt byter linjal till poäng gånger takt (se skelettsummor).
+    vald_takt = takt
     takt = takt_for(profil) if takt is None else takt
     tid_min = max(5, int(tid_min or 0))
     bast: dict | None = None
@@ -3558,10 +3568,22 @@ def foreslag_antal(tid_min: int, profil: str = "prov",
         # småpoäng. Fyllt hade varje kandidat vägt lika mycket, och
         # förslaget hade krympt till färre och tyngre uppgifter.
         kandidat = skelettsummor(n, profil, delar=(profil == "prov"),
-                                 mix=mix, niva_mal=niva_mal, takt=takt,
-                                 kurs=kurs, tid_min=tid_min if tak else None,
+                                 mix=mix, niva_mal=niva_mal, takt=vald_takt,
+                                 # UTAN TAK med lärarens linjal: kapat vid taket
+                                 # tar varje stort antal lika lång tid, och
+                                 # förslaget kunde landa på tjugo uppgifter.
+                                 kurs=kurs, tid_min=(tid_min if tak and vald_takt is None
+                                                     else None),
                                  fyll=False)
         tid = kandidat["tid"]
+        # MED VALD TAKT ÄR TAKET HÅRT (2026-10-03): 100 minuter i takt 3 är
+        # högst 33 poäng i hennes räkning, och ett förslag på 35 poäng hade
+        # genereringen kapat. Största antal som ryms under taket vinner.
+        if vald_takt is not None and tak is not None:
+            if kandidat["poang"] <= tak:
+                bast = kandidat
+                continue
+            break
         # Närmast vinner; står två lika nära vinner det MINDRE provet. Ett prov
         # som ryms är alltid bättre än ett som spiller över lika mycket åt andra
         # hållet — hon kan lägga till en uppgift, men inte lägga till en
