@@ -826,6 +826,155 @@ window.BladBygg = (() => {
       <p class="prscenhint">Släpp bilden här när den är klar — eller klicka.</p>
     </div>`;
   }
+  /* ══════════ BILDLAGRET ══════════
+     LÄRARENS DOM 2026-10-02, om arbetsbladen till BA26B men för alla blad:
+     där uppgiften beskriver något med mycket text (Negativa tal uppg 5,
+     gångtunneln med taket på −1 m och golvet på −4 m) ska bilden ha pilar som
+     pekar på rätt sak och lite ritat ovanpå, så att eleven direkt ser vad det
+     handlar om. Samma grepp som matematikvideorna.
+
+     Tvålagersprincipen (app/platar.py) gäller oförändrad. Plåten är bara
+     målning, utan text, siffror eller pilar. Allt som går att läsa ritas här,
+     i kod, ovanpå bilden. En siffra i själva målningen går inte att rätta när
+     uppgiften skrivs om, och ChatGPT målar fel siffror.
+
+     DATAN bor i dokumentet, bredvid bilderna: `v.bildlager = {uppg5: [...]}`,
+     samma nyckel som `v.bilder`. Den ligger INTE i exam_json, av tre skäl.
+     Bilden själv har aldrig legat där (plan.js: lärarens egna bilder bor bara
+     i dokumentet), och ett lager utan sin bild är koordinater på ingenting.
+     En omskrivning går genom modellen och exam_spec, som varken känner fältet
+     eller ska lära sig det (kassettregeln: prompterna är orörda). Och PDF:en
+     är skärmens avritning (blad-bild.js), så det som står i dokumentet är det
+     som trycks. Versionerna och godkännandet bär hela dokumentet, alltså
+     följer lagret med av sig självt.
+
+     Elementen, koordinater relativt bilden (0 till 1 i bredd och höjd, origo
+     uppe till vänster). tools/bildlager.py validerar samma form:
+       {typ:'pil', fran:[x,y], till:[x,y], text?, textvid?:'svans'|'spets'}
+       {typ:'matt', fran:[x,y], till:[x,y], text}   måttlinje med tvärstreck
+       {typ:'etikett', plats:[x,y], text}            text i vit ruta med kant
+       {typ:'linje', fran:[x,y], till:[x,y], streckad?, text?}
+       {typ:'ring', mitt:[x,y], r, text?}            r i andel av bildbredden
+     Alla med text tar också `sida` (var texten ligger mot sin punkt: mitt,
+     upp, ner, vanster, hoger, upp-hoger, upp-vanster, ner-hoger, ner-vanster)
+     och `textplats` [x,y] som flyttar texten. Matematik skrivs «$-4$ m» och
+     sätts av KaTeX som resten av bladet.
+
+     UTSEENDET är tryckets: svart linje med vit kontur, så att den syns både
+     mot mörk tunnel och ljus himmel, och text på vit botten. Linjerna är en
+     SVG med bildens egna proportioner (viewBox 1000 brett), texterna är HTML
+     i procent ovanpå, för KaTeX är HTML och en <foreignObject> i en SVG som
+     själv hamnar i avritningens <foreignObject> är en fälla för mycket.
+     Strecken är `non-scaling-stroke`, alltså lika tjocka i pixlar hur stor
+     bilden än ritas.
+
+     blad.js lägger lagret på bilden när bilden väl ligger i rutan (lärarens
+     egen eller plåten). Ett dokument utan `bildlager` ritas exakt som förut. */
+  const BL_SIDOR = {
+    mitt: [-50, -50, 0, 0], upp: [-50, -100, 0, -1], ner: [-50, 0, 0, 1],
+    vanster: [-100, -50, -1, 0], hoger: [0, -50, 1, 0],
+    'upp-hoger': [0, -100, 1, -1], 'upp-vanster': [-100, -100, -1, -1],
+    'ner-hoger': [0, 0, 1, 1], 'ner-vanster': [-100, 0, -1, 1],
+  };
+  const blPunkt = p => (Array.isArray(p) && p.length === 2
+    && p.every(t => typeof t === 'number' && isFinite(t)))
+    ? [Math.min(1, Math.max(0, p[0])), Math.min(1, Math.max(0, p[1]))] : null;
+  const blTal = n => Math.round(n * 10) / 10;
+  /* Bildens proportioner ur en PNG:s data-URL, utan att vänta på avkodningen.
+     IHDR står på byte 16 till 23 (bredd, höjd), alltså räcker de första 32
+     base64-tecknen. Lagret ritas då rätt redan när arket byggs, och canvasens
+     klon (granska.js) får det med sig. Allt annat ger 0, och då väntar blad.js
+     in bildens `load`. */
+  function bildForhallande(src) {
+    const m = /^data:image\/png;base64,/.exec(String(src || ''));
+    if (!m) return 0;
+    try {
+      const b = atob(String(src).slice(m[0].length, m[0].length + 32));
+      const tal = i => ((b.charCodeAt(i) << 24) >>> 0) + (b.charCodeAt(i + 1) << 16)
+        + (b.charCodeAt(i + 2) << 8) + b.charCodeAt(i + 3);
+      const w = tal(16), h = tal(20);
+      return w > 0 && h > 0 ? w / h : 0;
+    } catch (e) { return 0; }
+  }
+  function bildlager(lista, forhallande) {
+    if (!Array.isArray(lista) || !lista.length) return '';
+    const W = 1000;
+    const H = Math.round(W / (forhallande > 0 ? forhallande : 16 / 9));
+    const xy = p => [p[0] * W, p[1] * H];
+    const halo = [], black = [], lappar = [];
+    const streck = (a, b, streckad) => {
+      const d = `x1="${blTal(a[0])}" y1="${blTal(a[1])}" x2="${blTal(b[0])}" y2="${blTal(b[1])}"`;
+      halo.push(`<line ${d} stroke="#fff" stroke-width="6" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`);
+      black.push(`<line ${d} stroke="#000" stroke-width="2"${streckad ? ' stroke-dasharray="14 9"' : ' stroke-linecap="round"'} vector-effect="non-scaling-stroke"/>`);
+    };
+    /* Spetsen pekar från `bak` mot `spets`. Linjen kortas så att den runda
+       ändan inte sticker ut genom spetsen. */
+    const L = 26, B2 = 10, T = 13;
+    const enhet = (a, b) => {
+      const dx = b[0] - a[0], dy = b[1] - a[1], n = Math.hypot(dx, dy) || 1;
+      return [dx / n, dy / n];
+    };
+    const spets = (bak, tip) => {
+      const [ux, uy] = enhet(bak, tip);
+      const bas = [tip[0] - ux * L, tip[1] - uy * L];
+      const pts = [tip, [bas[0] - uy * B2, bas[1] + ux * B2], [bas[0] + uy * B2, bas[1] - ux * B2]]
+        .map(p => `${blTal(p[0])},${blTal(p[1])}`).join(' ');
+      halo.push(`<polygon points="${pts}" fill="#fff" stroke="#fff" stroke-width="4" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`);
+      black.push(`<polygon points="${pts}" fill="#000"/>`);
+      return [tip[0] - ux * L * 0.7, tip[1] - uy * L * 0.7];
+    };
+    const tvars = (p, u) => streck([p[0] - u[1] * T, p[1] + u[0] * T], [p[0] + u[1] * T, p[1] - u[0] * T]);
+    /* Texten läggs på den sida av punkten som linjen INTE går åt, så att den
+       aldrig ligger över sin egen pil. */
+    const bort = (fran, mot) => {
+      const dx = fran[0] - mot[0], dy = fran[1] - mot[1];
+      if (Math.abs(dx) > Math.abs(dy)) return dx < 0 ? 'vanster' : 'hoger';
+      return dy < 0 ? 'upp' : 'ner';
+    };
+    const lapp = (text, p, sida, ram) => {
+      if (text == null || String(text).trim() === '' || !p) return;
+      const s = BL_SIDOR[sida] || BL_SIDOR.mitt;
+      const tx = s[2] ? `calc(${s[0]}% + ${s[2] * 6}px)` : `${s[0]}%`;
+      const ty = s[3] ? `calc(${s[1]}% + ${s[3] * 6}px)` : `${s[1]}%`;
+      lappar.push(`<span class="bllapp${ram ? ' blram' : ''}" style="left:${blTal(p[0] * 100)}%;top:${blTal(p[1] * 100)}%;transform:translate(${tx},${ty})">${mat(String(text))}</span>`);
+    };
+    lista.forEach(e => {
+      if (!e || typeof e !== 'object') return;
+      const egen = blPunkt(e.textplats);
+      const fran = blPunkt(e.fran), till = blPunkt(e.till);
+      if (e.typ === 'pil' && fran && till) {
+        const a = xy(fran), b = xy(till);
+        streck(a, spets(a, b));
+        const vidSpets = e.textvid === 'spets';
+        const p = egen || (vidSpets ? till : fran);
+        lapp(e.text, p, e.sida || (egen ? 'mitt' : vidSpets ? bort(b, a) : bort(a, b)));
+      } else if (e.typ === 'matt' && fran && till) {
+        const a = xy(fran), b = xy(till), u = enhet(a, b);
+        streck(spets(b, a), spets(a, b));
+        tvars(a, u); tvars(b, u);
+        lapp(e.text, egen || [(fran[0] + till[0]) / 2, (fran[1] + till[1]) / 2], e.sida || 'mitt');
+      } else if (e.typ === 'linje' && fran && till) {
+        streck(xy(fran), xy(till), !!e.streckad);
+        lapp(e.text, egen || fran, e.sida || 'upp-hoger');
+      } else if (e.typ === 'ring') {
+        const m = blPunkt(e.mitt);
+        const r = Number(e.r);
+        if (!m || !(r > 0)) return;
+        const c = xy(m), rr = Math.min(r, 0.5) * W;
+        const d = `cx="${blTal(c[0])}" cy="${blTal(c[1])}" r="${blTal(rr)}" fill="none"`;
+        halo.push(`<circle ${d} stroke="#fff" stroke-width="6" vector-effect="non-scaling-stroke"/>`);
+        black.push(`<circle ${d} stroke="#000" stroke-width="2" vector-effect="non-scaling-stroke"/>`);
+        lapp(e.text, egen || [m[0], Math.max(0, m[1] - rr / H)], e.sida || 'upp');
+      } else if (e.typ === 'etikett') {
+        lapp(e.text, egen || blPunkt(e.plats), e.sida || 'mitt', true);
+      }
+    });
+    if (!halo.length && !lappar.length) return '';
+    const svg = halo.length
+      ? `<svg class="blsvg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">`
+        + `<g>${halo.join('')}</g><g>${black.join('')}</g></svg>` : '';
+    return svg + lappar.join('');
+  }
   /* ══════════ FÖRSÄTTSBLADETS PORTRÄTT ══════════
      Försättsbladet slutar i en halv sida tomt papper under betygstabellen, och
      den ytan var husets ENDA bildplats utan beställning: varenda annan ruta bär
@@ -1568,5 +1717,5 @@ window.BladBygg = (() => {
      sätt som provets och arbetsbladets, annars är det två olika facit. */
   return { mat, kortref, ref, ark, arkfacit, anteckningar, provforsatt, provblad,
            forsattsbild, losning, provtitel, BOKSTAV, delnamnVisning,
-           hjalpmedelsfras, hjalpmedelsval };
+           hjalpmedelsfras, hjalpmedelsval, bildlager, bildForhallande };
 })();

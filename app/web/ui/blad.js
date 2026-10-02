@@ -2007,7 +2007,45 @@ window.Blad = (() => {
       const img = $('img', el);
       if (img && !img.complete) img.addEventListener('load', () => formge(), { once: true });
     });
+    bildlagren(trav, v);
     return trav;
+  }
+
+  /* ── BILDLAGRET LÄGGS PÅ BILDEN (blad-bygg bildlager) ──
+     Efter bilderna, för lagret hör till den bild som faktiskt står i rutan:
+     lärarens egen (v.bilder) eller plåten. Rutan utan bild får inget lager,
+     och en inaktuell bild (bildInaktuell) har inget att rita på. Bilden
+     flyttas in i en låda med samma storlek, och lagret ligger absolut ovanpå.
+     Lådan påverkar inte höjden, så pagineringen mäter som förut.
+
+     Proportionerna behövs för att pilspetsarna ska peka rätt. En PNG som
+     data-URL bär dem i sitt huvud (BladBygg.bildForhallande). Annars ritas
+     lagret med plåtformatet 16:9 och ritas om när bilden landat. */
+  function bildlagren(trav, v) {
+    Object.entries((v && v.bildlager) || {}).forEach(([nyckel, lista]) => {
+      if (!/^[A-Za-z0-9_-]{1,40}$/.test(nyckel) || !Array.isArray(lista) || !lista.length) return;
+      if (bildInaktuell(v, nyckel)) return;
+      const ruta = $(`[data-el="${nyckel}"] .prbild, [data-el="${nyckel}"] .gufigur`, trav);
+      const img = ruta && $('img', ruta);
+      if (!img || img.parentNode.classList.contains('bildlager')) return;
+      const lada = document.createElement('div');
+      lada.className = 'bildlager';
+      img.parentNode.insertBefore(lada, img);
+      lada.appendChild(img);
+      const lagg = forh => {
+        Array.from(lada.children).forEach(n => { if (n !== img) n.remove(); });
+        lada.insertAdjacentHTML('beforeend', B().bildlager(lista, forh));
+        if (window.Matte) window.Matte.satt(lada);
+      };
+      const kand = B().bildForhallande(img.getAttribute('src'))
+        || (img.complete && img.naturalWidth ? img.naturalWidth / img.naturalHeight : 0);
+      lagg(kand);
+      if (!kand) {
+        img.addEventListener('load', () => {
+          if (img.naturalWidth) lagg(img.naturalWidth / img.naturalHeight);
+        }, { once: true });
+      }
+    });
   }
 
   /* ── KLONEN I CANVASEN FORMAS SJÄLV ────────────────

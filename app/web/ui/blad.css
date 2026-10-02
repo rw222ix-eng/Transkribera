@@ -388,3 +388,23 @@
    runt rutan läste fortfarande som platshållare. Bilden får stå oramad, som
    \includegraphics gör på pappret. */
 .gufigur:has(img){background:#fff;border:none}
+/* ── BILDLAGRET (blad-bygg.js bildlager, lärarens dom 2026-10-02) ──
+   Pilar, mått och etiketter ovanpå bilden. Lådan är exakt bildens storlek,
+   så att procenten i lagret är procent av bilden och inte av rutan. Plåten är
+   70 % bred (se ovan); då är det lådan som tar de 70 procenten och bilden
+   fyller lådan. Lärarens egen bild har sina mått inline (blad.js) och lådan
+   krymper runt den. Linjerna är svarta med vit kontur och texten står på vit
+   botten: det ska läsas på en gråskaleutskrift, mot mörk tunnel som mot
+   ljus himmel. */
+.bildlager{position:relative;display:block;width:fit-content;max-width:100%;margin:0 auto;line-height:0}
+.bildlager>img{display:block;margin:0!important}
+.prplat .bildlager{width:70%}
+.prplat .bildlager>img{width:100%;height:auto}
+:is(.prbild,.gufigur) .bildlager>svg.blsvg{position:absolute;left:0;top:0;width:100%;height:100%;
+  max-width:none;max-height:none;margin:0;overflow:visible;pointer-events:none}
+/* Normal vikt, inte fet: KaTeX bryr sig inte om font-weight, och «markytan»
+   i fetstil bredvid en mager nolla läste som två olika etiketter. Den vita
+   botten ger kontrasten. */
+.bllapp{position:absolute;white-space:nowrap;background:#fff;color:#000;font-size:13.5px;
+  font-weight:400;line-height:1.3;padding:1px 5px;border-radius:2px;pointer-events:none}
+.bllapp.blram{border:1px solid #000}
