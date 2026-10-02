@@ -3805,7 +3805,8 @@ def domarenheter(exam: dict) -> list[dict]:
                              "text": d.get("text") or "",
                              "losning": d.get("losning") or "",
                              "typ": d.get("typ") or u.get("typ") or "",
-                             "formaga": d.get("formaga") or u.get("formaga") or ""},
+                             "formaga": d.get("formaga") or u.get("formaga") or "",
+                             **_tabellkort(d.get("tabell") or u.get("tabell"))},
                 })
             continue
         niva = _niva_ur_poang(u.get("poang"))
@@ -3822,9 +3823,23 @@ def domarenheter(exam: dict) -> list[dict]:
             "kort": {"text": u.get("text") or "",
                      "losning": u.get("losning") or "",
                      "typ": u.get("typ") or "",
-                     "formaga": u.get("formaga") or ""},
+                     "formaga": u.get("formaga") or "",
+                     **_tabellkort(u.get("tabell"))},
         })
     return ut
+
+
+def _tabellkort(tabell) -> dict:
+    """Tabellen på domarens kort, och bara när uppgiften har en.
+
+    BA26B:s blad 153 och 155 (2026-10-02): «Tabellen nedan visar …» och
+    domaren såg ingen tabell. Kriteriedomaren svarade «oklart» på fyra
+    uppgifter som båda domarna annars kallade E, och grinden rapporterade
+    «Nivån gick inte att säkra». Utan tabell är kortet byte för byte som förut."""
+    if not isinstance(tabell, dict) or not tabell.get("rader"):
+        return {}
+    return {"tabell": {"rubriker": tabell.get("rubriker") or [],
+                       "rader": tabell.get("rader") or []}}
 
 
 def build_domar_prompt(enheter: list[dict], *, skala: str = "") -> str:

@@ -1386,3 +1386,14 @@ def test_ramen_hoppar_over_kapitlet_emellan():
     # Momentradens avsnitt saknar sidor och står alltid kvar.
     utan = [{"avsnitt": "1.1", "fran": 0, "till": 0}]
     assert exam_gen.avsnitt_med_lektioner(utan, delmoment) == utan
+
+
+def test_domaren_ser_uppgiftens_tabell():
+    """BA26B 2026-10-02: «Tabellen nedan visar …» gav «oklart» utan tabell."""
+    tab = {"rubriker": ["Punkt", "A", "B"], "rader": [["Höjd (m)", "0,4", "-0,8"]]}
+    exam = {"uppgifter": [
+        {"text": "Tabellen nedan visar höjden.", "poang": [1, 0, 0], "tabell": tab},
+        {"text": "Beräkna 3 - 9.", "poang": [1, 0, 0]}]}
+    e = exam_gen.domarenheter(exam)
+    assert e[0]["kort"]["tabell"]["rader"] == tab["rader"]
+    assert "tabell" not in e[1]["kort"]
