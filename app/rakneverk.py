@@ -68,6 +68,8 @@ import logging
 import random
 import re
 
+from app import facitfigur
+
 _LOG = logging.getLogger(__name__)
 
 # ── Verktygen, lånade sent ────────────────────────────────────────────────
@@ -574,11 +576,16 @@ def granska(exam: dict) -> dict:
     if not tillgangligt():
         return {"fel": [], "statistik": stat}
     for e in enheter(exam):
-        if not (e["losning"] or "").strip():
+        # Figurraderna i bladets facit («[tallinje start 3 hopp -9]», app/
+        # facitfigur) är ritinstruktioner och inga räkneled. De bär inga $…$
+        # och prövas därför aldrig, men de tas bort här så att det inte hänger
+        # på formen.
+        losning = facitfigur.utan_figurrader(e["losning"] or "")
+        if not losning.strip():
             continue
         stat["enheter"] += 1
-        for f, s in (granska_kedjor(e["nr"], e["losning"]),
-                     granska_rot(e["nr"], e["text"], e["losning"])):
+        for f, s in (granska_kedjor(e["nr"], losning),
+                     granska_rot(e["nr"], e["text"], losning)):
             fynd += f
             for k, n in s.items():
                 stat[k] += n

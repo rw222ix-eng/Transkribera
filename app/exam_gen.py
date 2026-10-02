@@ -3634,6 +3634,7 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             "Lösningsförslagen blir facit, och eleverna ska kunna följa det "
             "(FACIT FÖR ELEVERNA nedan). Svara med enbart JSON.")
         block.append(BLAD_FACIT)
+        block.append(BLAD_FIGUR)
         # TEXT → EKVATION på arbetsbladet också. Lärarens dom gällde
         # gruppuppgiften, men regeln är momentets och inte formens: ett
         # övningsblad om ekvationer som ger bort uppställningen övar bara
@@ -10240,6 +10241,33 @@ BLAD_FACIT = (
     "72$) får ingen pil. Vardagsord: «räkna ut», «flytta över», «dela», "
     "«gånger in», «stryk», «bryt ut», aldrig «subtrahera», «dividera», "
     "«ekvivalent». En enkel uppgift är två till fyra rader.\n")
+# FIGURER I FACIT (Rickard 2026-10-02, BA26B, gäller alla blad): «Starta på 3
+# på tallinjen», och eleverna frågar «vad då tallinje?». Svenskan är inte på
+# topp, så facit ska visa tallinjen och pilen. Raden ritas av app/facitfigur
+# (LaTeX) och blad-bygg.js FACITFIGUR (skärmen och PDF:en); formen och
+# nyckelorden står där. Eget block efter BLAD_FACIT och bara på arbetsbladet:
+# provets prompt och grammatik är orörda.
+BLAD_FIGUR = (
+    "FIGURER I FACIT. Eleverna läser svenska med möda och ska SE vägen. Där "
+    "ett steg annars skulle säga «på tallinjen», «gå 9 steg åt vänster», "
+    "«delar av brädan», «såga bort» eller «dela i tio/hundra delar» skriver "
+    "du en FIGURRAD: en egen rad inom hakparenteser, utan $ och utan "
+    "likhetstecken, med decimalkomma och minus som -. Formerna:\n"
+    "- [tallinje start 3 hopp -9]: start och ett eller flera hopp (hopp -3 "
+    "-6 är två pilar i rad). Tillägg: markera -1 0 (fler tal med prick), "
+    "lodrät (höjder, djup, våningar, tunnlar), noll marken (vad 0 är), "
+    "enhet m.\n"
+    "- [bräda delar 4 hela 2 stryk 3]: brädor delade i lika delar. hela är "
+    "antalet brädor, färga 3 6 färgar delar i två mönster (addition), stryk "
+    "3 sågar bort de sista färgade delarna (subtraktion). [bräda 9/4] ritar "
+    "nio fjärdedelar.\n"
+    "- [procent 10 av 2400 enhet kr]: stapel i tiondelar (dela med 10). "
+    "[procent ruta 1 av 500 enhet kg]: hundra rutor (dela med 100).\n"
+    "Figuren ersätter meningen som beskriver den; räkneleden står kvar. Den "
+    "står på stegets plats och får gärna en pil med kort förklaring: "
+    "«[tallinje start 3 hopp -9] ← minus är åt vänster». Aldrig på "
+    "svarsraden, högst en figur per uppgift eller deluppgift, och bara där "
+    "figuren hjälper.\n")
 
 BLAD_ORD_FORE_FRAGAN = 30
 BLAD_STAM_MENINGAR = 2

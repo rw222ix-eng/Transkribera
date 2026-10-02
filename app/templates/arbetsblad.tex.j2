@@ -103,6 +103,15 @@ på sista sidan((* endif *))((* if visa_poang *)); poäng anges som totalpoäng(
 ((# En äldre vy (servern har Python i minnet) bär stegen som strängar. #))
 ((* if s is string *))
 \noindent ((( s )))\par\nopagebreak
+((# Figurraden (app/facitfigur, lärarens dom 2026-10-02): tallinjen, brädan
+    eller procentstapeln som tikzpicture, förklaringen bredvid. `is defined`:
+    en äldre vy (gammal Python i minnet) saknar fältet. #))
+((* elif s.figur is defined and s.figur *))
+\par\vspace{0.8mm}\noindent\begin{minipage}[c]{((* if s.not *))0.58((* else *))0.98((* endif *))\linewidth}
+((( s.figur )))
+\end{minipage}((* if s.not *))\hfill\begin{minipage}[c]{0.39\linewidth}\small\hangindent=1.4em\hangafter=1\relax
+\textcolor{ink700}{\(\leftarrow\)\enspace ((( s.not )))}\end{minipage}((* endif *))
+\par\nopagebreak\vspace{0.8mm}\nopagebreak
 ((* elif s.not *))
 \facitsteg{((( s.rad )))}{((( s.not )))}
 ((* else *))

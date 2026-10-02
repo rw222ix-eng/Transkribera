@@ -17,7 +17,7 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
-from app import course_data, exam_figures, exam_spec
+from app import course_data, exam_figures, exam_spec, facitfigur
 
 
 def templates_dir() -> Path:
@@ -1073,6 +1073,12 @@ def facit_grupper(losning: str | None, enhet: str | None = None
         grupper[-1]["rader"].append(r[m.end():] if m else r)
     ut = []
     for g in grupper:
+        # En figurrad är aldrig svaret: står den först är gruppens svar tomt
+        # och figuren första steget (app/facitfigur, lärarens dom 2026-10-02).
+        if g["rader"] and facitfigur.ar_figurrad(
+                exam_spec.elevrad_delar(g["rader"][0])[0]):
+            ut.append({"namn": g["namn"], "svar": "", "steg": g["rader"]})
+            continue
         svar, rest = _dela_svaret(g["rader"][0] if g["rader"] else "")
         steg = ([rest] if rest else []) + g["rader"][1:]
         # Enheten hör till hela uppgiften: bara när det finns ett svar.
@@ -1093,6 +1099,17 @@ def _facit_vy(losning: str | None, enhet: str | None = None) -> list[dict]:
         steg = []
         for x in g["steg"]:
             rad, notis = exam_spec.elevrad_delar(x)
+            # Figurraden (app/facitfigur) blir en tikzpicture; en rad som inte
+            # går att tolka står som text utan hakparenteser. «figur» finns
+            # bara här: mallen frågar `s.figur is defined`, så en äldre vy
+            # utan fältet sätter raden som förut.
+            if facitfigur.ar_figurrad(rad):
+                f, _fel = facitfigur.tolka(rad)
+                steg.append({"rad": escape_mixed(facitfigur.textreserv(rad)),
+                             "not": escape_mixed(notis),
+                             "figur": facitfigur.tikz(f, escape_latex)
+                             if f else ""})
+                continue
             steg.append({"rad": escape_mixed(rad), "not": escape_mixed(notis)})
         ut.append({"namn": g["namn"],
                    "svar": escape_mixed(exam_spec.elevrad_delar(g["svar"])[0],
@@ -2067,7 +2084,20 @@ def render_arbetsblad(doc: exam_spec.ExamDoc, visa_poang: bool = False,
     (2026-08-25) är det en riktig lucka och inte en teoretisk."""
     return _environment().get_template("arbetsblad.tex.j2").render(
         visa_poang=visa_poang, dokumentkod=dokumentkod, only_facit=only_facit,
-        utan_facit=utan_facit, **_build_view(doc, bilder, egna=egna_bilder))
+        utan_facit=utan_facit,
+        med_facitfigur=not utan_facit and _har_facitfigur(doc),
+        **_build_view(doc, bilder, egna=egna_bilder))
+
+
+def _har_facitfigur(doc) -> bool:
+    """Bär facit en figurrad som går att rita? Då laddar preamblen tikz
+    (med_facitfigur, _preamble.tex.j2), men inte pgfplots eller biblioteken."""
+    def ritbar(losning):
+        return any(facitfigur.tolka(exam_spec.elevrad_delar(r)[0])[0]
+                   for r in str(losning or "").split("\n"))
+    return any(ritbar(it.losning) or any(ritbar(d.losning)
+                                         for d in (it.deluppgifter or []))
+               for it in doc.uppgifter)
 
 
 def render_anteckningar(doc) -> str:

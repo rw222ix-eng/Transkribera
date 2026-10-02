@@ -64,7 +64,10 @@
     — den behöver `tikz` men varken pgfplots eller ett bibliotek. Skillnaden
     står kvar därför att den kostar: pgfplots är det tyngsta paketet i hela
     bunten, och ett prov utan figurer ska inte betala för det. #))
-((* set tikz_pa = (med_tikz is defined and med_tikz) or (med_vand is defined and med_vand) *))
+((# `med_facitfigur` = arbetsbladets facit har en figurrad (app/facitfigur,
+    lärarens dom 2026-10-02): tallinjen och brädan är rena linjer och rutor,
+    så tikz räcker, utan pgfplots och bibliotek. #))
+((* set tikz_pa = (med_tikz is defined and med_tikz) or (med_vand is defined and med_vand) or (med_facitfigur is defined and med_facitfigur) *))
 ((* if tikz_pa *))
 ((* if forlaga is defined and forlaga and med_tikz is defined and med_tikz *))
 ((# Förlagan drar in pgfplots (och därmed tikz) för funktionsgrafen. Appens

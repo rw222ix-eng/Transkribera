@@ -1484,12 +1484,487 @@ window.BladBygg = (() => {
       grupper[grupper.length - 1].rader.push(m ? r.slice(m[0].length) : r);
     });
     return grupper.map(g => {
+      /* En figurrad är aldrig svaret: står den först är gruppens svar tomt
+         och figuren första steget (app/facitfigur, lärarens dom 2026-10-02). */
+      if (FACITFIGUR.arFigurrad(elevradDelar(g.rader[0] || '')[0])) {
+        return { namn: g.namn, svar: '', steg: g.rader.slice() };
+      }
       const [svar, rest] = delaSvaret(g.rader[0] || '');
       const steg = (rest ? [rest] : []).concat(g.rader.slice(1));
       /* Enheten hör till hela uppgiften och sätts bara när det finns ett svar. */
       return { namn: g.namn, svar: grupper.length === 1 ? medEnhet(svar, enhet) : svar, steg };
     }).filter(g => g.svar || g.steg.length);
   }
+  /* ══════════ FIGURRADER I FACIT (lärarens dom 2026-10-02) ══════════
+     «Starta på 3 på tallinjen», och eleverna frågar «vad då tallinje?».
+     Facit ska VISA tallinjen och pilen, brädan som sågas och de hundra
+     rutorna. En rad i `losning` som är en hakparentes med en figurtyp först,
+     «[tallinje start 3 hopp -9]», «[bräda delar 4 hela 2 stryk 3]»,
+     «[procent 10 av 2400 enhet kr]», ritas som SVG i facitgruppen där den
+     står. Skärmen är PDF:ens förlaga (blad-bild.js serialiserar arket), så
+     SVG:en följer med till pappret. Svart-vitt: grått, skrafferat och
+     mörkgrått.
+
+     Tolkningen och layouten är en spegel av app/facitfigur.py, primitiv för
+     primitiv (LaTeX-facit ritar samma primitiver som TikZ). Formen och
+     nyckelorden står där. En rad som inte går att tolka står som text utan
+     hakparenteser, aldrig som ett trasigt papper. */
+  const FACITFIGUR = (() => {
+    const TYPER = { tallinje: 'tallinje', 'bräda': 'brada', brada: 'brada',
+                    'bråk': 'brada', brak: 'brada', procent: 'procent' };
+    const RAD = /^\s*\[\s*([A-Za-zÅÄÖåäö]+)([^[\]]*)\]\s*\.?\s*$/;
+    const TAL = /^[+-]?\d+(?:[.,]\d+)?$/;
+    const BRAK = /^([+-]?\d+)\/(\d+)$/;
+    const TUSEN = /^\d{3}$/;
+    const NYCKLAR = {
+      tallinje: { start: 'tal', hopp: 'lista', markera: 'lista', 'lodrät': 'flagga',
+                  'lodrätt': 'flagga', lodrat: 'flagga', 'vågrät': 'flagga',
+                  vagrat: 'flagga', enhet: 'text', noll: 'text' },
+      brada: { delar: 'tal', hela: 'tal', 'färga': 'lista', farga: 'lista', stryk: 'tal' },
+      procent: { av: 'tal', ruta: 'flagga', stapel: 'flagga', enhet: 'text' },
+    };
+    const ALIAS = { 'lodrätt': 'lodrät', lodrat: 'lodrät', vagrat: 'vågrät', farga: 'färga' };
+    const arFigurrad = rad => {
+      const m = RAD.exec(String(rad || ''));
+      return !!m && Object.prototype.hasOwnProperty.call(TYPER, m[1].toLowerCase());
+    };
+    const normalisera = s => s.replace(/\{,\}/g, ',').replace(/\\,/g, '').replace(/\$/g, '')
+      .replace(/[−–—]/g, '-').replace(/[   ]/g, ' ').replace(/[=:%]/g, ' ');
+    function talet(token) {
+      const t = token.trim();
+      if (TAL.test(t)) return [parseFloat(t.replace(',', '.')), 1];
+      const m = BRAK.exec(t);
+      if (m && Number(m[2]) > 0) return [Number(m[1]) / Number(m[2]), Number(m[2])];
+      return null;
+    }
+    const tokens = rest => normalisera(rest).split(/\s+/).map(t => t.replace(/[,;]+$/, '')).filter(Boolean);
+    function talen(toks, namn) {
+      return toks.map(t => {
+        const v = talet(t);
+        if (!v) throw new Error(`«${t}» efter «${namn}» är inget tal`);
+        if (Math.abs(v[0]) > 1e6) throw new Error(`«${t}» är för stort`);
+        return v;
+      });
+    }
+    function ettTal(toks, namn) {
+      if (toks.length > 1 && toks.slice(1).every(t => TUSEN.test(t))) toks = [toks.join('')];
+      const t = talen(toks, namn);
+      if (t.length !== 1) throw new Error(`«${namn}» ska ha ett tal`);
+      return t[0];
+    }
+    const text = toks => (toks || []).join(' ').slice(0, 24);
+    function heltal(toks, namn, lo, hi) {
+      const [x] = ettTal(toks, namn);
+      if (x !== Math.trunc(x) || x < lo || x > hi) throw new Error(`«${namn}» ska vara ett heltal ${lo}–${hi}`);
+      return x;
+    }
+    function tolkaTallinje(v, flaggor) {
+      const fri = v[''] || []; delete v[''];
+      if (fri.length) {
+        if (v.start || v.hopp) throw new Error(`«${fri[0]}» står utan nyckelord`);
+        v.start = fri.slice(0, 1); v.hopp = fri.slice(1);
+      }
+      const namnare = [1];
+      let start = null;
+      if (v.start && v.start.length) { const [s, d] = ettTal(v.start, 'start'); start = s; namnare.push(d); }
+      const hopp = talen(v.hopp || [], 'hopp'), markera = talen(v.markera || [], 'markera');
+      hopp.concat(markera).forEach(([, d]) => namnare.push(d));
+      if (hopp.length && start === null) throw new Error('hopp kräver start');
+      if (start === null && !markera.length) throw new Error('tallinjen behöver start eller markera');
+      if (hopp.length > 6 || markera.length > 6) throw new Error('högst sex hopp och sex markerade tal');
+      if (hopp.some(([h]) => h === 0)) throw new Error('ett hopp kan inte vara 0');
+      return { typ: 'tallinje', start, hopp: hopp.map(h => h[0]), markera: markera.map(x => x[0]),
+               lodrat: flaggor.has('lodrät'), enhet: text(v.enhet), noll: text(v.noll),
+               namnare: Math.max(...namnare.filter(d => d <= 12)) };
+    }
+    function tolkaBrada(v) {
+      const fri = v[''] || []; delete v[''];
+      if (fri.length) {
+        const m = fri.length === 1 ? BRAK.exec(fri[0]) : null;
+        if (!m || v.delar || v['färga']) throw new Error(`«${fri.join(' ')}» står utan nyckelord`);
+        v.delar = [m[2]]; v['färga'] = [m[1]];
+      }
+      if (!v.delar || !v.delar.length) throw new Error('bräda behöver «delar»');
+      const delar = heltal(v.delar, 'delar', 2, 12);
+      let hela = v.hela && v.hela.length ? heltal(v.hela, 'hela', 1, 6) : null;
+      let farga = talen(v['färga'] || [], 'färga').map(([x]) => {
+        if (x !== Math.trunc(x) || x < 0) throw new Error('«färga» ska vara heltal');
+        return x;
+      });
+      if (farga.length > 3) throw new Error('högst tre grupper i «färga»');
+      if (!farga.length) {
+        if (hela === null) throw new Error('bräda behöver «hela» eller «färga»');
+        farga = [hela * delar];
+      }
+      const totalt = farga.reduce((a, b) => a + b, 0);
+      if (hela === null) hela = Math.max(1, Math.ceil(totalt / delar));
+      if (hela > 6) throw new Error('högst sex brädor');
+      if (totalt > hela * delar) throw new Error('fler färgade delar än brädorna har');
+      const stryk = v.stryk && v.stryk.length ? heltal(v.stryk, 'stryk', 0, 72) : 0;
+      if (stryk > totalt) throw new Error('fler strukna delar än färgade');
+      return { typ: 'brada', delar, hela, farga, stryk };
+    }
+    function tolkaProcent(v, flaggor) {
+      const fri = v[''] || []; delete v[''];
+      if (!fri.length) throw new Error('procent behöver ett tal, t.ex. [procent 10 av 2400]');
+      const [p] = ettTal(fri, 'procent');
+      const ruta = flaggor.has('ruta');
+      if (!(p > 0 && p <= (ruta ? 100 : 200))) {
+        throw new Error(`procenttalet ska vara större än 0 och högst ${ruta ? 100 : 200}`);
+      }
+      let av = null, enhet = text(v.enhet);
+      if (v.av && v.av.length) {
+        const talord = v.av.filter(t => talet(t) || TUSEN.test(t));
+        const ord = v.av.filter(t => !talord.includes(t));
+        [av] = ettTal(talord, 'av');
+        if (!(av > 0)) throw new Error('«av» ska vara större än 0');
+        enhet = enhet || text(ord);
+      }
+      return { typ: 'procent', p, av, enhet, ruta };
+    }
+    /* [figur, null] eller [null, felet]; ingen figurrad → [null, null]. */
+    function tolka(rad) {
+      const m = RAD.exec(String(rad || ''));
+      if (!m || !Object.prototype.hasOwnProperty.call(TYPER, m[1].toLowerCase())) return [null, null];
+      const typ = TYPER[m[1].toLowerCase()];
+      const nycklar = NYCKLAR[typ];
+      const v = {}, flaggor = new Set();
+      let nyckel = '';
+      tokens(m[2]).forEach(t => {
+        const l = t.toLowerCase(), n = ALIAS[l] || l;
+        if (nycklar[l]) {
+          if (nycklar[l] === 'flagga') { flaggor.add(n); nyckel = ''; }
+          else { nyckel = n; v[n] = v[n] || []; }
+          return;
+        }
+        (v[nyckel] = v[nyckel] || []).push(t);
+      });
+      try {
+        if (typ === 'tallinje') return [tolkaTallinje(v, flaggor), null];
+        if (typ === 'brada') return [tolkaBrada(v), null];
+        return [tolkaProcent(v, flaggor), null];
+      } catch (e) { return [null, e.message]; }
+    }
+    const textreserv = rad => String(rad || '').trim().replace(/\.$/, '').trim()
+      .replace(/^\[/, '').replace(/\]$/, '').trim();
+
+    /* Svensk sättning: «−1,5», «2 400», «1 1/4» när talen var bråk. */
+    function tal(x, namnare = 1) {
+      const tecken = x < -1e-9 ? '−' : '';
+      const a = Math.abs(x);
+      const gcd = (p, q) => (q ? gcd(q, p % q) : p);
+      if (namnare > 1 && Math.abs(a * namnare - Math.round(a * namnare)) < 1e-6
+          && Math.abs(a - Math.round(a)) > 1e-6) {
+        const t = Math.round(a * namnare), hel = Math.floor(t / namnare), rest = t % namnare;
+        const g = gcd(rest, namnare);
+        const b = `${rest / g}/${namnare / g}`;
+        return tecken + (hel ? `${hel} ${b}` : b);
+      }
+      const r = Math.round(a * 10000) / 10000;
+      let hel, dec = '';
+      if (Math.abs(r - Math.round(r)) < 1e-9) hel = String(Math.round(r));
+      else [hel, dec] = r.toFixed(4).replace(/0+$/, '').split('.');
+      if (hel.length > 3) hel = hel.replace(/\B(?=(\d{3})+$)/g, ' ');
+      return tecken + hel + (dec ? ',' + dec : '');
+    }
+
+    /* ── Layouten, primitiv för primitiv som app/facitfigur.py ── */
+    const GRA = '#b5b5b5', MORK = '#6e6e6e', TEXT = 13;
+    function pilspets(fran, till, storlek = 7) {
+      const dx = till[0] - fran[0], dy = till[1] - fran[1];
+      const n = Math.hypot(dx, dy) || 1, ux = dx / n, uy = dy / n;
+      const bas = [till[0] - ux * storlek, till[1] - uy * storlek], v = storlek * 0.45;
+      return { t: 'poly', fyll: '#000000',
+               p: [[till[0], till[1]], [bas[0] - uy * v, bas[1] + ux * v], [bas[0] + uy * v, bas[1] - ux * v]] };
+    }
+    function bage(a, b, hojd, normal) {
+      const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+      const k = [mx + normal[0] * hojd * 2, my + normal[1] * hojd * 2];
+      return [{ t: 'bage', p: [a.slice(), k, b.slice()], w: 1.6 }, pilspets(k, b, 6.5)];
+    }
+    const STEG = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000,
+                  5000, 10000, 20000, 50000, 100000];
+    const multipel = (x, s) => Math.abs(x / s - Math.round(x / s)) < 1e-6;
+    function skala(varden, namnare) {
+      const lo = Math.min(...varden), hi = Math.max(...varden);
+      const kand = (namnare > 1 ? [1 / namnare] : []).concat(STEG.filter(s => namnare === 1 || s >= 1));
+      const span = hi - lo;
+      let steg;
+      if (varden.every(v => multipel(v, 1)) && span <= 14) steg = 1;
+      else {
+        const delare = kand.filter(s => varden.every(v => multipel(v, s)));
+        steg = delare.length ? delare[delare.length - 1] : kand[0];
+        while (span / steg < 4) {
+          const finare = kand.filter(s => s < steg && multipel(steg, s));
+          if (!finare.length) break;
+          steg = finare[finare.length - 1];
+        }
+      }
+      let i = Math.max(0, kand.indexOf(steg));
+      while (span / steg > 14 && i + 1 < kand.length) steg = kand[++i];
+      let loT = Math.floor(lo / steg + 1e-9) * steg - steg, hiT = Math.ceil(hi / steg - 1e-9) * steg + steg;
+      while (Math.round((hiT - loT) / steg) < 4) { loT -= steg; hiT += steg; }
+      return [steg, loT, hiT];
+    }
+    function tallinje(f) {
+      const lodrat = f.lodrat;
+      const pos = f.start === null ? [] : [f.start];
+      f.hopp.forEach(h => pos.push(pos[pos.length - 1] + h));
+      const punkter = pos.concat(f.markera);
+      const varden = punkter.slice();
+      const lo = Math.min(...varden), hi = Math.max(...varden);
+      if (f.noll || (lo <= 0 && 0 <= hi) || Math.min(Math.abs(lo), Math.abs(hi)) <= 0.5 * (hi - lo)) varden.push(0);
+      const [steg, loT, hiT] = skala(varden, f.namnare);
+      const n = Math.round((hiT - loT) / steg);
+      const p = [];
+      let sp, bredd, hojd, xy, ax = 66, topp = 26, x0 = 30, y0 = 0;
+      if (lodrat) {
+        sp = Math.max(16, Math.min(26, 300 / n));
+        xy = (t, nrm = 0) => [ax + nrm, topp + (hiT - t) / steg * sp];
+        bredd = 236; hojd = topp + n * sp + 20;
+      } else {
+        bredd = 360; sp = (bredd - 60) / n;
+      }
+      const hoppen = [];
+      f.hopp.forEach((h, i) => {
+        const a = pos[i], b = pos[i + 1];
+        let niva = 0;
+        while (hoppen.some(o => o.niva === niva && Math.min(Math.max(a, b), Math.max(o.a, o.b))
+               - Math.max(Math.min(a, b), Math.min(o.a, o.b)) > 1e-9)) niva++;
+        const sma = Math.abs(steg - 1) < 1e-9 && Math.abs(h - Math.round(h)) < 1e-9
+          && Math.abs(h) <= 12 && niva === 0;
+        hoppen.push({ a, b, h, niva, sma });
+      });
+      const apex = o => (o.sma ? 9 : 22 + 26 * o.niva);
+      const hogst = Math.max(0, ...hoppen.map(apex));
+      if (!lodrat) {
+        y0 = Math.max(30, hogst + 22);
+        xy = (t, nrm = 0) => [x0 + (t - loT) / steg * sp, y0 - nrm];
+      }
+      const punkt = xy;
+      const normal = lodrat ? [1, 0] : [0, -1];
+      let a, b;
+      if (lodrat) { a = [ax, punkt(loT)[1] + 12]; b = [ax, punkt(hiT)[1] - 16]; }
+      else { a = [punkt(loT)[0] - 14, y0]; b = [punkt(hiT)[0] + 16, y0]; }
+      p.push({ t: 'linje', p: [a, b], w: 1.6, streck: false }, pilspets(a, b, 8));
+      if (f.enhet) {
+        p.push(lodrat
+          ? { t: 'text', x: ax + 9, y: b[1] + 4, s: f.enhet, ank: 'start', fet: false, g: 12 }
+          : { t: 'text', x: b[0], y: y0 - 9, s: f.enhet, ank: 'slut', fet: false, g: 12 });
+      }
+      if (f.noll && lodrat) {
+        const y = punkt(0)[1];
+        p.push({ t: 'linje', p: [[ax - 6, y], [bredd - 4, y]], w: 1.0, streck: true },
+               { t: 'text', x: bredd - 4, y: y - 4, s: f.noll, ank: 'slut', fet: false, g: 12 });
+      }
+      const nd = f.namnare;
+      const etiketter = [], sedda = [];
+      punkter.forEach(t => {
+        if (sedda.some(s => Math.abs(t - s) < 1e-9)) return;
+        sedda.push(t);
+        const rad = !lodrat && etiketter.some(e => Math.abs(punkt(t)[0] - punkt(e[0])[0]) < 24 && e[3] === 0) ? 1 : 0;
+        etiketter.push([t, tal(t, nd), true, rad]);
+      });
+      let varannan = sp >= 26 ? 1 : (sp * 2 >= 26 ? 2 : 5);
+      if (lodrat) varannan = sp >= 16 ? 1 : 2;
+      for (let k = 0; k <= n; k++) {
+        let t = loT + k * steg;
+        if (Math.abs(t) < 1e-9) t = 0;
+        const [x, y] = punkt(t);
+        p.push(lodrat ? { t: 'linje', p: [[x - 5, y], [x + 5, y]], w: 1.2, streck: false }
+                      : { t: 'linje', p: [[x, y - 5], [x, y + 5]], w: 1.2, streck: false });
+        if (Math.round(t / steg) % varannan) continue;
+        if (nd > 1 && Math.abs(t - Math.round(t)) > 1e-9) continue;
+        const krock = etiketter.some(e => e[2] && Math.abs((lodrat ? punkt(e[0])[1] : punkt(e[0])[0])
+          - (lodrat ? y : x)) < (lodrat ? 13 : 22));
+        if (!krock) etiketter.push([t, tal(t, nd), false, 0]);
+      }
+      etiketter.forEach(([t, s, fet, rad]) => {
+        const [x, y] = punkt(t);
+        p.push(lodrat ? { t: 'text', x: x - 9, y: y + 4.5, s, ank: 'slut', fet, g: TEXT }
+                      : { t: 'text', x, y: y + 20 + 14 * rad, s, ank: 'mitt', fet, g: TEXT });
+      });
+      sedda.forEach(t => { const [x, y] = punkt(t); p.push({ t: 'prick', x, y, r: 3.4 }); });
+      const rader = 1 + Math.max(0, ...etiketter.map(e => e[3]));
+      if (f.noll && !lodrat) {
+        const [x, y] = punkt(0);
+        p.push({ t: 'text', x, y: y + 20 + 14 * rader, s: f.noll, ank: 'mitt', fet: false, g: 11 });
+      }
+      hoppen.forEach(o => {
+        const etikett = (o.h > 0 ? '+' : '−') + tal(Math.abs(o.h), nd) + (f.enhet ? ' ' + f.enhet : '');
+        if (o.sma) {
+          const r = o.h > 0 ? 1 : -1;
+          for (let k = 0; k < Math.abs(Math.round(o.h)); k++) {
+            const ta = o.a + r * k;
+            p.push(...bage(punkt(ta), punkt(ta + r), 9, normal));
+          }
+        } else p.push(...bage(punkt(o.a), punkt(o.b), apex(o), normal));
+        const mitt = (o.a + o.b) / 2;
+        if (lodrat) {
+          const [x, y] = punkt(mitt, apex(o) + 7);
+          p.push({ t: 'text', x, y: y + 4.5, s: etikett, ank: 'start', fet: true, g: TEXT });
+        } else {
+          const [x, y] = punkt(mitt, apex(o) + 6);
+          p.push({ t: 'text', x, y, s: etikett, ank: 'mitt', fet: true, g: TEXT });
+        }
+      });
+      if (!lodrat) hojd = y0 + 10 + 14 * rader + (f.noll ? 14 : 0);
+      return { b: bredd, h: hojd, p };
+    }
+    function skraffering(x, y, b, h, avstand = 6) {
+      const ut = [];
+      for (let s = -h; s < b; s += avstand) {
+        const tmin = Math.max(0, -s), tmax = Math.min(h, b - s);
+        if (tmin < tmax) {
+          ut.push({ t: 'linje', p: [[x + s + tmin, y + h - tmin], [x + s + tmax, y + h - tmax]], w: 0.9, streck: false });
+        }
+      }
+      return ut;
+    }
+    function brakText(x, y, taljare, namnare, g = TEXT, fet = false) {
+      const b = 6 + 0.62 * g * Math.max(String(taljare).length, String(namnare).length);
+      return [{ t: 'text', x, y: y - 3, s: String(taljare), ank: 'mitt', fet, g },
+              { t: 'linje', p: [[x - b / 2, y + 1], [x + b / 2, y + 1]], w: 1.1, streck: false },
+              { t: 'text', x, y: y + g + 1, s: String(namnare), ank: 'mitt', fet, g }];
+    }
+    function brada(f) {
+      const { delar, hela, farga, stryk } = f;
+      const totalt = farga.reduce((a, b) => a + b, 0);
+      const bredd = 360, kol = Math.min(hela, 3), rader = Math.ceil(hela / kol);
+      const gap = 16, bh = 28;
+      const bb = Math.min(150, (bredd - 16 - gap * (kol - 1)) / kol);
+      const cell = bb / delar, radhojd = bh + 46;
+      const p = [], kvar = new Array(hela).fill(0);
+      for (let k = 0; k < hela * delar; k++) {
+        const bi = Math.floor(k / delar), ci = k % delar;
+        const bx = 8 + (bi % kol) * (bb + gap), by = 8 + Math.floor(bi / kol) * radhojd;
+        const x = bx + ci * cell;
+        let grupp = -1, kum = 0;
+        for (let g = 0; g < farga.length; g++) { kum += farga[g]; if (k < kum) { grupp = g; break; } }
+        const struken = totalt - stryk <= k && k < totalt;
+        if (grupp === 0) p.push({ t: 'rekt', x, y: by, b: cell, h: bh, fyll: GRA, w: 0 });
+        else if (grupp === 1) p.push(...skraffering(x, by, cell, bh));
+        else if (grupp === 2) p.push({ t: 'rekt', x, y: by, b: cell, h: bh, fyll: MORK, w: 0 });
+        p.push({ t: 'rekt', x, y: by, b: cell, h: bh, fyll: '', w: 1.0 });
+        if (struken) {
+          p.push({ t: 'linje', p: [[x + 3, by + 3], [x + cell - 3, by + bh - 3]], w: 2.4, streck: false },
+                 { t: 'linje', p: [[x + cell - 3, by + 3], [x + 3, by + bh - 3]], w: 2.4, streck: false });
+        } else if (grupp >= 0) kvar[bi]++;
+      }
+      for (let bi = 0; bi < hela; bi++) {
+        const bx = 8 + (bi % kol) * (bb + gap), by = 8 + Math.floor(bi / kol) * radhojd;
+        p.push({ t: 'rekt', x: bx, y: by, b: bb, h: bh, fyll: '', w: 2.2 },
+               ...brakText(bx + bb / 2, by + bh + 19, kvar[bi], delar));
+      }
+      return { b: bredd, h: 8 + rader * radhojd - 4, p };
+    }
+    function procentstapel(f) {
+      const { p: pr, av, enhet } = f;
+      const x0 = 24, x1 = 336, sk = Math.max(100, pr);
+      const px = q => x0 + q / sk * (x1 - x0);
+      const lagen = [...new Set([0, 10, pr, 100])].sort((a, b) => a - b);
+      const nere = q => tal(av * q / 100) + (enhet && q ? ' ' + enhet : '');
+      const rad = new Map(), senast = [[-1e9, 0], [-1e9, 0]];
+      lagen.forEach(q => {
+        const b = 0.56 * 12 * Math.max((tal(q) + ' %').length, av !== null ? nere(q).length : 0);
+        const x = px(q), [fx, fb] = senast[0];
+        const r = x - fx >= (b + fb) / 2 + 6 ? 0 : 1;
+        rad.set(q, r); senast[r] = [x, b];
+      });
+      const flera = Math.max(...rad.values());
+      const yb = 24 + 14 * flera, hb = 28;
+      const p = [{ t: 'rekt', x: x0, y: yb, b: px(Math.min(pr, 100)) - x0, h: hb, fyll: GRA, w: 0 }];
+      if (pr > 100) {
+        p.push(...skraffering(px(100), yb, px(pr) - px(100), hb),
+               { t: 'rekt', x: px(100), y: yb, b: px(pr) - px(100), h: hb, fyll: '', w: 1.6 });
+      }
+      for (let k = 1; k < 10; k++) p.push({ t: 'linje', p: [[px(10 * k), yb], [px(10 * k), yb + hb]], w: 1.0, streck: false });
+      p.push({ t: 'rekt', x: x0, y: yb, b: px(100) - x0, h: hb, fyll: '', w: 2.2 });
+      lagen.forEach(q => {
+        const x = px(q), r = rad.get(q), fet = Math.abs(q - pr) < 1e-9;
+        if (r) p.push({ t: 'linje', p: [[x, yb - 14 * r - 4], [x, yb]], w: 0.8, streck: false });
+        p.push({ t: 'text', x, y: yb - 6 - 14 * r, s: tal(q) + ' %', ank: 'mitt', fet, g: 12 });
+        if (av !== null) {
+          const s = tal(av * q / 100) + (enhet && q ? ' ' + enhet : '');
+          if (r) p.push({ t: 'linje', p: [[x, yb + hb], [x, yb + hb + 14 * r + 4]], w: 0.8, streck: false });
+          p.push({ t: 'text', x, y: yb + hb + 17 + 14 * r, s, ank: 'mitt', fet, g: 12 });
+        }
+      });
+      return { b: 360, h: yb + hb + (av !== null ? 24 + 14 * flera : 8), p };
+    }
+    function procentruta(f) {
+      const { p: pr, av, enhet } = f;
+      const c = 15, x0 = 8, y0 = 8, p = [];
+      const hela = Math.floor(pr + 1e-9);
+      for (let k = 0; k < hela; k++) {
+        p.push({ t: 'rekt', x: x0 + (k % 10) * c, y: y0 + Math.floor(k / 10) * c, b: c, h: c, fyll: GRA, w: 0 });
+      }
+      const rest = pr - hela;
+      if (rest > 1e-9 && hela < 100) {
+        p.push({ t: 'rekt', x: x0 + (hela % 10) * c, y: y0 + Math.floor(hela / 10) * c,
+                 b: c * rest, h: c, fyll: MORK, w: 0 });
+      }
+      for (let k = 1; k < 10; k++) {
+        p.push({ t: 'linje', p: [[x0 + k * c, y0], [x0 + k * c, y0 + 10 * c]], w: 0.7, streck: false },
+               { t: 'linje', p: [[x0, y0 + k * c], [x0 + 10 * c, y0 + k * c]], w: 0.7, streck: false });
+      }
+      p.push({ t: 'rekt', x: x0, y: y0, b: 10 * c, h: 10 * c, fyll: '', w: 2.2 });
+      const e = enhet ? ' ' + enhet : '';
+      const rader = av !== null
+        ? [['100 rutor = 100 % = ' + tal(av) + e, false], ['1 ruta = 1 % = ' + tal(av / 100) + e, false]]
+          .concat(Math.abs(pr - 1) > 1e-9 ? [[tal(pr) + ' % = ' + tal(av * pr / 100) + e, true]] : [])
+        : [['100 rutor = 100 %', false], ['1 ruta = 1 %', false]]
+          .concat(Math.abs(pr - 1) > 1e-9 ? [[tal(pr) + ' rutor = ' + tal(pr) + ' %', true]] : []);
+      rader.forEach(([s, fet], i) => p.push({ t: 'text', x: x0 + 10 * c + 14, y: y0 + 34 + 24 * i,
+                                              s, ank: 'start', fet, g: TEXT }));
+      return { b: 360, h: y0 + 10 * c + 8, p };
+    }
+    function layout(f) {
+      if (f.typ === 'tallinje') return tallinje(f);
+      if (f.typ === 'brada') return brada(f);
+      return f.ruta ? procentruta(f) : procentstapel(f);
+    }
+
+    /* ── SVG ── Bredden följer facitets grad (--fsk, blad.js fyll), så
+       figuren växer med texten när arket skalas upp. */
+    const r2 = x => String(Math.round(x * 100) / 100);
+    const pkt = pts => pts.map(([x, y]) => `${r2(x)},${r2(y)}`).join(' ');
+    function svg(f, rad) {
+      const lay = layout(f);
+      const ank = { mitt: 'middle', start: 'start', slut: 'end' };
+      const kropp = lay.p.map(q => {
+        if (q.t === 'linje') {
+          return `<polyline points="${pkt(q.p)}" fill="none" stroke="#000" stroke-width="${q.w}"${
+            q.streck ? ' stroke-dasharray="4.5 3.4"' : ''} stroke-linecap="round"/>`;
+        }
+        if (q.t === 'bage') {
+          const [[ax, ay], [kx, ky], [bx, by]] = q.p;
+          return `<path d="M${r2(ax)},${r2(ay)} Q${r2(kx)},${r2(ky)} ${r2(bx)},${r2(by)}" fill="none" stroke="#000" stroke-width="${q.w}"/>`;
+        }
+        if (q.t === 'poly') return `<polygon points="${pkt(q.p)}" fill="${q.fyll}"/>`;
+        if (q.t === 'rekt') {
+          return `<rect x="${r2(q.x)}" y="${r2(q.y)}" width="${r2(q.b)}" height="${r2(q.h)}" fill="${
+            q.fyll || 'none'}"${q.w ? ` stroke="#000" stroke-width="${q.w}"` : ''}/>`;
+        }
+        if (q.t === 'prick') return `<circle cx="${r2(q.x)}" cy="${r2(q.y)}" r="${q.r}" fill="#000"/>`;
+        return `<text x="${r2(q.x)}" y="${r2(q.y)}" text-anchor="${ank[q.ank]}" font-size="${q.g}"${
+          q.fet ? ' font-weight="700"' : ''}>${esc(q.s)}</text>`;
+      }).join('');
+      return `<svg class="lofigur" data-figur="${f.typ}" viewBox="0 0 ${r2(lay.b)} ${r2(lay.h)}" role="img" aria-label="${
+        attr(rad)}" style="display:block;width:calc(${r2(lay.b)}px * var(--fsk, 1));max-width:100%;height:auto;overflow:visible" font-family="Arimo, Arial, sans-serif" fill="#000">${kropp}</svg>`;
+    }
+    /* HTML för en figurrad, eller null när raden inte är en figurrad. En rad
+       som inte går att tolka blir texten utan hakparenteser. */
+    function html(rad) {
+      if (!arFigurrad(rad)) return null;
+      const [f] = tolka(rad);
+      if (!f) return { html: matBryt(textreserv(rad)), figur: false };
+      try { return { html: svg(f, rad), figur: true }; }
+      catch (e) { return { html: matBryt(textreserv(rad)), figur: false }; }
+    }
+    return { arFigurrad, tolka, tal, layout, html, textreserv };
+  })();
+
   /* FACIT FÖR ELEVERNA (Rickard 2026-09-26: «lösningarna är ganska svåra att
      förstå»). Ett steg med förklaring, «rad ← not» (elevradDelar), står som
      steget till vänster och «← förklaring» till höger på samma höjd, samma
@@ -1504,6 +1979,14 @@ window.BladBygg = (() => {
         svar ? `<b class="lobedsvar">${matBryt(svar, true)}</b>` : ''}</td></tr>`
         + g.steg.map(s => {
           const [rad, not] = elevradDelar(s);
+          /* Figurraden: tallinjen, brädan eller procentstapeln där steget
+             står, med förklaringen bredvid som andra steg. */
+          const fig = FACITFIGUR.html(rad);
+          if (fig) {
+            return not
+              ? `<tr><td class="lobedsteg" data-not=""${fig.figur ? ' data-figur="" style="align-items:center"' : ''}><span class="lofacitrad">${fig.html}</span><span class="lofacitnot">← ${mat(not)}</span></td></tr>`
+              : `<tr><td class="lobedsteg"${fig.figur ? ' data-figur=""' : ''}>${fig.html}</td></tr>`;
+          }
           return not
             ? `<tr><td class="lobedsteg" data-not=""><span class="lofacitrad">${matBryt(rad)}</span><span class="lofacitnot">← ${mat(not)}</span></td></tr>`
             : `<tr><td class="lobedsteg">${matBryt(rad)}</td></tr>`;
@@ -1717,5 +2200,6 @@ window.BladBygg = (() => {
      sätt som provets och arbetsbladets, annars är det två olika facit. */
   return { mat, kortref, ref, ark, arkfacit, anteckningar, provforsatt, provblad,
            forsattsbild, losning, provtitel, BOKSTAV, delnamnVisning,
-           hjalpmedelsfras, hjalpmedelsval, bildlager, bildForhallande };
+           hjalpmedelsfras, hjalpmedelsval, bildlager, bildForhallande,
+           facitfigur: FACITFIGUR };
 })();

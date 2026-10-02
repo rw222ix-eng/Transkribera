@@ -29,7 +29,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 # Mätningen av nationella provet (Del C/D) bor i en egen modul: den är DATA och
 # ska gå att ifrågasätta, mätas om och bytas utan att motorreglerna rörs.
 # Beroendet går bara åt det här hållet — niva_rubrik importerar ingenting.
-from app import niva_rubrik
+from app import facitfigur, niva_rubrik
 # Tankstrecksvakten, delad med anteckningarna och tavlan (spåret 2026-09-06).
 # Samma sorts beroende som ovan: textvakt importerar ingenting ur appen.
 from app import textvakt
@@ -3874,6 +3874,28 @@ def validate_tankstreck(doc: ExamDoc) -> list[dict]:
     return textvakt.granska(_fritexter(doc), tillat_spann=True)
 
 
+# ── FIGURRADERNA I BLADETS FACIT (lärarens dom 2026-10-02) ───────────────
+# «[tallinje start 3 hopp -9]» och syskonen, se app/facitfigur. En rad som
+# inte går att tolka står på pappret som text utan hakparenteser, så felet
+# fäller aldrig pappret, men reparationsloopen får veta det: en elev ska se
+# tallinjen, inte orden om den. Bara arbetsbladet, det enda facit som ritar
+# figurerna (blad-bygg.js bladfacit, arbetsblad.tex.j2).
+def validate_facitfigurer(doc: ExamDoc) -> list[dict]:
+    fel = []
+    for i, it in enumerate(doc.uppgifter, 1):
+        enheter = [(f"uppgift {i}", it)] + [
+            (f"uppgift {i}{chr(ord('a') + d)}", sub)
+            for d, sub in enumerate(it.deluppgifter or [])]
+        for stig, enhet in enheter:
+            for m in facitfigur.fel_i(enhet.losning or ""):
+                fel.append(_err(f"{stig}.losning", "figurrad",
+                                f"{m}. Skriv om raden i formen "
+                                "[tallinje start 3 hopp -9], [bräda delar 4 "
+                                "hela 2 stryk 3] eller [procent 10 av 2400 "
+                                "enhet kr], eller stryk den."))
+    return fel
+
+
 def validate_exam_json(data, profil: str = "prov",
                        niva_mal: dict | None = None
                        ) -> tuple[ExamDoc | None, list[dict]]:
@@ -3891,6 +3913,8 @@ def validate_exam_json(data, profil: str = "prov",
     fel = validate_balance(doc, niva_mal=niva_mal, profil=profil)
     fel = fel + validate_stam(doc)
     fel = fel + validate_tankstreck(doc)
+    if profil == "arbetsblad":
+        fel = fel + validate_facitfigurer(doc)
     # Gruppuppgiften är inget papper utan sitt upplägg: namnraderna, tiden och
     # redovisningsformen ÄR formen (se gruppark.css). Saknas de blir arket ett
     # arbetsblad med fel instruktionsband.

@@ -319,3 +319,104 @@ test("bladets facit: svaret fett, ett steg per rad, samma grad",
     expect(matt.linje[0]).toBe("0px");
     matt.linje.slice(1).forEach(b => expect(parseFloat(b)).toBeGreaterThan(0));
   });
+
+/* FIGURRADER I FACIT (lärarens dom 2026-10-02, BA26B): «Starta på 3 på
+   tallinjen», och eleverna frågar «vad då tallinje?». En rad
+   «[tallinje start 3 hopp -9]» i losning ritas som en SVG i facitgruppen
+   (blad-bygg.js FACITFIGUR, spegel av app/facitfigur), och skärmen är
+   PDF:ens förlaga: SVG:en ska stå i bilden BladBild gör av arket. Exam 155
+   uppgift 2 och 154 uppgift 2 med meningarna bytta mot figurrader. En rad som
+   inte går att tolka står som text, utan hakparenteser.
+
+   Skärmdumparna och PDF-bilderna sparas i testets utdatamapp, eller i
+   FIGUR_UT om den är satt, för att läsas med ögonen. */
+test("bladets facit ritar tallinjen, brädan och procentstapeln",
+  async ({ page }, testInfo) => {
+    const uppgifter = [
+      { nr: 1, p: 1, t: "Utan räknare. Beräkna $3 - 9$.",
+        f: "$-6$\n[tallinje start 3 hopp -3 -6] ← minus betyder åt vänster\n"
+          + "$3$ steg till $0$, sedan $6$ steg till $-6$" },
+      { nr: 2, p: 1, t: "Utan räknare. Beräkna $2 - \\tfrac{3}{4}$.",
+        f: "$1\\tfrac{1}{4}$\n$2 = \\tfrac{8}{4}$ ← gör om till fjärdedelar\n"
+          + "[bräda delar 4 hela 2 stryk 3] ← såga bort tre fjärdedelar\n"
+          + "$\\tfrac{8}{4} - \\tfrac{3}{4} = \\tfrac{5}{4}$\n"
+          + "$\\tfrac{5}{4} = 1\\tfrac{1}{4}$ ← fyra fjärdedelar är en hel" },
+      { nr: 3, p: 1, t: "Taket på $-1$ m och golvet på $-4$ m.",
+        f: "Nej, tunneln är 3 m hög.\n"
+          + "[tallinje lodrät start -4 hopp 3 noll marken enhet m] ← från golvet upp till taket\n"
+          + "$-1 - (-4) = -1 + 4 = 3$" },
+      { nr: 4, p: 1, t: "Beräkna 10 % av $2\\,400$ kr.",
+        f: "$240$ kr\n[procent 10 av 2400 enhet kr] ← dela med 10\n$2\\,400 / 10 = 240$" },
+      { nr: 5, p: 1, t: "Beräkna 1 % av $500$ kg.",
+        f: "$5$ kg\n[procent ruta 1 av 500 enhet kg]\n$500 / 100 = 5$ ← dela med 100" },
+      { nr: 6, p: 1, t: "Beräkna $\\tfrac{3}{4} + 1\\tfrac{1}{2}$.",
+        f: "$2\\tfrac{1}{4}$\n$1\\tfrac{1}{2} = \\tfrac{6}{4}$ ← gör om till fjärdedelar\n"
+          + "[bräda delar 4 färga 3 6]\n$\\tfrac{3}{4} + \\tfrac{6}{4} = \\tfrac{9}{4}$" },
+      { nr: 7, p: 1, t: "Beräkna $-1{,}5 - 2{,}5$.",
+        f: "$-4$\n[tallinje start -1,5 hopp -2,5]\n[tallinje hopp 3] ← en trasig rad" },
+    ];
+    await fejka(page, [rad(1, papper({ uppgifter }))]);
+    await page.goto("/");
+    await hydrerad(page);
+    await visa(page);
+
+    const ark = page.locator("#fh-ark .ark[data-form='fa']");
+    await expect(ark.locator("svg.lofigur")).toHaveCount(7);
+    const matt = await ark.first().evaluate(() => {
+      const alla = [...document.querySelectorAll("#fh-ark .ark[data-form='fa']")];
+      const figurer = alla.flatMap(a => [...a.querySelectorAll("svg.lofigur")]);
+      return {
+        typer: figurer.map(s => s.dataset.figur),
+        // Ingen figur sticker ut över arket.
+        utanfor: figurer.filter(s => {
+          const r = s.getBoundingClientRect();
+          const a = s.closest(".ark").getBoundingClientRect();
+          return r.width < 40 || r.left < a.left - 1 || r.right > a.right + 1;
+        }).length,
+        text: alla.map(a => a.textContent).join(" "),
+        svar: alla.flatMap(a => [...a.querySelectorAll(".lobedsvar")]).map(b => b.textContent),
+      };
+    });
+    expect(matt.typer).toEqual(["tallinje", "brada", "tallinje", "procent",
+                                "procent", "brada", "tallinje"]);
+    expect(matt.utanfor).toBe(0);
+    // Den trasiga raden står som text, utan hakparenteser.
+    expect(matt.text).toContain("tallinje hopp 3");
+    expect(matt.text).not.toContain("[tallinje");
+    expect(matt.text).not.toContain("[bräda");
+    // Figuren är aldrig svaret.
+    expect(matt.svar).toHaveLength(7);
+
+    const ut = process.env.FIGUR_UT || testInfo.outputPath();
+    const { mkdirSync, writeFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    mkdirSync(ut, { recursive: true });
+    const n = await ark.count();
+    for (let i = 0; i < n; i++) {
+      await ark.nth(i).screenshot({ path: join(ut, `skarm-facit-${i + 1}.png`) });
+    }
+
+    /* PDF:en: samma dokument med separat facit genom BladBild, och figurerna
+       ska stå i den serialiserade SVG:en som blir bilden. */
+    const pdf = await page.evaluate(async v => {
+      const fangat = [];
+      const org = XMLSerializer.prototype.serializeToString;
+      XMLSerializer.prototype.serializeToString = function (nod) {
+        const s = org.call(this, nod);
+        fangat.push(s);
+        return s;
+      };
+      let bilder;
+      try {
+        bilder = await window.BladBild.dokument(v, { skala: 2 });
+      } finally {
+        XMLSerializer.prototype.serializeToString = org;
+      }
+      const xml = fangat.filter(s => s.indexOf("data-form=\"fa\"") >= 0).join("");
+      return { facit: bilder.facit, figurer: (xml.match(/class="lofigur"/g) || []).length };
+    }, papper({ uppgifter, losningsblad: false }));
+    expect(pdf.facit.length).toBeGreaterThan(0);
+    expect(pdf.figurer).toBe(7);
+    pdf.facit.forEach((url, i) => writeFileSync(join(ut, `pdf-facit-${i + 1}.png`),
+      Buffer.from(url.slice(url.indexOf(",") + 1), "base64")));
+  });
