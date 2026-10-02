@@ -76,13 +76,17 @@ def till_tripel(rader: list[dict], per_nyckel: dict[str, float],
                              f"(finns: {', '.join(tak)})")
         t = tak[nyckel]
         nivaer = [i for i in range(3) if t[i] > 0]
-        if len(nivaer) != 1:
-            raise SystemExit(f"{namn}: rad {nyckel} har tak {t}, ange nivån")
-        i = nivaer[0]
-        if not 0 <= p <= t[i]:
-            raise SystemExit(f"{namn}: rad {nyckel} = {p}, tak {t[i]}")
+        if not nivaer:
+            raise SystemExit(f"{namn}: rad {nyckel} har tak {t}")
+        if not 0 <= p <= sum(t):
+            raise SystemExit(f"{namn}: rad {nyckel} = {p}, tak {sum(t)}")
+        # En rad med flera nivåer (uppgift 12: 1 C + 2 A) fylls nerifrån:
+        # «ett poäng» är C-poängen, A-poängen kommer först när C är full.
+        kvar = int(round(p))
         trip: list = [None, None, None]
-        trip[i] = int(round(p))
+        for i in nivaer:
+            trip[i] = min(kvar, t[i])
+            kvar -= trip[i]
         ut[nyckel] = trip
     return ut
 
