@@ -641,6 +641,24 @@ def _nptypfynd(doc, typ: str) -> list[dict]:
     return [_fynd("nptyper", text)] if text else []
 
 
+def _formfynd(doc, typ: str) -> list[dict]:
+    """NP:s uppgiftsform (lärarens dom 2026-10-03, exam_spec.
+    validate_uppgiftsform): prov 156 hade tolv uppgifter, noll enpoängare och
+    sex fristående uppgifter på 3–4 p. Fyndet pekar ut de gamla proven som
+    skrevs före formen, och de nya som en omskrivning dragit ifrån den.
+
+    Står utanför «Laga fynden» (_OLAGBARA) som tiden: formen lagas genom att
+    uppgifter delas och läggs till, och omskrivningen får varken lägga till
+    eller ta bort uppgifter. Ett nytt prov byggs i formen."""
+    if typ != "prov":
+        return []
+    try:
+        fel = exam_spec.validate_uppgiftsform(doc)
+    except Exception:                       # pragma: no cover
+        return []
+    return [_fynd(f["code"], f["message"]) for f in fel]
+
+
 def _kopiefynd(exam: dict, infor: dict | None) -> list[dict]:
     """Skrev arbetsbladet av provet det ska förbereda inför?
 
@@ -783,6 +801,7 @@ def efterkontroll(view: dict, doc, summor: dict | None, *,
         ut += _radfynd(view.get("exam") or {})
     ut += _konsfynd(view.get("exam") or {})
     ut += _nptypfynd(doc, typ)
+    ut += _formfynd(doc, typ)
     ut += _cifynd(view.get("exam") or {}, typ)
     ut += _ovningsfynd(view.get("exam") or {}, infor, typ)
     # Kopieringsvakten sist bland fynden, och bara när anroparen pekat ut
@@ -819,8 +838,10 @@ def efterkontroll(view: dict, doc, summor: dict | None, *,
 # `tid` är inte med. Provtiden lagas inte genom att skriva om pappret. Den
 # lagas genom att läraren sätter fler minuter eller tar bort poäng, och båda
 # valen är hennes. En modell som «lagar» provtiden skulle stryka uppgifter.
-# `nptyper` inte heller: punkterna är beställningens, inte pappret.
-_OLAGBARA = frozenset({"tid", "nptyper"})
+# `nptyper` inte heller: punkterna är beställningens, inte pappret. Och inte
+# `uppgiftsform`: formen kräver fler uppgifter, och omskrivningen får inte
+# lägga till några (se _formfynd).
+_OLAGBARA = frozenset({"tid", "nptyper", "uppgiftsform"})
 _ATGARD = {
     "utanbok": "Byt ut uppgiften mot en uppgift som följer en av nationella "
                "provets uppgiftstyper för kursen, med innehåll klassen har "

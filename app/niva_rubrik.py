@@ -296,6 +296,152 @@ def kursnyckel(kurs: str) -> str | None:
     nyckel = f"{steg}{spar}"
     return nyckel if nyckel in NP_FORDELNING_PER_KURS else None
 
+
+# ── NP:S UPPGIFTSFORM (lärarens dom 2026-10-03) ───────────────────────────
+# Fördelningen ovan är NIVÅMIXEN. Den säger ingenting om hur poängen är
+# STYCKADE, och det var det som var fel på prov 156 (NA26F, Ma 1c): tolv
+# uppgifter på 34 p, noll enpoängare, sex av tolv med deluppgifter och sex
+# fristående uppgifter på 3–4 p. Nivåmixen var NP:s, formen var det inte.
+# Rickard: «byt en eller två av de stora C-uppgifterna mot två, tre kortare
+# uppgifter. Det räcker.» Prov ska ha NP:s form, inte bara dess mix.
+#
+# Räknat ur app/data/np_uppgiftsprofil.json (kurser.<k>.uppgifter, en rad per
+# bedömd enhet; rader med samma termin och `nr` är en uppgift), prov för prov.
+# Tabellen står utskriven så att den går att läsa utan att köra något;
+# tests/test_uppgiftsform.py räknar om den ur JSON:en och fäller vid glidning.
+#
+#   uppgifter, poang, enheter  uppgifter, totalpoäng, bedömda enheter
+#   enpoangare                 uppgifter värda exakt 1 p (alla enheter)
+#   med_deluppgifter           uppgifter med fler än en bedömd enhet
+#   max_deluppgifter           flest enheter i en uppgift
+#   fristaende_stora           uppgifter på 3 p eller mer UTAN deluppgifter
+#   storlekar                  antal uppgifter på 1, 2, 3 och 4+ p
+#   enpoangare_niva            enpoängarnas nivå (E, C, A)
+#   utan_raknare               uppgifter i räknarfria delprov
+#   enpoangare_utan_raknare    enpoängare i räknarfria delprov
+#   kortsvar_utan_raknare      räknarfria uppgifter där bara svar krävs
+#
+# Vad det säger, kurs för kurs:
+#   1c vt22  32 uppg / 70 p: 13 enpoängare (41 %), 8 med deluppgifter (25 %,
+#            högst 3), 4 fristående 3+ (13 %), 2,19 p per uppgift, 1,71 per
+#            enhet. Alla 13 enpoängare i räknarfria delen, 5 E, 3 C, 5 A.
+#   1c vt17  27 / 77: 8 enpoängare (30 %), 7 med deluppgifter, 7 fristående.
+#   1a       vt17 9 av 27 enpoängare (33 %), vt22 15 av 31 (48 %); alla
+#            räknarfria. Fristående 3+: 7 resp. 3.
+#   2a       4–8 enpoängare (17–29 %), deluppgifter i 29–46 %, högst 4.
+#   2c       6 enpoängare (21–23 %), deluppgifter 23–29 %, högst 5; vt22 har
+#            fyra av sex enpoängare i räknardelen.
+# Kurs 1 bär alltså fler och kortare uppgifter än kurs 2, och enpoängarna är
+# kortsvar på alla tre nivåerna, inte bara E. Ingen kurs har fler än en
+# fjärdedel fristående uppgifter på 3 p eller mer.
+#
+# VT17 I KURS 1 ÄR MED HÄR, till skillnad från NP_FORDELNING:s räknarband och
+# poäng per uppgift. Där var skälet att delprov C var en enda tolvpoängsuppgift
+# och att räknaren tilläts i det; för STYCKNINGEN är provet lika giltigt, och
+# det drar banden åt det försiktiga hållet (färre enpoängare som golv). Det
+# är vad läraren bad om: en eller två byten, inte ett nytt prov.
+NP_UPPGIFTSFORM: dict[str, dict] = {
+    "NpMa1a vt 2017": {
+        "uppgifter": 27, "poang": 65, "enheter": 32, "enpoangare": 9,
+        "med_deluppgifter": 4, "max_deluppgifter": 3, "fristaende_stora": 7,
+        "storlekar": (9, 8, 8, 2), "enpoangare_niva": (3, 4, 2),
+        "utan_raknare": 14, "enpoangare_utan_raknare": 9,
+        "kortsvar_utan_raknare": 12},
+    "NpMa1a vt 2022": {
+        "uppgifter": 31, "poang": 66, "enheter": 40, "enpoangare": 15,
+        "med_deluppgifter": 8, "max_deluppgifter": 3, "fristaende_stora": 3,
+        "storlekar": (15, 7, 4, 5), "enpoangare_niva": (7, 5, 3),
+        "utan_raknare": 21, "enpoangare_utan_raknare": 15,
+        "kortsvar_utan_raknare": 15},
+    "NpMa1c vt 2017": {
+        "uppgifter": 27, "poang": 77, "enheter": 37, "enpoangare": 8,
+        "med_deluppgifter": 7, "max_deluppgifter": 3, "fristaende_stora": 7,
+        "storlekar": (8, 6, 7, 6), "enpoangare_niva": (2, 5, 1),
+        "utan_raknare": 15, "enpoangare_utan_raknare": 8,
+        "kortsvar_utan_raknare": 11},
+    "NpMa1c vt 2022": {
+        "uppgifter": 32, "poang": 70, "enheter": 41, "enpoangare": 13,
+        "med_deluppgifter": 8, "max_deluppgifter": 3, "fristaende_stora": 4,
+        "storlekar": (13, 10, 5, 4), "enpoangare_niva": (5, 3, 5),
+        "utan_raknare": 21, "enpoangare_utan_raknare": 13,
+        "kortsvar_utan_raknare": 16},
+    "NpMa2a vt 2017": {
+        "uppgifter": 24, "poang": 55, "enheter": 35, "enpoangare": 4,
+        "med_deluppgifter": 11, "max_deluppgifter": 2, "fristaende_stora": 4,
+        "storlekar": (4, 12, 5, 3), "enpoangare_niva": (1, 3, 0),
+        "utan_raknare": 15, "enpoangare_utan_raknare": 4,
+        "kortsvar_utan_raknare": 9},
+    "NpMa2a vt 2018": {
+        "uppgifter": 27, "poang": 55, "enheter": 37, "enpoangare": 7,
+        "med_deluppgifter": 8, "max_deluppgifter": 3, "fristaende_stora": 4,
+        "storlekar": (7, 13, 6, 1), "enpoangare_niva": (2, 1, 4),
+        "utan_raknare": 16, "enpoangare_utan_raknare": 6,
+        "kortsvar_utan_raknare": 10},
+    "NpMa2a vt 2022": {
+        "uppgifter": 28, "poang": 55, "enheter": 40, "enpoangare": 8,
+        "med_deluppgifter": 8, "max_deluppgifter": 4, "fristaende_stora": 2,
+        "storlekar": (8, 14, 5, 1), "enpoangare_niva": (3, 2, 3),
+        "utan_raknare": 17, "enpoangare_utan_raknare": 5,
+        "kortsvar_utan_raknare": 11},
+    "NpMa2c vt 2018": {
+        "uppgifter": 26, "poang": 57, "enheter": 35, "enpoangare": 6,
+        "med_deluppgifter": 6, "max_deluppgifter": 4, "fristaende_stora": 6,
+        "storlekar": (6, 10, 9, 1), "enpoangare_niva": (1, 2, 3),
+        "utan_raknare": 16, "enpoangare_utan_raknare": 6,
+        "kortsvar_utan_raknare": 9},
+    "NpMa2c vt 2022": {
+        "uppgifter": 28, "poang": 58, "enheter": 39, "enpoangare": 6,
+        "med_deluppgifter": 8, "max_deluppgifter": 5, "fristaende_stora": 4,
+        "storlekar": (6, 16, 5, 1), "enpoangare_niva": (5, 1, 0),
+        "utan_raknare": 15, "enpoangare_utan_raknare": 2,
+        "kortsvar_utan_raknare": 8},
+}
+
+
+def _andelsband(prov: list[dict], falt: str, namnare: str) -> tuple[float,
+                                                                    float]:
+    andelar = [p[falt] / p[namnare] for p in prov if p[namnare]]
+    return (round(min(andelar), 3), round(max(andelar), 3))
+
+
+def uppgiftsform(kurs: str = "") -> dict | None:
+    """Kursens uppmätta uppgiftsform som band (lägsta, högsta) över kursens
+    prov, eller None när kursen inte är mätt.
+
+    None och inte hela materialets band, med flit: formen skiljer sig mer
+    mellan kurs 1 och kurs 2 än nivåmixen gör (1a 33–48 % enpoängare, 2a
+    17–29 %), och ett gemensamt band hade antingen tvingat 2a-prov fulla med
+    enpoängare eller inte dragit 1c alls. Samma regel som kursnyckel: det som
+    inte är mätt fylls inte i. Utan band gör skelettet som förut.
+
+    Nycklarna är andelar av UPPGIFTERNA, utom `max_deluppgifter` (ett antal)
+    och `poang_per_uppgift`. `enpoangare_utan_raknare` är andelen av
+    enpoängarna som står i den räknarfria delen, `kortsvar_utan_raknare`
+    andelen av den räknarfria delens uppgifter som är kortsvar."""
+    nyckel = kursnyckel(kurs) or (kurs if kurs in ("1a", "1c", "2a", "2c")
+                                  else None)
+    if not nyckel:
+        return None
+    prov = [v for k, v in NP_UPPGIFTSFORM.items()
+            if k.startswith(f"NpMa{nyckel} ")]
+    if not prov:
+        return None
+    return {
+        "kurs": nyckel,
+        "prov": len(prov),
+        "enpoangare": _andelsband(prov, "enpoangare", "uppgifter"),
+        "med_deluppgifter": _andelsband(prov, "med_deluppgifter",
+                                        "uppgifter"),
+        "fristaende_stora": _andelsband(prov, "fristaende_stora",
+                                        "uppgifter"),
+        "max_deluppgifter": max(p["max_deluppgifter"] for p in prov),
+        "poang_per_uppgift": _andelsband(prov, "poang", "uppgifter"),
+        "enpoangare_utan_raknare": _andelsband(
+            prov, "enpoangare_utan_raknare", "enpoangare"),
+        "kortsvar_utan_raknare": _andelsband(
+            prov, "kortsvar_utan_raknare", "utan_raknare"),
+    }
+
 # Poängtripplar som faktiskt förekommer, per karaktär och i fallande frekvens.
 # 86 % av uppgifterna är RENA — de ger poäng på en enda nivå. Skelettet ska
 # därför inte strö [1, 1, 1] över provet: en A-uppgift i NP är oftast (0, 0, k),

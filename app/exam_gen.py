@@ -13225,6 +13225,17 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
         # så brett att det inte drar någonstans.
         skeleton = exam_spec.balanced_skeleton(
             antal, profil, delar=(profil == "prov" and delar), kurs=kurs)
+    # NP:S UPPGIFTSFORM (lärarens dom 2026-10-03): skelettet kan ha lyft ut
+    # poäng till nya kortsvar (exam_spec._np_uppgiftsform), och då har pappret
+    # fler uppgifter än panelen sa. Formen vinner på poängen, och läraren ska
+    # se det i förloppet i stället för att räkna uppgifterna själv. Omprovet
+    # ärver originalets slots och säger redan sitt ovan.
+    if (profil == "prov" and referensprov is None and skeleton
+            and len(skeleton) > antal):
+        poang = sum(sum(s["poang"]) for s in skeleton)
+        ett = sum(1 for s in skeleton if sum(s["poang"]) == 1)
+        log(f"NP-formen: {antal} uppgifter blev {len(skeleton)}, samma "
+            f"{poang} poäng på fler och kortare uppgifter ({ett} på 1 p).")
     antal = len(skeleton) or antal
     # … men bara två av dem GRAMMATIKLÅSES. En låst rad måste bära sina poäng
     # själv, och en uppgift med poäng får inga deluppgifter (exam_spec:

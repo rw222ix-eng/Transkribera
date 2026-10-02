@@ -476,7 +476,9 @@ def test_provet_fylls_upp_till_taket():
     doc = exam_spec._skeleton_doc(fyllt)
     assert exam_spec.poangsummor(doc)["total"] == tak
     assert exam_spec.validate_balance(doc, profil="prov") == []
-    assert len(fyllt) == 12                       # antalet är hennes
+    # Antalet är ett golv sedan lärarens dom 2026-10-03 (NP:s uppgiftsform,
+    # exam_spec._np_uppgiftsform): samma 33 p på fler och kortare uppgifter.
+    assert 12 < len(fyllt) <= 15
     ofyllt = exam_spec.balanced_skeleton(12, "prov", kurs="Matematik 1c",
                                          poang_tak=tak, fyll=False)
     assert exam_spec.poangsummor(
@@ -538,10 +540,15 @@ def test_taket_haller_i_varje_kurs(kurs):
     assert exam_spec.validate_balance(doc) == [], kurs
 
 
-def test_taket_koper_utrymmet_av_trepoangarna():
+def test_taket_koper_utrymmet_av_trepoangarna(monkeypatch):
     """Fler billiga rader, färre dyra, inte färre uppgifter. Det är hela
     mekaniken: (0,3,0) blir (0,2,0) blir (0,1,0), och raden är fortfarande
-    samma förmåga, samma del och samma plats i trappan."""
+    samma förmåga, samma del och samma plats i trappan.
+
+    Prövas UTAN uppgiftsformen (2026-10-03), som annars lyfter ut en poäng
+    till en trettonde rad i 2a-provet utan tak: det här är bantningens
+    mekanik, formen har sina egna tester i tests/test_uppgiftsform.py."""
+    monkeypatch.setattr(exam_spec, "NP_FORM_MIN_ANTAL", 99)
     utan = exam_spec.balanced_skeleton(12, "prov", kurs="Ma2a")
     med = exam_spec.balanced_skeleton(12, "prov", kurs="Ma2a", poang_tak=23)
     assert len(med) == len(utan) == 12

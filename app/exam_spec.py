@@ -2450,7 +2450,11 @@ def np_form(profil: str, kurs: str = "", antal: int = 0) -> dict | None:
     niva = niva_rubrik.kursniva(kurs or "")
     return {"k3": bool(niva and niva[0] == 2),
             "k_niva": NP_K_NIVA.get(niva_rubrik.kursnyckel(kurs or "") or ""),
-            "kortsvar": antal >= NP_KORTSVAR_MIN_ANTAL}
+            "kortsvar": antal >= NP_KORTSVAR_MIN_ANTAL,
+            # Uppgiftsformen (lärarens dom 2026-10-03, se NP_FORM_MIN_ANTAL):
+            # bara i en mätt kurs och på ett prov stort nog att ha en form.
+            "uppgiftsform": (niva_rubrik.uppgiftsform(kurs or "")
+                             if antal >= NP_FORM_MIN_ANTAL else None)}
 
 
 # Nivån en K-rad tar i kurs 2, där mätningen säger vilken. 2a: K-poängen
@@ -2654,6 +2658,328 @@ def _fyll_skelett(slots: list[dict], tak: int,
             return        # ingen rad kan växa: närmast möjliga summa
 
 
+# ── NP:S UPPGIFTSFORM (lärarens dom 2026-10-03) ───────────────────────────
+# Prov 156 (NA26F, Ma 1c, 100 minuter i takt 3) hade tolv uppgifter på 34 p,
+# NOLL enpoängare, sex av tolv med deluppgifter och sex fristående uppgifter
+# på 3–4 p. NP Ma 1c vt22 har 13 enpoängare av 32, 8 med deluppgifter och 4
+# fristående på 3 p eller mer (niva_rubrik.NP_UPPGIFTSFORM). Rickard: «byt en
+# eller två av de stora C-uppgifterna mot två, tre kortare uppgifter. Det
+# räcker.»
+#
+# VAR DET GICK FEL. Ingenting i skelettet styckade poängen. Fyllningen upp
+# till taket (_fyll_skelett) växer den BILLIGASTE raden först, alltså just
+# enpoängarna, som blir a/b-par; det som blev över hamnade på C-rader om 3–4 p.
+# Ett tolvuppgiftsprov på 33 p är 2,75 p per uppgift, och NP ligger på 2,2.
+# Antalet hade bara en väg att hålla taket på: tyngre uppgifter.
+#
+# FORMEN VINNER PÅ POÄNGEN. Poängtaket, E/C/A-bandet och tidsmodellen står
+# kvar; det som ger vika är ANTALET. En poäng lyfts ut ur en stor uppgift till
+# en ny kortsvarsuppgift om 1 p på samma nivå och förmåga: (0, 3, 0) blir
+# (0, 2, 0) och (0, 1, 0), ett a/b-par (2, 0, 0) blir två enpoängare, och
+# E-delen i (1, 0, 2) blir ett eget E-kortsvar. Summan, nivåpoängen och
+# förmågepoängen är exakt desamma; pappret får en uppgift till per lyft.
+# Lärarens tolv blir på 100 minuter i takt 3 femton uppgifter, 2,2 p per
+# uppgift, NP:s egen täthet. Loggen säger det (exam_gen.generate_exam), och
+# skärmens «Provet byggs för …» räknar på samma skelett.
+#
+# HUR ANTAL OCH FORM SAMSAS. Panelens antal är en BESTÄLLNING av provets
+# storlek, och den respekteras så här: (1) skelettet byggs med exakt så många
+# rader som förut, nivåmix, förmågor och tak som förut; (2) först sedan lyfts
+# poäng ut, högst NP_FORM_MAX_TILLAGDA_ANDEL av antalet (minst två, «en eller
+# två byten»), och aldrig över MAX_FORESLAGET_ANTAL, som är både panelens
+# tak och det grammatikbudgeten (29 844 av 30 000 tecken) är mätt på. Ett prov
+# på tjugo får alltså ingen rad till, bara poängsökningens dragning mot formen.
+#
+# TIDEN. Med lärarens takt på pappret är tiden poäng gånger takt (papperstid),
+# och den rörs inte: poängen är densamma. Utan takt räknar tidsatgang 1,1
+# minut per uppgift (MIN_PER_UPPGIFT), alltså tre minuter till för tre lyft.
+# Det är NP:s egen kostnad (termen är mätt på NP:s huvuduppgifter, 24–28 på
+# 240 minuter), och kortsvaret är den billigaste uppgift som finns.
+#
+# BARA PROVET, BARA MÄTTA KURSER (1a, 1c, 2a, 2c), BARA FRÅN TIO UPPGIFTER.
+# Arbetsbladet och gruppuppgiften har ingen form att följa; Ma3c och uppåt
+# har inga lästa prov. Tio och inte åtta, mätt: över 672 skelett (fyra
+# kurser, 8–20 uppgifter, sex passlängder, fyra nivåval) gav formen på åtta
+# uppgifter nio nya balansfel i kurs 2 (sex förmågor på åtta–nio rader, och
+# kurs 2:s golv är under två enpoängare), och från tio inga nya alls;
+# skelett med balans- eller ordningsfel är 138 mot 139 före formen.
+# Det är också kassettregeln: provbandet är inspelat på «Matematik 3c» med
+# sex uppgifter och auto-bandet på 2c med sex, och båda skeletten är byte för
+# byte orörda.
+NP_FORM_MIN_ANTAL = 10
+NP_FORM_MAX_TILLAGDA_ANDEL = 0.25
+# Vad en uppgift utanför formen kostar i poängsökningen (_straff). Över
+# FYLLSTRAFF (en saknad poäng under taket) och under bandbrottets fasta avgift
+# 0,1: formen går före fyllningen, men aldrig före nivå- och förmågebanden,
+# som valideringen fäller på.
+FORMSTRAFF = 0.03
+
+
+def _halvt_upp(x: float) -> int:
+    return int(math.floor(x + 0.5))
+
+
+def uppgiftsform_mal(uform: dict, n: int) -> dict[str, int]:
+    """Formens gränser i ANTAL uppgifter på ett prov om `n`: golvet för
+    enpoängare är kursens lägsta uppmätta andel, taken för uppgifter med
+    deluppgifter och för fristående 3+-uppgifter kursens högsta. Avrundat
+    till närmaste uppgift: på tolv uppgifter är en halv uppgift brus."""
+    return {
+        "enpoangare": _halvt_upp(uform["enpoangare"][0] * n),
+        "med_deluppgifter": _halvt_upp(uform["med_deluppgifter"][1] * n),
+        "fristaende_stora": _halvt_upp(uform["fristaende_stora"][1] * n),
+    }
+
+
+def _formrakning(slots: list[dict]) -> dict[str, int]:
+    """Enpoängare, uppgifter med deluppgifter och fristående 3+-uppgifter i
+    ett skelett, räknade med samma delning som _dela_i_deluppgifter gör."""
+    ett = dels = fri = 0
+    for s in slots:
+        summa = sum(s["poang"])
+        delad = _dela_poang(s["poang"], s["typ"]) is not None
+        ett += summa == 1
+        dels += delad
+        fri += (not delad) and summa >= 3
+    return {"enpoangare": ett, "med_deluppgifter": dels,
+            "fristaende_stora": fri}
+
+
+def _formunderskott(slots: list[dict], uform: dict,
+                    slack_delar: int = 0) -> int:
+    """Hur många uppgifter skelettet ligger från formen, summerat: saknade
+    enpoängare plus uppgifter över de två taken. Noll är NP:s form.
+
+    `slack_delar` är lyftets marginal på deluppgifterna (_np_uppgiftsform):
+    en uppgift för mycket med a/b lagar poängsökningen själv genom att
+    flytta en poäng mellan nivåerna, och ett lyft för den hade gett lärarens
+    70-minuterspapper, som redan hade NP:s form, en uppgift i onödan."""
+    mal = uppgiftsform_mal(uform, len(slots))
+    r = _formrakning(slots)
+    return (max(0, mal["enpoangare"] - r["enpoangare"])
+            + max(0, r["med_deluppgifter"] - mal["med_deluppgifter"]
+                  - slack_delar)
+            + max(0, r["fristaende_stora"] - mal["fristaende_stora"]))
+
+
+def _efter_delning(slots: list[dict], form: dict | None,
+                   delar: bool) -> list[dict]:
+    """Prövoskelettet som det blir efter delindelningen och poängstädningen,
+    på kopior. Formen ska räknas på det pappret får, inte på raderna före:
+    ett kortsvarspar som hamnar i räknardelen blir en lösning utan
+    deluppgifter, och en rutinrad över kortsvarstaket likaså."""
+    kopia = [dict(s, poang=list(s["poang"])) for s in slots]
+    ut = _delindelning(kopia, delar, form)
+    _np_stadning(ut, form)
+    return ut
+
+
+# Hur långt ett FÄRDIGT prov får ligga från formen innan efterkontrollen
+# säger något: en uppgift åt fel håll på varje mått. Skelettet bygger formen
+# exakt, men poängsökningen och lärarens omskrivningar flyttar en poäng här
+# och där, och ett fynd som tänds på varje papper slutar läsas. Prov 156
+# ligger fyra enpoängare och tre stora uppgifter från formen, långt utanför.
+FORM_FYND_SLACK = 1
+
+
+def validate_uppgiftsform(doc: ExamDoc, kurs: str | None = None) -> list[dict]:
+    """Avviker ett färdigt prov TYDLIGT från NP:s uppgiftsform för kursen?
+    En post med koden «uppgiftsform», eller ingen.
+
+    Samma mått och samma gränser som skelettet bygger mot (uppgiftsform_mal),
+    med FORM_FYND_SLACK, plus flest deluppgifter i en uppgift. Tyst för en
+    omätt kurs och under NP_FORM_MIN_ANTAL uppgifter, samma villkor som
+    skelettet: ett fynd för något genereringen aldrig bygger vore ett krav
+    läraren inte kan uppfylla genom att skriva provet igen."""
+    uform = niva_rubrik.uppgiftsform(doc.kurs if kurs is None else kurs)
+    n = len(doc.uppgifter)
+    if not uform or n < NP_FORM_MIN_ANTAL:
+        return []
+    mal = uppgiftsform_mal(uform, n)
+    ett = dels = fri = flest = 0
+    for it in doc.uppgifter:
+        delar = len(it.deluppgifter or [])
+        summa = sum(uppg_poang(it))
+        ett += summa == 1
+        dels += delar >= 2
+        fri += delar < 2 and summa >= 3
+        flest = max(flest, delar)
+    avvikelser = []
+    if ett < mal["enpoangare"] - FORM_FYND_SLACK:
+        avvikelser.append(f"{ett} enpoängare (NP: minst {mal['enpoangare']})")
+    if dels > mal["med_deluppgifter"] + FORM_FYND_SLACK:
+        avvikelser.append(f"{dels} uppgifter med deluppgifter (NP: högst "
+                          f"{mal['med_deluppgifter']})")
+    if fri > mal["fristaende_stora"] + FORM_FYND_SLACK:
+        avvikelser.append(f"{fri} fristående uppgifter på 3 p eller mer (NP: "
+                          f"högst {mal['fristaende_stora']})")
+    if flest > uform["max_deluppgifter"]:
+        avvikelser.append(f"en uppgift med {flest} deluppgifter (NP: högst "
+                          f"{uform['max_deluppgifter']})")
+    if not avvikelser:
+        return []
+    return [_err("uppgifter", "uppgiftsform",
+                 f"Provet har {n} uppgifter och avviker från nationella "
+                 f"provets form i Ma {uform['kurs']}: "
+                 f"{', '.join(avvikelser)}. NP har fler och kortare "
+                 "uppgifter. Byt en eller två stora uppgifter mot två, tre "
+                 "kortare; ett nytt prov byggs i den formen.")]
+
+
+def _ordningsfel(slots: list[dict], e_start: bool) -> int:
+    return len(validate_ordning(_skeleton_doc(slots), kraver_e_start=e_start))
+
+
+def _np_uppgiftsform(slots: list[dict], form: dict | None,
+                     antal: int, delar: bool = True,
+                     niva_mal: dict | None = None) -> int:
+    """Lyft ut poäng ur stora uppgifter till nya kortsvar om 1 p tills
+    skelettet har kursens uppgiftsform. Muterar `slots`; returnerar antalet
+    tillagda uppgifter. Körs efter fyllningen och bantningen (summan är då
+    passets) och före delindelningen (som ska se de nya kortsvaren).
+
+    Ett lyft i taget, och alltid det som minskar formunderskottet mest. Lika
+    bra lyft avgörs i lärarens ordning: ur en FRISTÅENDE stor uppgift först,
+    en C-uppgift före andra («de stora C-uppgifterna»), den största först.
+
+    Lagligt lyft: raden är inte Kommunikation (K kräver redovisning, och i kurs
+    2 bär K-raden alltid 3 p), karaktären står kvar, en A-lösning behåller
+    minst två A-poäng (NP_A_LOSNING_MIN_POANG), och ett A-kortsvar får bara
+    födas när provet är stort nog för A-kortsvar (form["kortsvar"])."""
+    uform = (form or {}).get("uppgiftsform")
+    if not uform:
+        return 0
+    tak = min(max(2, _halvt_upp(NP_FORM_MAX_TILLAGDA_ANDEL * antal)),
+              max(0, MAX_FORESLAGET_ANTAL - antal))
+    tillagda = 0
+    e_start = kraver_e_start(niva_mal)
+    fore = _efter_delning(slots, form, delar)
+    nu = _formunderskott(fore, uform, 1)
+    ordning = _ordningsfel(fore, e_start)
+    while nu > 0 and tillagda < tak:
+        basta = None
+        for i, s in enumerate(slots):
+            if s["formaga"] == "K":
+                continue
+            p = s["poang"]
+            fri = (_dela_poang(p, s["typ"]) is None and sum(p) >= 3)
+            for idx in range(3):
+                if not p[idx]:
+                    continue
+                if idx == 2 and not form.get("kortsvar"):
+                    continue
+                kvar = list(p)
+                kvar[idx] -= 1
+                if sum(kvar) < 1 or _karaktar(kvar) != s["karaktar"]:
+                    continue
+                if (s["typ"] != "rutin" and s["karaktar"] == "A"
+                        and kvar[2] < NP_A_LOSNING_MIN_POANG):
+                    continue
+                ny = [0, 0, 0]
+                ny[idx] = 1
+                prov = (slots[:i]
+                        + [dict(s, poang=kvar),
+                           {"del": None, "formaga": s["formaga"],
+                            "karaktar": NIVAER_STORA[idx], "typ": "rutin",
+                            "poang": ny}]
+                        + slots[i + 1:])
+                efter = _efter_delning(prov, form, delar)
+                varde = (_formunderskott(efter, uform, 1), not fri,
+                         s["karaktar"] != "C", -sum(p), i, idx)
+                if varde[0] >= nu or (basta is not None
+                                      and varde >= basta[0]):
+                    continue
+                # Ett lyft får inte bryta trappan. Utan ett enda E-kortsvar
+                # (C/A-tyngd) hade ett nytt C-kortsvar ställt sig först i
+                # del B, och delen hade börjat utan E-poäng (MIN_START_E).
+                fel = _ordningsfel(efter, e_start)
+                if fel > ordning:
+                    continue
+                basta = (varde, i, idx, kvar, ny, fel)
+        if basta is None:
+            break
+        (nu, *_), i, idx, kvar, ny, ordning = basta
+        kalla = slots[i]
+        kalla["poang"] = kvar
+        slots.insert(i + 1, {"del": None, "formaga": kalla["formaga"],
+                             "karaktar": NIVAER_STORA[idx], "typ": "rutin",
+                             "poang": ny})
+        tillagda += 1
+    if tillagda:
+        _LOG.info("NP-formen (%s): %d uppgifter blev %d, samma %d poäng på "
+                  "fler och kortare uppgifter.", uform.get("kurs"), antal,
+                  len(slots), sum(sum(s["poang"]) for s in slots))
+    return tillagda
+
+
+def _delindelning(slots: list[dict], delar: bool,
+                  form: dict | None) -> list[dict]:
+    """Del B/C, kortsvarsblocket och ordningen inom delarna. Muterar raderna
+    (del, typ) och returnerar dem i pappersordning. Utbruten ur
+    balanced_skeleton 2026-10-03 så att uppgiftsformen (_np_uppgiftsform) kan
+    räkna på ett prövoskelett som delats in precis som det riktiga; koden är
+    ordagrant densamma."""
+    if delar:
+        del_b: list[dict] = []
+        del_c: list[dict] = []
+        # KORTSVAREN FÖRST I GRUPPEN, och det är NP:s ordning och inte en
+        # smaksak: rutinraderna ska hamna i Del A (se NP:S DELORDNING).
+        # Sorteringen är stabil, så allt annat behåller sin plats.
+        grupper = []
+        for kar in NIVAER_STORA:
+            grupp = [s for s in slots if s["karaktar"] == kar]
+            grupp.sort(key=lambda s: s["typ"] != "rutin")
+            grupper.append(grupp)
+        for grupp, skiljelinje in zip(grupper, _dela_del_b(grupper)):
+            del_b += grupp[:skiljelinje]
+            del_c += grupp[skiljelinje:]
+        for s in del_b:
+            s["del"] = "B"
+        for s in del_c:
+            s["del"] = "C"
+            # Rök en rutinrad ändå över till Del B (fler kortsvar än
+            # skiljelinjen rymde) skrivs den om till en redovisningsuppgift.
+            # NP:s delprov D har inga kortsvar alls, och en «Endast svar
+            # krävs»-rad i räknardelen säger emot delens egen kravrad.
+            if s["typ"] == "rutin":
+                s["typ"] = _EJ_RUTIN.get(s["formaga"], "redovisning")
+        # Kortsvaren står först i Del A, som i NP:s delprov B, och de är EGNA
+        # NUMRERADE UPPGIFTER — inte en samling under ett nummer.
+        #
+        # Blocket kapades förut vid MAX_LIKA_I_RAD (tre rader), och skälet var
+        # att varje rad blev en samling med två eller tre frågor. Samlingen är
+        # borta (se _dela_i_deluppgifter), och då stämmer inte kapningen
+        # längre: tre rader vore tre kortsvar på ett helt prov.
+        #
+        # MÄTT PÅ NP, inte satt: NpMa2a vt17 har 9 kortsvarsuppgifter av 15 i
+        # delprov B+C (60 %), vt22 11 av 17 (65 %). Andelen nedan är den lägre
+        # av de två — hellre ett kortsvar för lite än ett prov som bara är
+        # kortsvar. Antiklumpningen fäller inte längre blocket: den inledande
+        # raden av rutinuppgifter är NP:s egen form (validate_ordning).
+        del_b_kort = [s for s in del_b if s["typ"] == "rutin"]
+        # MED UPPGIFTSFORMEN gäller kursens egen andel kortsvar i den
+        # räknarfria delen när den är högre (1c 73–76 %, 1a 71–86 %): annars
+        # skrevs de nya enpoängarna om till lösningar igen här. 2a och 2c
+        # ligger under 60 % och behåller den gamla andelen.
+        andel = KORTSVAR_ANDEL_DEL_A
+        if form and form.get("uppgiftsform"):
+            andel = max(andel,
+                        form["uppgiftsform"]["kortsvar_utan_raknare"][0])
+        tak = max(1, round(andel * len(del_b)))
+        for s in del_b_kort[tak:]:
+            s["typ"] = _EJ_RUTIN.get(s["formaga"], "redovisning")
+        del_b_kort = del_b_kort[:tak]
+        slots = (del_b_kort
+                 + _varva([s for s in del_b if s["typ"] != "rutin"], form)
+                 + _varva(del_c, form))
+    else:
+        # Platt dokument: samma stigande ordning, ingen delindelning.
+        # Gruppuppgiften mäts inte på stigande svårighet (fyra ingångar, inte en
+        # trappa) men tar ingen skada av att ändå ligga lätt först.
+        slots = _varva(slots, form)
+    return slots
+
+
 def balanced_skeleton(antal: int, profil: str = "prov",
                       delar: bool | None = None,
                       mix: tuple[float, float, float] | None = None,
@@ -2685,6 +3011,11 @@ def balanced_skeleton(antal: int, profil: str = "prov",
     `mix`/`niva_mal` är lärarens nivåval (NIVAVAL): mixen byter
     karaktärsfördelningen, banden byter sökningens mål. Utelämnade gäller
     profilens egna — exakt samma skelett som före väljaren.
+
+    ANTALET ÄR ETT GOLV PÅ PROVET sedan 2026-10-03: i en mätt kurs från tio
+    uppgifter kan NP:s uppgiftsform lyfta ut poäng till nya kortsvar, och
+    skelettet blir då längre än `antal` (se _np_uppgiftsform). Läs alltid
+    len(skelettet), aldrig `antal`, efteråt.
 
     `poang_tak` är PASSETS gräns (poang_tak_for: lärarens minuter delat med
     hennes takt). Med ett tak satt väljs billigare NP-tripplar tills summan
@@ -2793,56 +3124,13 @@ def balanced_skeleton(antal: int, profil: str = "prov",
             _fyll_skelett(slots, int(poang_tak), rent, form)
         _banta_skelett(slots, int(poang_tak), rent, form)
 
-    if delar:
-        del_b: list[dict] = []
-        del_c: list[dict] = []
-        # KORTSVAREN FÖRST I GRUPPEN, och det är NP:s ordning och inte en
-        # smaksak: rutinraderna ska hamna i Del A (se NP:S DELORDNING).
-        # Sorteringen är stabil, så allt annat behåller sin plats.
-        grupper = []
-        for kar in NIVAER_STORA:
-            grupp = [s for s in slots if s["karaktar"] == kar]
-            grupp.sort(key=lambda s: s["typ"] != "rutin")
-            grupper.append(grupp)
-        for grupp, skiljelinje in zip(grupper, _dela_del_b(grupper)):
-            del_b += grupp[:skiljelinje]
-            del_c += grupp[skiljelinje:]
-        for s in del_b:
-            s["del"] = "B"
-        for s in del_c:
-            s["del"] = "C"
-            # Rök en rutinrad ändå över till Del B (fler kortsvar än
-            # skiljelinjen rymde) skrivs den om till en redovisningsuppgift.
-            # NP:s delprov D har inga kortsvar alls, och en «Endast svar
-            # krävs»-rad i räknardelen säger emot delens egen kravrad.
-            if s["typ"] == "rutin":
-                s["typ"] = _EJ_RUTIN.get(s["formaga"], "redovisning")
-        # Kortsvaren står först i Del A, som i NP:s delprov B, och de är EGNA
-        # NUMRERADE UPPGIFTER — inte en samling under ett nummer.
-        #
-        # Blocket kapades förut vid MAX_LIKA_I_RAD (tre rader), och skälet var
-        # att varje rad blev en samling med två eller tre frågor. Samlingen är
-        # borta (se _dela_i_deluppgifter), och då stämmer inte kapningen
-        # längre: tre rader vore tre kortsvar på ett helt prov.
-        #
-        # MÄTT PÅ NP, inte satt: NpMa2a vt17 har 9 kortsvarsuppgifter av 15 i
-        # delprov B+C (60 %), vt22 11 av 17 (65 %). Andelen nedan är den lägre
-        # av de två — hellre ett kortsvar för lite än ett prov som bara är
-        # kortsvar. Antiklumpningen fäller inte längre blocket: den inledande
-        # raden av rutinuppgifter är NP:s egen form (validate_ordning).
-        del_b_kort = [s for s in del_b if s["typ"] == "rutin"]
-        tak = max(1, round(KORTSVAR_ANDEL_DEL_A * len(del_b)))
-        for s in del_b_kort[tak:]:
-            s["typ"] = _EJ_RUTIN.get(s["formaga"], "redovisning")
-        del_b_kort = del_b_kort[:tak]
-        slots = (del_b_kort
-                 + _varva([s for s in del_b if s["typ"] != "rutin"], form)
-                 + _varva(del_c, form))
-    else:
-        # Platt dokument: samma stigande ordning, ingen delindelning.
-        # Gruppuppgiften mäts inte på stigande svårighet (fyra ingångar, inte en
-        # trappa) men tar ingen skada av att ändå ligga lätt först.
-        slots = _varva(slots, form)
+    # NP:S UPPGIFTSFORM (2026-10-03): poäng lyfts ut ur stora uppgifter till
+    # nya kortsvar, samma summa på fler rader. Efter taket, före delarna. Utan
+    # mätt kurs eller under åtta uppgifter är form["uppgiftsform"] None och
+    # raden gör ingenting.
+    _np_uppgiftsform(slots, form, len(karaktarer), delar, niva_mal)
+
+    slots = _delindelning(slots, delar, form)
 
     # Rutinuppgiften: validate_balance kräver EN i varje dokument (också i
     # gruppuppgiften — läraren ska kunna se att någon del går att svara på
@@ -3400,7 +3688,7 @@ FYLLSTRAFF = 0.02
 def _straff(slots: list[dict], profil: str,
             niva_mal: dict | None = None, kurs: str = "",
             poang_tak: int | None = None, brett: bool = False,
-            fyll: bool = True) -> float:
+            fyll: bool = True, uform: dict | None = None) -> float:
     """Hur långt skelettet ligger från målen, som ETT tal. `brett` byter
     kursens hårda band mot valideringens (se _justera_skelett).
 
@@ -3496,6 +3784,11 @@ def _straff(slots: list[dict], profil: str,
         # uppgift — nationella provet ligger på 1,96–2,19 (niva_rubrik).
         mal = sum(niva_rubrik.NP_FORDELNING["poang_per_uppgift"]) / 2
         straff += 0.05 * ((total / len(slots) - mal) / mal) ** 2
+        # NP:s uppgiftsform (2026-10-03, se _np_uppgiftsform): sökningen får
+        # inte göra en enpoängare till ett a/b-par igen, eller bygga en
+        # fristående trepoängare, för att vinna en jämnhetshundradel.
+        if uform:
+            straff += FORMSTRAFF * _formunderskott(slots, uform)
     # Ordningsreglerna vägs med samma profilflaggor som valideringen använder —
     # annars hade sökningen straffat gruppuppgiften för att den saknar
     # svårighetstrappa, vilket är hela dess form.
@@ -3594,16 +3887,20 @@ def _justera_skelett(slots: list[dict], profil: str = "prov",
     reparationsloopen i exam_gen får ta vid. Det är samma kontrakt som förut,
     fast utan pingpongen."""
     stangda = stangda_nivaer(niva_mal)
+    # Uppgiftsformen drar i sökningen bara när skelettet byggdes med den.
+    uform = (form or {}).get("uppgiftsform")
 
     def sok(brett: bool) -> float:
-        nuvarande = _straff(slots, profil, niva_mal, kurs, poang_tak, brett, fyll)
+        nuvarande = _straff(slots, profil, niva_mal, kurs, poang_tak, brett,
+                            fyll, uform)
         for _ in range(varv):
             if nuvarande <= 0:
                 break
             basta = None
             for i, idx, delta in _drag(slots, stangda, form):
                 slots[i]["poang"][idx] += delta
-                varde = _straff(slots, profil, niva_mal, kurs, poang_tak, brett, fyll)
+                varde = _straff(slots, profil, niva_mal, kurs, poang_tak,
+                                brett, fyll, uform)
                 slots[i]["poang"][idx] -= delta
                 if varde < nuvarande - 1e-12 and (basta is None
                                                   or varde < basta[0]):
@@ -3640,7 +3937,7 @@ def _justera_skelett(slots: list[dict], profil: str = "prov",
                         continue
                     slots[j]["poang"][jdx] -= 1
                     varde = _straff(slots, profil, niva_mal, kurs, poang_tak,
-                                    brett, fyll)
+                                    brett, fyll, uform)
                     slots[j]["poang"][jdx] += 1
                     if varde < nuvarande - 1e-12 and (basta is None
                                                       or varde < basta[0]):
