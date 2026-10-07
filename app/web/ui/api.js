@@ -118,8 +118,8 @@
     swrNycklar().forEach(k => { if (k.indexOf(p) === 0) { try { L.removeItem(k); } catch (e) {} } });
   }
 
-  /* Vad en SKRIVNING gör osant. Grunden är vägens två första led — en PUT mot
-     /api/dokument/12/elevresultat gör allt under /api/dokument misstänkt. Ringarna
+  /* Vad en SKRIVNING gör osant. Grunden är vägens två första led — en PATCH mot
+     /api/dokument/12 gör allt under /api/dokument misstänkt. Ringarna
      står för svaren som ligger på en ANNAN väg än den man skrev till: en ny
      kalenderpost ändrar inte /api/kalenderposter (den läses aldrig) utan
      /api/schema, som svarar med hela veckan, posterna inräknade. */
