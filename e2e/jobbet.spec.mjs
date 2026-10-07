@@ -66,7 +66,10 @@ test("ett skrivet prov lämnar ett jobb med sin historik efter sig", async ({ pa
  *
  * Lärarens fynd 2026-09-06: hon klickade på remsans text för att komma DIT
  * jobbet skrivs, och ingenting hände. Texten säger vad som pågår; det enda
- * stället där det syns på riktigt är planeringens statusruta, en flik bort.
+ * stället där det syns på riktigt är planeringens statusruta.
+ *
+ * Planeringen var förr en flik bort, för appen startade på Transkribera. Den
+ * fliken togs bort 2026-10-07, så testet gömmer vyn själv innan klicket.
  */
 test("klick på remsans text går till planeringen", async ({ page }) => {
   await page.route("**/api/jobb/aktiva*", r => r.fulfill({
@@ -93,6 +96,7 @@ test("klick på remsans text går till planeringen", async ({ page }) => {
   // Klickbar på riktigt: en knapp för skärmläsaren och för tangentbordet.
   await expect(remsa.locator(".jtext")).toHaveAttribute("role", "button");
 
+  await page.evaluate(() => { document.querySelector("#vy-planering").hidden = true; });
   await expect(page.locator("#vy-planering")).toBeHidden();
   await remsa.locator(".jtext").click();
   await expect(page.locator("#vy-planering")).toBeVisible();
