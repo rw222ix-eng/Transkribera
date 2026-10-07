@@ -38,6 +38,12 @@
   ];
   /* Det avsnitt som gicks igenom sist — i appen ur de godkända tavlorna. */
   let senast = '5.1';
+  /* '5.1' är prototypens påhitt och gäller bara prototypens register. Med
+     lärarens böcker träffade det bokens EGEN 5.1, och 5000+ 1a öppnade på
+     «5.2 Längdberäkningar», s. 309–323, för en klass som inte börjat
+     (2026-10-07). Bara ett avsnitt läraren själv tagit (#boknastanv) räknas
+     där; annars avgör klassens läge (Profil.lageFor). */
+  let senastEget = false;
   /* Vilket register som gäller avgörs av kursen man planerar, inte av vilken bok
      appen startade med: en sökning i momentfältet på en Ma 4-lektion ska hitta
      «2.3 Polär form», inte 3c:s kapitel. */
@@ -61,7 +67,7 @@
   const nasta = (kurs, klass) => {
     const A = registerFor(kurs);
     if (!A.length) return null;
-    const i = A.findIndex(a => a.nr === senast);
+    const i = senastEget || !franServern() ? A.findIndex(a => a.nr === senast) : -1;
     if (i >= 0) return A[Math.min(A.length - 1, i + 1)];
     /* Registret känner inte avsnittet som gicks igenom sist — då är det en annan
        kurs, och det som säger var man är är klassens läge i just den kursen. */
@@ -293,7 +299,7 @@
       if (a) $('#boknastnamn').textContent = namnet(a);
     };
     skriv();
-    $('#boknastanv').addEventListener('click', () => { const a = nasta(); if (!a) return; valj(a); senast = a.nr; skriv(); });
+    $('#boknastanv').addEventListener('click', () => { const a = nasta(); if (!a) return; valj(a); senast = a.nr; senastEget = true; skriv(); });
     const kf = $('#p-kurs');
     if (kf) kf.addEventListener('change', skriv);
     document.addEventListener('bok-redo', skriv);

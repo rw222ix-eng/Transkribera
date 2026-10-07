@@ -52,12 +52,30 @@
   const uppslag = $('#bkuppslag'), remsa = $('#bkremsa'), spann = $('#bkspann');
   const moment = $('#moment'), momentrad = $('#momentrad');
 
-  /* Utan register finns inget avsnitt att stå på — remsan öppnar då på sidan
-     ett och avsnittsknappen säger «Välj avsnitt». Det händer med server men
-     utan inläst bok, och det är sant om läget. */
-  let avsnitt = window.Bok.nasta();
-  let fran = avsnitt ? grans(avsnitt)[0] : 1, till = avsnitt ? grans(avsnitt)[1] : 1;
+  /* Utan register finns inget avsnitt att stå på — remsan öppnar då på bokens
+     första sida och avsnittsknappen säger «Välj avsnitt». Det händer med server
+     men utan inläst bok, och det är sant om läget. */
+  let avsnitt = null, fran = 1, till = 1;
   let halv = false;
+  /* Har läraren (eller klassprofilen, planeringen) satt spannet? Bara då får det
+     stå kvar när hyllan kommer från servern. Annars är det startspannet, och det
+     räknades på det register som fanns DÅ: före serverns svar är det
+     prototypens 3c, och 5000+ 1a öppnade på s. 192–197, «5.2 Derivator» ur en
+     bok läraren inte har (2026-10-07). */
+  let egetSpann = false;
+  /* Avsnittet som står på tur i BOKENS kurs, inte i kursfältet: fältet är ofta
+     tomt vid uppstart, och en annan kurs avsnitt hör till en annan bok. Känner
+     registret inte avsnittet står boken på sitt första. */
+  function startSpann() {
+    const A = reg();
+    const kurs = window.Bok.kursForBok ? window.Bok.kursForBok(bok) : '';
+    const a = kurs && window.Bok.nasta ? window.Bok.nasta(kurs) : null;
+    const val = a && A.includes(a) ? a : A[0] || null;
+    avsnitt = val;
+    [fran, till] = val ? grans(val) : [1, 1];
+    halv = false;
+  }
+  startSpann();
 
   const avsnittFor = sida => reg().find(a => { const [f, t] = grans(a); return sida >= f && sida <= t; }) || null;
   const rullaLada = (box, mal) => (window.rullaLada || ((b, y) => { b.scrollTop = y; }))(box, mal, 520);
@@ -224,6 +242,7 @@
       f.addEventListener('change', () => {
         const v = Number(f.value) || forsta();
         if (id === '#bkfran') fran = v; else till = v;
+        egetSpann = true;
         if (till < fran) { const x = fran; fran = till; till = x; }
         klampa();
         halv = false;
@@ -312,6 +331,7 @@
     const b = e.target.closest('.bksida');
     if (!b) return;
     const s = +b.dataset.s;
+    egetSpann = true;
     if (!halv) { fran = s; till = s; halv = true; }
     else { if (s < fran) { till = fran; fran = s; } else till = s; halv = false; }
     rita();
@@ -330,6 +350,7 @@
     if (!r) return;
     avsnitt = reg().find(a => a.nr === r.dataset.nr);
     [fran, till] = grans(avsnitt);
+    egetSpann = true;
     halv = false;
     lista.hidden = true;
     avsnittsknapp.setAttribute('aria-expanded', 'false');
@@ -385,10 +406,13 @@
     BOCKER = bocker.map(b => b.namn);
     byggBokpanel();
     if (BOCKER.length && !BOCKER.includes(bok)) {
-      const a = window.Bok.nasta();
-      if (a) { [fran, till] = grans(a); avsnitt = a; halv = false; }
+      /* Spannet hörde till en bok som inte finns i hyllan, och är meningslöst
+         i den nya — eget eller inte. */
+      bok = BOCKER[0];
+      startSpann();
       valjBok(BOCKER[0], false);
     } else {
+      if (!egetSpann) startSpann();
       ritaRemsa(); rita(); skrivMoment(false);
     }
   });
@@ -463,6 +487,7 @@
       bokpanel.appendChild(r);
     }
     if (spann && spann.fran) {
+      egetSpann = true;
       fran = Math.round(spann.fran);
       till = Math.round(spann.till || spann.fran);
       halv = false;
@@ -472,6 +497,7 @@
   /* Klassprofilen sätter spannet åt läraren: boken minns var klassen slutade.
      Samma väg som ett klick i remsan, bara utan klicket. */
   function sattSpann(f, t) {
+    egetSpann = true;
     fran = Math.round(f || fran);
     till = Math.round(t || fran);
     klampa();
