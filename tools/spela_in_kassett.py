@@ -28,35 +28,8 @@ ROT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROT))
 
 from app import (ci_forslag, claude_code, elevlasare, exam_gen,    # noqa: E402
-                 exam_spec, kursdomare, lesson_board, llm_client, notes_gen,
-                 postprocess)
+                 exam_spec, kursdomare, lesson_board, llm_client)
 from tests import fejk                                             # noqa: E402
-
-TRANSKRIPT = (
-    "Idag tittade vi på derivatans definition. Vi började med ändringskvoten "
-    "och lät h gå mot noll. Många fastnade på kedjeregeln från förra veckan, "
-    "så vi tar om den på fredag. Kom ihåg att provet är den 12 maj, och jag "
-    "ska kopiera upp arbetsbladet till nästa gång."
-)
-
-# Anteckningarnas underlag är ett MÖTE, inte en lektion — det är därför typen
-# finns. Talspråket, avbrotten och det som beslutas i förbifarten hör till:
-# ett städat referat hade gjort inspelningen lättare än verkligheten, och det
-# är just röran modellen ska klara att plocka ur.
-MOTESTRANSKRIPT = (
-    "Okej, då kör vi. Först boken. Vi landade i att alla treor kör Matematik "
-    "5000+ 3c, samma som förra året, och de får den utdelad på första "
-    "lektionen. Säg åt dem att skriva bokens nummer på insidan, annars blir "
-    "det rörigt vid inlämningen i juni. Sen provdatumen. Första provet ligger "
-    "i vecka 42, det andra i vecka 48, och nationella provet i maj men "
-    "datumet är inte spikat än. Ja, och en sak till, vi bestämde i lagen att "
-    "de ska ha med egen räknare från och med andra veckan. Skolan har några "
-    "att låna ut men inte till alla. Räknaren behövs alltså inte första "
-    "veckan. Hur gör vi med dem som inte har? De får låna, men bara under "
-    "lektionen. Och läxhjälpen är tisdagar klockan tre i sal 214, samma som i "
-    "våras. Sista punkten: mobilerna ligger i lådan vid dörren. Ta det på "
-    "första lektionen så slipper ni diskussionen resten av terminen."
-)
 
 # Innehållsdomarens material (CI-förvalet). Formen är den `ci_forslag.kalltext`
 # bygger ur en riktig begäran: avsnittsregistret först, sedan de sidor som
@@ -190,24 +163,6 @@ SCENARIER = {
         "system": lambda: exam_gen.SYSTEM,
         "schema": lambda: None,
     },
-    # Anteckningarna (femte dokumenttypen). Scenariot är typfallet ur planen:
-    # kursens första lektion, innehållet är information och underlaget ett
-    # transkriberat möte. Båda källorna är med — lärarens ruta OCH mötet — för
-    # det är den kombinationen som avgör om prompten rangordnar dem rätt.
-    "anteckningar": {
-        "vad": ("notes_gen.generate_notes — lärarens stödpapper till en första "
-                "lektion, byggt på ett möte"),
-        "prompt": lambda: notes_gen.build_prompt(
-            "Matematik 3c", "NA25", "Första lektionen",
-            onskemal=("Vilken bok vi har och att de får den idag. Hur vi "
-                      "räknar på lektionerna. Provdatumen i höst. Att de ska "
-                      "ta med räknare på fredag."),
-            transkript=notes_gen.build_transkript([
-                ("Ämneslagets kursstartsmöte · 2026-08-12", MOTESTRANSKRIPT)]),
-            datum="2026-08-18"),
-        "system": lambda: notes_gen.SYSTEM,
-        "schema": lambda: None,
-    },
     # Innehållsdomaren (CI-förvalet, 2026-09-06). Scenariot är typfallet ur
     # lärarens beställning: Ma2a, ett bokspann kring andragradsekvationer, och
     # frågan vilka av nivåns sjutton punkter materialet TYDLIGT behandlar.
@@ -223,12 +178,6 @@ SCENARIER = {
         # ett band inspelat med en är inspelat mot en annan fråga.
         "system": lambda: None,
         "schema": lambda: ci_forslag.schema(),
-    },
-    "insikter": {
-        "vad": "postprocess.extract — insikter ur ett lektionstranskript",
-        "prompt": lambda: postprocess.build_extract_prompt(TRANSKRIPT),
-        "system": lambda: postprocess.EXTRACT_SYSTEM,
-        "schema": lambda: postprocess.EXTRACT_SCHEMA,
     },
     # Nivådomaren (Del C) bedöms mot ett FÄRDIGT dokument, inte mot en tom
     # sida. Därför läses respektive band in och döms — samma dokument som

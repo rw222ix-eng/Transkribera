@@ -3,8 +3,8 @@
 Två rutor i steg 3, två sätt att inte nå fram:
 
   1. `#svart` fanns inte alls. Appen kunde bara säga vad klassen hade svårt för
-     om lektionen SPELATS IN — «Svårighet att följa upp» kommer ur transkriptet
-     via db.next_prep — och en lektion utan mikrofon lämnade tavlan utan det
+     om lektionen SPELATS IN — «Svårighet att följa upp» kom ur transkriptet
+     via db.next_prep, och inspelningen är borta sedan 2026-10-07 — och en lektion utan mikrofon lämnade tavlan utan det
      enda läraren säkert visste.
   2. `#fokus` fanns, sparades på pappret och stod till och med i skrivplanen
      («Väger källorna»), men skickades aldrig i någon generate-begäran. Exakt
@@ -23,7 +23,7 @@ import json
 
 import pytest
 
-from app import exam_gen, lararord, lesson_board, notes_gen
+from app import exam_gen, lararord, lesson_board
 
 SVART = "kvadratkomplettering satt inte — flera blandade ihop roten ur produkt och summa"
 FOKUS = "mest ur provet, lite ur boken"
@@ -123,17 +123,6 @@ def test_provprompten_bar_bada_falten_i_alla_profiler(profil):
     assert text.rindex("Uppdrag:") > text.rindex("VÄGA TYNGST")
 
 
-def test_anteckningsprompten_bar_bada_falten():
-    """Stödpappret är det läraren har i handen när något ska tas om — vad
-    klassen hade svårt för är rakt på sak dess ärende."""
-    text = notes_gen.build_prompt(
-        "Matematik, nivå 2c", "NA25", "derivator",
-        onskemal="tre exempel att gå igenom",
-        svart=lararord.build_svart(SVART), fokus=lararord.build_fokus(FOKUS))
-    assert SVART in text and FOKUS in text
-    assert text.rindex("Uppdrag:") > text.rindex("VÄGA TYNGST")
-
-
 # ───────────────── prompterna, utan fält: kassettkravet ──────────────────
 
 def _tavla(**k):
@@ -147,12 +136,7 @@ def _prov(**k):
                                  antal=4, memory="Senaste lektionen.", **k)
 
 
-def _anteckning(**k):
-    return notes_gen.build_prompt("Matematik, nivå 2c", "NA25", "derivator",
-                                  onskemal="tre exempel", **k)
-
-
-@pytest.mark.parametrize("bygg", [_tavla, _prov, _anteckning])
+@pytest.mark.parametrize("bygg", [_tavla, _prov])
 def test_tomma_rutor_ger_byte_identisk_prompt(bygg):
     """KASSETTKRAVET. Skickar klienten inga fält — eller tomma — ska prompten
     vara EXAKT den som gick i väg innan fälten fanns. En enda extra radbrytning
@@ -257,19 +241,4 @@ def test_provrutten_bar_bada_falten(llm_ready, monkeypatch, typ):
                              "svart": SVART, "fokus": FOKUS})
     assert r.status_code == 200
     _done(r)
-    assert SVART in prompter[0] and FOKUS in prompter[0]
-
-
-def test_anteckningsrutten_bar_svarigheten(llm_ready, monkeypatch):
-    prompter = _fangad_prompt(monkeypatch, notes_gen)
-    monkeypatch.setattr(
-        notes_gen, "_llm_round",
-        lambda *a, **k: {"titel": "Stödanteckningar", "avsnitt": [
-            {"rubrik": "Att ta upp", "punkter": ["kvadratkomplettering"]}]})
-    r = llm_ready.post("/api/anteckningar/generate",
-                       json={"kurs": "Matematik, nivå 2c", "klass": "NA25",
-                             "moment": "derivator", "onskemal": "tre exempel",
-                             "svart": SVART, "fokus": FOKUS})
-    assert r.status_code == 200
-    assert prompter, "prompten byggdes aldrig"
     assert SVART in prompter[0] and FOKUS in prompter[0]

@@ -21,8 +21,7 @@ import re
 
 import pytest
 
-from app import (claude_code, exam_gen, lesson_board, llm_client,
-                 postprocess, whiteboard_spec)
+from app import claude_code, exam_gen, lesson_board, llm_client, whiteboard_spec
 from tests import fejk
 
 
@@ -273,31 +272,6 @@ def test_provet_ur_kassetten_klarar_balansreglerna(fejk_claude):
     assert all("del" in u and "poang" in u for u in exam["uppgifter"])
 
 
-def test_anteckningarna_ur_kassetten_haller_stilkontraktet(fejk_claude):
-    """Femte dokumenttypen, skarpt inspelad: en riktig modell fick lärarens
-    ruta OCH ett mötestranskript och skrev pappret ur båda.
-
-    Det som prövas är att stilkontraktet HÖLL i en riktig körning — inga
-    tankstreck, rubriker som är vägvisare, en sida — utan att en enda
-    reparationsrunda behövdes. Faller det här har antingen prompten glidit
-    eller taken skruvats, och båda ska märkas här och inte hos läraren."""
-    from app import notes_gen
-    fejk_claude(kassett="anteckningar")
-    res = notes_gen.generate_notes(
-        "Matematik 3c", "NA25", "Första lektionen", model="",
-        onskemal="Boken, hur vi räknar, provdatumen och räknaren")
-    assert res["errors"] == [], res["errors"]
-    assert res["rounds"] == 1, "det skarpa svaret behövde en reparationsrunda"
-    doc, _fel = notes_gen.validate_notes_json(res["notes"])
-    assert doc is not None
-    # Innehållet kom ur MÖTET, inte ur luften: bokens namn, provveckorna och
-    # räknaren stod i transkriptet och ska ha tagit sig hela vägen till pappret.
-    text = json.dumps(res["notes"], ensure_ascii=False)
-    for ur_motet in ("5000+", "42", "räknare"):
-        assert ur_motet in text, ur_motet
-    assert notes_gen.rader(doc) <= notes_gen.RADER_PA_SIDAN
-
-
 @pytest.mark.parametrize("dokument,domarband", [
     ("prov", "nivadomare"),
     ("arbetsblad", "nivadomare-blad"),
@@ -451,28 +425,6 @@ def test_provbandet_gar_genom_bada_domarna_och_talvakten(fejk_claude):
     assert [e["path"] for e in res["errors"] if e["code"] == "niva"]         == ["uppgift 6a"]
 
 
-def test_insikterna_ur_den_skarpa_kassetten_bar_inga_namn(fejk_claude):
-    """Den riktiga körningen FÖLJDE integritetsregeln — inga fullständiga
-    namn kom tillbaka. Det testet vaktar är att det förblir så."""
-    fejk_claude(kassett="insikter")
-    insikter, innehall = postprocess._extract_one("transkript", "modell")
-    assert insikter and innehall
-    texter = " ".join(i["text"] + " " + (i["ref"] or "") for i in insikter)
-    assert postprocess.initialisera(texter) == texter, \
-        "ett fullständigt namn kom tillbaka ur den skarpa inspelningen"
-    assert any(i["typ"] == "kalender" for i in insikter)
-
-
-def test_ett_namn_som_anda_kommer_tillbaka_stoppas(fejk_claude):
-    """…och när den INTE följer regeln — det bandet är konstruerat, för det
-    ska inte behöva hända på riktigt för att spärren ska vara prövad."""
-    fejk_claude(kassett="insikter-med-namn")
-    insikter, _ = postprocess._extract_one("transkript", "modell")
-    texter = " ".join(i["text"] + " " + (i["ref"] or "") for i in insikter)
-    assert "Lindqvist" not in texter and "Svensson" not in texter
-    assert "A.L." in texter and "E.S." in texter
-
-
 def test_mal_last_omskrivning_ror_bara_rutan_lararen_pekade_pa(fejk_claude):
     """Hela mål-låset genom den riktiga sömmen: tavlan ur bandet, läraren
     markerar EN formel i figur-och-formler-raden, och lappen som kommer
@@ -573,24 +525,7 @@ def test_auto_laget_lagger_i_bandet_prompten_ber_om(fejk_claude):
             assert (res["exam"].get("grupp") is not None) == \
                 (profil == "gruppuppgift"), profil
 
-    # Anteckningarna hör till lärardagen de också — och deras prompt bär ett
-    # helt mötestranskript, alltså den text som mest sannolikt råkar innehålla
-    # ett annat bands nyckelord. Går valet fel här får läraren ett prov när hon
-    # bad om ett stödpapper.
-    from app import notes_gen
-    ant = notes_gen.generate_notes(
-        "Matematik, nivå 2c", "NA25", "Första lektionen", model="",
-        onskemal="Boken, rutinerna och provdatumen",
-        transkript=notes_gen.build_transkript(
-            [("Kursstartsmöte", "vi kopierar upp ett arbetsblad till fredag "
-                                "och tar matteprovet i vecka 42")]))
-    assert ant["errors"] == [], ant["errors"]
-    assert ant["notes"]["sektioner"], "anteckningarna hamnade i fel band"
-
-    insikter, innehall = postprocess._extract_one("transkript", "modell")
-    assert insikter and innehall
-
-    # Det som inte är en generator (chatt, sökning) svarar som vanligt.
+    # Det som inte är en generator svarar som vanligt.
     assert claude_code.generate("Vad heter huvudstaden?") == "Det här är svaret."
 
 

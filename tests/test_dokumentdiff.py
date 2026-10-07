@@ -160,29 +160,6 @@ def test_arbetsblad_diffas_som_prov():
     assert dd.andrade_element("arbetsblad", _prov("a"), _prov("b")) == ["uppg1"]
 
 
-# ---------------------------------------------------------- anteckningarna --
-
-def _ant(*rubriker, kom=None):
-    return {"titel": "Stödpapper", "klass": "NA25",
-            "sektioner": [{"rubrik": r, "stycken": [r + "!"]} for r in rubriker],
-            "kom_ihag": kom}
-
-
-def test_en_omskriven_sektion_marks_med_sitt_nummer():
-    assert dd.andrade_element("anteckningar", _ant("A", "B", "C"),
-                              _ant("A", "NY", "C")) == ["sekt2"]
-
-
-def test_kom_ihag_ar_en_ruta_hur_manga_rader_den_an_bar():
-    assert dd.andrade_element("anteckningar", _ant("A", kom=["x"]),
-                              _ant("A", kom=["x", "y"])) == ["komihag"]
-
-
-def test_tom_lista_och_saknat_falt_ar_samma_sak():
-    assert dd.andrade_element("anteckningar", _ant("A", kom=None),
-                              _ant("A", kom=[])) == []
-
-
 # ------------------------------------------------------------------ tavlan --
 
 def _brade(*sektioner, annotations=None):

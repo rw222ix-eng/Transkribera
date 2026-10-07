@@ -1,19 +1,18 @@
-"""Felinjektion: godkännandet, disken och GPU-låset (Etapp 4.4).
+"""Felinjektion: godkännandet, disken och molnets tak (Etapp 4.4).
 
-Molnets felmoder är redan prövade (`tests/test_molnkorningen.py`) och nätet
-som dör mitt i en körning likaså (`e2e/moln.spec.mjs`). Kvar står de tre som
-kostar mest när de händer på riktigt, och som ingen upptäcker förrän de gör
-det:
+Kvar står de tre felen som kostar mest när de händer på riktigt, och som ingen
+upptäcker förrän de gör det:
 
 * **Godkännandet måste vara allt-eller-inget.** Läraren trycker Godkänn en
   gång. Faller skrivningen halvvägs får hon inte en lektion i kalendern utan
   papper, eller två lektioner för att hon tryckte igen.
-* **Disken tar slut.** Lektionsinspelningar är hundratals megabyte och
-  lärardatorer är fulla. Varje skrivväg ska svara med ett svenskt besked, inte
-  med ett fel som når läraren som «Okänt fel».
-* **GPU-låset.** Ett tungt jobb i taget. Den som får 409 får inte råka SLÄPPA
-  någon annans lås — låset har ingen ägarkontroll, så ett `finally` på fel
-  ställe stjäl det utan att något syns förrän två jobb kör samtidigt.
+* **Disken tar slut.** Lärardatorer är fulla. Varje skrivväg ska svara med ett
+  svenskt besked, inte med ett fel som når läraren som «Okänt fel».
+* **Molnets tak.** Den som får 409 får inte råka SLÄPPA någon annans plats. Ett
+  `finally` på fel ställe hade stulit den utan att något syntes förrän fler
+  jobb än taket körde samtidigt.
+
+(GPU-låset som stod här försvann 2026-10-07 med transkriberingen.)
 """
 from __future__ import annotations
 
@@ -242,12 +241,11 @@ def test_alla_stromjobb_oversatter_full_disk_till_svenska():
         OSError(errno.ENOENT, "No such file")).lower()
 
 
-# ══════════════════════════ Grindarna (kort & moln) ═══════════════════════════
+# ══════════════════════════ Grinden (molnets tak) ═════════════════════════════
 
 GENERERANDE = [
     ("/api/planning/generate", {"moment": "Derivator"}),
     ("/api/exams/generate", {"course_id": 1, "antal": 4}),
-    ("/api/chat", {"messages": [{"role": "user", "content": "hej"}]}),
 ]
 
 
@@ -256,8 +254,8 @@ def test_fullt_tak_ger_409_och_stjal_inte_nagon_annans_plats(
         llm_ready, vag, kropp):
     """LLM_TAK jobb samtidigt: den som kommer sedan får 409.
 
-    Grinden har en ägarkontroll sedan buggkandidat 9 — samma nyckeldisciplin som
-    GPU-låset, ärvd därifrån: bara en nyckel som togs ut öppnar. Testet står ändå
+    Grinden har en ägarkontroll sedan buggkandidat 9: bara en nyckel som togs
+    ut öppnar. Testet står ändå
     kvar — det som prövas är att 409-vägen inte ens FÖRSÖKER släppa, och att ett
     `finally` på fel sida om return-raden numera skulle vara ofarligt i stället
     för att rycka undan platsen för jobbet som pågår."""
@@ -274,20 +272,6 @@ def test_fullt_tak_ger_409_och_stjal_inte_nagon_annans_plats(
     finally:
         for n in nycklar:
             assert arb.release_llm(n), f"{vag} släppte vår plats"
-
-
-def test_gpu_laset_stanger_inte_langre_molnjobben(llm_ready):
-    """Arvet som skulle bort: förr räckte en pågående transkribering för att
-    läraren skulle mötas av «GPU:n är upptagen» när hon bad om en tavla. Kortet
-    och molnet är två skilda grindar nu."""
-    arb = llm_ready.app.state.arbiter
-    nyckel = arb.try_acquire_gpu()
-    assert nyckel, "låset var upptaget innan testet började"
-    try:
-        r = llm_ready.post("/api/planning/generate", json={"moment": "Derivator"})
-        assert r.status_code == 200, r.status_code
-    finally:
-        assert arb.release_gpu(nyckel), "planeringen släppte vårt GPU-lås"
 
 
 def test_godkannandet_vantar_inte_pa_grinden(llm_ready, fejk_claude, monkeypatch):

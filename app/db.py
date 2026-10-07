@@ -76,8 +76,8 @@ CREATE INDEX IF NOT EXISTS idx_insights_lesson ON insights(lesson_id);
 # sync by triggers. remove_diacritics 0 keeps å/ä/ö distinct — they are Swedish
 # letters, not accented a/o, so folding them would mismatch. Backfilled with
 # 'rebuild'. FTS5 ships with Python's sqlite3, but if a build lacks it the
-# migration degrades gracefully (see _apply_migrations) and search falls back to
-# LIKE (see search_transcripts).
+# migration degrades gracefully (see _apply_migrations). Sökningen som läste
+# indexet togs bort 2026-10-07; indexet står kvar som en del av schemat.
 _FTS_MIGRATION = """
 CREATE VIRTUAL TABLE IF NOT EXISTS lesson_fts USING fts5(
     transcript_text,
@@ -925,19 +925,12 @@ LEFT JOIN courses c ON c.id = l.course_id
 
 
 # Schema is created once per DB path per process; later connects only set the
-# per-connection PRAGMA. Keeps the hot read path (parallel /api/lessons,
+# per-connection PRAGMA. Keeps the hot read path (parallel /api/schema,
 # /api/groups, /api/courses) from re-running DDL + a write+commit.
 _initialized: set[str] = set()
 # SSE job threads and async handlers both call connect(); guard the check-then-set
 # so two concurrent first-calls on the same path can't both run the migration.
 _init_lock = threading.Lock()
-
-
-def segments_text(segments: list[dict] | None) -> str:
-    """Flatten transcript segments to plain text (one line per segment).
-    Single source of truth so transcribe-mirror, migration and extraction
-    all derive the stored transcript the same way."""
-    return "\n".join((s.get("text") or "") for s in (segments or [])).strip()
 
 
 def _apply_migrations(conn: sqlite3.Connection) -> None:
@@ -1202,10 +1195,16 @@ def list_groups(conn: sqlite3.Connection) -> list[dict]:
 
 
 # --------------------------------------------------------------------------- lessons --
+# Transkriberingen och lektionsarkivet togs bort 2026-10-07, och ingen rutt
+# skapar eller ändrar lektioner längre. Tabellerna står kvar med lärarens data:
+# memory_for_prompt och next_prep läser dem till tavlans och provets prompter,
+# och calendar_entries visar de hållna lektionerna. create_lesson och
+# add_insight är kvar som det enda sättet att fylla dem: sviten bygger sina
+# minnesfall med dem, och tools/volym.py fyller en volymbas.
 
 def _lesson_dict(row: sqlite3.Row) -> dict:
     d = dict(row)
-    d.pop("transcript_text", None)        # heavy; fetched on demand via lesson_transcript
+    d.pop("transcript_text", None)        # tungt, och ingen läsare behöver det
     try:
         d["formats"] = json.loads(d.get("formats") or "[]")
     except (ValueError, TypeError):
@@ -1264,110 +1263,9 @@ def get_lesson(conn: sqlite3.Connection, lesson_id: int) -> dict | None:
     return _lesson_dict(row) if row else None
 
 
-def lesson_transcript(conn: sqlite3.Connection, lesson_id: int) -> str:
-    """The lesson's transcript text (stored at transcribe time). Avoids scanning
-    history.json on the extraction hot path."""
-    row = conn.execute("SELECT transcript_text FROM lessons WHERE id = ?",
-                       (lesson_id,)).fetchone()
-    return (row["transcript_text"] if row else None) or ""
-
-
-def list_lessons(conn: sqlite3.Connection, *, group_id: int | None = None,
-                 course_id: int | None = None, date_from: str | None = None,
-                 date_to: str | None = None) -> list[dict]:
-    where, params = [], []
-    if group_id is not None:
-        where.append("l.group_id = ?"); params.append(group_id)
-    if course_id is not None:
-        where.append("l.course_id = ?"); params.append(course_id)
-    if date_from:
-        where.append("l.datum >= ?"); params.append(date_from)
-    if date_to:
-        where.append("l.datum <= ?"); params.append(date_to)
-    sql = _LESSON_SELECT
-    if where:
-        sql += " WHERE " + " AND ".join(where)
-    sql += " ORDER BY COALESCE(l.datum, l.ts) DESC, l.ts DESC, l.id DESC"
-    return [_lesson_dict(r) for r in conn.execute(sql, params).fetchall()]
-
-
-_EDITABLE = {"datum", "starttid", "sal", "group_id", "course_id", "summary"}
-
-
-def update_lesson(conn: sqlite3.Connection, lesson_id: int, **fields) -> dict | None:
-    sets = {k: v for k, v in fields.items() if k in _EDITABLE}
-    if sets:
-        assign = ", ".join(f"{k} = :{k}" for k in sets)
-        sets["_id"] = lesson_id
-        conn.execute(f"UPDATE lessons SET {assign} WHERE id = :_id", sets)
-        conn.commit()
-    return get_lesson(conn, lesson_id)
-
-
-def lesson_paths(conn: sqlite3.Connection, lesson_id: int) -> dict | None:
-    """The on-disk artifacts tied to a lesson, so a delete can clean them up:
-    {history_id, transcript_folder, recording_path}. None if no such lesson."""
-    row = conn.execute(
-        "SELECT history_id, transcript_folder, recording_path "
-        "FROM lessons WHERE id = ?", (lesson_id,)).fetchone()
-    return dict(row) if row else None
-
-
-def delete_lesson(conn: sqlite3.Connection, lesson_id: int) -> str | None:
-    """Delete a lesson; return its history_id so the caller can also drop the
-    matching history.json entry."""
-    row = conn.execute("SELECT history_id FROM lessons WHERE id = ?",
-                       (lesson_id,)).fetchone()
-    conn.execute("DELETE FROM lessons WHERE id = ?", (lesson_id,))
-    conn.commit()
-    return row["history_id"] if row else None
-
-
-def delete_lesson_by_history_id(conn: sqlite3.Connection, history_id: str) -> bool:
-    """Drop the lesson row (and its insights, via cascade) for a history entry.
-    Lets the legacy Historik-delete keep the lesson DB in sync instead of leaving
-    an orphan row. Returns True if a row was deleted."""
-    if not history_id:
-        return False
-    cur = conn.execute("DELETE FROM lessons WHERE history_id = ?", (history_id,))
-    conn.commit()
-    return cur.rowcount > 0
-
-
-def migrate_from_history(conn: sqlite3.Connection, items: list[dict]) -> int:
-    """Import history.json entries into lessons (idempotent on history_id).
-    Existing lessons keep their assigned class/course — only genuinely new
-    history entries are inserted. One bulk insert + commit (not per row).
-    Returns the number added.
-
-    ``transcript_folder`` is taken from the history entry's ``folder`` so
-    migrated lessons match freshly-transcribed ones. ``recording_path`` and
-    ``starttid`` are not reconstructable from older history and stay NULL."""
-    have = {r["history_id"] for r in
-            conn.execute("SELECT history_id FROM lessons "
-                         "WHERE history_id IS NOT NULL").fetchall()}
-    rows = []
-    for it in reversed(items):  # oldest first, so newest ends up with highest id
-        hid = it.get("id")
-        if not hid or hid in have:
-            continue
-        ttext = segments_text(it.get("transcript"))
-        rows.append((hid, it.get("ts"), _datum_from_ts(it.get("ts")), it.get("name"),
-                     it.get("source"), it.get("dur"), it.get("model"), it.get("lang"),
-                     json.dumps(it.get("formats") or [], ensure_ascii=False),
-                     it.get("words"), it.get("folder"), ttext, it.get("ts")))
-        have.add(hid)
-    if rows:
-        conn.executemany(
-            "INSERT INTO lessons (history_id, ts, datum, name, source, dur, model, "
-            "lang, formats, words, transcript_folder, transcript_text, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
-        conn.commit()
-    return len(rows)
-
-
 # -------------------------------------------------------------------------- insights --
-# (Fas 1 ships the storage; Fas 2 wires the LLM that fills it.)
+# Insiktsextraktionen är borta (se lessons ovan). Raderna som finns läses av
+# next_prep, och add_insight står kvar för att fylla dem i sviten.
 
 def add_insight(conn: sqlite3.Connection, lesson_id: int, typ: str, text: str,
                 *, due_date: str | None = None, ref: str | None = None,
@@ -1380,74 +1278,6 @@ def add_insight(conn: sqlite3.Connection, lesson_id: int, typ: str, text: str,
     new_id = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
     row = conn.execute("SELECT * FROM insights WHERE id = ?", (new_id,)).fetchone()
     return dict(row)
-
-
-def list_insights(conn: sqlite3.Connection, lesson_id: int) -> list[dict]:
-    rows = conn.execute("SELECT * FROM insights WHERE lesson_id = ? ORDER BY id",
-                        (lesson_id,)).fetchall()
-    return [dict(r) for r in rows]
-
-
-def get_insight(conn: sqlite3.Connection, insight_id: int) -> dict | None:
-    row = conn.execute("SELECT * FROM insights WHERE id = ?", (insight_id,)).fetchone()
-    return dict(row) if row else None
-
-
-_INSIGHT_EDITABLE = {"typ", "text", "due_date", "ref", "status"}
-
-
-def update_insight(conn: sqlite3.Connection, insight_id: int, **fields) -> dict | None:
-    sets = {k: v for k, v in fields.items() if k in _INSIGHT_EDITABLE}
-    if sets:
-        assign = ", ".join(f"{k} = :{k}" for k in sets)
-        sets["_id"] = insight_id
-        conn.execute(f"UPDATE insights SET {assign} WHERE id = :_id", sets)
-        conn.commit()
-    return get_insight(conn, insight_id)
-
-
-def delete_insight(conn: sqlite3.Connection, insight_id: int) -> None:
-    conn.execute("DELETE FROM insights WHERE id = ?", (insight_id,))
-    conn.commit()
-
-
-def delete_insights_by_source(conn: sqlite3.Connection, lesson_id: int, source: str) -> int:
-    """Drop a lesson's insights from a given source (e.g. clear old 'llm' ones
-    before a re-extraction). Manual insights are left untouched. Returns count."""
-    cur = conn.execute("DELETE FROM insights WHERE lesson_id = ? AND source = ?",
-                       (lesson_id, source))
-    conn.commit()
-    return cur.rowcount
-
-
-def replace_insights_by_source(conn: sqlite3.Connection, lesson_id: int, source: str,
-                               items: list[dict]) -> list[dict]:
-    """Atomically replace a lesson's insights from `source` with `items` (one
-    transaction). Either the old set is swapped for the new one or nothing
-    changes — a crash mid-way can't leave the lesson with the old ones gone and
-    no new ones. Manual insights are untouched. Returns the inserted rows."""
-    try:
-        conn.execute("BEGIN")
-        conn.execute("DELETE FROM insights WHERE lesson_id = ? AND source = ?",
-                     (lesson_id, source))
-        new_ids = []
-        for it in items:
-            cur = conn.execute(
-                "INSERT INTO insights (lesson_id, typ, text, due_date, ref, status, source) "
-                "VALUES (?, ?, ?, ?, ?, 'öppen', ?)",
-                (lesson_id, it.get("typ"), it.get("text"),
-                 it.get("due_date"), it.get("ref"), source))
-            new_ids.append(cur.lastrowid)
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    if not new_ids:
-        return []
-    rows = conn.execute(
-        f"SELECT * FROM insights WHERE id IN ({', '.join('?' for _ in new_ids)}) ORDER BY id",
-        new_ids).fetchall()
-    return [dict(r) for r in rows]
 
 
 # ----------------------------------------------------------- carry-forward (Fas 3) --
@@ -1490,155 +1320,13 @@ def next_prep(conn: sqlite3.Connection, group_id: int) -> dict:
     }
 
 
-# ------------------------------------------------------------- markörer (v3) --
-
-def lesson_id_by_history(conn: sqlite3.Connection, history_id: str) -> int | None:
-    if not history_id:
-        return None
-    row = conn.execute("SELECT id FROM lessons WHERE history_id = ?",
-                       (history_id,)).fetchone()
-    return row["id"] if row else None
-
-
-def add_marker(conn: sqlite3.Connection, lesson_id: int, t: float,
-               label: str | None = None, created_at: str | None = None) -> dict:
-    conn.execute(
-        "INSERT INTO markers (lesson_id, t, label, created_at) VALUES (?, ?, ?, ?)",
-        (lesson_id, float(t or 0.0), (label or None), created_at))
-    conn.commit()
-    new_id = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
-    return dict(conn.execute("SELECT * FROM markers WHERE id = ?", (new_id,)).fetchone())
-
-
-def list_markers(conn: sqlite3.Connection, lesson_id: int) -> list[dict]:
-    rows = conn.execute(
-        "SELECT * FROM markers WHERE lesson_id = ? ORDER BY t, id", (lesson_id,)
-    ).fetchall()
-    return [dict(r) for r in rows]
-
-
-def get_marker(conn: sqlite3.Connection, marker_id: int) -> dict | None:
-    row = conn.execute("SELECT * FROM markers WHERE id = ?", (marker_id,)).fetchone()
-    return dict(row) if row else None
-
-
-def delete_marker(conn: sqlite3.Connection, marker_id: int) -> None:
-    conn.execute("DELETE FROM markers WHERE id = ?", (marker_id,))
-    conn.commit()
-
-
-def add_markers_for_history(conn: sqlite3.Connection, history_id: str,
-                            markers: list[dict]) -> list[dict]:
-    """Attach markers captured during an in-app recording to the lesson once it
-    exists (resolved via history_id, set when the recording is transcribed).
-    Returns the inserted rows; [] if the lesson isn't found or there's nothing."""
-    lesson_id = lesson_id_by_history(conn, history_id)
-    if lesson_id is None or not markers:
-        return []
-    rows = [(lesson_id, float(m.get("t") or 0.0), (m.get("label") or None),
-             m.get("created_at")) for m in markers]
-    conn.executemany(
-        "INSERT INTO markers (lesson_id, t, label, created_at) VALUES (?, ?, ?, ?)",
-        rows)
-    conn.commit()
-    return list_markers(conn, lesson_id)
-
-
-# ------------------------------------------------------- terminstrender (per klass) --
-
-def term_trends(conn: sqlite3.Connection, group_id: int) -> dict:
-    """Longitudinal view of one class: how many lessons, how many analysed, the
-    insight counts by type, open vs done actions, and the recurring difficulties
-    (grouped case-insensitively so literal repeats float to the top). Drives the
-    'egen utveckling'-dashboard; aggregation only, no LLM, no schema change."""
-    grow = conn.execute("SELECT namn FROM groups WHERE id = ?", (group_id,)).fetchone()
-
-    lessons_total = conn.execute(
-        "SELECT COUNT(*) AS n FROM lessons WHERE group_id = ?", (group_id,)
-    ).fetchone()["n"]
-    analysed = conn.execute(
-        "SELECT COUNT(DISTINCT l.id) AS n FROM lessons l "
-        "JOIN insights i ON i.lesson_id = l.id WHERE l.group_id = ?", (group_id,)
-    ).fetchone()["n"]
-
-    counts = {t: 0 for t in ("kalender", "svårighet", "åtgärd",
-                             "grupprum", "material", "övrigt")}
-    for r in conn.execute(
-            "SELECT i.typ AS typ, COUNT(*) AS n FROM insights i "
-            "JOIN lessons l ON l.id = i.lesson_id "
-            "WHERE l.group_id = ? GROUP BY i.typ", (group_id,)).fetchall():
-        if r["typ"] in counts:
-            counts[r["typ"]] = r["n"]
-
-    arow = conn.execute(
-        "SELECT i.status AS status, COUNT(*) AS n FROM insights i "
-        "JOIN lessons l ON l.id = i.lesson_id "
-        "WHERE l.group_id = ? AND i.typ = 'åtgärd' GROUP BY i.status", (group_id,)
-    ).fetchall()
-    actions = {"öppen": 0, "klar": 0}
-    for r in arow:
-        if r["status"] in actions:
-            actions[r["status"]] = r["n"]
-
-    # Recurring difficulties: group on normalised text, keep the count and a
-    # representative (longest) phrasing + any refs.
-    grouped: dict[str, dict] = {}
-    for r in conn.execute(
-            "SELECT i.text AS text, i.ref AS ref FROM insights i "
-            "JOIN lessons l ON l.id = i.lesson_id "
-            "WHERE l.group_id = ? AND i.typ = 'svårighet' "
-            "AND i.text IS NOT NULL AND i.text != ''", (group_id,)).fetchall():
-        key = (r["text"] or "").strip().lower()
-        if not key:
-            continue
-        g = grouped.setdefault(key, {"text": r["text"].strip(), "count": 0, "refs": []})
-        g["count"] += 1
-        if len(r["text"].strip()) > len(g["text"]):
-            g["text"] = r["text"].strip()
-        if r["ref"] and r["ref"] not in g["refs"]:
-            g["refs"].append(r["ref"])
-    top = sorted(grouped.values(), key=lambda d: (-d["count"], d["text"]))[:15]
-
-    return {
-        "group_id": group_id,
-        "group": grow["namn"] if grow else None,
-        "lessons": lessons_total,
-        "analysed": analysed,
-        "counts": counts,
-        "actions": {"open": actions["öppen"], "done": actions["klar"]},
-        "top_difficulties": top,
-    }
-
-
-# ------------------------------------------------------------- agenda (kalender) --
-
-def agenda(conn: sqlite3.Connection, *, only_open: bool = False) -> list[dict]:
-    """Every dated insight (kalender/åtgärd m.fl. med due_date) across ALL classes,
-    ordered by due date — the cross-class "vad är på gång"-vy the per-class
-    next_prep can't give. Carries the lesson/class/course context so the UI (and
-    the .ics export) can show where each item comes from."""
-    sql = (
-        "SELECT i.id, i.typ, i.text, i.due_date, i.ref, i.status, i.source, "
-        "       l.id AS lesson_id, l.history_id, l.name AS lesson_name, "
-        "       l.datum AS lesson_datum, g.namn AS group_namn, c.namn AS course_namn "
-        "FROM insights i JOIN lessons l ON l.id = i.lesson_id "
-        "LEFT JOIN groups  g ON g.id = l.group_id "
-        "LEFT JOIN courses c ON c.id = l.course_id "
-        "WHERE i.due_date IS NOT NULL AND i.due_date != ''")
-    if only_open:
-        sql += " AND i.status = 'öppen'"
-    sql += " ORDER BY i.due_date, i.id"
-    rows = conn.execute(sql).fetchall()
-    out = []
-    for r in rows:
-        d = dict(r)
-        d["group"] = d.pop("group_namn", None)
-        d["course"] = d.pop("course_namn", None)
-        out.append(d)
-    return out
-
-
 # ------------------------------------------------------ fritextsök (FTS5) --
+# Sökningen över transkripten och arkivfrågan togs bort 2026-10-07. FTS-indexet
+# (lesson_fts, triggrarna, _ensure_fts, has_fts) står kvar: det är en del av
+# schemat i lärarens fil, och en migrering som river det är en annan sak än att
+# ta bort en rutt. content_terms, _mark_terms och _snippet_like har ingen
+# anropare i appen längre men står kvar på lärarens beslut samma dag
+# (tests/test_db.py prövar dem).
 import re as _re  # noqa: E402  (kept local to the search section)
 
 _TOKEN_RE = _re.compile(r"[^\W_]+", _re.UNICODE)   # letters/digits, drops punctuation
@@ -1674,20 +1362,6 @@ def content_terms(query: str) -> list[str]:
     terms = _TOKEN_RE.findall(query or "")
     core = [t for t in terms if t.lower() not in _STOPWORDS_SV and len(t) >= 2]
     return core or terms
-
-
-def _fts_query(text: str, *, match_all: bool = True) -> str | None:
-    """Turn free-text into a safe FTS5 MATCH string: each word becomes a prefix
-    term ("derivat*") so it tolerates Swedish inflection, and raw user input can
-    never inject FTS operators. match_all AND-s the terms (precise keyword
-    search); match_all=False OR-s them (a natural-language question, where bm25
-    still floats the lessons that contain the rare/meaningful words). None if the
-    query has no usable token."""
-    tokens = _TOKEN_RE.findall(text or "")
-    if not tokens:
-        return None
-    joiner = " " if match_all else " OR "
-    return joiner.join(f'"{t}"*' for t in tokens)
 
 
 def _mark_terms(text: str, terms: list[str]) -> str:
@@ -1737,131 +1411,6 @@ def _snippet_like(text: str, terms: list[str], width: int = 160, *,
     if mark:
         snip = _mark_terms(snip, terms)
     return ("… " if start > 0 else "") + snip + (" …" if end < len(text) else "")
-
-
-_SEARCH_META = (
-    "l.id AS lesson_id, l.history_id, l.name, l.datum, l.ts, "
-    "g.namn AS group_namn, c.namn AS course_namn")
-
-
-def search_transcripts(conn: sqlite3.Connection, query: str, *, limit: int = 50,
-                       snippet_tokens: int = 14, match_all: bool = True) -> list[dict]:
-    """Search every lesson transcript at once. Returns ranked hits with a context
-    snippet (what was said) and which lesson/class/course/date it belongs to.
-    Uses FTS5 + bm25 ranking + snippet(); falls back to LIKE when FTS is absent.
-    Snippeten markerar träffarna med \\x02..\\x03 på båda vägarna — UI:t
-    highlightar på den markeringen och får inte tappa den i fallbacken.
-    match_all=False (OR) is used for the natural-language RAG retrieval; where
-    the query is a natural question, so only its content words (stopwords
-    stripped) may match — otherwise "var/jag/och" ranks every lesson."""
-    terms = _TOKEN_RE.findall(query or "") if match_all else content_terms(query)
-    if not terms:
-        return []
-    if has_fts(conn):
-        match = _fts_query(" ".join(terms), match_all=match_all)
-        rows = conn.execute(
-            f"SELECT {_SEARCH_META}, "
-            f"  snippet(lesson_fts, 0, '\x02', '\x03', ' … ', ?) AS snippet, "
-            f"  bm25(lesson_fts) AS score "
-            f"FROM lesson_fts "
-            f"JOIN lessons l ON l.id = lesson_fts.rowid "
-            f"LEFT JOIN groups  g ON g.id = l.group_id "
-            f"LEFT JOIN courses c ON c.id = l.course_id "
-            f"WHERE lesson_fts MATCH ? "
-            f"ORDER BY score LIMIT ?",
-            (snippet_tokens, match, limit)).fetchall()
-        return [_search_row(r) for r in rows]
-    # LIKE fallback (no FTS5 in this sqlite build).
-    glue = " AND " if match_all else " OR "
-    where = glue.join("l.transcript_text LIKE ?" for _ in terms)
-    params = [f"%{t}%" for t in terms]
-    rows = conn.execute(
-        f"SELECT {_SEARCH_META}, l.transcript_text AS _full "
-        f"FROM lessons l "
-        f"LEFT JOIN groups  g ON g.id = l.group_id "
-        f"LEFT JOIN courses c ON c.id = l.course_id "
-        f"WHERE l.transcript_text IS NOT NULL AND {where} "
-        f"ORDER BY COALESCE(l.datum, l.ts) DESC LIMIT ?",
-        (*params, limit)).fetchall()
-    out = []
-    for r in rows:
-        d = _search_row(r)
-        d["snippet"] = _snippet_like(r["_full"] or "", terms, mark=True)
-        out.append(d)
-    return out
-
-
-def _search_row(row: sqlite3.Row) -> dict:
-    d = dict(row)
-    d.pop("_full", None)
-    d["group"] = d.pop("group_namn", None)
-    d["course"] = d.pop("course_namn", None)
-    return d
-
-
-def scan_transcripts(conn: sqlite3.Connection, query: str) -> list[dict]:
-    """Äkta träffbild för sökets live-skanning: varje lektion med transkript,
-    i genomsökningsordning (nyaste först), med verkligt antal förekomster av
-    frågans innehållsord. Höstacken är transkriptet PLUS namn/klass/kurs —
-    "nämns matematik?" ska träffa en inspelning som heter Matematik 4 även om
-    ordet aldrig sägs. Driver scan_plan/scan_result-eventen i /api/search/ask
-    — och avgör vilka lektioner som alls får bli källor."""
-    terms = [t.lower() for t in content_terms(query)]
-    rows = conn.execute(
-        "SELECT l.id, l.history_id, l.name, l.transcript_text, "
-        "       g.namn AS group_namn, c.namn AS course_namn "
-        "FROM lessons l "
-        "LEFT JOIN groups  g ON g.id = l.group_id "
-        "LEFT JOIN courses c ON c.id = l.course_id "
-        "WHERE l.transcript_text IS NOT NULL AND l.transcript_text != '' "
-        "ORDER BY COALESCE(l.datum, l.ts) DESC, l.id DESC").fetchall()
-    out: list[dict] = []
-    for r in rows:
-        hay = " ".join(x for x in (
-            r["name"], r["group_namn"], r["course_namn"],
-            r["transcript_text"]) if x).lower()
-        hits = sum(hay.count(t) for t in terms) if terms else 0
-        out.append({"lesson_id": r["id"], "history_id": r["history_id"],
-                    "name": r["name"] or "(namnlös)", "hits": hits})
-    return out
-
-
-def lessons_excerpts_for(conn: sqlite3.Connection, lesson_ids: list[int],
-                         query: str, *, window: int = 1200) -> list[dict]:
-    """For the RAG 'ask across all lessons' answer: a bounded transcript excerpt
-    around the query terms for each given lesson, with its class/course/date
-    header — so the LLM is grounded without overflowing the context window.
-    Centered on the question's content words, not on stopwords. Utdraget är
-    medvetet omarkerat: det går till prompten, inte till UI:t."""
-    out: list[dict] = []
-    terms = content_terms(query)
-    for lid in lesson_ids:
-        row = conn.execute(
-            _LESSON_SELECT + " WHERE l.id = ?", (lid,)).fetchone()
-        if not row:
-            continue
-        full = (row["transcript_text"] or "")
-        excerpt = _snippet_like(full, terms, width=window) if terms else full[:window]
-        out.append({
-            "lesson_id": lid, "history_id": row["history_id"], "name": row["name"],
-            "datum": row["datum"], "group": row["group_namn"],
-            "course": row["course_namn"], "excerpt": excerpt,
-        })
-    return out
-
-
-def update_lesson_transcript(conn: sqlite3.Connection, history_id: str,
-                             transcript_text: str) -> bool:
-    """Keep the stored transcript (and thus the FTS index, via trigger) in sync
-    when a transcription is edited in the Historik view. Returns True if a lesson
-    row matched."""
-    if not history_id:
-        return False
-    cur = conn.execute(
-        "UPDATE lessons SET transcript_text = ? WHERE history_id = ?",
-        (transcript_text, history_id))
-    conn.commit()
-    return cur.rowcount > 0
 
 
 # ------------------------------------------- planering & lektionsminne (v4) --
@@ -1995,66 +1544,12 @@ def update_planned_lesson(conn: sqlite3.Connection, pid: int,
     return get_planned_lesson(conn, pid)
 
 
-def _minutes(hhmm: str | None) -> int | None:
-    try:
-        h, m = str(hhmm).split(":")[:2]
-        return int(h) * 60 + int(m)
-    except (ValueError, AttributeError):
-        return None
-
-
-def autolink_lesson(conn: sqlite3.Connection, lesson_id: int,
-                    tolerance_min: int = 90) -> dict | None:
-    """Auto-länka en hållen lektion till sin planering (Fas 3): när en
-    transkribering fått klass/kurs/datum i org-flödet söks en olänkad
-    planering med samma group_id + course_id + datum. Vid flera kandidater
-    väljs den med närmast starttid (inom toleransen); saknar någon sida
-    starttid räknas den som svagast giltiga träff. Idempotent — en redan
-    länkad lektion returnerar sin befintliga planering."""
-    les = conn.execute(
-        "SELECT id, group_id, course_id, datum, starttid FROM lessons "
-        "WHERE id = ?", (lesson_id,)).fetchone()
-    if not les or not (les["group_id"] and les["course_id"] and les["datum"]):
-        return None
-    existing = conn.execute(
-        "SELECT id FROM planned_lessons WHERE lesson_id = ?",
-        (lesson_id,)).fetchone()
-    if existing:
-        return get_planned_lesson(conn, existing["id"])
-
-    candidates = conn.execute(
-        "SELECT id, starttid, created_at FROM planned_lessons "
-        "WHERE group_id = ? AND course_id = ? AND datum = ? "
-        "AND lesson_id IS NULL AND status = 'planerad' "
-        "ORDER BY starttid, created_at, id",
-        (les["group_id"], les["course_id"], les["datum"])).fetchall()
-    if not candidates:
-        return None
-
-    l_min = _minutes(les["starttid"])
-    best, best_diff = None, None
-    for cand in candidates:
-        c_min = _minutes(cand["starttid"])
-        if l_min is None or c_min is None:
-            diff = tolerance_min          # okänd tid -> svagast giltiga träff
-        else:
-            diff = abs(l_min - c_min)
-            if diff > tolerance_min:
-                continue
-        if best is None or diff < best_diff:
-            best, best_diff = cand, diff
-    if best is None:
-        return None
-    return update_planned_lesson(conn, best["id"],
-                                 lesson_id=lesson_id, status="hållen")
-
-
 # ------------------------------------------------- centralt innehåll (v4) --
 
 def seed_course_content(conn: sqlite3.Connection,
                         courses_data: list[dict]) -> int:
     """Seeda centralt innehåll från bundlad JSON (idempotent via
-    UNIQUE(course_id, kod) — jfr migrate_from_history). Varje post:
+    UNIQUE(course_id, kod)). Varje post:
     {"kurs": "Ma3c", "lasar_version": "Gy11", "innehall":
     [{"kod", "rubrik", "kort", "text"}, ...]}. Befintliga rader uppdateras med
     aktuell rubrik/kort/text (upsert) så att rättelser i den bundlade
@@ -2174,49 +1669,6 @@ def content_tags_for(conn: sqlite3.Connection, *,
         f"JOIN course_content cc ON cc.id = t.content_id WHERE {where} = ? "
         "ORDER BY cc.kod", (arg,)).fetchall()
     return [dict(r) for r in rows]
-
-
-_CONTENT_WORD_RE = None
-
-
-def _content_tokens(text: str) -> set[str]:
-    """Betydelsebärande ord (>= 5 tecken, gemener) för innehållsmatchningen."""
-    global _CONTENT_WORD_RE
-    if _CONTENT_WORD_RE is None:
-        import re
-        _CONTENT_WORD_RE = re.compile(r"[a-zåäöé]{5,}")
-    return set(_CONTENT_WORD_RE.findall((text or "").lower()))
-
-
-def tag_content_from_texts(conn: sqlite3.Connection, lesson_id: int,
-                           texts: list[str]) -> list[dict]:
-    """Tagga en lektions behandlade innehåll utifrån LLM-extraktionens
-    fritextpunkter ("pq-formeln", "derivatans definition" ...). Matchning
-    mot kursens centralt innehåll sker deterministiskt via ordöverlapp —
-    konservativt (minst ett betydelsebärande ord gemensamt) så att en
-    felmatchning hellre uteblir än gissas. Returnerar taggade rader."""
-    les = conn.execute("SELECT course_id FROM lessons WHERE id = ?",
-                       (lesson_id,)).fetchone()
-    if not les or not les["course_id"]:
-        return []
-    content = list_course_content(conn, les["course_id"])
-    if not content:
-        return []
-    tagged: dict[int, dict] = {}
-    for text in texts or []:
-        toks = _content_tokens(text)
-        if not toks:
-            continue
-        best, best_score = None, 0
-        for row in content:
-            score = len(toks & _content_tokens(
-                f"{row.get('rubrik') or ''} {row.get('text') or ''}"))
-            if score > best_score:
-                best, best_score = row, score
-        if best is not None and best_score >= 1:
-            tag_content(conn, best["id"], lesson_id=lesson_id)
-            tagged[best["id"]] = best
-    return list(tagged.values())
 
 
 # --------------------------------------------------- kalender & minne (v4) --
@@ -3747,7 +3199,7 @@ def memory_for_prompt(conn: sqlite3.Connection, group_id: int,
     """Kompakt minneskontext för tavel-/provprompterna (Fas 3): senaste
     lektionerna (datum, namn, kort sammanfattning, taggade innehållspunkter),
     öppna uppföljningar och senaste lektionens svårigheter. Bygger på samma
-    data som next_prep/lessons_excerpts_for men formaterad som text.
+    data som next_prep men formaterad som text.
     Tidigare provs uppgiftsteman läggs till i Fas 4."""
     parts: list[str] = []
     where = "l.group_id = ?"

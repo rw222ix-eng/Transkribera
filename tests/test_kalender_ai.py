@@ -15,7 +15,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from app import calendar_google, db, kalender_ai
+from app import calendar_google, db, kalender_ai, llm_client
 from app.web import server
 
 
@@ -236,14 +236,7 @@ def test_synken_fragar_en_gang_och_kommer_ihag(tmp_path, monkeypatch):
     nästa synk frågar inte om samma sak igen."""
     from fastapi.testclient import TestClient
 
-    class HW:
-        gpu_name = "T"; vram_mb = 1; has_cuda = False; ram_mb = 1; cpu_cores = 1
-        free_disk_mb = 1; cpu_name = "T"; vram_free_mb = 1; ram_free_mb = 1
-        total_disk_mb = 1; cuda_version = ""; compute_capability = ""
-        gpu_arch = ""; disks = []
-
-    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: HW())
-    monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
+    monkeypatch.setattr(llm_client, "is_running", lambda *a, **k: False)
     client = TestClient(server.create_app(base_dir=tmp_path))
     monkeypatch.setattr(client.app.state.arbiter, "ensure_llm", lambda: "http://x")
 
@@ -291,14 +284,7 @@ def test_synken_gar_igenom_utan_claude(tmp_path, monkeypatch):
     ingen vecka alls."""
     from fastapi.testclient import TestClient
 
-    class HW:
-        gpu_name = "T"; vram_mb = 1; has_cuda = False; ram_mb = 1; cpu_cores = 1
-        free_disk_mb = 1; cpu_name = "T"; vram_free_mb = 1; ram_free_mb = 1
-        total_disk_mb = 1; cuda_version = ""; compute_capability = ""
-        gpu_arch = ""; disks = []
-
-    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: HW())
-    monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
+    monkeypatch.setattr(llm_client, "is_running", lambda *a, **k: False)
     client = TestClient(server.create_app(base_dir=tmp_path))
     monkeypatch.setattr(client.app.state.arbiter, "ensure_llm", lambda: None)
     fredag = _framover(5)

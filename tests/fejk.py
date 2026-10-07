@@ -1,14 +1,16 @@
 """Den fejkade molngränsen (Etapp 1) — motorn i allt felinjektionsarbete.
 
-Appen har exakt två gränser mot nätet, och båda går att beordra härifrån:
+Appens gräns mot språkmodellen är **Claude Code** (`app/claude_code.py`), och
+den beordras härifrån via `skriv_claude`, som skriver en RIKTIG `claude`-fil på
+disk och pekar `CLAUDE_CODE_BIN` på den. Sömmen finns redan i appen, så inget
+behöver stubbas: argumentraden, strömtolkningen, timeouten och
+stderr-hanteringen körs på riktigt mot en process som beter sig precis så illa
+som vi ber den om.
 
-* **ElevenLabs** (`app/elevenlabs_asr.py`) via `Moln`, som byter ut
-  `httpx.Client`.
-* **Claude Code** (`app/claude_code.py`) via `skriv_claude`, som skriver en
-  RIKTIG `claude`-fil på disk och pekar `CLAUDE_CODE_BIN` på den. Sömmen finns
-  redan i appen, så inget behöver stubbas: argumentraden, strömtolkningen,
-  timeouten och stderr-hanteringen körs på riktigt mot en process som beter sig
-  precis så illa som vi ber den om.
+**ElevenLabs** (`app/elevenlabs_asr.py`) beordras via `Moln`, som byter ut
+`httpx.Client`. Appen transkriberar inte längre (borttaget 2026-10-07), men
+manusstudion (manus.py) gör det, och omtagen prövas därför fortfarande genom
+den här gränsen (tests/test_buggfixar.py).
 
 Lägena är namngivna efter vad läraren råkar ut för, inte efter HTTP-koder:
 ett 429 mitt i eftermiddagen, en uppladdning som dör på vägen, en modell
@@ -169,26 +171,20 @@ LANGSAM = float(os.environ.get("FEJK_LANGSAM") or 0)   # sekunder per rad
 # e2e: där lever servern i en egen process och kan inte byta fixtur mellan två
 # klick, men en lärardag skriver både en tavla, ett prov och en granskning.
 # Nyckelorden är generatorernas egna uppdragsrader (lesson_board.INSTRUCTION,
-# exam_gen.build_prompt, postprocess.EXTRACT_INSTRUCTION) — och de gäller även
+# exam_gen.build_prompt) — och de gäller även
 # reparations- och iterationsprompterna, som bär samma instruktion överst.
 # Versalorden räcker som nyckel, och det är med flit: de står både i
 # uppdragsraden («skriv ett ARBETSBLAD») och i reparationsprompten («ditt förra
 # ARBETSBLAD»). Förut matchade bara uppdragsraden, så en reparation av ett
 # arbetsblad hamnade i PROVETS band — och arbetsbladet «lagades» till ett prov.
 #
-# Anteckningarna står FÖRST, och det är av motsatt skäl: deras prompt kan bära
-# ett helt mötestranskript, och i talspråk dyker orden upp var som helst — «jag
-# kopierar upp ett arbetsblad till fredag», sagt på ett möte, hade annars lagt
-# i arbetsbladets band. Nyckeln är generatorns egen inledningsrad
-# (notes_gen.INSTRUCTION), som står överst även i reparations- och
-# iterationsprompterna.
+# Anteckningarnas och insikternas band togs bort 2026-10-07 med generatorerna
+# (notes_gen, postprocess).
 _VAL = [
-    ("Skriv lärarens stödanteckningar", "anteckningar"),
     ("GRUPPUPPGIFT", "gruppuppgift"),
     ("ARBETSBLAD", "arbetsblad"),
     ("lektionstavla", "tavla"),
     ("matteprov", "prov"),
-    ("Läs transkriptet", "insikter"),
 ]
 
 # Nivådomaren (Del C) prövas FÖRE listan ovan, och i två steg. Skälet till båda

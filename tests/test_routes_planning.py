@@ -1039,29 +1039,6 @@ def test_patch_planned_status_and_link(llm_ready, monkeypatch):
                            json={"status": "hållen"}).status_code == 404
 
 
-def test_org_patch_autolinks_lesson(llm_ready, monkeypatch):
-    """Org-flödet: när lektionen får klass/kurs/datum länkas den mot en
-    matchande planering som blir 'hållen'."""
-    from app import db as appdb
-    conn = appdb.connect(llm_ready.base_dir / "transkribera.db")
-    gid = appdb.get_or_create_group(conn, "NA23")
-    cid = appdb.get_or_create_course(conn, "Ma3c")
-    p = appdb.create_planned_lesson(conn, titel="Derivata", datum="2026-09-02",
-                                    starttid="09:10", group_id=gid, course_id=cid)
-    les = appdb.create_lesson(conn, history_id="hy",
-                              ts="2026-09-02T09:12:00", name="lektion")
-    conn.close()
-
-    r = llm_ready.patch(f"/api/lessons/{les['id']}",
-                        json={"group_id": gid, "course_id": cid,
-                              "datum": "2026-09-02", "starttid": "09:12"})
-    assert r.status_code == 200
-    assert r.json()["planned_lesson_id"] == p["id"]
-    planned = llm_ready.get(f"/api/planning/{p['id']}").json()
-    assert planned["status"] == "hållen"
-    assert planned["lesson_id"] == les["id"]
-
-
 # ---------------------------------------------------------- Fas: underlag --
 
 def _underlag_fixture(client, monkeypatch, beskrivning="Sida om andragradsfunktioner."):
@@ -1181,73 +1158,6 @@ def test_generate_ignores_invalid_underlag_id(client, monkeypatch):
     assert calls[0]["underlag"] == ""
 
 
-# ---- Arkivsökets äkta relevans + live-events (spec 2026-07-18) --------------
-
-def test_archive_ask_ignores_stopword_matches(client):
-    """En tavla som bara matchar frågans småord ("var/jag/och") får inte bli
-    källa — genomsökningen spelas ändå upp och ett ärligt 0-träffar-svar
-    strömmas utan att LLM:en behövs."""
-    from app import db as appdb
-    conn = appdb.connect(client.base_dir / "transkribera.db")
-    appdb.create_planned_lesson(conn, titel="Utflykt",
-                                moment="var på berget och jag såg en älg")
-    conn.close()
-    r = client.post("/api/planning/ask",
-                    json={"q": "Var förklarar jag täljare och nämnare?"})
-    assert r.status_code == 200
-    events = _events(r)
-    assert [e["hits"] for e in events if e["type"] == "scan_result"] == [0]
-    done = next(e for e in events if e["type"] == "done")
-    assert done["result"]["sources"] == []
-    assert "verkar inte nämna" in done["result"]["text"]
-
-
-def test_archive_ask_empty_archive_404(client):
-    r = client.post("/api/planning/ask", json={"q": "derivata"})
-    assert r.status_code == 404
-
-
-def test_archive_ask_emits_real_scan_events(client, monkeypatch):
-    """scan_plan → scan_result×N → deep_read före svaret; träffantalen är
-    innehållsordens verkliga förekomster och bara träffarna blir källor."""
-    from app import db as appdb
-    from app.web import routes_planning as rp
-    conn = appdb.connect(client.base_dir / "transkribera.db")
-    appdb.create_planned_lesson(conn, titel="Bråk",
-                                moment="täljare och nämnare, mer täljare",
-                                datum="2026-06-20")
-    appdb.create_planned_lesson(conn, titel="Utflykt",
-                                moment="var på berget och jag såg en älg",
-                                datum="2026-06-21")
-    conn.close()
-    monkeypatch.setattr(client.app.state.arbiter, "try_acquire_llm", lambda: "nyckel")
-    monkeypatch.setattr(client.app.state.arbiter, "release_llm", lambda n: True)
-    monkeypatch.setattr(client.app.state.arbiter, "ensure_llm",
-                        lambda: "http://127.0.0.1:8170")
-    monkeypatch.setattr(rp.llm_client, "generate",
-                        lambda *a, **k: "Det står på tavlan Bråk")
-
-    r = client.post("/api/planning/ask",
-                    json={"q": "Var förklarar jag täljare och nämnare?"})
-    assert r.status_code == 200
-    events = _events(r)
-    types = [e["type"] for e in events]
-    assert types.index("scan_plan") < types.index("scan_result") \
-        < types.index("deep_read") < types.index("done")
-
-    plan = next(e for e in events if e["type"] == "scan_plan")
-    assert plan["total"] == 2
-    assert [i["name"] for i in plan["items"]] == ["Utflykt", "Bråk"]
-
-    key_by_name = {i["name"]: i["key"] for i in plan["items"]}
-    hits = {e["key"]: e["hits"] for e in events if e["type"] == "scan_result"}
-    assert hits[key_by_name["Utflykt"]] == 0
-    assert hits[key_by_name["Bråk"]] == 3          # 2×täljare + 1×nämnare
-
-    deep = next(e for e in events if e["type"] == "deep_read")
-    assert [s["titel"] for s in deep["sources"]] == ["Bråk"]
-
-
 def test_refine_far_hela_meddelandet_inklusive_kallviktningen(llm_ready, monkeypatch):
     """Ett klick på en källa i canvas skriver in «Ta mer ur boken …» i FÄLTET.
     Hela meningen är prompten — det finns inget separat viktningsfält, och ska
@@ -1285,22 +1195,6 @@ def test_refine_utan_meddelande_ar_400(llm_ready, monkeypatch):
 def test_refine_pa_okand_planering_ar_404(llm_ready):
     assert llm_ready.post("/api/planning/finnsinte/refine",
                           json={"message": "byt exempel"}).status_code == 404
-
-
-def test_archive_search_marks_hits_in_snippet(client):
-    """Arkivsökets snippet ska markera träffarna med \\x02..\\x03 — samma
-    kontrakt som /api/search — så att UI:t kan highlighta sökordet."""
-    from app import db as appdb
-    conn = appdb.connect(client.base_dir / "transkribera.db")
-    appdb.create_planned_lesson(conn, titel="Bråk",
-                                moment="idag går vi igenom täljare och nämnare",
-                                datum="2026-06-20")
-    conn.close()
-    r = client.get("/api/planning/archive/search", params={"q": "täljare"})
-    assert r.status_code == 200
-    hits = r.json()["hits"]
-    assert len(hits) == 1
-    assert "\x02täljare\x03" in hits[0]["snippet"]
 
 
 # ── Planeringen överlever en omstart (v20) ───────────────────────────────────

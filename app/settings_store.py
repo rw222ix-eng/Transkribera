@@ -1,7 +1,8 @@
-"""Local app settings — a tiny JSON file next to history.json (offline, single
-user). Today it holds one thing: where the downloaded models live (the
-"download disk" the user picks in the UI). Kept deliberately small and
-GUI-agnostic; every function takes ``base`` so it is trivially testable.
+"""Appens inställningar: en liten JSON-fil i basmappen (offline, en användare).
+Säkerhetskopians plats och kvällsschema och exempelschemats markering bor här.
+Modelldisken (`models_dir`) som filen byggdes för försvann 2026-10-07 med
+transkriberingen; en gammal nyckel i filen läses aldrig och skadar inte.
+Varje funktion tar ``base`` så att den går att testa mot en tom mapp.
 """
 from __future__ import annotations
 
@@ -25,30 +26,3 @@ def load(base: Path) -> dict:
 def save(base: Path, data: dict) -> None:
     settings_path(base).write_text(
         json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
-def default_models_root(base: Path) -> Path:
-    return Path(base) / "models"
-
-
-def get_models_root(base: Path) -> Path:
-    """The configured models directory, or the default ``base/models`` when the
-    user has not picked another disk."""
-    val = load(base).get("models_dir")
-    return Path(val) if val else default_models_root(base)
-
-
-def set_models_root(base: Path, models_dir: str | Path | None) -> Path:
-    """Persist where models are stored and return the effective root. ``None``
-    (or empty) clears the override and falls back to ``base/models``. The target
-    directory is created so a following download lands cleanly."""
-    data = load(base)
-    if models_dir:
-        root = Path(models_dir)
-        data["models_dir"] = str(root)
-    else:
-        data.pop("models_dir", None)
-        root = default_models_root(base)
-    save(base, data)
-    root.mkdir(parents=True, exist_ok=True)
-    return root

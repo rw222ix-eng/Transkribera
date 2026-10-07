@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from app import db
+from app import db, llm_client
 from app.web import server
 
 PLAN_JS = Path(__file__).resolve().parent.parent / "app" / "web" / "ui" / "plan.js"
@@ -281,14 +281,7 @@ def test_dokumenten_overlever_en_omstart_av_servern(tmp_path, monkeypatch):
     """Poängen med hela etappen: högen finns kvar när appen öppnas igen."""
     from fastapi.testclient import TestClient
 
-    class HW:
-        gpu_name = "T"; vram_mb = 1; has_cuda = False; ram_mb = 1; cpu_cores = 1
-        free_disk_mb = 1; cpu_name = "T"; vram_free_mb = 1; ram_free_mb = 1
-        total_disk_mb = 1; cuda_version = ""; compute_capability = ""
-        gpu_arch = ""; disks = []
-
-    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: HW())
-    monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
+    monkeypatch.setattr(llm_client, "is_running", lambda *a, **k: False)
     with TestClient(server.create_app(base_dir=tmp_path)) as c1:
         c1.post("/api/dokument", json={"dokument": papper(), "status": "godkant"})
         c1.put("/api/klassprofil", json=PROFIL)

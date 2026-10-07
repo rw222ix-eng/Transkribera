@@ -10,14 +10,15 @@ på element som stod orörda, och det som verkligen skrevs om stod omarkerat.
 Servern har både före- och efterdokumentet i handen och behöver inte gissa.
 Den här modulen jämför dem och svarar med element-id i KLIENTENS schema — de
 som `blad.js markera()`/`taggaTavla()` sätter i `data-el`. Mappningen bor här,
-på ett ställe, för de tre refine-rutterna delar den (planering, prov,
-anteckningar) och en id-serie som glider isär mellan server och blad är precis
-den sortens fel som inte syns förrän en nål pekar fel.
+på ett ställe, för refine-rutterna delar den (planering och prov; den
+tredje, anteckningarnas, togs bort 2026-10-07) och en id-serie som glider
+isär mellan server och blad är precis den sortens fel som inte syns förrän en
+nål pekar fel.
 
 Två saker att hålla i minnet när bladen ändras:
 
 * Id-serierna är blad.js:s. Ändras `markera()` eller `taggaTavla()` ska
-  `_prov`, `_anteckningar` respektive `_tavelelement` ändras med — testerna i
+  `_prov` respektive `_tavelelement` ändras med — testerna i
   tests/test_dokumentdiff.py låser formen, inte samstämmigheten.
 * Vi jämför INNEHÅLL, inte positioner. Lägger modellen till en uppgift i
   mitten är det bara den som är ny; allt efter den har bara flyttat sig. Därför
@@ -134,22 +135,6 @@ def _prov(fore: dict, efter: dict) -> list[str]:
         ut.append("forsatt")
     ut += _lista(fore.get("uppgifter") or [], efter.get("uppgifter") or [],
                  lambda j: f"uppg{j + 1}")
-    return ut
-
-
-# --------------------------------------------------------- anteckningarna ----
-#
-# blad.js markera(): `.ansekt` numreras `sekt1`, `sekt2` … och kom ihåg-rutan
-# är EN nod (`komihag`) hur många rader den än bär.
-
-def _anteckningar(fore: dict, efter: dict) -> list[str]:
-    ut: list[str] = []
-    if _falt(fore, efter, ("titel", "datum", "klass")):
-        ut.append("rubrik")
-    ut += _lista(fore.get("sektioner") or [], efter.get("sektioner") or [],
-                 lambda j: f"sekt{j + 1}")
-    if _kanon(fore.get("kom_ihag") or []) != _kanon(efter.get("kom_ihag") or []):
-        ut.append("komihag")
     return ut
 
 
@@ -342,8 +327,7 @@ def _tavla(fore: dict, efter: dict) -> list[str]:
 # panelen att säga just det efter VARJE omskrivning, hur mycket servern än
 # skrivit om. Det har hänt en gång, för en typ som glömdes bort här.
 _DIFFAR = {"tavla": _tavla, "prov": _prov, "arbetsblad": _prov,
-           "gruppuppgift": _prov,
-           "anteckningar": _anteckningar}
+           "gruppuppgift": _prov}
 
 
 def andrade_element(typ: str, fore: Any, efter: Any) -> list[str]:

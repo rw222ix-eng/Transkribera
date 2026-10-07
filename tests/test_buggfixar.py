@@ -1,26 +1,22 @@
-"""De sju kända buggarna ur kartläggningen — ett regressionstest per fix.
+"""De kända buggarna ur kartläggningen — ett regressionstest per fix.
 
-Alla sju hittades genom att LÄSA koden, inte genom att köra den, och det är
+Alla hittades genom att LÄSA koden, inte genom att köra den, och det är
 därför de fick vänta på testinfrastrukturen (Etapp 1): var och en kräver att
 man kan beordra molngränsen att bete sig illa. Det kan man nu (tests/fejk.py).
 
-  1. Avbryt var dött under molnfasen — koden letade efter en subprocess att
-     döda (ljudrättningens, sedan riven), så flaggan sattes aldrig och jobbet
-     fortsatte med GPU-låset.
-  2. Noll omtag mot OpenAI — ett 429 på bit fjorton av femton slängde tretton
-     betalda bitar.
+Fyra av de sju gällde transkriberingen (Avbryt under molnfasen, ffprobe som
+saknas, /api/media utan timeout, `model`-fältet i /api/postprocess och
+/api/chat) och försvann med den 2026-10-07. Kvar står:
+
+  2. Noll omtag mot molnet — ett 429 slängde betalda bitar. Omtagen bor kvar i
+     app/elevenlabs_asr.py, som manusstudion (manus.py) använder.
   3. Tyst hängning i Claude-bryggan — timeouten låg inuti läsloopen och
      triggade aldrig när CLI:t inte skrev något; stderr lästes först efter
      wait() och kunde fylla röret.
-  4. ffprobe saknas gav «Transkriberingen gav inget resultat» — ett besked som
-     pekar på ljudet när felet är att ffmpeg inte finns.
-  5. /api/media körde ffmpeg utan timeout och kunde binda en trådpooltråd.
   6. pypdfium2 saknades i requirements.txt trots att tryckpaketet kräver den.
-  7. /api/postprocess och /api/chat krävde ett `model`-fält som ignoreras.
 """
 from __future__ import annotations
 
-import subprocess
 import threading
 import time
 from pathlib import Path
@@ -28,68 +24,6 @@ from pathlib import Path
 import pytest
 
 from app import claude_code, elevenlabs_asr
-from app.web import server
-from tests.conftest import HW
-
-
-# ─────────────────────────────────────────────── 1 · Avbryt under molnet ──
-
-class _Arbiter:
-    def try_acquire_gpu(self): return "nyckel"
-    def try_acquire_llm(self): return "nyckel"
-    def release_gpu(self, nyckel=None): self.slappt = True
-    def release_llm(self, nyckel=None): self.slappt = True
-    def stop_llm(self): return False
-    def ensure_llm(self): return None
-    def ensure_model(self, spec=None): return None
-    def prewarm_async(self): pass
-    def llm_installed(self): return False
-    slappt = False
-
-
-def test_avbryt_biter_mitt_i_molnfasen(tmp_path, monkeypatch):
-    """Under molnet finns ingen subprocess att döda. Avbryt svarade därför
-    {cancelled: false} medan jobbet fortsatte, höll GPU-låset och till slut
-    skrev en fil läraren inte längre ville ha."""
-    from fastapi.testclient import TestClient
-
-    i_molnet = threading.Event()
-
-    def moln_som_dröjer(audio, base, *, langd, avbruten=None, **k):
-        i_molnet.set()
-        for _ in range(200):                      # max 10 s, sedan ger vi upp
-            if avbruten and avbruten():
-                raise RuntimeError("Transkriberingen avbröts.")
-            time.sleep(0.05)
-        raise AssertionError("avbrottet nådde aldrig molnfasen")
-
-    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: HW())
-    monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
-    monkeypatch.setattr(server.media_mod, "probe_duration", lambda *_: 60.0)
-    monkeypatch.setattr(server.elevenlabs_asr, "har_nyckel", lambda *a, **k: True)
-    monkeypatch.setattr(server.elevenlabs_asr, "transkribera", moln_som_dröjer)
-    arb = _Arbiter()
-    c = TestClient(server.create_app(base_dir=tmp_path, arbiter=arb))
-    media = tmp_path / "lektion.mp3"
-    media.write_text("a", encoding="utf-8")
-
-    svar: dict = {}
-
-    def kor():
-        svar["r"] = c.post("/api/transcribe", json={
-            "source": str(media), "language": "sv", "formats": ["srt"]})
-    t = threading.Thread(target=kor, daemon=True)
-    t.start()
-    assert i_molnet.wait(10), "jobbet kom aldrig till molnfasen"
-
-    assert c.post("/api/transcribe/cancel").json() == {"cancelled": True}
-    t.join(15)
-    assert not t.is_alive()
-    assert "avbröts" in svar["r"].text
-    assert arb.slappt is True                     # GPU-låset släpptes i finally
-    assert c.get("/api/history").json() == []     # ingen halvskriven historikpost
-    # Idempotent: när ingenting kör är svaret fortfarande ärligt.
-    assert c.post("/api/transcribe/cancel").json() == {"cancelled": False}
 
 
 # ──────────────────────────────────────────── 2 · Omtag mot ElevenLabs ──
@@ -185,61 +119,6 @@ def test_utloggat_claude_ar_ett_eget_fel(fejk_claude):
         claude_code.generate("hej", timeout=30.0)
 
 
-# ───────────────────────────────────────────────── 4 · ffprobe saknas ──
-
-def _transkriberingsrigg(monkeypatch, tmp_path):
-    from fastapi.testclient import TestClient
-    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: HW())
-    monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
-    monkeypatch.setattr(server.elevenlabs_asr, "har_nyckel", lambda *a, **k: True)
-    c = TestClient(server.create_app(base_dir=tmp_path, arbiter=_Arbiter()))
-    media = tmp_path / "lektion.mp3"
-    media.write_text("a", encoding="utf-8")
-    return c, media
-
-
-def test_ffprobe_saknas_sager_att_ffmpeg_saknas(tmp_path, monkeypatch):
-    """Utan speltid blev styckningen tom, molnet fick noll bitar och läraren
-    fick «Transkriberingen gav inget resultat» — ett besked om ljudet, när
-    felet var att ffmpeg inte är installerat."""
-    monkeypatch.setattr(server.media_mod, "probe_duration", lambda *_: None)
-    monkeypatch.setattr(server.media_mod, "ffmpeg_available", lambda: False)
-    c, media = _transkriberingsrigg(monkeypatch, tmp_path)
-    r = c.post("/api/transcribe", json={
-        "source": str(media), "language": "sv", "formats": ["srt"]})
-    assert "ffmpeg" in r.text and "Installera" in r.text
-    assert "gav inget resultat" not in r.text
-
-
-def test_fil_utan_speltid_pekar_pa_filen_inte_pa_ffmpeg(tmp_path, monkeypatch):
-    monkeypatch.setattr(server.media_mod, "probe_duration", lambda *_: 0.0)
-    monkeypatch.setattr(server.media_mod, "ffmpeg_available", lambda: True)
-    c, media = _transkriberingsrigg(monkeypatch, tmp_path)
-    r = c.post("/api/transcribe", json={
-        "source": str(media), "language": "sv", "formats": ["srt"]})
-    assert "lektion.mp3" in r.text and "ljudspår" in r.text
-
-
-# ──────────────────────────────────────────── 5 · ffmpeg utan timeout ──
-
-def test_hangd_omkodning_i_spelaren_slapper_traden(client, tmp_path, monkeypatch):
-    """En hängd ffmpeg band en trådpooltråd för alltid. Några sådana och
-    servern svarar inte på något."""
-    kalla = tmp_path / "lektion.mkv"
-    kalla.write_text("a", encoding="utf-8")
-
-    def hanger(cmd, **kw):
-        assert kw.get("timeout") == server.MEDIA_FFMPEG_TIMEOUT
-        raise subprocess.TimeoutExpired(cmd, kw["timeout"])
-    monkeypatch.setattr(server.subprocess, "run", hanger)
-
-    r = client.get("/api/media", params={"path": str(kalla)})
-    assert r.status_code == 504
-    assert "trasig" in r.json()["error"]
-    # Ingen halvskriven förhandsfil får ligga kvar och spelas upp som ljudet.
-    assert not (tmp_path / "lektion.preview.m4a").exists()
-
-
 # ─────────────────────────────────────────────────── 6 · beroendena ──
 
 def test_allt_appen_importerar_star_i_requirements():
@@ -251,20 +130,3 @@ def test_allt_appen_importerar_star_i_requirements():
             if rad.strip() and not rad.strip().startswith("#")}
     for modul in ("pypdfium2", "jinja2", "pydantic", "httpx", "fastapi"):
         assert modul in krav, f"{modul} importeras men står inte i requirements.txt"
-
-
-# ─────────────────────────────────── 7 · model-fältet som inte används ──
-
-def test_postprocess_kraver_inte_ett_falt_som_ignoreras(client):
-    """Modellen är Claude Code och inget annat. `model` togs emot, ignorerades
-    — och 400:ade ändå när det saknades."""
-    r = client.post("/api/postprocess", json={"transcript": "Hej.",
-                                              "operation": "summary"})
-    assert r.status_code != 400
-    assert client.post("/api/postprocess", json={"transcript": ""}).status_code == 400
-
-
-def test_chatten_kraver_inte_heller_model(client):
-    r = client.post("/api/chat", json={"messages": [{"role": "user", "content": "hej"}]})
-    assert r.status_code != 400
-    assert client.post("/api/chat", json={"messages": []}).status_code == 400

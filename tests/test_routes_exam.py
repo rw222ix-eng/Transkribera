@@ -1243,7 +1243,11 @@ def test_content_status_marks_behandlat(client, monkeypatch):
     les = appdb.create_lesson(conn, history_id="h1",
                               ts="2026-09-01T09:00:00", name="lektion")
     gid = appdb.get_or_create_group(conn, "SA23")
-    appdb.update_lesson(conn, les["id"], group_id=gid, course_id=cid)
+    # Ingen rutt eller db-funktion ändrar lektioner längre (transkriberingen
+    # är borta), så klass och kurs skrivs rakt i tabellen.
+    conn.execute("UPDATE lessons SET group_id = ?, course_id = ? WHERE id = ?",
+                 (gid, cid, les["id"]))
+    conn.commit()
     appdb.tag_content(conn, punkt["id"], lesson_id=les["id"])
     conn.close()
 

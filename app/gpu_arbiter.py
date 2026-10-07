@@ -1,29 +1,23 @@
-"""Ett enda tungt GPU-jobb i taget — och svaret på om språkmodellen är nåbar.
+"""Molnjobbens grind och svaret på om språkmodellen är nåbar.
 
 Modulen skötte förr två saker: den startade och stoppade llama.cpp-servern (en
 ~21 GB GGUF som inte kunde samsas med Whispers ~10 GB på ett 24 GB-kort), och den
-höll ett lås så att de två aldrig krockade. Båda modellerna är borta:
-transkriberingen sker hos OpenAI och språkmodellsarbetet hos Claude Code.
+höll ett exklusivt GPU-lås så att de två aldrig krockade. Båda modellerna är
+borta, och låset försvann 2026-10-07 med transkriberingen, det sista jobbet som
+tog det. Namnet på modulen och klassen är arv.
 
-Kvar finns ett litet GPU-jobb — tidsättningen (wav2vec2) — och två sådana ska
-fortfarande inte köra samtidigt på kortet. Låset finns därför kvar.
+Kvar är molnets grind: en räknande semafor med tak (LLM_TAK). Molnet tål flera
+samtal samtidigt, men taket skyddar plånboken och Claude Codes
+hastighetsgränser. Bredvid den finns bakgrundsförslagens egen plats.
 
-Men det ÄRVDES av alla molnjobb också, och där var det bara i vägen: läraren
-som bad om en omskrivning medan ett prov skrevs fick «GPU:n är upptagen» om en
-GPU som inte gjorde någonting. Molnet tål flera samtal samtidigt, så de har nu
-en egen grind — en räknande semafor med tak (LLM_TAK) i stället för ett
-exklusivt lås. Taket finns för att skydda plånboken och Claude Codes
-hastighetsgränser, inte kortet.
-
-Livscykelmetoderna står också kvar, men betyder något annat nu: de svarar på
-frågan «går det att fråga språkmodellen?» i stället för att starta en process.
-Ett tjugotal anropsställen i provet, planeringen, chatten och sökningen ställer
-just den frågan, och de fortsätter göra rätt utan att veta att huset bytts.
+Livscykelmetoderna svarar på frågan «går det att fråga språkmodellen?» i
+stället för att starta en process. Anropsställena i provet, planeringen och
+eleverna ställer just den frågan, och de fortsätter göra rätt utan att veta
+att huset bytts.
 """
 from __future__ import annotations
 import threading
 import uuid
-from pathlib import Path
 from typing import Callable
 
 from app import llm_client
@@ -54,66 +48,26 @@ FORSLAG_TAK = 1
 
 
 class GpuArbiter:
-    """Ägare av appens två grindar: kortets exklusiva lås och molnets tak.
+    """Ägare av molnets tak och bakgrundsförslagens plats.
 
     Byggs av create_app() och ligger på app.state.arbiter."""
 
-    def __init__(self, models_root, on_log: "Callable[[str], None] | None" = None):
-        self.models_root = Path(models_root)
-        self._on_log = on_log
-        self._gpu = threading.Lock()          # ett tungt GPU-jobb i taget
-        self._byte = threading.Lock()         # skyddar nyckelbytet
-        self._nyckel: str | None = None       # vem som håller låset just nu
+    def __init__(self):
+        self._byte = threading.Lock()         # skyddar nyckelmängderna
         self._llm = threading.BoundedSemaphore(LLM_TAK)   # molnjobben
         self._llm_nycklar: set[str] = set()   # vilka som håller en plats
         self._forslag = threading.BoundedSemaphore(FORSLAG_TAK)  # bakgrunden
         self._forslag_nycklar: set[str] = set()
         self._forslag_biljett = 0             # högsta numret är det som gäller
 
-    # ---- exklusiv GPU-åtkomst ----------------------------------------------
-    #
-    # Låset har en NYCKEL sedan buggkandidat 9. Förr var release_gpu() öppen för
-    # vem som helst och «idempotent»: den som inte höll något släppte heller
-    # ingenting — utom när någon ANNAN höll det, och då släppte den deras lås.
-    # Det som höll ihop appen var att 409-vägarna returnerar före sitt finally.
-    # Det är testat, men det är en egenskap hos sjutton anropsställen, inte hos
-    # låset, och nästa rutt som skrivs känner inte till regeln.
-    #
-    # Nu lämnar `try_acquire_gpu` ut en nyckel, och bara den nyckeln öppnar. En
-    # release med fel eller ingen nyckel gör ingenting och SÄGER det (False), i
-    # stället för att rycka undan kortet för ett jobb som håller på.
-    def try_acquire_gpu(self) -> str | None:
-        """Icke-blockerande. Nyckeln till GPU:n om anroparen fick den, annars
-        None (upptagen). Sanningsvärdet fungerar som förr — `if not
-        arbiter.try_acquire_gpu()` läser likadant — men ägaren MÅSTE spara
-        nyckeln och lämna tillbaka den till release_gpu() i ett finally."""
-        if not self._gpu.acquire(blocking=False):
-            return None
-        with self._byte:
-            self._nyckel = uuid.uuid4().hex
-            return self._nyckel
-
-    def release_gpu(self, nyckel: str | None) -> bool:
-        """Släpp GPU:n. True om den släpptes, False om nyckeln inte var vår.
-
-        Nyckeln är obligatorisk med flit: ett anropsställe som glömmer den ska
-        falla i sviten, inte tyst låta bli att släppa ute hos läraren."""
-        with self._byte:
-            if nyckel is None or nyckel != self._nyckel:
-                return False
-            self._nyckel = None
-            try:
-                self._gpu.release()
-            except RuntimeError:
-                return False                    # var inte låst — inget att göra
-            return True
-
     # ---- molnjobbens grind --------------------------------------------------
     #
-    # Samma nyckeldisciplin som GPU-låset, av samma skäl (buggkandidat 9): en
-    # release utan giltig nyckel ska INTE öppna en plats som någon annan håller.
-    # Skillnaden mot låset är bara att här ryms LLM_TAK stycken samtidigt, så
-    # nyckeln är en av flera och lever i en mängd i stället för i ett fält.
+    # Platsen har en NYCKEL sedan buggkandidat 9. Förr var släppet öppet för
+    # vem som helst och «idempotent»: den som inte höll något släppte heller
+    # ingenting, utom när någon ANNAN höll det, och då släppte den deras plats.
+    # Nu öppnar bara nyckeln som lämnades ut, och en release med fel eller
+    # ingen nyckel gör ingenting och SÄGER det (False). Här ryms LLM_TAK
+    # stycken samtidigt, så nycklarna lever i en mängd.
     #
     # Semaforen är BoundedSemaphore med flit: en release för mycket är en bugg
     # i ett anropsställe, och då ska sviten falla — inte taket tyst växa.
@@ -206,10 +160,6 @@ class GpuArbiter:
             return True
 
     # ---- språkmodellen ------------------------------------------------------
-    def llm_installed(self) -> bool:
-        """Finns det någon språkmodell att fråga? Numera: finns Claude Code."""
-        return llm_client.is_running()
-
     def ensure_llm(self) -> str | None:
         """TILLGANGLIG om Claude Code är installerat och inloggat, annars None.
 
@@ -227,8 +177,3 @@ class GpuArbiter:
         """Ingen process att stoppa. Kvar för avslutningsvägarna (desktop.py,
         __main__.py) som stänger av allt appen startat."""
         return False
-
-    def prewarm_async(self) -> None:
-        """Ingen modell att förvärma. Väntan låg i att läsa in 21 GB i VRAM;
-        Claude Code har inget att läsa in."""
-        return None

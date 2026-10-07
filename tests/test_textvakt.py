@@ -3,17 +3,16 @@
 Bakgrunden står i modulens docstring: läraren bad om det sex gånger på fyra
 papper under veckan 1–6 sep 2026 (spårdata, spardata/forslag/2026-09-06.md),
 och varje gång kostade det ett omskrivningsvarv. Anteckningarna hade vakten
-sedan augusti; provet, arbetsbladet, gruppuppgiften och tavlan fick den
-2026-09-12.
+sedan augusti (de togs bort 2026-10-07); provet, arbetsbladet, gruppuppgiften
+och tavlan fick den 2026-09-12.
 
 Det som prövas här är REGELN och dess undantag — att felet går in i
-reparationsrundan prövas där rundorna bor (test_exam, test_lesson_board,
-test_anteckningar)."""
+reparationsrundan prövas där rundorna bor (test_exam, test_lesson_board)."""
 from __future__ import annotations
 
 import pytest
 
-from app import exam_spec, notes_gen, textvakt, whiteboard_spec
+from app import exam_spec, textvakt, whiteboard_spec
 
 EN, EM = "–", "—"
 
@@ -251,31 +250,3 @@ def test_kolumntavlan_granskas_ocksa():
         {"weight": 1, "sections": [{"kind": "text",
                                     "text": f"Först {EM} sedan"}]}]}]}
     assert _board_fel(doc) == ["boards[0].columns[0].sections[0].text"]
-
-
-# ── Anteckningarna ──────────────────────────────────────────────────────────
-
-def test_anteckningarna_beter_sig_som_forut():
-    """Femte dokumenttypen hade vakten först och ska inte ha ändrats av att
-    den flyttade: samma felkod, samma sökväg, samma besked — och INGET
-    sifferspannsundantag (pappret bär inga bokhänvisningar)."""
-    def _anteckningar(forsta: str) -> notes_gen.NoteDoc:
-        # Tre sektioner: taket MIN_SEKTIONER är ett eget fel och ska inte
-        # skymma det som mäts här.
-        return notes_gen.NoteDoc(
-            titel="Första lektionen",
-            sektioner=[notes_gen.Sektion(rubrik="Boken", stycken=[forsta]),
-                       notes_gen.Sektion(rubrik="Rutiner",
-                                         stycken=["Vi börjar kvart över."]),
-                       notes_gen.Sektion(rubrik="Provet",
-                                         stycken=["Provet ligger i vecka 42."])])
-
-    fel = notes_gen.validate_notes(
-        _anteckningar(f"Vi arbetar i boken {EN} alla får ett."))
-    assert [f["code"] for f in fel] == ["tankstreck"]
-    assert fel[0]["path"] == "sektion 1.stycke 1"
-    assert "utan tankstreck" in fel[0]["message"]
-
-    strangt = notes_gen.validate_notes(
-        _anteckningar("Läs s. 12–14 till fredag."))
-    assert [f["code"] for f in strangt] == ["tankstreck"]

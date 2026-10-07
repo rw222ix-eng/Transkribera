@@ -501,42 +501,6 @@ def test_tryckpaketet_tar_skarmens_pdf(client, monkeypatch):
     assert _ar_bild(Path(res["path"]))
 
 
-# ── Anteckningarna ──────────────────────────────────────────────────────
-
-def _anteckningar(client, monkeypatch):
-    from app import notes_gen
-    # Tre sektioner är minimum (notes_gen.validate_notes_json) — ett papper
-    # med två är ett giltigt fel, och det ska inte stå i vägen här.
-    noter = {"titel": "Kursstart", "sektioner": [
-        {"rubrik": "Boken", "stycken": ["Vi räknar i kapitel 1."]},
-        {"rubrik": "Rutinerna", "stycken": ["Räknaren ligger i väskan."]},
-        {"rubrik": "Proven", "stycken": ["Första provet vecka 42."]}]}
-    monkeypatch.setattr(notes_gen, "generate_notes",
-                        lambda *a, **k: {"notes": noter, "errors": [], "rounds": 1})
-    return _done(client.post("/api/anteckningar/generate", json={
-        "onskemal": "Boken och rutinerna", "kurs": "Matematik, nivå 2b",
-        "datum": "2026-10-05"}))
-
-
-def test_anteckningarna_gar_samma_vag(client, monkeypatch):
-    from pathlib import Path
-    result = _anteckningar(client, monkeypatch)
-    byggda = _tectonic(monkeypatch)
-    res = _done(client.post(f"/api/anteckningar/{result['id']}/approve", json={
-        "blad": {"uppgift": [_png()]}}))
-    assert res["errors"] == []
-    assert _ar_bild(Path(res["pdf"]))
-    assert byggda == [], byggda            # ingen Tectonic alls
-    assert Path(res["tex"]).is_file()
-
-
-def test_anteckningarna_utan_bilder_kompileras_som_forut(client, monkeypatch):
-    result = _anteckningar(client, monkeypatch)
-    byggda = _tectonic(monkeypatch)
-    res = _done(client.post(f"/api/anteckningar/{result['id']}/approve", json={}))
-    assert res["pdf"] and byggda, byggda
-
-
 def test_bilderna_i_katalogen_ar_provets_egna(tmp_path):
     """Utkatalogen är per kurs och datum och delas av alla papper där
     (2026-09-24 kväll). 23/9 visades gamla egen-NN.png under nya uppgifter

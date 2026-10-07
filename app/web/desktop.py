@@ -7,7 +7,6 @@ from __future__ import annotations
 import json
 import mimetypes
 import os
-import shutil
 import sys
 import threading
 import time
@@ -21,58 +20,6 @@ from app import debug_log, filhanterare
 from app.web import port as port_kalla
 from app.web import portvakt
 from app.web.server import create_app
-
-_MEDIA_TYPES = (
-    "Ljud & video (*.mp4;*.mkv;*.mov;*.webm;*.avi;*.m4v;*.mp3;*.wav;*.m4a;"
-    "*.flac;*.aac;*.ogg;*.opus;*.wma)",
-    "Alla filer (*.*)",
-)
-
-
-class Api:
-    """Exposed to the page as window.pywebview.api.* — native file access.
-
-    The redesigned UI uses drag-drop / a picker, but a browser only yields file
-    names; the backend needs real paths. These methods bridge that gap natively.
-    """
-
-    def pick_files(self):
-        win = webview.windows[0]
-        sel = win.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=True,
-                                     file_types=_MEDIA_TYPES)
-        if not sel:
-            return []
-        return [{"path": p, "name": os.path.basename(p)} for p in sel]
-
-    def save_file(self, suggested_name, src_path):
-        win = webview.windows[0]
-        dest = win.create_file_dialog(
-            webview.SAVE_DIALOG,
-            save_filename=suggested_name or os.path.basename(src_path or ""))
-        if not dest:
-            return False
-        if not isinstance(dest, str):
-            dest = dest[0] if dest else None
-        if not dest or not src_path:
-            return False
-        try:
-            shutil.copy(src_path, dest)
-            return True
-        except OSError:
-            return False
-
-    def reveal(self, path):
-        # Systemvalet ligger i app.filhanterare — mappen öppnas, filen markeras,
-        # och det fungerar på Mac och Linux också (os.startfile och explorer
-        # finns bara på Windows).
-        try:
-            if not path or not os.path.exists(path):
-                return False
-            filhanterare.markera(path)
-            return True
-        except Exception:
-            return False
-
 
 # ── Nedladdningar ───────────────────────────────────────────────────────────
 # Lärarens fynd 2026-09-12: «Ladda ner PDF» på en godkänd tavla gav en fil som
@@ -271,12 +218,6 @@ def _ta_over_nedladdningar() -> None:
     edgechromium.EdgeChrome.on_download_starting = _pa_nedladdning
 
 
-# Porten bor i app/web/port.py sedan 2026-09-06, inte i den här raden: den
-# stod på fem ställen och Windows reserverade spannet den låg i.
-def _free_port(candidates=None) -> int:
-    return port_kalla.ledig_port(candidates)[0]
-
-
 def _vem_har(port: int) -> str:
     """Vem sitter redan på porten? En annan Transkribera svarar på
     /api/var-kors med sitt hus (läge, pid, starttid); allt annat får heta
@@ -316,12 +257,6 @@ def _logga_portbyte(logg, port: int, hinder: str) -> None:
             port_kalla.FORSTAHAND, _vem_har(port_kalla.FORSTAHAND), port)
 
 
-class _ThreadedServer(uvicorn.Server):
-    # Signal handlers can only be installed on the main thread; we run on a worker.
-    def install_signal_handlers(self) -> None:
-        pass
-
-
 def main() -> None:
     logg = debug_log.get_logger()
     # Fråga Windows FÖRE bind. Ett reserverat spann syns bara i netsh, och utan
@@ -338,7 +273,10 @@ def main() -> None:
     _logga_portbyte(logg, port, hinder)
     config = uvicorn.Config(app, host="127.0.0.1", port=port,
                             log_level="warning")
-    server = _ThreadedServer(config)
+    # Servern kör i en arbetstråd. Signalhanterare går bara att installera i
+    # huvudtråden, men uvicorn (0.29 och senare, capture_signals) hoppar själv
+    # över dem utanför huvudtråden. En egen underklass behövs därför inte.
+    server = uvicorn.Server(config)
     threading.Thread(target=server.run, daemon=True).start()
 
     for _ in range(200):                 # wait until the socket is accepting
@@ -357,12 +295,11 @@ def main() -> None:
     # före create_window: klassen byts ut, inte ett objekt.
     _ta_over_nedladdningar()
 
-    # The LLM is NOT started here — it starts lazily on the first correction/chat
-    # (the GPU arbiter owns it; a transcription unloads it to free VRAM). This
-    # keeps launch instant and the first transcription needs no unload.
+    # Ingen js_api: frontenden anropar aldrig window.pywebview.api. Filväljaren,
+    # «spara som» och «visa i Utforskaren» som stod här användes inte av någon
+    # vy och togs bort 2026-10-07.
     webview.create_window("Transkribera", f"http://127.0.0.1:{port}",
-                          width=1040, height=780, min_size=(820, 600),
-                          js_api=Api())
+                          width=1040, height=780, min_size=(820, 600))
     webview.start()                      # blocks until the window is closed
     app.state.arbiter.stop_llm()         # ingen egen modellprocess kvar att stänga
     server.should_exit = True

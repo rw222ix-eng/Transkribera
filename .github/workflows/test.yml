@@ -42,10 +42,11 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
 
-      # ffmpeg/ffprobe är inte valfria: appen läser speltid, styckar ljudet och
-      # gör förhandsvisningar med dem, och conftest-grinden FALLER utan dem
-      # (samma val som för Tectonic — en svit som tyst hoppar över halva
-      # transkriberingen är värre än en röd). Runnern har dem inte förinstallerade.
+      # ffmpeg/ffprobe är inte valfria: manusstudion (manus.py, app/media.py)
+      # läser speltid och styckar ljudet med dem, och conftest-grinden FALLER
+      # utan dem (samma val som för Tectonic — en svit som tyst hoppar över
+      # manusstudions tester är värre än en röd). Runnern har dem inte
+      # förinstallerade.
       - name: ffmpeg
         run: choco install ffmpeg -y --no-progress
 

@@ -5,9 +5,9 @@ skillnader som inte var avsiktliga (någon satte `base_dir` på klienten, någon
 inte; några lät arbitern svara, andra inte). Den bor här nu, och skillnaderna
 är namngivna i stället för slumpade:
 
-* `client`      — servern mot en TOM `tmp_path`. Maskinprobet och
-                  `llm_client.is_running` är stubbade: inga endpoints får röra
-                  lärarens riktiga maskin, disk eller modeller.
+* `client`      — servern mot en TOM `tmp_path`. `llm_client.is_running` är
+                  stubbad: inga endpoints får röra lärarens riktiga Claude
+                  Code.
 * `llm_ready`   — samma klient, men arbitern svarar som om Claude Code finns
                   och är inloggad. Allt som genererar (tavla, prov, arkivfråga)
                   behöver den; allt annat ska klara sig utan.
@@ -22,7 +22,7 @@ import os
 
 import pytest
 
-from app import exam_pdf, media
+from app import exam_pdf, llm_client, media
 from app.web import server
 
 # ── Tectonic-grinden ────────────────────────────────────────────────────────
@@ -55,24 +55,14 @@ def pytest_runtest_setup(item):
         if KRAV_TECTONIC:
             pytest.fail(besked + " KRAV_TECTONIC är satt — det här får inte hoppas över.")
         pytest.skip(besked)
-    # ffmpeg är appens grundförutsättning (utan den går ingen transkribering
-    # alls), så de här testerna får aldrig hoppas över tyst i CI heller.
+    # ffmpeg är manusstudions grundförutsättning (manus.py läser speltid och
+    # styckar ljudet med den), så de här testerna får aldrig hoppas över tyst
+    # i CI heller.
     if "ffmpeg" in item.keywords and not media.ffmpeg_available():
-        besked = "ffmpeg/ffprobe saknas på maskinen — appen kan inte köra utan dem."
+        besked = "ffmpeg/ffprobe saknas på maskinen — manusstudion kan inte köra utan dem."
         if KRAV_TECTONIC:
             pytest.fail(besked)
         pytest.skip(besked)
-
-
-class HW:
-    """Maskinen som sviten låtsas köra på. Ett riktigt maskinprobe tar
-    sekunder, svarar olika på olika datorer och är dessutom det enda
-    `test_hardware.py` testar — här ska det vara samma maskin varje gång."""
-    gpu_name = "Test GPU"; vram_mb = 24000; has_cuda = True
-    ram_mb = 64000; cpu_cores = 16; free_disk_mb = 500000
-    cpu_name = "Test CPU"; vram_free_mb = 20000; ram_free_mb = 40000
-    total_disk_mb = 1000000; cuda_version = "12.1"
-    compute_capability = "8.9"; gpu_arch = "Ada Lovelace"; disks = []
 
 
 @pytest.fixture(autouse=True)
@@ -100,8 +90,7 @@ def inget_riktigt_claude(monkeypatch):
 def client(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
 
-    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: HW())
-    monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
+    monkeypatch.setattr(llm_client, "is_running", lambda *a, **k: False)
     c = TestClient(server.create_app(base_dir=tmp_path))
     c.base_dir = tmp_path
     return c
@@ -114,14 +103,6 @@ def llm_ready(client, monkeypatch):
     monkeypatch.setattr(client.app.state.arbiter, "ensure_llm",
                         lambda: "http://127.0.0.1:8170")
     return client
-
-
-@pytest.fixture
-def moln(monkeypatch):
-    """ElevenLabs-gränsen, beordringsbar. `moln.lagen = ["429", "ok", ...]`
-    sätter ett läge per anrop; `moln.anrop` är vad som faktiskt skickades."""
-    from tests.fejk import Moln
-    return Moln().installera(monkeypatch)
 
 
 @pytest.fixture

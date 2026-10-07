@@ -16,11 +16,13 @@ import copy
 import json
 import logging
 import re
+import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 from typing import Callable
 
 from app import (ci_utanfor, course_data, exam_spec, kursdomare, llm_client,
-                 niva_rubrik, np_vakter, postprocess, rakneverk)
+                 niva_rubrik, np_vakter, rakneverk)
 
 _LOG = logging.getLogger(__name__)
 
@@ -9563,7 +9565,7 @@ def personvakt(exam: dict) -> list[dict]:
 # person fick också oftast en ung kvinna.
 #
 # Könet ur namnet kräver en lista med kön. fornamn.txt har inget (den är
-# postprocess-nätet för initialer), och modellen går utanför INSTRUCTION:s tolv
+# bara en namnlista, se _las_fornamn), och modellen går utanför INSTRUCTION:s tolv
 # («Elsa»). Namn som bärs av båda könen (Kim, Robin, Charlie, Sam, Alex) står
 # inte med och räknas inte åt något håll.
 _MANSNAMN = frozenset((
@@ -10022,13 +10024,35 @@ def _normal(o: str) -> str:
 _FORNAMNEN: frozenset[str] | None = None
 
 
+def _las_fornamn() -> frozenset[str]:
+    """Namnen i app/data/fornamn.txt, gemener, utan kommentarsrader.
+
+    Flyttad hit ur app/postprocess.py när lektionsarkivet togs bort
+    (2026-10-07). Där var listan nätet under integritetsregeln i
+    insiktsextraktionen; här är den det enda som läser den. Saknas filen är
+    listan tom och bara INSTRUCTION:s egna namn känns igen."""
+    # Fryst packar PyInstaller bundlad data under sys._MEIPASS (jfr
+    # lasar_data._rot).
+    if getattr(sys, "frozen", False):
+        fil = Path(getattr(sys, "_MEIPASS", ".")) / "app" / "data" / "fornamn.txt"
+    else:
+        fil = Path(__file__).resolve().parent / "data" / "fornamn.txt"
+    try:
+        rå = fil.read_text(encoding="utf-8")
+    except OSError:
+        return frozenset()
+    return frozenset(
+        rad.strip().lower() for rad in rå.splitlines()
+        if rad.strip() and not rad.lstrip().startswith("#"))
+
+
 def _fornamnen() -> frozenset[str]:
     """Namnen som känns igen även först i en mening, där versalen inte säger
-    något. postprocess-listan (app/data/fornamn.txt) plus INSTRUCTION:s egna
+    något. Namnlistan (app/data/fornamn.txt) plus INSTRUCTION:s egna
     tolv, minus de namn som också är vanliga ord."""
     global _FORNAMNEN
     if _FORNAMNEN is None:
-        _FORNAMNEN = ((postprocess._las_fornamn()
+        _FORNAMNEN = ((_las_fornamn()
                        | {n.casefold() for n in _NAMN_KON})
                       - _TVETYDIGA_NAMN)
     return _FORNAMNEN

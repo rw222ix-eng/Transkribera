@@ -1,10 +1,9 @@
-# Vanliga svenska förnamn — används BARA av app/postprocess.initialisera för
-# att känna igen «Förnamn Efternamn» i modellsvar och korta ner det till
-# initialer. Listan behöver inte vara komplett: prompten är första försvaret,
-# och den här filen är nätet under. Ett namn som saknas här står kvar som det
-# är — därför är listan bred snarare än exakt, och den kostar ingenting att
-# fylla på. Ett ord som INTE är ett förnamn får däremot inte stå här: då
-# skulle vanlig text («Pythagoras sats») förvanskas.
+# Vanliga svenska förnamn. Läses BARA av app/exam_gen._las_fornamn, som känner
+# igen namn först i en mening där versalen inte säger något
+# (provets_namn_och_sammanhang, bladen inför provet). Listan behöver inte vara
+# komplett: ett namn som saknas räknas inte. Ett ord som INTE är ett förnamn
+# får däremot inte stå här, då läses vanlig text («Pythagoras sats») som ett
+# namn.
 adam
 adrian
 agnes

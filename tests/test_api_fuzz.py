@@ -36,9 +36,9 @@ schemathesis = pytest.importorskip(
 from hypothesis import HealthCheck, settings  # noqa: E402
 from schemathesis.checks import not_a_server_error  # noqa: E402
 
+from app import llm_client  # noqa: E402
 from app.web import server  # noqa: E402
 from tests import fejk  # noqa: E402
-from tests.conftest import HW  # noqa: E402
 
 pytestmark = pytest.mark.fuzz
 
@@ -100,8 +100,6 @@ UTANFOR_SANDLADAN = {
     # Skriver en zip till en godtycklig sökväg ur kroppen (`vag`), alltså var
     # som helst på disken, utanför temp-basen.
     ("POST", "/api/backup"),
-    # Skapar modellmappen på en godtycklig absolut sökväg ur kroppen (`dir`).
-    ("POST", "/api/settings/models-disk"),
 }
 
 # ── Kända fynd ──────────────────────────────────────────────────────────────
@@ -155,9 +153,8 @@ _FUZZINSTALLNING = settings(
 
 @pytest.fixture(autouse=True)
 def _sandlada(monkeypatch):
-    """Samma stubbar som conftests `client`: inget maskinprobe, ingen modell."""
-    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: HW())
-    monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
+    """Samma stubb som conftests `client`: ingen modell."""
+    monkeypatch.setattr(llm_client, "is_running", lambda *a, **k: False)
 
 
 @schema.exclude(_valj(_UNDANTAG)).parametrize()
