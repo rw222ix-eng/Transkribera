@@ -5,10 +5,6 @@
 .fsvar{background:var(--surface);border-radius:var(--r-card);padding:18px 20px;box-shadow:var(--shadow-sm);animation:stigin var(--dur-3) var(--ease) both}
 .fsvar+.fsvar{margin-top:12px}
 .fhuvud{display:flex;align-items:center;gap:10px;font-size:.78rem;color:var(--ink-2)}
-.fprick{width:7px;height:7px;border-radius:50%;background:var(--ok);flex:0 0 auto;animation:puls 1.4s var(--ease) infinite}
-.fsvar[data-lage='klar'] .fprick,.fsvar[data-lage='stoppad'] .fprick{animation:none}
-.fsvar[data-lage='stoppad'] .fprick{background:var(--ink-3)}
-.fmodell{flex:1;font-family:var(--mono);font-size:.72rem;letter-spacing:.02em;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .fstopp{flex:0 0 auto;font-size:.8rem}
 .ffraga{margin:12px 0 0;font-family:var(--serif);font-size:1.15rem;line-height:1.25;color:var(--ink)}
 .ffaser{margin:12px 0 0}
@@ -23,24 +19,10 @@
 .ffas[data-lage='fel'] .fikon{background:var(--berry);border-color:var(--berry)}
 .ffas[data-lage='fel'] .fikon::after{content:'!'}
 .fdetalj{font-family:var(--mono);font-size:.7rem;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
-.fbar{grid-column:2/-1;height:4px;border-radius:var(--r-pill);background:var(--track);overflow:hidden;margin-top:2px}
-.fbar span{display:block;height:100%;width:0;border-radius:var(--r-pill);background:linear-gradient(90deg,var(--sky-deep),var(--atmosphere));transition:width .18s linear}
 .fsok{grid-column:2/-1;display:flex;gap:3px;margin-top:4px}
 .fsok i{flex:1 1 0;height:3px;border-radius:2px;background:var(--track);animation:svep 1.1s var(--ease) infinite}
 @keyframes svep{0%,100%{background:var(--track)}50%{background:var(--atmosphere)}}
-/* Förslaget som samtal: chatten riktas mot kortet, kortet skriver om sig på stället. */
-.forslag[data-aktiv]{box-shadow:var(--shadow-sm),0 0 0 2px var(--atmosphere)}
-.forslag[data-bort]{opacity:.55}
-.forslagrad[data-andrad]{animation:andradrad 1.4s var(--ease) both}
-@keyframes andradrad{0%{background:rgba(96,168,221,.22)}70%{background:rgba(96,168,221,.14)}100%{background:transparent}}
-.forslagchatt{display:flex;flex-direction:column;gap:6px;margin:12px 0 0}
-.forslagchatt:empty{display:none}
-.fcfraga,.fcsvar{margin:0;font-size:.86rem;line-height:1.45;animation:stigin var(--dur-2) var(--ease) both}
-.fcfraga{align-self:flex-end;max-width:88%;background:var(--sky-deep);color:#fff;border-radius:12px 12px 3px 12px;padding:7px 11px}
-.fcsvar{color:var(--ink-2)}
-.forslag[data-tanker] .forslagchatt::after{content:'';height:3px;border-radius:2px;background:linear-gradient(90deg,var(--track) 0 40%,var(--atmosphere) 50%,var(--track) 60% 100%);background-size:260% 100%;animation:tankstreck 1s var(--ease) infinite}
 @keyframes tankstreck{from{background-position:130% 0}to{background-position:-30% 0}}
-.forslagknappar .lank{font-size:.82rem}
 
 /* Smalt läge — en rad, ett spår, en klocka. Viker ut och in mjukt. */
 .fsvar[data-smal]{transition:background var(--dur-3) var(--ease),padding var(--dur-3) var(--ease)}
@@ -70,7 +52,6 @@
 .ftext{margin:14px 0 0;font-size:1rem;line-height:1.6;color:var(--ink);text-wrap:pretty}
 .ftext:empty{display:none}
 .ftext .markt{background:color-mix(in srgb,var(--atmosphere) 26%,transparent);border-radius:3px;padding:0 2px}
-.ordin{display:inline}
 .fkallor{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 0;padding-top:12px;border-top:1px solid var(--line)}
 .fkalletikett{width:100%;font-size:.72rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0}
 .kchip{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:var(--r-pill);background:var(--surface);color:var(--ink);font-family:inherit;font-size:.8rem;font-weight:500;padding:7px 14px;cursor:pointer;transition:background-color var(--dur-2) var(--ease),border-color var(--dur-2) var(--ease),color var(--dur-2) var(--ease),transform var(--dur-1) var(--ease)}
@@ -82,156 +63,12 @@
 
 /* ══════════ LEKTIONSMODAL ══════════ */
 .modal.bred{width:min(1080px,100%);max-height:min(88vh,820px)}
-.lhuvud{display:flex;align-items:flex-start;gap:16px;padding:20px 22px 14px}
-.lhuvud .chatttitel{font-size:1.85rem;line-height:1.1}
-.lhuvud .chattmeta{margin-top:6px;font-size:.86rem}
-.lhuvud .stangx{margin-left:auto}
-/* videon får inte äta hela modalen — tråden och frågefältet måste rymmas */
-.lstor{flex:0 1 auto;min-height:0}
-.lstor .lscen{max-height:min(34vh,300px)}
-/* Lektionen är en tråd: fråga, svar, och citat ur transkriptet som blå överstrykning.
-   Spelaren är liten och klistrad i topp; hela transkriptet ligger bakom en chip. */
-.lkropp3{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
-.ltopprad{padding:12px 22px 14px;background:var(--surface);box-shadow:0 10px 14px -14px rgba(9,66,108,.5);z-index:6}
-.lspelrad{display:flex;align-items:center;gap:14px;background:var(--sunken);border-radius:var(--r-pill);padding:8px 16px 8px 8px}
-.lmini{width:92px;aspect-ratio:16/9;flex:0 0 auto;border-radius:7px;overflow:hidden;background:linear-gradient(165deg,var(--sky-pale),#2E8BD0 58%,var(--sky-deep))}
-.lmini img{width:100%;height:100%;object-fit:cover;display:block}
-.lminivag{display:flex;align-items:center;gap:2px;width:118px;height:24px;flex:0 0 auto;border-radius:6px}
-.lminivag i{flex:1 1 0;border-radius:2px;background:var(--line-2);transition:background-color .2s var(--ease)}
-.lminivag i[data-spelad]{background:var(--sky-deep)}
-.lstorknapp,.ltrknapp{flex:0 0 auto}
-.lstor{margin:0 22px 12px;animation:stigin var(--dur-3) var(--ease) both}
-.ltrad{flex:1;min-height:0;overflow-y:auto;padding:18px 22px 20px;display:flex;flex-direction:column;gap:14px;scrollbar-width:none}
-.ltrad::-webkit-scrollbar{width:0;display:none}
-.ltom-fraga{margin:0;font-size:.92rem;line-height:1.55;color:var(--ink-3);max-width:62ch}
-.lsvarvard{display:flex;flex-direction:column}
-.ltrad .fsvar{background:var(--sunken);box-shadow:none}
-.ltranskript{max-height:38%;overflow-y:auto;padding:14px 22px 18px;border-top:1px solid var(--line);background:var(--surface);scrollbar-width:none}
-.ltranskript::-webkit-scrollbar{width:0;display:none}
 /* citat: överstrykningspenna som går att klicka */
 .kallmark{display:inline;padding:1px 2px;border-radius:3px;cursor:pointer;background:color-mix(in srgb,var(--atmosphere) 34%,transparent);box-shadow:inset 0 -1px 0 var(--sky-deep);transition:background-color var(--dur-2) var(--ease)}
 .kallmark:hover,.kallmark:focus-visible{outline:none;background:var(--sky-deep);color:#fff}
-/* Citatkortet: raden ur transkriptet är det man är där för — serif, indragen
-   bakom en blå linjal. Tid, lektion och åtgärd ligger i en egen fotrad. */
-.kallpop{position:absolute;z-index:40;pointer-events:none;background:var(--surface);border-radius:14px;box-shadow:0 26px 50px -22px rgba(9,66,108,.55),0 2px 6px rgba(9,66,108,.14);padding:16px 18px 14px;animation:valjin 140ms cubic-bezier(.16,1,.3,1) both}
-.kallrad{margin:0;font-family:var(--serif);font-size:1.04rem;line-height:1.5;color:var(--ink);border-left:3px solid var(--atmosphere);padding-left:14px;text-wrap:pretty}
-.kallmeta{display:flex;align-items:center;gap:10px;margin:14px 0 0;padding-top:11px;border-top:1px solid var(--line);font-size:.78rem;color:var(--ink-3);min-width:0}
-.kalltid{flex:0 0 auto;font-family:var(--mono);font-size:.72rem;background:var(--sunken);color:var(--sky-deep);border-radius:var(--r-pill);padding:3px 9px}
-.kallnamn{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.kallgor{flex:0 0 auto;margin-left:auto;display:inline-flex;align-items:center;gap:6px;color:var(--sky-deep);font-weight:500;white-space:nowrap}
-.kallpop[data-sak] .kallrad{font-family:var(--sans);font-size:.92rem;border-left-color:var(--line-2)}
-
-.lfotfalt{border-top:1px solid var(--line);background:var(--surface);padding:12px 22px 16px}
-.lfragaform{display:flex;align-items:center;gap:12px;margin-top:10px}
-.lfragaform input{flex:1;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-pill);padding:12px 18px;font-family:inherit;font-size:.95rem;color:var(--ink);transition:border-color var(--dur-2) var(--ease),box-shadow var(--dur-2) var(--ease)}
-.lfragaform input:focus{outline:none;border-color:var(--atmosphere);box-shadow:0 0 0 3px rgba(96,168,221,.25)}
-.lfotfalt .chattlokal{margin:8px 0 0}
-.lpuls{animation:lpuls var(--dur-4) var(--ease) 2}
-@keyframes lpuls{0%,100%{box-shadow:0 0 0 0 rgba(96,168,221,0)}50%{box-shadow:0 0 0 3px var(--atmosphere)}}
-.lscen{position:relative;aspect-ratio:16/9;width:100%;border-radius:14px;overflow:hidden;background:linear-gradient(165deg,var(--sky-pale),#2E8BD0 58%,var(--sky-deep));box-shadow:0 18px 34px -22px rgba(9,66,108,.65)}
-.lscen .vbild{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.lscen::after{content:'';position:absolute;inset:auto 0 0;height:46%;background:linear-gradient(to top,rgba(0,0,0,.66),transparent);pointer-events:none}
-.lscen[data-typ='ljud']{background:linear-gradient(170deg,#0C4A72,#0A3A5C 60%,#062942);aspect-ratio:21/8}
-.ltom{position:absolute;inset:0;display:grid;place-items:center;padding:20px;text-align:center;font-size:.82rem;color:rgba(255,255,255,.9)}
-.lundertext{position:absolute;left:0;right:0;bottom:18px;z-index:2;display:flex;justify-content:center;padding:0 34px;pointer-events:none}
-.lundertext span{background:rgba(0,0,0,.6);color:#fff;border-radius:7px;padding:7px 14px;font-size:1.02rem;font-weight:500;line-height:1.35;text-align:center;text-wrap:balance;text-shadow:0 1px 2px rgba(0,0,0,.6);max-width:100%;transition:opacity var(--dur-2) var(--ease)}
-.lundertext[data-tom] span{opacity:0}
-.lspel{position:absolute;inset:0;z-index:3;display:grid;place-items:center;border:none;background:transparent;cursor:pointer}
-.lspel span{width:58px;height:58px;border-radius:50%;background:rgba(255,255,255,.94);color:var(--sky-deep);display:grid;place-items:center;font-size:.95rem;padding-left:3px;box-shadow:0 6px 18px rgba(0,0,0,.35);transition:transform var(--dur-2) var(--ease),opacity var(--dur-2) var(--ease)}
-.lspel:hover span{transform:scale(1.06)}
-.lscen[data-spelar] .lspel span{opacity:0;transform:scale(.9)}
-.vagform{position:absolute;inset:0;z-index:1;display:flex;align-items:center;gap:2px;padding:26px 22px 54px}
-.vagform i{flex:1 1 0;border-radius:2px;background:rgba(255,255,255,.28);transition:background-color .2s var(--ease)}
-.vagform i[data-spelad]{background:rgba(255,255,255,.86)}
-.lspelare{display:flex;align-items:center;gap:14px;background:var(--sunken);border-radius:var(--r-pill);padding:8px 18px 8px 8px;margin:14px 0 0}
-.lspelknapp{flex:0 0 auto;width:34px;height:34px;border-radius:50%;border:none;background:var(--btn-bg);color:var(--btn-fg);font-size:.72rem;cursor:pointer;display:grid;place-items:center;transition:transform var(--dur-1) var(--ease),box-shadow var(--dur-2) var(--ease)}
-.lspelknapp:hover{transform:scale(1.06);box-shadow:0 6px 14px -6px rgba(9,66,108,.6)}
-.lspar{position:relative;flex:1;height:5px;border-radius:var(--r-pill);background:var(--track);cursor:pointer}
-.lspar span{position:absolute;inset:0 auto 0 0;width:0;border-radius:var(--r-pill);background:linear-gradient(90deg,var(--sky-deep),var(--atmosphere));transition:width .12s linear}
-.ltid{font-family:var(--mono);font-size:.74rem;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
-.lfart{border:1px solid var(--line);border-radius:var(--r-pill);background:var(--surface);color:var(--ink-2);font-family:var(--mono);font-size:.72rem;padding:5px 10px;cursor:pointer;transition:background-color var(--dur-2) var(--ease),color var(--dur-2) var(--ease)}
-.lfart:hover{background:var(--sky-deep);color:#fff;border-color:var(--sky-deep)}
-.ltangent{display:flex;gap:16px;flex-wrap:wrap;margin:12px 0 0;font-size:.72rem;color:var(--ink-3)}
-.ltangent kbd{font-family:var(--mono);font-size:.72rem;background:var(--sunken);border:1px solid var(--line);border-radius:5px;padding:1px 6px;margin-right:5px}
-.lrader{display:flex;flex-direction:column;gap:2px;margin:0}
-.lrad{display:grid;grid-template-columns:58px 1fr auto;gap:10px;align-items:baseline;text-align:left;border:none;background:transparent;border-radius:9px;padding:9px 10px;font-family:inherit;font-size:.94rem;line-height:1.5;color:var(--ink-2);cursor:pointer;transition:background-color var(--dur-1) var(--ease),color var(--dur-1) var(--ease)}
-.lrad:hover{background:var(--accent-weak);color:var(--ink)}
-.lrad.spelas{background:var(--accent-weak);color:var(--ink);font-weight:500}
-.lrad .rtid{font-family:var(--mono);font-size:.74rem;color:var(--atmosphere)}
-.lrad .rtext{outline:none;border-radius:5px;padding:1px 3px;margin:-1px -3px}
-.lrad .rtext:focus{background:var(--surface);box-shadow:0 0 0 2px var(--atmosphere)}
-.lrad .rrattad{font-size:.74rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--sky-deep);opacity:0;transition:opacity var(--dur-2) var(--ease)}
-.lrad[data-rattad] .rrattad{opacity:1}
-.lfot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:18px 0 0;padding-top:16px;border-top:1px solid var(--line)}
-.ltradlista{display:flex;flex-direction:column;gap:12px}
-.lfraga{align-self:flex-end;max-width:82%;background:var(--sky-deep);color:#fff;border-radius:14px 14px 4px 14px;padding:11px 15px;font-size:.94rem;line-height:1.5;animation:stigin var(--dur-3) var(--ease) both}
-.forslag{background:var(--surface);border:1px solid var(--line-2);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow-sm);margin:14px 0 0;animation:stigin var(--dur-3) var(--ease) both}
-.forslagtitel{margin:0 0 4px;font-size:1rem;font-weight:600;color:var(--ink)}
-.forslagtext{margin:0 0 12px;font-size:.88rem;color:var(--ink-2)}
-.forslagrad{display:flex;gap:12px;padding:7px 0;border-top:1px solid var(--line);font-size:.84rem}
-.fnyckel{flex:0 0 74px;font-size:.74rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);padding-top:2px}
-.fvarde{color:var(--ink);font-family:inherit;font-size:.9rem;font-weight:500;font-variant-numeric:tabular-nums}
-.forslagknappar{display:flex;align-items:center;gap:14px;margin:14px 0 0}
-.forslag[data-inlagt]{border-color:var(--atmosphere);background:var(--accent-weak)}
-.fklar{font-size:.84rem;font-weight:600;color:var(--sky-deep)}
-.lfotfalt{border-top:1px solid var(--line);padding:14px 24px 18px;background:var(--surface)}
-
-/* ══════════ ARKIV: PILLER, KNUFF, TRÄFFAR ══════════ */
-.korpill{display:inline-flex;align-items:center;gap:11px;border:1px solid var(--sky-hair);border-radius:var(--r-pill);background:rgba(255,255,255,.72);backdrop-filter:blur(6px);padding:6px 8px 6px 14px;font-family:inherit;font-size:.78rem;color:#000;cursor:pointer;animation:stigin var(--dur-3) var(--ease) both;transition:box-shadow var(--dur-2) var(--ease),transform var(--dur-1) var(--ease)}
-.korpill:hover{box-shadow:0 10px 22px -14px rgba(9,66,108,.6);transform:translateY(-1px)}
-.korpill .pring{position:relative;width:18px;height:18px;flex:0 0 auto;border-radius:50%;background:conic-gradient(var(--sky-deep) var(--p,0%),rgba(0,0,0,.14) 0)}
-.korpill .pring::after{content:'';position:absolute;inset:4px;border-radius:50%;background:var(--surface)}
-.korpill .peta{font-family:var(--mono);font-size:.72rem;font-variant-numeric:tabular-nums;opacity:.7}
-.knuff{display:flex;align-items:center;gap:14px;background:var(--surface);border-radius:var(--r-card);padding:13px 16px;margin:20px 0 0;box-shadow:var(--shadow-sm);animation:stigin var(--dur-3) var(--ease) both}
-.knuff p{flex:1;margin:0;font-size:.9rem;color:var(--ink)}
-.knuff .antalprick{width:22px;height:22px;flex:0 0 auto;border-radius:50%;display:grid;place-items:center;background:var(--accent-weak);color:var(--sky-deep);font-size:.72rem;font-weight:600}
-.lokal{display:flex;align-items:center;gap:9px;margin:10px 0 0;font-size:.74rem;color:var(--sky-ink-2)}
-.lokal span.pk{width:6px;height:6px;border-radius:50%;background:var(--ok)}
-.lokal b{font-weight:500}
-.traffar{display:flex;flex-direction:column;gap:4px;margin:8px 0 0;padding-left:0}
-.traff{display:grid;grid-template-columns:52px 1fr;gap:9px;align-items:baseline;text-align:left;border:none;background:transparent;border-radius:7px;padding:5px 8px;margin-left:-8px;font-family:inherit;font-size:.84rem;color:var(--ink-2);cursor:pointer;transition:background-color var(--dur-1) var(--ease),color var(--dur-1) var(--ease)}
-.traff:hover{background:var(--accent-weak);color:var(--ink)}
-.traff .ttid{font-family:var(--mono);font-size:.72rem;color:var(--atmosphere)}
-.traff mark{background:color-mix(in srgb,var(--atmosphere) 30%,transparent);color:inherit;border-radius:3px;padding:0 2px}
-.traffrad{font-size:.74rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--sky-deep);margin:6px 0 0}
-.knappar{position:relative}
-.kort:has(.radmeny),.dokkort:has(.radmeny){z-index:80}
-.radmeny{position:absolute;z-index:90;top:50%;left:calc(100% + 8px);transform:translateY(-50%);min-width:200px;background:var(--surface);border-radius:12px;box-shadow:0 22px 44px -20px rgba(9,66,108,.55),0 2px 6px rgba(9,66,108,.12);padding:5px;display:flex;flex-direction:column;gap:2px;transform-origin:left center;animation:menyin 150ms cubic-bezier(.16,1,.3,1) both}
-@keyframes menyin{from{opacity:0;filter:blur(1px)}to{opacity:1;filter:none}}
-.radmeny[data-ut]{opacity:0;pointer-events:none;transition:opacity 110ms var(--ease)}
-.radmeny button{border:none;background:transparent;border-radius:8px;padding:9px 12px;font-family:inherit;font-size:.86rem;font-weight:500;color:var(--ink);text-align:left;white-space:nowrap;cursor:pointer;transition:background-color var(--dur-1) var(--ease),color var(--dur-1) var(--ease)}
-.radmeny button:hover{background:var(--sky-deep);color:#fff}
-.radmeny button.farlig{color:var(--berry)}
-.radmeny button.farlig:hover{background:var(--berry);color:#fff}
-.radmeny hr{border:none;border-top:1px solid var(--line);margin:4px 6px}
-.mer{position:relative;width:30px;height:30px;border:none;border-radius:50%;background-color:transparent;background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.3) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;color:var(--ink-2);font-size:1rem;line-height:1;cursor:pointer;transition:background-color var(--dur-2) var(--ease),color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),transform var(--dur-1) var(--ease),box-shadow var(--dur-2) var(--ease)}
-.mer:hover,.mer[aria-expanded='true']{background-color:var(--sky-deep);background-position:-30% 0;color:#fff;box-shadow:0 8px 18px -10px rgba(9,66,108,.55)}
-.mer:hover{transform:translateY(-1px)}
-.mer:active{transform:translateY(0) scale(.94)}
-.kort{cursor:pointer}
-.kort .text,.kort .tumme{pointer-events:auto}
-
-/* ══════════ FEL OCH VARNINGAR ══════════ */
-.varnruta{display:flex;align-items:flex-start;gap:14px;background:var(--sunken);border-radius:var(--r-card);padding:16px 18px;margin:16px 0 0;animation:stigin var(--dur-3) var(--ease) both}
-.varnruta[data-ton='fel']{background:color-mix(in srgb,var(--berry) 9%,var(--surface))}
-.varnikon{width:22px;height:22px;flex:0 0 auto;border-radius:50%;display:grid;place-items:center;font-size:.72rem;font-weight:600;background:var(--accent-weak);color:var(--sky-deep)}
-.varnruta[data-ton='fel'] .varnikon{background:var(--berry);color:#fff}
-.varntext{flex:1}
-.varntext p{margin:0;font-size:.92rem;color:var(--ink)}
-.varntext p+p{margin-top:4px;font-size:.86rem;color:var(--ink-2)}
-.varnknappar{display:flex;align-items:center;gap:12px;margin:12px 0 0;flex-wrap:wrap}
 
 /* ══════════ TILLDELA I KLUMP ══════════ */
 .tilldela{width:min(520px,100%);padding:24px}
-.tsteg{font-size:.7rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 8px}
-.tnamn{font-family:var(--serif);font-size:1.5rem;line-height:1.2;color:var(--ink);margin:0 0 4px}
-.tmeta{font-size:.84rem;color:var(--ink-2);margin:0 0 18px}
-.tfalt{display:flex;flex-direction:column;gap:9px;margin:0 0 16px}
-.tfalt .minietikett{margin:0}
-.tspar{display:flex;gap:5px;margin:0 0 18px}
-.tspar i{flex:1 1 0;height:3px;border-radius:2px;background:var(--track)}
-.tspar i[data-klar]{background:var(--sky-deep)}
-.tspar i[data-nu]{background:var(--atmosphere)}
 
 /* ══════════ PLANERING: GY25 OCH KÄLLOR ══════════ */
 .gyrad{margin-top:14px;padding-top:16px;border-top:1px solid var(--line)}
@@ -280,14 +117,9 @@
 .tackning{display:flex;align-items:center;gap:12px;margin:14px 0 0;font-size:.82rem;color:var(--ink-2)}
 .tackspar{flex:1;max-width:220px;height:4px;border-radius:var(--r-pill);background:var(--track);overflow:hidden}
 .tackspar span{display:block;height:100%;width:0;border-radius:var(--r-pill);background:linear-gradient(90deg,var(--sky-deep),var(--atmosphere));transition:width var(--dur-3) var(--ease)}
-.kallval{display:flex;align-items:center;gap:14px;background:var(--sunken);border-radius:var(--r-card);padding:14px 18px;margin-top:14px}
-.kallval .vt{flex:1}
-.kallval p{margin:0;font-size:.92rem;color:var(--ink);font-weight:500}
-.kallval .mjuk{display:block;margin-top:3px;font-weight:400}
 /* lektionsväljaren: en bred meny med kryssbara rader per vecka */
 .valjpanel.brett{width:min(340px,78vw);max-width:none;max-height:320px;overflow-y:auto;left:auto;right:0;transform-origin:top right;scrollbar-width:none}
 .valjpanel.brett::-webkit-scrollbar{width:0;display:none}
-.valjgrupp{margin:8px 8px 4px;font-size:.72rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
 .lrad-val{grid-template-columns:16px 1fr;white-space:normal;padding:11px 12px 12px}
 .lrad-val .lvnamn{font-size:1.02rem;font-weight:500;line-height:1.25}
 .lrad-val .lvmeta{grid-column:2;font-family:var(--sans);font-size:.88rem;color:var(--ink-2);margin-top:3px}
@@ -309,30 +141,8 @@
 .doktyp{font-size:.74rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--sky-deep)}
 .dokhuvud .dmeta{font-family:var(--sans);font-size:.8rem;font-weight:400;letter-spacing:0;text-transform:none;color:var(--ink-2)}
 .versioner{display:flex;gap:6px;margin-left:auto}
-.vchip{border:1px solid var(--line);border-radius:var(--r-pill);background:var(--surface);color:var(--ink-2);font-family:var(--mono);font-size:.72rem;padding:5px 11px;cursor:pointer;transition:background-color var(--dur-2) var(--ease),color var(--dur-2) var(--ease),border-color var(--dur-2) var(--ease)}
-.vchip:hover{border-color:var(--sky-deep);color:var(--ink)}
-.vchip[aria-pressed='true']{background:var(--sky-deep);border-color:var(--sky-deep);color:#fff}
 .arkskal{display:flex;flex-direction:column;align-items:center;gap:18px;background:var(--sunken);border-radius:var(--r-card);padding:24px}
 .ark[data-sida]{position:relative;width:100%;max-width:660px;aspect-ratio:1/1.414;background:#fff;border-radius:3px;box-shadow:0 20px 40px -24px rgba(9,66,108,.55),0 1px 3px rgba(9,66,108,.14);padding:52px 56px;overflow:hidden;color:#12212B;font-family:var(--sans);animation:stigin var(--dur-4) var(--ease) both}
-.ark[data-sida] .asidnr{position:absolute;right:56px;bottom:34px;font-family:var(--mono);font-size:9px;color:#000}
-.ahuvud{display:flex;align-items:flex-start;gap:16px;padding-bottom:14px;border-bottom:1.5px solid #12212B}
-.ahuvud .av{flex:1}
-.atitel{font-family:var(--serif);font-size:22px;line-height:1.16;margin:0;color:#000}
-.aunder{margin:5px 0 0;font-size:11px;color:#000;letter-spacing:.02em}
-.apoang{font-family:var(--mono);font-size:11px;color:#000;text-align:right;line-height:1.6}
-.ainstr{margin:16px 0 0;font-size:11.5px;line-height:1.55;color:#000}
-.auppg{margin:18px 0 0;display:flex;flex-direction:column;gap:14px}
-.uppg{display:grid;grid-template-columns:22px 1fr auto;gap:10px;align-items:baseline}
-.unr{font-family:var(--mono);font-size:11px;color:#12212B;font-weight:600;padding-top:1px}
-.utext{font-size:12px;line-height:1.5;color:#000}
-.utext .del{display:block;margin-top:5px;padding-left:14px;color:#000}
-.upoang{font-family:var(--mono);font-size:10px;color:#000;white-space:nowrap}
-.usvar{margin-top:7px;height:1px;background:repeating-linear-gradient(90deg,#D6DEE4 0 100%);box-shadow:0 9px 0 -8px #D6DEE4,0 18px 0 -17px #D6DEE4}
-.uhog{height:1px;box-shadow:0 9px 0 -8px #D6DEE4,0 18px 0 -17px #D6DEE4,0 27px 0 -26px #D6DEE4,0 36px 0 -35px #D6DEE4}
-.afacit{margin-top:6px;font-size:11px;line-height:1.45;color:var(--sky-deep);font-family:var(--mono)}
-.ark:not([data-facit]) .afacit{display:none}
-.aniva{margin:20px 0 0;padding-top:12px;border-top:1px dashed #C7D2DA}
-.anivarubrik{font-size:9.5px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#000;margin:0 0 10px}
 /* ÄNDRINGSMARKERINGEN — tydlig, sedan en prick (se prickar.js)
    Förr blinkade den tre gånger och låg därefter kvar för evigt: efter fem
    omskrivningar lyste halva pappret och ingen kunde se vilken ändring som var
@@ -365,19 +175,6 @@
   .andrad{background:transparent;box-shadow:none;animation:none}
   .aprick,.aprickbubbla{display:none}
 }
-/* Tavlan är inte ett A4 — den är en tavla */
-.tavla{width:100%;background:#fff;border:1px solid var(--line);border-radius:14px;padding:32px 34px;color:var(--ink);box-shadow:0 24px 48px -30px rgba(4,26,42,.4);animation:stigin var(--dur-4) var(--ease) both}
-.tavla .ttitel{font-family:var(--serif);font-size:26px;line-height:1.14;margin:0;color:var(--ink)}
-.tavla .tunder{margin:6px 0 0;font-size:12px;color:var(--ink-3);letter-spacing:.04em}
-.tblock{display:grid;grid-template-columns:56px 1fr;gap:16px;padding:16px 0;border-top:1px solid var(--line)}
-.tblock:first-of-type{margin-top:20px}
-.tmin{font-family:var(--mono);font-size:11px;color:var(--sky-deep);padding-top:3px}
-.tinnehall h4{margin:0 0 5px;font-size:14px;font-weight:600;color:var(--ink)}
-.tinnehall p{margin:0;font-size:12.5px;line-height:1.5;color:var(--ink-2)}
-.tinnehall .texempel{margin-top:8px;font-family:var(--mono);font-size:12px;color:var(--ink);background:var(--accent-weak);border-radius:7px;padding:9px 12px}
-.iterbar{margin-top:18px}
-.iterfalt{display:flex;align-items:center;gap:12px}
-.iterchips{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 0}
 
 /* ══════════ SPARAT ══════════ */
 .sparatnat{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:16px;margin:18px 0 0}
@@ -391,15 +188,8 @@
 .minisida[data-typ='Tavla'] .mslinje{background:rgba(255,255,255,.3)}
 .msrad{display:flex;gap:6px;align-items:center;margin:7px 0 4px}
 .msnr{width:6px;height:6px;border-radius:2px;background:var(--sky-deep);flex:0 0 auto}
-/* Anteckningarnas miniatyr: rubrik och text i block, inga uppgiftsnummer i
-   marginalen. Det är den skillnaden man ser i högen — ett stödpapper har
-   avsnitt, inte uppgifter. */
-.msdel{display:block;margin:9px 0 0}
-.msrub2{display:block;height:5px;width:38%;border-radius:2px;background:#3A4A56;margin-bottom:4px}
 .dokmeta .dnamn{font-size:.92rem;font-weight:600;color:var(--ink);margin:0;line-height:1.3}
 .dokmeta .dmeta2{margin:4px 0 0;font-size:.76rem;color:var(--ink-3);font-family:var(--mono)}
-.dokknappar{display:flex;align-items:center;gap:6px;margin-top:auto}
-.dokknappar .tyst{padding:5px 9px;font-size:.76rem}
 .dokbricka{position:absolute;top:20px;right:20px;font-size:.6rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#fff;background:var(--sky-deep);border-radius:var(--r-pill);padding:3px 9px}
 
 /* valda pillerknappar radbryter inte, och halvorna fyller sin bredd */
@@ -407,7 +197,6 @@
 .halva .valjknapp,.halva .valj{width:100%}
 .halva .valjknapp{justify-content:space-between}
 .rad .valjknapp{max-width:none}
-.lokal{flex-wrap:wrap}
 
 /* Appens gamla generiska papper (.ark[data-sida]) ligger kvar för äldre vyer.
    Det får INTE röra bladen som lyfts ur «femton former» — de bär data-form och
@@ -429,7 +218,6 @@
    med en titel. 300 px visar hela tavlan OCH provets första uppgifter. */
 #dokument[data-litet] .arkskal{max-height:300px;overflow:hidden;position:relative}
 #dokument[data-litet] .arkskal::after{content:'';position:absolute;inset:auto 0 0;height:84px;background:linear-gradient(to top,var(--sunken),rgba(255,255,255,0))}
-#dokument[data-litet] .iterbar{margin-top:14px}
 
 /* ══════════ GRANSKNINGSLÄGE — delad yta ══════════
    Pappret och samtalet är jämlika: ingenting ligger ovanpå något annat. */
@@ -665,10 +453,8 @@
 .chattlokal[data-ut] span{background:transparent;box-shadow:inset 0 0 0 1.5px var(--atmosphere)}
 .gbild{padding:8px 15px;font-size:.8rem}
 .dokbricka[data-losning]{background:var(--berry)}
-.tbild{display:block;max-width:100%;margin-top:10px;border-radius:8px}
 .granskaskal[data-valj] .gdok [data-el]::after{content:'Klicka för kommentar eller bild';position:absolute;left:0;top:-20px;font-family:var(--sans);font-size:10px;letter-spacing:.04em;color:var(--sky-deep);opacity:0;transition:opacity var(--dur-2) var(--ease);pointer-events:none;white-space:nowrap}
 .granskaskal[data-valj] .gdok [data-el]:hover::after{opacity:1}
-.iterfalt .ikonknapp{flex:0 0 auto}
 
 /* ══════════ MINUTVAL ══════════ */
 /* Klockslagen i kalenderpanelen: provet ligger MELLAN två klockslag, inte i ett
@@ -732,27 +518,8 @@
 .valjfot .summa{margin-left:auto;font-family:var(--mono);font-size:.76rem;color:var(--ink)}
 
 /* ══════════ LEKTIONEN I HELSKÄRM ══════════ */
-.lhuvud .lfokus{margin-left:auto;flex:0 0 auto}
-.lhuvud .lfokus[aria-pressed='true']{background:var(--accent-weak);border-color:var(--atmosphere);color:var(--sky-deep)}
-.lhuvud .lfokus+.lmax{margin-left:0}
-.lhuvud .lmax{margin-left:auto}
-.lhuvud .lmax+.stangx{margin-left:0}
-/* nedladdningsraden står för sig själv nu när transkriptlistan är borta */
-.lkropp3>.lfot{margin:0;padding:12px 22px 14px;border-top:1px solid var(--line);background:var(--surface)}
-.modalskal[data-max] .lkropp3>.lfot{padding-left:34px;padding-right:34px}
-/* fokusläge: tråden får hela modalen */
-.modalskal[data-fokus] .ltopprad,.modalskal[data-fokus] .lstor,.modalskal[data-fokus] .lkropp3>.lfot{display:none}
-.modalskal[data-fokus] .ltrad{padding-top:22px;animation:stigin var(--dur-3) var(--ease) both}
-.modalskal[data-fokus] .lsvarvard,.modalskal[data-fokus] .ltrad .fsvar{max-width:820px}
 .modalskal[data-max]{padding:0}
 .modalskal[data-max] .modal.bred{width:100%;max-width:none;max-height:none;height:100vh;border-radius:0}
-.modalskal[data-max] .lhuvud{padding:20px 34px 14px}
-.modalskal[data-max] .ltopprad,.modalskal[data-max] .ltrad,.modalskal[data-max] .lfotfalt,.modalskal[data-max] .ltranskript{padding-left:34px;padding-right:34px}
-.modalskal[data-max] .lstor{margin-left:34px;margin-right:34px}
-.modalskal[data-max] .ltrad{align-items:stretch}
-.modalskal[data-max] .lsvarvard,.modalskal[data-max] .ltrad .fsvar{max-width:960px}
-.modalskal[data-max] .lfraga{max-width:660px}
-.modalskal[data-max] .lfragaform{max-width:960px}
 
 /* ══════════ PLANERING: DOKUMENTETS EGNA VAL ══════════ */
 .typval{margin-top:14px;padding-top:16px;border-top:1px solid var(--line)}
@@ -796,47 +563,15 @@
 .dokverktyg .seg[hidden]{display:none}
 .dokkort[data-traff]{box-shadow:0 0 0 2px var(--sky-deep),0 18px 34px -22px rgba(9,66,108,.5);animation:traffpuls var(--dur-4) var(--ease) 2 alternate}
 @keyframes traffpuls{from{box-shadow:0 0 0 2px var(--sky-deep),0 18px 34px -22px rgba(9,66,108,.5)}to{box-shadow:0 0 0 6px var(--accent-weak),0 18px 34px -22px rgba(9,66,108,.5)}}
-#arkivpop{width:340px}
 .skiva{position:relative}
-.fhuvud .fprick+.fstopp{margin-left:auto}
 
 /* ══════════ UPPSPELNING I EGET RUM ══════════
    Vitt rum, inte mörkt: samma ordning som förut — etikett, titel, scen,
    spelrad, citat — men rummet är papper och bilden är fönstret i det. */
-.videoskal{z-index:240}
-.videomodal{width:min(1040px,100%);max-height:92vh;display:flex;flex-direction:column;background:var(--surface);color:var(--ink);border-radius:20px;overflow:hidden;box-shadow:0 44px 90px -44px rgba(9,66,108,.55),0 2px 8px rgba(9,66,108,.1);transform:translateY(14px) scale(.985);opacity:0;transition:transform var(--dur-4) var(--ease),opacity var(--dur-3) var(--ease)}
-.videoskal[data-pa] .videomodal{transform:none;opacity:1}
-.vhuvud{display:flex;align-items:flex-start;gap:16px;padding:18px 22px 12px}
-.vhuvud .chattetikett{color:var(--sky-deep)}
-.vhuvud .chatttitel{color:var(--ink);font-family:var(--serif);font-size:1.5rem;line-height:1.1;margin:3px 0 0}
-.videoskal .stangx{margin-left:auto;background-color:var(--sunken);color:var(--ink-2)}
-.videoskal .stangx:hover{background-color:var(--berry);color:#fff}
-.videomodal .lstor{margin:0 22px;min-height:0;flex:1 1 auto;display:flex}
-.videomodal .lscen{max-height:min(62vh,620px);box-shadow:0 20px 40px -26px rgba(9,66,108,.6);flex:1}
-.vfot{padding:14px 22px 20px}
-.vfot .lspelrad{background:var(--sunken)}
-.vfot .lspelrad .ltid{color:var(--ink-2)}
-.vfot .lspelrad .lspar{background:var(--track)}
-.vfot .lspelrad .lspelknapp{background:var(--btn-bg);color:var(--btn-fg)}
-.vfot .lspelrad .lfart{background:var(--surface);border-color:var(--line);color:var(--ink-2)}
-.vfot .lspelrad .lfart:hover{background:var(--sky-deep);border-color:var(--sky-deep);color:#fff}
-.vfot .lmini,.vfot .lminivag{display:none}
-.vcitat{margin:14px 0 0;font-family:var(--serif);font-size:1.1rem;line-height:1.45;color:var(--ink-2);text-wrap:pretty}
-.vcitat[hidden]{display:none}
-.lhuvud .lspelupp{margin-left:auto;flex:0 0 auto}
 .garkval{flex:0 0 auto;margin-right:6px;background:rgba(255,255,255,.55)}
 .garkval[hidden]{display:none}
 .garkval button{padding:7px 14px;font-size:.82rem}
-/* ikonknapp: samma runda krom som stängkrysset, med streckikon i stället för glyf */
-.ikonknapp{flex:0 0 auto;display:grid;place-items:center;width:32px;height:32px;border:none;border-radius:50%;background-color:var(--sunken);color:var(--ink-2);cursor:pointer;transition:background-color var(--dur-2) var(--ease),color var(--dur-2) var(--ease)}
-.ikonknapp:hover{color:#fff}
-.ikonknapp[aria-pressed='true']{background-color:var(--accent-weak);color:var(--sky-deep)}
-.ikonknapp .ikonsvg{display:block}
-.lhuvud .lmax{margin-left:8px}
-.dokknappar .radera{width:28px;height:28px;margin-left:auto;background:transparent;color:var(--ink-3)}
-.dokknappar .radera:hover{background:var(--berry);color:#fff}
 
-.kallval[data-over]{outline:1px dashed #2c6a8c;outline-offset:4px;border-radius:10px}
 .sidminis{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
 .sidminis:empty{display:none}
 .sidmini{display:flex;align-items:center;gap:9px;background:#fff;border:1px solid #dadada;border-radius:9px;padding:7px 9px 7px 7px}
@@ -847,7 +582,6 @@
 .sidmeta{font-family:var(--mono);font-size:10.5px;color:#000}
 .sidbort{width:22px;height:22px;border:0;border-radius:6px;background:transparent;color:#000;font-size:14px;line-height:1;cursor:pointer}
 .sidbort:hover{background:#ececec;color:#000}
-.tref{margin:10px 0 0;font-size:12px;color:rgba(187,227,247,.85)}
 #sidrad{flex-wrap:wrap}
 #sidrad .sidminis{flex:1 0 100%}
 

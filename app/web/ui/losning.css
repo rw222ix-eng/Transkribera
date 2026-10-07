@@ -99,7 +99,7 @@
 #lo4 .lodom>p,[data-form="lo4"] .lodom>p,[data-form^="fe-"] .lodom>p,[data-form="lo-c"] .lodom>p{margin:0;font-size:calc(13.5px * var(--fsk, 1));line-height:1.42;color:#000}
 #lo4 .lodom .katex,[data-form="lo4"] .lodom .katex,[data-form^="fe-"] .lodom .katex,[data-form="lo-c"] .lodom .katex{font-size:1.06em}
 #lo4 .loparti[data-utan],[data-form="lo4"] .loparti[data-utan],[data-form^="fe-"] .loparti[data-utan],[data-form="lo-c"] .loparti[data-utan]{border-left-color:#C0392B}
-#lo4 .loparti[data-utan]>b,[data-form="lo4"] .loparti[data-utan]>b,[data-form^="fe-"] .loparti[data-utan]>b,#lo4 .lomark[data-utan],[data-form="lo4"] .lomark[data-utan],[data-form^="fe-"] .lomark[data-utan],[data-form="lo-c"] .loparti[data-utan]>b,[data-form="lo-c"] .lomark[data-utan]{background:#C0392B}
+#lo4 .loparti[data-utan]>b,[data-form="lo4"] .loparti[data-utan]>b,[data-form^="fe-"] .loparti[data-utan]>b,[data-form="lo-c"] .loparti[data-utan]>b{background:#C0392B}
 
 /* Kommentarraden: brickan, skälet, poängen. Poängen sist och i svart — den är
    summan av skälet, inte en etikett på det. */

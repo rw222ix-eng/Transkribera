@@ -7,14 +7,13 @@ html{font-size:clamp(14.5px,13px + .3vw,18.5px)}
 :root{--kant:clamp(14px,3.2vw,40px);--spalt:min(100% - 2 * var(--kant),1060px)}
 @media (min-width:1560px){:root{--spalt:min(100% - 2 * var(--kant),1180px)}}
 
-.view,.stegwrap{width:var(--spalt);max-width:none;margin-inline:auto;padding-inline:0}
+.view{width:var(--spalt);max-width:none;margin-inline:auto;padding-inline:0}
 .view{padding-block:clamp(18px,2.6vw,34px) clamp(64px,9vw,120px)}
-.stegwrap{padding-block:clamp(14px,2vw,26px) 0}
 .topbar{padding:clamp(10px,1.4vw,16px) var(--kant)}
 .skiva{padding:clamp(16px,2vw,28px)}
 .himmelhuvud{padding-bottom:clamp(14px,2vw,24px)}
 .rubrik{font-size:clamp(1.9rem,4.6vw,3.3rem)}
-.ruta,.radruta{padding:clamp(14px,1.6vw,20px)}
+.ruta{padding:clamp(14px,1.6vw,20px)}
 
 /* fälten i en ruta bryter rad i stället för att klämmas ihop */
 .par{flex-wrap:wrap}
@@ -24,29 +23,13 @@ html{font-size:clamp(14.5px,13px + .3vw,18.5px)}
 /* topprad: flikarna får egen rad när namnet inte längre får plats */
 @media (max-width:620px){
   .topbar{flex-wrap:wrap;gap:6px}
-  .ordmarke{flex:1 1 100%}
   .flikar{gap:clamp(16px,5vw,30px)}
 }
-@media (max-width:420px){.steg{gap:9px}.stegnamn{font-size:.8rem}}
 
-/* kön: märkningen lägger sig under namnet, och radbryter internt på små fönster */
-@media (max-width:560px){
-  .korad{grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:'typ namn bort' 'langd mark mark'}
-  .korad .kolangd{justify-self:start}
-}
-
-/* lektionskorten: tumnageln krymper innan texten gör det */
-@media (max-width:600px){
-  .kort{gap:12px;flex-wrap:wrap}
-  .tumme{width:clamp(84px,26vw,132px)}
-  .knappar{margin-left:auto}
-}
 .sparatnat{grid-template-columns:repeat(auto-fill,minmax(min(238px,100%),1fr))}
-.fasdetalj{max-width:min(46vw,340px)}
 
 /* modaler mäts i dvh — annars hamnar foten under adressfältet på mobil */
 .modal.bred{max-height:min(88dvh,860px)}
-.videomodal{max-height:92dvh}
 .modalskal[data-max] .modal.bred{height:100dvh}
 @media (max-width:900px){
   .gsplit{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(0,45%)}
@@ -77,41 +60,6 @@ html{font-size:clamp(14.5px,13px + .3vw,18.5px)}
    man siktar på ↶. */
 .dokhuvud .dokslang{font-size:.8rem;color:var(--ink-2);white-space:nowrap}
 @media (max-width:640px){.histnot{display:none}}
-
-/* ══════════ VÄLJ PLATS FÖR SÄKERHETSKOPIAN ══════════
-   Man pekar ut disken, USB-minnet eller mappen själv — och platsen blir automatisk. */
-.modal.plats{width:min(560px,100%);max-height:min(86dvh,720px)}
-.platslista{flex:1;min-height:0;overflow-y:auto;padding:8px 14px 12px;display:flex;flex-direction:column;gap:2px;scrollbar-width:none}
-.platslista::-webkit-scrollbar{width:0;display:none}
-.platsrad{display:grid;grid-template-columns:16px minmax(0,1fr) auto;align-items:center;gap:12px;border:none;background:transparent;border-radius:10px;padding:11px 12px;font-family:inherit;text-align:left;cursor:pointer;transition:background-color var(--dur-1) var(--ease)}
-.platsrad:hover,.platsrad:focus-visible{outline:none;background:var(--sunken)}
-.platsrad[aria-selected='true']{background:var(--accent-weak)}
-.platsbock{opacity:0;font-size:.7rem;color:var(--sky-deep);justify-self:center}
-.platsrad[aria-selected='true'] .platsbock{opacity:1}
-.platstext{min-width:0;display:flex;flex-direction:column;gap:2px}
-.platsnamn{font-size:.96rem;font-weight:500;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.platstyp{font-size:.8rem;color:var(--ink-2)}
-.platsledigt{font-family:inherit;font-size:.88rem;font-weight:500;font-variant-numeric:tabular-nums;color:var(--ink-2);white-space:nowrap}
-.platsvag{display:flex;align-items:center;gap:14px;padding:12px 22px;border-top:1px solid var(--line)}
-.vagfalt{font-family:var(--mono);font-size:.84rem}
-/* Foten: ett enda ställe för handlingarna. Automatiken är en bricka till
-   vänster, knapparna sitter ihop till höger — och Avbryt är en riktig knapp,
-   inte en textlänk. Vid hovring får den samma glans som den primära, i rött. */
-.platsfot{display:flex;align-items:center;gap:14px;padding:14px 22px 18px;border-top:1px solid var(--line);background:var(--surface)}
-.knappstock{display:flex;align-items:center;gap:10px;margin-left:auto}
-.autopill{display:inline-flex;align-items:center;gap:9px;white-space:nowrap;background:var(--sunken);border-radius:var(--r-pill);padding:5px 14px 5px 7px;font-size:.82rem;color:var(--ink-2);cursor:pointer;min-width:0;transition:background-color var(--dur-2) var(--ease)}
-.autopill:hover{background:var(--accent-weak)}
-.sekundar{white-space:nowrap;border:1px solid var(--line-2);background-color:var(--surface);background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.26) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;color:var(--ink);border-radius:var(--r-pill);padding:12px 22px;font-family:inherit;font-size:.95rem;font-weight:500;cursor:pointer;transition:color var(--dur-2) var(--ease),border-color var(--dur-2) var(--ease),background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),transform var(--dur-1) var(--ease),box-shadow var(--dur-2) var(--ease)}
-.sekundar:hover{color:#fff;border-color:var(--berry);background-color:var(--berry);background-position:-30% 0;box-shadow:0 12px 26px -10px rgba(207,55,45,.62);transform:translateY(-1px)}
-.sekundar:focus-visible{outline:2px solid var(--berry);outline-offset:2px}
-.sekundar:active{transform:translateY(0) scale(.976)}
-@media (max-width:560px){.platsfot{flex-wrap:wrap;row-gap:12px}.knappstock{width:100%;margin-left:0}.knappstock .primar{margin-left:auto}}
-.platsauto{display:inline-flex;align-items:center;gap:10px;font-size:.84rem;color:var(--ink-2);cursor:pointer}
-@media (max-width:560px){.platsauto{flex:1 1 100%;order:3}}
-
-.sokfalt .sokord{flex:0 0 auto;white-space:nowrap}
-@media (max-width:560px){.sokfalt{flex-wrap:wrap}.sokfalt input{flex:1 1 100%}}
-.verktyg #soknot{font-size:.82rem;max-width:56ch}
 
 /* ══════════ PROVET ÄRVER ══════════ */
 .arvrad{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:14px 0 0;padding:12px 16px;background:var(--accent-weak);border-radius:var(--r-card)}
@@ -157,10 +105,6 @@ html{font-size:clamp(14.5px,13px + .3vw,18.5px)}
 .gomtag:disabled{opacity:.45;cursor:default}
 .gomtag:focus-visible{outline:2px solid var(--sky-deep);outline-offset:1px}
 
-/* kön: samma väljare som i filtren — samma storlek, samma hover, samma panel */
-.komark .valj[data-gissad] .valjknapp{border-style:solid;border-color:var(--atmosphere)}
-.komark .valj[data-gissad][data-satt] .valjknapp{border-color:var(--sky-pale)}
-
 /* Sparat-korten lyfter tydligt vid hover — man ska aldrig vara osäker på vilket
    dokument markören står på i rutnätet. */
 .dokkort:hover,.dokkort:focus-within{transform:translateY(-4px);box-shadow:0 34px 60px -26px rgba(9,66,108,.72),0 6px 16px -8px rgba(9,66,108,.34)}
@@ -198,13 +142,6 @@ html{font-size:clamp(14.5px,13px + .3vw,18.5px)}
 /* ══════════ KLARRUTAN · VAD SOM HÄNDE / VAD SOM HÄNDER NU ══════════
    Två kolumner så att kvittot och framåtrörelsen inte konkurrerar. Vänster är
    facit och filerna, höger är nästa steg som en kompakt lista. */
-.klartva{display:grid;grid-template-columns:minmax(0,1fr) 1px minmax(0,1fr);gap:clamp(18px,2.4vw,30px);align-items:start}
-.klarstreck{align-self:stretch;background:var(--line)}
-.klarfil{margin:11px 0 0;font-size:.98rem;line-height:1.45;color:var(--ink);font-weight:500;overflow-wrap:anywhere}
-.klarmeta{margin:6px 0 0;font-size:.86rem;line-height:1.5;color:var(--ink-2)}
-.klarsparat{display:flex;align-items:center;gap:9px;margin:14px 0 0;font-size:.85rem;color:var(--ink-2)}
-.klarsparat::before{content:'';width:8px;height:8px;flex:0 0 auto;border-radius:50%;background:var(--ok)}
-.klarvad .chips{margin-top:14px}
 .klarsteg{margin-top:6px}
 .nstegrad{display:flex;align-items:center;gap:12px;width:100%;text-align:left;border:none;background:none;border-radius:9px;padding:13px 8px;margin-inline:-8px;font-family:inherit;cursor:pointer;border-top:1px solid var(--line);transition:background-color var(--dur-1) var(--ease)}
 .nstegrad:first-child{border-top:0}
@@ -218,29 +155,13 @@ html{font-size:clamp(14.5px,13px + .3vw,18.5px)}
 .nspil{flex:0 0 auto;color:var(--sky-deep);font-size:.9rem;transition:transform var(--dur-2) var(--ease)}
 .nstegrad:hover:not(:disabled) .nspil{transform:translateX(3px)}
 .nstegrad[aria-expanded='true'] .nspil{transform:rotate(90deg)}
-#klarforslag{display:flex;flex-direction:column;gap:12px;margin:20px 0 0;padding-top:20px;border-top:1px solid var(--line)}
-#klarforslag[hidden]{display:none}
-@media (max-width:700px){
-  .klartva{grid-template-columns:minmax(0,1fr);gap:18px}
-  .klarstreck{height:1px;align-self:auto}
-}
-
-/* ══════════ FÖRSLAG SOM HITTAS AV SIG SJÄLVT ══════════
-   Extraktionen körs när transkriptet blir klart — klarrutan visar antalet,
-   korten ligger ett klick bort. Krock-raden är röd när dagen redan är bokad. */
-.klarrad{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin:18px 0 0}
-.klarlista{display:flex;flex-direction:column;gap:12px;margin:4px 0 0}
-.fvarde[data-krock]{color:var(--berry)}
-.forslagrad:has(.fvarde[data-krock]) .fnyckel{color:var(--berry)}
-
-.forslagknappar .lank,.forslagknappar .mjuk{white-space:nowrap}
 
 /* ══════════ SPARAT: FÖRHANDSVISNING, PDF, RADERA ══════════
    Kortet är bara en miniatyr — pappret i full storlek ligger i en modal som stiger
    mjukt upp (samma rörelse som lektionsmodalen). Radera frågar i kortet självt. */
 .fhark{flex:1;min-height:0;overflow-y:auto;background:var(--sunken);padding:clamp(16px,2.4vw,30px);display:flex;justify-content:center;scrollbar-width:none}
 .fhark::-webkit-scrollbar{width:0;display:none}
-.fhark>*,.fhark .provvard>*{width:100%;max-width:min(100%,660px);margin:0 auto}
+.fhark>*{width:100%;max-width:min(100%,660px);margin:0 auto}
 .fhfot{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 22px 18px;border-top:1px solid var(--line);background:var(--surface)}
 /* Raden som säger att godkänt är låst — står ovanför knapparna, där man läser
    den innan man trycker, och i samma dämpade ton som noten i foten. */
@@ -256,9 +177,6 @@ html{font-size:clamp(14.5px,13px + .3vw,18.5px)}
 .fhnot{display:inline-flex;align-items:center;gap:8px;margin-left:auto;font-size:.76rem;color:var(--ink-3)}
 .fhnot .pk{width:6px;height:6px;border-radius:50%;background:var(--ok)}
 @media (max-width:560px){.fhnot{margin-left:0;flex:1 1 100%;order:3}}
-
-.tyst[data-lage]{color:var(--sky-deep);font-weight:600}
-.tyst[data-lage='skriver']{color:var(--ink-3)}
 
 .dokfraga{position:absolute;inset:0;z-index:5;display:flex;flex-direction:column;justify-content:center;gap:6px;padding:16px;border-radius:var(--r-card);background:color-mix(in srgb,var(--surface) 94%,transparent);backdrop-filter:blur(3px);opacity:0;transform:translateY(6px);transition:opacity var(--dur-2) var(--ease),transform var(--dur-2) var(--ease)}
 .dokfraga[data-pa]{opacity:1;transform:none}

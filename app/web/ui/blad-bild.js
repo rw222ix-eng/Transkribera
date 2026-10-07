@@ -38,9 +38,9 @@ window.BladBild = (() => {
   const BO_BREDD = 900;         /* lite luft runt bladet så inget klämmer */
 
   /* Bara de ark bladen faktiskt använder. styles.css behövs INTE: allt inne i
-     ett ark som skriver var() gör det med fallback (blad.css, prov.css,
-     gruppark.css), och appens variabler hör inte till pappret. */
-  const ARK = /\/(typsnitt\.css|blad\.css|prov\.css|losning\.css|matte\.css|gruppark\.css|katex(\.min)?\.css)$/;
+     ett ark som skriver var() gör det med fallback (blad.css, prov.css),
+     och appens variabler hör inte till pappret. */
+  const ARK = /\/(typsnitt\.css|blad\.css|prov\.css|losning\.css|matte\.css|katex(\.min)?\.css)$/;
   /* Papprets egna familjer. typsnitt.css bär också Switzer (gränssnittet) och
      tavlans handstilar — en halv megabyte som inte står på ett blad. Caveat och
      Shadows Into Light Two följer med ändå: den bedömda elevlösningen ÄR

@@ -502,8 +502,9 @@ window.BladBygg = (() => {
        (radbunden). Förr stod «ab» här — en nyckel ingen regel i blad.css känner
        — och bladet fick basvärdena i stället för formens egen sättning
        (radhöjder, bandets padding, figurspaltens bredd, figurhöjden).
-       Gruppuppgiften behåller «gu»: den bär sin egen täthet i gruppark.css,
-       fyra rutor med namnrader på ett A4, och det ÄR dess form.
+       Gruppuppgiften behåller «gu»: fyra rutor med namnrader på ett A4, och
+       det ÄR dess form. (gruppark.css, som bar tätheten för plan.js gamla
+       ritaGrupp, togs bort 2026-10-07; ingen levande ritare satte klassen.)
 
        FORM 6 saknades. Förlagans sjätte form är «1 + 2 + 3»: basen, tvåans
        figurspalt OCH treans stegtabell på samma blad — tre former kostar höjd,

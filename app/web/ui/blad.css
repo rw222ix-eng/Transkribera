@@ -45,7 +45,6 @@
 /* ── Instruktionsbandet ── */
 .guband{margin:16px 0 0;padding:10px 13px;border:1.5px solid #000;font-size:13.5px;font-weight:700;line-height:1.5;color:#000;text-wrap:pretty}
 .guband b{font-weight:700}
-.guband .gupil{color:#000}
 
 /* ── Uppgiftsrutan ── */
 /* Uppgiften avgränsas av en hårlinje, inte av en rundad grå panel. En ram i en
@@ -78,7 +77,6 @@
    ascender ger ~8 mm fritt över linjen, vilket är vad en hand behöver. Allt
    under 6 mm tvingar eleven att skriva mellan linjerna. */
 .gurad{display:flex;align-items:baseline;gap:14px;margin-top:17px}
-.guforts{margin-top:13px}
 .gunamn{flex:0 0 auto;min-width:88px;font-size:13.5px;font-weight:700}
 .gulos{margin:12px 0 0;font-size:13.5px;font-style:italic;color:#000}
 .gulinje{flex:1;border-bottom:1px solid #9A9A9A;height:17px}
@@ -137,11 +135,6 @@
 [data-form="pr1b"] .pruppg{margin-top:21px}[data-form="pr1e"] .pruppg{margin-top:22px}
 [data-form="pr1e"] .probs{margin-top:12px;padding:9px 13px}
 [data-form="pr1e"] .prfigkap{margin-top:6px}
-/* Givna värden: en punktlista, inte löptext. Måtten ska gå att slå upp igen
-   mitt i en lösning utan att läsa om meningen de stod i. */
-.prgiv{margin:9px 0 0;padding:0;list-style:none;display:grid;gap:3px;font-size:13.5px}
-.prgiv li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:0 8px}
-.prgiv li::before{content:'·';font-weight:700}
 .gufigkap{margin:7px auto 0;font-size:13.5px;color:#000;line-height:1.45;text-align:center}
 
 /* ── Namnraderna ──
@@ -176,9 +169,7 @@
    resultat, och det syns. Fast mått; luften som blir över lägger sig nederst. */
 [data-form="gu1"] .gukort{margin-top:34px}
 [data-form="gu1"] .gurad{margin-top:14px}
-[data-form="gu1"] .guforts{margin-top:11px}
 [data-form="gu1"] .gufraga{margin-top:9px}[data-form="gu1"] .gutopp{margin-top:9px}[data-form="gu1"] .guband{margin-top:13px}
-.gumono{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:13.5px}
 
 
 /* ── 6 · kombinationen ──
@@ -189,7 +180,7 @@
 [data-form="gu6"] .gutab td:has(.brak){padding-top:9px;padding-bottom:9px;line-height:1.9}
 [data-form="gu6"] .gutab th{padding:4px 9px}
 [data-form="gu6"] .gudel{margin-top:5px}
-[data-form="gu6"] .gurad{margin-top:10px}[data-form="gu6"] .guforts{margin-top:8px}
+[data-form="gu6"] .gurad{margin-top:10px}
 [data-form="gu6"] .gufraga{margin-top:6px}
 [data-form="gu6"] .gutopp{margin-top:4px}
 [data-form="gu6"] .guband{margin-top:10px;padding:7px 12px}
@@ -202,7 +193,7 @@
    Luften mellan korten betalar. ── */
 [data-form="gu2"] .gukort{margin-top:34px;padding:0}
 [data-form="gu2"] .guband{margin-top:12px;padding:8px 12px}
-[data-form="gu2"] .gurad{margin-top:15px}[data-form="gu2"] .guforts{margin-top:12px}
+[data-form="gu2"] .gurad{margin-top:15px}
 [data-form="gu2"] .gutopp{margin-top:10px}
 [data-form="gu2"] .gutva{grid-template-columns:minmax(0,1fr) 250px}
 .tavhost .boards-container{justify-content:flex-start}
@@ -213,7 +204,6 @@
 [data-form="gu2"] .gufigur{--fh:168px}
 [data-form="gu6"] .gufigur{--fh:150px}
 [data-form="gu6"] .gukort{margin-top:34px}
-[data-form="gu6"] .gubred{margin-top:9px}
 
 /* ── Traven i appen ──
    Bladen är 794 px breda på riktigt. Rutan de ligger i är smalare, så traven
@@ -232,7 +222,6 @@
    Bedömningsanvisningen) — men inte TIDEN de tog (649 mot 637 ms, samma sida,
    av och på om vartannat i tre varv). Ingen mätt vinst, alltså ingen regel. */
 .bladtrav .ark,.bladtrav .gu{position:relative;left:auto;top:auto;margin:0;overflow:hidden}
-.bladlapp{width:794px;margin:0 auto;font:600 11px/1.3 var(--sans,Arimo),Arial,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
 /* Tavlan ritas i sin verkliga bredd och krymps efteråt med transform (se
    blad.js). Rutan bär den skalade höjden så traven inte får ett hål under sig. */
 .tavruta{position:relative;width:100%;overflow:hidden}
@@ -319,34 +308,6 @@
    procent löses mot rutans utflexade höjd, vilket grid-området inte ger. */
 .prforsatt .prbild:has(img){min-height:120px;flex:1 1 auto;display:flex;justify-content:center;align-items:center}
 .prforsatt .prbildtext{flex:0 0 auto}
-
-/* ══════════ ANTECKNINGAR — lärarens eget stödpapper ══════════
-   Femte dokumenttypen, och den enda som inte delas ut. Kravet är ett annat än
-   de andra bladens: eleven LÄSER ett arbetsblad från början till slut, men
-   läraren KASTAR EN BLICK ner på det här mitt i en mening. Därför större grad,
-   mer luft mellan sektionerna och rubriker som sticker ut — det är rubriken
-   ögat hittar, inte texten.
-
-   Pappret är samma A4 som de andra (.gu bär måtten); allt nedan är sättningen. */
-[data-form="an"]{padding:74px 70px 58px;font-size:16.5px;line-height:1.62}
-.anhuv{padding-bottom:6px;border-bottom:1.5px solid #000}
-.antitel{margin:0;font-size:27px;font-weight:700;letter-spacing:-.01em;line-height:1.14}
-.anmeta{margin:7px 0 0;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#000}
-/* Luften mellan sektionerna är det som gör pappret läsbart i en blick — den är
-   större än radavståndet med flit, så att ögat ser fyra block och inte en spalt. */
-.ansekt{margin:24px 0 0}
-.anrubrik{margin:0 0 5px;font-size:18.5px;font-weight:700;line-height:1.25}
-.anstycke{margin:0 0 7px;text-wrap:pretty}
-.anstycke:last-child{margin-bottom:0}
-.anpunkter{margin:8px 0 0;padding-left:20px}
-.anpunkter li{margin:3px 0}
-/* Kom ihåg-rutan ligger i botten: det är det sista läraren tittar på innan
-   klassen går. margin-top:auto trycker ner den — .gu är en flexkolumn — så
-   rutan står vid nederkanten även på ett halvfullt papper, precis som i
-   LaTeX-mallen. Tonen är samma sex procent bläck som tavlans callouts. */
-.ankom{margin-top:auto;padding:13px 16px;background:#F2F1EF;border:1px solid #CDC8BD}
-.ankomrub{display:block;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
-.ankom p{margin:5px 0 0;font-size:15.5px;line-height:1.5}
 
 /* ── PLÅTEN OCH SCENEN ──
    LÄRARENS BESLUT (2026-08-22): appen genererar ingen bild. Uppgiften bär

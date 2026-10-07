@@ -23,13 +23,7 @@ document.addEventListener('click', e => {
   const b = e.target.closest('.seg button');
   if (!b) return;
   const seg = b.parentElement;
-  if (seg.dataset.flerval) {
-    const pa = b.getAttribute('aria-pressed') === 'true';
-    if (pa && $$('[aria-pressed="true"]', seg).length === 1) return; // minst ett val
-    b.setAttribute('aria-pressed', String(!pa));
-  } else {
-    $$('button', seg).forEach(o => o.setAttribute('aria-pressed', String(o === b)));
-  }
+  $$('button', seg).forEach(o => o.setAttribute('aria-pressed', String(o === b)));
   /* Rubriken ägs av lägeskorten i steg 2, inte av den dolda skrivtyp-speglingen. */
   if (seg.dataset.seg === 'skrivtyp') { window.planKoll && window.planKoll(); }
 });

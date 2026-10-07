@@ -459,7 +459,7 @@
     Gruppuppgift: [
       /* ── Hur många uppgifter gruppuppgiften får ha ────────────
          Antalet var LÅST till fyra, och skälet var pappret: fyra rutor är vad
-         ett A4 rymmer med plats att skriva på (gruppark.css). Det skälet höll
+         ett A4 rymmer med plats att skriva på. Det skälet höll
          inte längre — gruppuppgiftens ark packar och delar sig själv sedan
          bladen fick sin paginering (blad.js delaArk, «forts. 2 av 2»), precis
          som arbetsbladets. Kvar av låsningen fanns bara att läraren inte fick
@@ -1174,7 +1174,7 @@
              blir ett eget blad — det är därför raden är flervalig. */
           : k.typ === 'mottagare'
           ? '<span class="typmottagare"><span class="tkchips"></span><button class="ghost tkvalj" type="button">Lägg till elev …</button></span>'
-          /* Provet bladet förbereder — samma form som mottagarraden, för det
+          /* Provet bladet förbereder har samma form som mottagarraden, för det
              är samma gest: en bricka för det valda och en knapp som slår upp
              listan. Klassen kan ha flera kommande prov, men bladet förbereder
              ett. */
@@ -3342,7 +3342,7 @@
       kurs: utkast.kurs, klass: utkast.klass,
       ...punktval,
       /* Fyra är förvalet och kommer ur pappret: fyra rutor är vad ett A4 rymmer
-         med plats att skriva på (gruppark.css). Det är inte längre ett lås —
+         med plats att skriva på. Det är inte längre ett lås —
          se «Antal uppgifter» i TYPVAL. */
       antal: Number(i0.antal) || 4,
       datum: utkast.datum || '',

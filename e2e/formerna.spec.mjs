@@ -6,7 +6,7 @@ import * as L from "./larardag.mjs";
  * Facit är designdokumentet «Arbetsblad prov och tavlor — femton former» i
  * Claude Design: fyra arbetsbladsformer, fem provblad, två lösningsförslag och
  * två tavlor. Stilbladen i repot är samma filer som där (blad.css, prov.css,
- * losning.css, gruppark.css) — men CSS ensam gör ingen form. Formen uppstår
+ * losning.css) — men CSS ensam gör ingen form. Formen uppstår
  * först när renderaren sätter rätt element med rätt formnyckel, och det var
  * där arken hade glidit:
  *
@@ -44,8 +44,8 @@ import * as L from "./larardag.mjs";
  *   TAV 1 · genomgången .............. tre spalter, tabell, röd understrykning ✓ nytt
  *   TAV 2 · teori | exempel .......... dragen spaltlinje ................. ✓ ovan
  *
- * Gruppuppgiften har ingen egen form på designsidan — den bär «gu» och sin
- * egen täthet i gruppark.css. Dess ifyllnadsrader är däremot form 2:s
+ * Gruppuppgiften har ingen egen form på designsidan — den bär «gu». Dess
+ * ifyllnadsrader är däremot form 2:s
  * (.gunamn + .gulinje) och prövas som sådana; den tryckta formen ligger i
  * tests/test_gruppuppgift.py, som kompilerar pappret på riktigt.
  *

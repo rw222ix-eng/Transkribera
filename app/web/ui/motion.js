@@ -4,40 +4,10 @@
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 
-/* ── Himmel: målade kumulusmoln, horisontbank och fåglar ─
-   Ett moln byggs av överlappande cirklar med skarp kant (85 %-stopp) —
-   skuggcirklarna läggs först och ger volym underifrån. */
-const PUFF = [
-  [4,58,60,1],[44,64,54,1],[92,60,62,1],[136,64,50,1],
-  [0,44,66,0],[36,26,84,0],[86,32,74,0],[128,42,62,0],[70,8,68,0],[20,16,56,0],[156,50,48,0],[110,18,52,0]
-];
-const BANK = [
-  { top: '1%',  s: 1.5, o: 1,   dur: 230, d: -40 },
-  { top: '11%', s: .95, o: .9,  dur: 160, d: -96 },
-  { top: '30%', s: 2.1, o: .5,  dur: 310, d: -172 },
-  { top: '48%', s: 1.2, o: .34, dur: 200, d: -28 }
-];
+/* ── Himmel: fåglarna ─
+   Molnen och horisontbanken byggdes här av cirklar i kod. Bakgrunden är
+   målade himlar sedan länge, och den koden låg oanvänd tills 2026-10-07. */
 const FAGEL = [{ top: '19%', dur: 78, d: -14 }, { top: '26%', dur: 96, d: -52 }, { top: '23%', dur: 88, d: -61 }];
-
-/* Horisontbanken: samma mönster i första och andra halvan → sömfri loop */
-function horisont(klass, n, min, max, lyft) {
-  const el = document.createElement('div');
-  el.className = 'horisont ' + klass;
-  el.appendChild(Object.assign(document.createElement('span'), { className: 'bas' }));
-  const frO = [];
-  const varians = [1, .62, 1.35, .78, 1.12, .5, .92, 1.5, .7];
-  for (let i = 0; i < n; i++) {
-    const d = Math.round(min + (max - min) * .5 * varians[i % varians.length] + ((i * 29) % (max - min)) * .5);
-    frO.push([i * (50 / n) + (i % 3) * .6, d, (i % 5) * lyft - lyft]);
-  }
-  [0, 50].forEach(skift => frO.forEach(p => {
-    const q = document.createElement('span');
-    q.className = 'puff';
-    q.style.cssText = `left:${(p[0] + skift).toFixed(2)}%;bottom:${p[2]}%;width:${p[1]}px;height:${p[1]}px`;
-    el.appendChild(q);
-  }));
-  return el;
-}
 
 /* Bakgrunden är nu målade himlar (en per flik) — bara fåglarna ritas i kod. */
 function byggHimmel() {
@@ -80,7 +50,6 @@ function flyttaFlik() {
    Följden var att «Balanserat» och «Del B + Del C» i steg 3 syntes som fetare
    text på tom platta — det gick inte att se vad som var valt. */
 function flyttaSeg(seg) {
-  if (seg.dataset.flerval || seg.classList.contains('flerval')) return;
   let glid = $('.segglid', seg);
   if (!glid) { glid = document.createElement('span'); glid.className = 'segglid'; seg.prepend(glid); }
   const pa = $('button[aria-pressed="true"]', seg);

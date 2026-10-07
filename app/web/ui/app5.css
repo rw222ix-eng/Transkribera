@@ -24,56 +24,10 @@
 .lagekort[data-foljd]{border-style:solid;background-color:var(--sky-deep)}
 .lagekort[data-foljd]::after{content:'2';position:absolute;top:10px;right:12px;width:17px;height:17px;border-radius:50%;background:rgba(255,255,255,.26);color:#fff;font-size:.62rem;display:grid;place-items:center}
 
-/* ══════════ LOVET I ARKIVET ══════════
-   Terminens rytm ska synas utan att man läser ett enda datum: fem rutor per
-   vecka, ett band där skolan var stängd, en rad där veckan gick utan
-   inspelning. Allt läst ur Google Kalender — appen skriver aldrig i den. */
-.remslegend{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;margin:0 4px 16px;font-size:.76rem;color:var(--sky-ink-2)}
-.remspar{display:inline-flex;align-items:center;gap:7px}
-.remslegend .dr{width:14px;height:14px;border-radius:4px}
-.dagremsa{display:flex;align-self:center;gap:4px;margin-left:14px}
-.dr{width:22px;height:22px;flex:0 0 auto;display:grid;place-items:center;border-radius:6px;background:var(--track);color:var(--ink-3);font-size:.62rem;font-weight:600;line-height:1}
-.dr[data-t='inspelad']{background:var(--sky-deep);color:#fff}
-.dr[data-t='lektion']{background:transparent;box-shadow:inset 0 0 0 1.5px var(--line-2);color:var(--ink-2)}
-.dr[data-t='tom']{opacity:.5}
-.dr[data-t='lov']{background:repeating-linear-gradient(135deg,var(--line-2) 0 1.5px,transparent 1.5px 6px);box-shadow:inset 0 0 0 1px var(--line);color:var(--ink-3)}
-.lovmark{display:inline-flex;align-items:center;gap:9px;white-space:nowrap;font-size:.92rem;font-weight:600;color:var(--ink);background:var(--sunken);box-shadow:inset 0 0 0 1px var(--line);border-radius:var(--r-pill);padding:7px 16px}
-.lovmark::before{content:'';width:13px;height:13px;flex:0 0 auto;border-radius:4px;background:repeating-linear-gradient(135deg,var(--line-2) 0 1.5px,transparent 1.5px 6px);box-shadow:inset 0 0 0 1px var(--line)}
-.lovmark b{font-weight:600;color:var(--sky-deep)}
-.lovmark b::first-letter{text-transform:uppercase}
-
-/* Bandet ligger på himlen mellan skivorna — halvgenomskinligt och streckat,
-   så att en stängd vecka aldrig läses som en tom arbetsvecka. */
-.lovband{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:18px 0;padding:14px 22px;border-radius:var(--r-panel);background-color:rgba(255,255,255,.42);background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.42) 0 10px,rgba(255,255,255,0) 10px 20px);box-shadow:inset 0 0 0 1px rgba(255,255,255,.6);animation:stigin var(--dur-4) var(--ease) both}
-.lovband .lovnamn{font-size:1rem;font-weight:600;color:var(--sky-ink)}
-.lovband .lovspann{font-size:.8rem;color:var(--sky-ink-2)}
-.lovnu{font-size:.72rem;font-weight:600;color:var(--sky-deep);background:rgba(255,255,255,.82);border-radius:var(--r-pill);padding:3px 11px}
-
-/* Tyst vecka: en rad, inte ett kort. */
-.tystvecka{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin:16px 6px;font-size:.8rem;color:var(--sky-ink-2)}
-.tystvecka .tv{font-weight:600;color:var(--sky-ink)}
-.tystvecka .tvspann{color:var(--sky-ink-3)}
-.tystlov{font-size:.72rem;color:var(--sky-ink-2);background:rgba(255,255,255,.5);border-radius:var(--r-pill);padding:3px 10px}
-.tystvecka::after{content:'';flex:1 1 40px;height:1px;background:var(--sky-hair);opacity:.32}
-@media (max-width:560px){.dagremsa{width:100%;margin:8px 0 0}}
-
-/* Lovdagen i planeringsveckan — samma streckning som i arkivet. */
-.vdaglov{margin:0;padding:9px 10px;border-radius:10px;background:repeating-linear-gradient(135deg,var(--line-2) 0 1.5px,transparent 1.5px 7px);box-shadow:inset 0 0 0 1px var(--line);font-size:.76rem;color:var(--ink-2);text-align:center}
-.vpost[data-vald]{background-color:var(--btn-bg);background-position:-30% 0;box-shadow:0 10px 22px -12px rgba(9,66,108,.6)}
-.vpost[data-kall='schema'][data-vald]{background-color:var(--btn-bg);border-left-color:var(--btn-bg);box-shadow:0 10px 22px -12px rgba(9,66,108,.6)}
-.vpost[data-vald] .vtitel{color:#fff}
-.vpost[data-vald] .vtid,.vpost[data-vald] .vkall{color:rgba(255,255,255,.82)}
-.vpost[data-vald]::after{content:'\2713';position:absolute;top:6px;right:8px;font-size:.7rem;color:rgba(255,255,255,.9)}
-.vpost{position:relative}
-.vpost[data-nu]{outline:2px solid var(--atmosphere);outline-offset:2px}
-
 /* Remsan som håller ordning på kön — vilken lektion man står i, hur många kvar. */
 .konnu{font-size:.98rem;font-weight:600;color:var(--ink)}
 .konlekt{font-size:.9rem;color:var(--ink-2)}
 .konprickar{display:inline-flex;align-items:center;gap:6px;margin-left:auto}
-.konprick{width:9px;height:9px;border-radius:50%;background:var(--line-2)}
-.konprick[data-klar]{background:var(--sky-deep)}
-.konprick[data-nu]{background:transparent;box-shadow:inset 0 0 0 2px var(--sky-deep)}
 .konknappar{display:inline-flex;align-items:center;gap:12px}
 /* Under själva planeringen ska kön inte ta en egen rad: den blir en liten
    remsa på samma axel som «Börja om», i motsatt hörn. Steg 1 och 2 flyttar upp
@@ -162,14 +116,9 @@
 .bknr:focus{outline:none;border-color:var(--atmosphere);box-shadow:0 0 0 3px rgba(96,168,221,.25)}
 @media (max-width:560px){.bkuppslag{grid-template-columns:1fr}.bknyckla{margin-left:0}}
 
-/* Piller: texten radbryts aldrig — «Transkriberar 3 filer» på två rader med
-   «kvar» avklippt läses som en trasig etikett. */
-.korpill .ptext,.korpill .peta{white-space:nowrap}
-.korpill .peta{font-family:var(--sans);font-variant-numeric:tabular-nums}
-
 /* Skrivmaskinssnittet är ute ur appen. Där siffror ska stå i kolumn hålls de
    ihop av tabulära siffror i stället för av ett eget typsnitt. */
-.vtid,.vkall,.vdagnamn,.kolangd,.speltid,.tumtid,.klocka,.ppct,.pklocka,.fasdetalj,.dmeta,.refmeta,.refminis,.vagfalt,.ktid2,.kalvecka,.kaltidfalt,.detalj .tid,.trad .tid,.lvmeta,input.komini,.filterrad input.field,.minietikett{font-variant-numeric:tabular-nums}
+.dmeta,.refmeta,.refminis,.ktid2,.kalvecka,.kaltidfalt,.lvmeta,.minietikett{font-variant-numeric:tabular-nums}
 /* … och därför inte heller i kön, steppern eller minutvalet: siffrorna i samma
    vy ska se ut som siffror i samma vy. */
 .konlage,.konlage b,.steppervarde,.minutchip,.minutfalt input,.gzoomtext{font-family:var(--sans);font-variant-numeric:tabular-nums}
@@ -293,17 +242,10 @@
 .uppgsvar{margin-top:10px}
 @media (max-width:560px){.uppgniva{grid-template-columns:1fr}.uppgnivanamn{padding-top:0}}
 
-/* ══════════ ANTECKNINGARNAS TVÅ KÄLLOR ══════════
-   Promptrutan och möteslistan är typvalens första kontroller som inte är ett
-   VAL utan ett INNEHÅLL — man skriver i dem. Därför ligger de under sin
-   etikett i stället för till höger om den: en kontroll i högerkanten är 160 px
-   bred, och det räcker till ett ord. */
-.typfritext{flex:0 0 100%;width:100%;resize:vertical;min-height:74px;line-height:1.5;font-size:.94rem}
-/* «Inför provet» och «Vad ska tränas?» har samma form som möteslistan: en
-   full bredd under etiketten, brickor till vänster, väljaren i högerkanten.
-   Därför samma regler och inte en egen uppsättning — raderna ska se ut som
-   varandra, för de är samma gest. */
-.typtranskript,.typinforprov{position:relative;flex:0 0 100%;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
-.typtranskript .tkchips,.typinforprov .tkchips{display:flex;flex-wrap:wrap;gap:6px}
-.typtranskript .tkvalj,.typinforprov .tkvalj{margin-left:auto}
-.typtranskript[data-oppen] .tkvalj,.typinforprov[data-oppen] .tkvalj{border-color:var(--atmosphere)}
+/* «Inför provet» och «Vad ska tränas?» tar full bredd under etiketten, med
+   brickor till vänster och väljaren i högerkanten. En kontroll i högerkanten
+   är 160 px bred, och det räcker inte till brickorna. */
+.typinforprov{position:relative;flex:0 0 100%;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.typinforprov .tkchips{display:flex;flex-wrap:wrap;gap:6px}
+.typinforprov .tkvalj{margin-left:auto}
+.typinforprov[data-oppen] .tkvalj{border-color:var(--atmosphere)}
