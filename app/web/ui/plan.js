@@ -1088,7 +1088,7 @@
   function ritaTypval() {
     /* En öppen väljare i raderna får aldrig ritas bort under handen. Raderna
        byggs om av allt möjligt som inte har med valet att göra —
-       lektionsmaterialets observatör, klassbytet, kön — och en panel som ligger
+       klassbytet, kön — och en panel som ligger
        i raden följer med i papperskorgen mitt i ett klick. Omritningen sker i
        stället när panelen stängs (valjElev). */
     if ($('#typval .valjpanel')) return;
@@ -2397,145 +2397,6 @@
   /* Byter man lektion byter också lektionslängden — tavlan läser om schemat. */
   $('#p-klass').addEventListener('change', () => { ritaTypval(); });
   $('#p-tid') && $('#p-tid').addEventListener('change', () => { ritaTypval(); });
-  /* ── Vilka lektioner utkastet bygger på ───────────── */
-  const valdaLektioner = new Set();
-  /* Inspelningarna lästes ur arkivets kort (#inspelningar), och arkivet togs
-     bort 2026-10-07. Listan är därför tom: väljaren erbjuder inga lektioner. Posternas
-     form var { el, namn, klass, kurs, datum, vecka, spann, langd, typ, bild }. */
-  const lektioner = () => [];
-  const minuter = t => { const d = String(t).split(':').map(Number); return d.length === 2 ? d[0] + d[1] / 60 : 0; };
-  const tidstext = m => m >= 60 ? `${Math.floor(m / 60)} h ${Math.round(m % 60)} min` : `${Math.round(m)} min`;
-  const valdaNamn = () => lektioner().filter(l => valdaLektioner.has(l.namn));
-  function ritaKallval() {
-    const v = valdaNamn();
-    const wrap = $('#lektionsvalj');
-    /* Knappens egen text ägs av kallor.js — den skrevs förr av båda filerna, och
-       då stod «1 lektion» eller «Välj en annan lektion» beroende på vilken som
-       råkade rita sist. Här sätts bara det wrap-tillstånd som styr formen.
-       Raden som stod ovanför kalendern är också borta: kortet under kalendern
-       namnger redan lektionen, dagen, veckan och längden, och dörren och kvittot
-       säger det en gång var till. Fyra röster om samma val är tre för många. */
-    v.length ? wrap.setAttribute('data-satt', '') : wrap.removeAttribute('data-satt');
-    const chips = $('#valdalektioner');
-    const gor = namn => {
-      const b = document.createElement('button');
-      b.className = 'lchip';
-      b.type = 'button';
-      b.innerHTML = '<span></span><i>✕</i>';
-      $('span', b).textContent = namn;
-      b.dataset.tip = 'Ta bort ur underlaget';
-      b.addEventListener('click', () => { valdaLektioner.delete(namn); ritaKallval(); planKoll(); });
-      return b;
-    };
-    if (window.ritaBrickor) window.ritaBrickor(chips, v.map(l => l.namn), gor);
-    else { chips.innerHTML = ''; v.forEach(l => chips.appendChild(gor(l.namn))); }
-    planKoll();
-  }
-  (() => {
-    const wrap = $('#lektionsvalj'), knapp = $('#lektionsknapp');
-    let panel = null;
-    const stang = () => {
-      if (!panel) return;
-      const p = panel; panel = null;
-      p.setAttribute('data-ut', '');
-      setTimeout(() => p.remove(), 180);
-      wrap.removeAttribute('data-oppen');
-      knapp.setAttribute('aria-expanded', 'false');
-      document.removeEventListener('pointerdown', ut, true);
-      document.removeEventListener('keydown', tangent, true);
-    };
-    const ut = e => { if (!wrap.contains(e.target)) stang(); };
-    const tangent = e => { if (e.key === 'Escape') { stang(); knapp.focus(); } };
-    let sokord = '';
-    function ritaPanel() {
-      const alla = lektioner();
-      const q = sokord.trim().toLowerCase();
-      const lista = q
-        ? alla.filter(l => (l.namn + ' ' + l.klass + ' ' + l.kurs + ' ' + l.vecka).toLowerCase().includes(q))
-        : alla;
-      const grupper = [...new Set(lista.map(l => l.vecka))];
-      const total = valdaNamn().reduce((a, l) => a + minuter(l.langd), 0);
-      panel.innerHTML = `<div class="lsokrad"><input type="text" placeholder="Sök lektion, klass eller kurs …" value="${sokord.replace(/"/g, '&quot;')}" aria-label="Sök lektion" /></div>`
-        + (lista.length
-          ? grupper.map(g => {
-            const iGrupp = lista.filter(l => l.vecka === g);
-            const allaValda = iGrupp.every(l => valdaLektioner.has(l.namn));
-            return `<div class="lgrupprad"><span class="lg">${g}${iGrupp[0].spann ? ' · ' + iGrupp[0].spann : ''}</span><button class="lgalla" type="button" data-grupp="${g}">${allaValda ? 'Avmarkera' : 'Välj alla'}</button></div>`
-              + iGrupp.map(l => `<button class="lrad-val" type="button" role="option" data-namn="${l.namn.replace(/"/g, '&quot;')}" aria-selected="${valdaLektioner.has(l.namn)}">
-                  <span class="lkryss">✓</span>
-                  <span class="ltum" data-typ="${l.typ}">${l.typ === 'ljud' ? 'LJUD' : l.bild ? `<img src="${l.bild}" alt="" />` : ''}</span>
-                  <span><span class="lvnamn"></span><span class="lvmeta"${l.klass || l.kurs ? '' : ' data-tom'}>${[l.klass, l.kurs].filter(Boolean).join(' · ') || 'Ingen klass eller kurs'}</span></span>
-                  <span class="lvlangd">${l.langd}</span>
-                </button>`).join('');
-          }).join('')
-          : '<p class="ltomsok">Ingen lektion matchar sökningen.</p>')
-        + `<div class="valjfot"><button class="lank" type="button" data-inga>Rensa</button><span class="summa">${valdaLektioner.size ? `${valdaLektioner.size} valda · ${tidstext(total)}` : 'Inget valt'}</span></div>`;
-      /* Ett kryss ska se ut som ett kryss som sätts — inte som en lista som
-         byts ut. Raden uppdateras därför på plats, och bara texterna som
-         faktiskt ändrats skrivs om. */
-      const synka = () => {
-        $$('.lrad-val', panel).forEach(r => r.setAttribute('aria-selected', String(valdaLektioner.has(r.dataset.namn))));
-        $$('[data-grupp]', panel).forEach(b => {
-          const iGrupp = lista.filter(l => l.vecka === b.dataset.grupp);
-          b.textContent = iGrupp.length && iGrupp.every(l => valdaLektioner.has(l.namn)) ? 'Avmarkera' : 'Välj alla';
-        });
-        const s = $('.valjfot .summa', panel);
-        if (s) s.textContent = valdaLektioner.size
-          ? `${valdaLektioner.size} valda · ${tidstext(valdaNamn().reduce((a, l) => a + minuter(l.langd), 0))}`
-          : 'Inget valt';
-        ritaKallval();
-      };
-      $$('.lrad-val', panel).forEach(r => {
-        $('.lvnamn', r).textContent = r.dataset.namn;
-        r.addEventListener('click', () => {
-          const n = r.dataset.namn;
-          valdaLektioner.has(n) ? valdaLektioner.delete(n) : valdaLektioner.add(n);
-          synka();
-        });
-      });
-      /* «Välj alla» kryssar raderna i tur och ordning — femton kryss på en gång
-         läses inte, femton kryss efter varandra gör det. */
-      const ivag = (rader, gor) => rader.forEach((l, i) => setTimeout(() => { gor(l); synka(); }, Math.min(i * 45, 400)));
-      $$('[data-grupp]', panel).forEach(b => b.addEventListener('click', () => {
-        const iGrupp = lista.filter(l => l.vecka === b.dataset.grupp);
-        const allaValda = iGrupp.every(l => valdaLektioner.has(l.namn));
-        ivag(iGrupp, l => allaValda ? valdaLektioner.delete(l.namn) : valdaLektioner.add(l.namn));
-      }));
-      const inga = $('[data-inga]', panel);
-      if (inga) inga.addEventListener('click', () => ivag(valdaNamn(), l => valdaLektioner.delete(l.namn)));
-      const sok = $('.lsokrad input', panel);
-      sok.addEventListener('input', () => {
-        sokord = sok.value;
-        const pos = sok.selectionStart;
-        ritaPanel();
-        const nytt = $('.lsokrad input', panel);
-        nytt.focus();
-        nytt.setSelectionRange(pos, pos);
-      });
-    }
-
-    const oppnaPanel = () => {
-      if (panel) return;
-      panel = document.createElement('div');
-      panel.className = 'valjpanel brett';
-      panel.setAttribute('role', 'listbox');
-      panel.setAttribute('aria-multiselectable', 'true');
-      wrap.appendChild(panel);
-      wrap.setAttribute('data-oppen', '');
-      knapp.setAttribute('aria-expanded', 'true');
-      ritaPanel();
-      if (window.centreraPanel) window.centreraPanel(panel);
-      document.addEventListener('pointerdown', ut, true);
-      document.addEventListener('keydown', tangent, true);
-    };
-    knapp.addEventListener('click', () => (panel ? stang() : oppnaPanel()));
-    if (matchMedia('(hover:hover) and (pointer:fine)').matches) {
-      let fordrojd;
-      wrap.addEventListener('pointerenter', () => clearTimeout(fordrojd));
-      wrap.addEventListener('pointerleave', e => { if (e.pointerType === 'touch') return; fordrojd = setTimeout(() => { if (panel) stang(); }, 70); });
-    }
-  })();
-
   /* ── Innehåll ─────────────────────────────────────── */
   const versal = s => s.charAt(0).toUpperCase() + s.slice(1);
   const tillMin = t => { const m = String(t || '').match(/(\d{1,2})[:.](\d{2})/); return m ? +m[1] * 60 + +m[2] : null; };
@@ -2828,18 +2689,15 @@
   function nyVersion(bas, andring) {
     const vtyp = valt('skrivtyp');
     const nar = vtyp === 'Prov' ? provNar(vtyp) : null;
-    /* Ingen lektion vald i veckan? Då ärvs klass och kurs ur lektionen utkastet
-       UTGÅR FRÅN. «Ingen klass · ingen kurs» hjälper ingen — och appen vet. */
-    const ur = valdaNamn()[0] || null;
     const v = bas
       ? JSON.parse(JSON.stringify(bas))
       : {
         typ: vtyp, moment: moment.value.trim(),
-        klass: $('#p-klass').value || (ur && ur.klass) || '',
-        kurs: $('#p-kurs').value || (ur && ur.kurs) || '',
+        klass: $('#p-klass').value || '',
+        kurs: $('#p-kurs').value || '',
         datum: nar ? nar.datum : $('#p-datum').value, tid: nar ? nar.tid : $('#p-tid').value,
         lektionsdatum: $('#p-datum').value, lektionstid: $('#p-tid').value,
-        gy: [...vald], kalla: valdaLektioner.size > 0, kallor: valdaNamn().map(l => l.namn),
+        gy: [...vald],
         /* Boksidorna följer med dokumentet: tavlan skriver upp dem åt eleverna,
            och utan dem skulle den peka på förlagans sidor i stället för klassens. */
         sidor: (() => { const s = window.Uppslag && window.Uppslag.spann ? window.Uppslag.spann() : null; return s && s.fran ? `${s.fran}–${s.till}` : (moment.dataset.sidor || '').replace(/^s\.\s*/, ''); })(),
@@ -2950,12 +2808,11 @@
     nu = i;
     const v = versioner[i];
     $('#dokument').hidden = false;
-    /* Metaraden ska säga hela underlaget, inte bara lektionerna: papperen från
-       lektionen är också något dokumentet är byggt på. */
-    const pap = window.Lektionsmaterial ? window.Lektionsmaterial.antal() : 0;
+    /* `kallor` finns bara på papper skrivna före 2026-10-07, när lektioner ur
+       arkivet kunde väljas som underlag. */
     const antalK = (v.kallor || []).length;
     const byggt = antalK
-      ? `byggt på ${antalK} ${antalK === 1 ? 'lektion' : 'lektioner'}${pap ? ` och ${pap} papper` : ''}`
+      ? `byggt på ${antalK} ${antalK === 1 ? 'lektion' : 'lektioner'}`
       : 'fritt skrivet';
     $('#doktyp').textContent = v.typ;
     /* «Inför provet 20 okt» står FÖRE underlaget: det är det första läraren
@@ -3128,7 +2985,6 @@
     }
     const not = $('#plannot');
     const gammal = not.textContent;
-    const underlag = valdaNamn();
     /* Utkastet får sina värden NÄR man trycker Skriv, inte när texten kommer
        tillbaka: hinner man byta lektion under tiden ska pappret ändå bära den
        lektion man skrev det för. */
@@ -3413,8 +3269,8 @@
          prov blir två sådana vågor. Nästa skarpa körning avgör om siffran
          behöver flyttas — den här är mätt på ett band, inte på en lärardag. */
       brukar: jobb && typ === 'Prov' ? 'brukar ta 7–10 min' : '',
-      omfang: underlag.length ? `${underlag.length} lektion${underlag.length === 1 ? '' : 'er'} ur arkivet` : 'Gy25 och kursplanen',
-      antal: underlag.length || vald.size || 5,
+      omfang: 'Gy25 och kursplanen',
+      antal: vald.size || 5,
       /* Svarstexten säger vad som FAKTISKT hände när det gick på riktigt: en
          tavla som behövde tre rundor är inte samma sak som en som satt direkt. */
       /* NIVÅN FÖRST när den inte gick att säkra. Raden är serverns egen
@@ -3459,7 +3315,6 @@
            vänt åt andra hållet. */
         ...(!helhetstyp(typ) && (($('#svart') || {}).value || '').trim() ? [{ namn: 'Läser vad du sett var svårt', detalj: $('#svart').value.trim().slice(0, 46) }] : []),
         ...(!helhetstyp(typ) && ($('#fokus') || {}).value && $('#fokus').value.trim() ? [{ namn: 'Väger källorna', detalj: $('#fokus').value.trim().slice(0, 46) }] : []),
-        { namn: underlag.length ? 'Läser vad klassen hann med' : 'Hoppar över transkripten', detalj: underlag.length ? underlag.map(l => l.namn).join(' · ') : 'inga lektioner valda' },
         { namn: 'Skriver och poängsätter', detalj: typ }
       ],
       /* Utan de här stod «Skriv» kvar död efter ett 409 från molnsemaforen,
@@ -3664,9 +3519,7 @@
       + `${best(o.typ)} skrivs på det du just godkände, med samma exempel och begrepp.`;
     const nar = f.datum ? (window.Kalender ? window.Kalender.ord(f.datum) : f.datum) : 'utan datum';
     const lekt = [f.klass || 'ingen klass', f.kurs || 'ingen kurs', nar].filter(Boolean).join(' · ');
-    const antalLekt = valdaNamn().length;
-    const underlag = [f.moment ? versal(f.moment) : null, antalLekt ? `${antalLekt} ${antalLekt === 1 ? 'lektion' : 'lektioner'}` : null]
-      .filter(Boolean).join(' · ') || 'inget underlag';
+    const underlag = f.moment ? versal(f.moment) : 'inget underlag';
     $('#foljeredan').innerHTML = '';
     [['Redan valt', lekt], ['Utgår från', underlag],
       ['Förlaga', dokNamn(f)],
@@ -4153,13 +4006,11 @@
     Object.assign(inst[typ], JSON.parse(JSON.stringify(STANDARD[typ])));
     arvtFran = null;
     glomInforForvalet(typ);
-    valdaLektioner.clear();
     /* Efter klass och kurs: bokhyllan ritar om sig när kursen byts (bok.js), och
        spannet ska sättas i den hylla som gäller. */
     arvBok(v);
     ritaGy();
     ritaTypval();
-    ritaKallval();
     ritaRef();
     planKoll();
     (window.rullaTill || (y => window.scrollTo(0, y)))(0);
@@ -4207,11 +4058,6 @@
     delete inst[v.typ].tidSchema;
     delete inst[v.typ].minSchema;
     arvtFran = null;
-    valdaLektioner.clear();
-    /* Bara källor som fortfarande finns bland inspelningarna — annars räknar
-       kvittot lektioner som inte går att visa. */
-    const namn = new Set(lektioner().map(l => l.namn));
-    (v.kallor || []).filter(n => namn.has(n)).forEach(n => valdaLektioner.add(n));
     const hur = $('#refhur');
     if (hur) hur.value = 'Omprov: likvärdigt prov — samma centrala innehåll, provtid, antal uppgifter, poäng och nivåfördelning, men HELT NYA uppgifter. Ingen uppgift får vara en variant av originalets med bara utbytta tal.';
     if (window.SattLage) window.SattLage(v.typ);
@@ -4221,7 +4067,6 @@
     arvBok(v);
     ritaGy();
     ritaTypval();
-    ritaKallval();
     ritaRef();
     planKoll();
     /* Veckan frågar efter dagen. Resten står redan ifyllt när man kommer ner. */
@@ -5144,10 +4989,6 @@
 
   window.Dokument = {
     sparade: () => sparat,
-    /* Utgångspunkterna i steg 3 väljer källor åt planeringen — samma tillstånd
-       som lektionsväljaren och förlagerutan, bara ett klick i stället för tre. */
-    valjLektion(namn) { valdaLektioner.add(namn); ritaKallval(); planKoll(); },
-    slappLektion(namn) { valdaLektioner.delete(namn); ritaKallval(); planKoll(); },
     /* Pekas en förlaga ut härifrån (pardokumentet, biblioteket) ärvs INGEN bok:
        det är en annan gest än «bygg vidare», och `bokArvet` får inte hänga kvar
        från förra gången och påstå att sidorna följde med. */
@@ -6308,8 +6149,7 @@
       typ: 'Arbetsblad', moment: 'primitiva funktioner', klass: '9A', kurs: 'Matematik 3c', datum: '2026-06-02',
       gy: ['Primitiv funktion och integral'], inst: { antal: 6, niva: 'C-nivå', facit: 'Facit i bladet', svar: 'Skrivlinjer', illustration: true }
     }),
-    /* Papperen som hör till den transkriberade lektionen 3 juni. De följer med av
-       sig själv när man utgår från «förra lektionen» — se lektionsmaterial.js. */
+    /* Två papper samma dag och klass, 3 juni. */
     fardigt({
       typ: 'Gruppuppgift', moment: 'derivatans definition', klass: '9A', kurs: 'Matematik 3c', datum: '2026-06-03', tid: '08:15–09:00',
       gy: ['Gränsvärde och derivata'], inst: { grupp: 3, langd: 45, redovisning: 'Muntligt' }
@@ -6349,7 +6189,6 @@
 
   ritaGy();
   ritaTypval();
-  ritaKallval();
   planKoll();
   ritaSparat();
 

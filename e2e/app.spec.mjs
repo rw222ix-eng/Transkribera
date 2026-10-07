@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 /* ATT FRONTENDEN ÖVER HUVUD TAGET KOMMER UPP
  *
- * Frontenden är ramverkslös: app.html laddar 42 skript i bestämd ordning, och de
+ * Frontenden är ramverkslös: app.html laddar 41 skript i bestämd ordning, och de
  * delar globaler med varandra. Det finns alltså inget byggsteg som säger ifrån
  * när en fil försvinner, döps om eller hamnar i fel ordning — sidan renderar
  * halvvägs och resten uteblir tyst. Testerna nedan är den saknade kompilatorn.
@@ -21,7 +21,7 @@ test("alla skript och stilmallar laddar", async ({ page }) => {
     skript: document.scripts.length,
     stilmallar: document.styleSheets.length,
   }));
-  expect(laddat.skript).toBeGreaterThanOrEqual(42);
+  expect(laddat.skript).toBeGreaterThanOrEqual(41);
   expect(laddat.stilmallar).toBeGreaterThanOrEqual(15);
 
   expect(misslyckade, misslyckade.join(" | ")).toEqual([]);

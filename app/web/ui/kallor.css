@@ -103,7 +103,6 @@
 
 /* ── kvittot: vad som faktiskt följer med ─────────────── */
 .kvitto{display:grid;gap:9px;margin-top:16px;padding:13px 15px 14px;border:1px solid var(--line);border-radius:var(--r-card);background:var(--sunken)}
-.kvitto .valdachips{display:none}
 .kvittotom{font-size:.82rem;color:var(--ink-3)}
 /* En rad per källa: vad det är, vad det innehåller, och vägen att ta bort det. */
 .krad{display:grid;grid-template-columns:78px 1fr auto;gap:12px;align-items:baseline;padding:9px 11px;border-radius:10px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)}
@@ -117,16 +116,6 @@
 .kchip:hover{box-shadow:inset 0 0 0 1px var(--sky-deep)}
 .kchip .kx{color:var(--ink-3);font-size:.74rem}
 .kchip:hover .kx{color:var(--sky-deep)}
-
-/* Lektionsväljaren är en utväg, inte ett val: den ska läsas som en länk under
-   korten — «välj en annan lektion» — inte som en knapp med ett tillstånd. */
-.kpkropp #lektionsvalj{justify-self:start;position:relative}
-.kpkropp #lektionsknapp{border:none;background:transparent;box-shadow:none;padding:2px 0;color:var(--ink-2);font-size:.86rem;font-family:inherit;cursor:pointer}
-.kpkropp #lektionsknapp:hover{color:var(--ink);text-decoration:underline;text-underline-offset:3px;background:transparent;box-shadow:none;transform:none}
-.kpkropp #lektionsknapp .valjpil{opacity:.6}
-/* Listan är bredare än länken som öppnar den — den ska falla ut åt HÖGER från
-   knappen, inte hänga ut över panelens vänsterkant. */
-.kpkropp #lektionsvalj .valjpanel.brett{left:0;right:auto;transform-origin:top left}
 
 /* ── Lektionslistan: en enda hovergest för ALLA rader ──────────────────
    app2.css bär två generationer regler: en som fyller raden ljusblå och en
@@ -150,16 +139,12 @@
 .valjpanel.brett .lgrupprad:first-of-type{margin-top:6px}
 
 /* Bok- och fotopanelen håller sitt innehåll innanför kanten igen: sidremsan är
-   avsiktligt bredare än panelen och rullas i sig själv. Bara lektionspanelen
-   släpper ut något — dess lista måste få ligga ovanpå. */
+   avsiktligt bredare än panelen och rullas i sig själv. */
 .kpanel[data-panel='bok'],.kpanel[data-panel='foton']{overflow:hidden}
 /* Dokumentbrickan: samma form som lektionens tumnagel, men papper i st\u00e4llet f\u00f6r bild. */
 .valjpanel.brett .ltum[data-typ='dok']{display:grid;place-items:center;background:#fff;background-image:none;box-shadow:inset 0 0 0 1px var(--line);font-family:var(--mono);font-size:.5rem;letter-spacing:.1em;font-weight:600;color:var(--ink-2)}
 .valjpanel.brett .lrad-val:hover .ltum[data-typ='dok']{box-shadow:0 0 0 1.5px var(--line-2)}
 .kpkropp{min-width:0}
-/* Listan «välj en annan lektion» är gömd. Minikalendern som var valet
-   (lektionskal.js) togs bort med arkivet 2026-10-07. */
-.kpkropp #lektionsvalj{display:none}
 .kpkropp>*{min-width:0;max-width:100%}
 
 /* Sökrutan i avsnittslistan — samma form som lektionslistans sök. */
@@ -199,33 +184,6 @@
 .typfakta span{font-size:.76rem;color:var(--ink-3)}
 /* Provets dag, klockslag och längd — en väljare, aldrig ett formulär. */
 .narfalt{display:inline-flex;align-items:center;gap:9px;margin-left:auto;flex:0 0 auto}
-
-/* ══════════ FÖLJER MED FRÅN LEKTIONEN ══════════
-   Transkriptet är bara halva lektionen: papperen som delades ut på den hör
-   också dit. De ligger under veckan där lektionen valdes — som fakta, inte som
-   ett formulär — och klickas bort på plats. */
-.lmat{display:grid;gap:9px;padding:13px 15px 14px;border:1px solid var(--line);border-radius:var(--r-card);background:var(--sunken)}
-.lmat[hidden]{display:none}
-.lmhuv{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.lmhuv .minietikett{margin:0}
-.lmnot{font-size:.74rem;color:var(--ink-3)}
-.lmchips{display:flex;flex-wrap:wrap;gap:8px}
-.lmfast,.lmchip{display:inline-flex;align-items:center;gap:8px;padding:6px 13px;border-radius:var(--r-pill);font-family:inherit;font-size:.8rem;line-height:1.25;white-space:nowrap}
-.lmfast{background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);color:var(--ink-2)}
-.lmfast::before{content:'✓';font-size:.7rem;color:var(--sky-deep)}
-/* Samma hovergest som allt annat i appen: disblå fyllning och en glans som sveper. */
-.lmchip{border:none;cursor:pointer;background-color:var(--accent-weak);background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.34) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;box-shadow:inset 0 0 0 1px var(--atmosphere);color:var(--sky-deep);transition:background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),box-shadow var(--dur-2) var(--ease),color var(--dur-2) var(--ease),transform var(--dur-1) var(--ease)}
-.lmchip::before{content:'✓';font-size:.7rem}
-.lmchip b{font-weight:600}
-.lmchip span{color:var(--ink-2)}
-.lmchip[aria-pressed='false']{background-color:transparent;box-shadow:inset 0 0 0 1px var(--line);color:var(--ink-3)}
-.lmchip[aria-pressed='false'] b{font-weight:500}
-.lmchip[aria-pressed='false'] span,.lmchip[aria-pressed='false']::before{color:var(--ink-3)}
-.lmchip[aria-pressed='false']::before{content:'+';opacity:.8}
-.lmchip:hover{background-color:var(--sky-pale);background-position:-30% 0;box-shadow:inset 0 0 0 1px var(--sky-deep);color:var(--sky-deep);transform:translateY(-1px)}
-.lmchip:hover span,.lmchip:hover::before{color:var(--sky-deep)}
-.lmchip:active{transform:translateY(0) scale(.976)}
-.lmchip:focus-visible{outline:2px solid var(--sky-deep);outline-offset:2px}
 
 /* ══════════ UNDERLAGET I CANVASEN ══════════
    Det som skrev pappret står kvar bredvid pappret. Klickar man en källa börjar

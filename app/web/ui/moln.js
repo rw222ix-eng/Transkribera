@@ -21,10 +21,8 @@
     if (!lista) return;
     const moment = ($('#moment') || {}).value || '';
     const kurs = ($('#p-kurs') || {}).value || '';
-    const valda = [...document.querySelectorAll('#valdalektioner .lchip span')].map(s => s.textContent);
     const sidor = document.querySelectorAll('#sidminis > *').length;
     const poster = [];
-    if (valda.length) poster.push(['Går ut', `Transkript ur ${valda.length} ${valda.length === 1 ? 'lektion' : 'lektioner'} — ${valda.join(' · ')}. Elevnamn kan förekomma.`, true]);
     if (moment.trim()) poster.push(['Går ut', `Momentet du skrev: ”${moment.trim()}”`, true]);
     if (kurs) poster.push(['Går ut', `${kurs}: centralt innehåll och senast godkända upplägg`, true]);
     if (sidor) poster.push(['Går ut', `Tolkningen av ${sidor} inlästa boksidor — som text, inte som bild`, true]);

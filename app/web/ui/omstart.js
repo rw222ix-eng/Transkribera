@@ -16,8 +16,7 @@
   const knapp = q('.omstartknapp', rad);
 
   const harNagot = () =>
-    !!(qq('#valdalektioner .lchip').length
-      || q('#sidminis') && q('#sidminis').children.length
+    !!(q('#sidminis') && q('#sidminis').children.length
       || (q('#moment') || {}).value
       || (q('#p-klass') || {}).value
       || (q('#planvald') && !q('#planvald').hidden)
@@ -26,13 +25,12 @@
   function spegla() { rad.toggleAttribute('data-aktiv', harNagot()); }
 
   function rensa() {
-    /* Underlaget: dörrar av, valda lektioner och sidor bort, förlagan släppt.
+    /* Underlaget: dörrar av, sidor bort, förlagan släppt.
        «sparat» hörde hit lika mycket som de andra — utan den stod dörren
        «Ett tidigare papper» kvar påslagen efter att allt annat rensats.
        Dörren «lektion» revs 2026-10-07; satt() på en dörr som inte finns
        kastar, så den står inte längre i listan. */
     if (window.Kallor) ['bok', 'foton', 'sparat'].forEach(d => window.Kallor.satt(d, false, true));
-    qq('#valdalektioner .lchip').forEach(c => c.click());
     qq('#sidminis .sidbort').forEach(b => b.click());
     /* Utkastet hörde hit lika mycket som källorna och lektionen: «Allt rensat»
        lämnade pappret liggande i rutan, och eftersom utkastet plockas upp igen
@@ -88,10 +86,8 @@
   }
 
   knapp.addEventListener('click', rensa);
-  ['#valdalektioner', '#sidminis'].forEach(s => {
-    const el = q(s);
-    if (el) new MutationObserver(spegla).observe(el, { childList: true });
-  });
+  const minis = q('#sidminis');
+  if (minis) new MutationObserver(spegla).observe(minis, { childList: true });
   const kl = q('#p-klass');
   if (kl) kl.addEventListener('change', spegla);
   const grid = q('#schemagrid');

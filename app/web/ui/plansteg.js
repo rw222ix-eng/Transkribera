@@ -45,7 +45,6 @@
     }
     if (n === 2) return typerna() || 'Inget valt';
     if (n === 3) {
-      const lekt = q('#valdalektioner').children.length;
       const sid = q('#sidminis').children.length;
       const forlaga = window.Dokument && window.Dokument.forlagan && window.Dokument.forlagan();
       const bit = [];
@@ -66,11 +65,6 @@
         const sv = ((res.rattat || {}).svaga || []).map(s => s.kod).filter(Boolean);
         bit.push(sv.length ? `provets utfall (uppg ${sv.join(', ')})` : 'provets utfall');
       }
-      if (lekt) bit.push(`${lekt} ${lekt === 1 ? 'lektion' : 'lektioner'}`);
-      /* Papperen som följer med lektionen räknas — annars säger raden «1 lektion»
-         medan tre saker faktiskt ligger som underlag. */
-      const mat = window.Lektionsmaterial ? window.Lektionsmaterial.antal() : 0;
-      if (mat) bit.push(`${mat} ${mat === 1 ? 'papper' : 'papper'} från lektionen`);
       if (sid) bit.push(`${sid} ${sid === 1 ? 'sida' : 'sidor'}`);
       return bit.length ? bit.join(' · ') : 'Inget underlag';
     }
@@ -219,21 +213,18 @@
   /* Underlag valt, eller överhoppat → sista steget */
   const vidareTre = () => las(sista);
   q('#hoppaunderlag').addEventListener('click', vidareTre);
-  const chips = q('#valdalektioner'), minis = q('#sidminis');
-  const obs = new MutationObserver(() => {
-    if (chips.children.length || minis.children.length) {
+  const minis = q('#sidminis');
+  new MutationObserver(() => {
+    if (minis.children.length) {
       if (!klara.has(3)) foreslagna.add(3);
       klara.add(3); rita(false);
     }
-  });
-  obs.observe(chips, { childList: true });
-  obs.observe(minis, { childList: true });
+  }).observe(minis, { childList: true });
   rita(false);
 
-  /* Dropzon — dra in sidor, eller välj lektioner / filer via länkarna */
+  /* Dropzon — dra in sidor, eller välj filer via länken */
   const zon = q('#dropzon'), utan = q('#utanrad');
   if (zon) {
-    q('#dzlektioner').addEventListener('click', e => { e.stopPropagation(); q('#lektionsknapp').click(); });
     q('#dzfiler').addEventListener('click', e => { e.stopPropagation(); q('#sidknapp').click(); });
     zon.addEventListener('click', () => q('#sidknapp').click());
     ['dragenter', 'dragover'].forEach(n => zon.addEventListener(n, e => { e.preventDefault(); zon.setAttribute('data-over', ''); }));
