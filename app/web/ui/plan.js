@@ -4203,7 +4203,6 @@
     ritaKallval();
     ritaRef();
     planKoll();
-    window.Utgang && window.Utgang.rita();
     /* Veckan frågar efter dagen. Resten står redan ifyllt när man kommer ner. */
     if (window.Klass && window.Klass.valjOmprov) window.Klass.valjOmprov(v);
     else if (window.PlanSteg) window.PlanSteg.las(4);

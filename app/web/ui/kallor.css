@@ -1,17 +1,15 @@
-/* ══════════ STEG 3 · FEM DÖRRAR ══════════
-   Källan väljs först: förra lektionen, boken, egna filer, ett tidigare papper
-   eller ett rättat prov — en, flera eller alla. Varje vald dörr fäller ut sitt
-   eget verktyg under raden. Korten bär appens enda hovergest: disblå fyllning
-   med en glans som sveper.
+/* ══════════ STEG 3 · FYRA DÖRRAR ══════════
+   Källan väljs först. Läraren tar en, flera eller alla av boken, egna filer,
+   ett tidigare papper och ett rättat prov. Varje vald dörr fäller ut sitt eget
+   verktyg under raden. Korten bär appens enda hovergest: disblå fyllning med en glans
+   som sveper.
 
-   Fem dörrar i fyra spalter gav fyra breda och en femtedel så bred på egen rad —
-   och den femte såg avstängd ut för att den var mindre. Fem spalter, alla lika,
-   och dörrarna får bli smalare i stället: att de är lika stora är det som säger
-   att de är fem jämlika vägar in. */
-.dorrar{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px;margin-top:14px}
-/* Under ~720 px rymmer raden inte fem läsbara dörrar. Då blir de EN spalt —
-   fortfarande lika stora. Två spalter hade lagt den femte ensam på sista raden,
-   alltså tillbaka till felet. */
+   Dörrarna står i lika många spalter som de är, alla lika breda: att de är
+   lika stora är det som säger att de är jämlika vägar in. Den femte dörren,
+   «Förra lektionen», revs med transkriberingen 2026-10-07. */
+.dorrar{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-top:14px}
+/* Under ~720 px rymmer raden inte fyra läsbara dörrar. Då blir de EN spalt,
+   fortfarande lika stora. */
 @media (max-width:720px){.dorrar{grid-template-columns:1fr}}
 .kalla{position:relative;display:grid;gap:4px;align-content:start;text-align:left;padding:14px 14px 15px;border:none;border-radius:var(--r-card);font-family:inherit;cursor:pointer;background-color:var(--accent-weak);background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.32) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;transition:transform var(--dur-1) var(--ease),background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),box-shadow var(--dur-2) var(--ease),color var(--dur-2) var(--ease)}
 .kalla:hover{background-color:#006FD6;background-position:-30% 0;box-shadow:0 14px 28px -12px rgba(9,66,108,.62);transform:translateY(-2px)}
@@ -63,11 +61,6 @@
 .kalla[data-hopfalld]{box-shadow:inset 0 0 0 1px rgba(255,255,255,.2)}
 .kalla[data-hopfalld]:hover{box-shadow:0 14px 28px -12px rgba(9,66,108,.62)}
 .kalla[data-hopfalld]::after{content:'✓ ›';letter-spacing:.1em}
-/* «Föreslås» står SIST i dörren, inte först: stod den överst sköt den den ena
-   dörrens rubrik en rad ned, och fem dörrar i rad fick fyra rubriker på en
-   baslinje och en på en annan. */
-.kmark{order:3;display:inline-flex;align-items:center;justify-self:start;align-self:start;margin-top:3px;padding:2px 8px;border-radius:var(--r-pill);background:var(--sky-deep);color:#fff;font-size:.6rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase}
-.kalla[aria-pressed='true'] .kmark{background:rgba(255,255,255,.22)}
 
 /* ── den utfällda källpanelen ─────────────────────────── */
 .kpanel{border:1px solid var(--line);border-radius:var(--r-card);margin-top:12px;animation:kpin var(--dur-3) var(--ease)}
@@ -80,8 +73,6 @@
 .kpstang:active,.kbort:active{transform:translateY(0) scale(.94)}
 .kpstang:focus-visible,.kbort:focus-visible{outline:2px solid var(--berry);outline-offset:2px}
 .kpkropp{padding:13px 17px 16px;display:grid;gap:14px}
-/* En tom ruta ska inte reservera ett rutnätsspår och en lucka — den ska vara borta. */
-.utgangnat:empty{display:none}
 .kpkropp .bokdel{margin-top:0;padding-top:0;border-top:none}
 .kpkropp .dropzon{padding:26px 22px}
 .kpkropp #momentrad{margin-top:0!important}
@@ -311,7 +302,6 @@
 /* Kvittot är för de HOPFÄLLDA källorna: den uppslagna panelen säger redan sitt.
    Förr stod samma lektion tre gånger — på dörren, i kvittot och i panelen. */
 .kvitto[data-dolt]{display:none}
-.kvitto[data-oppen='lektion'] .krad[data-kalla='lektion'],
 .kvitto[data-oppen='bok'] .krad[data-kalla='bok'],
 .kvitto[data-oppen='foton'] .krad[data-kalla='foton'],
 .kvitto[data-oppen='sparat'] .krad[data-kalla='sparat']{display:none}

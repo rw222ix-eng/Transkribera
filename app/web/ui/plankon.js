@@ -83,7 +83,6 @@ window.PlanKo = (() => {
     if (t) { t.value = p.tid || ''; t.dispatchEvent(new Event('change', { bubbles: true })); }
     /* Står det prov i kalendern är typen redan bestämd — steg 2 öppnar med Prov. */
     if (p.slag === 'prov' && window.SattLage) window.SattLage('Prov');
-    window.Utgang && window.Utgang.rita();
   }
 
   function ritaVal() {

@@ -1,11 +1,12 @@
 /* ══════════ STEG 3 · KÄLLORNA ══════════
-   Tre dörrar: förra lektionen, boken, foton av sidorna. En, två eller alla tre
-   — samma klickgest som lektionen i steg 1. Dörren styr bara om källan följer
-   med; verktygen bakom (utgångskorten, bokuppslaget, sidorna) är oförändrade.
+   Fyra dörrar: boken, egna filer, ett tidigare papper, ett rättat prov. En,
+   flera eller alla, med samma klickgest som lektionen i steg 1. Dörren styr
+   bara om källan följer med; verktygen bakom (bokuppslaget, sidorna, högen)
+   är oförändrade.
 
-   Förra lektionen föreslås av sig själv: appen vet vilken klass som valdes i
-   steg 1 och vilken lektion den hade senast, och slår på den dörren när steget
-   öppnas. Transkriptet säger vad klassen faktiskt hann — det är underlaget. */
+   En femte dörr, «Förra lektionen», föreslog klassens senaste transkriberade
+   lektion av sig själv. Transkriberingen och arkivet revs 2026-10-07, och
+   dörren gick med dem. */
 (() => {
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -15,8 +16,6 @@
   const dorrar = $$('#dorrar .kalla');
   const panel = d => $(`.kpanel[data-panel="${d}"]`, steg);
   const pa = d => $(`.kalla[data-dorr="${d}"]`, steg).getAttribute('aria-pressed') === 'true';
-  let rortLektion = false;   /* har läraren själv rört lektionsdörren? */
-  let autoValt = null;       /* lektionen appen valde åt en — byts när klassen byts */
   let uppslagen = null;      /* EN panel står öppen i taget — se ritaPaneler() */
 
   /* Fyra utfällda paneler gjorde steget 2 000 px högt och sköt kvittot utanför
@@ -37,59 +36,9 @@
 
   /* ── Vad appen vet om klassen ──────────────────────── */
   const klassen = () => ($('#p-klass') || {}).value || '';
-  /* Inspelningarna lästes ur arkivets kort (#inspelningar), och arkivet togs
-     bort 2026-10-07. Listan är därför tom: lektionsdörren säger «Ingen transkriberad
-     lektion» och föreslår ingenting. Posternas form var { namn, klass, datum,
-     langd }, sorterade på datum. */
-  const lektioner = () => [];
-  const senaste = () => {
-    const k = klassen();
-    const l = lektioner().filter(x => !k || x.klass === k);
-    return l[l.length - 1] || null;
-  };
-  const dagdatum = d => {
-    const x = new Date(String(d) + 'T12:00:00');
-    if (isNaN(x)) return String(d || '');
-    const dag = x.toLocaleDateString('sv-SE', { weekday: 'short' }).replace('.', '');
-    const kort = x.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' }).replace(/\./g, '');
-    return dag.charAt(0).toUpperCase() + dag.slice(1) + ' ' + kort;
-  };
-  const langden = t => {
-    const m = String(t || '').match(/(\d{1,2})[:.](\d{2})/);
-    return m ? `${+m[1]} min ${+m[2]} s` : String(t || '');
-  };
 
   /* ── Dörrarnas undertexter ─────────────────────────── */
   function ritaDorrar() {
-    const l = senaste(), k = klassen();
-    const dl = $('.kalla[data-dorr="lektion"]', steg);
-    const under = $('i', dl), mark = $('.kmark', dl);
-    /* Rubriken följer valet: den föreslagna är «förra lektionen», men väljer man
-       själv i listan är det en annan lektion — eller flera. */
-    const namn = $$('#valdalektioner .lchip span').map(s => s.textContent);
-    const foreslagen = namn.length === 1 && autoValt === namn[0];
-    const titel = !namn.length ? 'Lektionen'
-      : foreslagen ? 'Förra lektionen'
-      : namn.length === 1 ? 'Lektionen'
-      : `${namn.length} lektioner`;
-    /* Dörren står still: den ÄR «förra lektionen» för klassen man valt i steg 1.
-       Vad man sedan lagt till i listan syns i panelen och i kvittot. */
-    const b = $('b', dl);
-    if (b) b.textContent = 'Förra lektionen';
-    const huv = $('.kpanel[data-panel="lektion"] .kpn', steg);
-    if (huv) huv.textContent = titel;
-    if (l) {
-      /* Undertexten håller samma längd som de andra fyra dörrarnas: namnet och
-       dagen. Klassen står redan i steg 1 och längden i panelen — med dem blev
-       raden dubbelt så lång som grannarnas och dörren en annan höjd. */
-      under.textContent = `${l.namn} · ${dagdatum(l.datum)}`;
-      dl.removeAttribute('data-tom');
-      mark.hidden = rortLektion;
-    } else {
-      under.textContent = `Ingen transkriberad lektion${k ? ' för ' + k : ''} än`;
-      dl.setAttribute('data-tom', '');
-      mark.hidden = true;
-    }
     /* Boken är indexerad eller inte, och det är BOKENS eget register som avgör.
        Dörren namnger den bok som faktiskt ligger i hyllan — står hyllan på
        Matematik 4 får dörren inte säga 3c. Kursens bok är bara förvalet. */
@@ -107,8 +56,8 @@
        \u00abInget sparat \u00e4n\u00bb. Den h\u00e4r sa bara vad man kunde l\u00e4gga in, och d\u00e5 blev
        konturen det enda som skilde tom fr\u00e5n ifylld. */
     $('i', fot).textContent = antal ? `${antal} ${antal === 1 ? 'fil' : 'filer'} inlagda` : 'Ingen fil inlagd \u00e4n \u00b7 PDF eller foto';
-    /* Ingen fil inlagd är ett tomt förråd, precis som en oöppnad lektion eller ett
-       orattat prov — dörren öppnas ändå, det är där man lägger in dem. */
+    /* Ingen fil inlagd är ett tomt förråd, precis som ett orättat prov. Dörren
+       öppnas ändå, det är där man lägger in dem. */
     fot.toggleAttribute('data-tom', !antal);
     /* Ur Sparat: samma sak som resten — dörren säger vad den bär just nu. Dörren
        bär två användningar av samma hög, och undertexten namnger högen. */
@@ -389,29 +338,11 @@
   function satt(d, till, tyst) {
     const knapp = $(`.kalla[data-dorr="${d}"]`, steg);
     knapp.setAttribute('aria-pressed', String(till));
-    /* Lektionen får alltid ta uppslaget: det är dörren med förslaget i sig. */
-    if (till) { if (!tyst || !uppslagen || d === 'lektion') uppslagen = d; }
+    if (till) { if (!tyst || !uppslagen) uppslagen = d; }
     else if (uppslagen === d) uppslagen = null;
     const p = panel(d);
     ritaPaneler();
-    if (d === 'lektion') {
-      if (till) {
-        /* Ingen lektion vald än → ta den appen föreslår. */
-        if (!$('#valdalektioner').children.length) {
-          const l = senaste();
-          if (l && window.Dokument) {
-            window.Dokument.valjLektion(l.namn);
-            autoValt = l.namn;
-            window.Utgang && window.Utgang.rita();
-            if (!tyst) window.toast && window.toast(`Utgår från ${l.namn}`);
-          }
-        }
-      } else if (window.Dokument) {
-        $$('#valdalektioner .lchip span').map(s => s.textContent).forEach(n => window.Dokument.slappLektion(n));
-        autoValt = null;
-        window.Utgang && window.Utgang.rita();
-      }
-    } else if (d === 'sparat') {
+    if (d === 'sparat') {
       if (!till && window.Dokument && window.Dokument.slappForlaga) {
         window.Dokument.slappForlaga();
       }
@@ -430,7 +361,6 @@
 
   dorrar.forEach(b => b.addEventListener('click', () => {
     const d = b.dataset.dorr;
-    if (d === 'lektion') rortLektion = true;
     /* Vald men hopfälld → slå upp den. Vald OCH uppslagen → ta bort källan. */
     if (pa(d) && uppslagen !== d) {
       uppslagen = d;
@@ -444,10 +374,7 @@
     }
     satt(d, !pa(d));
   }));
-  $$('.kpstang', steg).forEach(b => b.addEventListener('click', () => {
-    if (b.dataset.stang === 'lektion') rortLektion = true;
-    satt(b.dataset.stang, false);
-  }));
+  $$('.kpstang', steg).forEach(b => b.addEventListener('click', () => satt(b.dataset.stang, false)));
 
   /* ── Kvittot: vad man faktiskt utgår från ───────────
      Inte etiketter, utan innehåll: vilken lektion med vilken klass och när,
@@ -486,34 +413,11 @@
       detalj: [teman.slice(0, 2).join(' + ') || 'tolkas ur rubrikerna', typer.slice(0, 2).join(', ')].filter(Boolean).join(' · ')
     };
   }
-  function lektionsinfo(namn) {
-    const l = lektioner().find(x => x.namn === namn);
-    if (!l) return { titel: namn, detalj: 'transkriberad lektion' };
-    return {
-      titel: l.namn,
-      detalj: ['Transkript', l.klass || 'ingen klass', dagdatum(l.datum), veckonr(l.datum), langden(l.langd)].filter(Boolean).join(' · ')
-    };
-  }
-  const veckonr = d => (d && window.Kalender && window.Kalender.veckonr) ? 'v' + window.Kalender.veckonr(d) : '';
-
   function ritaKvitto() {
     /* Fotozonen hör till dörren, inte till om något annat råkar vara valt. */
     $('#dropzon').hidden = false;
-    const lv = $('#lektionsknapp .valjtext');
-    if (lv) lv.textContent = $('#valdalektioner').children.length ? 'Välj en annan lektion' : 'Välj lektion ur listan';
     const ut = $('#kvittoextra');
     ut.innerHTML = '';
-    const namn = $$('#valdalektioner .lchip span').map(s => s.textContent);
-    namn.forEach(n => {
-      const i = lektionsinfo(n);
-      ut.appendChild(rad('Lektion', i.titel, i.detalj, () => {
-        if (window.Dokument) window.Dokument.slappLektion(n);
-        window.Utgang && window.Utgang.rita();
-        if (autoValt === n) autoValt = null;
-        rortLektion = true;
-        if (!$('#valdalektioner').children.length) satt('lektion', false, true);
-      }, 'lektion'));
-    });
     if (pa('bok')) {
       const b = bokinfoRad();
       if (b) ut.appendChild(rad('Boken', b.titel, b.detalj, () => satt('bok', false), 'bok'));
@@ -531,10 +435,6 @@
         .filter(Boolean).join(' · ');
       ut.appendChild(rad('Resultat', window.Dokument.namn(rs), detalj, () => satt('prov', false), 'prov'));
     }
-    /* Har man markerat bort den sista lektionen står panelen tom sånär som på
-       listan — inga kort som inte längre gäller. */
-    const nat = $('#utgangnat');
-    if (nat) nat.hidden = pa('lektion') && !namn.length;
     const nagot = ut.children.length;
     $('#kvittotom').hidden = !!nagot;
     /* Den uppslagna panelen säger redan vad den bär — kvittot är därför bara för
@@ -543,7 +443,7 @@
        försvinner hela kvittot i stället för att stå tomt. */
     const kv = $('#kvitto');
     kv.dataset.oppen = uppslagen || '';
-    const kvar = [...ut.children].filter(r => (r.dataset.kalla || (r.hasAttribute('data-lmrad') ? 'lektion' : '')) !== (uppslagen || '\u0000')).length;
+    const kvar = [...ut.children].filter(r => r.dataset.kalla !== (uppslagen || '\u0000')).length;
     kv.toggleAttribute('data-dolt', !kvar);
     kv.toggleAttribute('data-tom', !nagot);
     ritaSparatVald();
@@ -652,13 +552,6 @@
   })();
 
   /* ── Håll dörrarna i takt med det som händer i panelerna ── */
-  /* Väljer man en lektion i listan ska den också få sitt kort i panelen. */
-  new MutationObserver(() => {
-    window.Utgang && window.Utgang.rita();
-    if ($('#valdalektioner').children.length && !pa('lektion')) satt('lektion', true, true);
-    ritaDorrar();
-    ritaKvitto();
-  }).observe($('#valdalektioner'), { childList: true });
   new MutationObserver(() => {
     if ($('#sidminis').children.length && !pa('foton')) satt('foton', true, true);
     ritaDorrar();
@@ -666,36 +559,10 @@
   }).observe($('#sidminis'), { childList: true });
   $('#bkremsa') && $('#bkremsa').addEventListener('click', () => setTimeout(ritaKvitto, 0));
   $('#bkkapitel') && $('#bkkapitel').addEventListener('click', () => setTimeout(ritaKvitto, 0));
-  $('#p-klass') && $('#p-klass').addEventListener('change', () => { syncKlass(); ritaDorrar(); });
-  /* Klassen sätts programmatiskt när lektionen klickas i veckan — inget
-     change-event kommer. Vi läser om strax efter klicket i stället. */
-  $('#schemagrid') && $('#schemagrid').addEventListener('click', () => setTimeout(() => { syncKlass(); ritaDorrar(); }, 80), true);
-
-  /* Byter klassen i veckan byter också den föreslagna lektionen — så länge
-     läraren inte själv rört dörren. */
-  function syncKlass() {
-    if (rortLektion || !pa('lektion')) return;
-    const l = senaste();
-    if (!l) { satt('lektion', false, true); return; }
-    if (autoValt === l.namn) return;
-    if (window.Dokument) {
-      if (autoValt) window.Dokument.slappLektion(autoValt);
-      window.Dokument.valjLektion(l.namn);
-      autoValt = l.namn;
-      window.Utgang && window.Utgang.rita();
-    }
-    ritaDorrar();
-    ritaKvitto();
-  }
-
-  /* ── Förslaget slår till när steget öppnas ─────────── */
-  function kanskeForesla() {
-    if (steg.hasAttribute('data-last') || rortLektion) return;
-    syncKlass();
-    if (pa('lektion') || !senaste()) return;
-    satt('lektion', true, true);
-  }
-  new MutationObserver(kanskeForesla).observe(steg, { attributes: true, attributeFilter: ['data-last'] });
+  $('#p-klass') && $('#p-klass').addEventListener('change', ritaDorrar);
+  /* Klassen och kursen sätts programmatiskt när lektionen klickas i veckan, och
+     inget change-event kommer. Bokdörren läser därför om strax efter klicket. */
+  $('#schemagrid') && $('#schemagrid').addEventListener('click', () => setTimeout(ritaDorrar, 80), true);
 
   /* Håll fotozonen synlig: äldre kod (och den kompilerade bundlen) speglar
      fortfarande zonen mot «har något valts» och skulle annars gömma den. */
@@ -709,8 +576,7 @@
      förbifarten, utan att stoppa. */
   const fot = steg.querySelector('.stegfot .primar');
   if (fot) fot.addEventListener('click', () => {
-    const nagot = $('#valdalektioner').children.length || $('#kvittoextra').children.length;
-    if (!nagot) window.toast && window.toast('Skriver utan underlag — bara moment och kursplan');
+    if (!$('#kvittoextra').children.length) window.toast && window.toast('Skriver utan underlag — bara moment och kursplan');
   });
 
   /* Förlagan kan sättas också utanför dörren (förhandsvisningen) — då ska dörren
@@ -747,12 +613,8 @@
   ritaKvitto();
   ritaPaneler();
   ritaProvlista();
-  kanskeForesla();
   /* Fokusfältet står bara där något är valt: utan källor finns inget att väga.
-     Raderna i `#kvittoextra` ÄR alla källor — också lektionerna, som ritaKvitto()
-     lägger dit en rad var för. Att räkna lektionsbrickorna ovanpå dem räknade
-     samma transkript två gånger, och då frågade appen «Vad ska väga tyngst?» med
-     en enda källa vald — väga mot vad? */
+     Raderna i `#kvittoextra` ÄR alla källor, en rad per källa. */
   function ritaFokus() {
     const ruta = $('#fokusruta');
     if (!ruta) return;
@@ -776,7 +638,6 @@
       : 'T.ex. håll det vid det som föll, ta talen ur boken';
   }
   new MutationObserver(ritaFokus).observe($('#kvittoextra'), { childList: true });
-  new MutationObserver(ritaFokus).observe($('#valdalektioner'), { childList: true });
   ritaFokus();
   window.Kallor = { satt, ritaKvitto, ritaDorrar, speglaForlaga, speglaResultat, ritaFokus };
 })();

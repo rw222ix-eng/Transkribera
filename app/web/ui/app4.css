@@ -260,12 +260,6 @@
 .stegandra{font-size:.78rem;color:var(--sky-deep)}
 .plansteg+.stegvant{margin-top:10px}
 
-
-/* ══════════ 17b · UTGÅNGSPUNKTERNA (steg 3) ══════════
-   Vad appen redan vet om klassen, som kort man klickar en gång. Samma kortform
-   som lägesvalet — det är samma slags beslut, bara redan halvfattat. */
-.utgangnat{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin:0 0 18px;max-width:min(100%,880px)}
-
 .planvald{flex:1 1 auto;margin:0;font-size:.9rem;color:var(--ink)}
 .planvald b{font-weight:600}
 /* Kvittoraden bor i stapeln men syns inte: vad lektionen är säger veckan högst
