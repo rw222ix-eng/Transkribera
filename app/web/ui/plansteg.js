@@ -242,13 +242,12 @@
        synligheten. Den gamla speglingen gömde zonen så fort NÅGOT underlag var
        valt, vilket slog till redan när lektionen föreslogs av sig själv. */
     if (!window.Kallor) {
-      const harVal = () => chips.children.length || minis.children.length;
+      const harVal = () => minis.children.length;
       const speglaZon = () => {
         const valt = harVal();
         zon.hidden = valt;
         utan.hidden = valt;
       };
-      new MutationObserver(speglaZon).observe(chips, { childList: true });
       new MutationObserver(speglaZon).observe(minis, { childList: true });
       speglaZon();
     }
