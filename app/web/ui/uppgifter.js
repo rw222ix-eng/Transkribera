@@ -638,9 +638,9 @@
            det inte veta vilken form uppgiften ska få. */
         /* Inget lösningsblad till bokens uppgifter för provet:
            de har sitt eget lösningsförslag och sitt formelblad, och bokens
-           lösningar är det klassen ÖVADE med. Utan raden här hade tryck.js
-           lagt en «Lösningsförslag · boken»-flik i provets paket, eftersom
-           bokuppg.losning är det enda den läser. Upplägget kan sakna fälten
+           lösningar är det klassen ÖVADE med. Utan raden här fick provet
+           ett lösningsblad till boken, för bokuppg.losning är det enda
+           PDF-vägen (plan.js) läser. Upplägget kan sakna fälten
            helt (typen har ingen sådan rad) — också det är ett nej. */
         losning: (i.boklosning === false || i.boklosniva === undefined
                   || (window.Helhetstyp && window.Helhetstyp()))

@@ -448,7 +448,7 @@
       /* Bedömningsanvisningen och formelbladet är samma beslut — vad som skrivs
          ut UTÖVER provet — och stod som två switchar på var sin rad. En rad med
          två kryss säger det på halva höjden. Fälten under är oförändrade:
-         tryck.js läser `formelblad` och bladet `losningar`.
+         bladet läser `formelblad` och godkännandet `losningar`.
 
          FÄLTETS ID HETER KVAR `losningar` fast etiketten bytte namn
          2026-08-23. Id:t är persisterat i varje sparat dokument (`inst`), och
@@ -1274,7 +1274,7 @@
         if (k.id === 'syfte') { ritaTypval(); forvaljUrProfilen(); }
       }));
       /* Två kryss på en rad — varje kryss äger sitt eget fält i `s`, så att den
-         som läser upplägget längre fram (tryck.js, bladet) inte behöver veta att
+         som läser upplägget längre fram (bladet, godkännandet) inte behöver veta att
          de delar rad. */
       if (k.typ === 'kryss') $$('.kryssknapp', rad).forEach(b => b.addEventListener('click', () => {
         const id = b.dataset.del;

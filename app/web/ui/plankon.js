@@ -196,10 +196,7 @@ window.PlanKo = (() => {
     /* En kö på EN lektion behöver ingen räknare: «1 klar · 0 kvar» säger samma sak
        som «Lektionen är planerad», och tar den plats lektionens namn behöver. */
     $('.konprickar', remsa).innerHTML = ko.length > 1 ? lagetext(i + 1) : '';
-    const papper = ((window.Dokument && window.Dokument.sparade()) || [])
-      .some(v => v.datum === ko[i].datum && (!ko[i].klass || v.klass === ko[i].klass));
-    $('.konknappar', remsa).innerHTML = (papper ? '<button class="chip" type="button" data-tryck>Skriv ut papperen</button>' : '')
-      + '<button class="lank" type="button" data-avbryt>Stäng</button>';
+    $('.konknappar', remsa).innerHTML = '<button class="lank" type="button" data-avbryt>Stäng</button>';
     setTimeout(() => {
       const r = remsa.getBoundingClientRect();
       const mal = Math.max(0, r.top + window.scrollY - 120);
@@ -282,13 +279,6 @@ window.PlanKo = (() => {
   }
 
   remsa.addEventListener('click', e => {
-    if (e.target.closest('[data-tryck]')) {
-      const p = ko[i];
-      if (!(window.Tryck && window.Tryck.lektion && window.Tryck.lektion(p))) {
-        window.toast && window.toast('Inga godkända papper på den här lektionen än');
-      }
-      return;
-    }
     if (e.target.closest('[data-nasta]')) nasta();
     else if (e.target.closest('[data-avbryt]')) avbryt();
   });

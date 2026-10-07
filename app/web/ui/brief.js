@@ -47,8 +47,10 @@ window.Brief = (() => {
   }
 
   /* ── Vad veckan faktiskt saknar ─────────────────────
-     Tre slag av rader, i den ordning de kostar tid att upptäcka sent: ett bokat
-     prov som ingen skrivit, lektioner utan material, och papper som ska tryckas. */
+     Två slag av rader, i den ordning de kostar tid att upptäcka sent: ett bokat
+     prov som ingen skrivit, och lektioner utan material. Den tredje, prov som
+     ska skrivas ut, öppnade utskriftspaketet (tryck.js) och togs bort med det
+     2026-10-07. */
   function poster() {
     const bild = K.veckoBild(veckan());
     const kl = filtret();
@@ -88,20 +90,6 @@ window.Brief = (() => {
         under: visade + (tomma.length > 2 ? ` · och ${tomma.length - 2 === 1 ? 'en' : rakna(tomma.length - 2)} till` : ''),
         antal: tomma.length,
         gor: () => tillVeckan(kl, tomma[0].d.datum)
-      });
-    }
-
-    /* 3 · Prov som ÄR skrivet och ligger i veckan ska tryckas innan det hålls —
-       det är den enda av de tre raderna som bär en hög papper. Bara framåt: ett
-       prov som redan är hållet ska inte «skrivas ut till» sitt eget datum. */
-    const tryck = dok().filter(v => !v.losningsblad && /prov/i.test(v.typ) && iVeckan(v.datum)
-      && minKlass(v.klass) && v.datum >= K.idag());
-    if (tryck.length && window.Tryck) {
-      const v = tryck[0];
-      p.push({
-        rubrik: `Provet ska skrivas ut till ${K.ord(v.datum)}`,
-        under: [versal(v.moment || v.typ), v.klass, v.kurs].filter(Boolean).join(' · '),
-        gor: () => { fall(); bytFlik('Planering'); window.Tryck.lektion({ datum: v.datum, klass: v.klass }); }
       });
     }
     return p;

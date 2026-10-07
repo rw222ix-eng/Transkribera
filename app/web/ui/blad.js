@@ -11,7 +11,6 @@
 
      Blad.rita(mal, v)     ritar dokumentet v i mal
      Blad.uppgifter(v)     uppgiftslistan bladet faktiskt bär (poäng, nivå)
-     Blad.form(v)          vilka blad formen består av
 
    Vilken form ett dokument får följer av momentet — inte av en slumpad mall:
    geometri får figurspalt, ekvationslösning får den radbundna, en uppgift som
@@ -175,12 +174,6 @@ window.Blad = (() => {
     return ut;
   }
 
-  /* plan.js läser formen för att säga «2 sid» i utskriftspaketet — den behöver
-     antalet ark, inte deras namn. */
-  function form(v) {
-    if (v.typ === 'Tavla') return ['tav'];
-    return bladen(v).map((_, i) => 'ark' + i);
-  }
 
   /* ══════ PLANERINGEN PÅ PAPPRET ══════
      Förlagan bär formen, planeringen bär identiteten: rubriken, dagen,
@@ -2058,6 +2051,6 @@ window.Blad = (() => {
     return scenNyckel(u) !== markt;
   }
 
-  return { rita, form, formaOm, uppgifter, skala, omritaTavlor, tavlaTill,
+  return { rita, formaOm, uppgifter, skala, omritaTavlor, tavlaTill,
            tavlaDelar, bokTill, underlag, figurer, scenNyckel, bildInaktuell };
 })();
