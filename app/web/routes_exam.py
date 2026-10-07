@@ -146,16 +146,6 @@ def _uppgiftsnr(path: str) -> int | None:
     return int(m.group(1)) if m else None
 
 
-def _spann(text) -> tuple[int, int] | None:
-    """«s. 31–34» → (31, 34); «(s. 52)» → (52, 52). None utan sidor."""
-    tal = re.findall(r"\d+", str(text or ""))
-    if not tal:
-        return None
-    a = int(tal[0])
-    b = int(tal[1]) if len(tal) > 1 else a
-    return (min(a, b), max(a, b))
-
-
 def _sidspann_i_etikett(etikett: str) -> list[tuple[int, int]]:
     """Delmomentsrubrikens sidor, en per «(s. …)». Prompten ber om två rubriker
     med semikolon emellan när en uppgift täcker två, och då finns två spann."""

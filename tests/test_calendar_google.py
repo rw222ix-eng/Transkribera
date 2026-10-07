@@ -67,7 +67,7 @@ def test_ogiltig_klientfil_raknas_inte(tmp_path):
 
 def test_env_klient_ger_client_ready_utan_fil(tmp_path, monkeypatch):
     monkeypatch.setenv(calendar_google.ENV_CLIENT, VALID_CLIENT)
-    assert calendar_google.client_ready(tmp_path) is True
+    assert calendar_google.status(tmp_path)["client_ready"] is True
     assert calendar_google.status(tmp_path) == {"connected": False, "client_ready": True}
 
 
@@ -83,14 +83,14 @@ def test_install_client_secret_giltig(tmp_path):
     res = calendar_google.install_client_secret(tmp_path, VALID_CLIENT)
     assert res == {"ok": True, "client_ready": True}
     assert (tmp_path / calendar_google.CLIENT_SECRET_NAME).exists()
-    assert calendar_google.client_ready(tmp_path) is True
+    assert calendar_google.status(tmp_path)["client_ready"] is True
 
 
 def test_install_client_secret_web_form(tmp_path):
     # _looks_like_client accepterar även "web"-formen, inte bara "installed".
     res = calendar_google.install_client_secret(tmp_path, VALID_CLIENT_WEB)
     assert res == {"ok": True, "client_ready": True}
-    assert calendar_google.client_ready(tmp_path) is True
+    assert calendar_google.status(tmp_path)["client_ready"] is True
 
 
 def test_install_client_secret_ogiltig_json(tmp_path):

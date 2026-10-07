@@ -33,7 +33,7 @@ def pdf_fil(sokvag, sidor=2):
 
 def _prov(client, monkeypatch, sidor=3, bedomning=True, facit=False,
           losningar=False):
-    """Ett godkänt prov med en byggd PDF — det nedladdningen lägger först.
+    """Ett godkänt prov med en byggd PDF, det som nedladdningen lägger först.
 
     `bedomning`, `facit` och `losningar` är systerdokumenten bredvid: provets
     bedömningsanvisning, arbetsbladets separata facit och provets avritade

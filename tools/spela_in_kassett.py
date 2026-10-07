@@ -221,7 +221,7 @@ SCENARIER = {
         "system": lambda: exam_gen.RAKNE_SYSTEM,
         "schema": lambda: exam_gen.RAKNE_SCHEMA,
     },
-    # Kursdomaren (2026-09-22) döms mot PROV 88 (tests/fixtures/exam88.json,
+    # Kursdomaren (2026-09-22) döms mot PROV 88 (tests/np/exam88.json,
     # Ma 2a, lärarens dom uppgift för uppgift i planen), inte mot provbandet:
     # bandets kurs är Ma3c, och för den finns ingen mätt kursgräns
     # (kursdomare.kursgrans ger None och domaren körs inte). Prov 88 är
@@ -315,7 +315,7 @@ _DOMARENS_BAND = {"prov": ("prov", 6), "arbetsblad": ("arbetsblad", 6),
 
 def _exam88() -> dict:
     """Lärarens prov 88 (Ma 2a), fixturen kursdomarens tester mäter mot."""
-    return json.loads((ROT / "tests" / "fixtures" / "exam88.json")
+    return json.loads((ROT / "tests" / "np" / "exam88.json")
                       .read_text(encoding="utf-8"))
 
 

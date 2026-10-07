@@ -3,10 +3,11 @@
 # Två gånger nu har listan sett komplett ut och inte varit det. Först
 # pypdfium2, som tryckpaketet, bokimporten och PDF-underlaget importerar rakt
 # av: en ny installation kraschade när läraren tryckte «Skriv ut». Sedan
-# pillow, som INGEN av våra filer importerar — pypdfium2 gör det lazily när den
-# lämnar ut en sida som bild. Den fanns på utvecklarmaskinen (torchvision och
-# matplotlib drar in den) och saknades i CI, som föll på
-# «ModuleNotFoundError: No module named 'PIL'».
+# pillow, som då ingen av våra filer importerade: pypdfium2 gör det lazily när
+# den lämnar ut en sida som bild. Den fanns på utvecklarmaskinen (torchvision
+# och matplotlib drar in den) och saknades i CI, som föll på
+# «ModuleNotFoundError: No module named 'PIL'». Numera importerar app/bok.py,
+# app/platar.py, app/tryck.py och app/web/routes_bok.py PIL rakt av.
 #
 # Lärdomen: en grep efter `import` räcker inte. Det som avgör är vad en TOM
 # maskin behöver, och den frågan besvaras av CI:s beroendejobb, inte av oss.
@@ -22,9 +23,9 @@ starlette           # server.py använder den direkt, inte bara via fastapi
 anyio               # sse.py väntar på kön i en tråd utan att blockera slingan
 
 # Filer in och ut
-pypdfium2           # tryckpaketet, bokimporten, PDF-underlaget, tavlans sida
-pillow              # tavlans PNG läses här (app/tryck.py); pypdfium2 lämnar
-                    # dessutom ut sidbilder som PIL-objekt (lazy import)
+pypdfium2           # bokimporten, PDF-underlaget, tavlans och papperens PDF
+pillow              # bok.py, platar.py, tryck.py, routes_bok.py; pypdfium2
+                    # lämnar dessutom ut sidbilder som PIL-objekt (lazy import)
 
 # Räkneverket (app/rakneverk.py): den deterministiska domaren över facit och
 # svarsalternativ. math-verify drar in latex2sympy2_extended (LaTeX-läsaren) och

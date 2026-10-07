@@ -4,8 +4,8 @@ Två rutor i steg 3, två sätt att inte nå fram:
 
   1. `#svart` fanns inte alls. Appen kunde bara säga vad klassen hade svårt för
      om lektionen SPELATS IN — «Svårighet att följa upp» kom ur transkriptet
-     via db.next_prep, och inspelningen är borta sedan 2026-10-07 — och en lektion utan mikrofon lämnade tavlan utan det
-     enda läraren säkert visste.
+     via db.next_prep — och en lektion utan mikrofon lämnade tavlan utan det
+     enda läraren säkert visste. Inspelningen är borta sedan 2026-10-07.
   2. `#fokus` fanns, sparades på pappret och stod till och med i skrivplanen
      («Väger källorna»), men skickades aldrig i någon generate-begäran. Exakt
      samma tomma löfte som förlagan var före app/forlaga.py.

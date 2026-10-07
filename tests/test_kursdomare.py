@@ -2,7 +2,7 @@
 
 Lärarens dom över prov 88 (Ma 2a): uppgift 12b är 2c-provets A, inte 2a:s.
 Nivådomaren såg inget fel — nivån var rätt — och räknedomaren inte heller.
-Fixturen tests/fixtures/exam88.json är det provet, och bandet
+Fixturen tests/np/exam88.json är det provet, och bandet
 tests/kassetter/kursdomare.json är KONSTRUERAT mot det (`inspelad: false`),
 så att kedjan går att pröva innan ett skarpt band finns.
 """
@@ -17,7 +17,7 @@ from app import exam_gen, kursdomare
 from tests import fejk
 from tests.test_nivakalibrering import _giltigt_prov, _stub
 
-EXAM88 = Path(__file__).resolve().parent / "fixtures" / "exam88.json"
+EXAM88 = Path(__file__).resolve().parent / "np" / "exam88.json"
 
 
 def _exam88() -> dict:

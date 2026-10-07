@@ -1,7 +1,7 @@
 """NP-vakterna (app/np_vakter.py) mot lärarens dom över prov 88.
 
 Prov 88 («Algebra och ekvationer», Ma 2a, tolv uppgifter) ligger i
-tests/data/exam88.json som appen skrev det: inget ur nationella proven, bara
+tests/np/exam88.json som appen skrev det: inget ur nationella proven, bara
 appens egna uppgifter. Läraren gick igenom det uppgift för uppgift 2026-09-22
 och det hon fällde ska vakterna fälla, det hon godkände ska passera. Hennes
 egna förtydligande fraser («Avgör om Elin har hittat alla lösningar», «Visa
@@ -21,7 +21,7 @@ import pytest
 from app import exam_gen, exam_spec, np_vakter
 from app.web import routes_exam
 
-FIXTUR = Path(__file__).resolve().parent / "data" / "exam88.json"
+FIXTUR = Path(__file__).resolve().parent / "np" / "exam88.json"
 
 
 @pytest.fixture(scope="module")

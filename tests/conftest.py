@@ -59,7 +59,7 @@ def pytest_runtest_setup(item):
     # styckar ljudet med den), så de här testerna får aldrig hoppas över tyst
     # i CI heller.
     if "ffmpeg" in item.keywords and not media.ffmpeg_available():
-        besked = "ffmpeg/ffprobe saknas på maskinen — manusstudion kan inte köra utan dem."
+        besked = "ffmpeg/ffprobe saknas på maskinen. Manusstudion kan inte köra utan dem."
         if KRAV_TECTONIC:
             pytest.fail(besked)
         pytest.skip(besked)

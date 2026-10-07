@@ -8,7 +8,7 @@ Fyra av de sju gällde transkriberingen (Avbryt under molnfasen, ffprobe som
 saknas, /api/media utan timeout, `model`-fältet i /api/postprocess och
 /api/chat) och försvann med den 2026-10-07. Kvar står:
 
-  2. Noll omtag mot molnet — ett 429 slängde betalda bitar. Omtagen bor kvar i
+  2. Noll omtag mot molnet: ett 429 slängde betalda bitar. Omtagen bor kvar i
      app/elevenlabs_asr.py, som manusstudion (manus.py) använder.
   3. Tyst hängning i Claude-bryggan — timeouten låg inuti läsloopen och
      triggade aldrig när CLI:t inte skrev något; stderr lästes först efter

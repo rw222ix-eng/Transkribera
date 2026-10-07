@@ -6,6 +6,9 @@ blev «Öppna» ett 500-svar och «Visa i mappen» ett tyst `false` — knapparn
 levande ut och gjorde ingenting. Utvecklingen sker numera delvis på Mac, och
 appen ska bete sig likadant där som på lärarens Windowsdator.
 
+Rutterna och Api:ns `reveal` togs bort 2026-10-07. Kvar är nedladdningen i
+app/web/desktop.py, som visar den hämtade filen i Utforskaren (`markera`).
+
 Tre system, tre kommandon:
 
     Windows   os.startfile          ·  explorer /select,

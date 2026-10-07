@@ -92,10 +92,6 @@ def _client_config(base_dir: Path):
     return None
 
 
-def client_ready(base_dir: Path) -> bool:
-    return _client_config(base_dir) is not None
-
-
 def install_client_secret(base_dir: Path, raw: str) -> dict:
     """Spara en klient-JSON som användaren valt i appen som ``google_client_secret.json``
     i basmappen (validerad). Gör filplaceringen till ett knapptryck."""

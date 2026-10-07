@@ -1156,7 +1156,7 @@ def test_uppslaget_svarar_med_luckorna(client, ocr):
 def test_boklosningar_haller_sig_till_de_begarda():
     from app import bok_losning
     fejk = json.dumps({"poster": [
-        {"nr": 1111, "text": "Beräkna $\sqrt{49}$.", "svar": "$7$",
+        {"nr": 1111, "text": r"Beräkna $\sqrt{49}$.", "svar": "$7$",
          "vag": [["$7^2 = 49$", "kvadratrotens definition"]], "niva": 3},
         {"nr": 9999, "text": "Påhittad uppgift.", "svar": "$1$", "vag": []},
         {"nr": 1113, "text": "", "svar": "$2$", "vag": []},

@@ -2963,12 +2963,6 @@ def get_bok(conn: sqlite3.Connection, bok_id: int) -> dict | None:
     return _bok_view(conn, row) if row else None
 
 
-def find_bok(conn: sqlite3.Connection, namn: str) -> dict | None:
-    """Boken vid namn — hyllan i frontenden känner böcker på namnet, inte id."""
-    row = conn.execute("SELECT * FROM bocker WHERE namn = ?", (namn,)).fetchone()
-    return _bok_view(conn, row) if row else None
-
-
 def bok_for_kurs(conn: sqlite3.Connection, course_id: int | None) -> dict | None:
     """Klassens bok, slagen ur KURS-ID:t i stället för ur en begäran.
 
