@@ -530,9 +530,11 @@ test("provets färdiga fil pekas ut åt servern i stället för att hämtas hem"
     typ: "Arbetsblad", provId: 42, bokuppg: bokuppg() }))] });
   await page.route("**/api/exams/**", route => {
     const p = new URL(route.request().url()).pathname;
-    /* Förhandsvisningen speglar examens JSON (GET /api/exams/{id}) — det är
-       uppgiftslistan, inte filen, och hör inte hit. Räknarna gäller filerna. */
-    if (/^\/api\/exams\/\d+$/.test(p))
+    /* Förhandsvisningen speglar examens JSON (GET /api/exams/{id}) och läser
+       lärarens egna bilder ur utkatalogen (/egna, plan.js egnaFranDisk). Det
+       är uppgiftslistan och en bildkarta, inte filen, och hör inte hit.
+       Räknarna gäller filerna. */
+    if (/^\/api\/exams\/\d+(\/egna)?$/.test(p))
       return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
     hamtat.push(p);
     return route.fulfill({ status: 200, contentType: "application/pdf",
@@ -576,8 +578,9 @@ test("lösningsbladet laddar ner sin EGEN fil, inte originalets", async ({ page 
   ] });
   await page.route("**/api/exams/**", route => {
     const p = new URL(route.request().url()).pathname;
-    // Spegel-GET:en (uppgiftslistan) är en annan affär än filhämtningen.
-    if (/^\/api\/exams\/\d+$/.test(p))
+    // Spegel-GET:en (uppgiftslistan) och bildreserven (/egna) är andra
+    // affärer än filhämtningen.
+    if (/^\/api\/exams\/\d+(\/egna)?$/.test(p))
       return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
     hamtat.push(p);
     return route.fulfill({ status: 200, contentType: "application/pdf",
@@ -613,8 +616,9 @@ test("varje pappersort hämtar sin egen byggda fil", async ({ page }) => {
   ] });
   await page.route("**/api/exams/**", route => {
     const p = new URL(route.request().url()).pathname;
-    // Spegel-GET:en (uppgiftslistan) är en annan affär än filhämtningen.
-    if (/^\/api\/exams\/\d+$/.test(p))
+    // Spegel-GET:en (uppgiftslistan) och bildreserven (/egna) är andra
+    // affärer än filhämtningen.
+    if (/^\/api\/exams\/\d+(\/egna)?$/.test(p))
       return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
     hamtat.push(p);
     return route.fulfill({ status: 200, contentType: "application/pdf",
@@ -634,6 +638,44 @@ test("varje pappersort hämtar sin egen byggda fil", async ({ page }) => {
   }
   expect(hamtat).toEqual(["/api/exams/11/pdf", "/api/exams/12/pdf",
                           "/api/exams/13/pdf"]);
+});
+
+test("ett kastat lösningsblad tar inte originalets prov med sig", async ({ page }) => {
+  /* Lösningsbladet är en klon och bär originalets provId. Raderingen tog
+     provraden för varje kastat papper, så ett ensamt kastat blad raderade
+     provet originalet står på. Originalet pekade sedan på en rad som inte
+     fanns: nästa sidladdning fick 404 på GET /api/exams/42 och PDF:en gick
+     inte att hämta. Apan i svitens delade bas hittade det. */
+  const raderat = [];
+  await fejka(page, { sparade: [
+    rad(1, papper({ typ: "Prov", provId: 42 })),
+    rad(2, papper({ typ: "Prov", provId: 42, losningsblad: true })),
+  ] });
+  await page.route("**/api/exams/**", route => {
+    if (route.request().method() === "DELETE")
+      raderat.push(new URL(route.request().url()).pathname);
+    return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+  });
+  await page.goto("/");
+  await hydrerad(page);
+  await expect.poll(() => page.evaluate(() => window.Dokument.sparade().length)).toBe(2);
+  await page.getByRole("tab", { name: "Planering" }).click();
+
+  // Bladet först: originalet står kvar, och dess prov med det.
+  await page.evaluate(() => window.Dokument.radera(window.Dokument.sparade()[1]));
+  await expect.poll(() => page.evaluate(() => window.Dokument.sparade().length)).toBe(1);
+  await page.waitForTimeout(300);
+  expect(raderat).toEqual([]);
+  // Ångra lägger tillbaka bladet med sitt provId: provet finns ju kvar.
+  await page.locator(".toast button", { hasText: "Ångra" }).click();
+  await expect.poll(() => page.evaluate(() =>
+    window.Dokument.sparade().map(v => [v.provId, !!v.provBorta])))
+    .toEqual([[42, false], [42, false]]);
+
+  // Sedan originalet: nu går provet, en gång, och bladet följer med.
+  await page.evaluate(() => window.Dokument.radera(window.Dokument.sparade()[0]));
+  await expect.poll(() => raderat).toEqual(["/api/exams/42"]);
+  await expect.poll(() => page.evaluate(() => window.Dokument.sparade().length)).toBe(0);
 });
 
 test("ett papper utan byggd PDF ger serverns besked, inte «Sparad»", async ({ page }) => {

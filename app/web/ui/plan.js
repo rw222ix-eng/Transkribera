@@ -5078,9 +5078,18 @@
        uppgifter gick in i nästa prompt som «undvik det du gjort förut», och
        dubblettkontrollen jämförde mot uppgifter som inte finns någonstans.
        .tex och .pdf blev liggande i utkatalogen på köpet.
-       Lösningsbladet är en klon och bär SAMMA provId — därav mängden. */
+       Lösningsbladet är en klon och bär SAMMA provId — därav mängden.
+
+       Och därav också spärren: provraden raderas bara när inget papper som
+       står kvar bär den. Kastades lösningsbladet ensamt raderades originalets
+       prov med det, och originalet pekade sedan på en rad som inte fanns.
+       Nästa sidladdning frågade efter den (speglaExamen) och fick 404, och
+       PDF:en gick inte längre att hämta. Utkastet räknas också: ett godkänt
+       papper som lagts tillbaka för ändring bär sitt provId i versionerna. */
+    const kvar = new Set(sparat.concat(versioner)
+      .map(x => x && x.provId).filter(Boolean).map(String));
     const examIds = [...new Set(bort.map(b => b.v.provId)
-      .filter(Boolean))];
+      .filter(Boolean))].filter(id => !kvar.has(String(id)));
     if (serverPa()) {
       examIds.forEach(id => window.API.json('/api/exams/' + id,
                                             { method: 'DELETE' }).catch(() => {}));
@@ -5097,6 +5106,9 @@
          hämtat någon annans PDF. Uppgifterna står kvar på pappret: de är
          dokumentets egna, och det är dem läraren ville ha tillbaka. */
       bort.forEach(b => {
+        /* Bara de papper vars provrad faktiskt raderades. Ett ensamt
+           lösningsblad delar sin med originalet, som står kvar. */
+        if (b.v.provId && !examIds.includes(b.v.provId)) return;
         if (b.v.provId) b.v.provBorta = true;
         delete b.v.pdf;
         delete b.v.tex;
