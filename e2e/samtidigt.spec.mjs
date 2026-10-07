@@ -202,7 +202,11 @@ test("ett svar som landar när ett annat papper ligger framme slängs", async ({
   await expect(page.locator("#arkskal")).toContainText("Parabeln", { timeout: 20_000 });
 
   slapp();
-  await expect(page.locator(".toast")).toContainText("lades undan", { timeout: 20_000 });
+  /* `:not(.ut)`: skrivningens toast («Det här ligger i …») kan stå i sin
+     utgång (motion.js stangToast, 240 ms) när beskedet kommer, och två
+     .toast fäller lokatorn på strict mode innan den hinner vänta. */
+  await expect(page.locator(".toast:not(.ut)"))
+    .toContainText("lades undan", { timeout: 20_000 });
   // Det nya pappret är orört: ingen byggställning, ingen takstol.
   await expect(page.locator("#arkskal")).toContainText("Parabeln");
   await expect(page.locator("#arkskal")).not.toContainText("Takstolarna");
