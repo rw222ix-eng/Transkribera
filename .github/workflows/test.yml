@@ -93,8 +93,9 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
-      # Också här: lärardagarna transkriberar på riktigt (bara molnet är fejkat),
-      # och servern läser speltiden med ffprobe innan jobbet ens startar.
+      # Servern transkriberar inte längre (borttaget 2026-10-07) och behöver
+      # inte ffmpeg. Steget står kvar tills e2e-sviten är rensad från
+      # lärardagarnas inspelningar; ta bort det när ingen spec laddar upp ljud.
       - name: ffmpeg
         run: choco install ffmpeg -y --no-progress
       - uses: actions/setup-node@v4
