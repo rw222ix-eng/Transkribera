@@ -19,7 +19,7 @@
   };
 
   /* ══════════ SWR · det cachade först, det färska strax efter ══════════
-     Appen är EN sida med vyer som växlas. Andra gången läraren går till arkivet,
+     Appen är EN sida med vyer som växlas. Andra gången läraren går till
      schemat eller ett rättat papper är listan nästan alltid densamma som förra
      gången — men den ritades ändå inte förrän servern hunnit svara, och under
      tiden stod vyn tom. Här ligger svaret i localStorage: det ritas synkront,
@@ -125,16 +125,9 @@
      /api/schema, som svarar med hela veckan, posterna inräknade. */
   const SWR_RINGAR = {
     '/api/kalenderposter': ['/api/schema'],
-    '/api/schema': ['/api/schema', '/api/lessons'],
+    '/api/schema': ['/api/schema'],
     '/api/groups': ['/api/elever', '/api/dokument'],
     '/api/elever': ['/api/groups', '/api/dokument'],
-    /* Arkivkorten ritas ur BÅDA listorna (app.js hydreraArkivet) — den ena
-       glömd och den andra kvar hade ritat halva sanningen. Pappren hänger
-       däremot inte ihop med dem: en rättad uppgift ändrar inte en inspelning,
-       och den vanligaste skrivningen i appen (autosparet i elevläget) ska inte
-       kasta bort arkivet varje gång läraren sätter en poäng. */
-    '/api/lessons': ['/api/history'],
-    '/api/history': ['/api/lessons'],
   };
 
   function swrGlomFor(vag) {
@@ -346,9 +339,10 @@
   const avbrytJobb = id =>
     json(`/api/jobb/${id}/avbryt`, { method: 'POST' }).catch(() => ({ ok: false }));
 
-  /* Filen läggs på disk först — servern transkriberar en sökväg, inte en
-     webbläsarbuffert. Det är också det som gör att en lektion överlever att
-     fliken stängs mitt i. */
+  /* Filen läggs på disk först: servern läser en sökväg, inte en
+     webbläsarbuffert. Bokimporten (kallor.js) laddar upp bokens PDF så.
+     Transkriberingen gick samma väg tills Transkribera-fliken togs bort
+     2026-10-07. */
   async function laddaUpp(fil) {
     const r = await fetch('/api/upload?name=' + encodeURIComponent(fil.name), {
       method: 'POST',
@@ -358,24 +352,6 @@
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'uppladdningen misslyckades');
     return r.json();                       // { path, name }
   }
-
-  /* Längden läses ur filen i webbläsaren — samma siffra som kön visar, utan att
-     servern behöver röra filen innan läraren tryckt på start. */
-  function langd(fil) {
-    return new Promise(los => {
-      const url = URL.createObjectURL(fil);
-      const el = document.createElement('video');
-      el.preload = 'metadata';
-      el.onloadedmetadata = () => { URL.revokeObjectURL(url); los(el.duration || 0); };
-      el.onerror = () => { URL.revokeObjectURL(url); los(0); };
-      el.src = url;
-    });
-  }
-
-  const klocka = s => {
-    const h = Math.max(0, Math.round(s || 0));
-    return `${String(Math.floor(h / 60)).padStart(2, '0')}:${String(h % 60).padStart(2, '0')}`;
-  };
 
   /* ══════════ NÄR SERVERN FÖRSVINNER MITT I PASSET ══════════
      Sonderingen ovan ställer frågan EN gång, vid start. Morgonen 2026-08-30 dog
@@ -463,7 +439,7 @@
 
   Object.assign(API, { json, jsonSWR, swrGlom, swrTom, strom,
                        jobbStrom, aktivaJobb, avbrytJobb,
-                       laddaUpp, langd, klocka });
+                       laddaUpp });
 
   API.redo = json('/api/var-kors')
     .then(v => { API.pa = true; API.varKors = v; husPid = ((v || {}).hus || {}).pid || null; })

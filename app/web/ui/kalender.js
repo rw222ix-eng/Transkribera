@@ -410,7 +410,7 @@ window.Kalender = (() => {
   /* Allt som ritar veckan ritar om sig. Klass.rita drar med sig terminen,
      briefen och klassprofilen — se klass.js. */
   function ritaOm() {
-    ['Klass', 'Lov', 'Lektionskal'].forEach(n => {
+    ['Klass'].forEach(n => {
       const m = window[n];
       if (m && m.rita) { try { m.rita(); } catch (e) { /* en trasig vy ska inte ta de andra */ } }
     });

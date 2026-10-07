@@ -265,7 +265,7 @@ function start() {
   addEventListener('click', () => requestAnimationFrame(flyttaAlla), true);
   flyttaAlla(); fyllStreck();
   document.fonts && document.fonts.ready.then(flyttaAlla);
-  setTimeout(() => { stig($('#vy-transkribera')); document.body.classList.add('redo'); }, 30);
+  setTimeout(() => { stig($('#vy-planering')); document.body.classList.add('redo'); }, 30);
 }
 document.readyState === 'loading' ? addEventListener('DOMContentLoaded', start) : start();
 })();

@@ -37,11 +37,11 @@
 
   /* ── Vad appen vet om klassen ──────────────────────── */
   const klassen = () => ($('#p-klass') || {}).value || '';
-  const lektioner = () => $$('#inspelningar .kort').map(k => ({
-    namn: ($('.namn', k) || {}).textContent ? $('.namn', k).textContent.trim() : '',
-    klass: k.dataset.klass || '', datum: k.dataset.datum || '',
-    langd: ($('.tumtid', k) || {}).textContent || ''
-  })).filter(l => l.namn).sort((a, b) => (a.datum || '').localeCompare(b.datum || ''));
+  /* Inspelningarna lästes ur arkivets kort (#inspelningar), och arkivet togs
+     bort 2026-10-07. Listan är därför tom: lektionsdörren säger «Ingen transkriberad
+     lektion» och föreslår ingenting. Posternas form var { namn, klass, datum,
+     langd }, sorterade på datum. */
+  const lektioner = () => [];
   const senaste = () => {
     const k = klassen();
     const l = lektioner().filter(x => !k || x.klass === k);

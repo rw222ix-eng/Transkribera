@@ -17,16 +17,13 @@
   const nyckel = v => [v.typ, v.moment, v.datum].join('|');
   const avvalda = new Set();   /* det man klickat bort — nytt material är på */
 
-  const start = t => String(t || '').split('–')[0].split('-')[0].trim();
   const langden = t => {
     const m = String(t || '').match(/(\d{1,2})[:.](\d{2})/);
     return m ? `${+m[1]} min ${+m[2]} s` : String(t || '');
   };
-  const inspelningar = () => $$('#inspelningar .kort').map(k => ({
-    namn: ($('.namn', k) || {}).textContent ? $('.namn', k).textContent.trim() : '',
-    klass: k.dataset.klass || '', datum: k.dataset.datum || '',
-    tid: start(k.dataset.tid || ''), langd: ($('.tumtid', k) || {}).textContent || ''
-  })).filter(l => l.namn);
+  /* Inspelningarna lästes ur arkivets kort (#inspelningar), och arkivet togs
+     bort 2026-10-07. Listan är därför tom, och blocket står gömt (se rita). */
+  const inspelningar = () => [];
 
   const valdaLektioner = () => {
     const namn = $$('#valdalektioner .lchip span').map(s => s.textContent);
@@ -53,8 +50,7 @@
   el.className = 'lmat';
   el.id = 'lektionsmaterial';
   el.hidden = true;
-  const kal = $('#lektionskal', kropp);
-  kropp.insertBefore(el, kal ? kal.nextSibling : kropp.firstChild);
+  kropp.insertBefore(el, $('#lektionsvalj', kropp));
 
   function rita() {
     const lekt = valdaLektioner();

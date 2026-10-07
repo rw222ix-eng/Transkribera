@@ -46,8 +46,8 @@
   <link rel="stylesheet" href="blad.css" />
   <style>
     /* ==========================================================
-       Speglar frontend/src/lib/**. Tre vyer bakom flikarna i toppen —
-       Transkribera (steg 1–3), Inspelningar och Planering.
+       Speglar frontend/src/lib/**. En vy: Planering. Transkribera-fliken och
+       arkivet med inspelningarna togs bort 2026-10-07.
 
        Duken är himlen: den ligger fast bakom allt och rör sig långsamt.
        Arbetsytorna är vita "skivor" som flyter ovanpå den.
@@ -113,10 +113,8 @@
     .view.i-steg[data-steg="1"]{padding-bottom:280px}
     .vy[hidden],[hidden]{display:none!important}
     .himmelhuvud{padding:0 2px 24px}
-    /* Steg 1:s fråga står mitt över ytan den gäller — och samma sak gäller
-       lektionslistan och planeringens fråga: det är en fråga till hela sidan. */
-    #vy-transkribera .view[data-steg="1"] .himmelhuvud,
-    #vy-inspelningar .himmelhuvud,
+    /* Planeringens fråga står mitt över ytan den gäller: det är en fråga till
+       hela sidan. */
     #vy-planering .himmelhuvud{text-align:center}
     .eyebrow{font-size:.72rem;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:var(--sky-ink-3);margin:0 0 16px}
     .rubrik{font-family:var(--serif);font-weight:600;font-size:clamp(2.5rem,5.4vw,3.44rem);line-height:1.02;letter-spacing:-.004em;color:var(--sky-ink);margin:0;text-wrap:balance}
@@ -720,222 +718,16 @@
 </head>
 <body>
 
-<div class="duk" aria-hidden="true"><div class="himmel"></div><div class="fotolager"><div class="foto pa" data-vy="vy-transkribera" style="background-image:url(assets/himmel/transkribera.jpg);--pos:50% 40%;--dur:58s"></div><div class="foto vand" data-vy="vy-inspelningar" style="background-image:url(assets/himmel/transkribera.jpg);--pos:50% 40%;--dur:72s"></div><div class="foto" data-vy="vy-planering" style="background-image:url(assets/himmel/transkribera.jpg);--pos:50% 40%;--dur:64s"></div></div><div class="dis"></div></div>
+<div class="duk" aria-hidden="true"><div class="himmel"></div><div class="fotolager"><div class="foto pa" data-vy="vy-planering" style="background-image:url(assets/himmel/transkribera.jpg);--pos:50% 40%;--dur:64s"></div></div><div class="dis"></div></div>
 
 <header class="topbar">
   <div class="flikar" role="tablist" aria-label="Vy">
     <span class="flikglid"></span>
-    <button class="flik" role="tab" aria-selected="true" aria-controls="vy-transkribera">Transkribera</button>
-    <button class="flik" role="tab" aria-selected="false" aria-controls="vy-planering">Planering</button>
+    <button class="flik" role="tab" aria-selected="true" aria-controls="vy-planering">Planering</button>
   </div>
-  <div class="korruta" id="korruta" style="margin-left:auto"></div>
 </header>
 
-<div class="vy" id="vy-transkribera" role="tabpanel">
-  <div class="stegwrap" data-stig>
-    <div class="steg" id="stegrad">
-      <div class="stegpost pa" data-s="1"><span class="bricka pa">1</span><span class="stegnamn">Källa</span></div>
-      <span class="streck"></span>
-      <div class="stegpost" data-s="2"><span class="bricka">2</span><span class="stegnamn">Transkribering</span></div>
-    </div>
-  </div>
-
-  <!-- ═══════════ STEG 1 · KÄLLA ═══════════ -->
-  <section class="view i-steg" data-steg="1">
-    <div class="himmelhuvud">
-      <h1 class="rubrik" data-stig>Vad vill du transkribera?</h1>
-    </div>
-
-    <div class="skiva" data-stig>
-      <div class="dropzone" id="dropzone" role="button" tabindex="0">
-        <p class="dz-titel">Dra in filer — eller klicka för att välja</p>
-        <p class="dz-under">MP4 · MKV · MOV · MP3 · WAV · M4A — flera filer går bra</p>
-      </div>
-
-      <div class="kolista" id="ko-steg1"></div>
-
-      <div class="falt-rad">
-        <span class="minietikett">Eller<br />länk</span>
-        <input class="field" id="lankfalt" placeholder="Klistra in en YouTube-länk …" />
-        <button class="ghost" id="lagg-till-lank">Lägg till</button>
-      </div>
-
-      <p class="prova">Eller prova med
-        <button class="lank" data-exempel="Exempellektion — derivator.mp4|41:20">ett exempel</button>
-        <button class="lank" data-exempel="skadad_inspelning.m4a|07:48">skadad_inspelning.m4a</button>
-        <button class="lank" data-exempel="2026-08-20 1410 inspelning.mp4|48:02">en fil som schemat känner igen</button>
-      </p>
-
-
-      <!-- Inställningarna gömmer sig inte bakom chips: tre val, alla synliga och
-           direkt vridbara i raden. Ingenting att öppna för att se vad som gäller. -->
-      <div class="instrad" id="instrad">
-        <span class="minietikett" style="margin:0">Körs som</span>
-        <span id="talat-upptackt" hidden>svenska</span>
-        <div class="seg" role="group" data-seg="resultat" aria-label="Resultatspråk"><button aria-pressed="true">Svenska</button><button aria-pressed="false">Engelska</button></div>
-        <span class="lodlinje"></span>
-        <div class="seg flerval" role="group" data-seg="format" data-flerval="1" aria-label="Filformat"><button aria-pressed="true">SRT</button><button aria-pressed="true">TXT</button><button aria-pressed="false">VTT</button></div>
-      </div>
-
-      <div class="vidare" data-stig>
-        <button class="primar" id="starta" disabled>Starta transkribering</button>
-        <span class="skal" id="skal">Lägg till minst en fil, en länk eller en inspelning först.</span>
-      </div>
-    </div>
-  </section>
-
-  <!-- ═══════════ STEG 2 · TRANSKRIBERING ═══════════ -->
-  <section class="view i-steg" data-steg="2" hidden>
-    <div class="himmelhuvud">
-      <h1 class="rubrik" id="steg3-rubrik" data-stig>Lyssnar igenom …</h1>
-    </div>
-
-    <div class="skiva" data-stig>
-      <p class="korfot" id="korfot"><span class="prick"></span><span id="korkvar">Räknar ut hur lång tid det tar …</span></p>
-      <div id="korvarningar"></div>
-      <div id="progresslista"></div>
-
-      <div id="klarruta" hidden>
-        <div class="klartva">
-          <div class="klarvad">
-            <p class="minietikett">Klart</p>
-            <p class="klarfil" id="klarfil">Filen</p>
-            <p class="klarmeta" id="klartext"></p>
-            <p class="klarsparat" id="klarsparat">Ligger på sin lektion i veckan.</p>
-            <div class="chips" id="klarchips"></div>
-          </div>
-          <span class="klarstreck"></span>
-          <div class="klarnasta">
-            <p class="minietikett">Nästa steg</p>
-            <div class="klarsteg">
-              <button class="nstegrad" id="granska-forslag" type="button">
-                <span class="nsn"><span class="nsr">Granska förslagen</span><span class="nst" id="forslagnot">Läser igenom transkriptet …</span></span>
-                <span class="nsantal" id="forslagantal" hidden>0</span>
-                <span class="nspil">→</span>
-              </button>
-              <button class="nstegrad" id="fraga-nyss" type="button">
-                <span class="nsn"><span class="nsr">Fråga lektionen</span><span class="nst">Svar med citat ur transkriptet</span></span>
-                <span class="nspil">→</span>
-              </button>
-              <button class="nstegrad" id="gor-om" type="button">
-                <span class="nsn"><span class="nsr">Transkribera fler</span><span class="nst">Tillbaka till kön</span></span>
-                <span class="nspil">→</span>
-              </button>
-            </div>
-          </div>
-        </div>
-        <div id="klarforslag"></div>
-      </div>
-    </div>
-  </section>
-</div>
-
-<div class="vy" id="vy-inspelningar" role="tabpanel" hidden data-arkiv>
-<!-- ══════════════════════ INSPELNINGARNA ══════════════════════
-     Fliken är borta: en inspelning är vad som HÄNDE på en lektion, och den bor
-     därför på lektionen i veckan — med lådan «Alla inspelningar» under schemat
-     för arkivsysslorna och planeringens frågerad för sökningen.
-
-     Själva korten står kvar här som appens lager av inspelningar: schemat,
-     lektionsfönstret, minikalendern och sökningen läser dem härifrån. Vyn visas
-     aldrig — ingen flik pekar på den längre. -->
-<section class="view">
-  <div class="himmelhuvud">
-    <h1 class="rubrik" data-stig>Dina lektioner</h1>
-  </div>
-
-  <!-- Konsol i två våningar: sök överst, filter och verktyg i hyllan under samma tak. -->
-  <div class="konsol" data-stig>
-    <div class="konsolovre">
-      <span class="lupp"></span>
-      <input id="sokfalt" placeholder="Sök eller ställ en fråga om lektionerna …" />
-      <button class="kor" id="soknapp" data-lage="fraga">Fråga</button>
-      <button class="ghost sokord" id="sokordknapp" type="button">Sök ord</button>
-    </div>
-    <div class="konsolundre">
-      <select class="field" id="f-klass" aria-label="Filtrera på klass"><option value="">Alla klasser</option><option>9A</option><option>9B</option></select>
-      <select class="field" id="f-kurs" aria-label="Filtrera på kurs"><option value="">Alla kurser</option><option>Matematik 3c</option><option>Matematik 4</option></select>
-      <div class="valj" id="kalvalj"><button class="valjknapp" id="kalknapp" type="button" aria-haspopup="dialog" aria-expanded="false"><span class="valjtext">Alla datum</span><span class="valjpil"></span></button></div>
-      <span class="konsolverktyg">
-        <button class="lank" id="backup" type="button">Säkerhetskopiera</button>
-        <button class="lank" type="button" id="markeralage">Markera flera</button>
-      </span>
-    </div>
-  </div>
-
-  <div id="fragavard" style="margin-top:18px" hidden></div>
-  <div class="kallpop" id="fragapop" hidden></div>
-
-  <!-- Massradering: kryssrutor bara i markeringsläge, så listan förblir en lista. -->
-  <div id="markrad" class="markrad" hidden>
-    <span class="markvad"><b id="markantal">0 inspelningar markerade</b><span class="antalmark" id="markstorlek"></span></span>
-    <span class="markknapp">
-      <button class="ghost" type="button" id="markavbryt">Avbryt</button>
-      <button class="radera" type="button" id="markradera" disabled>Radera</button>
-    </span>
-  </div>
-
-  <p class="tomrad" id="tomrad-filter" hidden>Inga inspelningar matchar filtret.</p>
-
-  <div id="inspelningar" style="margin-top:22px">
-    <div class="veckogrupp skiva" data-vecka="31" data-mandag="2026-07-27" data-stig hidden>
-      <div class="grupprubrik"><h2 class="vecka">Vecka 31</h2><span class="spann">27 jul – 31 jul</span><span class="antal">0 inspelningar</span></div>
-      <div class="lista"></div>
-    </div>
-    <div class="veckogrupp skiva" data-vecka="24" data-mandag="2026-06-08" data-stig>
-      <div class="grupprubrik"><h2 class="vecka">Vecka 24</h2><span class="spann">8 jun – 12 jun</span><span class="antal">1 inspelning</span></div>
-      <div class="lista">
-        <article class="kort" data-klass="9B" data-kurs="Matematik 4" data-manad="jun" data-datum="2026-06-11">
-          <div class="tumkol"><div class="tumme" data-typ="video"><image-slot id="tum-trigonometri" shape="rect" placeholder="Bildruta"></image-slot><span class="tumspela"><span>▶</span></span><span class="tumtid">45:30</span></div><span class="tumlangd">45 min 30 s</span></div>
-          <div class="text">
-            <p class="datum"><span class="dagnamn">Tor</span> 11 jun</p>
-            <p class="namn" data-akt="redigera" data-tip="Klicka för att byta namn">Trigonometriska ettan</p>
-            <span class="tagg" data-cc="sage"><button class="taggdel" type="button" data-del="klass">9B</button><span class="taggpunkt">·</span><button class="taggdel" type="button" data-del="kurs">Matematik 4</button></span>
-            <p class="meta"><span class="sprakmark" data-oversatt data-tip="Talad engelska, översatt till svenska">Engelska → svenska</span></p>
-          </div>
-          <div class="knappar">
-            <button class="tyst" data-akt="fraga">Fråga</button>
-            <button class="mer" data-akt="mer" aria-haspopup="menu" aria-expanded="false" aria-label="Mer">⋯</button>
-          </div>
-        </article>
-      </div>
-    </div>
-    <div class="veckogrupp skiva" data-vecka="23" data-mandag="2026-06-01" data-stig>
-      <div class="grupprubrik"><h2 class="vecka">Vecka 23</h2><span class="spann">1 jun – 5 jun</span><span class="antal">2 inspelningar</span></div>
-      <div class="lista">
-        <article class="kort" data-klass="9A" data-kurs="Matematik 3c" data-manad="jun" data-datum="2026-06-03">
-          <div class="tumkol"><div class="tumme" data-typ="video"><image-slot id="tum-derivator" shape="rect" placeholder="Bildruta"></image-slot><span class="tumspela"><span>▶</span></span><span class="tumtid">42:11</span></div><span class="tumlangd">42 min 11 s</span></div>
-          <div class="text">
-            <p class="datum"><span class="dagnamn">Ons</span> 3 jun</p>
-            <p class="namn" data-akt="redigera" data-tip="Klicka för att byta namn">Derivatans definition</p>
-            <span class="tagg" data-cc="sky"><button class="taggdel" type="button" data-del="klass">9A</button><span class="taggpunkt">·</span><button class="taggdel" type="button" data-del="kurs">Matematik 3c</button></span>
-            <p class="meta"><span class="sprakmark" data-tip="Talad svenska, transkriberad på svenska">Svenska</span></p>
-          </div>
-          <div class="knappar">
-            <button class="tyst" data-akt="fraga">Fråga</button>
-            <button class="mer" data-akt="mer" aria-haspopup="menu" aria-expanded="false" aria-label="Mer">⋯</button>
-          </div>
-        </article>
-        <article class="kort" data-klass="" data-kurs="" data-manad="jun" data-datum="2026-06-01">
-          <div class="tumkol"><div class="tumme" data-typ="ljud"><span class="tumljud">Ljud</span><span class="tumtid">38:02</span></div><span class="tumlangd">38 min 2 s</span></div>
-          <div class="text">
-            <p class="datum"><span class="dagnamn">Mån</span> 1 jun</p>
-            <p class="namn" data-akt="redigera" data-tip="Klicka för att byta namn">Integraler — introduktion</p>
-            <span class="tagg" data-cc="none"><button class="taggdel" type="button" data-del="klass" data-tom>Klass</button><span class="taggpunkt">·</span><button class="taggdel" type="button" data-del="kurs" data-tom>Kurs</button></span>
-            <p class="meta"><span class="sprakmark" data-tip="Talad svenska, transkriberad på svenska">Svenska</span></p>
-          </div>
-          <div class="knappar">
-            <button class="tyst" data-akt="fraga">Fråga</button>
-            <button class="mer" data-akt="mer" aria-haspopup="menu" aria-expanded="false" aria-label="Mer">⋯</button>
-          </div>
-        </article>
-      </div>
-    </div>
-  </div>
-</section>
-</div>
-
-<div class="vy" id="vy-planering" role="tabpanel" hidden>
+<div class="vy" id="vy-planering" role="tabpanel">
 <!-- ══════════════════════ PLANERING ══════════════════════ -->
 <section class="view">
   <div class="himmelhuvud">
@@ -947,17 +739,11 @@
        ruta — inget avskalat schema en andra gång längre ner, och ingen egen
        «Allt sparat»-hög: allt godkänt ligger på sin lektion i veckan. -->
   <div class="skiva" id="klassvyn" data-stig>
-    <!-- En konsol, inte tre kontroller: läget, fältet och knappen ligger i SAMMA
-         vita piller — läget är fältets omfång, inte en egen sak att välja. -->
     <div class="rad arkfraga">
-      <div class="fragkonsol">
-        <div class="seg" role="group" data-seg="arkivläge"><button aria-pressed="true">Fråga AI</button><button aria-pressed="false">Inspelningar</button></div>
-        <span class="konsollinje"></span>
-        <input class="field" id="arkivfalt" placeholder="Fråga om veckan eller lektionerna …" />
-        <button class="kor" id="arkivknapp">Fråga</button>
-      </div>
-      <!-- Veckobriefen är en KNAPP i sökraden: det appen har att säga om veckan
-           ligger en klickning bort, inte som en remsa längst ner på sidan. -->
+      <!-- Veckobriefen är en KNAPP överst i klassvyn: det appen har att säga om
+           veckan ligger en klickning bort, inte som en remsa längst ner på sidan.
+           Raden bar förr också arkivfrågan (Fråga AI, Inspelningar), borttagen
+           2026-10-07. -->
       <div class="briefwrap" id="briefwrap" hidden>
         <div class="brikyta">
           <div class="brikinner">
@@ -977,11 +763,6 @@
         </div></div>
       </div>
     </div>
-    <div id="arkivsvar" style="margin-top:16px" hidden></div>
-    <div class="kallpop" id="arkivpop" hidden></div>
-    <!-- Inspelningarna är ett SÖKLÄGE, inte en låda för sig: samma fält, samma
-         rad, samma plats som «Fråga AI» och «Sök ord». -->
-    <div class="insplada" id="insplada" hidden></div>
 
     <section class="arkpanel" id="ark-klass">
       <!-- Klassremsan är veckans filter: «Alla klasser» är hela schemat, en klass
@@ -1409,71 +1190,6 @@
 <script src="tavla-bild.js"></script>
 <script src="blad-bild.js"></script>
 <script src="motion.js"></script>
-<script src="image-slot.js"></script>
-
-<div class="modalskal" id="lektionsskal" hidden>
-  <div class="modal bred" role="dialog" aria-modal="true" aria-labelledby="l-titel">
-    <header class="lhuvud">
-      <div>
-        <p class="chattetikett" id="l-etikett">Videoinspelning</p>
-        <h3 class="chatttitel" id="l-titel">Lektionen</h3>
-        <p class="chattmeta" id="l-meta"></p>
-      </div>
-      <button class="ghost lspelupp" id="l-spelupp" type="button">Spela lektionen</button>
-      <button class="ikonknapp lmax" id="l-max" type="button" data-tip="Förstora till helskärm" aria-label="Förstora till helskärm" aria-pressed="false"><svg class="ikonsvg" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3H5.5A2.5 2.5 0 0 0 3 5.5V9" /><path d="M15 3h3.5A2.5 2.5 0 0 1 21 5.5V9" /><path d="M9 21H5.5A2.5 2.5 0 0 1 3 18.5V15" /><path d="M15 21h3.5a2.5 2.5 0 0 0 2.5-2.5V15" /></svg></button>
-      <button class="stangx" id="l-stang" aria-label="Stäng">✕</button>
-    </header>
-    <div class="lkropp3" id="l-kropp">
-      <div class="ltrad" id="l-trad"></div>
-      <div class="lfot" id="l-radfot"></div>
-      <div class="lfotfalt" id="l-fot"></div>
-    </div>
-    <div class="kallpop" id="l-pop" hidden></div>
-  </div>
-</div>
-
-<!-- Uppspelning är ett eget rum: hela bilden, framspolad till citatet. -->
-<div class="modalskal videoskal" id="videoskal" hidden>
-  <div class="videomodal" role="dialog" aria-modal="true" aria-labelledby="v-titel">
-    <header class="vhuvud">
-      <div>
-        <p class="chattetikett" id="v-etikett">Videoinspelning</p>
-        <h3 class="chatttitel" id="v-titel">Lektionen</h3>
-      </div>
-      <button class="stangx" id="v-stang" aria-label="Stäng uppspelningen">✕</button>
-    </header>
-    <div class="lstor" id="l-stor"></div>
-    <div class="vfot">
-      <div class="lspelrad" id="l-spelrad"></div>
-      <p class="vcitat" id="v-citat"></p>
-    </div>
-  </div>
-</div>
-
-<div class="modalskal" id="platsskal" hidden>
-  <div class="modal plats" role="dialog" aria-modal="true" aria-labelledby="pl-titel">
-    <header class="chatthuvud">
-      <div>
-        <p class="chattetikett">Säkerhetskopia</p>
-        <h3 class="chatttitel" id="pl-titel">Välj plats på den här datorn</h3>
-        <p class="chattmeta" id="pl-meta">18,4 GB transkript och ljud kopieras dit du pekar.</p>
-      </div>
-      <button class="stangx" id="pl-stang" aria-label="Stäng">✕</button>
-    </header>
-    <div class="platslista" id="pl-lista" role="listbox" aria-label="Diskar och mappar"></div>
-    <div class="platsvag">
-      <span class="minietikett">Sökväg</span>
-      <input class="field vagfalt" id="pl-vag" aria-label="Sökväg" />
-    </div>
-    <div class="platsfot">
-      <label class="autopill"><button class="switch" id="pl-auto" type="button" aria-pressed="true" aria-label="Kopiera hit automatiskt varje kväll" data-tip="Kopiera hit automatiskt varje kväll klockan 21:00"><span class="knopp"></span></button><span>Varje kväll</span></label>
-      <div class="knappstock">
-        <button class="sekundar" id="pl-avbryt" type="button">Avbryt</button>
-        <button class="primar" id="pl-kor" type="button">Säkerhetskopiera hit</button>
-      </div>
-    </div>
-  </div>
-</div>
 
 <div class="modalskal" id="forhandsskal" hidden>
   <div class="modal bred" role="dialog" aria-modal="true" aria-labelledby="fh-titel">
@@ -1766,8 +1482,6 @@
 <script src="fraga.js"></script>
 <script src="app.js"></script>
 <script src="tips.js"></script>
-<script src="lov.js"></script>
-<script src="lektion.js"></script>
 <script src="gy.js"></script>
 <script src="plan.js"></script>
 <script src="plan-sidor.js"></script>
@@ -1785,16 +1499,13 @@
 <script src="klass.js"></script>
 <script src="termin-band.js"></script>
 <script src="termin.js"></script>
-<script src="inspelning.js"></script>
 <script src="rattning.js"></script>
 <script src="elever.js"></script>
 <script src="utgang.js"></script>
 <script src="notis.js"></script>
-<script src="lektionskal.js?v=5"></script>
 <script src="kallor.js"></script>
 <script src="lektionsmaterial.js"></script>
 <script src="omstart.js"></script>
-<script src="markera.js"></script>
 <script src="molnrad.js?v=13"></script>
 
 <script src="tryck.js"></script>

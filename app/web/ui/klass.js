@@ -12,7 +12,7 @@ window.Klass = (() => {
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const grid = $('#schemagrid');
   const K = window.Kalender;
-  if (!grid || !K) return { rita() {}, fragan: () => null };
+  if (!grid || !K) return { rita() {} };
 
   let vald = 'alla';
   const oppningsvecka = () => (K.nastaSkolvecka ? K.nastaSkolvecka(K.idag())
@@ -365,19 +365,11 @@ window.Klass = (() => {
   }
 
   /* Chipsremsan är densamma på en lektion och på ett löst dokument. */
-  function dokremsa(docs, insp, post) {
+  /* Inspelningarnas chips (▶ 42:11) stod först i remsan och öppnade
+     lektionsfönstret. Båda togs bort med arkivet 2026-10-07. */
+  function dokremsa(docs, post) {
     const remsa = document.createElement('div');
     remsa.className = 'lektdok';
-    insp.forEach(p => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'dokchip';
-      b.setAttribute('data-insp', '');
-      b.dataset.tip = `${p.namn} — lyssna, fråga transkriptet och hoppa till stället i inspelningen`;
-      b.textContent = `▶ ${p.langd || 'Inspelning'}`;
-      b.addEventListener('click', e => { e.stopPropagation(); window.Lektion && window.Lektion.oppna && window.Lektion.oppna(p.el); });
-      remsa.appendChild(b);
-    });
     docs.forEach(v => {
       const b = document.createElement('button');
       b.type = 'button';
@@ -461,7 +453,7 @@ window.Klass = (() => {
     el.innerHTML = `<div class="lekttopp"><span class="lekttid">${start(f.tid) || 'Hela dagen'}</span>${f.klass ? '<span class="lektklass"></span>' : ''}</div><p class="lektnamn"></p>`;
     if (f.klass) $('.lektklass', el).textContent = f.klass;
     $('.lektnamn', el).textContent = f.kurs ? kort(f.kurs) : namnPa(f);
-    el.appendChild(dokremsa(docs, [], null));
+    el.appendChild(dokremsa(docs, null));
     el.insertAdjacentHTML('beforeend', '<span class="lektbokat">Utanför schemat</span>');
     return el;
   }
@@ -516,9 +508,6 @@ window.Klass = (() => {
   /* ── Lektionskortet ────────────────────────────────── */
   function lektkort(d, s) {
     const docs = dokFor(d.datum, s);
-    /* Inspelningen är vad som HÄNDE på lektionen — den hänger på lektionen,
-       före materialet som skrevs efteråt. */
-    const insp = (window.Inspelningar && window.Inspelningar.forLektion) ? window.Inspelningar.forLektion(d.datum, s) : [];
     const post = { datum: d.datum, tid: s.tid, kurs: s.kurs, klass: s.klass, sal: s.sal };
     const bokatProv = K.poster.find(p => p.datum === d.datum && arProv(p) && !spegling(p) && iRutan(p, s));
     /* Vad kalendern säger att rutan är just den här dagen, när det inte är ett
@@ -586,8 +575,8 @@ window.Klass = (() => {
       el.appendChild(r);
     }
 
-    if (docs.length || insp.length) {
-      el.appendChild(dokremsa(docs, insp, post));
+    if (docs.length) {
+      el.appendChild(dokremsa(docs, post));
     } else if (bokatProv) {
       el.insertAdjacentHTML('beforeend', '<span class="lektbokat">Prov bokat · inte skrivet</span>');
       const b = document.createElement('button');
@@ -861,33 +850,6 @@ window.Klass = (() => {
     $('[data-nej]', ruta).addEventListener('click', () => { avvisat = true; ritaForslag(); });
   }
 
-  /* ── Frågan: schemat svarar, inte bara högen ────────
-     Fråga AI ligger över båda flikarna. Handlar frågan om tid — prov, nästa
-     vecka, vad som hunnits — läses schemat och boken med i svaret. */
-  function fragan(q) {
-    if (!/prov|nästa|nasta|när|nar|vecka|planera|hinner|kapitel|klar/i.test(q)) return null;
-    const f = forslaget();
-    if (!f) return null;
-    const kl = f.klass;
-    const lank = v => `[[dok:${dok().indexOf(v)}|${namnPa(v)}]]`;
-    const bok = kapitelKvar((K.schema.find(s => s.klass === kl) || {}).kurs || '', kl);
-    /* Provet bakåt skrivs som citat i stället för som mening — samma faktum,
-       en gång, men klickbart. */
-    const bakat = f.senast ? `Sist skrev ni ${lank(f.senast)} ${K.ord(f.senast.datum)}.` : f.senastSats;
-    return {
-      omfang: `${dok().length} sparade dokument, schemat och boken`,
-      antal: Math.max(1, dok().length + K.schema.length),
-      svar: `${[bakat, f.bokSats, f.karna.replace(/<\/?b>/g, '”')].filter(Boolean).join(' ')}${bok ? ` Boken är inläst, så innehållet är redan avgränsat: ${bok.avsnitt.nr}–kapitlets slut.` : ''}`,
-      plan: [
-        { namn: 'Läser kalendern och schemat', detalj: (() => { const n = K.schema.filter(s => s.klass === kl).length; return `${n} ${n === 1 ? 'lektion' : 'lektioner'} i veckan`; })() },
-        { namn: 'Väger in var boken står', detalj: bok ? `${bok.sidor} sidor kvar` : 'boken saknas' },
-        { namn: 'Skriver svar med källor', detalj: '' }
-      ],
-      kallor: [],
-      atgarder: [{ namn: f.knapp, stark: true, gor: () => f.gor() }]
-    };
-  }
-
   /* Veckobytet ska kännas som att bläddra — samma glid som planeringsveckan:
      veckan glider ut åt det håll man lämnar och nästa kommer in från andra sidan. */
   let byter = false;
@@ -1098,5 +1060,5 @@ window.Klass = (() => {
     if (k === 'alla') visaProfil = false;
     rita();
   }
-  return { rita, ritaVal: friskaVal, fragan, klass: () => vald, veckan: () => mandag, filtrera, till, valjOmprov, slappOmprov, speglaFinns };
+  return { rita, ritaVal: friskaVal, klass: () => vald, veckan: () => mandag, filtrera, till, valjOmprov, slappOmprov, speglaFinns };
 })();
