@@ -862,16 +862,13 @@
           </div>
         </div>
       </div>
-      <div class="plansteg" data-steg="2" data-visnr="1" data-namn="Skapar" data-vant="Tavla, prov, arbetsblad, gruppuppgift eller anteckningar" data-last>
+      <div class="plansteg" data-steg="2" data-visnr="1" data-namn="Skapar" data-vant="Tavla, prov, arbetsblad eller gruppuppgift" data-last>
         <div class="steghuvud"><span class="stegnr">1</span><p class="stegfraga">Vad ska du skapa?</p><span class="hjalp" id="lagenot">Välj två om de hör ihop — då skrivs de i samklang, med det andra byggt på det första</span></div>
         <div class="kort3" id="lagesval">
           <button class="lagekort" type="button" data-lage="Tavla" aria-pressed="true"><b>Tavla</b><span>Att skriva av under genomgången</span></button>
           <button class="lagekort" type="button" data-lage="Prov" aria-pressed="false"><b>Prov</b><span>Med poäng, delar och lösningsförslag</span></button>
           <button class="lagekort" type="button" data-lage="Arbetsblad" aria-pressed="false"><b>Arbetsblad</b><span>Uppgifter med nivå och facit</span></button>
           <button class="lagekort" type="button" data-lage="Gruppuppgift" aria-pressed="false"><b>Gruppuppgift</b><span>Ifyllnadsställning som följer av uppgiften</span></button>
-          <!-- Femte typen, och den enda som inte är elevmaterial: ett A4 att
-               skriva ut och ha bredvid sig under lektionen. -->
-          <button class="lagekort" type="button" data-lage="Anteckningar" aria-pressed="false"><b>Anteckningar</b><span>Ditt eget stödpapper — ett A4 att tala utifrån</span></button>
         </div>
         <!-- Andra handen: skapar man ett par är typen redan bestämd när det
              andra dokumentet ska skrivas — då står valet som en rad, inte fyra
@@ -882,7 +879,7 @@
           <button class="lank" id="andrahandbyt" type="button">Välj något annat</button>
         </div>
         <div class="seg" role="group" data-seg="skrivtyp" hidden>
-          <button aria-pressed="true">Tavla</button><button aria-pressed="false">Prov</button><button aria-pressed="false">Arbetsblad</button><button aria-pressed="false">Gruppuppgift</button><button aria-pressed="false">Anteckningar</button>
+          <button aria-pressed="true">Tavla</button><button aria-pressed="false">Prov</button><button aria-pressed="false">Arbetsblad</button><button aria-pressed="false">Gruppuppgift</button>
         </div>
         <!-- OBS-raden hör till valet man just gjort och står därför i stegets fot,
              till vänster om Nästa. plansteg.js ger den sin plats där, notis.js

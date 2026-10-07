@@ -715,7 +715,7 @@
      rutterna använder, inte i den form en mening börjar med. */
   const TYPNAMN = { prov: 'Provet', arbetsblad: 'Arbetsbladet',
                     gruppuppgift: 'Gruppuppgiften',
-                    tavla: 'Tavlan', anteckningar: 'Anteckningarna' };
+                    tavla: 'Tavlan' };
 
   /* ── REMSAN ÄR EN VÄG, INTE ETT KVITTO ──────────────
      Lärarens fynd 2026-09-06: hon klickade på remsans text för att komma DIT
@@ -735,7 +735,7 @@
 
   /* Vilket papper i Sparat jobbet skrev. `dokument_id` är INTE en rad i högen:
      för ett prov är det exam-id:t, för en tavla planeringens pid. Pappret bär
-     dem som `provId`/`antId` respektive `wbId`, och det är vägen tillbaka.
+     dem som `provId` respektive `wbId`, och det är vägen tillbaka.
      Hittas inget papper (jobbet blev klart i en annan flik, högen här är den
      som laddades) står «Ladda om» kvar. En knapp som öppnar fel papper är
      värre än en som ber om en omladdning. */
@@ -746,7 +746,7 @@
     const lika = (a) => a !== undefined && a !== null && a !== ''
       && String(a) === String(id);
     return (window.Dokument.sparade() || []).findIndex(
-      v => v && !v.losningsblad && (lika(v.provId) || lika(v.antId) || lika(v.wbId)));
+      v => v && !v.losningsblad && (lika(v.provId) || lika(v.wbId)));
   }
 
   function remsa(jobb) {
