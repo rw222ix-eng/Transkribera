@@ -109,7 +109,7 @@ const APAN = ({ varv, seed }) => new Promise(klar => {
  *  som ritas är något. En app som fastnat i en modal eller kastat i en
  *  klickhanterare klarar inte det. */
 async function levande(page) {
-  /* Apan lämnar ofta en modal öppen, och den kan stängas i LAGER — och står
+  /* Apan lämnar ofta en modal öppen, och den kan stängas i LAGER. Står
      markören i ett fält går första Escape till att lämna fältet. Fyra tryck
      räcker för varje kedja appen har. Att rutan GÅR att stänga är en del av
      det testet frågar om; en modal som inte lyssnar hade fastnat här.

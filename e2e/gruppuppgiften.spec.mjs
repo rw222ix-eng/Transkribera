@@ -168,8 +168,10 @@ test("fortsättningsbladet bär forts-raden — inte huvudet en gång till",
 /* ── APPENS EGNA VÄGAR ──────────────────────────────────
    Testen ovan går genom förhandsvisningen, där traven är synlig när den ritas.
    Läraren möter pappret på en annan väg: utkastet plockas upp vid SIDLADDNINGEN
-   (plan.js aterstallUtkast), och då ligger #dokument i planeringsvyn — som är
-   `hidden` tills hon byter flik. Traven ritades alltså i en gömd vy där varje
+   (plan.js aterstallUtkast), och då kan #dokument ligga i en vy som är
+   `hidden`. Förr startade appen på Transkribera-fliken och planeringen var
+   gömd tills läraren bytte flik; sedan fliken togs bort (2026-10-07) gömmer
+   testet vyn själv före första ritningen. Traven ritades alltså i en gömd vy där varje
    .gu rapporterar clientHeight 0, ledigt() blir −54 på varje blad, och delaArk
    delade tills ett kort låg kvar per papper. Mätt i den skarpa appen: fyra blad
    med 466, 703, 699 och 758 px ledigt.
@@ -196,20 +198,23 @@ const antalGu = page => page.evaluate(() => document.querySelectorAll("#arkskal 
 test("utkastet som plockas upp i en gömd flik delas inte alls — och packas när den öppnas",
   async ({ page }) => {
     await fejka(page, [], { id: 10, markor: 0, versioner: [papper()] });
+    await page.addInitScript(() => document.addEventListener("DOMContentLoaded", () => {
+      document.querySelector("#vy-planering").hidden = true;
+    }));
     await page.goto("/");
     await hydrerad(page);
     await expect.poll(() => antalGu(page), { timeout: 15_000 }).toBeGreaterThan(0);
     await page.waitForTimeout(1200);
 
     const gomt = await traven(page);
-    // Appen står kvar på transkriberingsvyn — pappret är ritat men omätbart.
+    // Vyn är gömd — pappret är ritat men omätbart.
     expect(gomt.vyDold).toBe(true);
     expect(gomt.gu[0].ch).toBe(0);
     // En gömd mätning får ALDRIG bli en maxdelning: ett blad, alla fyra korten.
     expect(gomt.gu.length).toBe(1);
     expect(gomt.gu[0].kort).toBe(4);
 
-    // Läraren byter flik. Nu har pappret en layout, och nu — först nu — mäts det.
+    // Fliken visar vyn. Nu har pappret en layout, och nu — först nu — mäts det.
     await page.getByRole("tab", { name: "Planering" }).click();
     await expect.poll(() => antalGu(page), { timeout: 15_000 }).toBe(2);
 

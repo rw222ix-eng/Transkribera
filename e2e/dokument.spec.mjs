@@ -602,7 +602,7 @@ test("lösningsbladet laddar ner sin EGEN fil, inte originalets", async ({ page 
 
 test("varje pappersort hämtar sin egen byggda fil", async ({ page }) => {
   /* Tre sorter delar exams-tabellen och därmed rutten: prov, arbetsblad och
-     gruppuppgift bär alla `provId`. Knappen ska fungera för alla tre — det är
+     gruppuppgift bär alla `provId`. Knappen ska fungera för alla tre. Det är
      lätt att tro att den gör det och lika lätt att en sort tappar sitt id på
      vägen. */
   const hamtat = [];

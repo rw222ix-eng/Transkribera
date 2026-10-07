@@ -7,8 +7,8 @@ import { expect, test } from "@playwright/test";
  * lagret ritar därför det cachade svaret SYNKRONT och hämtar färskt i bakgrunden.
  *
  * Det är svårt att se att det fungerar med nät: en snabb server ser precis ut
- * som en cache. Testerna nedan HÅLLER FAST rutten — begäran går i väg men
- * svarar aldrig — och frågar vad appen har under tiden. Har den svaret ändå
+ * som en cache. Testerna nedan HÅLLER FAST rutten, så att begäran går i väg men
+ * aldrig svarar, och frågar vad appen har under tiden. Har den svaret ändå
  * kom det ur cachen, för det kan inte ha kommit någon annanstans ifrån.
  * (Arkivlistan, /api/lessons och /api/history, prövades också här. Den togs
  * bort med arkivet 2026-10-07.)

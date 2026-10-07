@@ -1,17 +1,13 @@
 import { expect, test } from "@playwright/test";
 
-/* GISSNINGARNA OCH VECKOMATTEN SOM EGENSKAPER (Etapp 4.5)
+/* VECKOMATTEN SOM EGENSKAPER (Etapp 4.5)
  *
- * Två rena funktioner bär hela appens tideräkning, och båda går sönder tyst:
+ * ISO-veckorna styr veckovyn, terminsvyn, «nästa skolvecka» och varje
+ * dokuments plats, och de går sönder tyst. Kända datum är prövade
+ * (kalendern.spec.mjs); här körs hela år mot en oberoende referens.
  *
- *   · `gissaDatum`/`gissaTid` (app.js) läser filnamnet en lärare råkar ha:
- *     «NA25 2026-08-20 kl 0905.m4a», «ma3c 20 aug 09.05.mp3», «Inspelning
- *     (3).m4a». Läses datumet som en tid — 2026-08-20 som 20:26 — hamnar
- *     lektionen på fel plats i schemat, och `Kalender.traff` gör den
- *     gissningen till FAKTA: klass och kurs sätts utan att läraren tillfrågas.
- *   · ISO-veckorna styr veckovyn, terminsvyn, «nästa skolvecka» och varje
- *     dokuments plats. Kända datum är prövade (kalendern.spec.mjs); här körs
- *     hela år mot en oberoende referens.
+ * Filnamnsgissningen (app.js gissaDatum/gissaTid) prövades också här. Den
+ * togs bort med Transkribera-fliken 2026-10-07.
  *
  * Fallen genereras med en FAST seed: en röd körning går att köra om exakt.
  * Hypothesis finns bara i Python, och funktionerna bor i webbläsaren — så
@@ -32,105 +28,6 @@ async function fejka(page) {
 
 const hydrerad = page => page.waitForFunction(() =>
   window.Kalender && window.Kalender.franServern());
-
-// ── Filnamnen ────────────────────────────────────────────────────────────
-
-test("ett datum i filnamnet läses aldrig som ett klockslag", async ({ page }) => {
-  await fejka(page);
-  await page.clock.install({ time: new Date("2026-09-08T08:00:00") });
-  await page.goto("/");
-  await hydrerad(page);
-
-  const fall = await page.evaluate(() => {
-    /* Mulberry32 — liten, seedad och deterministisk. Samma seed ger samma
-       tusen filnamn varje körning, på varje maskin. */
-    let s = 20260808;
-    const slump = () => {
-      s |= 0; s = (s + 0x6D2B79F5) | 0;
-      let t = Math.imul(s ^ (s >>> 15), 1 | s);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-    const heltal = (a, b) => a + Math.floor(slump() * (b - a + 1));
-    const nolla = n => String(n).padStart(2, "0");
-    const KLASS = ["NA25", "TE25prk", "IN24prk", "NA24", "", "ma3c", "Ma 4"];
-    const SEP = ["-", "_", ".", " ", ""];
-    const ÄNDELSE = [".m4a", ".mp3", ".wav", ".MP3", ".m4a"];
-
-    const ut = [];
-    for (let i = 0; i < 1200; i++) {
-      const år = heltal(2020, 2029);
-      const mån = heltal(1, 12);
-      const dag = heltal(1, 28);
-      const tim = heltal(0, 23);
-      const min = heltal(0, 59);
-      const sep = SEP[heltal(0, SEP.length - 1)];
-      const datumtext = `${år}${sep}${nolla(mån)}${sep}${nolla(dag)}`;
-      const tidstext = [
-        `kl ${nolla(tim)}.${nolla(min)}`,
-        `${nolla(tim)}.${nolla(min)}`,
-        `${nolla(tim)}:${nolla(min)}`,
-        `${nolla(tim)}${nolla(min)}`,
-        "",
-      ][heltal(0, 4)];
-      const namn = [KLASS[heltal(0, KLASS.length - 1)], datumtext, tidstext]
-        .filter(Boolean).join(" ") + ÄNDELSE[heltal(0, ÄNDELSE.length - 1)];
-      ut.push({ namn, år, mån, dag, tim, min, tidstext,
-                datum: gissaDatum(namn), tid: gissaTid(namn) });
-    }
-    return ut;
-  });
-
-  const trasiga = [];
-  for (const f of fall) {
-    const vantat = `${f.år}-${String(f.mån).padStart(2, "0")}-${String(f.dag).padStart(2, "0")}`;
-    // Datumet läses ur namnet — inte dagens datum, och inte ur klockslaget.
-    if (f.år >= 2020 && f.år <= 2029 && f.datum !== vantat) {
-      trasiga.push(`datum: ${f.namn} → ${f.datum} (väntat ${vantat})`);
-    }
-    // Tiden är antingen den som står i namnet eller ingen alls. Den får ALDRIG
-    // komma ur datumsiffrorna.
-    const vantadTid = f.tidstext
-      ? `${String(f.tim).padStart(2, "0")}:${String(f.min).padStart(2, "0")}` : "";
-    if (f.tid !== vantadTid) {
-      trasiga.push(`tid: ${f.namn} → ${f.tid} (väntat ${vantadTid || "ingen"})`);
-    }
-  }
-  expect(trasiga.slice(0, 10), `${trasiga.length} av ${fall.length} fall`).toEqual([]);
-});
-
-test("filnamn utan datum eller tid gissar inte fram något", async ({ page }) => {
-  await fejka(page);
-  await page.clock.install({ time: new Date("2026-09-08T08:00:00") });
-  await page.goto("/");
-  await hydrerad(page);
-
-  const svar = await page.evaluate(() => ["Inspelning (3).m4a", "lektion.wav",
-    "röstmemo 7.m4a", "NA25 halvklass.m4a", "ljud 2.mp3", "kapitel 1.1.m4a"]
-    .map(n => ({ n, datum: gissaDatum(n), tid: gissaTid(n) })));
-
-  for (const s of svar) {
-    // Utan datum i namnet står dagens datum kvar — det är ett förval läraren
-    // ser och kan ändra, inte en gissning som utger sig för att vara läst.
-    expect(s.datum, s.n).toBe("2026-09-08");
-    expect(s.tid, s.n).toBe("");
-  }
-});
-
-test("2026-08-20 är ett datum, inte klockan 20:26", async ({ page }) => {
-  await fejka(page);
-  await page.goto("/");
-  await hydrerad(page);
-  const svar = await page.evaluate(() => ({
-    bara: { d: gissaDatum("2026-08-20.m4a"), t: gissaTid("2026-08-20.m4a") },
-    ihop: { d: gissaDatum("20260820.m4a"), t: gissaTid("20260820.m4a") },
-    med: { d: gissaDatum("NA25 2026-08-20 0905.m4a"),
-           t: gissaTid("NA25 2026-08-20 0905.m4a") },
-  }));
-  expect(svar.bara).toEqual({ d: "2026-08-20", t: "" });
-  expect(svar.ihop).toEqual({ d: "2026-08-20", t: "" });
-  expect(svar.med).toEqual({ d: "2026-08-20", t: "09:05" });
-});
 
 // ── ISO-veckorna ─────────────────────────────────────────────────────────
 

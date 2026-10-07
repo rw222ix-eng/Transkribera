@@ -13,8 +13,8 @@
  * /api/planning/generate och /api/exams/generate kör appens riktiga kedja:
  * prompt → ström → JSON → schema → balans → reparationsrundor.
  *
- * Allt annat — schemat, dokumenten, versionerna, godkännandet — går till
- * servern och skrivs på riktigt. (ElevenLabs fejkades också här, med
+ * Allt annat, alltså schemat, dokumenten, versionerna och godkännandet, går
+ * till servern och skrivs på riktigt. (ElevenLabs fejkades också här, med
  * fejkatMoln och transkribera. Båda togs bort med Transkribera-fliken
  * 2026-10-07.)
  *
