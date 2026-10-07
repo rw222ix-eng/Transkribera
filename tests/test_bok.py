@@ -686,6 +686,18 @@ def test_pdf_utanfor_appen_avvisas(client, tmp_path):
     assert r.status_code == 403
 
 
+def test_uppladdningen_lagger_boken_dar_importen_godtar_den(client):
+    """kallor.js laddar upp PDF:en först och pekar sedan ut den. Rutten
+    försvann med transkriberingen 2026-10-07 och bokimporten med den."""
+    r = client.post("/api/upload", params={"name": r"..\..\Liber 1c?.pdf"},
+                    content=b"%PDF-1.4 fejk")
+    assert r.status_code == 200, r.text
+    sparad = Path(r.json()["path"])
+    assert sparad.parent == client.base_dir / "downloads"
+    assert sparad.name == "Liber 1c.pdf" and sparad.read_bytes().startswith(b"%PDF")
+    assert client.post("/api/upload", content=b"").status_code == 400
+
+
 def test_okand_fil_ar_404(client):
     r = client.post("/api/bocker",
                     json={"path": str(client.base_dir / "downloads" / "finns-inte.pdf")})

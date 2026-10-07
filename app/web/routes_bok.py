@@ -18,8 +18,10 @@ finns kvar för takets skull, och för att `ensure_llm()` sitter på samma stäl
 from __future__ import annotations
 
 import hashlib
+import re
 import shutil
-from pathlib import Path
+import uuid
+from pathlib import Path, PureWindowsPath
 
 from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -85,6 +87,43 @@ def create_router(base: Path, arbiter) -> APIRouter:
         if b is None:
             return JSONResponse({"error": "okänd bok"}, status_code=404)
         return _vy(b)
+
+    # ----------------------------------------------------------- uppladdningen --
+    # Bokens PDF skickas hit först (kallor.js → API.laddaUpp) och pekas sedan ut
+    # med `path` i POST /api/bocker nedan. Rutten bodde i server.py ihop med
+    # inspelningarna och följde med när transkriberingen revs 2026-10-07
+    # (7536788); bokimporten var den enda levande anroparen kvar. Råa bytes i
+    # kroppen, inget multipart-beroende. Filen hamnar i downloads/, där
+    # böckerna redan ligger.
+    MAX_UPLOAD_BYTES = 1024 * 1024 * 1024
+    _OTILLATNA = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+    def _filnamn(raw: str) -> str:
+        """Ett filnamn Windows går med på, ändelsen kvar. PureWindowsPath så
+        att `..\\..\\x.pdf` och `c:x.pdf` blir `x.pdf` också på Macen."""
+        stam = PureWindowsPath(str(raw or "")).name
+        p = PureWindowsPath("" if stam in (".", "..") else stam)
+        ext = _OTILLATNA.sub("", p.suffix)[:16]
+        namn = _OTILLATNA.sub("", p.stem).strip().strip(".")
+        return (namn[:100] + ext) if namn else "bok.pdf"
+
+    @router.post("/api/upload")
+    async def ladda_upp(req: Request, name: str = "bok.pdf"):
+        declared = req.headers.get("content-length", "")
+        if declared.isdigit() and int(declared) > MAX_UPLOAD_BYTES:
+            return JSONResponse({"error": "Filen är för stor."}, status_code=413)
+        data = await req.body()
+        if not data:
+            return JSONResponse({"error": "tom uppladdning"}, status_code=400)
+        if len(data) > MAX_UPLOAD_BYTES:
+            return JSONResponse({"error": "Filen är för stor."}, status_code=413)
+        mapp = base / "downloads"
+        mapp.mkdir(parents=True, exist_ok=True)
+        dest = mapp / _filnamn(name)
+        if dest.exists():
+            dest = mapp / f"{dest.stem}-{uuid.uuid4().hex[:8]}{dest.suffix}"
+        dest.write_bytes(data)
+        return {"path": str(dest), "name": dest.name}
 
     # -------------------------------------------------------------- importen --
 

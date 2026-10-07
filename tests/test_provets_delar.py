@@ -777,10 +777,11 @@ def test_provets_facitark_heter_bedomningsanvisning():
     assert "Lösningsförslag" not in html
 
     plan = (UI / "plan.js").read_text(encoding="utf-8")
-    # arkNamn (fliken + granskningens rubrik) och dokNamn (PDF-filnamnet,
-    # tryckpaketets rad, kvittot och arkivsökningen) läser alla samma namn.
+    # arkNamn (fliken + granskningens rubrik) och dokNamn (PDF-filnamnet och
+    # kvittot) läser alla samma namn. Tryckpaketet och arkivsökningen, som
+    # också läste det, revs 2026-10-07.
     assert "['Provet', 'Bedömningsanvisning']" in plan
-    assert plan.count("v.typ === 'Prov' ? 'Bedömningsanvisning' : 'Facit'") == 3
+    assert plan.count("v.typ === 'Prov' ? 'Bedömningsanvisning' : 'Facit'") == 2
     assert "'Lösningsförslag'" not in plan
 
     html_app = (UI / "app.html").read_text(encoding="utf-8")
