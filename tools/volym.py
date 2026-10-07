@@ -5,15 +5,11 @@ som växer utan att någon lagt något nytt i huset. Det här verktyget frågar
 tvärtom: när huset ÄR fullt, hur lång tid tar det att öppna dörren?
 
 Skillnaden spelar roll. Soaken hinner ett par hundra varv på en natt och lämnar
-en bas med tusen papper — men den mäter aldrig svarstiden på en enskild rutt,
-och den kommer aldrig upp i ett läsårs LEKTIONER (700 transkript à 60 KB). Sviten
-gör det ännu mindre: varje körning startar mot ett tomt hus.
+en bas med tusen papper, men den mäter aldrig svarstiden på en enskild rutt.
+Sviten gör det ännu mindre: varje körning startar mot ett tomt hus.
 
 Så här fylls huset (ett läsår, `--ar` multiplicerar):
 
-* **700 lektioner** — fyra om dagen i 180 skoldagar, var och en med ett äkta
-  transkript på ~60 KB och tre insikter. `lessons.transcript_text` är den enda
-  riktigt stora kolumnen i basen, och FTS5-indexet lägger nästan lika mycket till.
 * **400 papper med fyra versioner var** — `/api/dokument` hämtar ALLA papper med
   ALLA sina versioner i ETT svar, plus en fråga per papper (db.list_dokument →
   _dokument_view). Frontenden hämtar den vid sidladdning. Det är den rutt som
@@ -64,7 +60,7 @@ PORT = port_kalla.VOLYM          # inte E2E (sviten), inte SOAK (soaken)
 BAS = Path(tempfile.gettempdir()) / "transkribera-volym"
 
 # Ett läsår, i det som faktiskt hamnar i basen. `--ar` multiplicerar allt.
-PER_AR = {"lektioner": 700, "papper": 400, "prov": 60, "rattningar": 40,
+PER_AR = {"papper": 400, "prov": 60, "rattningar": 40,
           "planerade": 700}
 VERSIONER = 4                    # ett papper skrivs om några gånger innan det duger
 
@@ -72,15 +68,8 @@ VERSIONER = 4                    # ett papper skrivs om några gånger innan det
 RUTTER = [
     "/api/schema",               # kontroll: liten och konstant, ska aldrig växa
     "/api/dokument",
-    "/api/lessons",
-    "/api/history",
-    "/api/agenda",
-    "/api/planning/archive",
     "/api/exams",
     "/api/rattningar",
-    "/api/trends?group_id=1",     # klassens termin — utan grupp svarar den 422
-    "/api/next-prep?group_id=1",
-    "/api/search?q=derivatan",
 ]
 
 TAK_S = 1.0                      # över detta känns appen trög i handen
@@ -107,24 +96,6 @@ def ur_kassett(namn: str) -> dict:
             except ValueError:
                 continue
     raise RuntimeError(f"kassetten {namn} bär inget dokument")
-
-
-# Ett transkript är det tyngsta appen lagrar. 60 KB ≈ en timmes tal (~9000 ord).
-_STYCKE = (
-    "Då tittar vi på derivatans definition. Vi tar ändringskvoten mellan två "
-    "punkter och låter avståndet h gå mot noll. Om ni tittar på tavlan så ser "
-    "ni att sekanten närmar sig tangenten. Ja, precis — och då är gränsvärdet "
-    "lutningen i punkten. Vi räknar ett exempel: f av x är x i kvadrat. "
-    "Frågan var om det gäller för alla funktioner, och svaret är nej, den "
-    "måste vara kontinuerlig i punkten. Vi tar en till på tavlan. "
-)
-
-
-def transkript(ordval: int, tecken: int = 60_000) -> str:
-    """~60 KB tal. Texten varieras per lektion — ett identiskt transkript i
-    varje rad gör FTS-indexet orealistiskt litet och sökningen orimligt snabb."""
-    krydda = f"Lektion {ordval}. Vi fortsätter på kapitel {ordval % 9 + 1}. "
-    return (krydda + _STYCKE * (tecken // len(_STYCKE) + 1))[:tecken]
 
 
 def papper(nr: int, tavla: dict, prov: dict) -> dict:
@@ -173,26 +144,6 @@ def fyll(bas: Path, n: dict, *, tyst: bool = False) -> None:
     kurser = [r["id"] for r in conn.execute("SELECT id FROM courses").fetchall()]
 
     start = date(2025, 8, 18)
-    for i in range(n["lektioner"]):
-        d = str(start + timedelta(days=i // 4))
-        les = db.create_lesson(
-            conn, history_id=f"h{i}", ts=f"{d}T09:00:00", datum=d,
-            starttid="09:00", name=f"NA25 {d} 09.00.m4a", source="inspelning",
-            dur="01:12:04", model="gpt-transcribe", lang="sv",
-            formats=["SRT", "TXT"], words=9000,
-            group_id=grupper[i % len(grupper)], course_id=kurser[i % len(kurser)],
-            transcript_text=transkript(i), created_at=f"{d}T10:14:00")
-        # Bara den daterade insikten syns i /api/agenda — den rutten hämtar
-        # varje daterad insikt i HELA basen, alltså en per lektion här.
-        for typ, text, forfaller in (
-                ("svårighet", "Kedjeregeln sitter inte.", None),
-                ("åtgärd", "Repetera på fredag.", None),
-                ("kalender", "Prov om två veckor.",
-                 str(start + timedelta(days=i // 4 + 14)))):
-            db.add_insight(conn, les["id"], typ, text, due_date=forfaller,
-                           source="llm")
-        spar("lektioner", i + 1, n["lektioner"])
-
     for i in range(n["papper"]):
         v = papper(i, tavla, prov)
         d = db.create_dokument(conn, dokument=v,
@@ -223,21 +174,6 @@ def fyll(bas: Path, n: dict, *, tyst: bool = False) -> None:
                                 for j in range(12)])
     conn.close()
 
-    # history.json är TAKAT till 200 poster (history_store.MAX_ENTRIES) — den
-    # växer alltså inte med läsåret. Den fylls ändå, till taket, så att rutten
-    # mäts med det största den kan bli.
-    #
-    # Posterna måste vara lektioner som FINNS: servern lyfter in okända
-    # history_id i lessons vid start, och en historik med hittepå-id gav 200
-    # lektioner i en bas som skulle ha 21.
-    from app import history_store
-    poster = [{"id": f"h{i}", "ts": f"2026-05-{i % 28 + 1:02d}T09:00:00",
-               "name": f"NA25 lektion {i}.m4a", "dur": "01:12:04",
-               "model": "gpt-transcribe", "lang": "sv", "formats": ["SRT", "TXT"],
-               "words": 9000, "text": transkript(i, 4000)}
-              for i in range(min(history_store.MAX_ENTRIES, n["lektioner"]))]
-    (bas / "history.json").write_text(
-        json.dumps(poster, ensure_ascii=False, indent=2), encoding="utf-8")
     if not tyst:
         print(" " * 40, end="\r")
 
@@ -305,8 +241,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Volymmätning: appen efter ett läsår")
     ap.add_argument("--ar", type=float, default=1.0, help="antal läsår att fylla")
     # En hög i taget: när /api/dokument är misstänkt vill man kunna lägga 2000
-    # papper i basen UTAN 4000 lektioner, annars går det inte att säga vilken
-    # hög som kostar.
+    # papper i basen utan 2000 planerade lektioner, annars går det inte att säga
+    # vilken hög som kostar.
     for hog in PER_AR:
         ap.add_argument(f"--{hog}", type=int, default=None,
                         help=f"sätt antalet {hog} rakt av (annars --ar × {PER_AR[hog]})")
@@ -321,7 +257,7 @@ def main() -> int:
 
     n = {k: (getattr(a, k) if getattr(a, k) is not None else max(1, int(v * a.ar)))
          for k, v in PER_AR.items()}
-    print(f"volym: {a.ar} läsår — {n['lektioner']} lektioner, {n['papper']} papper "
+    print(f"volym: {a.ar} läsår — {n['papper']} papper "
           f"× {VERSIONER} versioner, {n['prov']} prov, {n['planerade']} planerade",
           flush=True)
     t0 = time.time()

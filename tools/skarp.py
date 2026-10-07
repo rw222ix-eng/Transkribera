@@ -36,16 +36,13 @@ på riktigt. Kassetter och fejkbinär hör hemma i e2e-sviten och i soaken
 (tools/soak.py) — ett prov som fejkar molnet svarar inte på frågan «fungerar
 appen på riktigt?».
 
-Två saker kan sakna förutsättningar, och det är väntat snarare än trasigt:
-  · transkribering — kräver elevenlabs_key.txt i basen (kopieras in nedan om
-    den finns bredvid repot)
-  · PDF — Tectonic ligger i bin/tectonic/ som är gitignorerad (för stor för
-    repot), så motorn finns bara där tools/hamta_tectonic.sh körts
+PDF:en kan sakna förutsättningar, och det är väntat snarare än trasigt:
+Tectonic ligger i bin/tectonic/ som är gitignorerad (för stor för repot), så
+motorn finns bara där tools/hamta_tectonic.sh körts.
 
-Frontenden klarar en vanlig webbläsare. `window.pywebview.api` (filväljaren och
-"visa i mappen" i app/web/desktop.py) anropas inte från någon fil under
-app/web/ui/ — det som finns kvar där är drag-and-drop och `<input type=file>`,
-som webbläsaren gör själv. Sidan serveras dessutom av StaticFiles direkt från
+Frontenden klarar en vanlig webbläsare. Fönstret i app/web/desktop.py har inget
+eget js-api, och filval sker med `<input type=file>`, som webbläsaren gör
+själv. Sidan serveras dessutom av StaticFiles direkt från
 disk, så en ändring i app/web/ui/ syns vid en omladdning i webbläsaren; bara
 Python-ändringar kräver omstart härifrån.
 
@@ -76,7 +73,7 @@ PORT = port_kalla.SKARP        # se app/web/port.py
 BAS = ROT / ".skarp"
 
 # Hemligheterna bor i basmappen, och en tom bas har dem inte: utan dem är
-# Google-kalendern frånkopplad, ElevenLabs svarar inte och yt-dlp saknar kakor.
+# Google-kalendern frånkopplad.
 # De kopieras därför in EN gång när basen skapas. Kopior, inte länkar — en
 # förnyad OAuth-token ska skrivas i .skarp/ och inte i lärarens fil.
 #
@@ -84,8 +81,7 @@ BAS = ROT / ".skarp"
 # den flaggan satt hoppar create_app över seedningen — resultatet blir en bas
 # helt utan vecka, alltså ingenting att klicka på. En tom bas ska se ut som en
 # ny installation.
-HEMLIGHETER = ("cookies.txt", "google_client_secret.json", "google_token.json",
-               "openai_key.txt", "elevenlabs_key.txt")
+HEMLIGHETER = ("google_client_secret.json", "google_token.json")
 
 # Bokhyllan följer med, och till skillnad från allt annat i lärarens bas är det
 # rätt. Böckerna är INTE hennes arbete — de är läromedlet, hundratals megabyte
