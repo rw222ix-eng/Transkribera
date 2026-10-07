@@ -89,11 +89,8 @@ schema = schemathesis.openapi.from_asgi("/openapi.json", app)
 # ── Vad som INTE fuzzas ─────────────────────────────────────────────────────
 # Inte «det som går sönder». Det som gör något åt maskinen utanför sandlådan.
 UTANFOR_SANDLADAN = {
-    # Öppnar filhanteraren respektive webbläsaren på riktigt. Sökvägsvakten
-    # (_under_base) skyddar mot slumpsträngar, men en träff skulle kasta upp ett
-    # Utforskarfönster mitt i CI.
-    ("POST", "/api/open"),
-    ("POST", "/api/reveal"),
+    # Öppnar webbläsaren på riktigt: en träff skulle kasta upp ett fönster mitt
+    # i CI.
     ("POST", "/api/calendar/open-console"),
     # Blockerar tråden tills Googles samtyckesflöde är klart i en webbläsare.
     ("POST", "/api/calendar/connect"),

@@ -1,25 +1,16 @@
-"""Utskriftspaketet (Etapp 0.9).
+"""Papperen som PDF: bildvägen, hopfogningen och filerna bredvid provet.
 
-«Det här ska skrivas ut» som en enda gest: tavlan överst, elevernas papper
-under, facit sist — i rätt antal kopior. Knappen räknade ihop högen och sa
-sedan «Utskrivet» efter niohundra millisekunder. Det här bygger den på riktigt.
-
-Paketet är EN PDF, och kopiorna ligger i den. Det är inte en omväg runt
-skrivardialogen utan hela poängen: en lärare som ska ha 22 elevark, 1 tavla och
-1 facit kan inte säga det i en dialog som bara har ett kopieantal för hela
-jobbet. Ligger kopiorna i filen är högen redan rätt när den kommer ur skrivaren.
-
-NEDLADDNINGEN är den andra gesten och har motsatt form: skilda filer i en egen
-mapp (``dela_upp``). Läraren som sparar undan lektionens material letar efter
-facit, inte efter sida 47 i en bunt.
-
-Källorna är olika för olika papper, och det är därför den här modulen finns:
+Modulen byggdes för utskriftspaketet (Etapp 0.9): hela lektionens hög som en
+enda PDF med kopiorna i sig, och nedladdningen som skilda filer i en mapp.
+Paketet, den anpassade kopian och nedladdningsmappen togs bort 2026-10-07 med
+utskriftsrutan. Kvar är det godkännandet och nedladdningen (POST
+/api/tavla/pdf, routes_exam) använder:
 
 * **Arbetsblad och gruppuppgifter** har redan en PDF — den som byggdes
   vid godkännandet. Den är en bild av SKÄRMEN: klienten ritar av varje
   blad (app/web/ui/blad-bild.js) och rutten lägger bilderna på A4 här nere
   (``png_till_pdf``, samma väg som tavlan). Tectonic är kvar som reserv när
-  godkännandet kommer utan bilder. Den tas som den är.
+  godkännandet kommer utan bilder.
 * **Provet** går INTE den vägen. Dess mall är en reproduktion av lärarens eget
   Overleaf-prov (app/templates/prov.tex.j2), och en avritning av canvas kan
   inte se ut som den — skärmen sätter Arimo i 794 px, LaTeX sätter Computer
@@ -29,20 +20,15 @@ Källorna är olika för olika papper, och det är därför den här modulen fin
 * **Tavlan** finns bara som en ritad sida i webbläsaren. Klienten skickar den
   som PNG (samma bild som /api/planning/export sparar) och den läggs på ett A4
   här — utan LaTeX, se ``png_till_pdf``.
-* **Den anpassade kopian** renderas om ur provets egen JSON med längre tid,
-  färre uppgifter och en dokumentkod i foten. Ingen etikett, ingen text på
-  pappret som säger att det är en anpassning — koden i foten är det enda som
-  skiljer den, precis som i planeringen (app/web/ui/tryck.js).
 """
 from __future__ import annotations
 
 import base64
 import io
 import re
-import shutil
 from pathlib import Path
 
-from app import exam_gen, exam_latex, exam_pdf, exam_spec, pdfvakt
+from app import pdfvakt
 
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 _DATA_PREFIX = "data:image/png;base64,"
@@ -489,55 +475,13 @@ def png_till_pdf(dataurl, ut_dir: Path, stam: str) -> Path | None:
     return mal
 
 
-def anpassad_pdf(exam: dict, typ: str, ut_dir: Path, stam: str, *,
-                 tid_min: int | None = None, antal: int | None = None,
-                 kod: str = "") -> Path | None:
-    """Den anpassade kopian: samma prov, längre tid, färre uppgifter.
-
-    Uppgifterna som tas bort är de SISTA — provet är skrivet med stigande
-    svårighet (exam_spec balanserar så), och den som får färre uppgifter ska
-    få de första, inte ett slumpurval ur helheten.
-    """
-    if not exam_pdf.engine_available():
-        return None
-    kopia = exam_gen._repair_ctrl_chars({**exam})
-    if antal and antal > 0:
-        kopia["uppgifter"] = (kopia.get("uppgifter") or [])[:antal]
-    if tid_min:
-        kopia["tid_min"] = int(tid_min)
-    doc, fel = exam_spec.validate_exam_json(kopia, typ)
-    if doc is None:
-        # Ett trimmat prov kan falla på balanskraven (färre uppgifter ändrar
-        # fördelningen). Kopian är ändå lärarens beslut — rendera den utan
-        # valideringen hellre än att tyst utelämna den ur paketet.
-        doc, _ = exam_spec.validate_exam_json(kopia, "arbetsblad")
-    if doc is None:
-        return None
-    tex = (exam_latex.render_arbetsblad(doc, dokumentkod=kod)
-           if typ in ("arbetsblad", "gruppuppgift")
-           else exam_latex.render_prov(doc, dokumentkod=kod))
-    ut_dir.mkdir(parents=True, exist_ok=True)
-    pdf, _logg = exam_pdf.compile_pdf(tex, ut_dir, stam)
-    return pdf
-
-
-def _sidor(pdf: Path) -> int:
-    import pypdfium2 as pdfium
-    with pdfvakt.ensam():
-        doc = pdfium.PdfDocument(str(pdf))
-        try:
-            return len(doc)
-        finally:
-            doc.close()
-
-
 def foga_ihop(delar: list[tuple[Path, int]], ut: Path) -> int:
     """Slår ihop PDF:erna i ordning, varje del upprepad sina kopior gånger.
     Returnerar sidantalet. Kopiorna ligger i FILEN — det är därför högen är
     rätt när den kommer ur skrivaren."""
     import pypdfium2 as pdfium
-    # Samma vakt som resten (app/pdfvakt.py). RLock, så att `_sidor` innanför
-    # ett större tryckpass inte låser sig själv.
+    # Samma vakt som resten (app/pdfvakt.py). RLock, så att ett anrop innanför
+    # ett större pass inte låser sig själv.
     with pdfvakt.ensam():
         paket = pdfium.PdfDocument.new()
         oppna = []
@@ -556,31 +500,6 @@ def foga_ihop(delar: list[tuple[Path, int]], ut: Path) -> int:
                 d.close()
             paket.close()
     return antal
-
-
-def dela_upp(delar: list[tuple[Path, str]], mapp: Path) -> list[str]:
-    """Varje dokument som EGEN fil i en egen mapp — nedladdningens form.
-
-    Utskriften är en hopfogad hög, för det är så papperen ska komma ur
-    skrivaren. Nedladdningen är motsatsen: läraren som sparar undan lektionens
-    material vill ha tavlan, provet och facit som skilda filer att lägga i sin
-    egen mapp — inte en enda PDF att bläddra i när hon letar efter facit.
-
-    Kopieantalet följer INTE med. Tjugotvå exemplar av samma fil i en mapp är
-    tjugoen filer för mycket; kopiorna hör hemma i högen (`foga_ihop`), där de
-    faktiskt kommer ut ur maskinen.
-
-    Numret först i filnamnet är högens ordning. En mapp sorteras alfabetiskt,
-    och utan numret hamnar facit före provet — precis den ordning paketet finns
-    till för att undvika. Returnerar filnamnen, i ordning, till kvittot.
-    """
-    mapp.mkdir(parents=True, exist_ok=True)
-    filnamn: list[str] = []
-    for i, (pdf, namn) in enumerate(delar, 1):
-        fil = mapp / f"{i:02d} {_safe(namn, f'dokument {i}')}.pdf"
-        shutil.copyfile(pdf, fil)
-        filnamn.append(fil.name)
-    return filnamn
 
 
 def _bredvid(pdf: Path, andelse: str) -> Path | None:

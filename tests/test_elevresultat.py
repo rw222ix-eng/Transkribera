@@ -1,21 +1,19 @@
 """Elev för elev: nivåtripeln, betyget och klassaggregatet (v15).
 
-Två kontrakt hålls här och de är hela poängen med etappen:
+Rättningsvyn och «Elev för elev» togs bort 2026-10-07, och med dem rutterna
+och feedbacken. Poängen dikteras numera in (tools/elevresultat_diktera.py) och
+räknas med samma funktioner som prövas här. Två kontrakt hålls:
 
 * **Nycklarna är rättningens.** Elevraderna använder EXAKT de nycklar
   app/rattning.py bygg() ger klassraderna. Bryts det pekar elevens 2b på
   ingenting.
-* **Klassens siffror räknas ur elevernas.** Läraren matar in en gång, och det
-  som hamnar i `rattning` ska vara identiskt med vad manuell klassrättning med
-  samma summor hade gett — annars läser lektionsplaneringen (källdörr 5) ett
-  annat prov än det som rättades.
+* **Klassens siffror räknas ur elevernas.** Det som hamnar i `rattning` ska
+  vara identiskt med vad manuell klassrättning med samma summor hade gett —
+  annars läser lektionsplaneringen (källdörr 5) ett annat prov än det som
+  rättades.
 
 Betygets gränsfall står i egen sektion: reglerna är NP:s och de är ≥, inte >.
 """
-import re
-from fractions import Fraction
-from pathlib import Path
-
 import pytest
 
 from app import db, exam_spec, rattning
@@ -28,15 +26,6 @@ def conn(tmp_path):
     c.close()
 
 
-def _spara(client, dokument):
-    r = client.post("/api/dokument", json={"dokument": dokument,
-                                           "status": "godkant"})
-    assert r.status_code == 200
-    return r.json()["id"]
-
-
-# Ett prov med känd nivåfördelning: 1 → 2 E, 2a → 1 E + 2 C, 2b → 3 A,
-# 3 → 2 C + 1 A. Totalt 11 p (3 E, 4 C, 4 A).
 UPPGIFTER = [
     {"nr": 1, "t": "Beräkna arean.", "p": 2, "peca": [2, 0, 0]},
     {"nr": 2, "t": "Undersök sambandet.", "p": 6,
@@ -300,28 +289,6 @@ def test_bara_aktiva_pa_begaran(conn):
     assert len(db.list_elever(conn, gid, bara_aktiva=True)) == 1
 
 
-def test_skarmens_krav_ar_serverns():
-    """elever.js räknar gränser själv medan läraren klickar (prototypen har
-    ingen server). Står talen isär lovar skärmen ett annat betyg än pappret —
-    exakt felet blad.js beskriver. Raden pinnas här."""
-    js = (Path(__file__).resolve().parents[1] / "app" / "web" / "ui"
-          / "elever.js").read_text(encoding="utf-8")
-    rad = re.search(r"const KRAV = \{([^}]*)\}", js)
-    assert rad, "elever.js KRAV hittades inte"
-    # Andelarna står som bråk i JS (18/70) så skärmen räknar lika exakt som
-    # servern gör med sina Fraction. En decimal ska också gå att läsa, det är
-    # talet som jämförs, inte hur det är skrivet.
-    ur_js = {}
-    for nyckel, uttryck in re.findall(r"(\w+):\s*([\d./]+)", rad[1]):
-        taljare, _, namnare = uttryck.partition("/")
-        ur_js[nyckel] = Fraction(taljare) / Fraction(namnare or 1)
-    # Inga varav-nycklar: kravet slutade titta på nivåerna 2026-09-19, och en
-    # kvarglömd cCa i JS hade räknat ett krav servern inte ställer.
-    assert ur_js == {"e": Fraction(exam_spec.KRAV_DEFAULT["e_andel"]),
-                     "c": Fraction(exam_spec.KRAV_DEFAULT["c_andel"]),
-                     "a": Fraction(exam_spec.KRAV_DEFAULT["a_andel"])}
-
-
 def test_pappret_bar_sina_egna_granser_och_de_raknas_inte_om():
     """Ett prov som redan skrivits har SINA gränser.
 
@@ -348,37 +315,11 @@ def test_granser_for_en_annan_poangsumma_raknas_om():
     assert g["total"] == 11 and g["C"] == {"minst": 6}
 
 
-def test_sparade_granser_nar_hela_vagen_till_elevvyn(client):
-    gamla = {"total": 11, "E": {"minst": 3}, "C": {"minst": 5, "varav_ca": 3},
-             "A": {"minst": 8, "varav_a": 2}, "regel": "Gamla regeln."}
-    did = _spara(client, prov(granser=gamla))
-    d = client.get(f"/api/dokument/{did}/elevresultat").json()
-    assert d["granser"]["C"] == {"minst": 5, "varav_ca": 3}
-
-
 def test_gransernas_tripelflagga_faller_utan_ca_poang():
     """Papper utan tripel och nivå: allt föll på E och det finns ingen
     nivåsplit att visa per uppgift. Flaggan är UI:ts chans att säga det."""
     rader = rattning.bygg([{"nr": 1, "t": "Beräkna.", "p": 4}])
     assert rattning.granser(rader)["tripel"] is False
-
-
-def test_lararens_rorda_feedback_star_kvar(conn):
-    """«Skriv feedback» igen får skriva om modellens texter — aldrig den
-    läraren rört (rord, v25). Samma filtrering som routes_elever gör."""
-    gid = db.get_or_create_group(conn, "NA25")
-    elever = db.save_elever(conn, gid, ["Anna A", "Bo B"])
-    d = db.create_dokument(conn, dokument=prov(), status="godkant")
-    a, b = elever[0]["id"], elever[1]["id"]
-    db.save_elevfeedback(conn, d["id"], {a: "modellens", b: "modellens"})
-    db.save_elevfeedback(conn, d["id"], {a: "lärarens egen"}, rord=True)
-    rorda = db.elevfeedback_rorda(conn, d["id"])
-    assert rorda == {a}
-    ny = {a: "ny modelltext", b: "ny modelltext"}
-    db.save_elevfeedback(conn, d["id"],
-                         {e: t for e, t in ny.items() if e not in rorda})
-    fb = db.get_elevfeedback(conn, d["id"])
-    assert fb[a] == "lärarens egen" and fb[b] == "ny modelltext"
 
 
 # -------------------------------------------------------------- databasen --
@@ -424,199 +365,10 @@ def test_tomd_elevrad_forsvinner(conn):
     assert db.get_elevresultat(conn, did) == {a["id"]: {"1": [2, None, None]}}
 
 
-def test_feedbacken_sparas_namnkopplad_och_tom_text_tas_bort(conn):
-    did = _rattat_dokument(conn)
-    gid = db.get_or_create_group(conn, "NA25")
-    a, b = db.save_elever(conn, gid, ["Anna A", "Bo B"])
-    db.save_elevfeedback(conn, did, {a["id"]: "Ekvationer sitter fint.",
-                                     b["id"]: "  "})
-    assert db.get_elevfeedback(conn, did) == {a["id"]: "Ekvationer sitter fint."}
-    db.save_elevfeedback(conn, did, {a["id"]: ""})
-    assert db.get_elevfeedback(conn, did) == {}
-
-
-def test_angrad_rattning_tar_eleverna_med_sig(conn):
-    did = _rattat_dokument(conn)
-    gid = db.get_or_create_group(conn, "NA25")
-    a = db.save_elever(conn, gid, ["Anna A"])[0]
-    db.save_elevresultat(conn, did, {a["id"]: {"1": [2, None, None]}})
-    db.save_elevfeedback(conn, did, {a["id"]: "Bra."})
-    db.delete_rattning(conn, did)
-    assert db.get_elevresultat(conn, did) == {}
-    assert db.get_elevfeedback(conn, did) == {}
-    # Eleven själv står kvar — hon har fler prov.
-    assert len(db.list_elever(conn, gid)) == 1
-
-
 def test_raderat_papper_tar_elevraderna_med_sig(conn):
     did = _rattat_dokument(conn)
     gid = db.get_or_create_group(conn, "NA25")
     a = db.save_elever(conn, gid, ["Anna A"])[0]
     db.save_elevresultat(conn, did, {a["id"]: {"1": [2, None, None]}})
-    db.save_elevfeedback(conn, did, {a["id"]: "Bra."})
     db.delete_dokument(conn, did)
     assert db.get_elevresultat(conn, did) == {}
-    assert db.get_elevfeedback(conn, did) == {}
-
-
-# ------------------------------------------------------------------ rutterna --
-
-def _klass(client, namn="NA25"):
-    return next(g for g in client.get("/api/groups").json() if g["namn"] == namn)
-
-
-def test_klasslistan_over_http(client):
-    did = _spara(client, prov())
-    gid = client.get(f"/api/dokument/{did}/elevresultat").json()["group_id"]
-    assert client.get(f"/api/groups/{gid}/elever").json()["elever"] == []
-    r = client.put(f"/api/groups/{gid}/elever",
-                   json={"namn": ["Anna A", "Bo B", "Cilla C"]})
-    assert [e["namn"] for e in r.json()["elever"]] == ["Anna A", "Bo B", "Cilla C"]
-    assert len(client.get(f"/api/groups/{gid}/elever").json()["elever"]) == 3
-
-
-def test_klasslistan_kraver_en_lista(client):
-    did = _spara(client, prov())
-    gid = _klass(client)["id"]
-    assert client.put(f"/api/groups/{gid}/elever",
-                      json={"namn": "Anna"}).status_code == 400
-    assert client.get(f"/api/dokument/{did}/elevresultat").json()["group_id"] == gid
-
-
-def test_get_ger_rader_granser_och_elever(client):
-    did = _spara(client, prov())
-    d = client.get(f"/api/dokument/{did}/elevresultat").json()
-    assert [r["nyckel"] for r in d["rader"] if not r.get("grupp")] == \
-        ["1", "2a", "2b", "3"]
-    assert [r["peca"] for r in d["rader"] if not r.get("grupp")] == \
-        [[2, 0, 0], [1, 2, 0], [0, 0, 3], [0, 2, 1]]
-    assert d["granser"]["total"] == 11 and d["granser"]["E"]["minst"] == 3
-    assert d["elever"] == [] and d["resultat"] == {} and d["betyg"] == {}
-
-
-def test_okant_dokument_ar_404(client):
-    assert client.get("/api/dokument/9999/elevresultat").status_code == 404
-    assert client.put("/api/dokument/9999/elevresultat",
-                      json={"resultat": {}}).status_code == 404
-
-
-def test_put_utan_resultat_ar_400(client):
-    did = _spara(client, prov())
-    assert client.put(f"/api/dokument/{did}/elevresultat",
-                      json={}).status_code == 400
-
-
-def _tva_elever(client, did):
-    gid = client.get(f"/api/dokument/{did}/elevresultat").json()["group_id"]
-    return client.put(f"/api/groups/{gid}/elever",
-                      json={"namn": ["Anna A", "Bo B"]}).json()["elever"]
-
-
-FULLT = {"1": [2, None, None], "2a": [1, 2, None], "2b": [None, None, 3],
-         "3": [None, 2, 1]}          # 11 av 11 p — A
-HALVT = {"1": [2, None, None], "2a": [1, 0, None], "2b": [None, None, 0],
-         "3": [None, 0, 0]}          # 3 av 11 p — E
-
-
-def test_put_sparar_betyg_och_klassaggregat(client):
-    did = _spara(client, prov())
-    a, b = _tva_elever(client, did)
-    r = client.put(f"/api/dokument/{did}/elevresultat",
-                   json={"resultat": {a["id"]: FULLT, b["id"]: HALVT}})
-    assert r.status_code == 200
-    d = r.json()
-    assert d["betyg"] == {str(a["id"]): "A", str(b["id"]): "E"}
-    # Klassens rad-summor är elevernas summor, uppgift för uppgift.
-    assert d["rattat"]["elever"] == 2
-    assert d["rattat"]["varden"] == {"1": 4, "2a": 4, "2b": 3, "3": 3}
-
-
-def test_klassrattningen_ser_samma_prov(client):
-    """Kontraktet mot lektionsplaneringen: klassläget läser `rattning` som
-    förut och ska hitta exakt det elevläget skrev."""
-    did = _spara(client, prov())
-    a, b = _tva_elever(client, did)
-    client.put(f"/api/dokument/{did}/elevresultat",
-               json={"resultat": {a["id"]: FULLT, b["id"]: HALVT}})
-    klass = client.get(f"/api/dokument/{did}/rattning").json()
-    assert klass["elever"] == 2
-    assert klass["varden"] == {"1": 4, "2a": 4, "2b": 3, "3": 3}
-    hand = rattning.sammanfatta(UPPGIFTER, klass["varden"], 2)["rattat"]
-    assert klass["rattat"] == hand
-
-
-def test_siffrorna_overlever_en_omladdning(client):
-    did = _spara(client, prov())
-    a, _b = _tva_elever(client, did)
-    client.put(f"/api/dokument/{did}/elevresultat",
-               json={"resultat": {a["id"]: FULLT}})
-    igen = client.get(f"/api/dokument/{did}/elevresultat").json()
-    assert igen["resultat"][str(a["id"])]["2a"] == [1, 2, None]
-    assert igen["betyg"][str(a["id"])] == "A"
-
-
-def test_halvrattad_elev_far_inget_betyg(client):
-    """Ett betyg på halva provet är fejkad precision."""
-    did = _spara(client, prov())
-    a, _b = _tva_elever(client, did)
-    r = client.put(f"/api/dokument/{did}/elevresultat",
-                   json={"resultat": {a["id"]: {"1": [2, None, None]}}})
-    d = r.json()
-    assert d["betyg"] == {}
-    assert d["summor"][str(a["id"])]["kvar"] == 3
-
-
-def test_elev_utan_varden_lamnar_provet_orattat(client):
-    """Ingen skrev provet — då ska kortet säga «Rätta provet», inte
-    «Rättat · 0 %»."""
-    did = _spara(client, prov())
-    a, _b = _tva_elever(client, did)
-    r = client.put(f"/api/dokument/{did}/elevresultat",
-                   json={"resultat": {a["id"]: {}}})
-    assert r.json()["rattat"] is None
-    assert client.get(f"/api/dokument/{did}/rattning").json()["rattat"] is None
-
-
-def test_delete_tar_bort_bade_elever_och_klass(client):
-    did = _spara(client, prov())
-    a, b = _tva_elever(client, did)
-    client.put(f"/api/dokument/{did}/elevresultat",
-               json={"resultat": {a["id"]: FULLT, b["id"]: HALVT}})
-    client.put(f"/api/dokument/{did}/elevfeedback",
-               json={"feedback": {a["id"]: "Bra jobbat."}})
-    assert client.delete(f"/api/dokument/{did}/elevresultat").status_code == 200
-    d = client.get(f"/api/dokument/{did}/elevresultat").json()
-    assert d["resultat"] == {} and d["feedback"] == {}
-    assert client.get(f"/api/dokument/{did}/rattning").json()["rattat"] is None
-
-
-def test_rensad_elev_tappar_sin_feedback(client):
-    """«Skrev inte provet» efteråt: texten är skriven ur poängen och beskriver
-    annars ett prov som inte finns."""
-    did = _spara(client, prov())
-    a, b = _tva_elever(client, did)
-    client.put(f"/api/dokument/{did}/elevresultat",
-               json={"resultat": {a["id"]: FULLT, b["id"]: HALVT}})
-    client.put(f"/api/dokument/{did}/elevfeedback",
-               json={"feedback": {a["id"]: "Bra.", b["id"]: "Träna mer."}})
-    r = client.put(f"/api/dokument/{did}/elevresultat",
-                   json={"resultat": {a["id"]: FULLT, b["id"]: {}}})
-    assert r.json()["feedback"] == {str(a["id"]): "Bra."}
-
-
-def test_feedbacken_kan_redigeras_for_hand(client):
-    did = _spara(client, prov())
-    a, _b = _tva_elever(client, did)
-    client.put(f"/api/dokument/{did}/elevresultat",
-               json={"resultat": {a["id"]: FULLT}})
-    r = client.put(f"/api/dokument/{did}/elevfeedback",
-                   json={"feedback": {a["id"]: "Ekvationerna sitter."}})
-    assert r.json()["feedback"] == {str(a["id"]): "Ekvationerna sitter."}
-    assert client.get(f"/api/dokument/{did}/elevresultat").json()["feedback"] \
-        == {str(a["id"]): "Ekvationerna sitter."}
-
-
-def test_feedback_utan_rattade_elever_ar_400(client):
-    did = _spara(client, prov())
-    r = client.post(f"/api/dokument/{did}/elevfeedback", json={})
-    assert r.status_code == 400

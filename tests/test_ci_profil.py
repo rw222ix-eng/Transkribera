@@ -18,6 +18,7 @@ import json
 import pytest
 
 from app import ci_profil, db, rattning
+from tests import elevdata
 
 
 def _dok(dokument_id: int, rader: list[dict], resultat: dict,
@@ -229,23 +230,23 @@ def _prov(uppgifter: list[dict], datum: str) -> dict:
 def _ratta(client, dokument: dict, elev_id: int, poang: dict) -> int:
     did = client.post("/api/dokument",
                       json={"dokument": dokument, "status": "godkant"}).json()["id"]
-    r = client.put(f"/api/dokument/{did}/elevresultat",
-                   json={"resultat": {str(elev_id): poang}})
-    assert r.status_code == 200, r.text
+    assert elevdata.spara_elevresultat(client.base_dir, did,
+                                       {str(elev_id): poang})
     return did
 
 
-def test_rutterna_ger_elevens_och_klassens_profil(client):
+def test_rutten_ger_elevens_profil(client):
     # Klassen skapas av dokumentet; klasslistan läggs på gruppen efteråt.
+    # Klasslistan och poängen skrivs som diktatverktyget skriver dem
+    # (tests/elevdata.py): rättningsvyns rutter togs bort 2026-10-07.
     did_forsta = client.post("/api/dokument", json={
         "dokument": _prov([{"nr": 1, "t": "a", "p": 2, "peca": [2, 0, 0],
                             "ci": ["G25-M1C-ALG-1"]}], "2026-09-01"),
         "status": "godkant"}).json()["id"]
     grupp = next(g for g in client.get("/api/groups").json() if g["namn"] == "NA25")
-    elev = client.put(f"/api/groups/{grupp['id']}/elever",
-                      json={"namn": ["Alva Nyström"]}).json()["elever"][0]
-    client.put(f"/api/dokument/{did_forsta}/elevresultat",
-               json={"resultat": {str(elev["id"]): {"1": [0, None, None]}}})
+    elev = elevdata.spara_elever(client.base_dir, grupp["id"], ["Alva Nyström"])[0]
+    elevdata.spara_elevresultat(client.base_dir, did_forsta,
+                                {str(elev["id"]): {"1": [0, None, None]}})
     # Ett senare papper där samma punkt sitter.
     _ratta(client, _prov([{"nr": 1, "t": "a", "p": 2, "peca": [2, 0, 0],
                            "ci": ["G25-M1C-ALG-1"]}], "2026-11-01"),
@@ -259,11 +260,6 @@ def test_rutterna_ger_elevens_och_klassens_profil(client):
     # Etiketten är den läraren känner igen, inte koden.
     assert punkt["kort"] == "Formler och uttryck"
     assert punkt["andel"] > 0.5, "det senaste pappret väger tyngst"
-
-    klass = client.get(f"/api/groups/{grupp['id']}/ci-profil",
-                       params={"kurs": "Ma1c"}).json()
-    assert klass["punkter"][0]["kod"] == "G25-M1C-ALG-1"
-    assert klass["group_id"] == grupp["id"]
 
 
 def test_profilen_ar_tom_utan_rattade_papper(client):

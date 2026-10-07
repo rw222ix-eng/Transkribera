@@ -2009,9 +2009,11 @@ def render_prov(doc: exam_spec.ExamDoc,
                 dokumentkod: str = "",
                 egna_bilder: dict[int, str] | None = None,
                 forsatt_bild: str | None = None) -> str:
-    """`dokumentkod` sätts bara av den anpassade kopian (app/tryck.py). Den
-    står i foten och är det ENDA som skiljer kopian från provet — ingen
-    etikett, ingen text som talar om för klassen vem som fick den.
+    """`dokumentkod` sattes bara av den anpassade kopian i utskriftspaketet,
+    som togs bort 2026-10-07. Ingen anropare skickar den längre; parametern och
+    fotraden i _preamble.tex.j2 står kvar för att en ändring i mallen tvingar
+    om Tectonic-cachen (CI:s nyckel), och tomt värde ger samma papper som förut.
+    Koden stod i foten och var det ENDA som skilde kopian från provet.
 
     `egna_bilder` är de bilder läraren själv lagt in på en uppgift i canvas,
     nycklade på uppgiftens nummer. De bodde tidigare bara i webbläsaren och

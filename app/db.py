@@ -537,7 +537,8 @@ ALTER TABLE schema_lektioner ADD COLUMN undantag TEXT;
 #   rader, samma papper — och därför hänger tabellen i rattning(dokument_id):
 #   elevrader utan klassrättning kan inte finnas, de SKAPAR den.
 # * elevfeedback — den genererade texten, namnkopplad först här. Modellen såg
-#   bara «Elev 3» (app/elev_feedback.py).
+#   bara «Elev 3». Feedbacken och dess rutter togs bort 2026-10-07; tabellen
+#   och lärarens texter står kvar i filen.
 _ELEVER_MIGRATION = """
 CREATE TABLE IF NOT EXISTS elever (
     id       INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2846,22 +2847,6 @@ def ci_underlag(conn: sqlite3.Connection, *, kurs: str | None = None,
     return ut
 
 
-def delete_rattning(conn: sqlite3.Connection, dokument_id: int) -> bool:
-    """Ångra rättningen. Raderna följer med (ON DELETE CASCADE gäller bara med
-    PRAGMA foreign_keys=ON, som connect() sätter — men raderas explicit här så
-    att en connection utan den inte lämnar föräldralösa rader kvar).
-
-    Elevernas rader följer med av samma skäl, och feedbacken därför att den
-    inte HAR någon främmande nyckel att följa: texten är skriven ur poängen och
-    överlever dem inte."""
-    with skriv(conn):
-        conn.execute("DELETE FROM elevfeedback WHERE dokument_id = ?", (dokument_id,))
-        conn.execute("DELETE FROM elevresultat WHERE dokument_id = ?", (dokument_id,))
-        conn.execute("DELETE FROM rattning_rader WHERE dokument_id = ?", (dokument_id,))
-        cur = conn.execute("DELETE FROM rattning WHERE dokument_id = ?", (dokument_id,))
-    return cur.rowcount > 0
-
-
 def list_rattningar(conn: sqlite3.Connection, *, kurs: str | None = None) -> list[dict]:
     """De rättade proven, senast rättade först — källdörr 5:s hög."""
     sql = "SELECT * FROM rattning"
@@ -2950,56 +2935,6 @@ def save_elevresultat(conn: sqlite3.Connection, dokument_id: int,
             "INSERT INTO elevresultat(dokument_id, elev_id, nyckel, varde_e, "
             "varde_c, varde_a) VALUES (?, ?, ?, ?, ?, ?)", rader)
     return get_elevresultat(conn, did)
-
-
-def delete_elevresultat(conn: sqlite3.Connection, dokument_id: int) -> None:
-    """Ångra elevrättningen: siffrorna OCH feedbacken. Texten är skriven ur
-    poängen — står den kvar utan dem beskriver den ett prov som inte finns."""
-    did = int(dokument_id)
-    with skriv(conn):
-        conn.execute("DELETE FROM elevresultat WHERE dokument_id = ?", (did,))
-        conn.execute("DELETE FROM elevfeedback WHERE dokument_id = ?", (did,))
-
-
-def get_elevfeedback(conn: sqlite3.Connection, dokument_id: int) -> dict:
-    return {r["elev_id"]: r["text"] for r in conn.execute(
-        "SELECT elev_id, text FROM elevfeedback WHERE dokument_id = ?",
-        (int(dokument_id),)).fetchall()}
-
-
-def elevfeedback_rorda(conn: sqlite3.Connection, dokument_id: int) -> set[int]:
-    """Eleverna vars text läraren själv rört (v25) — genereringen ska inte
-    skriva över dem."""
-    return {r["elev_id"] for r in conn.execute(
-        "SELECT elev_id FROM elevfeedback WHERE dokument_id = ? AND rord = 1",
-        (int(dokument_id),)).fetchall()}
-
-
-def save_elevfeedback(conn: sqlite3.Connection, dokument_id: int,
-                      feedback: dict, rord: bool = False) -> dict:
-    """Texterna per elev. Tom text tas bort i stället för att sparas — en
-    elev utan feedback ska inte ha en tom ruta att undra över.
-
-    `rord=True` är lärarens egen redigering (PUT-rutten): texten märks som
-    hennes och genereringen låter den stå. Modellens skrivningar (rord=False)
-    får skrivas om av nästa körning."""
-    did = int(dokument_id)
-    nu = _now()
-    with skriv(conn):
-        for elev_id, text in (feedback or {}).items():
-            t = str(text or "").strip()
-            if not t:
-                conn.execute("DELETE FROM elevfeedback WHERE dokument_id = ? "
-                             "AND elev_id = ?", (did, int(elev_id)))
-                continue
-            conn.execute(
-                "INSERT INTO elevfeedback(dokument_id, elev_id, text, "
-                "updated_at, rord) VALUES (?, ?, ?, ?, ?) "
-                "ON CONFLICT(dokument_id, elev_id) DO UPDATE "
-                "SET text = excluded.text, updated_at = excluded.updated_at, "
-                "rord = excluded.rord",
-                (did, int(elev_id), t, nu, 1 if rord else 0))
-    return get_elevfeedback(conn, did)
 
 
 # --------------------------------------------------------------------- boken --

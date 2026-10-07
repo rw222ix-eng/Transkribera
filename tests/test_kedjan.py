@@ -21,6 +21,7 @@ import json
 import pytest
 
 from app import ci_profil, course_data, exam_gen, exam_spec
+from tests import elevdata
 
 KURS = "Matematik, nivå 1c"
 KLASS = "9Z"
@@ -127,11 +128,11 @@ def test_hela_kedjan(client, monkeypatch):
     # ── 3. Två elever rättas ────────────────────────────────────────────
     grupp = next(g for g in client.get("/api/groups").json()
                  if g["namn"] == KLASS)
-    elever = client.put(f"/api/groups/{grupp['id']}/elever",
-                        json={"namn": ["Alva Nyström", "Elis Hedlund"]}
-                        ).json()["elever"]
-    rader = [r for r in client.get(f"/api/dokument/{did}/elevresultat").json()["rader"]
-             if not r.get("grupp")]
+    # Rättningsvyn är borta (2026-10-07); poängen skrivs som diktatverktyget
+    # skriver dem (tests/elevdata.py).
+    elever = elevdata.spara_elever(client.base_dir, grupp["id"],
+                                   ["Alva Nyström", "Elis Hedlund"])
+    rader = [r for r in elevdata.rader(client.base_dir, did) if not r.get("grupp")]
     assert all(r["ci"] for r in rader), "CI-taggen tappades på vägen till rättningen"
     assert all(r["peca"] for r in rader), "nivåtaket tappades"
 
@@ -146,9 +147,8 @@ def test_hela_kedjan(client, monkeypatch):
             r["nyckel"]: [(0 if (j == 0) == foll else t) if t else None
                           for t in r["peca"]]
             for j, r in enumerate(rader)}
-    spar = client.put(f"/api/dokument/{did}/elevresultat",
-                      json={"resultat": resultat}).json()
-    assert spar["rattat"]["andel"] is not None
+    rattat = elevdata.spara_elevresultat(client.base_dir, did, resultat)
+    assert rattat["andel"] is not None
 
     # ── 4. CI-profilen skiljer eleverna åt ──────────────────────────────
     profiler = {e["namn"]: client.get(f"/api/elever/{e['id']}/ci-profil",
@@ -163,11 +163,6 @@ def test_hela_kedjan(client, monkeypatch):
     # … och den andra eleven har spegelvänd profil på just den punkten.
     andra = {p["kod"]: p for p in profiler["Elis Hedlund"]["punkter"]}
     assert andra[svag_kod]["styrka"] == "stark"
-
-    # Klassens profil är samma räkning över båda.
-    klass = client.get(f"/api/groups/{grupp['id']}/ci-profil",
-                       params={"kurs": KURS}).json()
-    assert klass["punkter"], "klassprofilen är tom"
 
     # ── 5. Riktat blad ur profilen ──────────────────────────────────────
     fangat = _stub_generator(monkeypatch, koder)
@@ -189,10 +184,9 @@ def test_kedjan_talar_om_nar_det_inte_gar_att_mata(client, monkeypatch):
         "uppgifter": [{"nr": 1, "t": "Beräkna.", "p": 2, "peca": [2, 0, 0]}]}
     }).json()["id"]
     grupp = next(g for g in client.get("/api/groups").json() if g["namn"] == KLASS)
-    elev = client.put(f"/api/groups/{grupp['id']}/elever",
-                      json={"namn": ["Alva Nyström"]}).json()["elever"][0]
-    client.put(f"/api/dokument/{did}/elevresultat",
-               json={"resultat": {str(elev["id"]): {"1": [1, None, None]}}})
+    elev = elevdata.spara_elever(client.base_dir, grupp["id"], ["Alva Nyström"])[0]
+    elevdata.spara_elevresultat(client.base_dir, did,
+                                {str(elev["id"]): {"1": [1, None, None]}})
     prof = client.get(f"/api/elever/{elev['id']}/ci-profil",
                       params={"kurs": KURS}).json()
     assert prof["punkter"] == []

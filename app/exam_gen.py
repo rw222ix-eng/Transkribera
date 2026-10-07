@@ -3023,7 +3023,8 @@ _RAKNARSATS = re.compile(r"[,;.:]|\bmen\b|\bfast\b", re.I)
 # Var en mening SLUTAR. Punkten måste följas av en ny mening — versal, siffra,
 # citattecken — eller av radens slut. Utan villkoret blev «Räknare får
 # användas, t.ex. på uppgift 3.» tre meningar och kapningen strök just
-# siffrorna. Samma fälla som _FORKORTNING i elev_feedback finns för.
+# siffrorna. Samma fälla som _FORKORTNING i elev_feedback (borttagen
+# 2026-10-07) fanns för.
 _MENINGSSLUT = re.compile(r"(?<=[.!?])(?=\s+[A-ZÅÄÖ0-9«\"]|\s*$)")
 
 

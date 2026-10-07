@@ -1,14 +1,10 @@
-"""Utskriftspaketet — rutt (Etapp 0.9).
+"""Tavlans och dokumentens nedladdning som PDF (POST /api/tavla/pdf).
 
-Ett anrop, hela lektionens hög i rätt ordning med rätt antal kopior
-(app/tryck.py). Egen router av samma skäl som de andra — och för att paketet
-kan ta tiotals sekunder när en anpassad kopia ska renderas om, och då ska
-förloppet strömma i stället för att begäran stå tyst.
-
-Högen har TVÅ former och det är begäran som väljer: utskriften fogar ihop den
-till en enda PDF med kopiorna i sig, nedladdningen (`separat`) lägger varje
-dokument som egen fil i en mapp. Här bor också tavlans egen nedladdning, som
-inte är ett paket alls men delar bildvägen med det.
+Filen bar förr utskriftspaketet (POST /api/tryck): hela lektionens hög i rätt
+ordning med rätt antal kopior, som en fil eller en mapp. Paketet och dess ruta
+i frontenden togs bort 2026-10-07. Kvar är nedladdningen, som delar bildvägen
+med det (app/tryck.py: png_till_pdf, foga_ihop och papperen bredvid provets
+PDF).
 """
 from __future__ import annotations
 
@@ -21,9 +17,6 @@ from starlette.background import BackgroundTask
 
 from app import db, tryck
 from app.web import _kropp
-from app.web.sse import sse_response
-
-MAX_DOKUMENT = 20
 
 
 def _stada(*pdfar: Path) -> None:
@@ -42,6 +35,9 @@ def _stada(*pdfar: Path) -> None:
 
 
 def create_router(base: Path, arbiter) -> APIRouter:
+    """`arbiter` används inte: nedladdningen är bildbyte och hopfogning, inget
+    LLM-jobb. Parametern står kvar så att server.create_app bygger alla
+    routrar på samma sätt."""
     router = APIRouter()
     db_file = base / "transkribera.db"
 
@@ -92,111 +88,6 @@ def create_router(base: Path, arbiter) -> APIRouter:
                           "godkänn pappret på nytt, då byggs den bredvid"},
                 status_code=404)
         return sido, None
-
-    @router.post("/api/tryck")
-    async def tryck_paket(req: Request):
-        """Bygg paketet. `dokument` är raderna i utskriftsrutan, i ordning."""
-        body = await _kropp(req)
-        rader = body.get("dokument")
-        if not isinstance(rader, list) or not rader:
-            return JSONResponse({"error": "inget att skriva ut"}, status_code=400)
-        if len(rader) > MAX_DOKUMENT:
-            return JSONResponse({"error": "för många dokument i ett paket"},
-                                status_code=400)
-        titel = tryck._safe(str(body.get("titel") or "utskrift"))
-        # «Skriv ut» och «Ladda ner» är två gester med samma hög men olika
-        # form: den ena ska bli en bunt ur skrivaren, den andra en mapp med
-        # skilda filer läraren kan lägga undan (se tryck.dela_upp).
-        separat = bool(body.get("separat"))
-        ut_dir = base / "Transkriberingar" / "utskrift"
-        stampel = datetime.now().strftime("%Y-%m-%d %H%M%S")
-
-        def job(emit):
-            delar: list[tuple[Path, int]] = []
-            kvitto: list[dict] = []
-            saknas: list[str] = []
-            arbete = ut_dir / f".{stampel}"
-            for i, rad in enumerate(rader):
-                if not isinstance(rad, dict):
-                    continue
-                namn = str(rad.get("namn") or f"dokument {i + 1}")
-                kopior = max(1, min(tryck.MAX_KOPIOR, int(rad.get("kopior") or 1)))
-                emit({"type": "log", "msg": f"Hämtar {namn} …"})
-                pdf = None
-                if rad.get("png"):
-                    # En sträng är tavlan, en lista är bokens lösningsförslag:
-                    # flera ark som hör till EN rad i högen. png_till_pdf tar
-                    # båda och lägger ett ark per sida.
-                    pdf = tryck.png_till_pdf(rad["png"], arbete, f"tavla-{i:02d}")
-                elif rad.get("exam_id"):
-                    provpdf, view = _exam_pdf(rad["exam_id"])
-                    if rad.get("anpassad") and view and view.get("exam"):
-                        emit({"type": "log", "msg": f"Renderar {namn} — anpassad kopia …"})
-                        a = rad["anpassad"] if isinstance(rad["anpassad"], dict) else {}
-                        pdf = tryck.anpassad_pdf(
-                            view["exam"], view.get("typ") or "prov", arbete,
-                            f"anpassad-{i:02d}",
-                            tid_min=a.get("tid_min"), antal=a.get("antal"),
-                            kod=str(a.get("kod") or f"{titel[:12]}-{i + 1:02d}"))
-                    elif rad.get("losningar") and provpdf:
-                        # Provets lösningsförslag: skärmens ark om det ritades
-                        # av vid godkännandet, annars bedömningsanvisningen
-                        # (tryck.losningar_bredvid). Det är raden «Lösningar»
-                        # i utskriftsrutan.
-                        pdf = tryck.losningar_bredvid(provpdf)
-                    elif rad.get("bedomning") and provpdf:
-                        # Bedömningsanvisningen som EGET dokument. Raden ligger
-                        # inte i rutan längre, men flaggan står kvar: den är
-                        # kontraktet mot äldre klienter och mot den som ber om
-                        # rättningsunderlaget och ingenting annat.
-                        pdf = tryck.bedomning_bredvid(provpdf)
-                    elif rad.get("facit") and provpdf:
-                        # Arbetsbladets och gruppuppgiftens separata facit.
-                        # Raden bad förut om bedömningen även för bladet — som
-                        # aldrig har någon — och lärarens lösningsblad hamnade
-                        # alltid i `saknas`. Har gruppuppgiften fått elevernas
-                        # lösningsförslag är det DET som läggs i högen
-                        # (tryck.facit_bredvid): läraren byggde det för att
-                        # dela ut det.
-                        pdf = tryck.facit_bredvid(provpdf)
-                    else:
-                        pdf = provpdf
-                if pdf is None:
-                    # Ett dokument som inte går att hämta utelämnas — och SÄGS.
-                    # Ett paket som tyst blev en sida kortare upptäcks framför
-                    # kopiatorn, med klassen på väg in.
-                    saknas.append(namn)
-                    continue
-                delar.append((pdf, kopior))
-                kvitto.append({"namn": namn, "kopior": kopior,
-                               "sidor": tryck._sidor(pdf)})
-            if not delar:
-                raise RuntimeError(
-                    "Inget av dokumenten har en byggd PDF än. Godkänn provet "
-                    "eller arbetsbladet först — då byggs den." if saknas
-                    else "Inget att skriva ut.")
-            if separat:
-                emit({"type": "log",
-                      "msg": "Lägger varje dokument som egen fil …"})
-                mapp = ut_dir / f"{titel} {stampel}"
-                filer = tryck.dela_upp(
-                    [(pdf, kv["namn"]) for (pdf, _kop), kv in zip(delar, kvitto)],
-                    mapp)
-                for kv, fil in zip(kvitto, filer):
-                    kv["fil"] = fil
-                # `path` är MAPPEN här — /api/reveal öppnar den, och läraren
-                # ser filerna ligga i den ordning högen hade. `sidor` räknas
-                # utan kopiorna, för de finns inte här: en fil per dokument.
-                return {"path": str(mapp), "mapp": True, "filer": filer,
-                        "sidor": sum(kv["sidor"] for kv in kvitto),
-                        "dokument": kvitto, "saknas": saknas}
-            emit({"type": "log", "msg": "Fogar ihop paketet …"})
-            fil = ut_dir / f"{titel} {stampel}.pdf"
-            sidor = tryck.foga_ihop(delar, fil)
-            return {"path": str(fil), "sidor": sidor, "dokument": kvitto,
-                    "saknas": saknas}
-
-        return sse_response(job, req)
 
     @router.post("/api/tavla/pdf")
     async def tavla_pdf(req: Request):

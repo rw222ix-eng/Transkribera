@@ -21,6 +21,7 @@ import sqlite3
 import pytest
 
 from app import db, exam_gen, exam_latex, exam_spec, rattning
+from tests import elevdata
 
 
 # ────────────────────────────────────────────────────────────────── prompten ──
@@ -163,11 +164,11 @@ def _elev_med_profil(client):
         "kurs": "Matematik, nivå 1c", "datum": "2026-09-01",
         "uppgifter": uppgifter}}).json()["id"]
     grupp = next(g for g in client.get("/api/groups").json() if g["namn"] == "NA25")
-    elev = client.put(f"/api/groups/{grupp['id']}/elever",
-                      json={"namn": ["Alva Nyström"]}).json()["elever"][0]
-    r = client.put(f"/api/dokument/{did}/elevresultat", json={"resultat": {
-        str(elev["id"]): {"1": [0, None, None], "2": [4, None, None]}}})
-    assert r.status_code == 200, r.text
+    # Rättningsvyn är borta (2026-10-07); poängen skrivs som diktatverktyget
+    # skriver dem (tests/elevdata.py).
+    elev = elevdata.spara_elever(client.base_dir, grupp["id"], ["Alva Nyström"])[0]
+    assert elevdata.spara_elevresultat(client.base_dir, did, {
+        str(elev["id"]): {"1": [0, None, None], "2": [4, None, None]}})
     return elev
 
 

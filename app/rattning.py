@@ -17,6 +17,11 @@ Räknandet ligger här och inte i frontenden ENSAM därför att utfallet är en
 källa: «Läser provets utfall · 4b, 7 föll» är en rad i skrivplanen, och det
 som föll ska in i nästa prompt (build_utfall). Ett tal som räknas på två
 ställen blir förr eller senare två tal.
+
+Rättningsvyn (rattning.js, elever.js) och dess rutter togs bort 2026-10-07.
+Hänvisningarna till rattning.js nedan säger varifrån kontraktet kom. Det som
+skriver rättningar nu är tools/elevresultat_diktera.py, och det som läser dem
+är planeringen, säkerhetskopian, kalibreringen och tools/kursvy.py.
 """
 from __future__ import annotations
 
@@ -296,21 +301,13 @@ def build_utfall(rattat: dict | None, namn: str = "") -> str:
             "om igen.")
 
 
-def moment_som_foll(rattat: dict | None) -> list[str]:
-    """Kodlistan «4b, 7» som skrivplanens rad visar (plan.js:1281) — samma
-    urval som svaga, bara koderna. För korta besked och loggrader."""
-    return [str(s.get("kod")) for s in ((rattat or {}).get("svaga") or [])
-            if isinstance(s, dict) and s.get("kod")]
-
-
 # ═══════════════════════════════ ELEV FÖR ELEV ═══════════════════════════════
 # Klassrättningen ovan är en summa per rad. Den räcker för planeringen och inte
 # för eleven: ett betyg kan inte räknas ur en klumpsumma, och en feedbacktext
 # kan inte skrivas till en klass. Därför matas poängen in per NIVÅ per elev, och
 # klassens siffror räknas fram ur elevernas i stället för att skrivas två gånger.
 #
-# Ingen elev når språkmodellen vid namn (app/elev_feedback.py) — men här, i
-# räknandet, finns bara id:n ändå.
+# Här, i räknandet, finns bara elevernas id:n.
 
 def granser(rader: list[dict], config: dict | None = None,
             sparade: dict | None = None, kurs: str = "") -> dict:

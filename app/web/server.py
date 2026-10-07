@@ -22,11 +22,11 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import Field
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app import (debug_log, gpu_arbiter, db, paths, settings_store, backup,
+from app import (debug_log, gpu_arbiter, db, settings_store, backup,
                  calendar_google, kalender_ai, course_data, lasar_data,
-                 claude_code, rattning, filhanterare, spar)
+                 claude_code, spar)
 from app.web import (Id64, _kropp, routes_bok, routes_elever, routes_exam,
-                     routes_jobb, routes_planning, routes_tryck, sse)
+                     routes_jobb, routes_planning, routes_tryck)
 
 
 def _static_dir() -> Path:
@@ -119,11 +119,6 @@ def _banderoll(sida: str, hus: dict) -> str:
     if "</body>" in sida:
         return sida.replace("</body>", bit + "</body>", 1)
     return sida + bit
-
-
-# Utbruten till app/web/sse.py (delas med routers i egna moduler, t.ex.
-# routes_planning) — aliaset behålls så alla anrop i den här filen står kvar.
-_sse_response = sse.sse_response
 
 
 def create_app(base_dir: Path | None = None,
@@ -829,100 +824,13 @@ def create_app(base_dir: Path | None = None,
             conn.close()
         return {"ok": True}
 
-    # ---- Rättningen: vad klassen tog på provet (Etapp 0.7) -------------------
-    #
-    # Raderna byggs ur PAPPRET, inte ur databasen: uppgifterna står på
-    # dokumentet (app/web/ui/blad.js — samma lista som arket, rättningen och
-    # poängsummorna läser), och ett prov som itererats efter rättningen ska
-    # visa sina nya uppgifter. Sparade siffror följer med på nyckeln så länge
-    # raden finns kvar; en uppgift som skrivits bort tar sitt värde med sig.
-    #
-    # Förmågan är det enda servern vet BÄTTRE än frontenden: ett prov Claude
-    # skrivit bär exam_spec:s förmåga per uppgift, och då behöver den inte
-    # gissas ur texten. Har läraren redan rättat gäller det som stod DÅ — hen
-    # läste sin analys mot de orden.
-
-    def _rattning_underlag(dokument_id: int):
-        """(pappret, sparad rättning) eller (None, None) för okänt dokument."""
-        conn = _db()
-        try:
-            d = db.get_dokument(conn, dokument_id)
-            if d is None:
-                return None, None
-            return (d.get("dokument") or {}), db.get_rattning(conn, dokument_id)
-        finally:
-            conn.close()
-
-    def _rattning_svar(papper: dict, varden: dict, elever, sparad: dict | None) -> dict:
-        res = rattning.sammanfatta(papper.get("uppgifter"), varden, elever,
-                                   kompensation=papper.get("kompensation"))
-        if sparad:
-            gammal = {r["nyckel"]: r for r in sparad["rader"]}
-            for rad in res["rader"]:
-                forra = gammal.get(rad.get("nyckel")) or {}
-                if forra.get("formaga"):
-                    rad["formaga"] = forra["formaga"]
-                # CI-taggen fryses av samma skäl som förmågan: skrivs provet om
-                # efter rättningen ska profilen räknas på det läraren rättade.
-                if forra.get("ci"):
-                    rad["ci"] = list(forra["ci"])
-            for s in res["rattat"]["svaga"]:
-                forra = gammal.get(s["kod"]) or {}
-                if forra.get("formaga"):
-                    s["formaga"] = forra["formaga"]
-        return res
-
-    @app.get("/api/dokument/{dokument_id}/rattning")
-    def api_rattning(dokument_id: Id64):
-        """Raderna att fylla i + det som redan är ifyllt. `rattat` är null tills
-        provet rättats — kortet säger «Rätta provet», inte «Rättat · 0 %»."""
-        papper, sparad = _rattning_underlag(dokument_id)
-        if papper is None:
-            return JSONResponse({"error": "okänt dokument"}, status_code=404)
-        varden = (sparad or {}).get("varden") or {}
-        res = _rattning_svar(papper, varden,
-                             (sparad or {}).get("elever") or rattning.ELEVER_STANDARD,
-                             sparad)
-        return {"rader": res["rader"], "elever": res["elever"],
-                "varden": res["rattat"]["varden"],
-                "rattat": res["rattat"] if sparad else None}
-
-    @app.put("/api/dokument/{dokument_id}/rattning")
-    async def api_rattning_spara(dokument_id: Id64, req: Request):
-        """Klassens poäng per uppgift. Servern räknar andelen och de svaga
-        momenten och lämnar tillbaka dem i den form pappret bär (`rattat`) —
-        ett tal som räknas på två ställen blir förr eller senare två tal."""
-        body = await _kropp(req)
-        papper, sparad = _rattning_underlag(dokument_id)
-        if papper is None:
-            return JSONResponse({"error": "okänt dokument"}, status_code=404)
-        varden = body.get("varden")
-        if not isinstance(varden, dict):
-            return JSONResponse({"error": "varden krävs"}, status_code=400)
-        res = _rattning_svar(papper, varden, body.get("elever"), sparad)
-        conn = _db()
-        try:
-            db.save_rattning(
-                conn, dokument_id, elever=res["elever"],
-                andel=res["rattat"]["andel"], rader=res["rader"],
-                exam_id=papper.get("provId"), klass=papper.get("klass"),
-                kurs=papper.get("kurs"), datum=papper.get("datum"))
-        finally:
-            conn.close()
-        return {"rader": res["rader"], "elever": res["elever"],
-                "varden": res["rattat"]["varden"], "rattat": res["rattat"]}
-
-    @app.delete("/api/dokument/{dokument_id}/rattning")
-    def api_rattning_ta_bort(dokument_id: Id64):
-        """Ångra: provet är orättat igen. Toasten i rättningen erbjuder det, och
-        då ska siffrorna vara borta — inte ligga kvar och komma tillbaka."""
-        conn = _db()
-        try:
-            db.delete_rattning(conn, dokument_id)
-        finally:
-            conn.close()
-        return {"ok": True}
-
+    # ---- Rättningen ----------------------------------------------------------
+    # Rättningsvyn och dess skrivrutter (GET/PUT/DELETE
+    # /api/dokument/{id}/rattning) togs bort 2026-10-07. Rättningarna skrivs
+    # numera av tools/elevresultat_diktera.py, och planeringen läser dem ur
+    # databasen (routes_planning). Högen nedan har ingen läsare i frontenden
+    # men står kvar: den är det enda sättet att se rättningarna utifrån, och
+    # tools/volym.py mäter den.
     @app.get("/api/rattningar")
     def api_rattningar(kurs: str | None = None):
         """De rättade proven — källdörr 5:s hög, senast rättade först."""
@@ -1099,48 +1007,6 @@ def create_app(base_dir: Path | None = None,
         except Exception:
             pass
         return {"ok": True, "url": url}
-
-    def _under_base(path: str) -> Path | None:
-        """Resolve `path` only if it lives under base_dir (local app; blocks
-        arbitrary filesystem reads). A stored path from before the app folder was
-        moved is re-rooted under the current base first (see app.paths.relocate).
-        Returns the resolved Path or None."""
-        relocated = paths.relocate(base, path)
-        if relocated is None:
-            return None
-        try:
-            p = relocated.resolve()
-        except Exception:
-            return None
-        # Parent-set containment, not a string prefix: a sibling like `<base>_evil`
-        # must NOT pass just because its name starts with base's.
-        root = base.resolve()
-        return p if (p == root or root in p.parents) else None
-
-    def _open_path(raw: str):
-        """Open a file/folder in the OS file manager, only if under base_dir."""
-        p = _under_base(raw or "")
-        if p is None:
-            return JSONResponse({"error": "otillåten sökväg"}, status_code=403)
-        if not p.exists():
-            return JSONResponse({"error": "finns inte"}, status_code=404)
-        try:
-            # Via filhanterare, inte os.startfile: attributet finns bara på
-            # Windows och gav AttributeError → 500 på Mac.
-            filhanterare.oppna(p)
-            return {"ok": True}
-        except Exception as e:
-            return JSONResponse({"error": str(e)}, status_code=500)
-
-    @app.post("/api/open")
-    async def api_open(req: Request):
-        """Open a result file/folder in the OS file manager (local desktop app)."""
-        return _open_path((await _kropp(req)).get("path") or "")
-
-    @app.post("/api/reveal")
-    async def api_reveal(req: Request):
-        """Reveal a result folder/file in the OS file manager."""
-        return _open_path((await _kropp(req)).get("path") or "")
 
     # Frontenden monteras SIST. app.html refererar sina 45 skript, 15 stilmallar,
     # typsnitt och bilder med relativa sökvägar, och eftersom dokumentet ligger på

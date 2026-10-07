@@ -485,22 +485,6 @@ def test_skarmpdfen_skrivs_pa_versionen_klienten_pekade_ut(client, monkeypatch):
     assert rad["pdf_path"] == res["pdf"]
 
 
-def test_tryckpaketet_tar_skarmens_pdf(client, monkeypatch):
-    """Paketet läser pdf_path och ska följa med av sig självt — men «bör» är
-    inte «gör», och det är utskriftshögen läraren bär in till klassen."""
-    result = _skriv(client, monkeypatch, typ="arbetsblad")
-    _tectonic(monkeypatch)
-    _done(client.post(f"/api/exams/{result['id']}/approve", json={
-        "blad": {"uppgift": [_png(), _png()]}}))
-    res = _done(client.post("/api/tryck", json={
-        "titel": "Fredag", "dokument": [
-            {"namn": "Provet", "exam_id": result["id"], "kopior": 2}]}))
-    assert res["saknas"] == []
-    assert res["dokument"][0]["sidor"] == 2
-    from pathlib import Path
-    assert _ar_bild(Path(res["path"]))
-
-
 def test_bilderna_i_katalogen_ar_provets_egna(tmp_path):
     """Utkatalogen är per kurs och datum och delas av alla papper där
     (2026-09-24 kväll). 23/9 visades gamla egen-NN.png under nya uppgifter

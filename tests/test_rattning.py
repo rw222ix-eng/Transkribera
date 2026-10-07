@@ -1,12 +1,9 @@
 """Rättningen (Etapp 0.7): raderna, räkningen, analysen och utfallet som källa.
 
-Kontraktet är frontendens (app/web/ui/rattning.js) och det är därför testerna
-läser som de gör: raderna som byggs här ska vara EXAKT de rader modalen ritar,
-annars säger servern och webbläsaren olika saker om samma prov.
-
-Tre saker skiljer servern från frontenden och de har varsitt test:
-provets egen förmåga slår gissningen ur texten, siffrorna överlever en
-omladdning, och det som föll når nästa prompt.
+Rättningsvyn (app/web/ui/rattning.js) och dess rutter togs bort 2026-10-07.
+Raderna och räkningen står kvar: tools/elevresultat_diktera.py skriver
+rättningen ur elevpoängen, och planeringen läser den som utfall (källdörr 5).
+Det som föll ska nå nästa prompt, och det har sina test här.
 """
 import json
 
@@ -59,6 +56,23 @@ def _spara(client, dokument):
                                            "status": "godkant"})
     assert r.status_code == 200
     return r.json()["id"]
+
+
+def _ratta(client, did, varden, elever=rattning.ELEVER_STANDARD):
+    """Klassens poäng per rad, sparade som den borttagna rättningsrutten
+    sparade dem (PUT /api/dokument/{id}/rattning, borta sedan 2026-10-07):
+    sammanfatta ur pappret, sedan save_rattning med pappret egna fält."""
+    conn = db.connect(client.base_dir / "transkribera.db")
+    try:
+        papper = db.get_dokument(conn, did)["dokument"]
+        res = rattning.sammanfatta(papper.get("uppgifter"), varden, elever,
+                                   kompensation=papper.get("kompensation"))
+        db.save_rattning(conn, did, elever=res["elever"],
+                         andel=res["rattat"]["andel"], rader=res["rader"],
+                         exam_id=papper.get("provId"), klass=papper.get("klass"),
+                         kurs=papper.get("kurs"), datum=papper.get("datum"))
+    finally:
+        conn.close()
 
 
 # ------------------------------------------------------------------ raderna --
@@ -226,16 +240,6 @@ def test_en_tomd_rad_forsvinner(conn):
     assert db.get_rattning(conn, d["id"])["varden"] == {"1": 40}
 
 
-def test_angrad_rattning_tas_bort_helt(conn):
-    d = db.create_dokument(conn, dokument=prov(), status="godkant")
-    res = rattning.sammanfatta(UPPGIFTER, {"1": 40, "3": 60}, 22)
-    db.save_rattning(conn, d["id"], elever=22, andel=res["rattat"]["andel"],
-                     rader=res["rader"])
-    assert db.delete_rattning(conn, d["id"]) is True
-    assert db.get_rattning(conn, d["id"]) is None
-    assert conn.execute("SELECT COUNT(*) AS n FROM rattning_rader").fetchone()["n"] == 0
-
-
 def test_raderat_papper_tar_rattningen_med_sig(conn):
     d = db.create_dokument(conn, dokument=prov(), status="godkant")
     res = rattning.sammanfatta(UPPGIFTER, {"1": 40, "3": 60}, 22)
@@ -247,65 +251,9 @@ def test_raderat_papper_tar_rattningen_med_sig(conn):
 
 # ------------------------------------------------------------------ rutterna --
 
-def test_get_ger_raderna_ur_pappret(client):
-    did = _spara(client, prov())
-    r = client.get(f"/api/dokument/{did}/rattning")
-    assert r.status_code == 200
-    d = r.json()
-    assert [x.get("nyckel") for x in d["rader"] if not x.get("grupp")] == \
-        ["1", "2a", "2b", "3"]
-    # Orättat prov: kortet ska säga «Rätta provet», inte «Rättat · 0 %».
-    assert d["rattat"] is None and d["elever"] == 22
-
-
-def test_okant_dokument_ar_404(client):
-    assert client.get("/api/dokument/9999/rattning").status_code == 404
-    assert client.put("/api/dokument/9999/rattning",
-                      json={"varden": {}}).status_code == 404
-
-
-def test_put_raknar_och_persisterar(client):
-    did = _spara(client, prov())
-    r = client.put(f"/api/dokument/{did}/rattning",
-                   json={"elever": 20, "varden": {"1": 20, "2a": 10, "3": 55}})
-    assert r.status_code == 200
-    rattat = r.json()["rattat"]
-    assert rattat["elever"] == 20
-    assert rattat["andel"] == pytest.approx(85 / (40 + 40 + 60))
-    assert [s["kod"] for s in rattat["svaga"]] == ["2a", "1"]
-    # Och den överlever — det var hela poängen med skivan.
-    igen = client.get(f"/api/dokument/{did}/rattning").json()
-    assert igen["rattat"] == rattat
-    assert igen["varden"] == {"1": 20, "2a": 10, "3": 55}
-
-
-def test_put_utan_varden_ar_400(client):
-    did = _spara(client, prov())
-    assert client.put(f"/api/dokument/{did}/rattning", json={}).status_code == 400
-
-
-def test_delete_gor_provet_orattat_igen(client):
-    did = _spara(client, prov())
-    client.put(f"/api/dokument/{did}/rattning", json={"varden": {"1": 20, "3": 30}})
-    assert client.delete(f"/api/dokument/{did}/rattning").status_code == 200
-    assert client.get(f"/api/dokument/{did}/rattning").json()["rattat"] is None
-
-
-def test_formagan_som_stod_da_star_kvar(client):
-    """Pappret kan itereras efter rättningen. Läraren läste sin analys mot de
-    ord som stod DÅ — de ska inte byta namn i efterhand."""
-    did = _spara(client, prov())
-    client.put(f"/api/dokument/{did}/rattning", json={"varden": {"1": 20, "3": 30}})
-    andrat = prov(uppgifter=[dict(UPPGIFTER[0], t="Beräkna talet.")] + UPPGIFTER[1:])
-    client.patch(f"/api/dokument/{did}", json={"dokument": andrat})
-    rad = next(r for r in client.get(f"/api/dokument/{did}/rattning").json()["rader"]
-               if r.get("nyckel") == "1")
-    assert rad["formaga"] == "Begreppsförståelse"
-
-
 def test_rattningslistan_ar_kalldorrens_hog(client):
     did = _spara(client, prov())
-    client.put(f"/api/dokument/{did}/rattning", json={"varden": {"1": 20, "3": 30}})
+    _ratta(client, did, {"1": 20, "3": 30})
     lista = client.get("/api/rattningar").json()["rattningar"]
     assert [r["dokument_id"] for r in lista] == [did]
     assert client.get("/api/rattningar?kurs=Ingen kurs").json()["rattningar"] == []
@@ -326,16 +274,10 @@ def test_utan_rattning_finns_inget_block():
     assert rattning.build_utfall({"svaga": [], "andel": None}) == ""
 
 
-def test_koderna_ar_de_planraden_visar():
-    res = rattning.sammanfatta(UPPGIFTER, {"1": 44, "2a": 8, "3": 20}, 22)
-    assert rattning.moment_som_foll(res["rattat"]) == ["2a", "3"]
-
-
 def test_utfallet_nar_provprompten(client, monkeypatch):
     """Källdörr 5 hela vägen: rättningen på servern → generate → prompten."""
     did = _spara(client, prov())
-    client.put(f"/api/dokument/{did}/rattning",
-               json={"varden": {"1": 44, "2a": 8, "3": 20}})
+    _ratta(client, did, {"1": 44, "2a": 8, "3": 20})
     fangat = {}
 
     def fake(kurs, klass, punkter, *, model, utfall="", **kw):
@@ -356,8 +298,7 @@ def test_utfallet_nar_provprompten(client, monkeypatch):
 
 def test_utfallet_nar_tavelprompten(client, monkeypatch):
     did = _spara(client, prov())
-    client.put(f"/api/dokument/{did}/rattning",
-               json={"varden": {"1": 44, "2a": 8, "3": 20}})
+    _ratta(client, did, {"1": 44, "2a": 8, "3": 20})
     fangat = {}
 
     def fake(course, group, moment, *, model, utfall="", log_cb=None, **kw):

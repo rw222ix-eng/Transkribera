@@ -202,29 +202,6 @@ def test_sakerhetskopian_sager_ifran_nar_disken_ar_full(client, monkeypatch):
     assert kvar == [], kvar
 
 
-def test_tryckpaketet_sager_ifran_nar_disken_ar_full(client, monkeypatch):
-    """Tryckpaketet fogar ihop PDF:erna till en fil. Går den inte att skriva
-    ska läraren få veta det innan hon står vid kopiatorn."""
-    import base64
-
-    from app import tryck
-
-    monkeypatch.setattr(tryck, "png_till_pdf",
-                        lambda *a, **k: client.base_dir / "fejk.pdf")
-    monkeypatch.setattr(tryck, "_sidor", lambda *a, **k: 1)
-
-    def full(*a, **k):
-        raise OSError(errno.ENOSPC, "No space left on device")
-
-    monkeypatch.setattr(tryck, "foga_ihop", full)
-    png = "data:image/png;base64," + base64.b64encode(b"\x89PNG\r\n\x1a\n").decode()
-    r = client.post("/api/tryck", json={"dokument": [
-        {"namn": "Dagens tavla", "typ": "Tavla", "kopior": 1, "png": png}]})
-    assert r.status_code == 200
-    besked = _fel(r)
-    assert "disk" in besked.lower(), besked
-
-
 def test_alla_stromjobb_oversatter_full_disk_till_svenska():
     """Bokimporten skriver sidbilder, extraktionen skriver ingenting, provet
     skriver .tex — men de delar strömlagret, och det är där översättningen

@@ -7,30 +7,24 @@ from app.web import server
 
 
 def _client(tmp_path, monkeypatch):
-    # Se test_open_endpoints: `os.startfile` finns bara på Windows, sömmen som
-    # gäller på alla system är app.filhanterare.
-    monkeypatch.setattr(server.filhanterare, "oppna", lambda p: None)
     return TestClient(server.create_app(base_dir=tmp_path))
 
 
-def _file_under_base(tmp_path):
-    f = tmp_path / "klipp.srt"
-    f.write_text("x", encoding="utf-8")
-    return f
+# En ofarlig state-ändrande POST att pröva skyddet på. Det var /api/open fram
+# till 2026-10-07, då rutten togs bort med utskriftsrutan.
+_POST = ("/api/groups", {"namn": "NA21"})
 
 
 def test_foreign_origin_post_blocked(tmp_path, monkeypatch):
     client = _client(tmp_path, monkeypatch)
-    f = _file_under_base(tmp_path)
-    r = client.post("/api/open", json={"path": str(f)},
+    r = client.post(_POST[0], json=_POST[1],
                     headers={"origin": "https://evil.example"})
     assert r.status_code == 403
 
 
 def test_localhost_origin_post_allowed(tmp_path, monkeypatch):
     client = _client(tmp_path, monkeypatch)
-    f = _file_under_base(tmp_path)
-    r = client.post("/api/open", json={"path": str(f)},
+    r = client.post(_POST[0], json=_POST[1],
                     headers={"origin": "http://127.0.0.1:18731"})
     assert r.status_code == 200
 
@@ -38,8 +32,7 @@ def test_localhost_origin_post_allowed(tmp_path, monkeypatch):
 def test_no_origin_post_allowed(tmp_path, monkeypatch):
     # Appens egna anrop och native-klienter skickar ofta ingen Origin — får inte blockeras.
     client = _client(tmp_path, monkeypatch)
-    f = _file_under_base(tmp_path)
-    r = client.post("/api/open", json={"path": str(f)})
+    r = client.post(_POST[0], json=_POST[1])
     assert r.status_code == 200
 
 
