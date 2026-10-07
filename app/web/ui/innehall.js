@@ -484,5 +484,5 @@ window.Innehall = (() => {
     return a.uppg.map((u, k) => ({ ...u, nr: k + 1, avsnitt: a.nr, avsnittTitel: a.titel }));
   }
 
-  return { avsnitt: nr => (AV[nr] ? { nr, ...AV[nr] } : null), hitta, provpool, arkpool, ordning: () => ORDNING.slice() };
+  return { avsnitt: nr => (AV[nr] ? { nr, ...AV[nr] } : null), hitta, provpool, arkpool };
 })();

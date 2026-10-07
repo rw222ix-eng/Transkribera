@@ -29,11 +29,6 @@
 window.BladTavla = (() => {
   const BOARD = { width: 1400, height: 460, padding: { top: 24, right: 26, bottom: 24, left: 30 }, tray: true };
 
-  /* Matematik i innehållet skrivs «$…$». På tavlan är en formel ett eget block,
-     så en rad som ÄR en formel sätts som math och en rad med formler inuti
-     text sätts som text — motorn kan inte blanda dem i samma sektion. */
-  const barMat = s => /^\s*\$[^$]+\$\s*$/.test(String(s));
-  const renMat = s => String(s).trim().replace(/^\$|\$$/g, '');
   /* En listrad kan bära en kort formel; motorn sätter listan som text, så
      dollartecknen tas bort och innehållet skrivs som det läses på en tavla. */
   const TEX = [
@@ -159,5 +154,5 @@ window.BladTavla = (() => {
     return lage === 'teori' ? teori(av) : genomgang(av);
   }
 
-  return { spec, platt, barMat, renMat };
+  return { spec, platt };
 })();

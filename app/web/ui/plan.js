@@ -2903,161 +2903,6 @@
   const datumText = v => v.datum
     ? new Date(v.datum + 'T12:00:00').toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'long' }) + (v.tid ? ' · ' + v.tid : '')
     : 'utan datum';
-  const mark = (v, nyckel) => v.andrat.includes(nyckel) ? ' andrad' : '';
-
-  /* ── Gruppuppgiften (fjärde dokumenttypen) ───────────────────
-     Ifyllnadsställningen väljs aldrig ur ett mallbibliotek — den följer av vad
-     uppgiften är. Beskriver momentet en undersökning blir ställningen hypotes,
-     metod, mätning, slutsats; en diskussion ger påstående och motargument. */
-  function stallning(m) {
-    const t = String(m || '').toLowerCase();
-    if (/undersök|labor|mät|experiment|data|statistik/.test(t)) return {
-      slag: 'Undersökning',
-      steg: [
-        ['Vad tror ni händer?', 'Skriv en hypotes ni kan pröva — inte en gissning utan skäl.'],
-        ['Hur mäter ni?', 'Bestäm metod, vad som varieras och vad som hålls konstant.'],
-        ['Mätningarna', 'För in värdena i tabellen. Räkna om till samma enhet.'],
-        ['Vad visar de?', 'Beskriv sambandet i ord, och sedan med ett uttryck.'],
-        ['Håller hypotesen?', 'Svara på er egen fråga och säg vad som skulle kunna vara fel.']
-      ]
-    };
-    if (/diskut|resonemang|argument|etik|jämför|värdera/.test(t)) return {
-      slag: 'Diskussion',
-      steg: [
-        ['Påståendet', 'Skriv om påståendet med egna ord så att alla i gruppen menar samma sak.'],
-        ['Argument för', 'Minst två — matematiska, inte tyckanden.'],
-        ['Argument mot', 'Minst två. Den som håller med måste ändå hitta ett.'],
-        ['Vad avgör?', 'Vilket argument väger tyngst, och varför?'],
-        ['Gruppens svar', 'En mening ni alla kan stå för — och den invändning som blev kvar.']
-      ]
-    };
-    if (/model|tillämp|verklig|problem/.test(t)) return {
-      slag: 'Modellering',
-      steg: [
-        ['Situationen', 'Vad ska ni ta reda på? Skriv frågan som en mening.'],
-        ['Antaganden', 'Vad förenklar ni bort? Var ärliga — det är antagandena som avgör svaret.'],
-        ['Modellen', 'Ställ upp uttrycket och namnge varje variabel.'],
-        ['Räkningen', 'Genomför den så att en annan grupp kan följa er.'],
-        ['Rimligheten', 'Kan svaret stämma i verkligheten? Vad skulle göra det bättre?']
-      ]
-    };
-    return {
-      slag: 'Samarbete',
-      steg: [
-        ['Problemet', 'Skriv uppgiften med egna ord. Vad är känt, vad söks?'],
-        ['Gruppens plan', 'Vilken väg väljer ni, och varför just den?'],
-        ['Vem gör vad', 'Fördela stegen. Alla ska kunna redovisa hela lösningen.'],
-        ['Lösningen', 'Redovisa så att den går att följa utan er röst till.'],
-        ['Vad lärde ni er?', 'En sak ni skulle göra annorlunda nästa gång.']
-      ]
-    };
-  }
-  /* ── Gruppuppgiften som tryckt arbetsblad ────────────────────
-     Den generiska formen (numrerade rader i en lista) var appens, inte lärarens.
-     Ett papper som ligger på ett bord under en lektion har en annan grammatik:
-     rubrik, ett grått instruktionsband, bokstavsbrickor och ifyllnadsrader man
-     skriver på. Ställningen är densamma som förut — det är sättningen som byts.
-
-     Varje steg blir en ruta med bokstav. Steget som handlar om något ritbart får
-     en figur i höger spalt, kompilerad ur CeTZ; de andra är bara text. Vilka
-     rader man skriver på följer av vad steget frågar: ett mätsteg vill ha en
-     tabellrad, ett resonemangssteg vill ha flera linjer. */
-  const BOKSTAV = 'ABCDEFGH';
-  /* ── Figuren, en gång för alla dokumenttyper ──
-     Prov, arbetsblad, tavlor och gruppuppgifter ritar samma figur i samma
-     storlek. Byggs den per dokumenttyp driver de isär, och det som är läsbart på
-     ett arbetsblad blir en miniatyr på ett prov. */
-  const figurFor = v => window.Figurer && window.Figurer.forslagFor
-    ? window.Figurer.forslagFor(v.moment, v.kurs) : null;
-  function figurbit(forslag, klass) {
-    if (!forslag) return '';
-    const kalla = window.Figurer.kalla(forslag.fig);
-    if (!kalla) return '';
-    return `<div><div class="${klass}" data-vantar data-cetz="${String(kalla).replace(/"/g, '&quot;')}"></div><p class="${klass}kap">${forslag.kapning}</p></div>`;
-  }
-  /* Raderna under en fråga följer av frågan. Ett steg som ber om en storhet får
-     en namngiven rad; ett som ber om ett resonemang får rena skrivlinjer. */
-  function stegrader(rubrik, n) {
-    const r = String(rubrik).toLowerCase();
-    if (/hypotes|påstående|pastaende|problemet|situationen|frågan|fragan/.test(r)) return { rader: ['Med egna ord'], linjer: 1 };
-    if (/mät|mat|mätning|matning|räkning|rakning|lösning|losning|modellen|beräkn/.test(r)) return { rader: ['Uttryck', 'Svar'], linjer: 1 };
-    if (/antagand|argument|vad avgör|vad avgor|rimlig|håller|haller|lärde|larde/.test(r)) return { rader: [], linjer: 3 };
-    if (/vem gör|vem gor|plan/.test(r)) return { rader: ['Vem gör vad'], linjer: 2 };
-    return { rader: ['Svar'], linjer: 1 };
-  }
-  function ritaGrupp(v) {
-    const i = v.inst || {};
-    const s = stallning(v.moment);
-    const per = Math.round((i.langd || 60) / (s.steg.length + 1));
-    /* Figuren hör till ETT steg, och till RÄTT steg: det som handlar om själva
-       sambandet. På «vem gör vad» är en graf dekor, inte hjälp. */
-    const forslag = figurFor(v);
-    const barFigur = /modell|lösning|losning|räkning|rakning|mätning|matning|situationen|problemet|påståendet|pastaendet/i;
-    const figurSteg = forslag ? (s.steg.findIndex(([r]) => barFigur.test(r)) + 1 || 1) - 1 : -1;
-    const kalla = forslag && window.Figurer.kalla ? window.Figurer.kalla(forslag.fig) : null;
-
-    const huvud = `<div class="guhuv" data-el="rubrik" data-namn="Sidhuvudet"><h4 class="gutitel">${versal(v.moment)}</h4></div>`;
-    const band = `<div class="guband" data-el="instr" data-namn="Instruktionen">Arbeta i grupp om ${i.grupp || 3}. Fyll i rutorna <b>i ordning</b> — en i taget, och alla ska kunna redovisa hela lösningen. Redovisning: ${(i.redovisning || 'Genomgång').toLowerCase()}.${(v.gy || []).length ? ` Centralt innehåll: ${v.gy.join(' · ')}.` : ''}</div>`;
-
-    const kort = s.steg.map(([rubrik, stod], n) => {
-      const f = stegrader(rubrik, n);
-      /* En rad som heter samma sak som frågan säger inget nytt — då står bara
-         linjen där, utan etikett. */
-      const rader = f.rader.filter(namn => namn.toLowerCase() !== String(rubrik).toLowerCase())
-        .map(namn => `<div class="gurad"><span class="gunamn">${namn}:</span><span class="gulinje"></span></div>`).join('')
-        + '<p class="gulos">Lösningen skrivs på lösblad.</p>';
-      const fraga = `<p class="gufraga">${rubrik} — <i>${stod}</i></p>`;
-      const kropp = n === figurSteg && kalla
-        ? `<div class="gutva">${'<div>' + fraga + rader + '</div>'}${figurbit(forslag, 'gufigur')}</div>`
-        : fraga + rader;
-      return `<div class="gukort${mark(v, 'steg' + n)}" data-el="steg${n}" data-namn="${rubrik}"><div class="gukorttopp"><span class="gubricka">${BOKSTAV[n]}</span><span class="gutid">${per} min</span></div>${kropp}</div>`;
-    }).join('');
-
-    const namnrader = Array.from({ length: Math.min(4, Math.max(2, i.grupp || 3)) },
-      () => '<div class="gurad"><span class="gunamn">Namn:</span><span class="gulinje"></span></div>').join('');
-    return `<div class="ark gruppark" data-sida="1">${huvud}<div class="gutopp" data-el="namn" data-namn="Namnraderna">${namnrader}</div>${band}${kort}</div>`;
-  }
-
-  function ritaTavla(v) {
-    const m = v.moment, i = v.inst || {};
-    const forslag = figurFor(v);
-    const minuter = Number(i.langd) || 45;
-    const exempel = Math.max(1, Math.min(4, i.exempel || 2));
-    const del = [0.12, 0.34, 0.26, 0.2, 0.08].map(x => Math.round(x * minuter));
-    let t = 0;
-    const spann = () => { const fran = t; t += del.shift(); return `${fran}–${t}`; };
-    const block = [
-      { min: spann(), h: 'Ingång', p: `Varför ${m.toLowerCase()}? Koppling till förra lektionen.` },
-      { min: spann(), h: 'Genomgång', p: `${exempel} exempel på tavlan, det sista med mellansteg.`, ex: v.kontext === 'start' ? Array.from({ length: exempel }, (_, n) => n === 0 ? 'f(x) = x²  →  f′(x) = 2x' : 'f(x) = 3x² − 2x  →  f′(x) = 6x − 2').join('     ') : `${versal(KONTEXT[v.kontext])} exempel — ${exempel} st` },
-      { min: spann(), h: 'Elevuppgift', p: 'Räkna i par. Gå runt och lyssna.' },
-      { min: spann(), h: 'Återsamling', p: 'Vanliga fel på tavlan — särskilt tecken vid negativa värden.' },
-      { min: spann(), h: 'Avslut', p: 'Sammanfatta i tre punkter och peka framåt.' }
-    ];
-    return `<div class="tavla"><h4 class="ttitel" data-el="rubrik" data-namn="Rubriken">${versal(m)}</h4>${(v.referenser || []).length ? `<p class="tref" data-el="referens" data-namn="Bokreferensen">Utgår från ${v.referenser.length} ${v.referenser.length === 1 ? 'uppladdad sida' : 'uppladdade sidor'} ur läroboken · ${v.referenser.map(r => r.namn).join(', ')}</p>` : ''}<p class="tunder">${[v.kurs || 'Ingen kurs', v.klass || 'ingen klass', datumText(v)].join(' · ')} · ${minuter} min</p>
-      ${block.map((b, n) => `<div class="tblock${mark(v, 'block' + n)}"${n === 1 && forslag ? ' data-figur-plats' : ''} data-el="block${n}" data-namn="${b.h} · ${b.min} min"><span class="tmin">${b.min}</span><div class="tinnehall"><div><h4>${b.h}</h4><p>${b.p}</p>${b.ex ? `<p class="texempel">${b.ex}</p>` : ''}${(v.bilder || {})['block' + n] ? `<img class="tbild" src="${v.bilder['block' + n]}" alt="" />` : ''}</div>${n === 1 ? figurbit(forslag, 'dokfigur') : ''}</div></div>`).join('')}
-      </div>`;
-  }
-
-  function ritaArk(v) {
-    const prov = v.typ === 'Prov';
-    const summa = v.uppgifter.reduce((a, u) => a + u.p, 0);
-    const huvud = `<div class="ahuvud" data-el="rubrik" data-namn="Sidhuvudet"><div class="av"><h4 class="atitel">${prov ? 'Prov' : 'Arbetsblad'} — ${versal(v.moment)}</h4><p class="aunder">${[v.kurs || 'Ingen kurs', v.klass || 'ingen klass', datumText(v)].join(' · ')}</p></div><div class="apoang">${prov ? `${summa} p<br />90 min` : `${v.uppgifter.length} uppgifter`}</div></div>`;
-    const instr = `<p class="ainstr${mark(v, 'instr')}" data-el="instr" data-namn="Instruktionen">${prov
-      ? 'Skriv dina lösningar så att de går att följa. Endast penna, sudd och linjal. Räknare är inte tillåten på del 1.'
-      : 'Arbeta i den ordning du vill. Redovisa hur du tänker — svaret räcker inte.'}${v.gy.length ? ` <b>Centralt innehåll:</b> ${v.gy.join(' · ')}.` : ''}</p>`;
-    const forslag = figurFor(v);
-    /* Figuren hör till den tillämpade uppgiften, inte till begreppsfrågan och
-       inte till varje rad — då blir den dekor. */
-    const figurNr = forslag ? (v.uppgifter[2] ? 3 : 1) : -1;
-    const rad = u => {
-      const figur = u.nr === figurNr ? figurbit(forslag, 'dokfigur') : '';
-      return `<div class="uppg${mark(v, 'uppg' + u.nr)}"${figur ? ' data-figur-plats' : ''} data-el="uppg${u.nr}" data-namn="Uppgift ${u.nr}"><span class="unr">${u.nr}</span><span class="utext">${u.t}${(u.del || []).map(d => `<span class="del">${d}</span>`).join('')}${prov ? '' : `<span class="usvar${u.p > 4 ? ' uhog' : ''}"></span>`}${u.f ? `<span class="afacit">Facit: ${u.f}</span>` : ''}</span>${figur}<span class="upoang">${prov ? u.p + ' p' : ''}</span></div>`;
-    };
-    const vanliga = v.uppgifter.filter(u => !u.niva), extra = v.uppgifter.filter(u => u.niva);
-    return `<div class="ark" data-sida="1">${huvud}${instr}<div class="auppg">${vanliga.map(rad).join('')}</div>
-      ${extra.length ? `<div class="aniva andrad" data-el="niva" data-namn="${prov ? 'Del B' : 'Nivå B'}"><p class="anivarubrik">${prov ? 'Del B · högre nivå' : 'Nivå B — för den som vill mer'}</p><div class="auppg">${extra.map(rad).join('')}</div></div>` : ''}
-      <span class="asidnr">1 / 1 · ${prov ? summa + ' p' : 'arbetsblad'}</span></div>`;
-  }
 
   /* Provet är elevens dokument. Lösningsförslaget är lärarens — ett eget ark,
      inte facit intryckt i provet. Växlaren visas bara när det finns ett. */
@@ -5271,7 +5116,6 @@
        som lektionsväljaren och förlagerutan, bara ett klick i stället för tre. */
     valjLektion(namn) { valdaLektioner.add(namn); ritaKallval(); planKoll(); },
     slappLektion(namn) { valdaLektioner.delete(namn); ritaKallval(); planKoll(); },
-    harLektion(namn) { return valdaLektioner.has(namn); },
     /* Pekas en förlaga ut härifrån (pardokumentet, biblioteket) ärvs INGEN bok:
        det är en annan gest än «bygg vidare», och `bokArvet` får inte hänga kvar
        från förra gången och påstå att sidorna följde med. */
@@ -5683,11 +5527,6 @@
       dokTaBort(v);
       ritaSparat();
     });
-  }
-  function nastaBokstav(i) {
-    const orig = sparat[i];
-    const tagna = sparat.filter(s => s.syskonAv === dokNamn(orig) && /^Variant/.test(s.variant || '')).length;
-    return 'Variant ' + 'BCDE'[Math.min(3, tagna)];
   }
   function fragaSyskon(kort, i) {
     if ($('.dokfraga', kort)) return;

@@ -162,8 +162,8 @@
 
   window.Bok = {
     namn: 'Matematik 5000+ 3c', avsnitt: AVSNITT, register: REGISTER, bocker: null,
-    forKurs, registerFor, registerForBok, namnFor, sok, nasta, namnet, tolka,
-    franServern, taEmot,
+    forKurs, registerFor, registerForBok, namnFor, nasta, namnet, tolka,
+    franServern,
     /* Bokens id på servern — uppslaget och skrivningen behöver det för att
        kunna be om sidorna. null för prototypens böcker: de finns ingenstans. */
     bokId: namn => ID_BOK[namn] || null,

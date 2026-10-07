@@ -8,7 +8,6 @@
 (() => {
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-  const MODELL = { namn: 'Claude Code · Anthropic', mb: 0 };
   /* Spegeln kortar väntan till några sekunder men låter klockan gå i appens takt,
      så texten «brukar ta 1–2 min» stämmer mot det som visas. Med ett RIKTIGT
      jobb (o.jobb) går klockan i verklig tid — då finns inget att komprimera. */
@@ -868,7 +867,7 @@
 
   document.addEventListener('api-redo', () => { aterupptagning(); });
 
-  window.Fraga = { kor, aterupptagning, get varm() { return varm; }, MODELL };
+  window.Fraga = { kor };
 
   /* En kort uppspelning i svaret: knappen blir ett spår som fylls, och raden ur
      transkriptet står under källorna medan den spelas. */

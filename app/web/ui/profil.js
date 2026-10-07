@@ -559,7 +559,6 @@ window.Profil = (() => {
     $('b', rad).textContent = f.kalla ? f.kalla.replace(/:$/, '') : `${minnesKlass} ·`;
     $('.mrgjort', rad).textContent = f.text;
   }
-  const slappMinnesrad = () => slapp(true);
 
   /* ── Profilkortet i klassvyn ─────────────────── */
   function rader(klass) {
@@ -711,5 +710,5 @@ window.Profil = (() => {
     spara();
   }
 
-  return { forKlass, anvand, lar, rita, slapp, slappMinnesrad, visaFor, gyFor, sattLage, lageFor, bekraftaLage, inriktningFor, minne: () => minne };
+  return { forKlass, anvand, lar, rita, slapp, visaFor, sattLage, lageFor, bekraftaLage, inriktningFor, minne: () => minne };
 })();

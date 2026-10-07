@@ -570,39 +570,6 @@ window.Figurer = (() => {
     linjar, andragrad, exponential, normalfordelning, enhetscirkel, stapeldiagram, ladagram
   };
 
-  /* ── Vilken figur uppgiften vill ha ─────────────────
-     Momentets ord säger vad som ska ritas. Heuristiken är med flit grov: hittar
-     den inget returnerar den null, och då blir det ingen figur — en gissad figur
-     som inte hör till uppgiften är värre än ingen. */
-  function forslagFor(moment, kurs) {
-    const m = String(moment || '').toLowerCase();
-    if (/cirkel|randvinkel|korda|tangent|båge|bage|medelpunkt/.test(m)) return {
-      fig: { typ: 'cirkel', gradA: 168, gradB: 18, gradC: 274, medelpunktsvinkel: 'v' },
-      kapning: 'Figuren hör till uppgiften — markera det ni vet direkt i den.'
-    };
-    if (/triangel|pythagoras|hypotenusa|katet|sinus|cosinus|tangens|trigonometri/.test(m)) return {
-      fig: { typ: 'triangel', rattVid: 'B', sidaAB: 'a', sidaBC: 'b', sidaCA: 'c' },
-      kapning: 'Sätt in de mått ni får ur texten innan ni räknar.'
-    };
-    if (/volym|cylinder|tank|behållare|behallare|rätblock|ratblock|prisma/.test(m)) return {
-      fig: { typ: 'cylinder', inflode: 'in', utflode: 'ut', nivanamn: 'h', radienamn: 'r' },
-      kapning: 'Genomskärning — höjden h mäts från botten.'
-    };
-    if (/olikhet|intervall|tallinje|absolutbelopp|definitionsmängd|definitionsmangd/.test(m)) return {
-      fig: { typ: 'tallinje', fran: -4, till: 4, marken: [{ vid: -2 }, { vid: 0 }, { vid: 2 }], intervall: [{ fran: -1, till: 3, medFran: true, medTill: false }] },
-      kapning: 'Fylld ring = värdet ingår, tom ring = det gör det inte.'
-    };
-    if (/statistik|diagram|fördelning|fordelning|medelvärde|medelvarde|frekvens/.test(m)) return {
-      fig: { typ: 'staplar', data: [{ namn: 'E', varde: 8 }, { namn: 'C', varde: 14 }, { namn: 'A', varde: 5 }], visaVarden: true },
-      kapning: 'Läs av staplarna — värdena står över dem.'
-    };
-    if (/derivat|funktion|graf|exponent|logaritm|tillväxt|tillvaxt|avtag|potens|ekvation/.test(m)) return {
-      fig: { typ: 'graf', uttryck: 'x => calc.pow(1.14, x)', xmax: 20, ymax: 14, xnamn: 'x', ynamn: 'y' },
-      kapning: 'Grafen är till för att läsa av — jämför med ert räknade svar.'
-    };
-    return null;
-  }
-
   /* Beskrivningen till CeTZ-källa. Okänd typ ger ingen tom ruta utan ett tydligt
      fel i konsolen — en figur som saknas är en bugg, inte ett designval. */
   function kalla(fig) {
@@ -619,5 +586,5 @@ window.Figurer = (() => {
     niceTicks, etikett
   };
 
-  return { kalla, katalog, forslagFor, prov, matt: { BREDD, HOJD }, typer: () => Object.keys(katalog) };
+  return { kalla, prov };
 })();

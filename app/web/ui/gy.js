@@ -525,7 +525,7 @@ window.Gy = (() => {
              delvis: mina.some(([s]) => finnsI(s, har.id)) };
   };
 
-  return { nivaer, niva, punkter, foreslagen, kodFor, koder, kortFor, utanfor,
+  return { nivaer, niva, punkter, foreslagen, koder, kortFor, utanfor,
            lista: () => nivaer.slice() };
 })();
 

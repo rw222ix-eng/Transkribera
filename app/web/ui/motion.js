@@ -94,15 +94,6 @@ function flyttaSeg(seg) {
 }
 function flyttaAlla() { flyttaFlik(); $$('.seg').forEach(flyttaSeg); }
 
-/* ── Stegräckans fyllda streck ──────────────────────── */
-function fyllStreck() {
-  const poster = $$('#stegrad .stegpost');
-  $$('#stegrad .streck').forEach((s, i) => {
-    const f = poster[i] && $('.bricka', poster[i]).classList.contains('klar');
-    s.classList.toggle('fylld', !!f);
-  });
-}
-
 /* ── Stigande entré ─────────────────────────────────── */
 function stig(root) {
   const el = $$('[data-stig]', root);
@@ -113,24 +104,6 @@ function stig(root) {
     e.style.animationDelay = (i * 60) + 'ms';
   });
   requestAnimationFrame(flyttaAlla);
-}
-
-/* ── Ord-för-ord-avtäckning för AI-svar ─────────────── */
-let skriver = false;
-function ordvis(el) {
-  if (!el) return;
-  const t = el.textContent.trim();
-  if (!t) return;
-  skriver = true;
-  el.textContent = '';
-  t.split(/\s+/).forEach((w, i) => {
-    const s = document.createElement('span');
-    s.className = 'ordin';
-    s.style.animationDelay = Math.min(i * 24, 900) + 'ms';
-    s.textContent = w + ' ';
-    el.appendChild(s);
-  });
-  requestAnimationFrame(() => { skriver = false; });
 }
 
 /* ── FLIP: det som byter plats glider dit, hoppar inte ─
@@ -219,19 +192,17 @@ window.stangToast = el => {
 
 /* ── Observatörer ───────────────────────────────────── */
 const obs = new MutationObserver(muts => {
-  if (skriver) return;
   let flytta = false;
   muts.forEach(m => {
     if (m.type === 'attributes') {
       const t = m.target;
       if (m.attributeName === 'hidden' && !t.hidden) {
         if (t.matches('.vy,[data-steg]')) stig(t);
-        else if (t.matches('.svarsruta,#utkast,#klarruta,.veckogrupp')) { t.classList.remove('in'); void t.offsetHeight; t.classList.add('in'); }
+        else if (t.matches('#utkast')) { t.classList.remove('in'); void t.offsetHeight; t.classList.add('in'); }
         flytta = true;
       }
       if (m.attributeName === 'aria-selected') { flytta = true; if (t.matches('.flik')) fotoflik(); }
       if (m.attributeName === 'aria-pressed' && t.closest('.seg')) flyttaSeg(t.closest('.seg'));
-      if (m.attributeName === 'class' && t.classList.contains('bricka')) fyllStreck();
     }
     m.addedNodes && m.addedNodes.forEach(n => {
       if (n.nodeType !== 1) return;
@@ -247,12 +218,6 @@ const obs = new MutationObserver(muts => {
 function start() {
   byggHimmel();
   obs.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'aria-selected', 'aria-pressed', 'class'] });
-  /* AI-svar: täck av orden när texten byts */
-  ['#svarstext', '#arkivsvarstext'].forEach(sel => {
-    const el = $(sel);
-    if (!el) return;
-    new MutationObserver(() => { if (!skriver) ordvis(el); }).observe(el, { childList: true, characterData: true, subtree: true });
-  });
   /* rullad topbar */
   const top = $('.topbar'), duk = $('.duk');
   addEventListener('scroll', () => {
@@ -263,7 +228,7 @@ function start() {
   /* Paneler öppnas av klick. Ett omätt segment får sin mätning på nästa bildruta
      efter klicket — billigare och säkrare än att bevaka varje panel. */
   addEventListener('click', () => requestAnimationFrame(flyttaAlla), true);
-  flyttaAlla(); fyllStreck();
+  flyttaAlla();
   document.fonts && document.fonts.ready.then(flyttaAlla);
   setTimeout(() => { stig($('#vy-planering')); document.body.classList.add('redo'); }, 30);
 }

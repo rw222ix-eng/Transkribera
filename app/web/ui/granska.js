@@ -1790,6 +1790,5 @@
                         samma skäl som `koad` finns: e2e ska slippa jaga en
                         markering i DOM:en. */
                      get blinkade() { return blinkade.slice(); },
-                     get senasteVarv() { return senaste.varv; },
-                     get kommentarer() { return kommentarer; } };
+                     get senasteVarv() { return senaste.varv; } };
 })();

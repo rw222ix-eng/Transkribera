@@ -88,7 +88,6 @@ window.Blad = (() => {
     return ut.map((u, k) => ({ ...u, orig: u.nr, nr: k + 1 }));
   }
   const provval = provplock;
-  const delBAntal = v => delaProv(uppgifter(v))[0].length;
 
   /* Arbetsbladet och gruppuppgiften håller sig till dagens avsnitt — och till
      den nivå läraren valde. «Nivå» var förr en etikett på metaraden; nu väljer

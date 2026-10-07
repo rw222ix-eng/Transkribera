@@ -231,7 +231,7 @@
   }
 
   const allt = () => { satt(); tavla(); };
-  window.Matte = { satt, tavla, jamna, BGAP };
+  window.Matte = { satt, tavla, jamna };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', allt);
   else allt();
 })();

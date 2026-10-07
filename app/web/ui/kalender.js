@@ -57,7 +57,6 @@ window.Kalender = (() => {
   };
   const veckodag = s => (dat(s).getDay() + 6) % 7 + 1;
   const minuter = t => { const m = String(t).match(/(\d{1,2})[:.](\d{2})/); return m ? +m[1] * 60 + +m[2] : null; };
-  const omVeckor = n => { const d = new Date(); d.setDate(d.getDate() + n * 7); return iso(d); };
   const forDatum = datum => poster.filter(p => p.datum === datum);
   /* Schemaraden gäller mellan sina datum. Ett veckoschema utan giltighet är ett
      påstående om varenda vecka som finns, och det stämmer aldrig: uppstarts-
@@ -494,5 +493,5 @@ window.Kalender = (() => {
     })
     .catch(() => { /* servern svarar inte: prototypens vecka står kvar */ });
 
-  return { poster, schema, lov, innehall, innehallFor, planeringen, uppgifterForSpann, provpunkter, nastaProv, forraProv, omVeckor, forDatum, schemaFor, lovFor, traff, krockrad, veckan, veckoBild, veckonr, mandagen, nastaSkolvecka, terminen, lagg, ord, synka, redo, franServern: () => franServern, idag: () => iso(new Date()) };
+  return { poster, schema, lov, innehall, innehallFor, planeringen, uppgifterForSpann, provpunkter, nastaProv, forraProv, forDatum, schemaFor, lovFor, traff, krockrad, veckan, veckoBild, veckonr, mandagen, nastaSkolvecka, terminen, lagg, ord, synka, redo, franServern: () => franServern, idag: () => iso(new Date()) };
 })();

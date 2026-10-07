@@ -114,5 +114,5 @@
     sattLage();
   });
 
-  window.Moln = { get ansluten() { return ansluten; }, sattLage };
+  window.Moln = { sattLage };
 })();

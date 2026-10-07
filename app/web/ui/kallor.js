@@ -778,5 +778,5 @@
   new MutationObserver(ritaFokus).observe($('#kvittoextra'), { childList: true });
   new MutationObserver(ritaFokus).observe($('#valdalektioner'), { childList: true });
   ritaFokus();
-  window.Kallor = { satt, ritaKvitto, ritaDorrar, speglaForlaga, ritaProvlista, speglaResultat, ritaFokus };
+  window.Kallor = { satt, ritaKvitto, ritaDorrar, speglaForlaga, speglaResultat, ritaFokus };
 })();

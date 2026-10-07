@@ -142,5 +142,5 @@ window.Prickar = (() => {
     return kopia;
   }
 
-  return { pa, riv, LUGN_MS };
+  return { pa, riv };
 })();
