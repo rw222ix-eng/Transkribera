@@ -36,7 +36,7 @@ import * as L from "./larardag.mjs";
  *   PR · försättsbladet .............. .prmeta, .prnot, .prbetyg ......... ✓ nytt
  *   PR · uppgiftsbladet .............. .prtab, .prsvar, .prdel/.prpo ..... ✓ ovan
  *   PR · lösningsblad 1–2 ............ .probs, .prfig, .prslut ........... ✓ nytt
- *   PR · lösningsblad 3 · bilder ..... .prbild (image-slot) .............. ✗ appen
+ *   PR · lösningsblad 3 · bilder ..... .prbild ........................... ✗ appen
  *        producerar inga bilduppgifter ur egen kraft — bilden kommer ur lärarens
  *        uppladdning (bild-fältet), och den vägen prövas i prov.spec.mjs.
  *   LÖ · kommenterad elevlösning ..... .loelev/.loparti/.lodom ........... ✓ nytt
@@ -77,7 +77,6 @@ async function satt(page, html) {
 }
 
 test("arbetsbladet bär en av förlagans formnycklar — inte en egen", async ({ page }) => {
-  await L.fejkatMoln(page);
   await L.oppna(page);
 
   const utan = await page.evaluate(() => window.BladBygg.ark(
@@ -93,7 +92,6 @@ test("arbetsbladet bär en av förlagans formnycklar — inte en egen", async ({
 });
 
 test("figuren står bredvid frågan, aldrig under den", async ({ page }) => {
-  await L.fejkatMoln(page);
   await L.oppna(page);
   const html = await page.evaluate(() => window.BladBygg.ark(
     { typ: "Arbetsblad", moment: "cirkeln", inst: {} },
@@ -112,7 +110,6 @@ test("figuren står bredvid frågan, aldrig under den", async ({ page }) => {
 
 test("provbladet ritar uppgiftens figur och deluppgifternas egna poäng",
   async ({ page }) => {
-    await L.fejkatMoln(page);
     await L.oppna(page);
     const html = await page.evaluate(() => window.BladBygg.provblad(
       { kurs: "Matematik, nivå 2c", klass: "NA25" },
@@ -153,7 +150,6 @@ test("provets figur följer med från serverns JSON hela vägen till arket",
       ],
     };
     const strom = h => h.map(x => `data: ${JSON.stringify(x)}\n\n`).join("");
-    await L.fejkatMoln(page);
     await page.route("**/api/exams/generate", route => route.fulfill({
       status: 200, contentType: "text/event-stream",
       body: strom([{ type: "done", result: {
@@ -190,7 +186,6 @@ test("provets figur följer med från serverns JSON hela vägen till arket",
 
 test("arbetsbladet sätter tabellen, kryssruteraden och stegtabellen",
   async ({ page }) => {
-    await L.fejkatMoln(page);
     await L.oppna(page);
     const html = await page.evaluate(() => window.BladBygg.ark(
       { typ: "Arbetsblad", moment: "former", inst: {} },
@@ -229,7 +224,6 @@ test("form 3 · två elevers lösningar står sida vid sida", async ({ page }) =
   /* Förlagans tredje form: tabellen först, över hela bladets bredd, med EN
      spalt per elev och en kryssrutekolumn sist. Med en enda lösningsspalt är
      det en annan form — då finns inget att jämföra. */
-  await L.fejkatMoln(page);
   await L.oppna(page);
   const html = await page.evaluate(() => window.BladBygg.ark(
     { typ: "Arbetsblad", moment: "exponentialekvationer", inst: {} },
@@ -257,7 +251,6 @@ test("form 6 · figur och stegtabell på samma blad bär kombinationens nyckel",
        ett A4 kostar höjd, och den tas ur radhöjder och cellpadding. Renderaren
        kunde aldrig nå den: bladet fick gu2, som är satt för ETT figurtungt
        blad. Samma sorts fel som «ab» en gång var. */
-    await L.fejkatMoln(page);
     await L.oppna(page);
     const html = await page.evaluate(() => window.BladBygg.ark(
       { typ: "Arbetsblad", moment: "från text till ekvation", inst: {} },
@@ -288,7 +281,6 @@ test("bedömningsanvisningen · nationella provets form, elevlösningarna sist",
        strängen «1,0,0 p» — JavaScript adderar tal och array genom att foga
        ihop dem. Det syns bara på ett prov som kommer från servern; prototypens
        egna facit bär ett tal. */
-    await L.fejkatMoln(page);
     await L.oppna(page);
     const html = await page.evaluate(() => window.BladBygg.losning(
       { kurs: "Matematik, nivå 3c", klass: "NA25" },
@@ -412,8 +404,6 @@ test("bedömningsanvisningen ur serverns prov · paginerad, satt och pekbar",
     const rad = { id: 1, status: "godkant", markor: 0, sort: 1, foljd: null,
                   versioner: [papper], dokument: { ...papper, id: 1 } };
     await page.route("**/api/schema", r => json(r, { schema: [], lov: [], poster: [] }));
-    await page.route("**/api/lessons", r => json(r, []));
-    await page.route("**/api/history", r => json(r, []));
     await page.route("**/api/klassprofil", r => json(r, {}));
     await page.route("**/api/dokument", r => json(r, { sparade: [rad], utkast: null }));
     await page.route("**/api/dokument/**", r => json(r, { ok: true, id: 1 }));
@@ -502,7 +492,6 @@ test("provets försättsblad bär avtalet — och ingen OBS-ruta upprepar det",
       ],
     };
     const strom = h => h.map(x => `data: ${JSON.stringify(x)}\n\n`).join("");
-    await L.fejkatMoln(page);
     await page.route("**/api/exams/generate", route => route.fulfill({
       status: 200, contentType: "text/event-stream",
       body: strom([{ type: "done", result: {
@@ -659,7 +648,6 @@ test("provarket bär samma former — och aldrig facit", async ({ page }) => {
     ],
   };
   const strom = h => h.map(x => `data: ${JSON.stringify(x)}\n\n`).join("");
-  await L.fejkatMoln(page);
   await page.route("**/api/exams/generate", route => route.fulfill({
     status: 200, contentType: "text/event-stream",
     body: strom([{ type: "done", result: {
@@ -702,7 +690,6 @@ test("gruppuppgiftens ifyllnadsrader ersätter svarsraden", async ({ page }) => 
      designens egna element, .gunamn + .gulinje, så en ny form inte drar med
      sig ett nytt utseende. Och den som fyllt i dem har svarat: en svarslinje
      till under dem är en rad ingen vet vad hon ska skriva på. */
-  await L.fejkatMoln(page);
   await L.oppna(page);
   const html = await page.evaluate(() => window.BladBygg.ark(
     { typ: "Gruppuppgift", moment: "från text till ekvation",
@@ -763,7 +750,6 @@ test("tavlans sammanfattningstabell får kolumnbredd ur innehållet", async ({ p
      en kontextspalt, en ekvation, ett metodled och ett kort svar. Motorn gav
      alla kolumner SAMMA bredd, så metodledet ritades rakt ut ur sin ruta och
      lade sig över svaret. Nu sätts bredden ur innehållet när cellW utelämnas. */
-  await L.fejkatMoln(page);
   await L.oppna(page);
   await tavla(page, {
     title: "Från text till ekvation",
@@ -801,7 +787,6 @@ test("tavlans sammanfattningstabell får kolumnbredd ur innehållet", async ({ p
 test("en tabell med satt cellW ritas likbred som förr", async ({ page }) => {
   /* Designens egen teckentabell sätter cellW och ska se ut precis som den
      gör — annars «rättar» vi appen bort från förlagan i stället för mot den. */
-  await L.fejkatMoln(page);
   await L.oppna(page);
   await tavla(page, {
     title: "Extrempunkter",
@@ -827,7 +812,6 @@ test("en tabell med satt cellW ritas likbred som förr", async ({ page }) => {
 });
 
 test("tavlans spaltlinje är dragen, inte streckad", async ({ page }) => {
-  await L.fejkatMoln(page);
   await L.oppna(page);
   /* Förlagan tog upp linjen i sitt eget stilblad — «motorn ritar den streckad
      och blek» — och det är motorn som ska rätta sig, inte dokumentet. */
@@ -857,7 +841,6 @@ test("tavlans spaltlinje är dragen, inte streckad", async ({ page }) => {
 });
 
 test("ett bråk inuti ett rottecken spricker inte i röda TeX-fragment", async ({ page }) => {
-  await L.fejkatMoln(page);
   await L.oppna(page);
   /* Bråkstaplingen (matte.js ettUttryck) klippte ut \dfrac också när det låg
      INUTI en annan konstruktions klamrar: «\sqrt{\dfrac{3}{a}}» blev
@@ -940,7 +923,6 @@ function provmedbilder() {
 }
 
 test("ingen uppgift klipps när plåtarna kommer efter mätningen", async ({ page }) => {
-  await L.fejkatMoln(page);
   /* Plåtarna dröjer — det är precis det som hände första gången servern
      skalade om hennes 2048 px-bilder. */
   await page.route("**/api/platar/**", async route => {
@@ -1008,7 +990,6 @@ test("svarsraden står bara på de uppgifter som bara kräver ett svar", async (
      uppgifter/deluppgifter med Endast svar krävs.» Hennes uppgift 7 — en
      A-uppgift som ber om ett villkor OCH en motivering — fick en tom linje
      under sig, och linjen säger raka motsatsen till kravraden ovanför. */
-  await L.fejkatMoln(page);
   await L.oppna(page);
   const html = await page.evaluate(() => window.BladBygg.provblad(
     { typ: "Prov", moment: "potenser", kurs: "Matematik 1c", klass: "NA25" },
@@ -1037,7 +1018,6 @@ test("nedskalad kolumn går till reparation, uppskalad gör det inte", async ({ 
      mot den exporterade predikaten och inte med innehåll: fit-passets
      binärsökning snäpper till grova skalor (0,6 · 0,65 · 0,7 · 0,8) och går
      inte att styra till 92 % med rader i en spalt. */
-  await L.fejkatMoln(page);
   await L.oppna(page);
   expect(await page.evaluate(() => [
     window.WBLayout.krympvarning(0.70),   // den fällda tavlans egen skala

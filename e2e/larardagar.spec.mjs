@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import * as L from "./larardag.mjs";
 
-/* SCENARIOMATRISEN — tio skriptade lärardagar (Etapp 4.1)
+/* SCENARIOMATRISEN — skriptade lärardagar (Etapp 4.1)
  *
  * «Som om hundratals lärare använt appen och rapporterat buggarna» betyder för
  * en lokal enanvändarapp hundratals SESSIONER, inte samtidiga användare. Det
@@ -21,23 +21,15 @@ import * as L from "./larardag.mjs";
 test.describe.configure({ mode: "serial" });
 
 // ── Dag 1 ────────────────────────────────────────────────────────────────
-test("dag 1 — vanlig dag: spela in, transkribera, granska, planera, godkänn",
+/* Dagen började förr med morgonens inspelning (transkribera, granska
+   förslagen). Den delen togs bort med Transkribera-fliken 2026-10-07. */
+test("dag 1 — vanlig dag: planera, godkänn",
   async ({ page }) => {
     const fel = L.vakt(page);
     const anrop = L.spana(page);
-    await L.fejkatMoln(page);
     await L.oppna(page);
 
-    // Morgonen: gårdagens inspelning läggs i kön. Schemat gör klass och kurs
-    // till fakta — filnamnet bär datum och tid, och tisdag 09:05 är NA25.
-    await L.transkribera(page);
-    await expect(page.locator("#klarruta")).toBeVisible({ timeout: 20_000 });
-    await expect(page.locator("#korkvar")).toContainText("ElevenLabs");
-
-    // Granskningen efter körningen: serverns insikter, inte regexgissningen.
-    await expect(page.locator("#forslagnot")).toContainText("kalender", { timeout: 20_000 });
-
-    // Eftermiddagen: en av veckans lektioner planeras.
+    // En av veckans lektioner planeras.
     const fore = await L.antalSparade(page);
     await L.valjKlass(page, "NA25");
     await L.skriv(page, { moment: "derivatans definition" });
@@ -65,7 +57,6 @@ test("dag 2 — tre lektioner, två klasser: kön bär dem i tur och ordning",
   async ({ page }) => {
     test.setTimeout(180_000);
     const fel = L.vakt(page);
-    await L.fejkatMoln(page);
     await L.oppna(page);
 
     // Måndagens tre lektioner: NA25 (Ma2c), TE25prk (Ma1c), IN24prk (Ma2a).
@@ -100,7 +91,7 @@ test("dag 2 — tre lektioner, två klasser: kön bär dem i tur och ordning",
   });
 
 // ── Dag 3 ────────────────────────────────────────────────────────────────
-test("dag 3 — provdag: skriv provet, godkänn till PDF, tryck med anpassad kopia",
+test("dag 3 — provdag: skriv provet, godkänn till PDF",
   async ({ page }) => {
     /* Fyra minuter. Mätt, inte gissat: dagen tar 13 s lokalt och 53 s i CI
        (2026-08-09) — fyra gånger, alltså precis vad en tvåkärnig runner kostar.
@@ -111,7 +102,6 @@ test("dag 3 — provdag: skriv provet, godkänn till PDF, tryck med anpassad kop
     test.setTimeout(240_000);
     const fel = L.vakt(page);
     const anrop = L.spana(page);
-    await L.fejkatMoln(page);
     await L.oppna(page);
 
     await L.valjKlass(page, "NA25");
@@ -133,32 +123,18 @@ test("dag 3 — provdag: skriv provet, godkänn till PDF, tryck med anpassad kop
     await expect.poll(() => L.traff(anrop, "/approve").length, { timeout: 30_000 })
       .toBeGreaterThan(0);
 
-    // Utskriftsrutan: provet, facit och en anpassad kopia — förlängd tid och
-    // färre uppgifter, märkt bara med dokumentkod i sidfoten.
-    await page.getByRole("tab", { name: "Planering" }).click();
-    await page.evaluate(() => window.Tryck.oppna());
-    await expect(page.locator("#tryckruta")).toBeVisible();
-    await page.locator("#tryckanpassad").click();
-    await page.locator("#tryckskicka").click();
-
-    await expect.poll(() => L.traff(anrop, "/api/tryck").length,
-                      { timeout: 120_000 }).toBe(1);
-    const paket = L.traff(anrop, "/api/tryck")[0].kropp;
-    expect(paket.dokument.some(d => d.anpassad)).toBe(true);
-    // Tavlan hade legat först om det funnits en; provet ska i alla fall inte
-    // ligga efter sitt eget facit.
-    await expect(page.locator(".toast").last()).toContainText(/ordning|utskrift|PDF/i,
-                                                              { timeout: 60_000 });
     L.rent(fel);
   });
 
 // ── Dag 4 ────────────────────────────────────────────────────────────────
-test("dag 4 — rättningsdag: siffrorna in, utfallet blir källdörr 5",
+/* Rättningen gjordes förr i rättningsvyn (rattning.js) mitt i dagen. Vyn
+   togs bort 2026-10-07; det som prövas nu är att ett prov som källdörr 5
+   följer med till servern. */
+test("dag 4 — utfallsdag: provet blir källdörr 5",
   async ({ page }) => {
     test.setTimeout(180_000);
     const fel = L.vakt(page);
     const anrop = L.spana(page);
-    await L.fejkatMoln(page);
     await L.oppna(page);
 
     /* Provet ligger i Sparat sedan provdagen — dagarna delar bas, precis som en
@@ -191,51 +167,6 @@ test("dag 4 — rättningsdag: siffrorna in, utfallet blir källdörr 5",
       }), { timeout: 180_000 }).toBe(true);
     }
     const provId = await provet();
-    await page.evaluate(id => window.Rattning.oppna(
-      window.Dokument.sparade().find(v => v.id === id)), provId);
-
-    // Raderna är serverns: en per uppgift och deluppgift, med provets egna
-    // förmågor.
-    const rader = page.locator("#rattninglista .rattrad");
-    await expect(rader.first()).toBeVisible({ timeout: 20_000 });
-    const antal = await rader.count();
-    expect(antal).toBeGreaterThan(2);
-
-    await page.locator("#rattelever").fill("22");
-    const nycklar = await rader.evaluateAll(
-      els => els.map(e => e.getAttribute("data-nyckel")));
-    await page.locator(`.rattrad[data-nyckel="${nycklar[0]}"] .rattfalt`).fill("40");
-    await page.locator(`.rattrad[data-nyckel="${nycklar[1]}"] .rattfalt`).fill("12");
-    /* Appen räknar om andelen på fältets input-händelse (rattning.js), och
-       `rattat` byggs BARA av rader som fått en andel. Att klicka Spara direkt
-       efter fill() är alltså en kapplöpning med uträkningen: i CI 2026-08-09
-       sparades raderna utan sin andel och `rattat` blev null i basen, medan
-       samma test var grönt här. Procenttalet i raden är kvittot på att
-       uträkningen hunnit fram. */
-    await expect(page.locator(`.rattrad[data-nyckel="${nycklar[0]}"] .rattproc`))
-      .toHaveText(/%/, { timeout: 15_000 });
-    await page.locator("#rattningspara").click();
-
-    await expect.poll(() => anrop.filter(a => a.metod === "PUT"
-      && a.vag.endsWith("/rattning")).length, { timeout: 30_000 }).toBe(1);
-
-    /* Rättningen överlever omstarten — «Rättat · NN %» ska inte vara ett
-       minnesvärde. Frågan ställs till SERVERN och inte till högen i webbläsaren:
-       högen växer för varje session (soak-körningen kör dagen om och om igen)
-       och «det första provet i listan» är inte samma papper i morgon. */
-    /* Att anropet GJORDES är inte att det LANDAT. `spana` lyssnar på
-       request-eventet, alltså när webbläsaren skickar — svaret kan dröja. I CI
-       hann dagen läsa tillbaka innan PUT:en skrivit klart: raderna fanns men
-       `rattat` var null, för servern sätter det fältet först när det finns en
-       sparad rättning. Fråga tills servern svarat, inte en gång. */
-    await expect.poll(async () => {
-      const svar = await page.request.get(`/api/dokument/${provId}/rattning`);
-      if (!svar.ok()) return null;
-      const lagrad = await svar.json();
-      return lagrad.rattat ? lagrad.elever : null;
-    }, { timeout: 30_000 }).toBe(22);
-    await L.efterOmladdning(page);
-
     // Källdörr 5: utfallet följer med in i nästa skrivning — omprovet ska ta om
     // det klassen föll på, inte gå igenom momentet en gång till.
     await page.evaluate(id => window.Dokument.sattResultat(
@@ -254,7 +185,6 @@ test("dag 5 — pardokument: arbetsbladet skrivs PÅ tavlan man godkände",
     test.setTimeout(180_000);
     const fel = L.vakt(page);
     const anrop = L.spana(page);
-    await L.fejkatMoln(page);
     await L.oppna(page);
 
     await L.valjKlass(page, "NA24");
@@ -311,7 +241,6 @@ test("dag 5b — källdörr 4: ett tidigare papper som förlaga följer med till
     test.setTimeout(180_000);
     const fel = L.vakt(page);
     const anrop = L.spana(page);
-    await L.fejkatMoln(page);
     await L.oppna(page);
 
     /* Femte källdörren: «Ett tidigare papper». Läraren pekar ut det och skriver
@@ -346,7 +275,6 @@ test("dag 5c — «Tavlan löser förlagans uppgifter» är ett val som når ser
     test.setTimeout(180_000);
     const fel = L.vakt(page);
     const anrop = L.spana(page);
-    await L.fejkatMoln(page);
     await L.oppna(page);
 
     /* Jobb 1181 (2026-09-28): meningen «samma ordning och med samma tal» i
@@ -377,7 +305,6 @@ test("dag 5c — «Tavlan löser förlagans uppgifter» är ett val som når ser
 test("dag 6 — lovdag: ingenting att planera, och vägen ut är nästa skolvecka",
   async ({ page }) => {
     const fel = L.vakt(page);
-    await L.fejkatMoln(page);
     await L.oppna(page, { tid: L.LOVDAG });
     await page.getByRole("tab", { name: "Planering" }).click();
 
@@ -404,26 +331,7 @@ test("dag 7 — dagen då allt går fel: varje stopp är ett svenskt besked",
   async ({ page }) => {
     test.setTimeout(180_000);
     const fel = L.vakt(page);
-    await L.fejkatMoln(page, {
-      // 429 mitt i körningen: molnet svarar med serverns egen felmening.
-      transkribering: route => route.fulfill({
-        status: 200, contentType: "text/event-stream",
-        body: 'data: {"type":"progress","pct":30}\n\n'
-            + 'data: {"type":"error","message":"ElevenLabs svarade 429 (för många '
-            + 'anrop). Vänta en minut och försök igen."}\n\n' }),
-    });
     await L.oppna(page);
-    await L.transkribera(page);
-
-    /* Felet kommer ur serverns `message`-fält (app/web/sse.py). Läste klienten
-       bara `error` blev varenda jobb som föll mitt i strömmen ett «Okänt fel»
-       hos läraren — och det som stod där var i själva verket den åtgärdbara
-       meningen. */
-    const varning = page.locator("#korvarningar .varnruta");
-    await expect(varning).toBeVisible({ timeout: 20_000 });
-    await expect(varning).toContainText("429");
-    await expect(varning).not.toContainText("Okänt fel");
-    await expect(page.locator("#klarruta")).toBeHidden();
 
     // GPU:n är upptagen när tavlan ska skrivas: ett besked med en väg vidare,
     // och inget halvskrivet dokument.
@@ -471,7 +379,6 @@ test("dag 8 — boken: slå upp ett uppslag och skriv tavlan ur det",
     test.setTimeout(180_000);
     const fel = L.vakt(page);
     const anrop = L.spana(page);
-    await L.fejkatMoln(page);
     // Bokens OCR är ett molnpass som kostar minuter och pengar — den fejkas
     // här, precis som transkriberingen. Det som prövas är att UPPSLAGET når
     // generatorn på servern.
@@ -540,54 +447,11 @@ test("dag 8 — boken: slå upp ett uppslag och skriv tavlan ur det",
     L.rent(fel);
   });
 
-// ── Dag 9 ────────────────────────────────────────────────────────────────
-test("dag 9 — bara transkribering: tre filer i kö, en av dem förbannad",
-  async ({ page }) => {
-    test.setTimeout(180_000);
-    const fel = L.vakt(page);
-    let n = 0;
-    await L.fejkatMoln(page, {
-      transkribering: route => {
-        n += 1;
-        // Fil två är trasig: ffprobe hittar inget ljudspår. Kön ska ta sig
-        // igenom den och köra vidare — inte stanna på den.
-        if (n === 2) {
-          return route.fulfill({
-            status: 200, contentType: "text/event-stream",
-            body: 'data: {"type":"error","message":"Filen saknar ljudspår — '
-                + 'kontrollera att inspelningen blev av."}\n\n' });
-        }
-        return route.fulfill({ status: 200, contentType: "text/event-stream",
-                               body: L.korning() });
-      },
-    });
-    await L.oppna(page);
-
-    for (const namn of ["NA25 2026-09-08 09.05.m4a",
-                        "TE25prk 2026-09-08 13.45.m4a",
-                        "IN24prk 2026-09-08 14.40.m4a"]) {
-      await page.evaluate(f => laggTill(f, "00:45:00", "C:/inspelningar/" + f), namn);
-    }
-    await expect(page.locator("#ko-steg1 .korad")).toHaveCount(3);
-    await page.locator("#starta").click();
-
-    // Den trasiga filen ger ett besked med filens namn — inte «Okänt fel», och
-    // inte en bar som står still.
-    const varning = page.locator("#korvarningar .varnruta");
-    await expect(varning).toBeVisible({ timeout: 40_000 });
-    await expect(varning).toContainText("ljudspår");
-    // …och de andra två blev ändå klara.
-    await expect(page.locator("#klarruta")).toBeVisible({ timeout: 60_000 });
-    expect(n).toBe(3);
-    L.rent(fel);
-  });
-
 // ── Dag 10 ───────────────────────────────────────────────────────────────
 test("dag 10 — terminsvyn: hitta veckan som saknar material och planera den",
   async ({ page }) => {
     test.setTimeout(180_000);
     const fel = L.vakt(page);
-    await L.fejkatMoln(page);
     await L.oppna(page);
     await page.getByRole("tab", { name: "Planering" }).click();
 

@@ -48,19 +48,12 @@ const PROV = {
                 text: "Beräkna", losning: "1", bedomning: "+2 E" }],
 };
 
-const ANTECKNINGAR = {
-  titel: "Stödanteckningar",
-  avsnitt: [{ rubrik: "Att ta upp", punkter: ["kvadratkomplettering"] }],
-};
-
-/** Fejkar datagrunden och alla tre generatorrutterna. `anrop` samlar kropparna. */
+/** Fejkar datagrunden och båda generatorrutterna. `anrop` samlar kropparna. */
 async function fejka(page) {
   const anrop = [];
   const json = (route, kropp) => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify(kropp) });
   await page.route("**/api/schema", route => json(route, SCHEMA));
-  await page.route("**/api/lessons", route => json(route, []));
-  await page.route("**/api/history", route => json(route, []));
   await page.route("**/api/klassprofil", route => json(route, {}));
   await page.route("**/api/dokument", route => json(route, { sparade: [], utkast: null }));
   await page.route("**/api/dokument/**", route => json(route, { ok: true, id: 1 }));
@@ -75,8 +68,6 @@ async function fejka(page) {
     id: "abc123def456", board: tavla(), errors: [], rounds: 1 }));
   await page.route("**/api/exams/**", route => generator(route, {
     id: 7, exam: PROV, errors: [], rounds: 1 }));
-  await page.route("**/api/anteckningar/**", route => generator(route, {
-    id: 8, anteckningar: ANTECKNINGAR, errors: [], rounds: 1 }));
   return anrop;
 }
 
@@ -158,19 +149,15 @@ test("tomma rutor lägger inga nycklar i begäran", async ({ page }) => {
 });
 
 /* Fälten står i steget för det som ska ÖVAS, och de ska nå fram oavsett vilken
-   rutt som svarar. Arbetsbladet och gruppuppgiften delar rutt med provet;
-   anteckningarna har en egen. */
+   rutt som svarar. Arbetsbladet och gruppuppgiften delar rutt med provet. */
 for (const [typ, vag] of [["Arbetsblad", "/api/exams/generate"],
-                          ["Gruppuppgift", "/api/exams/generate"],
-                          ["Anteckningar", "/api/anteckningar/generate"]]) {
+                          ["Gruppuppgift", "/api/exams/generate"]]) {
   test(`${typ} bär också lärarens egna ord`, async ({ page }) => {
     const anrop = await fejka(page);
     await planering(page);
     await page.evaluate(t => { window.SattLage(t); window.PlanSteg.las(4, false); window.PlanSteg.gaTill(4); }, typ);
     await fyll(page, "#svart", SVART);
     await fyll(page, "#fokus", FOKUS);
-    // Anteckningarna kan inte skrivas ur ingenting: rutan eller ett möte krävs.
-    if (typ === "Anteckningar") await fyll(page, ".typfritext", "tre exempel att gå igenom");
     await skriv(page, typ);
 
     await expect.poll(() => anrop.length).toBe(1);

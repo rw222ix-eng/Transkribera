@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 /* ATT FRONTENDEN ÖVER HUVUD TAGET KOMMER UPP
  *
- * Frontenden är ramverkslös: app.html laddar 45 skript i bestämd ordning, och de
+ * Frontenden är ramverkslös: app.html laddar 43 skript i bestämd ordning, och de
  * delar globaler med varandra. Det finns alltså inget byggsteg som säger ifrån
  * när en fil försvinner, döps om eller hamnar i fel ordning — sidan renderar
  * halvvägs och resten uteblir tyst. Testerna nedan är den saknade kompilatorn.
@@ -21,32 +21,28 @@ test("alla skript och stilmallar laddar", async ({ page }) => {
     skript: document.scripts.length,
     stilmallar: document.styleSheets.length,
   }));
-  expect(laddat.skript).toBeGreaterThanOrEqual(45);
+  expect(laddat.skript).toBeGreaterThanOrEqual(43);
   expect(laddat.stilmallar).toBeGreaterThanOrEqual(15);
 
-  const trasiga = misslyckade.filter(m => !m.includes(".image-slots.state.json"));
-  expect(trasiga, trasiga.join(" | ")).toEqual([]);
+  expect(misslyckade, misslyckade.join(" | ")).toEqual([]);
 });
 
-test("de två vyerna renderar och flikarna byter mellan dem", async ({ page }) => {
+/* Transkribera-fliken och arkivet togs bort 2026-10-07: Planering är appens
+   enda vy och den som syns när appen startar. */
+test("appen startar på Planering och vyn renderar", async ({ page }) => {
   const jsfel = [];
   page.on("pageerror", e => jsfel.push(e.message));
 
   await page.goto("/", { waitUntil: "networkidle" });
 
-  // Vyerna göms med hidden i stället för att tas ur DOM:en, så lokatorer måste
-  // avgränsas till det som faktiskt syns. Och det räcker inte att välja vy: inuti
-  // en vy ligger stegen som var sin .view, alla utom en dolda, och var och en
-  // har en egen .rubrik. En omärkt .rubrik-lokator träffar därför två element
-  // och fäller testet i strict mode — inte för att appen är trasig.
+  // Lokatorerna avgränsas till det som syns: .view och .rubrik finns också i
+  // dolda delar av sidan.
   const synlig = () => page.locator(".vy:not([hidden])");
   const rubrik = () => synlig().locator(".view:not([hidden]) .rubrik");
   await expect(synlig()).toHaveCount(1);
-  await expect(synlig()).toHaveAttribute("id", "vy-transkribera");
-  await expect(rubrik()).toHaveText("Vad vill du transkribera?");
-
-  await page.getByRole("tab", { name: "Planering" }).click();
   await expect(synlig()).toHaveAttribute("id", "vy-planering");
+  await expect(page.getByRole("tab", { name: "Planering" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tab")).toHaveCount(1);
   await expect(rubrik()).toHaveText("Vad ska du planera?");
 
   // Schemaveckan är planeringens kärna och byggs av JS, så ett tomt rutnät

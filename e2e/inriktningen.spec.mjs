@@ -64,7 +64,6 @@ const faltet = page =>
 /* ── 1 · Raden i kortet ─────────────────────────────── */
 
 test("inriktningen står i klassprofilen som ett skrivet fält", async ({ page }) => {
-  await L.fejkatMoln(page);
   await L.oppna(page);
   await oppnaProfilen(page);
 
@@ -84,7 +83,6 @@ test("inriktningen står i klassprofilen som ett skrivet fält", async ({ page }
 test("yrket sparas i klassprofilen och överlever en omladdning",
      async ({ page }) => {
   const anrop = L.spana(page);
-  await L.fejkatMoln(page);
   await L.oppna(page);
   await oppnaProfilen(page);
 
@@ -114,7 +112,6 @@ test("yrket sparas i klassprofilen och överlever en omladdning",
 
 test("yrket följer med tavlans skrivjobb, per klass", async ({ page }) => {
   const anrop = await fejkaTavla(page);
-  await L.fejkatMoln(page);
   await L.oppna(page);
   await oppnaProfilen(page);
   await faltet(page).fill(YRKE);
@@ -128,7 +125,6 @@ test("yrket följer med tavlans skrivjobb, per klass", async ({ page }) => {
 
 test("en klass utan inriktning skickar ingen nyckel alls", async ({ page }) => {
   const anrop = await fejkaTavla(page);
-  await L.fejkatMoln(page);
   await L.oppna(page);
   /* KASSETTREGELN. Nyckeln ska inte FINNAS: servern lägger sin promptrad på
      ett ifyllt fält, och en tom sträng hade varit ett svar. Klassen är en

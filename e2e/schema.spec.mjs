@@ -24,35 +24,16 @@ const SCHEMA = {
   poster: [{ datum: "2026-08-20", tid: "13:00–14:30", titel: "Ämneslagsmöte", klass: "" }],
 };
 
-const LEKTIONER = [
-  { history_id: "h2", datum: "2026-08-05", ts: "2026-08-05T10:15:00", name: "Andragradsekvationer",
-    dur: "41:02", lang: "Svenska", group: "NA24", course: "Matematik, nivå 2c" },
-  { history_id: "h1", datum: "2026-07-29", ts: "2026-07-29T08:15:00", name: "Enhetscirkeln",
-    dur: "38:20", lang: "Engelska", group: "TE25", course: "Matematik, nivå 1c" },
-];
-
-const HISTORIK = [
-  { id: "h2", name: "Andragradsekvationer", lang: "Svenska", target_lang: "Svenska", video: null },
-  { id: "h1", name: "Enhetscirkeln", lang: "Engelska", target_lang: "Svenska",
-    video: { path: "C:/x/e.mp4" } },
-];
-
 /** Servern svarar med `svar` på datagrundens rutter. */
 async function fejkaDatagrunden(page, svar = {}) {
   const json = (route, kropp) => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify(kropp) });
   await page.route("**/api/schema", route => json(route, svar.schema ?? SCHEMA));
-  await page.route("**/api/lessons", route => json(route, svar.lektioner ?? LEKTIONER));
-  await page.route("**/api/history", route => json(route, svar.historik ?? HISTORIK));
 }
 
-/** Väntar tills kalendern hämtat schemat och arkivet ritats om. */
+/** Väntar tills kalendern hämtat schemat. */
 async function hydrerad(page) {
   await page.waitForFunction(() => window.Kalender && window.Kalender.franServern());
-  await page.waitForFunction(() =>
-    !document.querySelector('#inspelningar .kort .namn')
-    || ![...document.querySelectorAll('#inspelningar .kort .namn')]
-        .some(n => n.textContent.includes("Trigonometriska")));
 }
 
 test("veckoschemat kommer från servern, inte ur kalender.js", async ({ page }) => {
@@ -118,43 +99,22 @@ test("en kalenderpost med klass och tid är en lektion, inte bara en notis", asy
   await expect(motet).not.toHaveAttribute("data-valjbar", "");
 });
 
-test("arkivets kort är lärarens lektioner, inte app.html:s", async ({ page }) => {
-  await fejkaDatagrunden(page);
-  await page.goto("/");
-  await hydrerad(page);
-
-  const namn = await page.locator("#inspelningar .kort .namn").allTextContents();
-  expect(namn).toEqual(["Andragradsekvationer", "Enhetscirkeln"]);
-
-  // Varje kort ligger i sin ISO-vecka, med sin klass och sin kurs.
-  const kort = page.locator('#inspelningar .kort', { hasText: "Enhetscirkeln" });
-  await expect(kort).toHaveAttribute("data-datum", "2026-07-29");
-  await expect(kort).toHaveAttribute("data-klass", "TE25");
-  await expect(kort.locator(".sprakmark")).toHaveText("Engelska → svenska");
-  // Historikens `video` avgör tummen — inte en gissning ur filnamnet.
-  await expect(kort.locator('.tumme[data-typ="video"]')).toHaveCount(1);
-  await expect(page.locator('#inspelningar .kort', { hasText: "Andragradsekvationer" })
-    .locator('.tumme[data-typ="ljud"]')).toHaveCount(1);
-});
-
-test("filtren erbjuder lärarens klasser och kurser", async ({ page }) => {
+test("planeringens väljare erbjuder lärarens klasser och kurser", async ({ page }) => {
   await fejkaDatagrunden(page);
   await page.goto("/");
   await hydrerad(page);
 
   const val = s => page.locator(s).evaluate(el => [...el.options].map(o => o.textContent));
-  expect(await val("#f-klass")).toEqual(["Alla klasser", "NA24", "TE25"]);
-  expect(await val("#f-kurs")).toEqual(["Alla kurser", "Matematik, nivå 1c", "Matematik, nivå 2c"]);
+  await expect.poll(() => val("#p-klass")).toEqual(["Ingen klass", "NA24", "TE25"]);
+  expect(await val("#p-kurs")).toEqual(["Ingen kurs", "Matematik, nivå 1c", "Matematik, nivå 2c"]);
 });
 
 test("tomt schema ger en tom vecka — appen hittar inte på lektioner", async ({ page }) => {
-  await fejkaDatagrunden(page, {
-    schema: { schema: [], lov: [], poster: [] }, lektioner: [], historik: [] });
+  await fejkaDatagrunden(page, { schema: { schema: [], lov: [], poster: [] } });
   await page.goto("/");
   await page.waitForFunction(() => window.Kalender && window.Kalender.franServern());
 
   expect(await page.evaluate(() => window.Kalender.schema)).toEqual([]);
-  await expect(page.locator("#inspelningar .kort")).toHaveCount(0);
   // Prototypens 9A/9B får inte smyga tillbaka som "bättre än inget".
   expect(await page.evaluate(() => window.Kalender.poster)).toEqual([]);
 });
@@ -259,8 +219,8 @@ test("utan innehåll i kalendern gissar appen som förut", async ({ page }) => {
 });
 
 test("utan server står prototypen kvar", async ({ page }) => {
-  // Designprojektet har ingen server: sonderingen faller, och då är veckan,
-  // loven och korten prototypens egna igen.
+  // Designprojektet har ingen server: sonderingen faller, och då är veckan
+  // och loven prototypens egna igen.
   await page.route("**/api/var-kors", route => route.abort());
   await page.goto("/");
   await page.waitForFunction(() => window.API && window.API.redo !== null);
@@ -268,6 +228,4 @@ test("utan server står prototypen kvar", async ({ page }) => {
 
   expect(await page.evaluate(() => window.Kalender.franServern())).toBe(false);
   expect(await page.evaluate(() => window.Kalender.schema.length)).toBeGreaterThan(0);
-  await expect(page.locator("#inspelningar .kort", { hasText: "Trigonometriska ettan" }))
-    .toHaveCount(1);
 });

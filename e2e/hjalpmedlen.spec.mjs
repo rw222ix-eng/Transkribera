@@ -120,7 +120,6 @@ async function skriv(page) {
 /* ── 1 · Raderna i panelen ──────────────────────────── */
 
 test("hjälpmedelsraderna står i provets upplägg, en per del", async ({ page }) => {
-  await L.fejkatMoln(page);
   await L.oppna(page);
   await provpanelen(page);
 
@@ -141,7 +140,6 @@ test("hjälpmedelsraderna står i provets upplägg, en per del", async ({ page }
 });
 
 test("formelblad som tillåtet hjälpmedel erbjuder bilagan", async ({ page }) => {
-  await L.fejkatMoln(page);
   await L.oppna(page);
   await provpanelen(page);
   /* Bilagekrysset är förvalt PÅ, så testet börjar med att slå av det: det är
@@ -161,7 +159,6 @@ test("formelblad som tillåtet hjälpmedel erbjuder bilagan", async ({ page }) =
 
 test("ett orört val skickar inga hjälpmedelsfält alls", async ({ page }) => {
   const anrop = await fejkaGenerate(page);
-  await L.fejkatMoln(page);
   await L.oppna(page);
   await provpanelen(page);
   await sattHjalpmedel(page, "Inga digitala", "Räknare");
@@ -176,7 +173,6 @@ test("ett orört val skickar inga hjälpmedelsfält alls", async ({ page }) => {
 
 test("lärarens val följer med begäran, en nyckel per del", async ({ page }) => {
   const anrop = await fejkaGenerate(page);
-  await L.fejkatMoln(page);
   await L.oppna(page);
   await provpanelen(page);
   // Det hon bad om tre gånger: formelbladet tillåtet på BÅDA delarna.
@@ -190,7 +186,6 @@ test("lärarens val följer med begäran, en nyckel per del", async ({ page }) =
 
 test("En del skickar bara sin enda regel", async ({ page }) => {
   const anrop = await fejkaGenerate(page);
-  await L.fejkatMoln(page);
   await L.oppna(page);
   await provpanelen(page);
   await knapp(page, "delprov", "En del").click();
@@ -220,7 +215,6 @@ const delcell = (page, namn) => page
 test("skärmens provtabell bär planeringens hjälpmedel när dokumentet tiger",
   async ({ page }) => {
     const anrop = await fejkaGenerate(page);
-    await L.fejkatMoln(page);
     await L.oppna(page);
     await provpanelen(page);
     await sattHjalpmedel(page, "Formelblad", "Räknare och formelblad");
@@ -236,7 +230,6 @@ test("skärmens provtabell bär planeringens hjälpmedel när dokumentet tiger",
 
 test("förvalet ritar precis de fraser pappret alltid burit", async ({ page }) => {
   const anrop = await fejkaGenerate(page);
-  await L.fejkatMoln(page);
   await L.oppna(page);
   await provpanelen(page);
   await sattHjalpmedel(page, "Inga digitala", "Räknare");

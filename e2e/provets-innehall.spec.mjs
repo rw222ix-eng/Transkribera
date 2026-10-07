@@ -42,8 +42,6 @@ async function fejka(page, { poster = POSTER } = {}) {
   const json = (route, kropp) => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify(kropp) });
   await page.route("**/api/schema", route => json(route, { ...SCHEMA, poster }));
-  await page.route("**/api/lessons", route => json(route, []));
-  await page.route("**/api/history", route => json(route, []));
   await page.route("**/api/klassprofil", route => json(route, {}));
   await page.route("**/api/dokument", route => json(route, { sparade: [], utkast: null }));
   await page.route("**/api/bocker**", route => json(route, { bocker: [] }));

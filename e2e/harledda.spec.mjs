@@ -48,8 +48,6 @@ async function fejka(page, { antal = 4, typ = "arbetsblad" } = {}) {
   const json = (route, kropp) => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify(kropp) });
   await page.route("**/api/schema", route => json(route, SCHEMA));
-  await page.route("**/api/lessons", route => json(route, []));
-  await page.route("**/api/history", route => json(route, []));
   await page.route("**/api/klassprofil", route => json(route, {}));
   await page.route("**/api/dokument", route => route.request().method() === "POST"
     ? json(route, { id: 1, status: "utkast", markor: 0, versioner: [] })

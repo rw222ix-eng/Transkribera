@@ -33,8 +33,6 @@ const json = (route, kropp) => route.fulfill({
 
 async function fejka(page, schema = SCHEMA) {
   await page.route("**/api/schema", route => json(route, schema));
-  await page.route("**/api/lessons", route => json(route, []));
-  await page.route("**/api/history", route => json(route, []));
   await page.route("**/api/klassprofil", route => json(route, {}));
   await page.route("**/api/bocker", route => json(route, []));
   await page.route("**/api/dokument", route => json(route, { sparade: [], utkast: null }));

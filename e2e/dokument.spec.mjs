@@ -37,8 +37,6 @@ async function fejka(page, { sparade = [], utkast = null, profil = {} } = {}) {
   const json = (route, kropp) => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify(kropp) });
   await page.route("**/api/schema", route => json(route, SCHEMA));
-  await page.route("**/api/lessons", route => json(route, []));
-  await page.route("**/api/history", route => json(route, []));
   await page.route("**/api/klassprofil", route => {
     const r = route.request();
     if (r.method() === "PUT") {
@@ -603,16 +601,15 @@ test("lösningsbladet laddar ner sin EGEN fil, inte originalets", async ({ page 
 });
 
 test("varje pappersort hämtar sin egen byggda fil", async ({ page }) => {
-  /* Fyra sorter delar exams-tabellen och därmed rutten: prov, arbetsblad och
-     gruppuppgift bär `provId`, anteckningarna `antId` (samma tabell, egen
-     router). Knappen ska fungera för alla fyra — det är lätt att tro att den
-     gör det och lika lätt att en sort tappar sitt id på vägen. */
+  /* Tre sorter delar exams-tabellen och därmed rutten: prov, arbetsblad och
+     gruppuppgift bär alla `provId`. Knappen ska fungera för alla tre — det är
+     lätt att tro att den gör det och lika lätt att en sort tappar sitt id på
+     vägen. */
   const hamtat = [];
   await fejka(page, { sparade: [
     rad(1, papper({ typ: "Prov", provId: 11 })),
     rad(2, papper({ typ: "Arbetsblad", provId: 12 })),
     rad(3, papper({ typ: "Gruppuppgift", provId: 13 })),
-    rad(4, papper({ typ: "Anteckningar", antId: 15 })),
   ] });
   await page.route("**/api/exams/**", route => {
     const p = new URL(route.request().url()).pathname;
@@ -625,10 +622,10 @@ test("varje pappersort hämtar sin egen byggda fil", async ({ page }) => {
   });
   await page.goto("/");
   await hydrerad(page);
-  await expect.poll(() => page.evaluate(() => window.Dokument.sparade().length)).toBe(4);
+  await expect.poll(() => page.evaluate(() => window.Dokument.sparade().length)).toBe(3);
 
   await page.getByRole("tab", { name: "Planering" }).click();
-  for (const i of [0, 1, 2, 3]) {
+  for (const i of [0, 1, 2]) {
     await visa(page, i);
     const nedladdning = page.waitForEvent("download", { timeout: 15_000 });
     await page.locator("#fh-pdf").click();
@@ -636,7 +633,7 @@ test("varje pappersort hämtar sin egen byggda fil", async ({ page }) => {
     await expect(page.locator("#fh-pdf")).toHaveText("Ladda ner PDF");
   }
   expect(hamtat).toEqual(["/api/exams/11/pdf", "/api/exams/12/pdf",
-                          "/api/exams/13/pdf", "/api/exams/15/pdf"]);
+                          "/api/exams/13/pdf"]);
 });
 
 test("ett papper utan byggd PDF ger serverns besked, inte «Sparad»", async ({ page }) => {
@@ -1008,8 +1005,6 @@ async function fejkaLagrande(page, rader) {
   const vy = r => ({ ...r, markor: klam(r), dokument: { ...r.versioner[klam(r)], id: r.id } });
   const senasteUtkast = () => [...rader].reverse().find(x => x.status === "utkast");
   await page.route("**/api/schema", route => json(route, SCHEMA));
-  await page.route("**/api/lessons", route => json(route, []));
-  await page.route("**/api/history", route => json(route, []));
   await page.route("**/api/klassprofil", route => json(route, {}));
   await page.route("**/api/exams/**", route => json(route, { id: 42, status: "utkast" }));
   await page.route("**/api/dokument", route => {

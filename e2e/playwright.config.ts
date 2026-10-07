@@ -7,12 +7,12 @@ const CHROME = process.env.CHROME_PATH || "/opt/pw-browsers/chromium";
 
 /* E2E för Transkriberas frontend.
  *
- * Sviten startar den RIKTIGA FastAPI-servern och kör mot den. Ingen fejkserver
- * behövs längre: frontenden anropar inget API — den är designprototypen från
- * Claude Design, med hårdkodad data och setTimeout i stället för nätverk. Det
- * som går att testa i dag är alltså sättningen och offline-integriteten, och det
- * är också precis det som är lätt att förstöra av misstag. När backen kopplas in
- * växer sviten med den.
+ * Sviten startar den RIKTIGA FastAPI-servern (e2e/testserver.py, tom bas) och
+ * kör mot den. Specarna fejkar det de behöver med page.route, alltså molnet
+ * eller en datagrund som den tomma basen saknar. Lärardagarna
+ * (larardagar.spec.mjs) skriver på riktigt. Utan server (sonderingen
+ * /api/var-kors faller) kör frontenden prototypens egna data, och det prövas
+ * också.
  *
  * Egen port (18751), skild från utvecklingsserverns 18750, så en igångvarande
  * dev-server inte tystar en trasig svit genom att svara i dess ställe.

@@ -5,7 +5,7 @@ import { forbiNivavarningen } from "./larardag.mjs";
  *
  * Lärarens ord: «exporten av alla pdf:er ska renderas korrekt — jag vill ha
  * pdf-filerna EXAKT som de ser ut i appen». Fram till nu sattes prov,
- * arbetsblad, gruppuppgift och anteckningar om i LaTeX vid
+ * arbetsblad och gruppuppgift om i LaTeX vid
  * godkännandet. Snarlikt, aldrig identiskt: brickorna satt ihop, tabellerna
  * hade andra linjer, och lärarens egna inlagda bilder — som bara finns i
  * webbläsarens dokument (v.bilder) och aldrig i provets JSON — kom inte med
@@ -52,13 +52,6 @@ const EXAM = {
   ],
 };
 
-/** Anteckningar som app/notes_gen.py definierar dem. */
-const NOTES = {
-  titel: "Derivator — så gör vi",
-  sektioner: [{ rubrik: "Det här ska med",
-                stycken: ["Ändringskvoten när $h$ går mot noll."] }],
-};
-
 /* En riktig, minimal PNG — den läraren «lagt in» på en uppgift. Röd, 1×1. */
 const BILD = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAf"
   + "Fcn/AAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
@@ -71,26 +64,12 @@ async function fejka(page, { typ = "prov" } = {}) {
   const json = (route, kropp) => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify(kropp) });
   await page.route("**/api/schema", route => json(route, SCHEMA));
-  await page.route("**/api/lessons", route => json(route, []));
-  await page.route("**/api/history", route => json(route, []));
   await page.route("**/api/klassprofil", route => json(route, {}));
   await page.route("**/api/dokument", route => json(route, { sparade: [], utkast: null }));
   await page.route("**/api/dokument/**", route => json(route, { ok: true, id: 1 }));
   await page.route("**/api/planning/**", route => json(route, { ok: true }));
   const sse = (route, kropp) => route.fulfill({
     status: 200, contentType: "text/event-stream", body: strom(kropp) });
-  await page.route("**/api/anteckningar/**", route => {
-    const vag = new URL(route.request().url()).pathname;
-    anrop.push({ vag, kropp: route.request().postDataJSON() });
-    if (vag.endsWith("/approve")) {
-      return sse(route, [{ type: "done", result: {
-        id: 11, pdf: "C:/Transkriberingar/anteckningar/d.pdf",
-        tex: "C:/Transkriberingar/anteckningar/d.tex", errors: [] } }]);
-    }
-    return sse(route, [{ type: "done", result: {
-      id: 11, anteckningar: NOTES, typ: "anteckningar", status: "utkast",
-      versions: [], errors: [], rounds: 1 } }]);
-  });
   await page.route("**/api/exams/**", route => {
     const vag = new URL(route.request().url()).pathname;
     anrop.push({ vag, kropp: route.request().postDataJSON() });
@@ -106,9 +85,9 @@ async function fejka(page, { typ = "prov" } = {}) {
   return anrop;
 }
 
-async function skriv(page, typ, moment = "derivator", onskemal = null) {
+async function skriv(page, typ, moment = "derivator") {
   await page.getByRole("tab", { name: "Planering" }).click();
-  await page.evaluate(([t, m, ons]) => {
+  await page.evaluate(([t, m]) => {
     window.SattLage(t);
     const satt = (id, v) => {
       const e = document.querySelector(id);
@@ -122,16 +101,7 @@ async function skriv(page, typ, moment = "derivator", onskemal = null) {
     f.dispatchEvent(new Event("input", { bubbles: true }));
     window.PlanSteg.las(4, false);
     window.PlanSteg.gaTill(4);
-    /* Anteckningarnas källa är rutan i typvalen, inte momentet — den fylls
-       EFTER gaTill, för raderna ritas om när typen byts (larardag.mjs). */
-    if (ons != null) {
-      const ruta = document.querySelector(".typfritext");
-      if (ruta) {
-        ruta.value = ons;
-        ruta.dispatchEvent(new Event("input", { bubbles: true }));
-      }
-    }
-  }, [typ, moment, onskemal]);
+  }, [typ, moment]);
   await page.locator("#skriv").click();
   /* «derivator» är 3c-innehåll i en 2c-kurs — första klicket blir varningen.
      Se nivavarning.spec.mjs; här prövas godkännandet, inte ämnesplanen. */
@@ -199,22 +169,6 @@ test("provets godkännande bär med sig BÅDA arklägena", async ({ page }) => {
   expect(blad.losningar.every(arPng)).toBe(true);
   expect(blad.losningar[0]).not.toBe(blad.uppgift[0]);
   // Och inte i arbetsbladets fack: den filen finns inte för ett prov.
-  expect(blad.facit).toEqual([]);
-});
-
-test("anteckningarna går samma väg", async ({ page }) => {
-  const anrop = await fejka(page);
-  await page.goto("/");
-  await hydrerad(page);
-  await skriv(page, "Anteckningar", "kursstart",
-              "Boken, rutinerna och provdatumen.");
-  await expect(page.locator("#dokument")).toBeVisible({ timeout: 15_000 });
-
-  await page.locator("#godkann").click();
-  const blad = await bladenIApprove(page, anrop, "/anteckningar/11/approve");
-  expect(blad.uppgift.length).toBeGreaterThan(0);
-  expect(blad.uppgift.every(arPng)).toBe(true);
-  // Pappret ÄR lärarens ark — det finns ingen andra hälft att vända på.
   expect(blad.facit).toEqual([]);
 });
 

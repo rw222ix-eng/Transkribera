@@ -1,24 +1,22 @@
 /* LÄRARDAGARNA — det gemensamma underlaget (Etapp 4.1)
  *
  * Sviten har hittills prövat en skiva i taget: tavlan i tavla.spec, provet i
- * prov.spec, rättningen i rattning.spec. Var och en fejkar hela backenden runt
+ * prov.spec. Var och en fejkar hela backenden runt
  * sin egen skiva. Det duger för att pinna ett kontrakt, men det liknar inte en
  * arbetsdag — och de fel som kostar en lektion uppstår mellan skivorna: pappret
  * som inte hänger med till veckan, kön som tappar klassen, godkännandet som
  * lämnar halva dokumentet.
  *
  * Lärardagarna kör därför mot den RIKTIGA servern (e2e/testserver.py, tom bas
- * under temp) och fejkar bara MOLNET:
+ * under temp) och fejkar bara MOLNET, alltså Claude. Det fejkas i CLI:t
+ * (FEJK_CLAUDE=auto, e2e/testserver.py). Kassetten väljs ur prompten, så
+ * /api/planning/generate och /api/exams/generate kör appens riktiga kedja:
+ * prompt → ström → JSON → schema → balans → reparationsrundor.
  *
- *   · ElevenLabs — /api/transcribe route:as här. Servern kan inte transkribera
- *     på riktigt i e2e (ingen nyckel, inget ljud), och ska inte.
- *   · Claude  — fejkas i CLI:t i stället (FEJK_CLAUDE=auto, e2e/testserver.py).
- *     Kassetten väljs ur prompten, så /api/planning/generate,
- *     /api/exams/generate och /api/lessons/{id}/extract kör appens riktiga
- *     kedja: prompt → ström → JSON → schema → balans → reparationsrundor.
- *
- * Allt annat — schemat, dokumenten, versionerna, godkännandet, rättningen,
- * tryckpaketet, säkerhetskopian — går till servern och skrivs på riktigt.
+ * Allt annat — schemat, dokumenten, versionerna, godkännandet — går till
+ * servern och skrivs på riktigt. (ElevenLabs fejkades också här, med
+ * fejkatMoln och transkribera. Båda togs bort med Transkribera-fliken
+ * 2026-10-07.)
  *
  * Dagarna delar bas: servern startas EN gång för hela sviten. Ett papper som
  * en dag skriver ligger alltså kvar när nästa dag börjar — precis som på
@@ -34,78 +32,18 @@ export const SKOLDAG = "2026-09-08T07:30:00";
 /* Tisdag i höstlovet (2026-10-26–30 enligt app/data/lasar) — ingen lektion. */
 export const LOVDAG = "2026-10-27T07:30:00";
 
-const strom = handelser =>
-  handelser.map(h => `data: ${JSON.stringify(h)}\n\n`).join("");
+/* En 404 är MEDVETEN och står kommenterad i koden den kommer ur. Den är
+   inte ett fel att laga utan brus att känna igen — allt annat i konsolen
+   fäller dagen.
 
-/* En körning som servern skulle ha strömmat: faserna i ordning, kostnaden ur
-   audio_duration_secs (aldrig ur filens längd) och ett transkript i done. */
-/* lektionId: servern skriver lektionsraden när den transkriberar, och det är
-   den granskningen frågar om insikter (app.js hamtaInsikter). Molnet är fejkat
-   här, så raden finns inte i basen — därför fejkas extract-rutten med.
-   Utan id:t står regexgissningen kvar och dagen prövar prototypen. */
-export function korning({ text = "Vi tittar på derivatans definition. Ändringskvoten när h går mot noll.",
-                          usd = 0.06, minuter = 15.1, lektionId = 1 } = {}) {
-  return strom([
-    { type: "log", msg: "Komprimerar ljudet för uppladdning ..." },
-    { type: "progress", pct: 6 },
-    { type: "log", msg: "Skickar ljudet (15,1 min) till scribe_v2 ..." },
-    { type: "delta", text },
-    { type: "progress", pct: 60 },
-    { type: "kostnad", usd, minuter },
-    { type: "progress", pct: 98 },
-    { type: "done", result: {
-        id: "h1", lesson_id: lektionId, files: [], folder: "C:/Transkriberingar/x",
-        media: "C:/x/lektion.wav",
-        transcript: [{ start: 0.4, end: 6.2, text }] } },
-  ]);
-}
-
-/** Insikterna som /api/lessons/{id}/extract skulle ha svarat med. */
-export const INSIKTER = strom([
-  { type: "log", msg: "Analyserar lektionen ..." },
-  { type: "done", result: { count: 2, insights: [
-      { id: 1, typ: "svårighet", text: "Klassen fastnade på kedjeregeln.",
-        ref: null, due_date: null, source: "llm" },
-      { id: 2, typ: "kalender", text: "Prov på derivator", ref: null,
-        due_date: "2026-09-24", source: "llm" },
-    ] } },
-]);
-
-/**
- * Fejkar molngränsen. `transkribering` och `extraktion` går att beordra per
- * dag — «dagen då allt går fel» skickar in ett 429 här, inte en annan app.
- */
-export async function fejkatMoln(page, { transkribering, extraktion } = {}) {
-  const anrop = [];
-  await page.route("**/api/transcribe", route => {
-    anrop.push("transcribe");
-    const svar = transkribering || korning();
-    if (typeof svar === "function") return svar(route);
-    return route.fulfill({ status: 200, contentType: "text/event-stream", body: svar });
-  });
-  await page.route("**/api/lessons/*/extract", route => {
-    anrop.push("extract");
-    const svar = extraktion || INSIKTER;
-    if (typeof svar === "function") return svar(route);
-    return route.fulfill({ status: 200, contentType: "text/event-stream", body: svar });
-  });
-  return anrop;
-}
-
-/* Två 404:or är MEDVETNA och står kommenterade i koden de kommer ur. De är
-   inte fel att laga utan brus att känna igen — allt annat i konsolen fäller
-   dagen.
-
-   1. KaTeX:s CSS listar .woff och .ttf som fallback efter .woff2. Vi vendrar
-      bara woff2 (webbläsaren behöver inte mer), men tavlans bildexport
-      (tavla-bild.js baka) hämtar VARJE url() i @font-face för att baka in den
-      som data:-URI — och får 404 på de två den inte hittar. Den fångar dem och
-      låter woff2-URI:n stå först. Webbläsarens egen rendering begär dem aldrig.
-   2. `.image-slots.state.json` är omelette-startarens sidovagn (image-slot.js).
-      Utanför Claude Designs körtid finns den inte, och komponenten är då
-      skrivskyddad — precis som avsett. */
-const TILLATNA_404 = [/\/static\/vendor\/katex\/fonts\/.*\.(woff|ttf)$/,
-                      /\.image-slots\.state\.json$/];
+   KaTeX:s CSS listar .woff och .ttf som fallback efter .woff2. Vi vendrar
+   bara woff2 (webbläsaren behöver inte mer), men tavlans bildexport
+   (tavla-bild.js baka) hämtar VARJE url() i @font-face för att baka in den
+   som data:-URI — och får 404 på de två den inte hittar. Den fångar dem och
+   låter woff2-URI:n stå först. Webbläsarens egen rendering begär dem aldrig.
+   (image-slot.js:s sidovagn .image-slots.state.json stod också här. Filen
+   togs bort med arkivet 2026-10-07.) */
+const TILLATNA_404 = [/\/static\/vendor\/katex\/fonts\/.*\.(woff|ttf)$/];
 
 /**
  * Konsolvakten. Kravet per lärardag är «inga konsolfel» — en dag som ser rätt
@@ -142,13 +80,6 @@ const vantarHogen = page => page.waitForResponse(
  */
 export async function oppna(page, { tid = SKOLDAG } = {}) {
   await page.clock.install({ time: new Date(tid) });
-  // Tryckknappen ber servern öppna paketet i systemets PDF-läsare (tryck.js →
-  // /api/open → os.startfile). Rätt i appen, fel i en svit: dag 3 trycker den
-  // varje varv, och en soak-natt lämnar hundra PDF-flikar i lärarens webb-
-  // läsare. Anropet GÖRS fortfarande — `spana` ser det, os.startfile gör det
-  // inte. Samma sak för /api/reveal (Utforskarfönster).
-  await page.route(/\/api\/(open|reveal)$/, r => r.fulfill({
-    status: 200, contentType: "application/json", body: '{"ok":true}' }));
   const hogen = vantarHogen(page);
   await page.goto("/");
   await page.waitForFunction(() =>
@@ -156,13 +87,6 @@ export async function oppna(page, { tid = SKOLDAG } = {}) {
       && window.API.pa);
   await hogen;
   await page.waitForTimeout(150);          // högen ritas om efter svaret
-}
-
-/** Lägger en inspelning i kön och kör den. Molnet är fejkat — kedjan är äkta. */
-export async function transkribera(page, { namn = "NA25 2026-09-08 09.05.m4a",
-                                           langd = "01:12:04" } = {}) {
-  await page.evaluate(([n, l]) => laggTill(n, l, "C:/inspelningar/" + n), [namn, langd]);
-  await page.locator("#starta").click();
 }
 
 /** Klickar ett lektionskort i veckan (index i rutnätet) — klicket ÄR valet. */
@@ -212,10 +136,10 @@ export const traff = (anrop, slut) => anrop.filter(a => a.vag.endsWith(slut));
  * valt en lektion i veckan (då bär lektionen dem själv).
  */
 export async function skriv(page, { typ = "Tavla", moment = "derivatans definition",
-                                    klass = null, kurs = null, onskemal = null,
+                                    klass = null, kurs = null,
                                     vantaSvar = true } = {}) {
   await page.getByRole("tab", { name: "Planering" }).click();
-  await page.evaluate(([t, m, kl, ku, ons]) => {
+  await page.evaluate(([t, m, kl, ku]) => {
     window.SattLage(t);
     const satt = (id, v) => {
       const e = document.querySelector(id);
@@ -231,22 +155,13 @@ export async function skriv(page, { typ = "Tavla", moment = "derivatans definiti
     // Skriv-knappen bor i steg 4 («Upplägg»); stapeln viker ihop de andra.
     window.PlanSteg.las(4, false);
     window.PlanSteg.gaTill(4);
-    /* Anteckningarnas källa är rutan i typvalen, inte momentet — den fylls
-       EFTER gaTill, för raderna ritas om när typen byts. */
-    if (ons != null) {
-      const ruta = document.querySelector(".typfritext");
-      if (ruta) {
-        ruta.value = ons;
-        ruta.dispatchEvent(new Event("input", { bubbles: true }));
-      }
-    }
-  }, [typ, moment, klass, kurs, onskemal]);
+  }, [typ, moment, klass, kurs]);
   /* Vänta på SVARET, inte på att ett papper syns. Utkastet återställs ur
      servern vid sidladdning (Etapp 0.2), så «#dokument är synligt» kan vara
      gårdagens papper — och då mäter dagen ingenting. */
   const svar = vantaSvar
     ? page.waitForResponse(
-        r => /\/api\/(planning|exams|anteckningar)\/generate$/.test(new URL(r.url()).pathname),
+        r => /\/api\/(planning|exams)\/generate$/.test(new URL(r.url()).pathname),
         { timeout: 60_000 })
     : Promise.resolve(null);
   await page.locator("#skriv").click();

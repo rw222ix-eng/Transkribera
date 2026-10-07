@@ -80,7 +80,6 @@ test.afterEach(async ({ page }) => {
 
 test("den smala raden bär serverns egna rader medan provet skrivs", async ({ page }) => {
   await page.addInitScript(OBSERVATOR);
-  await L.fejkatMoln(page);
   await L.oppna(page);
   await L.valjKlass(page, "NA25");
   await L.skriv(page, { typ: "Prov", moment: "derivator" });

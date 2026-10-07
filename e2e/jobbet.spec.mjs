@@ -33,7 +33,6 @@ test.afterEach(async ({ page }) => {
 });
 
 test("ett skrivet prov lämnar ett jobb med sin historik efter sig", async ({ page }) => {
-  await L.fejkatMoln(page);
   await L.oppna(page);
   await L.valjKlass(page, "NA25");
   await L.skriv(page, { typ: "Prov", moment: "derivator" });

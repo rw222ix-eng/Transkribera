@@ -2,10 +2,11 @@ import { expect, test } from "@playwright/test";
 
 /* HELA KEDJAN GENOM GRÄNSSNITTET
  *
- * Prov → rättning elev för elev → CI-profil → riktat arbetsblad. Varje led
- * har sin egen svit; den här prövar SKARVARNA, och den gör det genom att gå
- * lärarens väg: skriv provet, godkänn det, öppna elevmodalen på det, rätta,
- * läs profilen, och skriv sedan bladet till den som föll.
+ * Prov → CI-profil → riktat arbetsblad. Varje led har sin egen svit; den här
+ * prövar SKARVARNA, och den gör det genom att gå lärarens väg: skriv provet,
+ * godkänn det, och skriv sedan bladet till den som föll. Profilen kommer ur
+ * serverns rättning (fejkad här). Rättningsvyn elev för elev (elever.js)
+ * låg mellan provet och bladet och togs bort 2026-10-07.
  *
  * Kedjan kördes också skarpt mot riktiga servern och riktiga Claude Code
  * 2026-08-14. Det här är samma väg med servern fejkad, så att den går att köra
@@ -66,18 +67,6 @@ const BLAD = {
   ],
 };
 
-const RADER = PROV.uppgifter.map((u, i) => ({
-  nyckel: String(i + 1), kod: String(i + 1), nr: String(i + 1),
-  text: u.text, p: u.poang[0] + u.poang[1], peca: u.poang,
-  formaga: "Räkning i standardfall", ci: u.innehall,
-}));
-const GRANSER = { total: 6, E: { minst: 2 }, C: { minst: 3 },
-                  A: { minst: 4 } };
-const ELEVSVAR = {
-  group_id: 1, klass: "9Z", rader: RADER, granser: GRANSER, elever: ELEVER,
-  resultat: {}, summor: {}, betyg: {}, feedback: {},
-};
-
 const strom = h => h.map(x => `data: ${JSON.stringify(x)}\n\n`).join("");
 
 async function fejka(page) {
@@ -85,11 +74,9 @@ async function fejka(page) {
   const json = (route, kropp) => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify(kropp) });
   await page.route("**/api/schema", route => json(route, SCHEMA));
-  await page.route("**/api/lessons", route => json(route, []));
-  await page.route("**/api/history", route => json(route, []));
   await page.route("**/api/klassprofil", route => json(route, {}));
   /* GET listar högen, POST lägger ett papper i den — och svaret måste bära ett
-     id, annars vet klienten inte vilket dokument rättningen hör till. */
+     id, annars vet klienten inte vilket dokument pappret är. */
   await page.route("**/api/dokument", route => json(
     route, route.request().method() === "POST"
       ? { id: 5 } : { sparade: [], utkast: null }));
@@ -113,19 +100,6 @@ async function fejka(page) {
         summor: { total: 6, e: 4, c: 2, a: 0 } } }]) });
   });
   await page.route("**/api/dokument/**", route => json(route, { ok: true, id: 5 }));
-  /* Elevresultatet registreras SIST: Playwright provar de senast tillagda
-     mönstren först, och den generella dokumentvägen ovan matchar annars den
-     här med. */
-  await page.route("**/api/dokument/*/elevresultat", route => {
-    const r = route.request();
-    anrop.push({ vag: "elevresultat", metod: r.method(),
-                 kropp: r.method() === "PUT" ? r.postDataJSON() : null });
-    if (r.method() === "PUT") {
-      return json(route, { ...ELEVSVAR, resultat: r.postDataJSON().resultat,
-        rattat: { elever: 1, varden: { 1: 0, 2: 2, 3: 1 }, andel: 0.5, svaga: [] } });
-    }
-    return json(route, ELEVSVAR);
-  });
   return anrop;
 }
 
@@ -151,7 +125,7 @@ async function planera(page, typ, moment) {
   }, [typ, moment]);
 }
 
-test("prov → rättning → CI-profil → riktat blad", async ({ page }) => {
+test("prov → CI-profil → riktat blad", async ({ page }) => {
   const anrop = await fejka(page);
   await page.goto("/");
   await hydrerad(page);
@@ -175,30 +149,7 @@ test("prov → rättning → CI-profil → riktat blad", async ({ page }) => {
   await expect.poll(() => page.evaluate(
     () => window.Dokument.sparade().length), { timeout: 15_000 }).toBe(2);
 
-  // ── 2. Rättningen elev för elev ──────────────────────────────────────
-  await page.evaluate(() => window.Elever.oppna(window.Dokument.sparade()[0]));
-  await expect(page.locator("#elevvy")).toBeVisible({ timeout: 15_000 });
-  await expect(page.locator("#elevnamn")).toHaveText("Alva Nyström");
-
-  /* Noll på ekvationerna, full pott på uttrycken, hälften på resonemanget —
-     samma utfall som profilen nedan säger att servern räknade fram. */
-  await page.locator('.elevrad[data-nyckel="1"] .elevknapp[data-v="0"]').click();
-  await page.locator('.elevrad[data-nyckel="2"] .elevknapp[data-v="2"]').click();
-  await page.locator('.elevrad[data-nyckel="3"] .elevknapp[data-v="1"]').click();
-  await page.locator("#elevspara").click();
-  await expect.poll(() => anrop.some(a => a.vag === "elevresultat" && a.metod === "PUT"),
-                    { timeout: 15_000 }).toBe(true);
-  const put = anrop.find(a => a.vag === "elevresultat" && a.metod === "PUT");
-  expect(Object.keys(put.kropp.resultat)).toEqual(["21"]);
-
-  // ── 3. CI-profilen säger vad som brister ─────────────────────────────
-  const rader = page.locator("#elevcilista .elevcirad");
-  await expect(rader).toHaveCount(3, { timeout: 15_000 });
-  await expect(rader.first().locator(".elevcinamn")).toHaveText("Linjära ekvationer");
-  await expect(rader.first()).toHaveAttribute("data-styrka", "svag");
-  await page.locator("#elevstang").click();
-
-  // ── 4. Riktat blad på just den punkten ───────────────────────────────
+  // ── 2. Riktat blad på just den punkten ───────────────────────────────
   await planera(page, "Arbetsblad", "linjära ekvationer");
   await page.locator('.typrad[data-id="mottagare"] .tkvalj').click();
   await page.locator('.typmottagare .lrad-val', { hasText: "Alva Nyström" }).click();

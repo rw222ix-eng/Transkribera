@@ -109,8 +109,7 @@ const APAN = ({ varv, seed }) => new Promise(klar => {
  *  som ritas är något. En app som fastnat i en modal eller kastat i en
  *  klickhanterare klarar inte det. */
 async function levande(page) {
-  /* Apan lämnar ofta en modal öppen, och den stängs i LAGER: videon först,
-     sedan helskärmsläget, sedan rutan (lektion.js tangent) — och står
+  /* Apan lämnar ofta en modal öppen, och den kan stängas i LAGER — och står
      markören i ett fält går första Escape till att lämna fältet. Fyra tryck
      räcker för varje kedja appen har. Att rutan GÅR att stänga är en del av
      det testet frågar om; en modal som inte lyssnar hade fastnat här.
@@ -133,67 +132,9 @@ async function levande(page) {
      till ett lov eller ut ur läsåret, och en tom vecka är ett riktigt svar. */
   await page.waitForTimeout(700);
   expect(await page.locator("#schemagrid .skdag").count()).toBeGreaterThan(0);
-  await page.getByRole("tab", { name: "Transkribera" }).click({ timeout: 15_000 });
-  await expect(page.locator("#vy-transkribera")).toBeVisible();
-  await expect(page.locator("#vy-transkribera [data-steg]:not([hidden])").first())
-    .toBeVisible();
 }
 
-/* Apans första fynd, pinnat som ett vanligt flöde: en seedad körning bevisar
-   inte samma sak två gånger, och den här buggen ska aldrig komma tillbaka. */
-test("döpa om en inspelning och klicka vidare kraschar inte listan",
-  async ({ page }) => {
-    const fel = L.vakt(page);
-    await L.fejkatMoln(page);
-    await L.oppna(page);
-    // Inspelningarna är ett SÖKLÄGE i arkivfältet — och arkivfältet bor i
-    // planeringsvyn.
-    await page.getByRole("tab", { name: "Planering" }).click();
-    /* Listan ritas ur inspelningskorten (#inspelningar .kort), som hydreras ur
-       /api/history. Svitens bas är tom, så korten läggs in här — det som ska
-       prövas är listans egen händelsekedja, inte varifrån raderna kom. */
-    await page.evaluate(() => {
-      const vard = document.querySelector("#inspelningar");
-      vard.innerHTML = "";
-      [["NA25 måndag", "2026-09-07", "NA25"], ["TE25prk tisdag", "2026-09-08", "TE25prk"]]
-        .forEach(([namn, datum, klass]) => {
-          const k = document.createElement("article");
-          k.className = "kort";
-          k.dataset.datum = datum;
-          k.dataset.klass = klass;
-          k.dataset.kurs = "Matematik, nivå 2c";
-          k.innerHTML = '<span class="namn"></span><span class="tumlangd">45 min</span>';
-          k.querySelector(".namn").textContent = namn;
-          vard.appendChild(k);
-        });
-      window.Inspelningar.lage(true);
-    });
-    const rader = page.locator("#insplada .ilrad");
-    await expect(rader.first()).toBeVisible();
-    expect(await rader.count()).toBe(2);
-
-    // Döp om den första — fältet tar fokus — och klicka sedan på ANNAT i
-    // lådan. Blur ritade då om hela lådan (innerHTML) mitt i klicket, och
-    // webbläsaren kastade: «The node to be removed is no longer a child of
-    // this node. Perhaps it was moved in a 'blur' event handler?»
-    await rader.first().locator("[data-dop]").click();
-    const falt = page.locator("#insplada .ildop");
-    await expect(falt).toBeVisible();
-    await falt.fill("Omdöpt av testet");
-    /* Klicket dispatchas i sidan, inte med musen: då ligger fokus KVAR i
-       fältet när kryssrutans hanterare ritar om lådan, och det är blur —
-       utlöst mitt i innerHTML-bytet, av att fältet rycks ur trädet — som
-       kastade. Med muspekaren blurrar fältet först och kedjan blir en annan. */
-    await page.evaluate(() => document.querySelectorAll("#insplada .ilrad")[1]
-      .querySelector(".ilkryss").click());
-
-    await page.waitForTimeout(400);
-    await expect(page.locator("#insplada .ilrad").first()).toContainText("Omdöpt av testet");
-    L.rent(fel);
-  });
-
 const VYER = [
-  { namn: "transkribering", flik: "Transkribera", seed: 4711 },
   { namn: "planering", flik: "Planering", seed: 90210 },
   { namn: "planering, steg för steg", flik: "Planering", seed: 13,
     innan: async page => page.evaluate(() => {
@@ -207,7 +148,6 @@ for (const vy of VYER) {
   test(`apan i ${vy.namn} lämnar inget fel i konsolen`, async ({ page }) => {
     test.setTimeout(180_000);
     const fel = L.vakt(page);
-    await L.fejkatMoln(page);
     await L.oppna(page);
     await page.getByRole("tab", { name: vy.flik }).click();
     if (vy.innan) await vy.innan(page);
@@ -218,10 +158,8 @@ for (const vy of VYER) {
     // Ge påbörjade anrop en chans att svara — ett fel som kommer efter att
     // apan slutat är lika mycket ett fel.
     await page.waitForTimeout(1500);
-    /* Två svar som INTE är 2xx är väntade och tas om hand i appen; webbläsaren
+    /* Svar som INTE är 2xx är väntade och tas om hand i appen; webbläsaren
        loggar dem ändå:
-         · /api/sample 404 — det finns ingen exempelfil på den här maskinen.
-           Knappen faller tillbaka på prototypens namn (app.js, try/catch).
          · /api/schema/synk 409 — Google Kalender är inte kopplad i svitens bas.
            Synkraden visar serverns besked som en toast (klass.js).
          · /api/exams/generate 400 — apan trycker Skriv utan att ha valt kurs.
@@ -240,7 +178,7 @@ for (const vy of VYER) {
      *     är apans verk. Vilket papper hon råkar hamna på växlar mellan
      *     körningar — högen byggs av dagarna före — så mönstret och inte ett
      *     visst id står här. */
-    L.rent(fel, { tillat: [/api\/sample/, /api\/schema\/synk/,
+    L.rent(fel, { tillat: [/api\/schema\/synk/,
                            /api\/exams\/generate/, /api\/planning\/generate/,
                            /api\/exams\/\d+\/(pdf|tex|bedomning|facit|losningar)/] });
     await levande(page);

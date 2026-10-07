@@ -2,14 +2,16 @@ import { expect, test } from "@playwright/test";
 
 /* CACHAT FÖRST, FÄRSKT STRAX EFTER (api.js jsonSWR)
  *
- * Appen är en enda sida med vyer som växlas, och andra gången läraren går till
- * arkivet eller schemat är svaret nästan alltid detsamma som förra gången. SWR-
+ * Appen är en enda sida, och andra gången läraren öppnar den är svaret på
+ * schemat nästan alltid detsamma som förra gången. SWR-
  * lagret ritar därför det cachade svaret SYNKRONT och hämtar färskt i bakgrunden.
  *
  * Det är svårt att se att det fungerar med nät: en snabb server ser precis ut
- * som en cache. Testerna nedan HÅLLER FAST list-rutterna — begäran går i väg men
- * svarar aldrig — och frågar vad som står på skärmen under tiden. Ritas listan
- * ändå kom den ur cachen, för den kan inte ha kommit någon annanstans ifrån.
+ * som en cache. Testerna nedan HÅLLER FAST rutten — begäran går i väg men
+ * svarar aldrig — och frågar vad appen har under tiden. Har den svaret ändå
+ * kom det ur cachen, för det kan inte ha kommit någon annanstans ifrån.
+ * (Arkivlistan, /api/lessons och /api/history, prövades också här. Den togs
+ * bort med arkivet 2026-10-07.)
  *
  * Det andra som måste hålla är gränsen mot prototypen: Claude Design kör samma
  * filer utan server, och lärarens riktiga listor får aldrig ritas där. Svarar
@@ -17,14 +19,6 @@ import { expect, test } from "@playwright/test";
  */
 
 const SWR = "swr1:";
-
-/* Namnet får inte finnas bland prototypkorten i app.html — annars bevisar en
-   träff bara att den statiska sidan laddade. «Derivatans definition» står där. */
-const NAMN = "Kedjeregeln ur cachen";
-const LEKTION = {
-  id: 1, history_id: 1, name: NAMN, dur: "42:10",
-  group: "NA25", course: "Matematik 3c", datum: "2026-08-24", lang: "Svenska",
-};
 
 /** Öppna appen och vänta tills den är LADDAD — samma villkor som offline.spec. */
 async function laddad(page) {
@@ -50,34 +44,6 @@ async function saCache(page, vag, data) {
   }, [SWR + vag, JSON.stringify(data)]);
 }
 
-test("andra besöket ritar arkivet ur cachen, med listrutterna fastspända", async ({ page }) => {
-  await laddad(page);
-
-  /* Basen i sviten är tom, så servern har inga lektioner att cacha. Cachen sås
-     därför för hand — i lagrets eget format — med en lektion som INTE står i
-     app.html. Syns kortet på andra besöket kan det bara ha kommit ur cachen. */
-  await saCache(page, "/api/lessons", [LEKTION]);
-  await saCache(page, "/api/history", [{ id: 1, video: false, lang: "Svenska", target_lang: "Svenska" }]);
-
-  /* Svaren räknas: hade någon av dem kommit fram vore beviset borta, för då
-     kunde kortet ha ritats därifrån. */
-  let svarat = 0;
-  page.on("response", r => { if (/\/api\/(lessons|history)\b/.test(r.url())) svarat++; });
-
-  await hallFast(page, "**/api/lessons");
-  await hallFast(page, "**/api/history");
-  await page.goto("/");
-
-  /* Arkivet ligger i en vy som inte är den appen öppnar på — därför räknas
-     korten i DOM:en i stället för att synlighet mäts. Det som prövas är när
-     listan RITAS, inte vilken flik som råkar ligga framme. */
-  await expect(page.locator(".kort .namn", { hasText: NAMN })).toHaveCount(1, { timeout: 8_000 });
-  /* Och prototypkorten ska vara borta: listan ur cachen ÄGER arkivet, precis
-     som serverns svar gör det. */
-  await expect(page.locator(".kort .namn", { hasText: "Derivatans definition" })).toHaveCount(0);
-  expect(svarat, "listrutterna svarade — testet bevisar då ingenting").toBe(0);
-});
-
 test("veckan står där innan /api/schema svarat", async ({ page }) => {
   await laddad(page);
   const harSchema = await page.evaluate(() => !!localStorage.getItem("swr1:/api/schema"));
@@ -94,18 +60,17 @@ test("veckan står där innan /api/schema svarat", async ({ page }) => {
 
 test("cachen ritas aldrig när ingen server svarar", async ({ page }) => {
   await laddad(page);
-  await saCache(page, "/api/lessons", [LEKTION]);
+  await saCache(page, "/api/dokument", [{ id: 7 }]);
 
   /* Sonderingen spärras: det här ÄR prototypläget (Claude Design har ingen
-     server alls). Lärarens riktiga lektion får inte synas, och den får inte
-     ligga kvar och kunna synas nästa gång heller. */
+     server alls). Lärarens riktiga papper får inte ligga kvar i cachen och
+     kunna synas nästa gång. */
   await page.route("**/api/var-kors", route => route.abort());
   await page.goto("/");
   await page.waitForFunction(() => !!(window.API && window.API.redo));
   await page.evaluate(() => window.API.redo);          // sonderingen klar, på ett eller annat sätt
   expect(await page.evaluate(() => window.API.pa)).toBe(false);
 
-  await expect(page.locator(".kort .namn", { hasText: NAMN })).toHaveCount(0);
   const kvar = await page.evaluate(() =>
     Object.keys(localStorage).filter(k => k.indexOf("swr1:") === 0));
   expect(kvar, `cachen låg kvar i prototypläget: ${kvar.join(", ")}`).toEqual([]);
@@ -114,15 +79,15 @@ test("cachen ritas aldrig när ingen server svarar", async ({ page }) => {
 test("en skrivning glömmer det cachade svaret", async ({ page }) => {
   await laddad(page);
   await saCache(page, "/api/dokument", [{ id: 7 }]);
-  await saCache(page, "/api/dokument/7/elevresultat", { rader: [] });
+  await saCache(page, "/api/dokument/7", { id: 7 });
 
   /* Rutten fejkas: det som prövas är att json() glömmer, inte vad servern gör. */
-  await page.route("**/api/dokument/7/elevresultat", route =>
+  await page.route("**/api/dokument/7", route =>
     route.fulfill({ status: 200, contentType: "application/json", body: "{}" }));
 
   const kvar = await page.evaluate(async () => {
-    await window.API.json("/api/dokument/7/elevresultat", {
-      method: "PUT",
+    await window.API.json("/api/dokument/7", {
+      method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: "{}",
     });

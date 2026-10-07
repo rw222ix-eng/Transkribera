@@ -69,8 +69,6 @@ async function fejka(page, { poster = [], svar = null, fel = false,
     status: 200, contentType: "application/json", body: JSON.stringify(kropp) });
   await page.route("**/api/schema", route =>
     json(route, { schema: [], lov: [], poster, innehall: [] }));
-  await page.route("**/api/lessons", route => json(route, []));
-  await page.route("**/api/history", route => json(route, []));
   await page.route("**/api/klassprofil", route => json(route, {}));
   await page.route("**/api/dokument", route => json(route, { sparade: [], utkast: null }));
   await page.route("**/api/bocker**", route => {
@@ -279,23 +277,6 @@ test("har läraren skrivit punkterna i kalendern står de kvar, modellen får ba
     expect(anrop.length).toBe(1);
     /* Modellens punkt ligger som förslag, inte som kryss. */
     await expect(page.locator("#gychips .gyforslag")).toHaveCount(1);
-  });
-
-test("anteckningarna har inget centralt innehåll och frågar aldrig",
-  async ({ page }) => {
-    /* Frånvaron prövas mot en närvaro i samma test: provet frågar på samma
-       bokdörr, anteckningarna gör det inte. Annars hade en trasig lokator
-       eller en stängd dörr sett ut som ett grönt svar. */
-    const anrop = await fejka(page);
-    await planeringen(page, "Prov");
-    await slarUpp(page);
-    await expect(noten(page)).toContainText("Ur underlaget", SVAR_TID);
-    expect(anrop.length).toBe(1);
-
-    await page.evaluate(() => window.SattLage("Anteckningar"));
-    await page.evaluate(() => window.Uppslag.satt(52, 65));
-    await stillhet(page);
-    expect(anrop.length).toBe(1);
   });
 
 /* ── 6 · Samma källa frågas inte två gånger ─────────── */
