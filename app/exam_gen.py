@@ -7308,7 +7308,7 @@ def _till_deluppgifter(u: dict) -> str | None:
     poang = list(u.get("poang") or [0, 0, 0])
     if sum(poang) == 0 or [sum(t[j] for t in tripplar)
                            for j in range(3)] != poang:
-        return (f"bedömningens rader ger {_trippel(tripplar)} men uppgiften "
+        return (f"bedömningens rader ger {_tripplar_text(tripplar)} men uppgiften "
                 f"är värd {tuple(poang)}")
     # Stammen. Räknarmärket räknas inte som en stam: utan någonting annat
     # lyfts uppmaningen dit om alla delar har samma («Beräkna.»).
@@ -7353,7 +7353,9 @@ def _till_deluppgifter(u: dict) -> str | None:
 _BOKSTAVSPREFIX = re.compile(r"^\s*(?:svar\s*)?\(?[a-h]\)\s*:?\s*", re.I)
 
 
-def _trippel(tripplar: list[list[int]]) -> str:
+def _tripplar_text(tripplar: list[list[int]]) -> str:
+    # Eget namn sedan 2026-10-07: _trippel nedan (329d2dc) skuggade den, och
+    # meddelandet sa «(0, 0, 0)» om varje trippel.
     return " + ".join(str(tuple(t)) for t in tripplar)
 
 
@@ -11057,8 +11059,12 @@ def bladets_npvakter(exam: dict) -> list[dict]:
             + np_vakter.endastsvarvakt(exam))
 
 
-def _meningar(text: str) -> list[str]:
+def _stammens_meningar(text: str) -> list[str]:
     """Meningarna med sina skiljetecken kvar, så att _ar_fraga ser «?».
+    EGET NAMN sedan 2026-10-07: den hette _meningar som räknarradens
+    meningsdelare ovan, och den här definitionen vann i hela modulen.
+    korta_hjalpmedel och räknarmarkeringen läste alltså räknarraden utan
+    räknarmärket och med raderna ihopslagna (sedan 07a220c, 26/9).
     _rentext har redan slagit ihop raderna, som i _ord_fore_fragan."""
     ren = _rentext(_RAKNARMARKE.sub("", str(text or "")))
     return [m for m in re.split(r"(?<=[.!?])\s+", ren) if m.strip()]
@@ -11076,7 +11082,7 @@ def _fakta_fore_fragan(text: str) -> int:
     """Meningar före den första frågan eller uppmaningen (_ar_fraga). «Svara
     i grundpotensform.» efter frågan räknas alltså inte, och inte heller ett
     påstående som frågan prövar (_PASTAENDE)."""
-    mm = _meningar(text)
+    mm = _stammens_meningar(text)
     k = next((i for i, m in enumerate(mm) if _ar_fraga(m)), len(mm))
     return len([m for m in mm[:k] if not _PASTAENDE.search(m)])
 
@@ -11101,7 +11107,7 @@ def textmangdvakt(exam: dict) -> list[dict]:
         stam = _RAKNARMARKE.sub("", str(u.get("text") or ""))
         delar = [d for d in (u.get("deluppgifter") or []) if isinstance(d, dict)]
         if delar:
-            s = len(_meningar(stam))
+            s = len(_stammens_meningar(stam))
             if s > BLAD_STAM_MENINGAR:
                 ut.append(_err(
                     f"uppgift {i}", "textmangd",
@@ -12946,7 +12952,12 @@ def _raknas_om(fel: dict) -> bool:
                "citackning", "citaggning", "anivavakt", "kravrad",
                "rubrikord", "likvardighet", "scenvakt",
                "forebildsvakt", "radlangd", "forbudsvakt",
-               "upprepning", "poangtak", ci_utanfor.KOD) + np_vakter.KODER:
+               "upprepning", "poangtak", ci_utanfor.KOD,
+               # De fem _raknade_fynd gav men listan saknade till 2026-10-07:
+               # slutgrinden lät ett lagat fel stå kvar som varning och räknade
+               # ett kvarstående två gånger.
+               "delmomentniva", "blandatkrav", "person", "forvaxling",
+               "konsbalans") + np_vakter.KODER:
         return True
     if kod == "delmomenttackning":
         return path == "uppgifter"
@@ -13839,6 +13850,129 @@ def _varvsvakt(fore: dict, res: dict, *, model: str, llm, profil: str,
             "errors": res["errors"] + kvar}
 
 
+# ── POÄNGEN SOM ÖNSKEMÅLET SA ────────────────────────────────────────────
+# Prov 156, 2026-10-03: «Dela uppgiften i två deluppgifter … [1,0,0] var» gav
+# 2 p på 8 a), varvet gick igenom med fel=0, och nästa önskemål fick säga «a)
+# ger 1 poäng i stället för 2». Fjärde fallet på två veckor (prov 118, 119,
+# blad 145). Poängvakten mäter krav mot poäng, inte poäng mot besked, och
+# såg inget. Här läses beskedet: en trippel [e, c, a] i samma stycke som
+# «uppgift N» (eller «uppgift Nb»). «var» efter trippeln gäller varje
+# deluppgift. Ett stycke som tar bort eller ersätter uppgiften läses inte:
+# numret pekar då på en annan uppgift efter varvet.
+_ONSKAD_UPPGIFT = re.compile(r"(?i)\buppgift\s+(\d{1,2})\s*([a-h])?\b\)?")
+_ONSKAD_TRIPPEL = re.compile(r"\[\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\](\s*var\b)?",
+                             re.I)
+_ONSKAD_STRUKTUR = re.compile(r"(?i)\b(?:tas\s+bort|ta\s+bort|stryk\w*|ersätt\w*"
+                              r"|byt\w*\s+plats|flytta\w*)\b")
+
+
+def onskade_poang(instruction: str) -> list[tuple[int, int | None, list[int]]]:
+    """(uppgift, deluppgift, trippel) ur önskemålet. Deluppgiften är ett
+    index (a = 0), -1 för «var» (varje deluppgift) eller None (uppgiften)."""
+    text = str(instruction or "")
+    ankare = list(_ONSKAD_UPPGIFT.finditer(text))
+    ut = []
+    for i, a in enumerate(ankare):
+        slut = ankare[i + 1].start() if i + 1 < len(ankare) else len(text)
+        stycke = text[a.end():slut]
+        if _ONSKAD_STRUKTUR.search(stycke):
+            continue
+        t = _ONSKAD_TRIPPEL.search(stycke)
+        if not t:
+            continue
+        trippel = [int(t.group(k)) for k in (1, 2, 3)]
+        bokstav = a.group(2)
+        index = (ord(bokstav.lower()) - ord("a")) if bokstav else (
+            -1 if t.group(4) else None)
+        ut.append((int(a.group(1)), index, trippel))
+    return ut
+
+
+def poangonske(instruction: str, exam: dict | None) -> list[dict]:
+    """Ett fynd per uppgift där poängen inte blev den önskemålet sa."""
+    if not isinstance(exam, dict):
+        return []
+    uppgifter = exam.get("uppgifter") or []
+    fel = []
+    for nr, index, trippel in onskade_poang(instruction):
+        if not 1 <= nr <= len(uppgifter) or not isinstance(uppgifter[nr - 1],
+                                                           dict):
+            continue
+        u = uppgifter[nr - 1]
+        delar = [d for d in (u.get("deluppgifter") or [])
+                 if isinstance(d, dict)]
+        if index is None:
+            if delar:
+                continue           # «uppgift 8 [2,0,0]» på en delad: oklart
+            mal = [("", u)]
+        elif index == -1:
+            mal = ([(f"{chr(97 + k)}) ", d) for k, d in enumerate(delar)]
+                   if delar else [("", u)])
+        elif index < len(delar):
+            mal = [(f"{chr(97 + index)}) ", delar[index])]
+        else:
+            continue
+        for etikett, del_ in mal:
+            har = [int(x) for x in (del_.get("poang") or [])
+                   if isinstance(x, (int, float))]
+            if har != trippel:
+                fel.append({
+                    "path": f"uppgift {nr}", "code": "poangonske",
+                    "message": (
+                        f"Uppgift {nr} {etikett}har poängen {har}, men "
+                        f"önskemålet sa {trippel}. Sätt poängen till "
+                        f"{trippel} och skriv bedömningen efter den.")})
+    return fel
+
+
+def _poangonskepass(fore: dict, instruction: str, res: dict, *, model: str,
+                    llm, profil: str, niva_mal: dict | None, max_rounds: int,
+                    log_cb: Callable[[str], None] | None = None) -> dict:
+    """EN låst runda när poängen inte blev den läraren bad om, annars
+    varning. Samma grind som _varvsvakt: kandidaten tas bara emot om den
+    validerar och lagar fynden. Inga fynd, inga anrop."""
+    exam = res.get("exam")
+    if exam is None or exam is fore:
+        return res
+    # Fick pappret fler eller färre uppgifter har numren flyttat sig, och
+    # «uppgift 8» i önskemålet är inte uppgift 8 efter varvet (prov 156,
+    # 00:33: en uppgift ut, tre in).
+    if len(exam.get("uppgifter") or []) != len(fore.get("uppgifter") or []):
+        return res
+    fynd = poangonske(instruction, exam)
+    if not fynd:
+        return res
+    if res["rounds"] >= max_rounds:
+        return {**res, "errors": res["errors"] + fynd}
+    las = {"uppgifter": sorted({_fyndets_uppgift(f) for f in fynd}),
+           "falt": ()}
+    (log_cb or (lambda _m: None))(
+        "Poängen blev inte den önskemålet sa: justerar …")
+    kandidat = _llm_round(build_repair_prompt(exam, fynd, profil), model, llm,
+                          profil=profil, log_cb=log_cb,
+                          etikett="Justerar poängen i")
+    rounds = res["rounds"] + 1
+    varning = {**res, "rounds": rounds, "errors": res["errors"] + fynd}
+    if kandidat is None:
+        return varning
+    kandidat, _skal = sammanfoga_riktat(exam, kandidat, las)
+    if kandidat is None:
+        return varning
+    fore_val = {_felnyckel(f)
+                for f in _validate(copy.deepcopy(exam), profil,
+                                   niva_mal=niva_mal)[1]}
+    varnar = balansvarningar(profil, las)
+    _doc, brutna = _validate(kandidat, profil, niva_mal=niva_mal)
+    if any(_felnyckel(f) not in fore_val and f.get("code") not in varnar
+           for f in brutna):
+        return varning
+    kvar = poangonske(instruction, kandidat)
+    if len(kvar) >= len(fynd):
+        return varning
+    return {**res, "exam": kandidat, "rounds": rounds,
+            "errors": res["errors"] + kvar}
+
+
 def refine_exam(exam: dict, instruction: str, *, model: str,
                 nummer=None, profil: str = "prov",
                 mal: dict | None = None, malen=None,
@@ -13940,6 +14074,11 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
     res = _varvsvakt(exam, res, model=model, llm=llm, profil=profil,
                      niva_mal=niva_mal, infor=infor, max_rounds=max_rounds,
                      log_cb=log_cb, steg_cb=steg)
+    # Poängen som önskemålet sa (se poangonske). Efter varvsvakten, så att
+    # dess lagning inte flyttar poängen tillbaka efter att den satts.
+    res = _poangonskepass(exam, instruction, res, model=model, llm=llm,
+                          profil=profil, niva_mal=niva_mal,
+                          max_rounds=max_rounds, log_cb=log_cb)
     # ── GRINDEN, men bara den DETERMINISTISKA halvan ─────────────────
     # E-signalerna körs: de kostar ingenting, och det är precis dem läraren kan
     # råka ut för här — «gör uppgift 7 svårare» på ett rent E-papper är en

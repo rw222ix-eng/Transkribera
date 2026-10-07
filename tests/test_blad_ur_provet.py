@@ -353,6 +353,9 @@ def test_blad_144_uppgift_7_och_9():
 def _prov_1c():
     prov = copy.deepcopy(_exam())
     prov["kurs"] = KURS1C
+    # Titeln och uppgift 7 på bladet nedan bytta 2026-10-07: andragrads-
+    # funktionen står utanför 1c (ci_utanfor._ANDRAGRAD).
+    prov["titel"] = "Prov: Ekvationer"
     prov["uppgifter"][2].update(
         text="Lös ekvationen $3x - 7 = 8$.", innehall=["ekvationer"],
         losning="$x = 5$.", bedomning="+1 E ansats\n+1 C korrekt\n"
@@ -368,7 +371,7 @@ BLADTEXTER = [
     "Ett konto växer med 3 procent per år.\nNär har beloppet ökat med "
     "hälften?",
     "En funktion har $a > 0$.\nHar den ett största värde? Motivera.",
-    "Funktionen är $g(x) = x^2 - 4x$.\nFörklara hur symmetrilinjen bestäms.",
+    "Funktionen är $g(x) = 3x - 4$.\nFörklara hur lutningen bestäms.",
 ]
 
 

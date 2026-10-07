@@ -4650,3 +4650,50 @@ def test_avsnittsfaltet_star_i_grammatiken_och_ryms():
                             separators=(",", ":"), ensure_ascii=False)
     assert '"avsnitt"' in minifierat
     assert len(minifierat) < claude_code.SCHEMA_TAK_EXE
+
+
+# ── Poängen som önskemålet sa (prov 156, 2026-10-03) ────────────────────────
+
+def test_onskade_poang_lases_ur_lararens_former():
+    """Formerna ur spåret: «[1,0,0] var» på deluppgifterna, «Uppgift 3b …
+    samma poäng [0, 0, 1]», och en uppgift som tas bort läses inte."""
+    assert exam_gen.onskade_poang(
+        "Uppgift 8: Dela uppgiften i två deluppgifter, [1,0,0] var: a) …") \
+        == [(8, -1, [1, 0, 0])]
+    assert exam_gen.onskade_poang(
+        "Uppgift 3b: Byt b) mot en A-uppgift, samma poäng [0, 0, 1]. "
+        "Uppgift 9: märk uppgiften.") == [(3, 1, [0, 0, 1])]
+    assert exam_gen.onskade_poang(
+        "Uppgift 6 (Ali, [0,4,0]) tas bort och ersätts av tre nya.") == []
+    assert exam_gen.onskade_poang("gör uppgift 2 kortare") == []
+
+
+def test_poangonske_ser_deluppgiften_som_fick_fel_poang():
+    papper = _exam()
+    papper["uppgifter"][1]["deluppgifter"] = [
+        {"text": "a) …", "poang": [2, 0, 0]}, {"text": "b) …", "poang": [1, 0, 0]}]
+    fynd = exam_gen.poangonske("Uppgift 2: dela den, [1,0,0] var.", papper)
+    assert [f["code"] for f in fynd] == ["poangonske"]
+    assert "a)" in fynd[0]["message"] and "[1, 0, 0]" in fynd[0]["message"]
+    assert exam_gen.poangonske("Uppgift 1: [3,0,0]", papper) == []
+
+
+def test_varvet_med_ratt_poang_kostar_inget_anrop():
+    updated = _exam()
+    updated["uppgifter"][1]["text"] = "Ny uppgift."
+    llm, calls = _stub_llm([json.dumps(updated)])
+    exam_gen.refine_exam(_exam(), "Uppgift 2: skriv om, poäng [2,0,0].",
+                         nummer=2, model="m", llm=llm)
+    assert not any("önskemålet sa" in c["prompt"] for c in calls)
+
+
+def test_varvet_med_fel_poang_far_en_runda_och_annars_en_varning():
+    """Modellen skrev om texten men lät poängen stå på 2, fast läraren bad om
+    1. Lagningen svarar likadant, så fyndet står kvar som varning."""
+    fel = _exam()
+    fel["uppgifter"][1]["text"] = "Ny uppgift."
+    llm, calls = _stub_llm([json.dumps(fel)] * 6)
+    res = exam_gen.refine_exam(_exam(), "Uppgift 2: skriv om, poäng [1,0,0].",
+                               nummer=2, model="m", llm=llm)
+    assert any("önskemålet sa [1, 0, 0]" in c["prompt"] for c in calls)
+    assert "poangonske" in [e["code"] for e in res["errors"]]
