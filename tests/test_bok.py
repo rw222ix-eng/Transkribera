@@ -935,6 +935,37 @@ def test_sidbilden_sager_nej_i_stallet_for_att_gissa(client, ocr):
     assert client.get(f"/api/bocker/{b['id']}/sida/10.png").status_code == 404
 
 
+def test_tryckta_sidor_haller_sig_inom_pdfen():
+    """Samma räkning som bok.js forstaFor/sidorFor: pdf_sida = sida + offset."""
+    assert bok.tryckta({"sidoffset": -5, "sidor": 344}) == (6, 349)   # 5000+ 1a
+    assert bok.tryckta({"sidoffset": 1, "sidor": 304}) == (1, 303)    # Liber 1c
+    assert bok.tryckta({"sidoffset": None, "sidor": None}) == (1, None)
+
+
+def test_bok_med_negativ_offset_fungerar_hela_vagen(client, ocr):
+    """5000+ 1a har sidoffset −5: PDF-sida 1 är tryckt s. 6, s. 1–5 finns inte.
+    2026-10-07 öppnade uppslaget på s. 1 och svarade 404 fem gånger per
+    sidladdning — och `uppslag` sa att s. 1 var oläst, så uppgiftspanelen
+    begärde ett faktapass på en sida som renderades ur PDF-index −5."""
+    ocr.offset = -5
+    b = _importera(client, sidor=30)
+    assert b["sidoffset"] == -5
+    upp = client.get(f"/api/bocker/{b['id']}/uppslag?fran=1&till=7").json()
+    assert upp["olasta"] == [6, 7] and upp["utan_fakta"] == [6, 7]
+    assert client.get(f"/api/bocker/{b['id']}/uppslag?fran=1&till=1"
+                      ).json()["utan_fakta"] == []
+    r = client.get(f"/api/bocker/{b['id']}/sida/1.png")
+    assert r.status_code == 404 and "före bokens början" in r.json()["error"]
+    assert client.get(f"/api/bocker/{b['id']}/sida/6.png").status_code == 200
+    assert client.get(f"/api/bocker/{b['id']}/sida/35.png").status_code == 200
+    # Läsningen tar bara sidorna som finns, och träffar rätt PDF-sidor.
+    ocr.fakta.clear()
+    res = _done(client.post(f"/api/bocker/{b['id']}/las",
+                            json={"fran": 1, "till": 7, "bara": "fakta"}))
+    assert sorted({u["sida"] for u in res["uppgifter"]}) == [6, 7]
+    assert ocr.fakta == [["sida-001.png", "sida-002.png"]]
+
+
 def test_sidbilden_sager_varfor_den_inte_gick(client, ocr):
     """«kunde inte rendera sidan» ensamt var vad läraren hade 2026-09-06.
 

@@ -281,12 +281,31 @@ def _spara_fakta(conn, bok_id: int, fakta: list[dict], offset: int | None) -> No
 
 # ── Sidorna, när de behövs ────────────────────────────────────────────────
 
+def tryckta(bok: dict) -> tuple[int, int | None]:
+    """Första och sista TRYCKTA sidan som finns i PDF:en (samma räkning som
+    bok.js forstaFor/sidorFor). Negativt sidoffset betyder att PDF:en saknar
+    bokens första blad: i Matematik 5000+ 1a (−5) är PDF-sida 1 tryckt s. 6,
+    och s. 1–5 finns inte. None som sista: sidantalet okänt."""
+    off = int(bok.get("sidoffset") or 0)
+    sidor = int(bok.get("sidor") or 0)
+    return max(1, 1 - off), (sidor - off if sidor else None)
+
+
 def olasta(conn, bok_id: int, fran: int, till: int, *, text: bool = True) -> list[int]:
     """De sidor i spannet som ännu inte lästs. `text=False` frågar efter
-    faktapasset, som är det billiga."""
+    faktapasset, som är det billiga.
+
+    Bara sidor som FINNS i boken. En sida före bokens början kan aldrig läsas,
+    och stod den här fick uppgiftspanelen (uppgifter.js lasSidorna) ett
+    faktapass på tryckt s. 1 i 5000+ 1a, som renderade PDF-index −5."""
+    bok = db.get_bok(conn, bok_id) or {}
+    forsta, sista = tryckta(bok)
+    fran, till = max(int(fran), forsta), int(till)
+    if sista is not None:
+        till = min(till, sista)
     har = {r["sida"] for r in db.bok_sidor(conn, bok_id, fran, till)
            if not text or r.get("text")}
-    return [s for s in range(int(fran), int(till) + 1) if s not in har]
+    return [s for s in range(fran, till + 1) if s not in har]
 
 
 def _sikta_om(fakta: list[dict], bilder: list[Path], sikte: int) -> int | None:

@@ -172,6 +172,7 @@
 
   /* ── Remsan: hela boken, sida för sida ── */
   function ritaRemsa() {
+    klampa();
     let ut = '';
     const A = reg(), SISTA = sista();
     for (let s = forsta(); s <= SISTA; s++) {
@@ -267,7 +268,12 @@
     avsnittsknapp.textContent = avsnittsnamn() || 'Välj avsnitt';
   }
 
-  function rita() { ritaUppslag(); markera(); ritaSpann(); ritaAvsnitt(); }
+  /* klampa() FÖRST, i varje omritning och inte bara i bokbytet. Uppstarten utan
+     register öppnar på s. 1, och kom hyllan sedan med samma bok som redan stod
+     vald (bok-redo, else-grenen) ritades s. 1 rakt av. I 5000+ 1a ligger s. 1
+     före bokens början: fem 404 per sidladdning och ett tomt uppslag
+     (2026-10-07). Vilken väg spannet än kom, ritas bara sidor som finns. */
+  function rita() { klampa(); ritaUppslag(); markera(); ritaSpann(); ritaAvsnitt(); }
 
   /* Spannet ÄR momentet — fältet fylls i tyst, så steg 3 låses upp av valet. */
   /* ...men bara när momentet är remsans eget. En omritning som INTE kommer ur
