@@ -1355,6 +1355,24 @@ def test_markeringen_skrivs_aldrig_tva_ganger():
     assert papper["uppgifter"][0]["text"] == "Utan räknare. Beräkna talet."
 
 
+@pytest.mark.parametrize("egen", [
+    "På den här uppgiften får du använda räknare.",
+    "Du får använda räknare.",
+    "Du får inte använda räknare.",
+])
+def test_modellens_egen_raknarmening_stryks(egen):
+    """Blad 161 och 162 (2026-10-02): markeringen stod först och modellens
+    mening om samma sak stod kvar efter. Uppgiftens egen räkning med räknaren
+    och siffror rörs inte."""
+    papper = _grupppapper(hjalpmedel="Räknare får användas på alla uppgifter.")
+    papper["uppgifter"][0]["text"] = f"{egen} Beräkna talet."
+    papper["uppgifter"][1]["text"] = "Använd räknaren och beräkna 3,4 · 2."
+    exam_gen.satt_raknarmarkering(papper, "gruppuppgift")
+    assert papper["uppgifter"][0]["text"] == "Räknare tillåten. Beräkna talet."
+    assert papper["uppgifter"][1]["text"] == \
+        "Räknare tillåten. Använd räknaren och beräkna 3,4 · 2."
+
+
 def test_hjalpmedelsraden_kapas_till_meningen_som_bar_regeln():
     """Raden står i bandet överst bredvid tiden och redovisningsformen, och
     ett stycke där trycker ner allt annat. Meningen som VÄLJS är den som

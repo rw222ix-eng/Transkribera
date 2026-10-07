@@ -2988,6 +2988,26 @@ RAKNARE_NEJ = "Utan räknare."
 # och varvet därpå tre gånger.
 _RAKNARMARKE = re.compile(r"^\s*(?:Räknare tillåten|Utan räknare)\.\s*")
 _RAKNARORD = re.compile(r"räknare", re.I)
+# Modellens EGEN räknarmening i uppgiftstexten, den som blir en dubblett när
+# markeringen läggs först. Blad 161 och 162 (2026-10-02) fick «Räknare
+# tillåten. På den här uppgiften får du använda räknare. …» och läraren fick be
+# om strykningen själv. Meningen ska bära ett tillstånd («får», «tillåten»,
+# «utan», «inte») och får inte ha siffror: «Använd räknaren och beräkna 3,4²»
+# är uppgiften, inte regeln.
+_RAKNARREGEL = re.compile(r"\b(?:får|tillåt\w*|utan|inte|ej|förbjud\w*)\b",
+                          re.I)
+_RAKNARREGEL_ORD = 12
+
+
+def _stryk_raknarmeningar(text: str) -> str:
+    """Texten utan de meningar som bara säger räknarregeln. Meningarna klipps
+    ur texten där de står, så radbrytningarna i resten ligger kvar."""
+    for m in _meningar(text):
+        if (_RAKNARORD.search(m) and _RAKNARREGEL.search(m)
+                and not re.search(r"\d", m)
+                and len(m.split()) <= _RAKNARREGEL_ORD):
+            text = text.replace(m, "", 1)
+    return re.sub(r"[ \t]{2,}", " ", text).strip()
 # Nekandet i raden. «utom» hör hit: «räknare på alla utom uppgift 2» pekar ut
 # uppgiften som INTE får den.
 _NEKANDE = re.compile(r"\b(?:inte|utan|ingen|inga|ej|utom|förbjuden|"
@@ -3121,6 +3141,7 @@ def satt_raknarmarkering(exam: dict, profil: str) -> list[int]:
         if val is None:
             u["text"] = ren
             continue
+        ren = _stryk_raknarmeningar(ren)
         u["text"] = f"{RAKNARE_JA if val else RAKNARE_NEJ} {ren}".strip()
         satta.append(nr)
     return satta
