@@ -627,7 +627,13 @@ test("bokbytet ritar om båda bladen med den nya bokens id", async ({ page }) =>
   await page.locator(".bkbokrad", { hasText: "Exponent 1c" }).click();
   await expect.poll(() => page.evaluate(() => window.Uppslag.spann().bok))
     .toBe("Exponent 1c");
-  await expect.poll(() => sidbilder.slice().sort()).toEqual(["4:12", "4:2"]);
+  /* Bladen, inte nätet: hyllans första bok är Exponent 1c, och dess startspann
+     (s. 2–9) hämtades redan vid sidladdningen (uppslag.js startSpann). S. 2
+     serveras då ur webbläsarens minnescache och syns aldrig som en begäran. */
+  await expect.poll(() => page.evaluate(() =>
+    [...document.querySelectorAll("#bkuppslag img")]
+      .map(i => i.getAttribute("src").split("?")[0])))
+    .toEqual(["/api/bocker/4/sida/2.png", "/api/bocker/4/sida/12.png"]);
   /* …och ingen sida ur den gamla boken. Ett halvt uppslag — ett blad ur den
      nya boken och ett ur den gamla — är precis vad läraren såg. */
   expect(sidbilder.some(x => x.startsWith("3:"))).toBe(false);
@@ -707,9 +713,11 @@ test("provets förval slår inte upp sidorna — passet tas när det skrivs",
        provspann över trettio sidor är det minuters LLM-anrop för en lista
        ingen ser. Passet ska vänta till skrivningen, där servern tar det
        (routes_planning.bok_las_text) och väntan syns i molnraden. */
-    /* `anrop` märker varje läsning med sitt `fran`: remsan står på prototypens
-       standardspann tills förvalet skriver det, och det spannets egen läsning
-       (en tavlegest, helt riktig) får inte förväxlas med provets. */
+    /* `anrop` märker varje läsning med sitt spann: remsan står på bokens
+       startspann (1.1, s. 2–6, uppslag.js startSpann) tills förvalet skriver
+       provets 2–12, och startspannets egen läsning (en tavlegest, helt riktig)
+       får inte förväxlas med provets. Bara `fran` räckte så länge startspannet
+       var prototypens, långt bort i en annan bok (före 05ebfb7). */
     const anrop = [];
     await fejka(page);
     await page.unroute("**/api/bocker**");
@@ -719,10 +727,10 @@ test("provets förval slår inte upp sidorna — passet tas när det skrivs",
       if (url.pathname.endsWith("/uppslag")) {
         const fran = Number(url.searchParams.get("fran"));
         const till = Number(url.searchParams.get("till"));
-        anrop.push(`uppslag:${fran}`);
+        anrop.push(`uppslag:${fran}-${till}`);
         // Provspannet (2–12) är oläst: det är precis läget som drog igång
         // läsningen. Alla andra spann svarar lästa och tysta.
-        const olast = fran === 2;
+        const olast = fran === 2 && till === 12;
         return route.fulfill({ status: 200, contentType: "application/json",
           body: JSON.stringify({ fran, till, uppgifter: [],
                                  olasta: olast ? [2, 3] : [],
@@ -730,7 +738,8 @@ test("provets förval slår inte upp sidorna — passet tas när det skrivs",
                                  sidor: [] }) });
       }
       if (url.pathname.endsWith("/las")) {
-        anrop.push(`las:${(r.postDataJSON() || {}).fran}`);
+        const k = r.postDataJSON() || {};
+        anrop.push(`las:${k.fran}-${k.till}`);
         return route.fulfill({ status: 200, contentType: "text/event-stream",
           body: strom([{ type: "done",
                          result: { uppgifter: UPPG, lasta: 0 } }]) });
@@ -744,14 +753,14 @@ test("provets förval slår inte upp sidorna — passet tas när det skrivs",
     await expect(page.locator("#bkplanering")).toBeVisible();
 
     // Uppslaget frågades — men läsningen begärdes aldrig.
-    await expect.poll(() => anrop.includes("uppslag:2")).toBe(true);
+    await expect.poll(() => anrop.includes("uppslag:2-12")).toBe(true);
     await page.waitForTimeout(1000);
-    expect(anrop.filter(a => a === "las:2").length).toBe(0);
+    expect(anrop.filter(a => a === "las:2-12").length).toBe(0);
 
     /* Tillbaka till lektionsmaterialet: panelen är uppe igen och behöver sina
        uppgifter — nu ska passet tas direkt, inte förbli hoppat. */
     await page.evaluate(() => window.SattLage("Tavla"));
-    await expect.poll(() => anrop.filter(a => a === "las:2").length,
+    await expect.poll(() => anrop.filter(a => a === "las:2-12").length,
                       { timeout: 15_000 }).toBe(1);
   });
 
