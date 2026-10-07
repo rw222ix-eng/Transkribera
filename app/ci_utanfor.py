@@ -119,6 +119,64 @@ UTANFOR: dict[str, list[tuple[str, str, re.Pattern]]] = {
     ],
 }
 
+# ── SAMMANSATTA FUNKTIONER OCH ANDRAGRADSFUNKTIONER I 1c (Rickard 2026-10-02)
+# «g(f(x)) ingår inte i Matematik 1c» (prov 156) och «f(x) = x² − 4x + 3 är en
+# andragradsfunktion och ingår inte» (blad 160). Båda stod som FORMLER utan
+# namnet, och ordlistan ovan såg dem inte. Mönstren läser matten:
+#   * en funktion i en funktion, f(g(x)) och g(f(2)), med bokstäverna f, g, h
+#     (a(b + c) är en faktor och en parentes, ingen sammansättning);
+#   * en FUNKTION med en kvadrat och en förstagradsterm i samma variabel,
+#     f(x) = x² − 4x + 3 och h(t) = 20t − 5t². Bara funktionen: uttrycket
+#     x² + 5x som ska förenklas ur x(x + 5) står på drygt 70 uppgifter i 1c,
+#     de flesta godkända (prövat 2026-10-07): parenteser ingår. Ordet
+#     «andragradsuttryck» står där också och fälls inte. Potensfunktionen
+#     y = 2x² ensam står kvar (den står i 1c).
+_SAMMANSATT = (
+    "sammansatta funktioner",
+    "sammansatta funktioner: en funktion av en funktion, f(g(x)), också när "
+    "den inte kallas sammansatt",
+    re.compile(r"(?i:sammansatt\w*\s+funktion|inre\s+funktion"
+               r"|yttre\s+funktion)"
+               r"|(?<![A-Za-z\\])[fgh]\s*\(\s*[fgh]\s*\("))
+_ANDRAGRADSORD = re.compile(r"(?i:andragradsfunktion\w*|andragradskurv\w*"
+                            r"|pq-formel\w*)")
+# f(x) = …, h(t) = … eller y = …, högerledet fram till nästa =, $, komma
+# eller radslut. Inte n: R(n) = n² + n är mönstrets formel för figur n
+# (godkända blad 112), och den står i 1c. Och inte ett y mitt i en produkt,
+# «3xy · 2x = 6x²y» (blad 142).
+_FUNKTIONSDEF = re.compile(
+    r"(?<![\w\\}^)])(?:[a-zA-Z]\s*\(\s*([a-mo-z])\s*\)|y)\s*=\s*([^$=,;\n]+)")
+_KVADRAT_I = r"(?:\^\s*\{?\s*2\s*\}?|²)"
+
+
+class _Andragradsfunktion:
+    """re-lik sökare som _Kvadreringsregler: ordet, eller en funktion vars
+    högerled har både variabeln i kvadrat och variabeln ensam."""
+
+    def search(self, text: str) -> _Traff | None:
+        text = str(text or "")
+        m = _ANDRAGRADSORD.search(text)
+        if m:
+            return _Traff(m.group(0))
+        for d in _FUNKTIONSDEF.finditer(text):
+            var, hl = d.group(1) or "x", _LATEXORD.sub(" ", d.group(2))
+            kvadrat = re.search(rf"(?<![A-Za-z]){var}\s*{_KVADRAT_I}", hl)
+            ensam = re.search(rf"(?<![A-Za-z]){var}(?![A-Za-z]|\s*(?:\^|²))",
+                              hl)
+            if kvadrat and ensam:
+                return _Traff(d.group(0).strip())
+        return None
+
+
+_ANDRAGRAD = (
+    "andragradsfunktioner",
+    "andragradsfunktioner: en funktion med både x² och x, som "
+    "f(x) = x² − 4x + 3 eller h(t) = 20t − 5t², och pq-formeln. "
+    "Potensfunktionen y = ax² ensam ingår, och att förenkla x(x + 5) till "
+    "x² + 5x ingår",
+    _Andragradsfunktion())
+UTANFOR["1c"] += [_SAMMANSATT, _ANDRAGRAD]
+
 
 # ── KVADRERINGS- OCH KONJUGATREGLERNA I NIVÅ 1 (Rickards dom 2026-09-24) ──
 # De står i det centrala innehållet för 2a och 2c, inte för 1a och 1c, och

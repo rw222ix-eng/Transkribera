@@ -178,8 +178,12 @@ def _arbetsblad_med(uppgift: dict) -> dict:
     d = copy.deepcopy(_exam())
     d["kurs"] = KURS
     d.pop("forsattsbild", None)
+    # Andragradsfunktionerna likaså, sedan 2026-10-07 (prov 156, blad 160).
+    d["titel"] = "Prov: Formler"
     d["uppgifter"] = [u for u in d["uppgifter"]
-                      if "kvadratkomplett" not in u["text"]]
+                      if "kvadratkomplett" not in u["text"]
+                      and not ci_utanfor._ANDRAGRAD[2].search(
+                          json.dumps(u, ensure_ascii=False))]
     d["uppgifter"][0].update(uppgift)
     return d
 
@@ -353,3 +357,36 @@ def test_efterkontrollen_visar_pilarna_pa_ett_godkant_prov():
     fynd = routes_exam._cifynd(_papper(NY_10, PROV129_12A))
     assert [(f["kod"], f["nr"]) for f in fynd] == [("utanforci", 2)]
 
+
+
+# ── Formlerna utan namnet (Rickard 2026-10-02, prov 156 och blad 160) ──────
+
+@pytest.mark.parametrize("text, namn", [
+    ("Funktionen $g$ ges av $g(x) = 3x - 2$. Ange värdemängden för $g(f(x))$.",
+     "sammansatta funktioner"),
+    ("Figuren visar grafen till funktionen $f(x) = x^2 - 4x + 3$.",
+     "andragradsfunktioner"),
+    ("Bollens höjd är $h(t) = 20t - 5t^{2}$ meter.", "andragradsfunktioner"),
+    ("Lös ekvationen med pq-formeln.", "andragradsfunktioner"),
+])
+def test_formlerna_slar_larm_utan_namnet(text, namn):
+    fynd = ci_utanfor.ci_vakt(_papper({"text": text}))
+    assert len(fynd) == 1 and namn in fynd[0]["message"]
+
+
+@pytest.mark.parametrize("text", [
+    "Förenkla $x(x + 5)$. Svar: $x^2 + 5x$.",           # parenteser ingår
+    "Figur $n$ har $R(n) = n^{2} + n$ rutor.",           # mönstrets formel
+    "Funktionen $y = 2x^2$ beskriver arean.",            # potensfunktion
+    r"Förenkla $3xy \cdot 2x$. Svar: $6x^{2}y$.",
+    "Beräkna $a(b + c)$ när $a = 2$.",
+    "Rita grafen till $f(x) = 3x - 2$.",
+])
+def test_algebran_och_potensfunktionen_ar_tillaten(text):
+    assert ci_utanfor.ci_vakt(_papper({"text": text})) == []
+
+
+def test_formelreglerna_galler_bara_1c():
+    papper = _papper({"text": "Rita $f(x) = x^2 - 4x + 3$ och $g(f(x))$."},
+                     kurs="Matematik, nivå 2c")
+    assert ci_utanfor.ci_vakt(papper) == []
