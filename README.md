@@ -1,24 +1,19 @@
 # Transkribera
 
-En lokal-först-app för en gymnasielärare i matematik. Hon spelar in sina
-lektioner, appen transkriberar dem, och utifrån transkriptionerna, läroboken och
-det hon redan gjort planerar hon nästa lektion och skriver tavlor, prov,
-arbetsblad och gruppuppgifter.
+En lokal-först-app för en gymnasielärare i matematik. Utifrån schemat,
+läroboken och det hon redan gjort planerar hon lektionerna och skriver tavlor,
+prov, arbetsblad och gruppuppgifter. Namnet är kvar från början, då appen
+transkriberade inspelade lektioner. Den delen är borta ur appen och lever bara
+i manusstudion (`manus.py`), ett eget litet program bredvid.
 
-Allt annat står i koden, i kommentarer vid raden de handlar om. Det här är den
-enda .md-filen i repot och den ska förbli det.
+Allt annat står i koden, i kommentarer vid raden de handlar om. Nya .md-filer
+skapas inte. De få som finns har var sin snäv uppgift.
 
 ## Så här hänger den ihop
 
 **Servern** är FastAPI (`app/web/server.py` + routers för planering, prov, bok
 och utskrift). Den binder 127.0.0.1 och startas antingen som skrivbordsfönster
 (pywebview, `app/web/desktop.py`) eller som ren server via `transkribera_web.py`.
-
-**Transkriberingen** kodar om ljudet till 16 kHz Opus (ffmpeg) och skickar hela
-filen till ElevenLabs `scribe_v2` (`app/elevenlabs_asr.py`), som svarar med text
-och tid per ord i samma svep; `transcriber.segmentera_ord` gör undertextrader av
-orden. Kostnaden räknas ur svarets `audio_duration_secs` — aldrig ur filens
-längd.
 
 **Språkmodellen är Claude Code CLI**, headless (`app/claude_code.py`). Ingen
 API-nyckel: appen kör på lärarens egen inloggning. Verktygen är avstängda utom
@@ -30,9 +25,8 @@ innehållsförteckningen och bygger registret, och sidornas innehåll läses fö
 när ett uppslag faktiskt används — en sida kostar ungefär en minut och en bok är
 tre hundra sidor.
 
-**Persistensen** är SQLite (`app/db.py`) plus `history.json` — enda stället
-segmenttiderna ligger utöver SRT-filen — och mappen `Transkriberingar/` för
-resultat, tavlor, prov, bokens sidbilder och utskriftspaket.
+**Persistensen** är SQLite (`app/db.py`) och mappen `Transkriberingar/` för
+tavlor, prov, bokens sidbilder och utskriftspaket.
 
 **PDF:er** byggs av en bundlad Tectonic (`bin/tectonic/`) ur LaTeX-mallarna i
 `app/templates/`. Kompileringsfel går tillbaka till modellen som
@@ -54,8 +48,10 @@ utan ett krav: designprojektet har ingen server, och appen ska gå att rita mot.
 python transkribera_web.py
 ```
 
-Kraven ligger i `requirements.txt`. `ffmpeg` och `ffprobe` ska finnas på PATH,
-och `claude` ska vara installerat och inloggat för allt som skriver text.
+Kraven ligger i `requirements.txt`. `claude` ska vara installerat och inloggat
+för allt som skriver text. Manusstudion (`manus.bat`, dra en ljudfil på den)
+vill dessutom ha `ffmpeg` på PATH och en ElevenLabs-nyckel
+(`elevenlabs_key.txt` eller `ELEVENLABS_API_KEY`).
 
 ## Testa
 

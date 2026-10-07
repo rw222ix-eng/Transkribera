@@ -1,9 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller spec for the Transkribera web-UI desktop app (pywebview + uvicorn).
 
-One-folder, windowed. Reuses the heavy-dep collection from Transkribera.spec and
-adds the web stack (fastapi/uvicorn), pywebview (+ pythonnet for the EdgeChromium
-backend) and the static frontend. PySide6 is excluded — the web build has no Qt UI.
+En mapp, fönsterläge. Buntar webbstacken (fastapi/uvicorn), pywebview (med
+pythonnet för EdgeChromium) och frontenden. PySide6 är undantaget, bygget har
+ingen Qt-yta.
 
 Inget byggsteg krävs för frontenden: app/web/ui serveras som den ligger.
 

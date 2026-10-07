@@ -12,5 +12,5 @@ App-ikonen för skrivbordsgenvägen och det paketerade exet (`Transkribera_web.s
   omramad till ~88 % av en kvadratisk yta, därefter sparad som en ICO med
   storlekarna 16/20/24/32/40/48/64/128/256 px.
 
-Ikonen är avsiktligt gråtonad så att den samsas med paper/ink-paletten i
-[DESIGN.md](../DESIGN.md) i stället för att dra in en främmande accentfärg.
+Ikonen är avsiktligt gråtonad så att den samsas med frontendens paper/ink-palett
+(app/web/ui/) i stället för att dra in en främmande accentfärg.

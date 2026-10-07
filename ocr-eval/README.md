@@ -16,7 +16,7 @@ Det ställer tre krav som vanliga OCR-jämförelser inte mäter:
    på fel ställe ger en tavla som är fel på tavlan, inför klassen.
 2. **Figurerna måste beskrivas, inte hoppas över.** En graf eller en geometrisk
    skiss bär ofta hela poängen med avsnittet. Modellen som sedan skriver tavlan
-   (Qwen3) ser inga bilder — den får bara texten. Duger inte figurbeskrivningen
+   (Claude Code, app/lesson_board.py) ser inga bilder — den får bara texten. Duger inte figurbeskrivningen
    finns figuren inte.
 3. **Inget får hittas på.** Det här är den viktigaste. En modell som gissar sig
    igenom en suddig formel producerar något som *ser* rätt ut och är fel. Tyst
