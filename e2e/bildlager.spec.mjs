@@ -37,13 +37,20 @@ const LAGER = [
   { typ: "etikett", plats: [0.84, 0.12], text: "Saga: $5$ m?" },
 ];
 
+/* `provBorta`, inte ett påhittat provId. Pappret skrivs till svitens riktiga,
+   DELADE bas, och `provId: 12` pekade på ett prov som aldrig funnits där:
+   varje senare sidladdning speglade pappret (plan.js speglaExamen) och fick
+   404 på GET /api/exams/12, som apan (zz-apan.spec.mjs) läste som ett
+   konsolfel. `provBorta` säger samma sak som är sann här, att pappret är
+   serverns men inte har någon provrad, och räknas ändå som serverns
+   (blad.js franServern), så bladet ritar dokumentets egna uppgifter. */
 function papper() {
   return {
     typ: "Arbetsblad", moment: "Negativa tal", klass: "BA26B",
     kurs: "Matematik, nivå 1a", datum: "2026-10-05", tid: "",
     gy: [], kalla: false, kallor: [], inst: { antal: 2, niva: "E-nivå" },
     bilder: {}, referenser: [], forlaga: null, resultat: null, fokus: "",
-    kontext: "start", niva: false, svarighet: 0, andrat: [], provId: 12,
+    kontext: "start", niva: false, svarighet: 0, andrat: [], provBorta: true,
     uppgifter: [
       { nr: 1, p: 1, t: "Beräkna $-3 + 7$.", f: "$4$" },
       { nr: 2, p: 2, t: "Höjderna mäts i meter från markytan. Taket i en "
