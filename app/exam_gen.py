@@ -3698,7 +3698,7 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
         # krävs», delprov C «Fullständiga lösningar krävs» — båda utan digitala
         # verktyg — och delprov D med digitala verktyg, fullständiga lösningar
         # PLUS «visa hur du använder ditt digitala verktyg» (läraren skriver
-        # «Redovisa kort på pappret …», se exam_latex.REDOVISA_VERKTYGET, och
+        # «Redovisa kort på pappret …», se exam_latex.REDOVISA_LOSNINGEN, och
         # räknaren är inte ett digitalt verktyg). Lärarens Del B är
         # alltså NP:s B+C och hennes Del C är NP:s D. Skelettet lägger redan
         # kortsvaren i Del B (exam_spec, NP:S DELORDNING); den här raden säger
@@ -4010,10 +4010,6 @@ KRITERIER: list[tuple[str, str, str]] = [
      "motexempel med ett tal som inte är det uppenbara, eller att ALLA fall "
      "täcks?", "A"),
 ]
-
-# Resonemangsordet är rubrikens eget: enkelt = E, välgrundat = C, nyanserat = A.
-_RESONEMANG_NIVA = {"inget": "E", "enkelt": "E", "välgrundat": "C",
-                    "valgrundat": "C", "nyanserat": "A"}
 
 DOMAR_KRIT_SYSTEM = (
     "Du är kriteriedomare för svenska nationella prov i matematik. Du får "
@@ -9383,7 +9379,6 @@ def kravradsvakt(exam: dict) -> list[dict]:
 # BARA NÄR DELUPPGIFTERNA ÄR AV SAMMA SORT: rena uttryck under en gemensam
 # uppmaning («Beräkna.»). a) endast svar och b) «Motivera …» är NP:s form och
 # står på prov läraren godkänt (126 uppgift 6, 129 uppgift 11 och 12).
-_BARA_UTTRYCK_RE = re.compile(r"^\s*\$[^$]+\$\s*$")
 
 
 def _uppmaningen(text: str) -> str | None:

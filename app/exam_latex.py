@@ -349,13 +349,8 @@ def _hjalpmedel_i_delen(hjalpmedel: str | None, del_kod: str) -> str | None:
 # LÄRARENS DOM 2026-09-26: «Det handlar inte bara om räknaren, de ska
 # redovisa hur de har löst uppgifterna. Och det gäller alla uppgifter där det
 # står fullständig lösning krävs.» En mening för varje del med fullständiga
-# lösningar, med eller utan räknare (REDOVISA_LOSNINGEN). Tabellen nedan står
-# kvar för anropare som frågar per verktyg.
+# lösningar, med eller utan räknare (REDOVISA_LOSNINGEN).
 REDOVISA_LOSNINGEN = "Redovisa kort på pappret hur du har löst uppgifterna."
-REDOVISA_VERKTYGET = {
-    "räknare": REDOVISA_LOSNINGEN,
-    "digitala verktyg": REDOVISA_LOSNINGEN,
-}
 
 
 _DELNAMN_RE = [(re.compile(r"\b([Dd]el)\s+B\b"), r"\1 A"),
