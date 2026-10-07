@@ -31,6 +31,19 @@
      den oförändrad — hade den haft en egen dokumentform hade det funnits två,
      och den som ritas hade inte varit den som sparas. */
   let utkastId = null;
+  /* ── SENA SVAR SKRIVER INTE ÖVER ETT NYARE UTKAST ────
+     Varje gest som byter utkast (nytt papper, ångrad slängning, slängning,
+     godkännande, ett utkast lagt på bordet) räknar upp `utkastVarv`. Ett
+     POST-svar som landar efter en sådan gest hör till ett utkast som inte
+     längre ligger framme och får inte bli `utkastId`.
+     Utan räknaren gick det så här (apan, e2e 2026-10-07): Ångra på en äldre
+     «Utkastet slängt» medan ett nyare utkast låg framme postade det gamla, och
+     servern städade bort det nyare («ett utkast i taget»). Men `utkastId`
+     pekade kvar på det nyare tills svaret kom, och en slängning i det fönstret
+     skickade DELETE mot en rad som redan var borta: 404 i konsolen. Samma
+     fönster fanns efter ett snabbt godkännande, där utkastets sena svar satte
+     tillbaka ett id som godkännandet just nollat. */
+  let utkastVarv = 0;
   /* ── VILKET SERVERVARV ÄR KLIENTENS versioner[0]? ────
      Nästan alltid noll: raden skapas med sitt första varv och klientens array
      växer i takt med serverns. «Fortsätt ändra» är undantaget — där plockas ett
@@ -161,11 +174,12 @@
      annars hade ett papper blivit två. */
   function utkastNytt(v) {
     if (!serverPa()) return;
+    const varv = ++utkastVarv;
     utkastId = null;
     utkastUr = null;              // ett nytt papper ärver ingen gammal rad
     nollstallBas();
     skicka('/api/dokument', 'POST', { dokument: v, status: 'utkast' })
-      .then(d => { utkastId = d.id; })
+      .then(d => { if (varv === utkastVarv) utkastId = d.id; })
       .catch(() => {});
   }
   function utkastVersion(v) {
@@ -193,6 +207,7 @@
   function utkastGodkann(v) {
     const id = utkastId || utkastUr;
     const ur = utkastUr;
+    utkastVarv++;
     utkastId = null;
     utkastUr = null;
     if (!serverPa()) return Promise.resolve(null);
@@ -242,8 +257,13 @@
      påskrifter hade kapat varandra. */
   function utkastAterskapa(vs, markor) {
     if (!serverPa() || !vs.length) return Promise.resolve(null);
+    /* Utkastet som ev. låg framme byts ut nu, och POST:en nedan städar dess
+       rad. Id:t släpps genast, inte när svaret kommer (se utkastVarv). */
+    const varv = ++utkastVarv;
+    utkastId = null;
     return skicka('/api/dokument', 'POST', { dokument: vs[0], status: 'utkast' })
       .then(d => {
+        if (varv !== utkastVarv) return null;
         utkastId = d.id;
         utkastUr = null;         // den ångrade slängningen ÄR en ny rad
         nollstallBas();          // ny rad, hela arrayen skrivs om — bas noll
@@ -271,6 +291,7 @@
        bladet till FÖRRA mottagaren — även om läraren just bytt i väljaren. */
     const koVar = bladko.slice(), nuVar = bladNu;
     bladNu = null; bladko = [];
+    utkastVarv++;
     utkastId = null;
     utkastUr = null;
     versioner = []; nu = -1;
@@ -6374,6 +6395,7 @@
      igen — med sin ångra-historik OCH med stegen ovanför ifyllda. Ett papper som
      hänger över en tom planering är sämre än inget papper alls. */
   function aterstallUtkast(u) {
+    utkastVarv++;
     utkastId = u.id;
     /* Förvalet: utkastet ÄR raden, det finns ingen godkänd rad bakom det.
        «Fortsätt ändra» sätter ankaret själv, efter det här anropet. */
