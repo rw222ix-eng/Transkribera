@@ -18,10 +18,9 @@ transkribera.db
 transkribera.db-wal
 transkribera.db-shm
 
-# Nedladdade modeller / cache
+# Nedladdade modeller / cache (app/settings_store.py pekar fortfarande på models/)
 models/
 *.bin
-*.gguf
 
 # Media (in- och utdata)
 *.wav
@@ -57,10 +56,8 @@ nul
 /dist/
 *.manifest
 
-# llama.cpp-binärer + spike-artefakter (stora; byggs/laddas separat)
-/bin/llamacpp/
+# Tectonic-binären (stor; hämtas med tools/hamta_tectonic.sh)
 /bin/tectonic/
-/_spike/
 
 # Lokala Claude Code-inställningar — utom settings.json, som är delad.
 # Den bär SessionStart-kroken som gör en tom behållare körklar (tools/miljo.sh),
@@ -89,20 +86,12 @@ e2e/.test-data-qa/
 e2e/test-results/
 e2e/_srv_*.txt
 
-# Impeccable live mode (durabel sessionsjournal — lokal återhämtning, ej projektkälla)
-.impeccable/live/sessions/
 e2e/playwright-report/
 e2e/.cache/
 e2e/visual-screens/
 
-# Genererad verifieringsbild för app-snapshot (ej versionshanterad)
-design-system/_snapshot-verify.png
-
 # Genererade ljudtestfiler (skapas av tests/download_sv_audio.py)
 tests/audio_samples/
-
-# Whiteboard-benchens körningsartefakter (tests/bench_whiteboard.py)
-tests/bench_out/
 
 # Lokala QA-körningsartefakter (rådata från riktiga transkriberingskörningar)
 exports/
@@ -112,14 +101,12 @@ exports/
 
 # Nedladdad föreläsningsmedia och lösa transkript i repo-roten (lokal lektionsdata
 # — får ALDRIG checkas in). Själva medie- och undertextfilerna är redan täckta
-# globalt ovan (*.mkv/*.mp4/*.webm rad 28-30, *.srt/*.vtt rad 34-35); det som
+# globalt ovan (*.mkv/*.mp4/*.webm, *.srt/*.vtt); det som
 # saknade täckning var .txt-transkripten och yt-dlp:s sidofiler (.info.json,
 # .description, miniatyrer), som reglerna nedan fångar.
 /downloads/
-/Mamma waw isolerad.txt
 
-# Byggd Svelte-frontend (byggs vid paketering, checkas inte in)
-app/web/next/
+# npm-paket
 node_modules/
 
 # OCR-utvärderingen: läroboksidor och modellutdata checkas aldrig in.
@@ -133,6 +120,10 @@ ocr-eval/.tmp/
 
 # Playwrights körartefakter (skapas i repo-roten om sviten körs därifrån)
 test-results/
+
+# Testernas egna cacher
+.hypothesis/
+.pytest_cache/
 
 # Coverage (CI laddar upp den som artefakt; lokalt är den skräp)
 .coverage
