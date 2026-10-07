@@ -405,19 +405,11 @@ window.Klass = (() => {
       }
       remsa.appendChild(b);
     });
-    /* Provet bär sina två skyldigheter där det ligger: rättningen efteråt och
-       omprovet för dem som missade. Ingen hög att gå till. */
+    /* Provet bär omprovet för dem som missade där det ligger. Ingen hög att gå
+       till. Rättningschipet (rattning.js) stod före det och togs bort med
+       rättningsvyerna 2026-10-07. */
     const provet = docs.find(v => v.typ === 'Prov' && !v.losningsblad);
     if (provet) {
-      const ra = document.createElement('button');
-      ra.type = 'button';
-      ra.className = 'dokchip';
-      ra.setAttribute('data-atgard', '');
-      if (provet.rattat) ra.setAttribute('data-klar', '');
-      ra.textContent = provet.rattat ? `Rättat · ${Math.round((provet.rattat.andel || 0) * 100)} %` : 'Rätta';
-      ra.dataset.tip = provet.rattat ? 'Ändra klassens poäng' : 'Mata in klassens poäng per uppgift';
-      ra.addEventListener('click', e => { e.stopPropagation(); window.Rattning && window.Rattning.oppna(provet); });
-      remsa.appendChild(ra);
       const om = document.createElement('button');
       om.type = 'button';
       om.className = 'dokchip';

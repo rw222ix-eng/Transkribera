@@ -809,7 +809,7 @@
       if (!panel.isConnected) return;
       if (!lista.length) {
         panel.innerHTML = `<p class="ltomsok">${serverPa()
-          ? 'Ingen klasslista för klassen ännu — lägg in den när du rättar ett prov elev för elev.'
+          ? 'Ingen klasslista för klassen ännu.'
           : 'Utan server finns ingen klasslista att välja ur.'}</p>`;
         return;
       }
@@ -2591,8 +2591,8 @@
         avd: u.del || null,
         /* Nivåvektorn följer med hel, inte bara som `niva`. Elevens betyg går
            inte att räkna ur en klumpsumma — C kräver sin andel av C- och
-           A-poängen — och rättningen elev för elev (elever.js) är den enda
-           läsaren. Elevens papper är orört: `poang_str` trycker fortfarande
+           A-poängen. Servern läser den (app/rattning.py, app/ci_profil.py);
+           rättningsvyn elev för elev (elever.js) togs bort 2026-10-07. Elevens papper är orört: `poang_str` trycker fortfarande
            totalen, E/C/A-splitten är rättarens vy. */
         peca: nivavektor.slice(0, 3),
         /* Uppgiftens centrala innehåll som KODER — det provet självt taggade
@@ -5438,23 +5438,12 @@
       $('.minisida', d).insertAdjacentHTML('beforeend',
         `<span class="dokslojan"><button class="dsl" type="button" data-a="visa">Visa</button>${syskonknapp}<button class="dsl" type="button" data-a="pdf">PDF</button><button class="dsl" type="button" data-a="radera" data-farlig>Radera</button></span>`);
       $('.dnamn', d).textContent = dokNamn(v);
-      /* Provet rättas där provet ligger — inte i en ruta som dyker upp på sidan. */
-      if (v.typ === 'Prov' && !v.losningsblad) {
-        const r = document.createElement('button');
-        r.type = 'button';
-        r.className = 'dokratta';
-        r.dataset.a = 'ratta';
-        r.textContent = v.rattat ? `Rättat · ${Math.round((v.rattat.andel || 0) * 100)} % av poängen` : 'Rätta provet';
-        if (v.rattat) r.setAttribute('data-klar', '');
-        $('.dokmeta', d).appendChild(r);
-      }
       d.addEventListener('click', e => {
         const b = e.target.closest('[data-a]');
         const namn = dokNamn(v);
         if (b && b.dataset.a === 'pdf') { skrivUt(b, pdfNamn(v), v); return; }
         if (b && b.dataset.a === 'radera') { fragaRadera(d, v); return; }
         if (b && b.dataset.a === 'syskon') { fragaSyskon(d, i); return; }
-        if (b && b.dataset.a === 'ratta') { e.stopPropagation(); window.Rattning && window.Rattning.oppna(v); return; }
         if (b && (b.dataset.a === 'ja' || b.dataset.a === 'nej')) return;
         forhandsvisa(i);
       });
