@@ -7,7 +7,7 @@ BARA FÖR PROV. Arbetsbladets och gruppuppgiftens PDF är skärmens avritning
 canvasen. Sex blad gick ut till eleverna så 2026-09-08. Godkänn dem i stället
 med e2e/godkann-avritat.mjs, som trycker på appens egen knapp.
 
-Användning: python godkann.py <dokument_id>
+Användning: python tools/dokument_godkann.py <dokument_id>
 """
 import json, sqlite3, sys, urllib.request
 from pathlib import Path

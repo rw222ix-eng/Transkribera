@@ -1,7 +1,7 @@
 """Lägg nedladdade plåtar på ett planeringsdokument, samma väg som släppytan:
 v.bilder[<el>] = data-URL och en ny version via POST /api/dokument/{id}/versioner.
 
-Användning: python attach_platar.py <dokument_id> <png-katalog>
+Användning: python tools/platar_lagg_pa.py <dokument_id> <png-katalog>
 PNG-filerna heter <scen.filnamn>.png (a-07-frobutik.png) och forsatt.png för
 försättsbladet. Läser senaste versionen ur DB (bara läsning), skriver via API:t.
 """

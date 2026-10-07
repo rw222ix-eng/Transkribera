@@ -2,7 +2,7 @@
 klienten gör efter en generering (plan.js franProv + utkastfälten). Mallen är ett
 befintligt dokument av samma typ; exam-fälten skrivs över.
 
-Användning: python aterskapa_dokument.py <exam_id> <mall_dokument_id> <json-med-overrides>
+Användning: python tools/dokument_aterskapa.py <exam_id> <mall_dokument_id> <json-med-overrides>
 
 --godkant (sist på raden) skapar dokumentet GODKÄNT i stället för som utkast.
 Använd den alltid när någon annan kan ha ett utkast framme: servern håller ETT
