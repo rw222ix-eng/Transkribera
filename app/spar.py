@@ -58,3 +58,19 @@ def logga(db_file, art: str, *, vag: str | None = None,
             conn.close()
     except (sqlite3.Error, OSError):
         pass
+
+
+# Utfallets felkoder, «kod:väg» per fel. Söndagsrapporten 2026-09-27 och
+# 2026-10-04: «fel=2» på prov 156 sa inte VILKA två fel som kastade varvet,
+# och läraren fick gissa i koden. Taket håller raden kort.
+FELKODER_TAK = 12
+
+
+def felkoder(errors) -> list[str]:
+    ut = []
+    for e in errors or []:
+        if isinstance(e, dict):
+            kod = str(e.get("code") or "?")
+            vag = str(e.get("path") or "").strip()
+            ut.append(f"{kod}:{vag}" if vag else kod)
+    return ut[:FELKODER_TAK]

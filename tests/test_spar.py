@@ -60,3 +60,12 @@ def test_middleware_loggar_mutationer_men_inte_getar(client):
         conn.close()
     assert "PUT /api/klassprofil" in rader
     assert not any(r.startswith("GET ") for r in rader)
+
+
+def test_felkoderna_sager_vilka_fel_som_kastade_varvet():
+    """«fel=2» på prov 156 (2026-10-03) sa inte vilka två."""
+    fel = [{"code": "poangvakt", "path": "uppgift 8"},
+           {"code": "utanforci", "path": ""}, "skräp"]
+    assert spar.felkoder(fel) == ["poangvakt:uppgift 8", "utanforci"]
+    assert spar.felkoder(None) == []
+    assert len(spar.felkoder([{"code": "x"}] * 40)) == spar.FELKODER_TAK

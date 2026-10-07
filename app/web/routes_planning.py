@@ -1698,7 +1698,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     dokumentdiff.andrade_element("tavla", fore, st["board"])
                 spar.logga(db_file, "utfall", doktyp="tavla", dok_id=pid,
                            detalj={"andrade": andrade,
-                                   "fel": len(res["errors"] or [])})
+                                   "fel": len(res["errors"] or []),
+                                   "koder": spar.felkoder(res["errors"])})
                 return {"id": pid, "board": st["board"], "errors": res["errors"],
                         "rounds": res["rounds"],
                         # Rutorna som faktiskt skrevs om, i tavlans egen

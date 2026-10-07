@@ -2621,7 +2621,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 spar.logga(db_file, "utfall", doktyp=newview.get("typ") or "prov",
                            dok_id=exam_id,
                            detalj={"andrade": svar["andrade"],
-                                   "fel": len(res["errors"] or [])})
+                                   "fel": len(res["errors"] or []),
+                                   "koder": spar.felkoder(res["errors"])})
                 return svar
             finally:
                 # Molnplatsen hör till ANROPET och släpps när anropet är över,
