@@ -272,8 +272,9 @@ test("bandet läraren skrev om står på pappret — löftet klistras inte på i
 
     const band = page.locator("#fh-ark .guband").first();
     await expect(band).toContainText("Bestäm vem som skriver");
-    // Meningen hon strök får inte komma tillbaka ur inställningen.
-    await expect(band).not.toContainText("lämnas in vid lektionens slut");
+    // Inget löfte klistras på ur inställningen: varken meningen hon strök
+    // eller genomgångens, som «Skriftligt» numera ger.
+    await expect(band).not.toContainText("lämnas in");
     // Ägarskapstecknet — det grupphuvud() läser för att hålla fingrarna borta.
     await expect(band).toHaveAttribute("data-egen", "");
   });
@@ -287,7 +288,9 @@ test("ett papper utan fältet ser ut precis som förut", async ({ page }) => {
 
   const band = page.locator("#fh-ark .guband").first();
   await expect(band).toContainText("Läs uppgiften tillsammans");
-  await expect(band).toContainText("lämnas in vid lektionens slut");
+  /* Löftet klistras på som förut. «Skriftligt» var en inlämning och får sedan
+     2026-09-23 genomgångens mening (blad.js grupphuvud, f6c6ff21). */
+  await expect(band).toContainText("Inget lämnas in.");
   await expect(band).not.toHaveAttribute("data-egen", "");
 });
 

@@ -35,7 +35,13 @@ test.afterEach(async ({ page }) => {
 test("ett skrivet prov lämnar ett jobb med sin historik efter sig", async ({ page }) => {
   await L.oppna(page);
   await L.valjKlass(page, "NA25");
-  await L.skriv(page, { typ: "Prov", moment: "derivator" });
+  const skrivet = await L.skriv(page, { typ: "Prov", moment: "derivator" });
+  /* Strömmen till SLUT, inte bara svarets huvud som skriv() väntar på. Ett
+     utkast från en tidigare spec återställs vid sidladdning, så «#dokument
+     syns» var sant redan innan provet skrivits, och listan nedan lästes mitt i
+     körningen. Strömmen stängs först efter att jobbet fått sin status
+     (sse.py run: _slut före `end`). */
+  await skrivet.finished();
   await L.vantaPapper(page, 60_000);
 
   const lista = await (await page.request.get("/api/jobb/aktiva")).json();

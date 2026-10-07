@@ -289,7 +289,12 @@ test("lärarens inlagda bild följer med till PDF:en", async ({ page }) => {
   await page.goto("/");
   await hydrerad(page);
 
+  /* Uppgiften bär en scen: bildrutan ritas bara då (blad-bygg.js scenruta,
+     lärarens beslut 2026-08-26), och utan ruta finns ingenstans för bilden att
+     landa. */
   const v = papper({ bilder: { uppg1: BILD } });
+  v.uppgifter[0].scen = { begrepp: "summa", scene: "Två högar äpplen.",
+                          filnamn: "summa.png" };
   const xml = await xmlUr(page, v);
   expect(xml.length).toBeGreaterThan(0);
   // Bilden ligger som data-URI i taggen — den enda formen som överlever in i

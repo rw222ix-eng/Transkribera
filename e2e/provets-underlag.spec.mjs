@@ -107,7 +107,9 @@ async function fejka(page, { sparade = [], bocker = null, sidbilder = null } = {
     const PNG = Buffer.from(
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
       "base64");
-    await page.route("**/api/bocker/*/sida/*.png", route => {
+    /* `*.png*`: bladet bär `?laddning=` sedan bcdd5a53 (uppslag.js
+       ritaUppslag), och utan stjärnan efter matchade rutten ingen sida alls. */
+    await page.route("**/api/bocker/*/sida/*.png*", route => {
       const m = new URL(route.request().url()).pathname
         .match(/\/api\/bocker\/(\d+)\/sida\/(\d+)\.png/);
       sidbilder.push(`${m[1]}:${m[2]}`);
@@ -659,7 +661,8 @@ test("spannet klampas mot den nya bokens sista sida", async ({ page }) => {
      som mätare här: en sidbild som redan hämtats en gång serveras ur webbläsarens
      cache och syns aldrig som en begäran. */
   await expect.poll(() => page.evaluate(() =>
-    [...document.querySelectorAll("#bkuppslag img")].map(i => i.getAttribute("src"))))
+    [...document.querySelectorAll("#bkuppslag img")]
+      .map(i => i.getAttribute("src").split("?")[0])))
     .toEqual(["/api/bocker/4/sida/40.png", "/api/bocker/4/sida/40.png"]);
   expect(sidbilder.every(x => Number(x.split(":")[1]) <= 40)).toBe(true);
 });
@@ -689,7 +692,8 @@ test("remsan börjar där boken börjar — sidorna före pärmen finns inte",
     // Första knappen i remsan är s. 6, inte s. 1.
     await expect(page.locator("#bkremsa .bksida").first()).toHaveAttribute("data-s", "6");
     await expect.poll(() => page.evaluate(() =>
-      [...document.querySelectorAll("#bkuppslag img")].map(i => i.getAttribute("src"))))
+      [...document.querySelectorAll("#bkuppslag img")]
+      .map(i => i.getAttribute("src").split("?")[0])))
       .toEqual(["/api/bocker/4/sida/6.png", "/api/bocker/4/sida/6.png"]);
     expect(sidbilder.every(x => Number(x.split(":")[1]) >= 6)).toBe(true);
   });

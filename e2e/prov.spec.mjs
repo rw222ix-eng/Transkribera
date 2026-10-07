@@ -250,7 +250,10 @@ test("gruppuppgiften går samma väg och bär sitt upplägg", async ({ page }) =
   expect(gen.kropp.grupp.elever).toBeGreaterThanOrEqual(2);
   expect(gen.kropp.grupp.elever).toBeLessThanOrEqual(5);
   expect(gen.kropp.grupp.langd_min).toBeGreaterThan(0);
-  expect(["muntligt", "skriftligt", "poster"]).toContain(gen.kropp.grupp.redovisning);
+  /* «Skriftligt» finns inte längre som val; genomgången är förvalet sedan
+     2026-09-23 (exam_spec.REDOVISNING_FORVAL). Servern läser «genomgång» via
+     sina alias. */
+  expect(["genomgång", "muntligt", "poster"]).toContain(gen.kropp.grupp.redovisning);
   // Fyra rutor är formen, inte en väljare.
   expect(gen.kropp.antal).toBe(4);
 });

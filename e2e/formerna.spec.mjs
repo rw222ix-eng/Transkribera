@@ -309,7 +309,7 @@ test("bedömningsanvisningen · nationella provets form, elevlösningarna sist",
       .toHaveText("Bedömningsanvisning · kortsvar");
     // Att elevlösningarna finns sägs EN gång, under första arkets rubrik.
     await expect(page.locator("#formprov .lolede"))
-      .toHaveText(["Bedömda elevlösningar står sist i häftet."]);
+      .toHaveText(["Exempel på lösningar med bedömning står sist i häftet."]);
     await expect(page.locator("#formprov [data-form='lo-b'] .lotitel + .lolede"))
       .toHaveCount(1);
 
@@ -342,7 +342,7 @@ test("bedömningsanvisningen · nationella provets form, elevlösningarna sist",
     // Sista arket: uppgiftens nummer, elevens papper, poängen i ord och
     // skälet (lärarens dom 2026-09-26: «0 poäng», «+1 E», inte «0/0/0»).
     const elev = page.locator("#formprov [data-form='lo-elev']");
-    await expect(elev.locator(".lotitel")).toHaveText("Bedömda elevlösningar");
+    await expect(elev.locator(".lotitel")).toHaveText("Exempel på lösningar med bedömning");
     await expect(elev.locator(".prnr")).toHaveText(["2."]);
     await expect(elev.locator(".loskann")).toHaveCount(2);
     await expect(elev.locator(".lobedelevpoang")).toHaveText(["0 poäng", "+1 E"]);
@@ -435,7 +435,7 @@ test("bedömningsanvisningen ur serverns prov · paginerad, satt och pekbar",
       .toHaveText(["Korrekt alternativ.", "Svarar 2,5 km.", "Korrekt svar."]);
     // Och inledningen, en gång, under första arkets rubrik.
     await expect(page.locator("#fh-ark .lolede"))
-      .toHaveText(["Bedömda elevlösningar står sist i häftet."]);
+      .toHaveText(["Exempel på lösningar med bedömning står sist i häftet."]);
     await expect(b.locator(".lotitel + .lolede")).toHaveCount(1);
     const c = page.locator("#fh-ark [data-form='lo-c']");
     await expect(c.locator(".lobedniva")).toHaveText(["+C", "+C"]);
@@ -452,10 +452,12 @@ test("bedömningsanvisningen ur serverns prov · paginerad, satt och pekbar",
     spill.forEach(s => expect(s).toBeLessThanOrEqual(0));
 
     // Canvas pekar på en elevlösning och får dess uppgift, inte en egen serie.
+    /* Uppgift 1 är «Endast svar krävs» och får inga elevlösningar (lärarens
+       dom 2026-09-26, exam_spec elevlosning_behovs). Kvar står uppgift 3, och
+       den bär SITT nummer, uppg3, inte elevarkets första plats. */
     const elev = page.locator("#fh-ark [data-form='lo-elev']");
-    await expect(elev.locator(".pruppg")).toHaveCount(2);
-    await expect(elev.locator(".pruppg").first()).toHaveAttribute("data-el", "uppg1");
-    await expect(elev.locator(".pruppg").last()).toHaveAttribute("data-el", "uppg3");
+    await expect(elev.locator(".pruppg")).toHaveCount(1);
+    await expect(elev.locator(".pruppg")).toHaveAttribute("data-el", "uppg3");
     await expect(elev.locator(".loskann").last()).toHaveAttribute("data-el", "uppg3");
     // Kommentaren räknar inte poängen en gång till (utanStegen).
     await expect(elev.locator(".lobedvarfor").last()).toHaveText("Multiplicerar fel.");
