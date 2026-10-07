@@ -3505,6 +3505,17 @@
     $('#bladkotext').textContent = mottagare.id
       ? `Arbetsblad till ${mottagare.namn} väntar — samma lektion, hennes egna punkter`
       : 'Arbetsblad till hela klassen väntar — samma lektion';
+    /* KÖN SKA SYNAS NÄR DEN SÄGER IFRÅN. Molnet följer sitt stegs siffra och
+       tonar ut när siffran ligger utanför bild (molnrad.js). Godkännandet
+       stänger dokumentpanelen, och sidan blev då stående där den råkade
+       hamna: med siffran ovanför fönstret syntes varken beskedet eller
+       «Skriv det», och läraren fick ingen fråga om nästa blad (e2e riktat,
+       2026-10-07). Steget rullas därför fram, men bara när det behövs. */
+    const steg = $('#typval') && $('#typval').closest('.plansteg');
+    const nr = steg && steg.querySelector('.stegnr');
+    if (!nr || !window.rullaTill) return;
+    const r = nr.getBoundingClientRect();
+    if (r.top < 72 || r.bottom > innerHeight - 40) window.rullaTill(Math.max(0, scrollY + r.top - 120));
   }
 
   /* Notisen: ett stopp med två vägar, ingen kryssruta i hörnet. */
