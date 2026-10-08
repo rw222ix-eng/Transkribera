@@ -441,11 +441,12 @@ window.Figurer = (() => {
       rader.push(`line(${s.map(p => P(p[0], p[1])).join(', ')}, stroke: (thickness: 1.8pt, paint: blue))`));
     return rader.join('\n');
   }
-  /* Definitionsmängderna är exam_figures: linjär och andragrad på [−1, 7],
-     exponentialen på [−3, 3]. */
+  /* Definitionsmängderna är exam_figures: linjär på [−1, 7], andragrad på
+     symmetrilinjen ± 4 (avrundad med Math.round), exponentialen på [−3, 3]. */
+  const parabelmitt = o => o.a ? Math.round(-o.b / (2 * o.a)) : 3;
   const GRAFER = {
     linjar: o => [x => o.k * x + o.m, -1, 7],
-    andragrad: o => [x => o.a * x * x + o.b * x + o.c, -1, 7],
+    andragrad: o => [x => o.a * x * x + o.b * x + o.c, parabelmitt(o) - 4, parabelmitt(o) + 4],
     exponential: o => [x => o.C * Math.pow(o.bas, x), -3, 3]
   };
   const linjar = o => funktionsgraf(...GRAFER.linjar(o));

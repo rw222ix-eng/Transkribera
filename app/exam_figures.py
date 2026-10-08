@@ -167,8 +167,16 @@ def _linjar(f: "exam_spec.FigLinjar") -> str:
     return _funktionsgraf(lambda x: f.k * x + f.m, -1, 7)
 
 
+# PARABELN RITAS KRING SIN SYMMETRILINJE, inte på linjens −1 ≤ x ≤ 7. Prov 156
+# uppgift 1 (2026-10-08): y = 0,5x², facit krävde x = −2 och x = 2 för E-poängen,
+# och grafen visade bara den högra halvan med y-axeln upp till 24,5. Samma fönster
+# skar av roten −3 i prov 9 och 10. Bredden är densamma (8 enheter), mitten är
+# symmetrilinjen avrundad till heltal så ticksen hamnar på jämna tal. Avrundningen
+# är JS:ens Math.round (halva uppåt), inte Pythons round, så canvasen i
+# figurer.js ritar samma fönster.
 def _andragrad(f: "exam_spec.FigAndragrad") -> str:
-    return _funktionsgraf(lambda x: f.a * x * x + f.b * x + f.c, -1, 7)
+    mitt = math.floor(-f.b / (2 * f.a) + 0.5) if f.a else 3
+    return _funktionsgraf(lambda x: f.a * x * x + f.b * x + f.c, mitt - 4, mitt + 4)
 
 
 def _exponential(f: "exam_spec.FigExponential") -> str:
