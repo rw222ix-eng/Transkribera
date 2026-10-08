@@ -73,3 +73,14 @@ def test_reglerna_star_i_prompten():
                 "ORD SOM ELEVEN HAR", "BESKRIVS FRÅN PUNKT TILL PUNKT",
                 "En deluppgift är kort"):
         assert rad in g.INSTRUCTION
+
+
+def test_strack_och_tid_i_vektoruppgift():
+    ballong = _prov({"text": "En luftballong stiger med 3 m/s. Samtidigt för vinden den åt höger. "
+                             "Hur högt har den stigit när den flyttats 200 m längs marken?",
+                     "losning": "Vindens fart: 4 m/s\nTid: $200 / 4 = 50$ s\nHöjd: 150"})
+    kajak = _prov({"text": "Hugo paddlar över en älv. Vattnet strömmar åt höger.",
+                   "deluppgifter": [{"text": "Beräkna storleken av den resulterande vektorn.",
+                                     "losning": r"$\sqrt{0{,}5^2 + 1{,}2^2} = 1{,}3$", "poang": [0, 1, 0]}]})
+    assert _koder(g.tidsvektorvakt(ballong)) == ["uppgift 1"]
+    assert g.tidsvektorvakt(kajak) == []

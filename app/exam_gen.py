@@ -5003,6 +5003,35 @@ def intervallvakt(exam: dict, ram: dict | None = None) -> list[dict]:
     return ut
 
 
+# ── STRÄCKA OCH TID I EN VEKTORUPPGIFT (samma granskning, 13 b i v753) ────
+# «Älven är 60 m bred … Hur långt åt höger har strömmen fört honom?»: «den
+# har ju bara med hastighet att göra … att förstå mer vad hastighet, sträcka
+# och tid är». Bladen inför provet fick samma sort samma kväll (luftballongen
+# och drönaren på C-bladet). Tiden syns sällan i frågan men alltid i facit.
+_VEKTORSITUATION_RE = re.compile(
+    r"(?i)vektor|resulterande|ström|vind|blåser", re.I)
+_TID_I_FACIT_RE = re.compile(r"(?i)(?<![\wåäö])tid(?:en)?(?![\wåäö])")
+
+
+def tidsvektorvakt(exam: dict) -> list[dict]:
+    ut: list[dict] = []
+    for i, u in enumerate(exam.get("uppgifter") or [], 1):
+        if not isinstance(u, dict):
+            continue
+        delar = [d for d in (u.get("deluppgifter") or []) if isinstance(d, dict)]
+        text = " ".join([str(u.get("text") or "")] + [str(d.get("text") or "") for d in delar])
+        facit = " ".join([str(u.get("losning") or "")] + [str(d.get("losning") or "") for d in delar])
+        if _VEKTORSITUATION_RE.search(text) and _TID_I_FACIT_RE.search(facit):
+            ut.append(_err(
+                f"uppgift {i}", "begriplighet",
+                f"uppgift {i} räknar med tid i en vektoruppgift: den prövar "
+                "sträcka, tid och hastighet i stället för vektorer. Låt eleven "
+                "räkna med vektorerna direkt, till exempel storleken eller "
+                "riktningen på den resulterande vektorn, med samma poäng och "
+                "nivå." + BEHALL_PLANEN))
+    return ut
+
+
 # ── KORTA DELUPPGIFTER PÅ PROVET (samma granskning, uppgift 13 b) ─────────
 # Version 754 hade fem meningar och 45 ord i 13 b): «så jävla mycket text».
 # Tre meningar och 21 ord blev godkänt.
@@ -5097,7 +5126,7 @@ def begriplighetssignaler(exam: dict, profil: str = "gruppuppgift") -> list[dict
     if profil == "prov":
         ut: list[dict] = sprakvakt(exam)
         # Svarsform ur provets kapitel och korta deluppgifter (2026-10-08).
-        ut += intervallvakt(exam) + deluppgiftsvakt(exam)
+        ut += intervallvakt(exam) + deluppgiftsvakt(exam) + tidsvektorvakt(exam)
         for e in domarenheter(exam):
             kort = e["kort"]
             text = f"{kort.get('stam', '')} {kort.get('text', '')}".strip()
@@ -11489,6 +11518,7 @@ def ovningsvakter(exam: dict, *, prov: dict | None = None,
     fel += sprakvakt(exam)
     # Och inga svarsformer utanför provets kapitel (Rickard 2026-10-08).
     fel += intervallvakt(exam, prov)
+    fel += tidsvektorvakt(exam)
     # Och med ord eleverna har (lärarens dom 2026-10-02).
     fel += facktermsvakt(exam)
     # Och lika kort (Rickard 2026-09-26).
