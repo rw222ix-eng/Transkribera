@@ -2769,6 +2769,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # — samma sak som `bilder` ovan, och det reser samma väg.
         # {"uppg7": "a-19-hage-flod"} byter, {"uppg7": ""} tar bort.
         platval = body.get("platar") if isinstance(body, dict) else None
+        # BILDLAGRET (Rickard 2026-10-08, prov 163): pilar, mått och
+        # vinkelbågar på bilderna. Bor i dokumentets `bildlager` bredvid
+        # `bilder` och reser samma väg (tryck.rita_bildlager).
+        bildlager_val = tryck.bildlager(
+            body.get("bildlager") if isinstance(body, dict) else None)
         # INGEN VERSION FÖRSVINNER TYST (2026-09-24 kväll, blad 146). Pekaren
         # nedan flyttas till den version klienten säger att den visar. Är den
         # ÄLDRE än provets aktuella och uppgifterna skiljer sig, försvinner
@@ -2859,6 +2864,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
                                                    base=base))
                 egna_map.update(tryck.spara_egna_bilder(egna_bilder, out_dir,
                                                         exam_id))
+                # BILDLAGRET ritas in sist, på den bild som vann ovan
+                # (plåten eller lärarens egen), precis som canvas lägger det
+                # på bilden som står i rutan (blad.js bildlagren).
+                egna_map = tryck.rita_bildlager(egna_map, bildlager_val,
+                                                out_dir, exam_id)
                 # Försättsbladets bild har ingen plats i egna_map (den
                 # nycklas på uppgiftsnummer) och skrivs därför för sig,
                 # till samma katalog och med samma kontrakt: filnamnet,
@@ -3280,6 +3290,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
         egna: dict[int, str] = dict(platar.plat_bilder(exam, None, out_dir,
                                                        base=base))
         egna.update(egna_filer)
+        # Bilderna med bildlagret inritat vinner, som i godkännandet. De
+        # skrevs av det senaste godkännandet (tryck.rita_bildlager).
+        egna.update(tryck.lagerfiler(out_dir, int(view["id"])))
         return bilder, egna, forsatt
 
     def _egna_tex(view: dict) -> list[Path]:

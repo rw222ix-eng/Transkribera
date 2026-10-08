@@ -523,3 +523,39 @@ def test_bilderna_i_katalogen_ar_provets_egna(tmp_path):
     os.utime(tmp_path / "egen-03.png", (nu - 100, nu - 100))
     _und, egna, _f = tryck.bilder_i_katalogen(tmp_path, 5, [tex])
     assert egna[3] == "egen-5-03.png"
+
+
+def test_bildlagret_ritas_in_i_provets_bild(client, monkeypatch):
+    """Rickard 2026-10-08, prov 163: pilar och vinkelbågar i provets bilder.
+    Lagret reser med godkännandet bredvid `bilder`, ritas in i en kopia av
+    bilden, och mallen tar kopian. Originalet står orört, för det läses
+    tillbaka till canvas, där lagret ritas en gång till."""
+    from pathlib import Path
+    from PIL import Image
+    result = _skriv(client, monkeypatch)
+    _tectonic(monkeypatch)
+    eid = result["id"]
+    lager = [{"typ": "pil", "fran": [0.1, 0.5], "till": [0.9, 0.5],
+              "text": "låga kanten"}]
+    res = _done(client.post(f"/api/exams/{eid}/approve", json={
+        "bilder": {"uppg2": _png(400, 240, "gray")},
+        "bildlager": {"uppg2": lager, "uppg9": lager, "rubrik": lager}}))
+    ut = Path(res["pdf"]).parent
+    ritad = ut / f"lager-{eid}-02.png"
+    assert ritad.is_file(), sorted(p.name for p in ut.iterdir())
+    tex = Path(res["tex"]).read_text(encoding="utf-8")
+    assert "{" + ritad.name + "}" in tex
+    assert f"egen-{eid}-02.png" not in tex
+    # Pilen går genom bildens mitt, och originalet är fortfarande grått där.
+    assert Image.open(ritad).convert("RGB").getpixel((200, 120)) != (128, 128, 128)
+    assert Image.open(ut / f"egen-{eid}-02.png").convert("RGB").getpixel(
+        (200, 120)) == (128, 128, 128)
+    # Uppgift 9 har ingen bild: ett lager utan bild är koordinater på ingenting.
+    assert not list(ut.glob(f"lager-{eid}-09.*"))
+    # Ett nytt godkännande utan lager tar bort den gamla kopian, och provet
+    # trycks med bilden som den är.
+    res = _done(client.post(f"/api/exams/{eid}/approve", json={
+        "bilder": {"uppg2": _png(400, 240, "gray")}}))
+    assert not ritad.exists()
+    tex = Path(res["tex"]).read_text(encoding="utf-8")
+    assert f"egen-{eid}-02.png" in tex

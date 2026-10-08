@@ -33,6 +33,8 @@ def main(dok_id):
         "version": v.get("provVersion"),
         "blad": None,
         "bilder": v.get("bilder") or {},
+        # Pilarna och måtten på bilderna (tryck.rita_bildlager).
+        "bildlager": v.get("bildlager") or {},
         "platar": {f"uppg{u['nr']}": (u.get("scen") or {}).get("plat") or "" for u in (v.get("uppgifter") or []) if u.get("scen")},
     }
     # Strömmen: SSE-rader tills «done».

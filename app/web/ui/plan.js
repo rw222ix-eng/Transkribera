@@ -5968,6 +5968,13 @@
           bilder: Object.fromEntries(Object.entries(godkant.bilder || {})
             .filter(([k]) => !(window.Blad && Blad.bildInaktuell &&
                                Blad.bildInaktuell(godkant, k)))),
+          /* BILDLAGRET (Rickard 2026-10-08, prov 163). Provets PDF sätts i
+             LaTeX och ser inte skärmens lager, så pilarna reser hit och
+             ritas in i bilden (tryck.rita_bildlager). Samma filter som
+             bilderna: blad.js bildlagren ritar inget på en inaktuell bild. */
+          bildlager: Object.fromEntries(Object.entries(godkant.bildlager || {})
+            .filter(([k]) => !(window.Blad && Blad.bildInaktuell &&
+                               Blad.bildInaktuell(godkant, k)))),
           /* PLÅTVALEN. De bor i dokumentets `scen.plat` (plåtväljaren ovan),
              men servern har sin EGEN kopia av provet i basen — och den kopian
              känner bara den plåt appen matchade vid genereringen. Utan den

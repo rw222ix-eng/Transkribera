@@ -386,6 +386,77 @@ def spara_forsattsbild(dataurl, ut_dir: Path, exam_id: int) -> str | None:
     return namn
 
 
+# ── BILDLAGRET PÅ PROVETS BILDER (Rickard 2026-10-08, prov 163) ─────────
+# Pilarna, måtten och vinkelbågarna läraren sätter i canvas eller med
+# tools/bildlager.py bor i dokumentets `bildlager`, bredvid `bilder`, och
+# reser med godkännandet på samma sätt. Mallen tar bara filnamn, så lagret
+# ritas in i en KOPIA av bilden (app/bildlager_rita) och kopian byter plats
+# med originalet i bildindexet. Kopian och inte originalet: plåtens fil
+# «plat-namn.jpg» delas av alla papper i utkatalogen, och lärarens egen
+# «egen-163-06.png» läses tillbaka till canvas (/api/exams/{id}/egna), där
+# lagret ritas en gång till ovanpå.
+_LAGERFIL = re.compile(r"^lager-(\d+)-(\d+)\.(png|jpg)$")
+
+
+def bildlager(lager) -> dict[int, list]:
+    """Dokumentets `bildlager` per uppgiftsnummer. Samma sil som
+    ``egna_bilder``: bara «uppgN» med en icke-tom lista."""
+    if not isinstance(lager, dict):
+        return {}
+    ut: dict[int, list] = {}
+    for nyckel, lista in lager.items():
+        m = _UPPGIFTSNYCKEL.match(str(nyckel))
+        if m and isinstance(lista, list) and lista:
+            ut[int(m.group(1))] = lista
+    return ut
+
+
+def lager_namn(exam_id: int, nr: int, ursprung: str) -> str:
+    """JPEG om bilden var en JPEG (plåten), annars PNG."""
+    ext = "jpg" if Path(ursprung).suffix.lower() in (".jpg", ".jpeg") else "png"
+    return f"lager-{int(exam_id)}-{int(nr):02d}.{ext}"
+
+
+def rita_bildlager(egna: dict[int, str], lager: dict[int, list],
+                   ut_dir: Path, exam_id: int) -> dict[int, str]:
+    """Bildindexet med lagret inritat där uppgiften har både bild och lager.
+
+    Provets gamla lagerfiler tas bort först. Ett lager läraren tagit bort
+    ska inte leva kvar på disk och plockas upp av ett omtryck
+    (``lagerfiler``). En bild som inte går att rita på trycks utan lager:
+    hellre en bild utan pil än ett godkännande som faller."""
+    from app import bildlager_rita
+    ut_dir = Path(ut_dir)
+    if ut_dir.is_dir():
+        for fil in ut_dir.glob(f"lager-{int(exam_id)}-*"):
+            m = _LAGERFIL.match(fil.name)
+            if m and int(m.group(1)) == int(exam_id):
+                fil.unlink(missing_ok=True)
+    ut = dict(egna)
+    for nr, lista in sorted(lager.items()):
+        namn = egna.get(nr)
+        if not namn:
+            continue
+        mal = lager_namn(exam_id, nr, namn)
+        if bildlager_rita.rita_fil(ut_dir / namn, ut_dir / mal, lista):
+            ut[nr] = mal
+    return ut
+
+
+def lagerfiler(ut_dir: Path, exam_id: int) -> dict[int, str]:
+    """Provets inritade bilder, nummer → filnamn, för ett omtryck utan
+    klient. Godkännandet tar bort de gamla, så det som ligger här är det
+    senaste godkännandets."""
+    ut: dict[int, str] = {}
+    if not Path(ut_dir).is_dir():
+        return ut
+    for fil in sorted(Path(ut_dir).glob(f"lager-{int(exam_id)}-*")):
+        m = _LAGERFIL.match(fil.name)
+        if m and int(m.group(1)) == int(exam_id):
+            ut[int(m.group(2))] = fil.name
+    return ut
+
+
 def bladbilder(blad, nyckel: str) -> list[str]:
     """Bladbilderna klienten skickade med godkännandet, ett arkläge i taget.
 

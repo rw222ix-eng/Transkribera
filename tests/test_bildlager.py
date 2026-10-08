@@ -134,3 +134,117 @@ def test_kommandoraden_validerar(tmp_path, capsys):
     f.write_text(json.dumps([{"typ": "pil"}]), encoding="utf-8")
     assert bl.main(["validera", str(f)]) == 1
     assert "saknar fran" in capsys.readouterr().out
+
+
+# ── Provets PDF: lagret ritat i bilden (app/bildlager_rita.py) ─────────────
+# Rickard 2026-10-08, prov 163. Provet sätts i LaTeX och ser inte skärmens
+# lager, så godkännandet ritar in det i en kopia av bilden.
+
+GRA = (128, 128, 128)
+
+
+def _gra(bredd=800, hojd=450):
+    from PIL import Image
+    return Image.new("RGB", (bredd, hojd), GRA)
+
+
+def _andrat(fore, efter):
+    from PIL import ImageChops
+    return ImageChops.difference(fore.convert("RGB"), efter.convert("RGB")).getbbox()
+
+
+def test_pilen_andrar_bilden_dar_den_gar_och_ingen_annanstans():
+    from app import bildlager_rita as br
+    bild = _gra()
+    ut = br.rita(bild, [{"typ": "pil", "fran": [0.2, 0.5], "till": [0.8, 0.5]}])
+    assert ut.convert("RGB").getpixel((400, 225)) != GRA
+    x0, y0, x1, y1 = _andrat(bild, ut)
+    # Pilen går från x 160 till 640 på höjden 225. Strecket, spetsen och den
+    # mjuka skuggan får breda ut sig några tiotal pixlar, inte mer.
+    assert 120 < x0 < 160 and 640 < x1 < 680, (x0, x1)
+    assert 180 < y0 < 225 < y1 < 270, (y0, y1)
+    # Originalet rörs inte: kopian är den som ritas på.
+    assert bild.getpixel((400, 225)) == GRA
+
+
+def test_tomt_eller_trasigt_lager_lamnar_bilden_orord():
+    from app import bildlager_rita as br
+    bild = _gra()
+    for lager in (None, [], "pil", [{"typ": "pilen", "fran": [0, 0], "till": [1, 1]}],
+                  [{"typ": "pil", "fran": [0, 0]}], [7, None],
+                  [{"typ": "ring", "mitt": [0.5, 0.5], "r": True}]):
+        assert br.rita(bild, lager) is bild, lager
+
+
+def test_vinkelbagen_ligger_mellan_stralarna():
+    """Hörnet i (200, 400) på en 800 × 450-bild, strålarna åt höger och
+    snett uppåt höger (45°). Bågen med radien 0,1 · 800 = 80 px ska gå
+    genom bisektrisen och inte på andra sidan hörnet."""
+    import math
+    from app import bildlager_rita as br
+    bild = _gra()
+    ut = br.rita(bild, [{"typ": "vinkel", "mitt": [0.25, 400 / 450],
+                         "fran": [0.75, 400 / 450], "till": [0.5, 150 / 450],
+                         "r": 0.1}]).convert("RGB")
+    v = math.radians(22.5)
+    pa_bagen = (round(200 + 80 * math.cos(v)), round(400 - 80 * math.sin(v)))
+    assert ut.getpixel(pa_bagen) != GRA
+    x0, y0, x1, y1 = _andrat(bild, ut)
+    assert x0 > 180, "bågen gick åt vänster om hörnet, den stora vinkeln"
+    assert y1 < 420
+
+
+def test_texten_ritas_och_matematiken_blir_tecken():
+    from app import bildlager_rita as br
+    assert br.klartext("$\\tfrac{1}{4}$ m") == "1/4 m"
+    assert br.klartext("$32^\\circ$") == "32°"
+    assert br.klartext("$0{,}30$ m") == "0,30 m"
+    assert br.klartext("vinkeln $v$") == "vinkeln v"
+    bild = _gra()
+    ut = br.rita(bild, [{"typ": "etikett", "plats": [0.5, 0.5], "text": "höga kanten"}])
+    x0, y0, x1, y1 = _andrat(bild, ut)
+    assert x0 < 400 < x1 and y0 < 225 < y1
+
+
+def test_alla_bladets_typer_ritas():
+    from app import bildlager_rita as br
+    bild = _gra()
+    ut = br.rita(bild, TUNNEL + [{"typ": "vinkel", "mitt": [0.3, 0.7],
+                                   "fran": [0.6, 0.7], "till": [0.5, 0.5],
+                                   "text": "$v$"}])
+    assert _andrat(bild, ut) is not None
+
+
+def test_vinkeln_ar_en_giltig_typ():
+    vinkel = {"typ": "vinkel", "mitt": [0.3, 0.7], "fran": [0.6, 0.7],
+              "till": [0.5, 0.5], "text": "$v$"}
+    assert bl.validera([vinkel]) == []
+    assert bl.validera([dict(vinkel, r=0.1)]) == []
+    assert any("r ska vara" in f for f in bl.validera([dict(vinkel, r=0.9)]))
+    assert any("hörnet" in f for f in bl.validera([dict(vinkel, fran=[0.3, 0.705])]))
+    assert any("saknar mitt" in f for f in bl.validera(
+        [{k: v for k, v in vinkel.items() if k != "mitt"}]))
+
+
+def test_lagerfilerna_ersatts_och_stadas(tmp_path):
+    """tryck.rita_bildlager skriver kopian med provets id i namnet, byter den
+    mot originalet i bildindexet och tar bort förra godkännandets kopior.
+    Omtrycket (lagerfiler) hittar bara provets egna."""
+    from app import tryck
+    _gra().save(tmp_path / "egen-163-06.png")
+    _gra().save(tmp_path / "plat-a-19-hage.jpg")
+    (tmp_path / "lager-163-04.png").write_bytes(b"gammal")
+    (tmp_path / "lager-99-06.png").write_bytes(b"annat prov")
+    pil = [{"typ": "pil", "fran": [0.1, 0.5], "till": [0.9, 0.5]}]
+    karta = tryck.rita_bildlager(
+        {6: "egen-163-06.png", 7: "plat-a-19-hage.jpg", 8: "egen-163-08.png"},
+        tryck.bildlager({"uppg6": pil, "uppg7": pil, "uppg8": pil, "rubrik": pil}),
+        tmp_path, 163)
+    # Plåten är en JPEG och kopian också. Uppgift 8:s fil saknas på disk och
+    # trycks som förut i stället för att fälla godkännandet.
+    assert karta == {6: "lager-163-06.png", 7: "lager-163-07.jpg",
+                     8: "egen-163-08.png"}
+    assert not (tmp_path / "lager-163-04.png").exists()
+    assert (tmp_path / "lager-99-06.png").read_bytes() == b"annat prov"
+    assert tryck.lagerfiler(tmp_path, 163) == {6: "lager-163-06.png",
+                                                7: "lager-163-07.jpg"}

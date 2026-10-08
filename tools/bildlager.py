@@ -33,6 +33,16 @@ Lagret, koordinater relativt bilden (0 till 1, origo uppe till vänster):
      {"typ": "pil", "fran": [0.12, 0.5], "till": [0.38, 0.42],
       "text": "taket $-1$ m"},
      {"typ": "matt", "fran": [0.6, 0.42], "till": [0.6, 0.86], "text": "? m"}]
+
+Vinkelbågen (Rickard 2026-10-08, vinkeln v på friggeboden i prov 163) sitter
+i hörnet `mitt` mellan strålarna mot `fran` och `till`, alltid den mindre
+vinkeln. `r` är radien i andel av bildbredden (standard 0,06):
+    {"typ": "vinkel", "mitt": [0.3, 0.7], "fran": [0.6, 0.7],
+     "till": [0.5, 0.5], "text": "$v$"}
+
+Provets PDF sätts i LaTeX och inte av skärmen. Där ritas lagret in i bilden
+vid godkännandet (app/bildlager_rita.py, tryck.rita_bildlager), i
+provbildernas handstil. Verktyget fungerar alltså lika på prov som på blad.
 """
 from __future__ import annotations
 
@@ -67,6 +77,7 @@ TYPER = {
     "etikett": ({"plats", "text"}, set()),
     "linje": ({"fran", "till"}, {"text", "streckad"}),
     "ring": ({"mitt", "r"}, {"text"}),
+    "vinkel": ({"mitt", "fran", "till"}, {"text", "r"}),
 }
 GEMENSAMMA = {"typ", "sida", "textplats"}
 PUNKTER = {"fran", "till", "plats", "mitt", "textplats"}
@@ -135,6 +146,14 @@ def validera(lista) -> list[str]:
             fel.append(f"{var} ({typ}): textvid ska vara svans eller spets")
         if "streckad" in e and not isinstance(e["streckad"], bool):
             fel.append(f"{var} ({typ}): streckad ska vara true eller false")
+        if typ == "vinkel":
+            r = e.get("r", 0.06)
+            if not (isinstance(r, (int, float)) and not isinstance(r, bool) and 0 < r <= 0.5):
+                fel.append(f"{var} (vinkel): r ska vara ett tal i (0, 0,5], andel av bildbredden")
+            m = e.get("mitt")
+            for falt in ("fran", "till"):
+                if _punkt(m) and _punkt(e.get(falt)) and math.dist(m, e[falt]) < 0.02:
+                    fel.append(f"{var} (vinkel): {falt} ligger nästan på hörnet")
         if typ == "ring":
             r = e.get("r")
             if not (isinstance(r, (int, float)) and not isinstance(r, bool) and 0 < r <= 0.5):

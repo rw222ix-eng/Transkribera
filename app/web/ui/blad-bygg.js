@@ -825,6 +825,10 @@ window.BladBygg = (() => {
        {typ:'etikett', plats:[x,y], text}            text i vit ruta med kant
        {typ:'linje', fran:[x,y], till:[x,y], streckad?, text?}
        {typ:'ring', mitt:[x,y], r, text?}            r i andel av bildbredden
+       {typ:'vinkel', mitt:[x,y], fran:[x,y], till:[x,y], r?, text?}
+                                 båge i hörnet `mitt`, alltid den mindre
+                                 vinkeln; r som ringens, standard 0,06
+                                 (Rickard 2026-10-08, vinkeln v i prov 163)
      Alla med text tar också `sida` (var texten ligger mot sin punkt: mitt,
      upp, ner, vanster, hoger, upp-hoger, upp-vanster, ner-hoger, ner-vanster)
      och `textplats` [x,y] som flyttar texten. Matematik skrivs «$-4$ m» och
@@ -937,6 +941,29 @@ window.BladBygg = (() => {
         lapp(e.text, egen || [m[0], Math.max(0, m[1] - rr / H)], e.sida || 'upp');
       } else if (e.typ === 'etikett') {
         lapp(e.text, egen || blPunkt(e.plats), e.sida || 'mitt', true);
+      } else if (e.typ === 'vinkel') {
+        /* Bågen går den kortaste vägen mellan strålarna. Etiketten sitter på
+           bisektrisen, längre ut ju spetsigare vinkeln är, och högst tre
+           radier bort (samma regel som provets PDF, app/bildlager_rita.py). */
+        const m = blPunkt(e.mitt);
+        if (!m || !fran || !till) return;
+        const c = xy(m), a = xy(fran), b = xy(till);
+        const r = Number(e.r);
+        const rr = (r > 0 && r <= 0.5 ? r : 0.06) * W;
+        const ta = Math.atan2(a[1] - c[1], a[0] - c[0]);
+        let d = Math.atan2(b[1] - c[1], b[0] - c[0]) - ta;
+        while (d > Math.PI) d -= 2 * Math.PI;
+        while (d < -Math.PI) d += 2 * Math.PI;
+        if (Math.hypot(a[0] - c[0], a[1] - c[1]) < 1 || Math.hypot(b[0] - c[0], b[1] - c[1]) < 1) return;
+        const p1 = [c[0] + rr * Math.cos(ta), c[1] + rr * Math.sin(ta)];
+        const p2 = [c[0] + rr * Math.cos(ta + d), c[1] + rr * Math.sin(ta + d)];
+        const dd = `d="M${blTal(p1[0])} ${blTal(p1[1])} A${blTal(rr)} ${blTal(rr)} 0 0 ${d > 0 ? 1 : 0} ${blTal(p2[0])} ${blTal(p2[1])}" fill="none"`;
+        halo.push(`<path ${dd} stroke="#fff" stroke-width="6" vector-effect="non-scaling-stroke"/>`);
+        black.push(`<path ${dd} stroke="#000" stroke-width="2" vector-effect="non-scaling-stroke"/>`);
+        const mid = ta + d / 2;
+        const avst = Math.min(Math.max(rr + 30, 18 / Math.sin(Math.max(Math.abs(d) / 2, 0.02)) + 12), rr * 3);
+        lapp(e.text, egen || [Math.min(1, Math.max(0, (c[0] + avst * Math.cos(mid)) / W)),
+          Math.min(1, Math.max(0, (c[1] + avst * Math.sin(mid)) / H))], e.sida || 'mitt');
       }
     });
     if (!halo.length && !lappar.length) return '';
