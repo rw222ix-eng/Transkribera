@@ -798,6 +798,58 @@ INSTRUCTION = (
     "bara «dubbla det gröna rummets».\n"
     "  • Skriv aldrig bara «leden». Säg vilka: «vänsterledet (x + 5)² och "
     "högerledet x² + 25».\n"
+    # Rickards granskning av prov 163 (TE26A kap 6), 2026-10-08, tre varv:
+    # «där behöver vi vara noga med att det här handlar om vektorer. Annars
+    # kanske eleverna tänker på att det är koordinater», «vara tydlig och
+    # konsekvent att när man skriver vektorer så namnger man dem». Och om
+    # kajaken: «beräkna kajakens fart i förhållande till stranden kommer bli
+    # jättesvårt … Då är det bättre att skriva typ beräkna den resulterande
+    # vektorn». Vakten är vektornamnvakt.
+    "  • VEKTORER HAR ALLTID ETT NAMN MED PIL: «Vektorerna är "
+    "$\\vec{v} = (-5,\\ 7)$ och $\\vec{u} = (8,\\ -3)$. Beräkna "
+    "$\\vec{v} - \\vec{u}$.», aldrig «Beräkna $(-5,\\ 7) - (8,\\ -3)$.» eller "
+    "«Vektorn $(6,\\ -8)$», som eleven läser som punkter. Samma namn genom "
+    "hela uppgiften. En summa av vektorer heter «den resulterande vektorn»: "
+    "«Beräkna storleken av den resulterande vektorn, alltså summan av Hugos "
+    "hastighet och strömmens hastighet.», aldrig «kajakens fart i "
+    "förhållande till stranden».\n"
+    # Samma granskning: «Vi ska utgå från det centrala innehållet först och
+    # främst … det handlar inte om att de ska kunna skillnaden mellan fart
+    # och hastighet», intervall «är ju inte med där i det här kapitlet», och
+    # en deluppgift om sträcka och tid «har ju bara med hastighet att göra».
+    # Vakten för svarsformen är intervallvakt.
+    "  • DET CENTRALA INNEHÅLLET STYR, INTE BOKENS SIDOSPÅR. Pröva begreppet "
+    "som kursplanen säger det: en vektor har en storlek och en riktning och "
+    "kan till exempel vara en kraft eller en hastighet. Fråga inte efter "
+    "skillnaden mellan fart och hastighet, och låt ingen deluppgift pröva "
+    "något annat än momentet (sträcka och tid i en vektoruppgift). Kräv "
+    "inget svarsformat från ett annat kapitel än provets: «Svara med ett "
+    "intervall» hör inte hemma på ett prov om vektorer.\n"
+    # Samma granskning: «sluttar är svårt för eleverna», «vågrät kan vara
+    # svårt», «Taket lutar vinkeln v mot vågrätt … askonstigt ställd».
+    # Orden står i språkvaktens lista (SVARA_ORD_PROV).
+    "  • ORD SOM ELEVEN HAR: skriv inte «vågrät», «lodrät», «sluttar», «i "
+    "vågrät led» eller «i förhållande till». Skriv «lutar», «mätt längs "
+    "marken», «för varje 100 m bort», och säg åt vilket håll något rör sig "
+    "(«åt höger i bilden»).\n"
+    # Samma granskning: «Vadå? Taket lutar och vinkeln mellan taket och
+    # marken … Då tror eleverna att från den låga kanten ner till marken, där
+    # är vinkeln», «Den här är svår att veta vad som menas med övre ände och
+    # nedre ände», «rutschkanan är inte helt spikrak».
+    "  • EN VINKEL, EN KANT ELLER EN ÄNDE SOM UPPGIFTEN NÄMNER BESKRIVS FRÅN "
+    "PUNKT TILL PUNKT OCH MED BILDEN: «Från den låga kanten upp till den höga "
+    "kanten lutar taket vinkeln $v$, se bilden.», aldrig «vinkeln mellan "
+    "taket och marken» när taket inte når marken. Det som räknas som en "
+    "sträcka är rakt i texten («Rutschkanan på bilden är rak och 2,4 m "
+    "lång.»).\n"
+    # Samma granskning, uppgift 13 b) i version 754 (fem meningar): «Det är
+    # så jävla mycket text där och det är så mycket eleverna ska göra.» Tre
+    # meningar räckte. Vakten är deluppgiftsvakt (DELUPPGIFT_ORD_TAK).
+    "  • En deluppgift är kort: högst tre meningar och en prestation. Står "
+    "situationen redan i stammen och i bilden, berätta inte varje steg: "
+    "«Hugo vill nu komma i land precis mittemot startplatsen. Bestäm "
+    "vinkeln mellan stranden och den riktning han ska styra. Rita en figur "
+    "med vektorerna.»\n"
     "  • Ett påstående som kan vara fel står som ett PÅSTÅENDE: «Hugo påstår "
     "att (x + 5)² = x² + 25.» Frågan är «Avgör med en beräkning om Hugo har "
     "rätt.» Skriv "
@@ -4874,7 +4926,106 @@ SVARA_ORD_PROV = {
     "erhåller": "skriv «får»",
     "medelst": "skriv «med»",
     "påföljande": "skriv «nästa»",
+    # Rickards granskning av prov 163, 2026-10-08 (se läsreglerna i
+    # INSTRUCTION): «sluttar», «vågrät», «i förhållande till stranden».
+    "vågrät": "skriv «mätt längs marken» eller «rakt bort»",
+    "vågrätt": "skriv «mätt längs marken» eller «rakt bort»",
+    "vågräta": "skriv «mätt längs marken» eller «rakt bort»",
+    "lodrät": "skriv «rakt upp» eller «rakt ner»",
+    "lodrätt": "skriv «rakt upp» eller «rakt ner»",
+    "lodräta": "skriv «rakt upp» eller «rakt ner»",
+    "sluttar": "skriv «lutar»",
+    "i förhållande till": "säg vad som räknas ut med enkla ord, till exempel "
+                          "«storleken av den resulterande vektorn»",
 }
+
+# ── VEKTORER MED NAMN (Rickard 2026-10-08, prov 163 uppgift 3 och 4) ──────
+# «Beräkna $(-5,\ 7) - (8,\ -3)$» och «Vektorn $(6,\ -8)$ är given» läste han
+# som koordinater: en vektor ska heta något med pil, $\vec{u} = (6,\ -8)$, och
+# räknas med namnen. Två koordinatpar med räknetecken emellan, eller ordet
+# vektor direkt före ett par, är det som går att räkna.
+_KOORDPAR = r"\(\s*-?[\d{},.]+\s*,\\?\s*-?[\d{},.]+\s*\)"
+_PAR_OP_PAR_RE = re.compile(_KOORDPAR + r"\s*[-+]\s*(?:[a-z]\s*)?" + _KOORDPAR)
+_VEKTOR_PAR_RE = re.compile(r"(?i)\bvektor(?:n|er|erna)?\s+\$\s*" + _KOORDPAR)
+
+
+def vektornamnvakt(exam: dict) -> list[dict]:
+    """Vektorer utan namn i uppgiftens text (inte i facit)."""
+    ut: list[dict] = []
+    for i, u in enumerate(exam.get("uppgifter") or [], 1):
+        if not isinstance(u, dict):
+            continue
+        texter = [str(u.get("text") or "")] + [
+            str(d.get("text") or "") for d in (u.get("deluppgifter") or [])
+            if isinstance(d, dict)]
+        for t in texter:
+            m = _PAR_OP_PAR_RE.search(t) or _VEKTOR_PAR_RE.search(t)
+            if m:
+                ut.append(_err(
+                    f"uppgift {i}", "begriplighet",
+                    f"uppgift {i} skriver en vektor utan namn («{m.group(0)}»): "
+                    f"{SPRAKVAKTENS_MARKE}. Ge varje vektor ett namn med pil, "
+                    "«$\\vec{u} = (6,\\ -8)$», och räkna med namnen, "
+                    "«$\\vec{u} + k\\vec{w}$». Annars läser eleven "
+                    "koordinaterna som punkter." + BEHALL_PLANEN))
+                break
+    return ut
+
+
+# ── SVARSFORM UR ETT ANNAT KAPITEL (samma granskning, uppgift 5) ──────────
+# «Svara med ett intervall» på ett prov om vektorer: intervall är kapitel 2.
+# Provets delmoment är ramen; nämner ingen av dem intervall eller olikheter
+# hör svarsformen inte till provet. Utan delmoment (ett blad utan prov)
+# finns ingen ram att mäta mot, och vakten tiger.
+_INTERVALL_RE = re.compile(r"(?i)(?<![\wåäö])intervall(?:et|en)?(?![\wåäö])")
+_INTERVALL_RAM_RE = re.compile(r"(?i)intervall|olikhet")
+
+
+def intervallvakt(exam: dict, ram: dict | None = None) -> list[dict]:
+    ramen = [str(u.get(k) or "") for u in ((ram or exam).get("uppgifter") or [])
+             if isinstance(u, dict) for k in ("delmoment", "avsnitt")]
+    if not any(r.strip() for r in ramen) or any(_INTERVALL_RAM_RE.search(r) for r in ramen):
+        return []
+    ut: list[dict] = []
+    for i, u in enumerate(exam.get("uppgifter") or [], 1):
+        if not isinstance(u, dict):
+            continue
+        texter = [str(u.get("text") or "")] + [
+            str(d.get("text") or "") for d in (u.get("deluppgifter") or [])
+            if isinstance(d, dict)]
+        if any(_INTERVALL_RE.search(t) for t in texter):
+            ut.append(_err(
+                f"uppgift {i}", "begriplighet",
+                f"uppgift {i} kräver ett intervall, men intervall hör inte till "
+                "provets kapitel. Låt uppgiften pröva provets eget innehåll och "
+                "fråga efter ett värde eller alla värden i stället för ett "
+                "intervall." + BEHALL_PLANEN))
+    return ut
+
+
+# ── KORTA DELUPPGIFTER PÅ PROVET (samma granskning, uppgift 13 b) ─────────
+# Version 754 hade fem meningar och 45 ord i 13 b): «så jävla mycket text».
+# Tre meningar och 21 ord blev godkänt.
+DELUPPGIFT_ORD_TAK = 30
+
+
+def deluppgiftsvakt(exam: dict) -> list[dict]:
+    ut: list[dict] = []
+    for i, u in enumerate(exam.get("uppgifter") or [], 1):
+        if not isinstance(u, dict):
+            continue
+        for j, d in enumerate(d for d in (u.get("deluppgifter") or [])
+                              if isinstance(d, dict)):
+            ord_ = len(_BOKSTAVSORD_RE.findall(_rentext(d.get("text") or "")))
+            if ord_ > DELUPPGIFT_ORD_TAK:
+                nr = f"{i}{chr(ord('a') + j)}"
+                ut.append(_err(
+                    f"uppgift {nr}", "begriplighet",
+                    f"uppgift {nr} har {ord_} ord (taket för en deluppgift är "
+                    f"{DELUPPGIFT_ORD_TAK}): {SPRAKVAKTENS_MARKE}. Stryk det "
+                    "som redan står i stammen eller syns i bilden, och låt "
+                    "deluppgiften säga EN sak eleven ska göra." + BEHALL_PLANEN))
+    return ut
 
 
 def sprakvakt(exam: dict) -> list[dict]:
@@ -4924,6 +5075,8 @@ def sprakvakt(exam: dict) -> list[dict]:
         for ord_, rad in SVARA_ORD_PROV.items():
             if re.search(rf"(?i)(?<![\wåäö]){ord_}(?![\wåäö])", ren):
                 fynd(f"skriver «{ord_}»: {SPRAKVAKTENS_MARKE}. {rad}.")
+    # Vektorer med namn (Rickard 2026-10-08), på provet och på bladet.
+    ut += vektornamnvakt(exam)
     return ut
 
 
@@ -4943,6 +5096,8 @@ def begriplighetssignaler(exam: dict, profil: str = "gruppuppgift") -> list[dict
     RÄKNA räknas här."""
     if profil == "prov":
         ut: list[dict] = sprakvakt(exam)
+        # Svarsform ur provets kapitel och korta deluppgifter (2026-10-08).
+        ut += intervallvakt(exam) + deluppgiftsvakt(exam)
         for e in domarenheter(exam):
             kort = e["kort"]
             text = f"{kort.get('stam', '')} {kort.get('text', '')}".strip()
@@ -11332,6 +11487,8 @@ def ovningsvakter(exam: dict, *, prov: dict | None = None,
     fel += bladets_npvakter(exam)
     # Provets språkvakt: bladet ska vara lika lätt att läsa som provet.
     fel += sprakvakt(exam)
+    # Och inga svarsformer utanför provets kapitel (Rickard 2026-10-08).
+    fel += intervallvakt(exam, prov)
     # Och med ord eleverna har (lärarens dom 2026-10-02).
     fel += facktermsvakt(exam)
     # Och lika kort (Rickard 2026-09-26).
