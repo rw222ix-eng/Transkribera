@@ -825,6 +825,32 @@ INSTRUCTION = (
     "något annat än momentet (sträcka och tid i en vektoruppgift). Kräv "
     "inget svarsformat från ett annat kapitel än provets: «Svara med ett "
     "intervall» hör inte hemma på ett prov om vektorer.\n"
+    # Rickards granskning av A-bladet inför prov 163 (exam 169 uppgift 9),
+    # 2026-10-08, fyra varv: båtuppgiften var «i princip identisk» med
+    # C-bladets 9 b) och bara «dåligt formulerad», och «beräkna båtens fart
+    # rakt över ån» läses som båtens egen fart. Två försök att göra den till
+    # A föll: en gräns («olikheter ingår inte») och båtens fart delad i en
+    # del åt vänster och en framåt («man kan inte bara snacka om att han kör
+    # vänster»). Det som höll var koordinatformen. Vakten för frasen står i
+    # SVARA_ORD_PROV.
+    "  • A-NIVÅN ÄR EN INSIKT, ALDRIG EN SVÅRARE TEXT. En uppgift som löses "
+    "med samma metod som en C-uppgift i samma situation är en C-uppgift, hur "
+    "krånglig formuleringen än är. A-poängen kommer av att eleven själv "
+    "översätter ett villkor ur situationen till matematik («pekar rakt mot "
+    "andra stranden» blir $x$-koordinaten 0), ställer upp ett uttryck i en "
+    "variabel eller kombinerar två villkor som texten inte kopplar ihop.\n"
+    "  • BARA VERKTYG KLASSEN HAR. Inga olikheter och inga gränsvärden, och "
+    "dela aldrig en vektor i delar längs två riktningar («båtens del åt "
+    "vänster»): eleven ser en pil som pekar åt ett håll. Det som finns är "
+    "vektorer i koordinatform, addition och subtraktion, längden med "
+    "Pythagoras sats, och sinus, cosinus, tangens och arcus i rätvinkliga "
+    "trianglar. Behövs en riktning i två led, ge ett koordinatsystem i texten "
+    "(«$x$-axeln åt höger längs strömmen och $y$-axeln rakt mot andra "
+    "stranden») och låt vektorerna ha koordinater.\n"
+    "  • SÄG VILKEN VEKTOR SOM MENAS. Skriv aldrig «båtens fart rakt över "
+    "ån»: eleven läser det som båtens egen fart. Skriv «den resulterande "
+    "vektorn $\\vec{b} + \\vec{s}$ pekar rakt mot andra stranden» och fråga "
+    "efter en namngiven vektor eller dess längd.\n"
     # Samma granskning: «sluttar är svårt för eleverna», «vågrät kan vara
     # svårt», «Taket lutar vinkeln v mot vågrätt … askonstigt ställd».
     # Orden står i språkvaktens lista (SVARA_ORD_PROV).
@@ -4937,6 +4963,11 @@ SVARA_ORD_PROV = {
     "sluttar": "skriv «lutar»",
     "i förhållande till": "säg vad som räknas ut med enkla ord, till exempel "
                           "«storleken av den resulterande vektorn»",
+    # Samma kväll, A-bladets uppgift 9: «beräkna båtens fart rakt över ån»
+    # läses som båtens egen fart (INSTRUCTION, «Säg vilken vektor som menas»).
+    "fart rakt över": "säg vilken vektor som menas: «den resulterande vektorn "
+                      "$\\vec{b} + \\vec{s}$ pekar rakt mot andra stranden», och "
+                      "fråga efter en namngiven vektor eller dess längd",
 }
 
 # ── VEKTORER MED NAMN (Rickard 2026-10-08, prov 163 uppgift 3 och 4) ──────

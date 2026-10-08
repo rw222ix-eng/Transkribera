@@ -84,3 +84,15 @@ def test_strack_och_tid_i_vektoruppgift():
                                      "losning": r"$\sqrt{0{,}5^2 + 1{,}2^2} = 1{,}3$", "poang": [0, 1, 0]}]})
     assert _koder(g.tidsvektorvakt(ballong)) == ["uppgift 1"]
     assert g.tidsvektorvakt(kajak) == []
+
+
+def test_a_bladets_batuppgift_8_oktober():
+    """A-bladet inför prov 163, uppgift 9 (exam 169 version 762), ordagrant."""
+    prov = _prov({"text": "Liam ska köra en motorbåt rakt över en å.",
+                  "deluppgifter": [{"text": "Beräkna båtens fart rakt över ån.\nSvara i hela m/min.",
+                                    "poang": [0, 0, 1]}]})
+    ny = _prov({"text": "Liam styr så att den resulterande vektorn $\vec{b} + \vec{s}$ pekar rakt mot andra stranden."})
+    assert "«fart rakt över»" in " ".join(f["message"] for f in g.sprakvakt(prov))
+    assert not any("fart rakt över" in f["message"] for f in g.sprakvakt(ny))
+    for rad in ("A-NIVÅN ÄR EN INSIKT", "BARA VERKTYG KLASSEN HAR", "SÄG VILKEN VEKTOR SOM MENAS"):
+        assert rad in g.INSTRUCTION
