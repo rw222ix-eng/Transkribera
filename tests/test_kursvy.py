@@ -162,3 +162,34 @@ def test_kompensationen_ar_bonus_utanfor_maxen(conn):
     vy = kursvy.bygg_vy(conn, "TE26A")
     assert vy["kursmax"] == [4, 3, 1]
     assert _elev(vy, "Ada")["summa"] == [4, 4, 1]
+
+
+# --------------------------------------------- delarna, pilen, samlingen --
+
+GR = {"betyg": ["E", "C", "A"], "E": {"minst": 6}, "C": {"minst": 11}, "A": {"minst": 17}}
+
+
+@pytest.mark.parametrize("betyg,total,ut", [
+    ("C", 14, "C → A"), ("C", 13, "C"), ("E", 10, "E → C"),
+    ("F", 5, "F → E"), ("F", 2, "F"), ("A", 20, "A")])
+def test_pilen_ar_hogst_tre_poang_fran_nasta_betyg(betyg, total, ut):
+    assert kursvy.pilbetyg(betyg, total, GR) == ut
+
+
+def test_del_a_och_b_ar_provets_avsnitt_och_varje_deluppgift_syns(conn):
+    gid = db.get_or_create_group(conn, "TE26A")
+    elever = {e["namn"]: e["id"] for e in db.save_elever(conn, gid, ["Ada"])}
+    uppg = [{"nr": 1, "t": "Beräkna.", "avd": "B", "peca": [2, 0, 0], "formaga": "P",
+             "del": ["a", "b"], "delpeca": [[1, 0, 0], [1, 0, 0]]},
+            {"nr": 2, "t": "Visa.", "avd": "C", "peca": [0, 1, 1], "formaga": "R"}]
+    _prov(conn, "2026-10-07", uppg, elever,
+          {"Ada": {"1a": [1, 0, 0], "1b": [0, 0, 0], "2": [0, 1, 0]}})
+    vy = kursvy.bygg_vy(conn, "TE26A")
+    assert vy["prov"][0]["delmax"] == {"A": 2, "B": 2}
+    rub, ada = kursvy.till_rader(vy)
+    k = "Prov 2026-10-07 (2026-10-07)"
+    assert ada[rub.index(f"{k} del A /2")] == 1 and ada[rub.index(f"{k} del B /2")] == 1
+    assert ada[rub.index(f"{k} uppg 1b E1")] == 0 and ada[rub.index(f"{k} uppg 2 C1A1")] == 1
+    sam = kursvy.samling(conn)
+    assert sam[0] == kursvy.SAMLING_RUBRIK
+    assert sam[1][:2] == ["TE26A", "Ada"] and sam[1][4:12] == [1, 2, 1, 2, "", 2, 4, "E → C"]

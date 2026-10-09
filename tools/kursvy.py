@@ -13,6 +13,12 @@ som räknas i nivåsumman men inte i förmågorna — den säger inget om eleven
 
     python -m tools.kursvy TE26A                 # tabell i terminalen
     python -m tools.kursvy TE26A --csv ut.csv    # för Google-arket
+    python -m tools.kursvy --alla --csv ut.csv   # samlingsarket, alla klasser
+
+KLASSARKET bär per prov del A, del B, totalt och provbetyget med pil, och
+elevens poäng på varje deluppgift (läraren vill se var poängen satt inför
+betygssamtalet). SAMLINGSARKET («Provresultat alla klasser», läraren
+2026-10-02) är en rad per elev och skrivet papper, alla klasser.
 
 OMPROV: ett omprov är ett eget papper (TE26A:s omprov på kapitel 1 är exam
 132, originalet exam 81) men samma moment i kursen. Pappren grupperas därför
@@ -27,6 +33,7 @@ from __future__ import annotations
 import argparse
 import csv
 import math
+import re
 import sys
 from fractions import Fraction
 from pathlib import Path
@@ -54,6 +61,51 @@ SLUTKRAV = (("E", KRAV_DEFAULT["e_andel"], None, None),
             ("B", KRAV_DEFAULT["b_andel"], 2, Fraction(1, 3)),
             ("A", KRAV_DEFAULT["a_andel"], 2, Fraction(1, 2)))
 FORMAGOR_B_A = 2
+
+# PILREGELN (läraren 2026-10-02): högst så här många poäng under nästa
+# provbetygs gräns ger «C → A», annars bara bokstaven. Gäller även F
+# («F → E»). Bara muntligt och i StudyBee, aldrig ett eget betyg.
+PIL_POANG = 3
+
+
+def pilbetyg(betyg: str, total: int, gr: dict) -> str:
+    """Provbetyget med pil mot nästa, om eleven ligger högst PIL_POANG under
+    dess gräns. Ordningen är gränsernas egen (`betyg`), annars E, C, A."""
+    ordning = [b for b in (gr.get("betyg") or ["E", "C", "A"]) if gr.get(b)]
+    if betyg == "F":
+        hogre = ordning
+    else:
+        hogre = ordning[ordning.index(betyg) + 1:] if betyg in ordning else []
+    if not hogre:
+        return betyg
+    nasta = hogre[0]
+    kvar = int(gr[nasta].get("minst") or 0) - total
+    return f"{betyg} → {nasta}" if 0 < kvar <= PIL_POANG else betyg
+
+
+def delprov(papper: dict, rader: list[dict]) -> dict[str, str]:
+    """Radnyckel → «A» eller «B». Provet trycker sina delar som avsnitt
+    (`avd` B = utan räknare, C = med), läraren kallar dem del A och del B:
+    första avsnittet är del A, nästa del B. Kompensationsraden hör till ingen
+    del."""
+    avd = {}
+    for i, u in enumerate(papper.get("uppgifter") or []):
+        if isinstance(u, dict):
+            avd[str(u.get("nr") or i + 1)] = str(u.get("avd") or "")
+    namn = {a: "AB"[min(j, 1)] for j, a in enumerate(dict.fromkeys(avd.values()))}
+    ut = {}
+    for r in rader:
+        if r.get("grupp") or r.get("kompensation"):
+            continue
+        m = re.match(r"\d+", str(r["nyckel"]))
+        ut[r["nyckel"]] = namn.get(avd.get(m.group(0) if m else ""), "A")
+    return ut
+
+
+def radnamn(r: dict) -> str:
+    """«6b A2», «10 C1A1»: deluppgiften och dess poäng per nivå."""
+    niv = "".join(f"{NIVA[i]}{n}" for i, n in enumerate(r.get("peca") or []) if n)
+    return f"{r['nyckel']} {niv}".strip()
 
 
 def slutbetyg(summa: list[int], maxt: list[int], formagor_a: dict[str, int]) -> tuple[str, str]:
@@ -94,8 +146,15 @@ def prov_for_klass(conn, klass: str) -> list[dict]:
         if str(papper.get("typ") or "").lower() != "prov":
             continue
         rader = rattning.bygg(papper.get("uppgifter"), papper.get("kompensation"))
+        delar = delprov(papper, rader)
+        delmax = {"A": 0, "B": 0}
+        for rad in rader:
+            if rad.get("nyckel") in delar:
+                delmax[delar[rad["nyckel"]]] += sum(int(x or 0) for x in rad.get("peca") or [])
         ut.append({
             "id": r["dokument_id"], "papper": papper, "rader": rader,
+            "delar": delar, "delmax": delmax,
+            "komp": any(rad.get("kompensation") for rad in rader),
             "granser": rattning.granser(rader, sparade=papper.get("granser"),
                                         kurs=papper.get("kurs") or ""),
             "resultat": db.get_elevresultat(conn, r["dokument_id"]),
@@ -158,8 +217,21 @@ def bygg_vy(conn, klass: str) -> dict:
                 continue
             s = rattning.elevsummor(p["rader"], varden)
             b = rattning.betyg(s, p["granser"]) if not s["kvar"] else "?"
+            per_rad, dels, k = {}, {"A": 0, "B": 0}, 0
+            for r in p["rader"]:
+                if r.get("grupp"):
+                    continue
+                trip = rattning._elevtripel(varden.get(r["nyckel"]), r.get("peca") or [0, 0, 0])
+                x = None if all(t is None for t in trip) else sum(t or 0 for t in trip)
+                if r.get("kompensation"):
+                    k = x or 0
+                    continue
+                per_rad[r["nyckel"]] = x
+                dels[p["delar"][r["nyckel"]]] += x or 0
             rad["prov"].append({"e": s["e"], "c": s["c"], "a": s["a"], "total": s["total"],
-                                "betyg": b, "kvar": s["kvar"], "raknas": False})
+                                "betyg": b, "kvar": s["kvar"], "raknas": False,
+                                "pil": b if b == "?" else pilbetyg(b, s["total"], p["granser"]),
+                                "del": dels, "k": k, "rader": per_rad})
         for m, ix in moment.items():
             gjorda = [i for i in ix if rad["prov"][i]]
             if not gjorda:
@@ -195,8 +267,11 @@ def till_rader(vy: dict) -> list[list]:
     rub = ["Elev"]
     for p in vy["prov"]:
         k = f"{p['titel']} ({p['datum']})"
+        rub += [f"{k} del A /{p['delmax']['A']}", f"{k} del B /{p['delmax']['B']}"]
+        rub += [f"{k} kompensation"] if p["komp"] else []
         rub += [f"{k} E/{p['max'][0]}", f"{k} C/{p['max'][1]}",
-                f"{k} A/{p['max'][2]}", f"{k} tot", f"{k} betyg"]
+                f"{k} A/{p['max'][2]}", f"{k} totalt /{sum(p['max'])}", f"{k} betyg"]
+        rub += [f"{k} uppg {radnamn(r)}" for r in p["rader"] if r.get("nyckel") in p["delar"]]
     rub += ["Kurs E", "E-andel", "Kurs C", "C-andel", "Kurs A", "A-andel",
             "C per förmåga", "A per förmåga", "Skrivna prov",
             "Slutbetyg (preliminärt)", "Till nästa betyg"]
@@ -206,12 +281,18 @@ def till_rader(vy: dict) -> list[list]:
             continue
         rad = [e["elev"]]
         for i, p in enumerate(e["prov"]):
+            prov = vy["prov"][i]
+            nycklar = [r["nyckel"] for r in prov["rader"] if r.get("nyckel") in prov["delar"]]
             if p is None:
-                annat = any(e["prov"][j] for j in vy["moment"][vy["prov"][i]["moment"]])
-                rad += ["", "", "", "", "" if annat else "skrev inte"]
+                annat = any(e["prov"][j] for j in vy["moment"][prov["moment"]])
+                rad += ([""] * (6 + prov["komp"]) + ["" if annat else "skrev inte"]
+                        + [""] * len(nycklar))
             else:
+                rad += [p["del"]["A"], p["del"]["B"]]
+                rad += [p["k"]] if prov["komp"] else []
                 rad += [p["e"], p["c"], p["a"], p["total"],
-                        p["betyg"] if p["raknas"] else f"{p['betyg']} (räknas ej)"]
+                        p["pil"] if p["raknas"] else f"{p['pil']} (räknas ej)"]
+                rad += ["" if p["rader"][n] is None else p["rader"][n] for n in nycklar]
         s, m = e["summa"], e["max"]
         fm = lambda d: ", ".join(f"{f} {n}" for f, n in sorted(d.items(), key=lambda kv: -kv[1])) or "–"
         rad += [f"{s[0]} av {m[0]}", andel(s[0], m[0]), f"{s[1]} av {m[1]}", andel(s[1], m[1]),
@@ -222,21 +303,66 @@ def till_rader(vy: dict) -> list[list]:
     return ut
 
 
+SAMLING_RUBRIK = ["Klass", "Elev", "Prov", "Datum", "Del A", "Del A max", "Del B",
+                  "Del B max", "Kompensation", "Totalt", "Max", "Betyg",
+                  "E-poäng", "C-poäng", "A-poäng"]
+
+
+def samling(conn) -> list[list]:
+    """Samlingsarket: en rad per elev och skrivet papper, klasserna i den
+    ordning de skrev sitt första prov. Omprovet är en egen rad («(omprov)»),
+    med elevens räknade papper oavsett om det är det bästa: arket visar vad
+    som hände, kursvyn vad som räknas."""
+    klasser = [r["klass"] for r in conn.execute(
+        "SELECT klass, MIN(datum) AS d FROM rattning GROUP BY klass ORDER BY d, klass")]
+    ut = [SAMLING_RUBRIK]
+    for klass in klasser:
+        vy = bygg_vy(conn, klass)
+        for i, prov in enumerate(vy["prov"]):
+            namn = prov["titel"] + (" (omprov)" if prov["omprov"] else "")
+            for e in vy["elever"]:
+                p = e["prov"][i]
+                if p is None:
+                    continue
+                ut.append([klass, e["elev"], namn, prov["datum"],
+                           p["del"]["A"], prov["delmax"]["A"], p["del"]["B"],
+                           prov["delmax"]["B"], p["k"] if prov["komp"] else "",
+                           p["total"], sum(prov["max"]), p["pil"], p["e"], p["c"], p["a"]])
+    return ut
+
+
+def skriv_csv(fil: Path, rader: list[list]) -> None:
+    with fil.open("w", newline="", encoding="utf-8") as f:
+        csv.writer(f).writerows(rader)
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("klass")
+    ap.add_argument("klass", nargs="?")
+    ap.add_argument("--alla", action="store_true",
+                    help="samlingsarket: en rad per elev och prov, alla klasser")
     ap.add_argument("--db", type=Path, default=ROT / "transkribera.db")
     ap.add_argument("--csv", type=Path, help="skriv tabellen som CSV (UTF-8)")
     a = ap.parse_args(argv)
+    if bool(a.klass) == a.alla:
+        ap.error("ange en klass eller --alla")
     conn = db.connect(str(a.db))
     try:
+        if a.alla:
+            rader = samling(conn)
+            if a.csv:
+                skriv_csv(a.csv, rader)
+                print(f"skrev {a.csv} ({len(rader) - 1} rader)")
+            else:
+                for r in rader:
+                    print("\t".join(str(x) for x in r))
+            return 0
         vy = bygg_vy(conn, a.klass)
     finally:
         conn.close()
     rader = till_rader(vy)
     if a.csv:
-        with a.csv.open("w", newline="", encoding="utf-8") as f:
-            csv.writer(f).writerows(rader)
+        skriv_csv(a.csv, rader)
         print(f"skrev {a.csv} ({len(rader) - 1} elever, {len(vy['prov'])} prov)")
         return 0
     print(f"{vy['klass']}: {len(vy['prov'])} prov i {len(vy['moment'])} moment, "
