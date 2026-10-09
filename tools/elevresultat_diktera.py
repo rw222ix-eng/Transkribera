@@ -14,6 +14,8 @@ Nyckeln är radens nyckel på pappret (1, 2a, 12b), poängen ett heltal. Varje
 rad på pappret bär EN nivå (peca = [E,C,A] med en nolla-fri plats), så en
 siffra räcker: den läggs på radens nivå. En rad som inte nämns lämnas tom
 (None), inte noll — «ej rättad» och «0 poäng» är olika saker för betyget.
+En rad med flera nivåer fylls nerifrån; «ett A-poäng på 10» utan C-poängen
+skrivs med nivån framför siffran: `10 A1` (radens övriga nivåer blir 0).
 
 Elever som inte finns i klasslistan läggs till sist; ingen befintlig elev
 inaktiveras (save_elever gör det, därför synkas unionen). Redan sparade
@@ -34,7 +36,7 @@ sys.path.insert(0, str(ROT))
 
 from app import db, rattning  # noqa: E402
 
-_PAR = re.compile(r"(\d+[a-z]?|K)\s*[:=]?\s*(-?\d+(?:[.,]\d+)?)")
+_PAR = re.compile(r"(\d+[a-z]?|K)\s*[:=]?\s*([ECA]?)(-?\d+(?:[.,]\d+)?)")
 
 
 def tolka(text: str) -> dict[str, dict[str, float]]:
@@ -55,10 +57,11 @@ def tolka(text: str) -> dict[str, dict[str, float]]:
         if not namn:
             raise SystemExit(f"rad utan namn: {rad!r}")
         par = {}
-        for nyckel, varde in _PAR.findall(rest):
+        for nyckel, niva, varde in _PAR.findall(rest):
             if nyckel in par:
                 raise SystemExit(f"{namn}: nyckel {nyckel} två gånger")
-            par[nyckel] = float(varde.replace(",", "."))
+            p = float(varde.replace(",", "."))
+            par[nyckel] = (niva, p) if niva else p
         if not par:
             raise SystemExit(f"{namn}: inga poäng på raden")
         ut[namn] = par
@@ -78,6 +81,15 @@ def till_tripel(rader: list[dict], per_nyckel: dict[str, float],
         nivaer = [i for i in range(3) if t[i] > 0]
         if not nivaer:
             raise SystemExit(f"{namn}: rad {nyckel} har tak {t}")
+        if isinstance(p, tuple):
+            i, p = "ECA".index(p[0]), p[1]
+            if not 0 <= p <= t[i]:
+                raise SystemExit(f"{namn}: rad {nyckel} {'ECA'[i]} = {p}, "
+                                 f"tak {t}")
+            trip = [0 if j in nivaer else None for j in range(3)]
+            trip[i] = int(round(p))
+            ut[nyckel] = trip
+            continue
         if not 0 <= p <= sum(t):
             raise SystemExit(f"{namn}: rad {nyckel} = {p}, tak {sum(t)}")
         # En rad med flera nivåer (uppgift 12: 1 C + 2 A) fylls nerifrån:
