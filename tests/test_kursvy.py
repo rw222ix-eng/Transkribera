@@ -187,8 +187,11 @@ def test_del_a_och_b_ar_provets_avsnitt_och_varje_deluppgift_syns(conn):
     vy = kursvy.bygg_vy(conn, "TE26A")
     assert vy["prov"][0]["delmax"] == {"A": 2, "B": 2}
     rub, ada = kursvy.till_rader(vy)
+    assert rub[1:5] == ["Prov 7 okt del A /2", "Prov 7 okt del B /2",
+                        "Prov 7 okt totalt /4", "Prov 7 okt betyg"]   # NA26F-arkets form
+    assert ada[1:5] == [1, 1, 2, "E → C"] and not any("uppg" in r for r in rub)
+    rub, ada = kursvy.till_rader(vy, uppgifter=True)
     k = "Prov 2026-10-07 (2026-10-07)"
-    assert ada[rub.index(f"{k} del A /2")] == 1 and ada[rub.index(f"{k} del B /2")] == 1
     assert ada[rub.index(f"{k} uppg 1b E1")] == 0 and ada[rub.index(f"{k} uppg 2 C1A1")] == 1
     sam = kursvy.samling(conn)
     assert sam[0] == kursvy.SAMLING_RUBRIK
