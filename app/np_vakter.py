@@ -166,6 +166,16 @@ KURSINNEHALL: dict[str, list[tuple[str, re.Pattern]]] = {
             r"(?:undersök|bestäm|ange|avgör)\s+för\s+vilk(?:a|et)"
             r"|för\s+vilka\s+(?:värden|tal|tider|längder|\$)|olikhet"
             r"|\\(?:le|ge|leq|geq|lt|gt)(?![a-z])|[<>≤≥]", re.I)),
+        # Samma kväll: A-bladet bar «Faktorisera $x(x - 4) - 3(4 - x)$» och
+        # «$2x(x-5)+7(5-x)$». Ma 1a bryter ut tal och bokstäver ur termer
+        # (prov 2 uppg 5, $8x^2 - 12x$); en parentes som gemensam faktor är
+        # 1c. Tas när faktoriseringsverbet och ett uttryck med två parenteser
+        # står i samma uppgift, i vilken ordning som helst.
+        ("faktorisering med en parentes som gemensam faktor", re.compile(
+            r"(?:faktoris|bryt\w*\s+ut)[^$]{0,120}\$[^$]*\([^()$]+\)[^$]*"
+            r"\([^()$]+\)[^$]*\$"
+            r"|\$[^$]*\([^()$]+\)[^$]*\([^()$]+\)[^$]*\$[^$]{0,120}"
+            r"(?:faktoris|bryt\w*\s+ut)", re.I | re.S)),
     ],
     # 1c och 2c är de tyngre spåren: ingenting i grannkursen ligger utanför.
     "1c": [],
@@ -182,10 +192,17 @@ GENERALISERING: dict[str, str] = {"1a": "aldrig", "1c": "aldrig",
 # prov 88 gällde just den formen. Kravet på ordet aldrig/alltid gör att
 # «för vilka värden på k har ekvationen två rötter» (2a vt18, A 3 p) inte
 # fälls av raden här utan av A2R-regeln som förut.
+# Bokstaven måste stå ensam: C-bladet inför BA26B prov 2 (2026-10-10) fälldes
+# för «lika mycket för varje timme» och «2 250 kr för alla takstolar», där
+# mönstret läste t:et i ordet som en variabel. Samma blad bar «saknar lösning,
+# vilket tal $c$ än är», som är «för alla c» med andra ord och gick igenom.
 _GENERALISERING_RE = re.compile(
-    r"för (?:varje|alla) \$?[a-zA-Z]\$?|för alla värden|alla värden på"
-    r"|för varje värde|gäller för alla|för alla reella"
-    r"|för vilka värden på \$?[a-zA-Z]\$?[^.?!]{0,80}\b(?:aldrig|alltid)\b",
+    r"för (?:varje|alla) \$?[a-zA-Z]\$?(?![\wåäö])|för alla värden"
+    r"|alla värden på|för varje värde|gäller för alla|för alla reella"
+    r"|vilke[tn] (?:tal|värde) \$?[a-zA-Z]\$?(?![\wåäö])[^.?!]{0,20}?än är"
+    r"|vad \$?[a-zA-Z]\$?(?![\wåäö])[^.?!]{0,20}?än är"
+    r"|för vilka värden på \$?[a-zA-Z]\$?(?![\wåäö])[^.?!]{0,80}"
+    r"\b(?:aldrig|alltid)\b",
     re.I)
 
 # Metodföreskriften (regel 3): formen «med/använd/genom <metod>». Verbet

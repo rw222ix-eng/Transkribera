@@ -80,3 +80,33 @@ def test_olikheter_ar_utanfor_kurs_1a_ocksa_pa_bladet():
     fynd = [f for f in exam_gen.bladets_npvakter(exam) if f["code"] == "kursvakt"]
     assert [f["path"] for f in fynd] == ["uppgift 1"]
     assert "olikheter" in fynd[0]["message"]
+
+
+def test_parentes_som_gemensam_faktor_ar_utanfor_kurs_1a():
+    from app import exam_gen
+    exam = {"kurs": "Matematik, nivå 1a", "uppgifter": [
+        {"text": "Faktorisera uttrycket $x(x - 4) - 3(4 - x)$ så långt det går.",
+         "poang": [0, 0, 1], "typ": "rutin", "losning": "$(x + 3)(x - 4)$"},
+        {"text": "Faktorisera $8x^2 - 12x$ genom att bryta ut största möjliga faktor.",
+         "poang": [0, 1, 0], "typ": "rutin", "losning": "$4x(2x - 3)$"},
+        {"text": "Skriv utan parenteser: $3(x + 2) - 2(x - 1)$", "poang": [1, 0, 0],
+         "typ": "rutin", "losning": "$x + 8$"}]}
+    fynd = [f for f in exam_gen.bladets_npvakter(exam) if f["code"] == "kursvakt"]
+    assert [f["path"] for f in fynd] == ["uppgift 1"]
+    assert "parentes som gemensam faktor" in fynd[0]["message"]
+
+
+def test_generaliseringen_laser_inte_ordets_forsta_bokstav():
+    from app import exam_gen
+    exam = {"kurs": "Matematik, nivå 1a", "uppgifter": [
+        {"text": "Elias får lika mycket för varje timme övertid. Hur stor är månadslönen?",
+         "poang": [0, 1, 0], "typ": "problem", "losning": "24 600"},
+        {"text": "Varje takstol kostar 900 kr. Vad kostar det för alla takstolar?",
+         "poang": [0, 1, 0], "typ": "problem", "losning": "9 900"},
+        {"text": "Liam påstår att ekvationen $3(x + 2) - x = 2x + c$ saknar lösning, "
+                 "vilket tal $c$ än är. Avgör om Liam har rätt.",
+         "poang": [0, 2, 0], "typ": "problem", "losning": "Nej"},
+        {"text": "Visa att uttrycket blir 3 för alla $a$.", "poang": [0, 0, 1],
+         "typ": "problem", "losning": "3"}]}
+    fynd = [f for f in exam_gen.bladets_npvakter(exam) if f["code"] == "kursvakt"]
+    assert [f["path"] for f in fynd] == ["uppgift 3", "uppgift 4"]
