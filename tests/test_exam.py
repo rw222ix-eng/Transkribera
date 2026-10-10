@@ -1189,7 +1189,10 @@ def test_render_prov_golden_markers():
     assert "\\pagestyle{headandfoot}" in tex
     assert "\\runningheader{}{}{\\rightmark}" in tex
     assert "\\runningheadrule" in tex
-    assert "\\firstpageheader{}{}{}" in tex
+    # Försättsbladet häftas ihop med del A och bär delen i samma hörn
+    # (Rickard 2026-10-10).
+    assert "\\firstpageheader{}{}{Del A}" in tex
+    assert "\\firstpageheadrule" in tex
     # … och provrubriken står i INGET runningheader.
     for rad in tex.splitlines():
         if rad.startswith("\\runningheader"):

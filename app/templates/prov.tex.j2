@@ -39,6 +39,14 @@
     \markboth. #))
 ((* set sidhuvud = '' *))
 ((* include '_preamble.tex.j2' *))
+((# FÖRSÄTTSBLADET HÖR TILL DEL A (Rickard 2026-10-10): det häftas ihop med
+    del A:s blad, och eleven ska se direkt vilken bunt som är A och vilken
+    som är B. Samma huvud som del A:s sidor, delen i högra hörnet med linje
+    under. Ett prov utan delar har inget att märka och behåller tomt huvud. #))
+((* if delar and delar[0].rubrik *))
+\firstpageheader{}{}{((( delar[0].rubrik )))}
+\firstpageheadrule
+((* endif *))
 ((* import '_former.tex.j2' as former *))
 
 \begin{document}
