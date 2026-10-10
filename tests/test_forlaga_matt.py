@@ -241,12 +241,13 @@ def test_linjerna_ligger_dar_forlagan_har_dem(rader):
 
 @pytest.mark.tectonic
 def test_forsattsbladet_har_forlagans_ordning(rader):
-    """Titel, klass, linje, delöversikt, provtid, hjälpmedel, inlämningsregel,
-    totalpoäng, betygstabell, instruktioner, namnrader — i den ordningen. Det
-    är den läraren känner igen pappret på."""
+    """Titel, klass, linje, provtid, hjälpmedel, inlämningsregel, totalpoäng,
+    betygstabell, instruktioner, namnrader — i den ordningen. Det är den
+    läraren känner igen pappret på. Delöversikten («Del A: Uppgift 1–8. Endast
+    svar på …») är borta sedan 2026-10-10, «onödigt mycket information»."""
     rad, _ = rader
     forsta_sidan = [(y, txt) for s, _x, y, txt in rad if s == 0]
-    ordning = ["Prov Kapitel 2", "Klass: NA25", "Del A", "Provtid:",
+    ordning = ["Prov Kapitel 2", "Klass: NA25", "Provtid:",
                "Hjälpmedel:", "Du lämnar in", "Provet kan ge totalt",
                "Betyg", "Instruktioner", "Namn:", "Klass:"]
     sedd = -1.0
@@ -255,6 +256,8 @@ def test_forsattsbladet_har_forlagans_ordning(rader):
                 default=None)
         assert y is not None, f"«{fras}» saknas eller står i fel ordning"
         sedd = y
+    assert not any(txt.startswith("Del A:") for _y, txt in forsta_sidan), (
+        "delöversikten står kvar på försättsbladet")
 
 
 @pytest.mark.tectonic

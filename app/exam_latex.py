@@ -442,18 +442,6 @@ def _krav(typ: str | None) -> str:
     return _KRAV_TEXT.get(typ or "", _KRAV_ANNARS)
 
 
-def _nrlista(nrs: list[int]) -> str:
-    """«1–2», «3» eller «1, 2 och 5» — spegel av blad.js nrlista, tecken för
-    tecken. Utan ordet «uppgift»: delraden börjar redan med det."""
-    if not nrs:
-        return ""
-    if len(nrs) == 1:
-        return f"{nrs[0]}"
-    if all(n == nrs[k - 1] + 1 for k, n in enumerate(nrs) if k):
-        return f"{nrs[0]}–{nrs[-1]}"
-    return f"{', '.join(map(str, nrs[:-1]))} och {nrs[-1]}"
-
-
 # En rad som börjar med «a) » är en deluppgift i uppgiftstexten. Bladen bar
 # länge sina deluppgifter så (Rickard 2026-09-25, samma disposition som
 # provet), och raden börjar ett nytt stycke i stället för att klistras efter
@@ -1496,33 +1484,14 @@ def _forsatt_vy(doc: exam_spec.ExamDoc, delar: list[dict],
     if doc.datum:
         under.append(doc.datum)
 
-    delrader = []
-    for d in delar:
-        if not d["rubrik"]:
-            continue
-        f, s = d["_forsta_nr"], d["_sista_nr"]
-        spann = f"Uppgift {f}." if f == s else f"Uppgift {f}–{s}."
-        # REDOVISNINGEN FÖLJER UPPGIFTERNA. «Kortsvar och fullständiga
-        # lösningar» sa inte VILKA, och eleven fick leta på arket. Nu står
-        # numren: samma ord som skärmens provtabell (blad.js planvalProv),
-        # annars säger papper och skärm olika om samma prov (2026-09-18).
-        if d["_alla_kortsvar"]:
-            vad = "Endast svar krävs, skrivs i provet."
-        elif d["_nagot_kortsvar"]:
-            # EN RAD: «… på uppgift 1–2, fullständig lösning på lösblad på
-            # uppgift 3–7.» bröt raden och «3–7.» stod ensamt (läraren
-            # 2026-09-19). Raden börjar med «Uppgift», numren inuti står utan
-            # ordet, och lösbladet nämns i instruktionerna under.
-            vad = (f"Endast svar på {_nrlista(d['_kort_nr'])}, fullständig "
-                   f"lösning på {_nrlista(d['_langa_nr'])}.")
-        else:
-            vad = "Fullständiga lösningar på lösblad."
-        # «3–7» får inte brytas vid strecket: sjuan hamnade ensam på nästa
-        # rad (läraren 2026-09-18). Spannen sätts i \mbox efter escapen.
-        delrader.append({"namn": escape_latex(d["rubrik"]),
-                         "text": re.sub(r"(\d+)(\\textendash\{\})(\d+)",
-                                        r"\\mbox{\1\2\3}",
-                                        escape_latex(f"{spann} {vad}"))})
+    # DELRADERNA ÄR BORTA (Rickard 2026-10-10): «Del A: Uppgift 1–8. Endast
+    # svar på 1, 2, 3, 4, 5, 7 och 8, fullständig lösning på 6» var «onödigt
+    # mycket information» på försättsbladet. Varje uppgift säger redan själv
+    # «Endast svar krävs» eller «Fullständig lösning krävs», och delrubriken
+    # står överst på delens första sida. Delarna räknas fortfarande, för
+    # inlämningsregeln nedan finns bara när provet har två delar.
+    delrader: list[dict] = []
+    namngivna = [d for d in delar if d["rubrik"]]
 
     # INLÄMNINGSREGELN ÄR LÄRARENS PROVRUTIN, ordagrant (2026-08-22):
     # «eleverna får båda delarna samtidigt; när de känner sig klara lämnar de in
@@ -1536,9 +1505,9 @@ def _forsatt_vy(doc: exam_spec.ExamDoc, delar: list[dict],
     # har ingen sådan regel, och en rad som beskriver något som inte händer är
     # en rad som lärs bort.
     inlamning = None
-    if len(delrader) >= 2:
+    if len(namngivna) >= 2:
         forsta = delar[0]["rubrik"]
-        nasta_del = [d for d in delar if d["rubrik"]][1]
+        nasta_del = namngivna[1]
         nasta = nasta_del["rubrik"]
         # Räknaren är inte ett digitalt verktyg (se _verktyget_i_delen).
         fram = ("räknaren" if nasta_del.get("verktyg") == "räknare"
@@ -1889,12 +1858,6 @@ def _build_view(doc: exam_spec.ExamDoc,
             "_kod": del_kod,
             "_forsta_nr": vy_items[0]["nummer"] if vy_items else None,
             "_sista_nr": vy_items[-1]["nummer"] if vy_items else None,
-            "_alla_kortsvar": alla_kortsvar,
-            "_nagot_kortsvar": nagot_kortsvar,
-            "_kort_nr": [vi["nummer"] for vi in vy_items
-                         if vi["krav"] == _KRAV_TEXT["rutin"]],
-            "_langa_nr": [vi["nummer"] for vi in vy_items
-                          if vi["krav"] != _KRAV_TEXT["rutin"]],
         })
     for i, d in enumerate(delar):
         if i and d["rubrik"]:
