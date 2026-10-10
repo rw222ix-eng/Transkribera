@@ -361,7 +361,11 @@ def test_elevlasarens_provprompt_ar_byte_for_byte_densamma():
     e = _enheter()
     assert (elevlasare.build_elevlasare_prompt(e, "Bygg", "prov")
             == elevlasare.build_elevlasare_prompt(e, "Bygg"))
-    assert "SVAG SVENSKA" not in elevlasare.build_elevlasare_prompt(e, "Bygg")
+    # Varje prov läses med svag svenska sedan Rickards dom 2026-10-10 (BA26B
+    # prov 2), oavsett klass.
+    for inr in ("", "Bygg"):
+        p = elevlasare.build_elevlasare_prompt(e, inr)
+        assert "SVAG SVENSKA" in p and "Det här är ett prov," in p
 
 
 def test_elevlasarens_fynd_pa_bladet_far_byta_beskrivningen_mot_visad_form():

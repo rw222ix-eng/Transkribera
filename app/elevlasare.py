@@ -146,13 +146,18 @@ def _facit(e: dict) -> dict:
 # frågan; det är fortfarande ett tillägg av exempel, aldrig en nedkortning.
 # Tom sträng på provet, alltså byte-identisk prompt där.
 def _svag_svenska(profil: str, inriktning: str) -> str:
-    if profil != "arbetsblad":
+    # VARJE PROV läses också med svag svenska (Rickard 2026-10-10, BA26B
+    # prov 2: provet ska vara «så lätt att förstå som möjligt», och domen
+    # «gäller alla prov, oavsett vilken klass det är»). Gruppuppgiften läses
+    # som förut.
+    if profil not in ("arbetsblad", "prov"):
         return ""
     inr = " ".join(str(inriktning or "").split())[:exam_gen.MAX_INRIKTNING]
+    pappret = "ett arbetsblad" if profil == "arbetsblad" else "ett prov"
     yrke = (f" Klassen går {inr}: yrkets egna ord är vardagsord för dem, "
             "matematikbokens ord är det inte." if inr else "")
     return (
-        "STEG 4, SVAG SVENSKA. Det här är ett arbetsblad, och många elever "
+        f"STEG 4, SVAG SVENSKA. Det här är {pappret}, och många elever "
         "har svag svenska. Läs då som en elev som kan vardagssvenska men "
         f"inte matematikens fackord.{yrke} forstar \"nej\" också när:\n"
         "- ett fackord (nämnare, täljare, blandad form, bråkform, "
@@ -183,9 +188,11 @@ def build_elevlasare_prompt(enheter: list[dict], inriktning: str = "",
     (_svag_svenska). Provets prompt är byte för byte densamma."""
     return (
         "Du är elevläsare för ett prov i matematik. Du läser varje uppgift "
-        "SOM EN ELEV i årskurs 1 på gymnasiet: ensam, utan att få fråga, med "
-        "några minuter per uppgift, och du kan det som står i kursboken men "
-        "inget mer. «verktyg» säger om eleven har räknare.\n"
+        "SOM EN TRÖTT ELEV i årskurs 1 på gymnasiet: ensam, utan att få "
+        "fråga, med några minuter per uppgift, och du kan det som står i "
+        "kursboken men inget mer. Du läser långsamt och ordagrant, tar varje "
+        "ord som det står och gissar aldrig vad läraren menar. «verktyg» "
+        "säger om eleven har räknare.\n"
         f"{json.dumps([_utan_facit(e) for e in enheter], ensure_ascii=False)}"
         "\n\n"
         "STEG 1, FÖRE FACIT. Skriv för varje uppgift i fältet omskrivning, med "
@@ -209,7 +216,9 @@ def build_elevlasare_prompt(enheter: list[dict], inriktning: str = "",
         "tillägg, ett exempel på vad som menas, eller en delning i a) och "
         "b). Förtydligandet LÄGGER TILL text. Det stryker aldrig, kortar "
         "aldrig, och byter aldrig ord som redan står där, utom en "
-        "villkorsmening som byggs in i frågan (se nedan).\n"
+        "villkorsmening som byggs in i frågan och de fällor nedan som säger "
+        "att något ska bytas (en bokstav, ett gångertecken, ett ord som kan "
+        "syfta på två saker).\n"
         "- forstar \"oklart\" när du inte kan avgöra det, till exempel när "
         "uppgiften hänvisar till en figur du inte ser; oklart fäller "
         "ingenting.\n"
@@ -254,6 +263,32 @@ def build_elevlasare_prompt(enheter: list[dict], inriktning: str = "",
         "påstår att …» och «Avgör om Hugo har rätt.»\n"
         "- «leden» utan att det står vilka led, och två ekvationer utan "
         "nummer som frågan ändå hänvisar till\n"
+        # Lärarens läsning av BA26B prov 2 «som en trött elev», 2026-10-10.
+        # Elevläsaren fann ingenting på provet; de här sju fällorna fanns där.
+        "- en bokstav som är samma som en enhet i uppgiften: $m$ för vikt "
+        "när meter står bredvid, $s$ för sträcka bredvid sekunder, $t$ för "
+        "tid bredvid ton, $h$ för höjd bredvid timmar. Förtydligandet byter "
+        "bokstaven («$x$ är antalet ton»).\n"
+        "- ett tal och en bokstav som kan läsas som en mängd med enhet: "
+        "«$100h$» läses som 100 timmar. Förtydligandet sätter ett "
+        "gångertecken: $100 \\cdot h$.\n"
+        "- en instruktion som bara säger räknesättet men inte vad svaret ska "
+        "bli («Multiplicera $3x(x + 4)$.»). Förtydligandet säger vad eleven "
+        "ska skriva: «… och skriv uttrycket utan parentes».\n"
+        "- ett ord som kan syfta på två saker: «hyran» när fem delar på den "
+        "(hela stugans eller min del?), «priset» när det finns pris per "
+        "styck och totalt. Förtydligandet säger vilken («hyran för hela "
+        "stugan»).\n"
+        "- en fråga där poängen hänger på ett ord som «högst» eller «minst» "
+        "och hur svaret ska avrundas, när det inte är det uppgiften prövar. "
+        "Förtydligandet frågar rakt («Hur tjock blir plattan om all betong "
+        "används? Svara i cm.»).\n"
+        "- en formel mitt i en mening, eller två formler i samma stycke. "
+        "Förtydligandet ställer varje formel på egen rad efter en mening som "
+        "säger vad den räknar ut.\n"
+        "- ett villkor i formelspråk («Formeln gäller när $t$ är 2 eller "
+        "mer.»). Förtydligandet säger det i vardagsord («Man hyr alltid minst "
+        "2 timmar.»).\n"
         "Det som ALDRIG ger \"nej\":\n"
         "- att uppgiften är svår att LÖSA. Provets sista uppgifter ska vara "
         "svåra, och en uppgift eleven förstår men inte klarar är rätt "
@@ -370,7 +405,9 @@ def elevlasarfynd(enheter: list[dict], domar: dict[str, dict],
         # som annars ryker i en omskrivning.
         text += f" Förtydliga uppgiften: {_fortydligande(dom['fortydligande'])}"
         text += (" Lägg till, stryk inte: samma tal, samma ord som redan står "
-                 "där, och inte kortare." if profil != "arbetsblad" else
+                 "där utom det förtydligandet byter (en bokstav, ett "
+                 "gångertecken, ett ord som kan syfta på två saker), och inte "
+                 "kortare." if profil != "arbetsblad" else
                  " Lägg till det eleven behöver och behåll talen. En "
                  "beskrivning med fackord får bytas mot samma sak visad "
                  "(«$\\tfrac{1}{2}$ m $= \\tfrac{?}{4}$ m»), aldrig mot "

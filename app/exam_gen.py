@@ -4330,10 +4330,17 @@ def _fraga_domare(enheter: list[dict], *, model: str, llm, skala: str,
 def niva_fynd(exam: dict, *, model: str, llm=llm_client.generate,
               skala: str = "", niva_mal: dict | None = None,
               bara: list[int] | None = None,
+              profil: str = "",
               log_cb: Callable[[str], None] | None = None
               ) -> tuple[list[dict], bool]:
     """Hela nivåkontrollen: två oberoende domar plus de deterministiska
     E-signalerna. Returnerar ``(fynd, kördes)``.
+
+    PROVET JÄMFÖRS DESSUTOM MED NATIONELLA PROVET (app/np_jamforare, Rickard
+    2026-10-10): domarna dömer mot nivåernas beskrivning i ord, jämföraren mot
+    NP:s egna uppgifter i samma kurs. Säger den en annan nivå vinner den, för
+    NP är facit, och domarnas fynd på samma uppgift stryks. Tom `profil`
+    (äldre anropare) eller ett blad: ingen jämförelse, som förut.
 
     `bara` begränsar kontrollen till vissa uppgiftsnummer. Grinden använder det
     när den prövar om en omskrivning hjälpte: då är det de rörda uppgifterna
@@ -4353,7 +4360,14 @@ def niva_fynd(exam: dict, *, model: str, llm=llm_client.generate,
                              krit=True, log=log)
     if not ok:
         return [], False
-    return (avvikelser(enheter, blind, krit)
+    domarnas = avvikelser(enheter, blind, krit)
+    np = []
+    if profil == "prov":
+        from app import np_jamforare            # lånar domarenheter härifrån
+        np = np_jamforare.doma_np(exam, enheter, model=model, llm=llm,
+                                  log_cb=log_cb)
+    np_nr = {f.get("nr") for f in np}
+    return (np + [f for f in domarnas if f.get("nr") not in np_nr]
             + e_nivasignaler(enheter, niva_mal)), True
 
 
@@ -12771,7 +12785,7 @@ def _domar_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
     log = log_cb or (lambda _m: None)
     signaler = _signaler(exam)
     niva, kordes = niva_fynd(exam, model=model, llm=llm, skala=skala,
-                             niva_mal=niva_mal, log_cb=log_cb)
+                             niva_mal=niva_mal, profil=profil, log_cb=log_cb)
 
     def svar(ut: dict, matt: bool) -> dict:
         return {**ut, "nivafynd": niva, "nivakoll": kordes, "nivamatt": matt}
@@ -12957,6 +12971,7 @@ def _niva_grind(res: dict, *, model: str, llm, profil: str, skala: str,
             # ingen rört.
             fynd, kordes = niva_fynd(exam, model=model, llm=llm, skala=skala,
                                      niva_mal=niva_mal, log_cb=log_cb,
+                                     profil=profil,
                                      bara=None if rent else
                                      sorted({_uppgiftsnr(f.get("nr"))
                                              for f in fynd}))
