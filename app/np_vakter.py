@@ -980,7 +980,7 @@ def endastsvarvakt(exam: dict) -> list[dict]:
                 continue
             fel.append(_err(
                 f"uppgift {e['nr']}", "endastsvar",
-                f"Uppgift {e['nr']} har «Endast svar krävs», men bedömningen "
+                f"Uppgift {e['nr']} har «Skriv bara svaret», men bedömningen "
                 f"«+{r['poang']} {r['niva']} {r['krav']}» kräver ett arbete "
                 "som eleven inte redovisar. Skriv raden som svaret, t.ex. "
                 "«+1 E korrekt svar 5»."))

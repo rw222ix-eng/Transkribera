@@ -423,7 +423,7 @@ def test_rutinuppgift_som_ber_om_motivering_sager_emot_sin_kravrad():
     u = _u(typ="rutin", text="Bestäm $k$. Motivera ditt svar.")
     fel = exam_gen.kravradsvakt(_prov([u]))
     assert [f["code"] for f in fel] == ["kravrad"]
-    assert "Endast svar krävs" in fel[0]["message"]
+    assert "Skriv bara svaret" in fel[0]["message"]
 
 
 def test_redovisningsuppgift_utan_ordet_motivera_ar_inget_fynd():

@@ -149,7 +149,7 @@ def test_inlamningsraden_ar_lararens_provrutin():
     tex = exam_latex.render_prov(doc)
     # Fixturens Del C har räknare, och räknaren är inte ett digitalt verktyg
     # (lärarens dom 2026-09-22): raden säger vad eleven faktiskt tar fram.
-    assert "innan du tar fram räknaren" in tex
+    assert "Sedan tar du fram räknaren och gör Del B." in tex
     assert "innan du hämtar" not in tex
 
 
@@ -436,8 +436,8 @@ def test_svarsraden_star_bara_pa_kortsvaren():
     assert "prsvarnamn" in ett
     assert "prsvar" not in tva
     # Kravraden står kvar på båda och säger vilken som är vilken.
-    assert "Endast svar krävs." in ett
-    assert "Fullständig lösning krävs." in tva
+    assert "Skriv bara svaret." in ett
+    assert "Visa hur du räknar." in tva
 
 
 def test_svarsraden_uteblir_aven_nar_uppgiften_bar_en_enhet():

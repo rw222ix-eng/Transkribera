@@ -235,9 +235,9 @@ def _del_instruktion(del_kod: str, utan_raknare: bool,
     if not namn:
         return ""
     if del_kod == "B":
-        krav = "Endast svar krävs om inget annat anges."
+        krav = "Skriv bara svaret om inget annat står."
     else:
-        krav = "Fullständig redovisning krävs. " + REDOVISA_LOSNINGEN
+        krav = REDOVISA_LOSNINGEN
     return f"{namn} löses {'utan' if utan_raknare else 'med'} räknare. {krav}"
 
 
@@ -350,7 +350,12 @@ def _hjalpmedel_i_delen(hjalpmedel: str | None, del_kod: str) -> str | None:
 # redovisa hur de har löst uppgifterna. Och det gäller alla uppgifter där det
 # står fullständig lösning krävs.» En mening för varje del med fullständiga
 # lösningar, med eller utan räknare (REDOVISA_LOSNINGEN).
-REDOVISA_LOSNINGEN = "Redovisa kort på pappret hur du har löst uppgifterna."
+#
+# VARDAGSORD SEDAN 2026-10-10 (Rickard, språkkollen på omprov 174 «som en
+# trött elev»): «Redovisa kort på pappret» krockade med försättsbladets
+# «lösblad», och eleven visste inte var hon skulle skriva. Meningen säger nu
+# vad hon gör och var.
+REDOVISA_LOSNINGEN = "Visa hur du räknar. Skriv på lösblad."
 
 
 _DELNAMN_RE = [(re.compile(r"\b([Dd]el)\s+B\b"), r"\1 A"),
@@ -428,8 +433,13 @@ _VERSAL = "ABCDEFGHIJKL"
 # Kravetiketten står på VARJE uppgift i förlagan, inte bara på kortsvaren: det
 # är den eleven läser för att veta om svaret skrivs på pappret eller lösningen
 # på lösblad.
-_KRAV_TEXT = {"rutin": "Endast svar krävs."}
-_KRAV_ANNARS = "Fullständig lösning krävs."
+#
+# ORDEN ÄR ELEVENS, inte NP:s (Rickard 2026-10-10): «Endast svar krävs» och
+# «Fullständig lösning krävs» är skolsvenska i passiv form, och den svaga
+# läsaren läste dem på varje uppgift utan att förstå dem. Skärmen säger samma
+# sak (blad-bygg.js, prkrav).
+_KRAV_TEXT = {"rutin": "Skriv bara svaret."}
+_KRAV_ANNARS = "Visa hur du räknar."
 
 # En rad i uppgiftstexten som ÄR en formel och inget annat sätts som
 # displayformel — förlagan gör det med $h(t) = -5t^2 + 20t + 700$ mitt i
@@ -1512,9 +1522,23 @@ def _forsatt_vy(doc: exam_spec.ExamDoc, delar: list[dict],
         # Räknaren är inte ett digitalt verktyg (se _verktyget_i_delen).
         fram = ("räknaren" if nasta_del.get("verktyg") == "räknare"
                 else "digitala verktyg")
+        # LÖSBLADEN NÄMNS (Rickard 2026-10-10): eleven lämnade in häftet men
+        # behöll lösbladen till del A:s långa uppgifter, och räknade sedan om
+        # dem med räknaren. Raden säger vilka uppgifternas lösblad som följer
+        # med, och bara när det finns några.
+        langa = [vi["nummer"] for vi in delar[0]["uppgifter"]
+                 if vi["krav"] != _KRAV_TEXT["rutin"]]
+        med = ""
+        if langa:
+            nr = (f"{langa[0]}" if len(langa) == 1 else
+                  f"{langa[0]}–{langa[-1]}"
+                  if langa == list(range(langa[0], langa[-1] + 1)) else
+                  f"{', '.join(map(str, langa[:-1]))} och {langa[-1]}")
+            med = (f" och lösbladen till uppgift {nr}" if len(langa) > 1
+                   else f" och lösbladet till uppgift {nr}")
         inlamning = escape_latex(
-            f"Du lämnar in {forsta} innan du tar fram {fram} och "
-            f"börjar på {nasta}.")
+            f"Lämna in {forsta}{med}. Sedan tar du fram {fram} och "
+            f"gör {nasta}.")
 
     g = exam_spec.kravgranser(doc)
     total = int(g["total"])
@@ -1845,8 +1869,7 @@ def _build_view(doc: exam_spec.ExamDoc,
             # kosmetik — utan den kan en elev skriva ett svar räknaren gav och
             # ingen kan bedöma vägen dit.
             "kravrad": (None if nagot_kortsvar else escape_latex(
-                "Fullständiga lösningar krävs på alla uppgifter. "
-                + REDOVISA_LOSNINGEN)),
+                "Visa hur du räknar på alla uppgifter. Skriv på lösblad.")),
             "instruktion": escape_latex(
                 _del_instruktion(del_kod or "", utan_raknare, verktyg)) or None,
             "uppgifter": vy_items,

@@ -180,7 +180,7 @@ def test_lika_mycket_mellanrum_mellan_uppgifterna(rader):
     rad, _ = rader
     # Sista svarslinjen i uppgift 1 (kortsvaren) → kravraden på uppgift 2.
     sista_svaret_i_ett = _y(rad, "Svar:", 2, sida=1)
-    krav_pa_tva = _y(rad, "Endast svar krävs", 1, sida=1)
+    krav_pa_tva = _y(rad, "Skriv bara svaret", 1, sida=1)
     # Svarslinjen lägger 2 mm under sig (förlagans \svarsrad), så avståndet
     # från den till nästa uppgift är rytmen plus den luften.
     matt = krav_pa_tva - sista_svaret_i_ett
@@ -214,7 +214,7 @@ def test_kravraden_och_forsta_stycket(rader):
     den — ett styckeavstånd, precis som i förlagan."""
     rad, _ = rader
     # Uppgift 2 — den som bär BÅDE kravrad och egen frågetext.
-    krav = _y(rad, "Endast svar krävs", 1, sida=1)
+    krav = _y(rad, "Skriv bara svaret", 1, sida=1)
     forsta = _y(rad, "Bestäm värdet av", sida=1)
     assert abs((forsta - krav) - FORSTA_RADEN_TILL_STYCKET) < TAL, (
         f"kravrad→fråga mäter {forsta - krav:.1f} pt")
@@ -248,7 +248,7 @@ def test_forsattsbladet_har_forlagans_ordning(rader):
     rad, _ = rader
     forsta_sidan = [(y, txt) for s, _x, y, txt in rad if s == 0]
     ordning = ["Prov Kapitel 2", "Klass: NA25", "Provtid:",
-               "Hjälpmedel:", "Du lämnar in", "Provet kan ge totalt",
+               "Hjälpmedel:", "Lämna in Del A", "Provet kan ge totalt",
                "Betyg", "Instruktioner", "Namn:", "Klass:"]
     sedd = -1.0
     for fras in ordning:
@@ -320,7 +320,7 @@ def test_ingen_svarsrad_pa_redovisningsuppgift(tmp_path):
     # Sidan 0 är försättsbladet; uppgifterna står på sidan 1.
     sidan = d[1].get_text()
     d.close()
-    assert "Fullständig lösning krävs" in sidan
+    assert "Visa hur du räknar" in sidan
     # Kortsvaret behåller sin rad — det är den ENA som ska finnas.
     assert sidan.count("Svar:") == 1, sidan
     assert "Villkor" not in sidan, "svarsfältet blev en svarsrad ändå"

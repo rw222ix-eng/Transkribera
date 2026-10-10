@@ -443,8 +443,8 @@ INSTRUCTION = (
     # lärarens förlaga. Står frasen dessutom i texten trycks den två gånger på
     # samma uppgift, och det såg första skarpa renderingen: «1. Endast svar
     # krävs.» och sist i frågan «… Endast svar krävs.»
-    "  SKRIV ALDRIG «Endast svar krävs», «Fullständig lösning krävs», "
-    "«Fullständiga lösningar krävs» eller «Motivera ditt svar» i texten. "
+    "  SKRIV ALDRIG «Skriv bara svaret», «Visa hur du räknar», «Endast svar "
+    "krävs», «Fullständig lösning krävs» eller «Motivera ditt svar» i texten. "
     "Pappret sätter den raden självt ur uppgiftens typ. Frågan ska säga vad "
     "som ska räknas ut, inte hur den ska redovisas.\n"
     # Radbrytningen i `text` är sättning: exam_latex._stycken gör varje rad
@@ -936,8 +936,8 @@ INSTRUCTION = (
     "intervall. Exempel: alla tal större än 1 och högst 4 skrivs ]1, 4].»\n"
     # Lärarens dom 2026-09-26: redovisningen gäller lösningen, inte räknaren,
     # och den står på delens kravrad (exam_latex.REDOVISA_LOSNINGEN).
-    "  • Redovisningen står på delens kravrad («Redovisa kort på pappret "
-    "hur du har löst uppgifterna.») och inte i uppgifterna. Skriv aldrig "
+    "  • Redovisningen står på delens kravrad («Visa hur du räknar på alla "
+    "uppgifter. Skriv på lösblad.») och inte i uppgifterna. Skriv aldrig "
     "«visa hur du använder ditt digitala verktyg». Räknaren är inte ett "
     "digitalt verktyg.\n"
     # ── TEXTENS FORM (lärarens dom 2026-09-23 kväll, exam 128 och 129) ──
@@ -3789,8 +3789,8 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             "delen tillåter: med GeoGebra på datorn en regression, en graf att "
             "avläsa eller en ekvation som bara går att lösa numeriskt, med "
             "enbart räknare en beräkning som inte går för hand. Delens "
-            "kravrad säger redan «Redovisa kort på pappret hur du har löst "
-            "uppgifterna.», så den meningen står inte i uppgifterna."
+            "kravrad säger redan «Visa hur du räknar på alla uppgifter. Skriv "
+            "på lösblad.», så den meningen står inte i uppgifterna."
             if delar else
             "Provet har inga delar (del: null på alla uppgifter).")
         # Lärarens hjälpmedelsval, och bara när hon flyttat något (se
@@ -9556,15 +9556,14 @@ _REDOVISNINGSUPPMANING_RE = re.compile(
 def kravradsvakt(exam: dict) -> list[dict]:
     """Säger uppgiftens typ samma sak som uppgiftens text?
 
-    Typen «rutin» trycker «Endast svar krävs.» på pappret, och delens egen rad
-    säger «Endast svar krävs, svaret skrivs i provet» när alla uppgifter i
-    delen är kortsvar. En rutinuppgift som ber eleven motivera ger då två
+    Typen «rutin» trycker «Skriv bara svaret.» på pappret (förr «Endast svar
+    krävs.», bytt 2026-10-10). En rutinuppgift som ber eleven motivera ger då två
     motstridiga besked på samma papper, och eleven vet inte vilket som gäller
     när hon rättas.
 
     Åt andra hållet fälls ingenting. En redovisningsuppgift som inte säger
     «motivera» är helt i sin ordning, kravraden på pappret säger redan
-    «Fullständig lösning krävs», och nationella provet skriver «Bestäm … med
+    «Visa hur du räknar», och nationella provet skriver «Bestäm … med
     hjälp av derivatans definition» utan ett ord om redovisning."""
     fel: list[dict] = []
     for e in domarenheter(exam):
@@ -9577,7 +9576,7 @@ def kravradsvakt(exam: dict) -> list[dict]:
         fel.append(_err(
             f"uppgift {e['nr']}", "kravrad",
             f"Uppgift {e['nr']} har typen «rutin», och då trycker pappret "
-            "«Endast svar krävs» på den, men texten ber om «"
+            "«Skriv bara svaret» på den, men texten ber om «"
             f"{m.group(0)}». Välj ett: stryk kravet på redovisning ur texten, "
             "eller sätt typen till \"redovisning\" (eller \"resonemang\") så "
             "att kravraden och uppgiften säger samma sak. Behåll del, poäng "

@@ -1200,10 +1200,11 @@ def test_render_prov_golden_markers():
     # först när Del A är inlämnad (2026-08-22).
     # Fixturens Del C tillåter räknare och formelblad, och räknaren är inte
     # ett digitalt verktyg (lärarens dom 2026-09-22).
-    assert ("Du lämnar in Del A innan du tar fram räknaren och "
-            "börjar på Del B." in tex)
+    # Lösbladen till del A:s långa uppgifter följer med (Rickard 2026-10-10).
+    assert re.search(r"Lämna in Del A( och lösblade[tn] till uppgift [^.]+)?\. "
+                     r"Sedan tar du fram räknaren och gör Del B\.", tex)
     assert "Provet kan ge totalt \\textbf{20 poäng}" in tex
-    assert "Instruktioner" in tex and "Poängen för varje uppgift anges" in tex
+    assert "Instruktioner" in tex and "Poängen för varje uppgift står till höger" in tex
     assert "\\textbf{Namn:} \\hrulefill" in tex
     # elevens prov visar endast totalsumman — E/C/A hör till bedömningen
     assert "(9/6/5)" not in tex and "3/0/0" not in tex
@@ -1211,11 +1212,11 @@ def test_render_prov_golden_markers():
     assert (r"Del A: Räknare är inte tillåten"
             in tex)
     assert r"Del B: Räknare är tillåten" in tex
-    assert "Redovisa kort på pappret hur du har löst uppgifterna." in tex
+    assert "Skriv på lösblad." in tex
     # uppgifterna i exam-klassens questions/parts, med kravetiketten i kursiv
     assert "\\begin{questions}" in tex and "\\setcounter{question}{0}" in tex
-    assert "\\question[3] \\pfkrav{Endast svar krävs.}" in tex
-    assert "\\question[4] \\pfkrav{Fullständig lösning krävs.}" in tex
+    assert "\\question[3] \\pfkrav{Skriv bara svaret.}" in tex
+    assert "\\question[4] \\pfkrav{Visa hur du räknar.}" in tex
     # matte bevarad, kortsvarsuppgiften får förlagans svarslinje
     assert r"\(x^2 - 4x + 3 = 0\)" in tex
     assert "\\svarsrad{Svar:}" in tex

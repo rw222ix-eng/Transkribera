@@ -725,8 +725,10 @@ window.BladBygg = (() => {
        den raden eleven läser för att veta om svaret skrivs här eller lösningen
        på lösblad. Skärmen satte i stället ordet «lösblad» litet i marginalen,
        och sa alltså samma sak med andra ord på en annan plats. */
+    /* Etiketterna i vardagsord sedan 2026-10-10 (Rickard, språkkollen på
+       omprov 174), samma som pappret (exam_latex._KRAV_TEXT). */
     const krav = `<p class="prkrav">${u.ut === 'kort'
-      ? 'Endast svar krävs.' : 'Fullständig lösning krävs.'}</p>`;
+      ? 'Skriv bara svaret.' : 'Visa hur du räknar.'}</p>`;
     /* Marginalen bär ETT format. «(totalt 3 p)» bredvid «1 p» läste sig som två
        olika fält; att poängen är en summa framgår av deluppgifternas egna. */
     const varde = `${u.p} p`;
