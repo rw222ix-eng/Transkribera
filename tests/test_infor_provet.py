@@ -369,6 +369,10 @@ def test_vakten_faller_noah_och_ali():
     assert "Noah" in fynd[0]["text"] and "Byt namnet" in fynd[0]["text"]
     assert "Ali" in fynd[1]["text"] and "«säckar»" in fynd[1]["text"]
     assert "«tändstickor»" in fynd[2]["text"]
+    # Blad 190:9: Ali byttes mot Hugo, som också stod på provet. Fyndet säger
+    # vilka namn provet redan har, och bara när ett namn är fyndet.
+    assert "Provet har redan" in fynd[0]["text"] and "Ali" in fynd[0]["text"]
+    assert "Provet har redan" not in fynd[2]["text"]
     # LAGBART på samma väg som kopian: «Laga fynden» skickar det vidare.
     assert routes_exam.efterkontroll_nummer(fynd) == [1, 2, 3, 4]
     assert "provlan" in routes_exam._ATGARD

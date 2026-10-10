@@ -10872,13 +10872,18 @@ def lanevakt(exam: dict, prov: dict | None) -> list[dict]:
         if mina_saker:
             vad.append("handlar om " + _och([f"«{o}»" for o in mina_saker]))
             byt.append("situationen")
+        # PROVETS NAMN I FYNDET (blad 190:9, 2026-10-10): «byt mot något som
+        # inte står på provet» bytte Ali mot Hugo, som också stod där. Modellen
+        # ser inte provet när den skriver om, så listan måste stå i fyndet.
+        upptagna = (f" Provet har redan {_och(sorted(namn))}." if mina_namn
+                    else "")
         ut.append({
             "nr": nr, "namn": mina_namn, "sammanhang": mina_saker,
             "message": (
                 f"Uppgift {nr} {' och '.join(vad)}, precis som provet. Bladet "
                 "ska öva samma sort av uppgift som provet, men med andra namn "
                 f"och andra sammanhang. Byt {' och '.join(byt)} mot något som "
-                "inte står på provet.")})
+                f"inte står på provet.{upptagna}")})
     return ut[:LAN_MAX_FYND]
 
 
