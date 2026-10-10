@@ -11403,8 +11403,26 @@ def textmangdvakt(exam: dict) -> list[dict]:
                 f"på bladet är {tak_o} ord och {tak_f} meningar på "
                 f"{niva}-nivå). Stryk bakgrund som inte behövs för att räkna, "
                 "slå ihop meningar om samma sak och lägg ett villkor i frågan "
-                f"när det blir kortare. {rad}" + BEHALL_PLANEN))
+                f"när det blir kortare. {rad}" + _efter_fragan_rad(stam, o, tak_o)
+                + BEHALL_PLANEN))
     return ut
+
+
+def _efter_fragan_rad(stam: str, o: int, tak: int) -> str:
+    """Orden räknas fram till SISTA meningen (_ord_fore_fragan), så en rad
+    efter frågan («Svara med minst en decimal.») gör frågan själv till
+    bakgrund. Blad 183:6 och 188:9 (2026-10-10) stod kvar på 42–46 ord efter
+    två omskrivningar: modellen strök fakta men lät frågan och raderna efter
+    den stå, och de var det som drog över taket. Fyndet säger det nu."""
+    if o <= tak:
+        return ""
+    mm = _stammens_meningar(stam)
+    k = next((j for j, m in enumerate(mm) if _ar_fraga(m)), None)
+    if k is None or k >= len(mm) - 1:
+        return ""
+    return (f" Frågan räknas med här, eftersom «{mm[k + 1]}» står efter den: "
+            "skriv in det i frågan («Bestäm … med minst en decimal.») eller "
+            "korta det, så att hela uppgiften håller sig under taket.")
 
 
 # PROVETS FORM PÅ BLADET (Rickard 2026-09-26, via provgranskningen): bladen

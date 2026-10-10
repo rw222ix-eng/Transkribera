@@ -52,6 +52,21 @@ def test_c_problemet_far_provets_tak_och_delas_inte():
     assert _fynd(_blad(_uppg(DIKE_EFTER, (0, 2, 0)))) == []
 
 
+def test_raden_efter_fragan_namns_i_fyndet():
+    """Blad 183:6 (2026-10-10): «Svara med minst en decimal.» och «Förklara
+    kort …» efter frågan gjorde frågan till bakgrund, och två omskrivningar
+    strök fakta utan att komma under taket. Fyndet pekar ut raden."""
+    text = ("En fotboll rymmer $5{,}6$ liter luft.\nBollens volym i cm$^3$ ges "
+            "av formeln: $V = \\dfrac{4\\pi r^3}{3}$, där $r$ är radien i cm.\n"
+            "Bestäm den minsta kantlängd som en kubformad kartong för bollen "
+            "kan ha.\nSvara med minst en decimal.\nFörklara kort vad du gör i "
+            "varje steg.")
+    fynd = _fynd(_blad(_uppg(text, (0, 3, 0))))
+    assert fynd and "«Svara med minst en decimal.» står efter den" in fynd[0][1]
+    # Utan rader efter frågan säger fyndet inget om dem.
+    assert "står efter den" not in _fynd(_blad(_uppg(DIKE_FORE, (0, 2, 0))))[0][1]
+
+
 def test_e_uppgiften_har_bladets_lagre_tak():
     """Samma text som går igenom på C fälls på E: E-uppgiften får delas."""
     fynd = _fynd(_blad(_uppg(DIKE_EFTER, (1, 0, 0))))
