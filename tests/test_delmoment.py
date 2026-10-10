@@ -535,8 +535,8 @@ def test_kalendern_vinner_over_boken(tmp_path):
 
 def test_bladets_ram_hamtar_sidorna_ur_kalendern(tmp_path):
     """Omgenereringen via API:t 10/10 saknade `bok`, och provets förbudslista
-    blev tom. Ramen tar då lektionens sidor på bladets dag, eller den senaste
-    lektionen före, som gränssnittets bokval()."""
+    blev tom. Ramen tar då allt klassen haft fram till provdagen: kursens
+    första lektion till den sista på eller före dagen."""
     db_file = tmp_path / "t.db"
     conn = db.connect(db_file)
     try:
@@ -547,16 +547,55 @@ def test_bladets_ram_hamtar_sidorna_ur_kalendern(tmp_path):
         cid = db.get_or_create_course(conn, "Matematik 1c")
     finally:
         conn.close()
-    sista = max((r for r in LEKTIONER if r["datum"] <= "2026-09-16"),
-                key=lambda r: r["datum"])
+    haft = [r for r in LEKTIONER if r.get("fran") and r["datum"] <= "2026-09-16"]
     assert routes_planning.bok_ur_kalendern(
         db_file, "2026-09-16", group_id=gid, course_id=cid) == {
-        "id": bid, "fran": sista["fran"], "till": sista.get("till") or sista["fran"]}
+        "id": bid, "fran": min(r["fran"] for r in haft),
+        "till": max(r.get("till") or r["fran"] for r in haft)}
     # Före första lektionen, eller utan klass: inget att gissa på.
     assert routes_planning.bok_ur_kalendern(
         db_file, "2026-01-01", group_id=gid, course_id=cid) is None
     assert routes_planning.bok_ur_kalendern(
         db_file, "2026-09-16", group_id=None, course_id=cid) is None
+
+
+def test_efterkontrollen_faller_bokstaver_fore_algebran(tmp_path):
+    """Blad 199 (BA26B A inför prov 131, 2026-10-11): bokstäver i åtta
+    uppgifter och en tom fyndlista, för efterkontrollen körde vakterna utan
+    provets ram. Nu räknas ramen ur kalendern, och samma vakt fäller."""
+    from app.web import routes_exam
+    db_file = tmp_path / "t.db"
+    conn = db.connect(db_file)
+    try:
+        db.create_bok(conn, namn="Matte 1a", kurs="Matematik 1a")
+        db.replace_lektionsinnehall(conn, [
+            {"datum": "2026-09-01", "fran": 10, "till": 12, "rubrik": "Procent",
+             "klass": "BA26B", "kurs": "Matematik 1a"},
+            {"datum": "2026-09-20", "fran": 30, "till": 33,
+             "rubrik": "Algebraiska uttryck", "klass": "BA26B",
+             "kurs": "Matematik 1a"}])
+        gid = db.get_or_create_group(conn, "BA26B")
+        cid = db.get_or_create_course(conn, "Matematik 1a")
+    finally:
+        conn.close()
+    blad = {"titel": "Inför provet", "kurs": "Matematik, nivå 1a",
+            "uppgifter": [
+                {"text": "En rulle är $n$ m lång. Hur många bitar blir det?",
+                 "poang": [0, 0, 1], "typ": "problem", "losning": "5"},
+                {"text": "En rulle är 25 m lång. Hur många bitar blir det?",
+                 "poang": [1, 0, 0], "typ": "problem", "losning": "5"}]}
+    view = {"typ": "arbetsblad", "group_id": gid, "course_id": cid,
+            "datum": "2026-09-05", "exam": blad}
+    fynd = routes_exam._forbudsfynd(view, {"datum": "2026-09-10"},
+                                    "arbetsblad", db_file)
+    assert [(f["kod"], f["nr"]) for f in fynd] == [("forbudsvakt", 1)]
+    assert "bokstäver" in fynd[0]["text"]
+    assert "forbudsvakt" in routes_exam._ATGARD
+    # Tyst på andra papper och utan provet.
+    assert routes_exam._forbudsfynd(view, None, "arbetsblad", db_file) == []
+    assert routes_exam._forbudsfynd({**view, "typ": "prov"},
+                                    {"datum": "2026-09-10"}, "prov",
+                                    db_file) == []
 
 
 # ══════════════════════════════════════════════════════════════════════════

@@ -752,6 +752,49 @@ def _ovningsfynd(exam: dict, infor: dict | None, typ: str) -> list[dict]:
     return ut
 
 
+def _forbudsfynd(view: dict, infor: dict | None, typ: str,
+                 db_file: Path | None) -> list[dict]:
+    """Provets förbudslista på bladet inför provet: metoder som kommer senare
+    i boken och bokstäver före algebran (exam_gen.forbudsvakt) samt största
+    och minsta värde (extremvardesvakt).
+
+    Genereringen kör vakterna mot provets ram, men efterkontrollen anropade
+    ovningsvakter utan den, så fynden syntes aldrig. Blad 199 (BA26B A, inför
+    prov 131, 2026-10-11) stod kvar med bokstäver i åtta uppgifter och en tom
+    fyndlista, och 188:12 och 189:9 med största värde före
+    andragradsfunktionen. Ramen räknas här ur kalendern på samma sätt som
+    genereringen gör när kroppen saknar `bok` (bok_ur_kalendern), med provets
+    datum. Tyst utan basen, klassen, kursen, provet eller lektioner."""
+    if typ != "arbetsblad" or not infor or db_file is None \
+            or not view.get("group_id") or not view.get("course_id"):
+        return []
+    try:
+        gid, cid = view["group_id"], view["course_id"]
+        provdatum = str(infor.get("datum") or view.get("datum") or "")
+        bok = routes_planning.bok_ur_kalendern(db_file, provdatum,
+                                               group_id=gid, course_id=cid)
+        if not bok:
+            return []
+        body = {"bok": bok, "datum": provdatum}
+        delmoment = routes_planning.undervisade_delmoment(
+            db_file, body, group_id=gid, course_id=cid)
+        forbjudna = [f for f in routes_planning.forbjudna_metoder(
+            db_file, body, group_id=gid, course_id=cid, undervisade=delmoment)
+            if not f.get("fordjupning")]
+        avsnitt = exam_gen.avsnitt_med_lektioner(
+            routes_planning.bok_avsnitt(db_file, body), delmoment)
+        exam = view.get("exam") or {}
+        fel = exam_gen.forbudsvakt(exam, delmoment, forbjudna, avsnitt)
+        sedda = {f["path"] for f in fel}
+        fel += [f for f in exam_gen.extremvardesvakt(exam, forbjudna,
+                                                     delmoment, avsnitt)
+                if f["path"] not in sedda]
+    except Exception:                       # pragma: no cover, trasig bas
+        return []
+    return [_fynd(f["code"], f["message"], _uppgiftsnr(f.get("path", "")))
+            for f in fel]
+
+
 def _utan_granser(exam: dict | None) -> dict:
     """Pappret utan sitt gränsblock, för jämförelsen vid godkännandet."""
     return {k: v for k, v in (exam or {}).items() if k != "granser"}
@@ -800,6 +843,7 @@ def efterkontroll(view: dict, doc, summor: dict | None, *,
     ut += _formfynd(doc, typ)
     ut += _cifynd(view.get("exam") or {}, typ)
     ut += _ovningsfynd(view.get("exam") or {}, infor, typ)
+    ut += _forbudsfynd(view, infor, typ, db_file)
     # Kopieringsvakten sist bland fynden, och bara när anroparen pekat ut
     # provet (se _kopiefynd). Den tiger på varje annat papper i appen.
     kopior = _kopiefynd(view.get("exam") or {}, infor)
@@ -885,6 +929,10 @@ _ATGARD = {
                      "med en bokstav färre. Samma poäng, samma förmåga.",
     "lasregel": "Skriv om uppgiftens text så som fyndet säger. Samma "
                 "matematik, samma tal, samma poäng; övriga uppgifter står kvar.",
+    # Provets förbudslista på bladet inför provet (_forbudsfynd, 2026-10-11).
+    "forbudsvakt": "Gör som fyndet säger: skriv uppgiften med konkreta tal "
+                   "eller byt ut den mot en som går att lösa med det klassen "
+                   "haft före provet. Samma del, samma poäng, samma förmåga.",
     "kursvakt": "Byt ut uppgiften mot en som prövar samma förmåga inom kursens "
                 "eget innehåll, eller fråga efter ett bestämt fall. Samma del "
                 "och samma poäng.",
@@ -2143,11 +2191,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     ram_body = {**body, "datum": infor_datum or datum or ""}
                     ram_grupp = infor_grupp or group_id
                     # Utan `bok` i kroppen blev listorna tomma (omgenereringen
-                    # via API:t 10/10): sidorna hämtas då ur kalenderns
-                    # lektion på bladets dag, som gränssnittets bokval().
+                    # via API:t 10/10): sidorna hämtas då ur kalendern, hela
+                    # provets kapitel fram till provdagen.
                     if routes_planning.bok_val(ram_body) is None:
                         kal = routes_planning.bok_ur_kalendern(
-                            db_file, datum or infor_datum or "",
+                            db_file, infor_datum or datum or "",
                             group_id=ram_grupp, course_id=course_id)
                         if kal:
                             ram_body["bok"] = kal

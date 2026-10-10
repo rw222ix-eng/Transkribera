@@ -281,21 +281,27 @@ def bok_val(body: dict) -> tuple[int, int, int] | None:
 
 def bok_ur_kalendern(db_file: Path, datum: str, *, group_id: int | None,
                      course_id: int | None) -> dict | None:
-    """`bok: {id, fran, till}` ur kalenderns lektion på `datum`, eller den
-    senaste lektionen med sidor före det. Det gränssnittet skickar som
-    bokval() när läraren skriver bladet från lektionen.
+    """`bok: {id, fran, till}` för ALLT KLASSEN HAFT fram till `datum`
+    (provdagen): från kursens första lektion med sidor till den sista på
+    eller före provdagen. Förbudslistan blir då det som står senare i boken.
 
     Bladen inför provet som skrevs om via API:t 10/10 saknade `bok` i
     kroppen, så provets förbudslista blev tom: BA26B:s blad fick uttryck med
     bokstäver före algebran och IndA:s blad symmetrilinjer före
     andragradsfunktionen. Ramen hämtar därför sidorna själv när kroppen
-    tiger. None utan klass, kurs, bok eller lektioner."""
+    tiger. Allt hittills och inte bladets lektion eller kapitlet: med en
+    lektions sidor förbjöd IndA:s «Från ekvation till graf» ordet ekvation på
+    ett blad inför ett ekvationsprov, och TE26A:s kapitel 2 (efter prov 132
+    den 5/10) saknade algebran från kapitel 1, så «Räta linjens ekvation»
+    förbjöd bokstäver inför prov 129. None utan klass, kurs, bok eller
+    lektioner."""
     try:
         gid, cid = int(group_id or 0), int(course_id or 0)
     except (TypeError, ValueError):
         return None
     if not gid or not cid:
         return None
+    slut = datum or "9999"
     conn = db.connect(db_file)
     try:
         bok = db.bok_for_kurs(conn, cid)
@@ -304,13 +310,12 @@ def bok_ur_kalendern(db_file: Path, datum: str, *, group_id: int | None,
         conn.close()
     if not bok:
         return None
-    fore = [r for r in rader if r.get("fran") and str(r.get("datum") or "")
-            <= (datum or "9999")]
-    if not fore:
+    haft = [r for r in rader if r.get("fran")
+            and str(r.get("datum") or "") <= slut]
+    if not haft:
         return None
-    r = max(fore, key=lambda r: str(r.get("datum") or ""))
-    return {"id": bok["id"], "fran": int(r["fran"]),
-            "till": int(r.get("till") or r["fran"])}
+    return {"id": bok["id"], "fran": min(int(r["fran"]) for r in haft),
+            "till": max(int(r.get("till") or r["fran"]) for r in haft)}
 
 
 def bok_urval(body: dict) -> dict | None:
