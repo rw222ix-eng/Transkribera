@@ -4339,8 +4339,9 @@ def niva_fynd(exam: dict, *, model: str, llm=llm_client.generate,
     PROVET JÄMFÖRS DESSUTOM MED NATIONELLA PROVET (app/np_jamforare, Rickard
     2026-10-10): domarna dömer mot nivåernas beskrivning i ord, jämföraren mot
     NP:s egna uppgifter i samma kurs. Säger den en annan nivå vinner den, för
-    NP är facit, och domarnas fynd på samma uppgift stryks. Tom `profil`
-    (äldre anropare) eller ett blad: ingen jämförelse, som förut.
+    NP är facit, och domarnas fynd på samma uppgift stryks. Arbetsbladet
+    jämförs också sedan samma kväll (C-bladet inför BA26B prov 2 bar en
+    A-insikt). Tom `profil` (äldre anropare): ingen jämförelse, som förut.
 
     `bara` begränsar kontrollen till vissa uppgiftsnummer. Grinden använder det
     när den prövar om en omskrivning hjälpte: då är det de rörda uppgifterna
@@ -4362,10 +4363,10 @@ def niva_fynd(exam: dict, *, model: str, llm=llm_client.generate,
         return [], False
     domarnas = avvikelser(enheter, blind, krit)
     np = []
-    if profil == "prov":
+    if profil in ("prov", "arbetsblad"):
         from app import np_jamforare            # lånar domarenheter härifrån
         np = np_jamforare.doma_np(exam, enheter, model=model, llm=llm,
-                                  log_cb=log_cb)
+                                  profil=profil, log_cb=log_cb)
     np_nr = {f.get("nr") for f in np}
     return (np + [f for f in domarnas if f.get("nr") not in np_nr]
             + e_nivasignaler(enheter, niva_mal)), True
@@ -11303,8 +11304,16 @@ def bladets_npvakter(exam: dict) -> list[dict]:
     svar» som bedöms på svaret. Samma fel är lika fel på övningen, och
     facit eleverna läser är samma räkning (Rickard 2026-09-25). De andra
     NP-vakterna är mätta på provets poäng och står utanför."""
+    kurs = str((exam or {}).get("kurs") or "")
+    # KURSGRÄNSEN OCKSÅ PÅ BLADET (Rickard 2026-10-10): A-bladet inför BA26B
+    # prov 2 bar «för alla värden på a», olikheter och trigonometri, och
+    # vakterna som hade fällt dem kördes bara på provet. «Vi ska kunna
+    # förlita oss på generatorn.» Kursvakten och parametervakten mäter
+    # innehållet, inte provets poängform, och gäller därför bladet lika.
     return (np_vakter.doltkravvakt(exam) + np_vakter.avrundningsvakt(exam)
-            + np_vakter.endastsvarvakt(exam))
+            + np_vakter.endastsvarvakt(exam)
+            + np_vakter.parametervakt(exam, kurs)
+            + np_vakter.kursvakt(exam, kurs))
 
 
 def _stammens_meningar(text: str) -> list[str]:

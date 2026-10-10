@@ -628,11 +628,12 @@ def test_utan_avvikelser_kostar_domaren_ingen_reparation():
     llm, anrop = _stub([json.dumps(_giltigt_prov())], dom=dom)
     res = exam_gen.generate_exam("Ma1a", "NA25", ["ekvationer"], model="m",
                                  antal=2, profil="arbetsblad", llm=llm)
-    # Generering + två nivådomare + räknedomaren + kursdomaren (Ma1a är en
-    # mätt kurs, app/kursdomare 2026-09-22) = fem anrop, noll rundor och noll
+    # Generering + två nivådomare + NP-jämföraren (app/np_jamforare, också
+    # bladet sedan 2026-10-10) + räknedomaren + kursdomaren (Ma1a är en mätt
+    # kurs, app/kursdomare 2026-09-22) = sex anrop, noll rundor och noll
     # extrarundor: domare som inte fäller får aldrig kosta läraren en
     # omskrivning, och grinden ska inte döma om ett papper som är rent.
-    assert len(anrop) == 5 and res["rounds"] == 1 and res["errors"] == []
+    assert len(anrop) == 6 and res["rounds"] == 1 and res["errors"] == []
     assert res["nivafel"] == []
 
 
@@ -878,7 +879,8 @@ def test_ett_rent_papper_doms_om_aven_utan_kvarstaende_fynd():
     dom = json.dumps({"domar": [{"nr": "1", "niva": "E"},
                                 {"nr": "2", "niva": "E"},
                                 {"nr": "3", "niva": "E"}]})
-    for niva_mal, vantat in ((_REN_E, 2), (None, 0)):
+    # Det rena pappret: dubbeldomen och NP-jämföraren, tre anrop.
+    for niva_mal, vantat in ((_REN_E, 3), (None, 0)):
         llm, anrop = _stub([json.dumps(exam)], dom=dom)
         res = exam_gen._niva_grind({"exam": exam, "errors": [], "rounds": 1,
                                     "nivafynd": [], "nivakoll": True,
@@ -886,7 +888,7 @@ def test_ett_rent_papper_doms_om_aven_utan_kvarstaende_fynd():
                                    model="m", llm=llm, profil="arbetsblad",
                                    skala="", antal=3, skeleton=None,
                                    koder=None, niva_mal=niva_mal)
-        # Dubbeldomen är två anrop; det blandade pappret kör inget alls.
+        # Det blandade pappret kör inget alls.
         assert len(anrop) == vantat, niva_mal
         assert res["nivafel"] == []
 
@@ -1149,8 +1151,9 @@ def test_talsignaler_ensamma_kostar_aldrig_en_runda():
     llm, anrop = _stub([json.dumps(prov)], dom=enig)
     res = exam_gen.generate_exam("Ma1a", "NA25", ["ekvationer"], model="m",
                                  antal=2, profil="arbetsblad", llm=llm)
-    # Fem anrop: generering, två nivådomare, räknedomaren, kursdomaren.
-    assert len(anrop) == 5 and res["rounds"] == 1 and res["nivafel"] == []
+    # Sex anrop: generering, två nivådomare, NP-jämföraren, räknedomaren,
+    # kursdomaren.
+    assert len(anrop) == 6 and res["rounds"] == 1 and res["nivafel"] == []
     # Två signaler: frasen på uppgiften, och pappret som helhet (en av två
     # uppgifter är över andelstaket).
     assert [e["code"] for e in res["errors"]] == ["talsignal", "talsignal"]

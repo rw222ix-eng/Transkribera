@@ -23,8 +23,10 @@ generatorns reparationsrunda och nivågrinden lagar dem som de lagar
 nivådomarnas, och läraren ser dem i `nivafel`.
 
 KONTRAKTET ÄR NIVÅDOMARNAS: eget anrop, temperature 0, json_schema,
-fail-open. «ingen» NP-enhet och «oklart» fäller aldrig. Bara provet, och bara
-de kurser profilen har mätt (1a, 1c, 2a, 2c). Ordet «NP-jämförare» står i
+fail-open. «ingen» NP-enhet fäller bara en A-uppgift på arbetsbladet. Provet
+och arbetsbladet, och bara de kurser profilen har mätt (1a, 1c, 2a, 2c).
+På bladet byts uppgiften i stället för att poängen ändras: bladets nivå är
+lärarens val. Ordet «NP-jämförare» står i
 prompten och ingen annanstans; uppspelningen väljer band på det
 (tests/fejk.py `_auto`).
 """
@@ -157,15 +159,31 @@ def parse_npj(raw: str) -> dict[str, dict]:
 
 
 def npj_fynd(enheter: list[dict], domar: dict[str, dict],
-             np: list[dict]) -> list[dict]:
+             np: list[dict], profil: str = "prov") -> list[dict]:
     """Ett nivåfynd per enhet där NP sätter andra poäng än provet. «ingen»,
     [0, 0, 0] och tystnad fäller aldrig, och inte heller ett NP-id som inte
     finns i profilen."""
     kanda = {u["id"]: u for u in np}
+    blad = profil == "arbetsblad"
     ut = []
     for e in enheter:
         dom = domar.get(e["nr"])
-        if not dom or not any(dom["poang"]):
+        if not dom:
+            continue
+        # A-BLADET: en A-uppgift som ingen uppgift på nationella provet prövar
+        # är inte en A-uppgift i kursen utan något utanför den (A-bladet inför
+        # BA26B prov 2: olikheter, «för alla a», $c(x - 2)^2$). Provet fäller
+        # inte på det, där har stugan och andra egna situationer ingen tvilling.
+        if blad and e["niva"] == "A" and dom["np"] == "ingen":
+            ut.append(exam_gen._fynd(e, "?", (
+                f"uppgift {e['nr']} prövar något som ingen uppgift på "
+                "nationella provet i kursen prövar. Byt den mot en A-uppgift "
+                "av provets egen sort: ett värde ur ett givet samband, en "
+                "lösning med ett extra villkor, en formel med en bokstav till "
+                "eller en brytpunkt. Inga olikheter och inget som ska gälla "
+                "för alla tal.")))
+            continue
+        if not any(dom["poang"]):
             continue
         ref = kanda.get(dom["np"])
         if ref is None:
@@ -178,7 +196,7 @@ def npj_fynd(enheter: list[dict], domar: dict[str, dict],
         # samma nivå fäller inte: provmätningen 2026-10-10 ville ge stugans
         # E-uppgift två poäng och betongens C-uppgift en E-poäng till, och då
         # hade jämföraren skrivit om poängtaket i stället för nivåerna.
-        if domd == e["niva"] and (dom["poang"] == egna
+        if domd == e["niva"] and (blad or dom["poang"] == egna
                                   or sum(dom["poang"]) != sum(egna)):
             continue
         trip = lambda v: "/".join(str(x) for x in v)
@@ -188,16 +206,23 @@ def npj_fynd(enheter: list[dict], domar: dict[str, dict],
                 f"({trip(dom['poang'])}).")
         if dom["motivering"]:
             text += f" {exam_gen._kort(dom['motivering'], 220).rstrip('.')}."
-        text += (f" Sätt poängen till ({trip(dom['poang'])}) som nationella "
-                 "provet gör, och behåll uppgiften. Går balansen inte ihop då, "
-                 "ändra i stället uppgiften så att den prövar det en uppgift med "
-                 f"({trip(egna)}) prövar på nationella provet.")
+        if blad:
+            # Bladets nivå är lärarens val (E-, C- eller A-bladet). Poängen
+            # står kvar, och uppgiften byts mot en som är på bladets nivå.
+            text += (f" Bladet är på {e['niva']}-nivå: behåll poängen och byt "
+                     f"uppgiften mot en som prövar det en {e['niva']}-uppgift "
+                     "prövar på nationella provet.")
+        else:
+            text += (f" Sätt poängen till ({trip(dom['poang'])}) som nationella "
+                     "provet gör, och behåll uppgiften. Går balansen inte ihop då, "
+                     "ändra i stället uppgiften så att den prövar det en uppgift "
+                     f"med ({trip(egna)}) prövar på nationella provet.")
         ut.append(exam_gen._fynd(e, domd, text))
     return ut
 
 
 def doma_np(exam: dict, enheter: list[dict], *, model: str,
-            llm=llm_client.generate,
+            llm=llm_client.generate, profil: str = "prov",
             log_cb: Callable[[str], None] | None = None) -> list[dict]:
     """Ett anrop → nivåfynd där nationella provet sätter en annan nivå."""
     log = log_cb or (lambda _m: None)
@@ -220,4 +245,4 @@ def doma_np(exam: dict, enheter: list[dict], *, model: str,
         log(f"Jämförelsen med nationella provet kunde inte köras ({e}), "
             "provet levereras ändå.")
         return []
-    return npj_fynd(enheter, parse_npj(raw), np)
+    return npj_fynd(enheter, parse_npj(raw), np, profil)

@@ -158,6 +158,14 @@ KURSINNEHALL: dict[str, list[tuple[str, re.Pattern]]] = {
         ("talsystem och delbarhet", re.compile(
             r"binär|primtal|talsystem|tvåsystem|basen två|delbar"
             r"|gemensamm?a?\s+delare|(?<![\wåäö])delare\s+till", re.I)),
+        # Rickard 2026-10-10, A-bladet inför BA26B prov 2: «Undersök för vilka
+        # rörlängder L Hugo har rätt» och sju uppgifter till av samma sort.
+        # Olikheter står inte i Ma 1a:s centrala innehåll (och «olikheter
+        # ingår inte», domen 2026-10-08). Formen tas på orden och tecknen.
+        ("olikheter", re.compile(
+            r"(?:undersök|bestäm|ange|avgör)\s+för\s+vilk(?:a|et)"
+            r"|för\s+vilka\s+(?:värden|tal|tider|längder|\$)|olikhet"
+            r"|\\(?:le|ge|leq|geq|lt|gt)(?![a-z])|[<>≤≥]", re.I)),
     ],
     # 1c och 2c är de tyngre spåren: ingenting i grannkursen ligger utanför.
     "1c": [],
