@@ -533,6 +533,32 @@ def test_kalendern_vinner_over_boken(tmp_path):
                   "datum": "2026-09-16"}, group_id=gid, course_id=cid)
     assert [(d["delmoment"], d["sidor"]) for d in ut] == VANTADE
 
+def test_bladets_ram_hamtar_sidorna_ur_kalendern(tmp_path):
+    """Omgenereringen via API:t 10/10 saknade `bok`, och provets förbudslista
+    blev tom. Ramen tar då lektionens sidor på bladets dag, eller den senaste
+    lektionen före, som gränssnittets bokval()."""
+    db_file = tmp_path / "t.db"
+    conn = db.connect(db_file)
+    try:
+        bid = db.create_bok(conn, namn="Liber Ma 1c", kurs="Matematik 1c")["id"]
+        db.replace_lektionsinnehall(conn, [
+            dict(r, klass="TE26A", kurs="Matematik 1c") for r in LEKTIONER])
+        gid = db.get_or_create_group(conn, "TE26A")
+        cid = db.get_or_create_course(conn, "Matematik 1c")
+    finally:
+        conn.close()
+    sista = max((r for r in LEKTIONER if r["datum"] <= "2026-09-16"),
+                key=lambda r: r["datum"])
+    assert routes_planning.bok_ur_kalendern(
+        db_file, "2026-09-16", group_id=gid, course_id=cid) == {
+        "id": bid, "fran": sista["fran"], "till": sista.get("till") or sista["fran"]}
+    # Före första lektionen, eller utan klass: inget att gissa på.
+    assert routes_planning.bok_ur_kalendern(
+        db_file, "2026-01-01", group_id=gid, course_id=cid) is None
+    assert routes_planning.bok_ur_kalendern(
+        db_file, "2026-09-16", group_id=None, course_id=cid) is None
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # SPÅR 5 (2026-09-13): domarna släppte igenom uppgifter som inte hörde till
 # kapitlet och som var otydligt skrivna.

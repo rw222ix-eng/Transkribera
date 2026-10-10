@@ -2142,6 +2142,15 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 if typ == "arbetsblad" and inforprov:
                     ram_body = {**body, "datum": infor_datum or datum or ""}
                     ram_grupp = infor_grupp or group_id
+                    # Utan `bok` i kroppen blev listorna tomma (omgenereringen
+                    # via API:t 10/10): sidorna hämtas då ur kalenderns
+                    # lektion på bladets dag, som gränssnittets bokval().
+                    if routes_planning.bok_val(ram_body) is None:
+                        kal = routes_planning.bok_ur_kalendern(
+                            db_file, datum or infor_datum or "",
+                            group_id=ram_grupp, course_id=course_id)
+                        if kal:
+                            ram_body["bok"] = kal
                     ram_del = routes_planning.undervisade_delmoment(
                         db_file, ram_body, group_id=ram_grupp,
                         course_id=course_id)

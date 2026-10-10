@@ -279,6 +279,40 @@ def bok_val(body: dict) -> tuple[int, int, int] | None:
     return (bid, fran, max(fran, till)) if fran > 0 else None
 
 
+def bok_ur_kalendern(db_file: Path, datum: str, *, group_id: int | None,
+                     course_id: int | None) -> dict | None:
+    """`bok: {id, fran, till}` ur kalenderns lektion på `datum`, eller den
+    senaste lektionen med sidor före det. Det gränssnittet skickar som
+    bokval() när läraren skriver bladet från lektionen.
+
+    Bladen inför provet som skrevs om via API:t 10/10 saknade `bok` i
+    kroppen, så provets förbudslista blev tom: BA26B:s blad fick uttryck med
+    bokstäver före algebran och IndA:s blad symmetrilinjer före
+    andragradsfunktionen. Ramen hämtar därför sidorna själv när kroppen
+    tiger. None utan klass, kurs, bok eller lektioner."""
+    try:
+        gid, cid = int(group_id or 0), int(course_id or 0)
+    except (TypeError, ValueError):
+        return None
+    if not gid or not cid:
+        return None
+    conn = db.connect(db_file)
+    try:
+        bok = db.bok_for_kurs(conn, cid)
+        rader = db.lektionsinnehall_for_kurs(conn, gid, cid)
+    finally:
+        conn.close()
+    if not bok:
+        return None
+    fore = [r for r in rader if r.get("fran") and str(r.get("datum") or "")
+            <= (datum or "9999")]
+    if not fore:
+        return None
+    r = max(fore, key=lambda r: str(r.get("datum") or ""))
+    return {"id": bok["id"], "fran": int(r["fran"]),
+            "till": int(r.get("till") or r["fran"])}
+
+
 def bok_urval(body: dict) -> dict | None:
     """Lärarens eget urval ur uppgiftspanelen, som klienten skickar det:
     `bok: {…, remsa, bortremsa}` — «1101–1103, 1105–1119» och de överhoppade.
