@@ -1,192 +1,3 @@
-{"tid": "2026-09-09T16:44:18", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 592}}
-{"tid": "2026-09-09T16:44:29", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T16:44:38", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 218}}
-{"tid": "2026-09-09T16:44:38", "art": "api", "vag": "POST /api/exams/{id}/oppna", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 218}}
-{"tid": "2026-09-09T16:44:42", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T16:44:43", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 1062}}
-{"tid": "2026-09-09T16:44:49", "art": "api", "vag": "POST /api/exams/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 327}}
-{"tid": "2026-09-09T16:46:12", "art": "api", "vag": "GET /api/exams/{id}/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T16:46:22", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 405}}
-{"tid": "2026-09-09T16:46:27", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
-{"tid": "2026-09-09T16:46:36", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 141}}
-{"tid": "2026-09-09T16:46:36", "art": "api", "vag": "POST /api/exams/{id}/oppna", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 157}}
-{"tid": "2026-09-09T16:46:40", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T16:46:41", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 734}}
-{"tid": "2026-09-09T16:46:47", "art": "api", "vag": "POST /api/exams/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 264}}
-{"tid": "2026-09-09T16:47:14", "art": "api", "vag": "GET /api/exams/{id}/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T16:47:24", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 484}}
-{"tid": "2026-09-09T16:47:28", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-09T16:47:38", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 140}}
-{"tid": "2026-09-09T16:47:38", "art": "api", "vag": "POST /api/exams/{id}/oppna", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 140}}
-{"tid": "2026-09-09T16:47:43", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-09T16:47:44", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 670}}
-{"tid": "2026-09-09T16:47:49", "art": "api", "vag": "POST /api/exams/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 219}}
-{"tid": "2026-09-09T16:48:14", "art": "api", "vag": "GET /api/exams/{id}/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
-{"tid": "2026-09-09T16:52:59", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 452}}
-{"tid": "2026-09-09T16:53:00", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-09T16:53:10", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 155}}
-{"tid": "2026-09-09T16:53:10", "art": "api", "vag": "POST /api/exams/{id}/oppna", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 155}}
-{"tid": "2026-09-09T16:53:14", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T16:53:15", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 813}}
-{"tid": "2026-09-09T16:53:21", "art": "api", "vag": "POST /api/exams/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 280}}
-{"tid": "2026-09-09T16:53:25", "art": "api", "vag": "GET /api/exams/{id}/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T16:55:24", "art": "api", "vag": "POST /api/bocker/{id}/las", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T16:55:25", "art": "api", "vag": "POST /api/planning/ci-forslag", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T16:55:28", "art": "api", "vag": "POST /api/planning/ci-forslag", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-09T16:55:58", "art": "api", "vag": "POST /api/exams/generate", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 155}}
-{"tid": "2026-09-09T17:02:29", "art": "api", "vag": "GET /api/exams/{id}/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T17:02:29", "art": "api", "vag": "GET /api/exams/{id}/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T17:02:29", "art": "api", "vag": "GET /api/exams/{id}/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T17:02:29", "art": "api", "vag": "GET /api/exams/{id}/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T17:02:29", "art": "api", "vag": "GET /api/exams/{id}/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T17:02:29", "art": "api", "vag": "GET /api/exams/{id}/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T17:02:29", "art": "api", "vag": "GET /api/exams/{id}/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-09T17:02:29", "art": "api", "vag": "GET /api/exams/{id}/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T17:02:29", "art": "api", "vag": "GET /api/exams/{id}/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
-{"tid": "2026-09-09T17:02:30", "art": "api", "vag": "GET /api/exams/{id}/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T17:07:48", "art": "api", "vag": "POST /api/dokument", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
-{"tid": "2026-09-09T17:07:48", "art": "api", "vag": "POST /api/bocker/{id}/losningar", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T17:08:38", "art": "onske", "vag": null, "doktyp": "gruppuppgift", "dok_id": "75", "detalj": {"message": "SRIV KORTARE UTAN EM DASH", "nummer": null, "mal": "Instruktionen", "malen": []}}
-{"tid": "2026-09-09T17:08:38", "art": "api", "vag": "POST /api/exams/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-09T17:08:45", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T17:10:07", "art": "utfall", "vag": null, "doktyp": "gruppuppgift", "dok_id": "75", "detalj": {"andrade": ["instr"], "fel": 0}}
-{"tid": "2026-09-09T17:10:07", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-09T17:55:29", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-09T17:55:39", "art": "api", "vag": "POST /api/exams/generate", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 156}}
-{"tid": "2026-09-09T18:11:27", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-09T18:11:37", "art": "api", "vag": "POST /api/exams/generate", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 155}}
-{"tid": "2026-09-09T18:38:22", "art": "onske", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"message": "Skriv om uppgift 2 till EN fråga och ETT räknesteg. Behåll betongblandaren med effekten 3 kW och bygget som situation. Frågan ska vara «Hur många watt är 3 kW?» eller motsvarande. Ta bort dammsugaren helt och ta bort ordet «drar». Svarsfält: Svar. Förebilden 1269 står kvar.", "nummer": [2], "mal": "Uppgift 2", "malen": []}}
-{"tid": "2026-09-09T18:38:22", "art": "api", "vag": "POST /api/exams/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-09T18:40:04", "art": "utfall", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"andrade": ["uppg2"], "fel": 0}}
-{"tid": "2026-09-09T18:41:52", "art": "onske", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"message": "Uppgift 2 tappade sin bokförebild i förra varvet. Lägg tillbaka fältet forebild på uppgift 2 med nr 1269 och sort «Samma sort: göra sig av med prefixet kilo i en effekt och arbeta i grundenheten watt.». Ändra ingenting annat i uppgift 2: texten, poängen, förmågan, svarsfältet, lösningen och bedömningen ska stå kvar ord för ord.", "nummer": [2], "mal": "Uppgift 2", "malen": []}}
-{"tid": "2026-09-09T18:41:52", "art": "api", "vag": "POST /api/exams/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-09T18:43:33", "art": "utfall", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"andrade": ["uppg2"], "fel": 0}}
-{"tid": "2026-09-09T18:54:24", "art": "onske", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"message": "Uppgift 2 tappade sin bokförebild i förra varvet. Lägg tillbaka fältet forebild på uppgift 2 med nr 1269 och sort «Samma sort: göra sig av med prefixet kilo i en effekt och arbeta i grundenheten watt.». Ändra ingenting annat i uppgift 2: texten, poängen, förmågan, svarsfältet, lösningen och bedömningen ska stå kvar ord för ord.", "nummer": [2], "mal": "Uppgift 2", "malen": []}}
-{"tid": "2026-09-09T18:54:24", "art": "api", "vag": "POST /api/exams/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-09T18:56:34", "art": "utfall", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"andrade": ["uppg2"], "fel": 0}}
-{"tid": "2026-09-09T18:57:46", "art": "api", "vag": "POST /api/dokument", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
-{"tid": "2026-09-09T18:58:29", "art": "api", "vag": "DELETE /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 404, "ms": 0}}
-{"tid": "2026-09-09T18:58:29", "art": "api", "vag": "DELETE /api/exams/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T18:58:29", "art": "api", "vag": "DELETE /api/exams/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T19:03:53", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T19:05:56", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T19:06:40", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T19:06:40", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-09T19:08:20", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T19:11:25", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-09T19:11:25", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 30}}
-{"tid": "2026-09-09T19:11:40", "art": "onske", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"message": "Det måste framgå i varje uppgift om minerakt eller inte behövs", "nummer": null, "mal": null, "malen": []}}
-{"tid": "2026-09-09T19:11:40", "art": "api", "vag": "POST /api/exams/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
-{"tid": "2026-09-09T19:13:02", "art": "utfall", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"andrade": ["avtal0", "instr", "uppg1", "uppg2", "uppg3", "uppg4"], "fel": 0}}
-{"tid": "2026-09-09T19:13:02", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T19:14:38", "art": "onske", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"message": "Behöver omformulera uppgiften så att den är skriven på enklare svenska", "nummer": [4], "mal": "Uppgift 4", "malen": []}}
-{"tid": "2026-09-09T19:14:38", "art": "api", "vag": "POST /api/exams/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-09T19:15:39", "art": "utfall", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"andrade": ["uppg4"], "fel": 0}}
-{"tid": "2026-09-09T19:15:39", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
-{"tid": "2026-09-09T19:15:39", "art": "onske", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"message": "Detta med antal skivor och motivering. Eh, och sen är det höjd kvar i millimeter och sen antal skivor. Ta bort det. Det räcker med att vi har liksom, eh, att det står varje skiva är arton millimeter tjock. Bestäm hur många skivor stapeln högst kan innehålla på deluppgift A och deluppgift B. Nu lägg stapeln på en pall som är femton centimeter hög. Skivorna är tjugofyra millimeter tjocka. Bestäm hur många skivor som ryms under den högsta tillåtna höjden. Det räcker, det kan vi kryssa.", "nummer": [4], "mal": "Uppgift 4", "malen": []}}
-{"tid": "2026-09-09T19:15:39", "art": "api", "vag": "POST /api/exams/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-09T19:16:30", "art": "utfall", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"andrade": ["uppg4"], "fel": 0}}
-{"tid": "2026-09-09T19:16:30", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-09T19:16:30", "art": "onske", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"message": "Skriv med enklare svenska", "nummer": [3], "mal": "Uppgift 3", "malen": []}}
-{"tid": "2026-09-09T19:16:30", "art": "api", "vag": "POST /api/exams/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
-{"tid": "2026-09-09T19:17:27", "art": "utfall", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"andrade": ["uppg3"], "fel": 0}}
-{"tid": "2026-09-09T19:17:27", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-09T19:17:27", "art": "onske", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"message": "Skriv kortare och med enklare svenska", "nummer": null, "mal": "Instruktionen", "malen": []}}
-{"tid": "2026-09-09T19:17:27", "art": "api", "vag": "POST /api/exams/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
-{"tid": "2026-09-09T19:18:06", "art": "utfall", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"andrade": ["instr"], "fel": 0}}
-{"tid": "2026-09-09T19:18:06", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
-{"tid": "2026-09-09T19:18:06", "art": "onske", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"message": "Om lösningen ska skrivas på lösblad på den här uppgiften, då behövs inte sva-svar kolon och sen det där understicket under bilden", "nummer": [2], "mal": "Uppgift 2", "malen": []}}
-{"tid": "2026-09-09T19:18:06", "art": "api", "vag": "POST /api/exams/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-09T19:18:19", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 110}}
-{"tid": "2026-09-09T19:19:40", "art": "utfall", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"andrade": ["uppg2"], "fel": 0}}
-{"tid": "2026-09-09T19:19:40", "art": "onske", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"message": "Åt vilket håll ska talet? Det låter konstigt. Ta bort det", "nummer": null, "mal": "Instruktionen", "malen": []}}
-{"tid": "2026-09-09T19:19:40", "art": "api", "vag": "POST /api/exams/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T19:19:40", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 125}}
-{"tid": "2026-09-09T19:20:49", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 234}}
-{"tid": "2026-09-09T19:20:52", "art": "utfall", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"andrade": ["instr"], "fel": 0}}
-{"tid": "2026-09-09T19:20:52", "art": "onske", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"message": "Eh, batteriets energi i megajoul och sen står det antal timmar där nere. Vi kan ta bort dem. Det behövs inte. Det räcker med att vi har uppgiftsbeskrivningen, eh, ovanför bilden.", "nummer": [3], "mal": "Uppgift 3", "malen": []}}
-{"tid": "2026-09-09T19:20:52", "art": "api", "vag": "POST /api/exams/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-09T19:20:52", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 280}}
-{"tid": "2026-09-09T19:21:31", "art": "utfall", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"andrade": ["uppg3"], "fel": 0}}
-{"tid": "2026-09-09T19:21:32", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 390}}
-{"tid": "2026-09-09T19:21:32", "art": "onske", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"message": "Vi behöver disponera, eh, texten i den här uppgiften. För just nu är texten ligger liksom efter varandra utan några, nån tydlig styckeindelning alltså. Eller ja, utan nån, nån mellanrum. Det är tydligt att, eller otydligt att läsa av", "nummer": [4], "mal": "Uppgift 4", "malen": []}}
-{"tid": "2026-09-09T19:21:32", "art": "api", "vag": "POST /api/exams/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-09T19:21:33", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 500}}
-{"tid": "2026-09-09T19:22:51", "art": "utfall", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"andrade": ["uppg4"], "fel": 0}}
-{"tid": "2026-09-09T19:22:52", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 514}}
-{"tid": "2026-09-09T19:22:53", "art": "onske", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"message": "Åt vilket håll ska talet? Det låter konstigt. Ta bort det\n\nDet förra försöket gick fel: resultatet blev inte som önskat. Gör om ändringen, den här gången så att önskemålet uppfylls.", "nummer": null, "mal": "Instruktionen", "malen": []}}
-{"tid": "2026-09-09T19:22:53", "art": "api", "vag": "POST /api/exams/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T19:24:09", "art": "utfall", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"andrade": [], "fel": 0}}
-{"tid": "2026-09-09T19:24:10", "art": "onske", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"message": "Vi behöver disponera den här uppgiftsbeskrivningen tydligare. Eh, just nu står liksom texten liksom under varandra hela tiden. Det är jättesvårt att läsa av som du själv kanske ser", "nummer": [3], "mal": "Uppgift 3", "malen": []}}
-{"tid": "2026-09-09T19:24:10", "art": "api", "vag": "POST /api/exams/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-09T19:24:10", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 625}}
-{"tid": "2026-09-09T19:24:59", "art": "utfall", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"andrade": ["uppg3"], "fel": 0}}
-{"tid": "2026-09-09T19:25:00", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 625}}
-{"tid": "2026-09-09T19:26:56", "art": "onske", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"message": "Byt ut, byt ut mot, eh, till plywood och skivor istället", "nummer": [4], "mal": "Uppgift 4", "malen": []}}
-{"tid": "2026-09-09T19:26:56", "art": "api", "vag": "POST /api/exams/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T19:27:42", "art": "utfall", "vag": null, "doktyp": "gruppuppgift", "dok_id": "77", "detalj": {"andrade": ["uppg4"], "fel": 0}}
-{"tid": "2026-09-09T19:27:43", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 703}}
-{"tid": "2026-09-09T19:28:25", "art": "api", "vag": "POST /api/kalenderposter", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T19:28:26", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 750}}
-{"tid": "2026-09-09T19:28:26", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-09T19:28:27", "art": "api", "vag": "POST /api/dokument", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 562}}
-{"tid": "2026-09-09T19:28:30", "art": "api", "vag": "POST /api/exams/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 109}}
-{"tid": "2026-09-09T19:28:32", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 702}}
-{"tid": "2026-09-09T19:28:37", "art": "api", "vag": "POST /api/planning/ci-forslag", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 62}}
-{"tid": "2026-09-09T19:28:39", "art": "api", "vag": "POST /api/planning/ci-forslag", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T19:28:52", "art": "api", "vag": "POST /api/planning/generate", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T19:38:12", "art": "api", "vag": "POST /api/dokument", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
-{"tid": "2026-09-09T19:48:47", "art": "onske", "vag": null, "doktyp": "tavla", "dok_id": "506cfdbd8e22", "detalj": {"message": "en tabell med Prefixen och dess tiopotens tack", "mal": "1.2 Tal och beräkningar · figuren", "malen": []}}
-{"tid": "2026-09-09T19:48:47", "art": "api", "vag": "POST /api/planning/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
-{"tid": "2026-09-09T19:49:38", "art": "utfall", "vag": null, "doktyp": "tavla", "dok_id": "506cfdbd8e22", "detalj": {"andrade": ["tav7", "tav8"], "fel": 0}}
-{"tid": "2026-09-09T19:49:38", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T19:53:19", "art": "api", "vag": "POST /api/planning/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-09T19:53:19", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-09T19:53:19", "art": "api", "vag": "POST /api/kalenderposter", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-09T19:53:19", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
-{"tid": "2026-09-09T19:53:20", "art": "api", "vag": "POST /api/planning/export", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-09T19:53:25", "art": "api", "vag": "POST /api/planning/ci-forslag", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T19:53:25", "art": "api", "vag": "POST /api/bocker/{id}/las", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T19:53:25", "art": "api", "vag": "POST /api/planning/ci-forslag", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T19:53:46", "art": "api", "vag": "POST /api/planning/generate", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
-{"tid": "2026-09-09T19:53:58", "art": "api", "vag": "POST /api/planning/ci-forslag", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T20:07:25", "art": "api", "vag": "POST /api/dokument", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-09T20:07:25", "art": "api", "vag": "POST /api/planning/{id}/render-report", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T20:08:02", "art": "api", "vag": "POST /api/planning/{id}/render-report", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T20:09:10", "art": "api", "vag": "POST /api/planning/{id}/render-report", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T20:10:10", "art": "api", "vag": "POST /api/planning/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-09T20:10:10", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-09T20:10:10", "art": "api", "vag": "POST /api/kalenderposter", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-09T20:10:10", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
-{"tid": "2026-09-09T20:10:10", "art": "api", "vag": "POST /api/planning/{id}/render-report", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T20:10:11", "art": "api", "vag": "POST /api/planning/export", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-09T20:10:29", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T20:10:41", "art": "api", "vag": "POST /api/planning/{id}/render-report", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
-{"tid": "2026-09-09T20:10:41", "art": "api", "vag": "POST /api/planning/{id}/render-report", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T20:11:06", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T20:41:44", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-09T20:42:44", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-09T20:43:20", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-09T20:43:39", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-09T20:43:52", "art": "api", "vag": "POST /api/planning/{id}/render-report", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T20:44:20", "art": "api", "vag": "POST /api/planning/generate", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-09T20:53:57", "art": "api", "vag": "POST /api/dokument", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-09T20:54:34", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-09T21:24:07", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
-{"tid": "2026-09-09T21:25:33", "art": "api", "vag": "POST /api/planning/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T21:25:33", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-09T21:25:33", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-09T21:25:33", "art": "api", "vag": "POST /api/planning/export", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-09T21:26:22", "art": "api", "vag": "POST /api/tavla/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 296}}
-{"tid": "2026-09-09T21:26:42", "art": "api", "vag": "GET /api/exams/{id}/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-09T21:26:45", "art": "api", "vag": "POST /api/tavla/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 218}}
-{"tid": "2026-09-10T15:36:19", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 31}}
-{"tid": "2026-09-10T15:36:19", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-10T15:36:45", "art": "api", "vag": "POST /api/bocker/{id}/las", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-10T15:36:46", "art": "api", "vag": "POST /api/planning/ci-forslag", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 31}}
-{"tid": "2026-09-10T15:36:48", "art": "api", "vag": "POST /api/planning/ci-forslag", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-10T15:36:59", "art": "api", "vag": "POST /api/exams/generate", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 843}}
-{"tid": "2026-09-10T15:37:33", "art": "api", "vag": "POST /api/planning/ci-forslag", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
 {"tid": "2026-09-10T15:58:53", "art": "api", "vag": "POST /api/dokument", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
 {"tid": "2026-09-10T15:59:56", "art": "onske", "vag": null, "doktyp": "gruppuppgift", "dok_id": "78", "detalj": {"message": "Skriv mycket kortare", "nummer": null, "mal": "Instruktionen", "malen": []}}
 {"tid": "2026-09-10T15:59:56", "art": "api", "vag": "POST /api/exams/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
@@ -7264,3 +7075,30 @@
 {"tid": "2026-10-09T16:36:23", "art": "api", "vag": "POST /api/planning/{id}/render-report", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 31}}
 {"tid": "2026-10-09T16:36:27", "art": "api", "vag": "POST /api/tavla/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 297}}
 {"tid": "2026-10-09T16:36:42", "art": "api", "vag": "POST /api/tavla/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 203}}
+{"tid": "2026-10-09T16:36:58", "art": "api", "vag": "POST /api/tavla/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 202}}
+{"tid": "2026-10-09T16:37:16", "art": "api", "vag": "POST /api/tavla/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 702}}
+{"tid": "2026-10-09T16:37:31", "art": "api", "vag": "POST /api/tavla/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 218}}
+{"tid": "2026-10-09T16:37:47", "art": "api", "vag": "POST /api/tavla/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 202}}
+{"tid": "2026-10-09T16:38:02", "art": "api", "vag": "POST /api/tavla/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 234}}
+{"tid": "2026-10-09T16:38:18", "art": "api", "vag": "POST /api/tavla/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 234}}
+{"tid": "2026-10-09T16:38:33", "art": "api", "vag": "POST /api/tavla/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 218}}
+{"tid": "2026-10-09T16:38:49", "art": "api", "vag": "POST /api/tavla/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 218}}
+{"tid": "2026-10-09T16:39:04", "art": "api", "vag": "POST /api/tavla/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 203}}
+{"tid": "2026-10-09T16:54:11", "art": "api", "vag": "POST /api/dokument", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-09T16:54:15", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-09T16:54:27", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-09T16:54:27", "art": "api", "vag": "POST /api/exams/{id}/oppna", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-09T16:54:31", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
+{"tid": "2026-10-09T16:54:31", "art": "api", "vag": "POST /api/kalenderposter", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
+{"tid": "2026-10-09T16:54:31", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-09T16:54:34", "art": "api", "vag": "POST /api/exams/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 31}}
+{"tid": "2026-10-09T16:54:35", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-09T16:54:58", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-09T16:54:59", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-09T16:55:11", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
+{"tid": "2026-10-09T16:55:11", "art": "api", "vag": "POST /api/exams/{id}/oppna", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
+{"tid": "2026-10-09T16:55:14", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-09T16:55:14", "art": "api", "vag": "POST /api/kalenderposter", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-09T16:55:14", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-09T16:55:17", "art": "api", "vag": "POST /api/exams/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 47}}
+{"tid": "2026-10-09T16:55:18", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
