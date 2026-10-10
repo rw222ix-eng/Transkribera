@@ -10877,6 +10877,12 @@ def lanevakt(exam: dict, prov: dict | None) -> list[dict]:
         # ser inte provet när den skriver om, så listan måste stå i fyndet.
         upptagna = (f" Provet har redan {_och(sorted(namn))}." if mina_namn
                     else "")
+        # Samma sak för sammanhangen: «byt situationen» bytte kakelplattor
+        # mot betongplattor på blad 200:2 (2026-10-11).
+        if mina_saker:
+            upptagna += (" Provets sammanhang är "
+                         + _och([f"«{s}»" for s in sorted(saker)])
+                         + "; välj något helt annat.")
         ut.append({
             "nr": nr, "namn": mina_namn, "sammanhang": mina_saker,
             "message": (
