@@ -350,6 +350,8 @@ def test_efterkontrollens_tidsfynd_foljer_taket():
     assert [f["kod"] for f in fynd] == ["tid"]
     assert "rymmer det 20 poäng" in fynd[0]["text"]
     assert "25 poäng, alltså 75 minuter" in fynd[0]["text"]
+    # Arbetsbladets tid är fri (Rickard 2026-10-10).
+    assert routes_exam._tidfynd(Doc, {"total": 40}, "arbetsblad") == []
 
 
 def test_poangtaket_haller_hela_vagen():

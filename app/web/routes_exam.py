@@ -383,6 +383,12 @@ def _tidfynd(doc, summor: dict | None, typ: str) -> list[dict]:
     papper på 100, det är inte slack, det är en lektion till."""
     if not summor or not doc.tid_min:
         return []
+    # ARBETSBLADETS TID ÄR FRI (Rickard 2026-10-10, bladen inför BA26B prov
+    # 2: E 60, C 95, A 125 minuter): «tolv uppgifter, tiden fri», och tiden
+    # står inte på bladet. Ett tidsfynd skulle bara få omskrivningen att
+    # stryka poäng läraren vill ha kvar.
+    if typ == "arbetsblad":
+        return []
     # PAPPRETS EGEN TAKT om det bär en (exam_spec.ExamDoc.takt): provet skrevs
     # mot lärarens minuter per poäng, och då mäts det med HENNES räkning,
     # poäng gånger takt, samma som taket (exam_spec.papperstid, exam 128:

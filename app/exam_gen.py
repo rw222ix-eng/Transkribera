@@ -4809,7 +4809,10 @@ BEGRIPLIGHETSORD = {
     "paketet": "säg vad paketet består av, eller undvik ordet",
 }
 
-_MENING = re.compile(r"[.!?]\s+|\n")
+# Ett citat som slutar meningen («… mer kvar än Noah.» Avgör om …) slutar
+# också på citattecknet. Utan det räknades påståendet och uppmaningen efter
+# som EN mening på 21 ord (A-bladet inför BA26B prov 2, 2026-10-10).
+_MENING = re.compile(r"[.!?][»\"”']?\s+|\n")
 # Tal i uppgiftstexten: heltal och decimaltal, med LaTeX-tunnrymd och komma.
 _TAL = re.compile(r"\d+(?:[.,]\d+)?")
 # Likhetstecken som RÄKNESTEG: `=` som inte är en del av \neq, \leq, ==, <=.

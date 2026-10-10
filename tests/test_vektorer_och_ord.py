@@ -68,6 +68,13 @@ def test_svara_ord_ur_granskningen():
         assert ord_ in meddelanden
 
 
+def test_citatet_slutar_meningen():
+    """A-bladet inför BA26B prov 2 (exam 180 v853), uppgift 5 ordagrant."""
+    prov = _prov({"text": "Ella påstår: «Per timme har jag alltid mer kvar efter skatt än Noah.» "
+                          "Avgör om Ella har rätt och förklara varför."})
+    assert g.sprakvakt(prov) == []
+
+
 def test_reglerna_star_i_prompten():
     for rad in ("VEKTORER HAR ALLTID ETT NAMN MED PIL", "DET CENTRALA INNEHÅLLET STYR",
                 "ORD SOM ELEVEN HAR", "BESKRIVS FRÅN PUNKT TILL PUNKT",
