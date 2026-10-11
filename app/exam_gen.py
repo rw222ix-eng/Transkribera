@@ -4420,6 +4420,7 @@ def niva_fynd(exam: dict, *, model: str, llm=llm_client.generate,
         from app import np_jamforare            # lånar domarenheter härifrån
         np = np_jamforare.doma_np(exam, enheter, model=model, llm=llm,
                                   profil=profil, poang_last=poang_last,
+                                  upprepa=profil == "arbetsblad",
                                   log_cb=log_cb)
     np_nr = {f.get("nr") for f in np}
     return (np + [f for f in domarnas if f.get("nr") not in np_nr]
@@ -15043,7 +15044,7 @@ def _varvsvakt(fore: dict, res: dict, *, model: str, llm, profil: str,
                    if _uppgiftsnr(e["nr"]) in rorda]
         lasta = lasta + np_jamforare.doma_np(exam, enheter, model=model,
                                              llm=llm, profil=profil,
-                                             log_cb=log_cb)
+                                             upprepa=True, log_cb=log_cb)
     nya = raknade + lasta
     if not nya:
         return res

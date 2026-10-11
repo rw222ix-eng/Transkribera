@@ -235,13 +235,34 @@ def npj_fynd(enheter: list[dict], domar: dict[str, dict],
 
 def doma_np(exam: dict, enheter: list[dict], *, model: str,
             llm=llm_client.generate, profil: str = "prov",
-            poang_last: bool = False,
+            poang_last: bool = False, upprepa: bool = False,
             log_cb: Callable[[str], None] | None = None) -> list[dict]:
-    """Ett anrop → nivåfynd där nationella provet sätter en annan nivå."""
+    """Ett anrop → nivåfynd där nationella provet sätter en annan nivå.
+
+    `upprepa` (bladet, Rickard 2026-10-11): ett fynd räknas först när samma
+    uppgift fälls en gång till. Blad 220 (IndA C) dömdes fyra gånger, och
+    varje körning fällde 2–4 ANDRA C-uppgifter som «NP ger E»; bara 12b föll
+    varje gång. Ett andra anrop på de fällda enheterna, och bara de som
+    fälls båda gångerna står kvar."""
     log = log_cb or (lambda _m: None)
     np = np_enheter(exam.get("kurs") or "")
     if not np or not enheter:
         return []
+    fynd = _doma_en_gang(enheter, np, model=model, llm=llm, profil=profil,
+                         poang_last=poang_last, log=log)
+    if not upprepa or not fynd:
+        return fynd
+    fallda = {f.get("nr") for f in fynd}
+    igen = _doma_en_gang([e for e in enheter if e["nr"] in fallda], np,
+                         model=model, llm=llm, profil=profil,
+                         poang_last=poang_last, log=log)
+    kvar = {f.get("nr") for f in igen}
+    return [f for f in fynd if f.get("nr") in kvar]
+
+
+def _doma_en_gang(enheter: list[dict], np: list[dict], *, model: str, llm,
+                  profil: str, poang_last: bool,
+                  log: Callable[[str], None]) -> list[dict]:
     log("Jämför uppgifterna med nationella provet …")
     try:
         raw = llm(
