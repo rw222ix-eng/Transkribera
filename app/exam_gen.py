@@ -4011,7 +4011,7 @@ def domarenheter(exam: dict) -> list[dict]:
                              "losning": d.get("losning") or "",
                              "typ": d.get("typ") or u.get("typ") or "",
                              "formaga": d.get("formaga") or u.get("formaga") or "",
-                             **_tabellkort(d.get("tabell") or u.get("tabell"))},
+                             **_formerkort(d, u)},
                 })
             continue
         niva = _niva_ur_poang(u.get("poang"))
@@ -4029,7 +4029,7 @@ def domarenheter(exam: dict) -> list[dict]:
                      "losning": u.get("losning") or "",
                      "typ": u.get("typ") or "",
                      "formaga": u.get("formaga") or "",
-                     **_tabellkort(u.get("tabell"))},
+                     **_formerkort(u)},
         })
     return ut
 
@@ -4045,6 +4045,28 @@ def _tabellkort(tabell) -> dict:
         return {}
     return {"tabell": {"rubriker": tabell.get("rubriker") or [],
                        "rader": tabell.get("rader") or []}}
+
+
+def _formerkort(d: dict, u: dict | None = None) -> dict:
+    """Allt pappret visar utöver texten: tabellen, stegtabellen och
+    flervalets alternativ, och bara när uppgiften har dem.
+
+    Blad 188:6 (IndA, 2026-10-11): «Tabellen visar hans lösning. Kryssa det
+    första steg som är fel.» Stegtabellen fanns inte på kortet, och
+    elevläsaren svarade «jag ser ingen tabell». Samma sak med alternativen:
+    «Vilket alternativ …» utan alternativ. Första felet och rätt alternativ
+    följer inte med, de är facit."""
+    u = u or {}
+    ut = _tabellkort(d.get("tabell") or u.get("tabell"))
+    steg = d.get("stegtabell") or u.get("stegtabell")
+    if isinstance(steg, dict) and steg.get("steg"):
+        ut["stegtabell"] = {
+            "kolumner": steg.get("kolumner") or [],
+            "steg": [s.get("celler") or [] for s in steg["steg"]
+                     if isinstance(s, dict)]}
+    if d.get("alternativ"):
+        ut["alternativ"] = list(d["alternativ"])
+    return ut
 
 
 def build_domar_prompt(enheter: list[dict], *, skala: str = "") -> str:

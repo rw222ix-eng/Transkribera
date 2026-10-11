@@ -1462,3 +1462,23 @@ def test_domaren_ser_uppgiftens_tabell():
     e = exam_gen.domarenheter(exam)
     assert e[0]["kort"]["tabell"]["rader"] == tab["rader"]
     assert "tabell" not in e[1]["kort"]
+
+
+def test_domaren_ser_stegtabellen_och_alternativen_men_inte_facit():
+    """Blad 188:6 (2026-10-11): «Tabellen visar hans lösning» och elevläsaren
+    såg ingen tabell. Första felet och rätt alternativ är facit."""
+    steg = {"kolumner": ["Leos lösning"], "forsta_fel": 1,
+            "steg": [{"celler": ["$2x = 6$"]}, {"celler": ["$x = 4$"]},
+                     {"celler": ["$x = 4$"]}]}
+    exam = {"uppgifter": [
+        {"text": "Kryssa det första steg som är fel.", "poang": [0, 1, 0],
+         "stegtabell": steg},
+        {"text": "Vilket alternativ är rätt?", "poang": [1, 0, 0],
+         "alternativ": ["1", "2", "3"], "ratt_alternativ": 1},
+        {"text": "Beräkna 3 - 9.", "poang": [1, 0, 0]}]}
+    e = exam_gen.domarenheter(exam)
+    assert e[0]["kort"]["stegtabell"] == {
+        "kolumner": ["Leos lösning"], "steg": [["$2x = 6$"], ["$x = 4$"], ["$x = 4$"]]}
+    assert e[1]["kort"]["alternativ"] == ["1", "2", "3"]
+    assert "forsta_fel" not in str(e) and "ratt_alternativ" not in str(e)
+    assert set(e[2]["kort"]) == {"text", "losning", "typ", "formaga"}
