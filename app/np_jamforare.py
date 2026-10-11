@@ -164,7 +164,8 @@ def _cblad_stycke(cblad: list[dict]) -> str:
         "den inte till en annan uppgift. Att båda använder sinus, tangens eller "
         "Pythagoras sats räcker INTE: en okänd som tar ut sig, en tredje "
         "dimension eller två villkor som C-uppgiften saknar är en egen insikt. "
-        "Finns ingen, eller är enheten inte på A-nivå, skriv «ingen».\n"
+        "Finns ingen sådan C-uppgift, eller är enheten inte på A-nivå, lämna "
+        "cblad tomt (\"\"). Fältet cblad ändrar inget i fälten np och poang.\n"
     )
 
 
