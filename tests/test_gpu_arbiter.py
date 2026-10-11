@@ -130,3 +130,15 @@ def test_ingen_slapper_nagon_annans_forslagsplats(tmp_path):
     assert arb.acquire_forslag(arb._forslag_biljett, timeout=0.1) is None
     assert arb.release_forslag(mitt) is True
     assert arb.release_forslag(mitt) is False       # nyckeln biter en gång
+
+
+def test_taket_ar_sex_och_gar_att_andra_med_miljon(monkeypatch):
+    """Rickard 2026-10-11: sex samtidiga jobb, så att flera sessioner kan
+    generera. Beskedet säger samma tal som taket."""
+    monkeypatch.delenv("TRANSKRIBERA_LLM_TAK", raising=False)
+    assert ga._las_tak() == 6
+    monkeypatch.setenv("TRANSKRIBERA_LLM_TAK", "4")
+    assert ga._las_tak() == 4
+    monkeypatch.setenv("TRANSKRIBERA_LLM_TAK", "många")
+    assert ga._las_tak() == 6
+    assert ga._TALORD[ga.LLM_TAK] in ga.LLM_UPPTAGET

@@ -16,6 +16,7 @@ eleverna ställer just den frågan, och de fortsätter göra rätt utan att veta
 att huset bytts.
 """
 from __future__ import annotations
+import os
 import threading
 import uuid
 from typing import Callable
@@ -26,13 +27,28 @@ from app import llm_client
 # llama-serverns bas-URL; ingen läser värdet, alla jämför det mot None.
 TILLGANGLIG = "claude-code"
 
-# Hur många molnjobb som får skriva samtidigt. Tre är valt så att läraren kan
-# ha en tavla, ett prov och en omskrivning igång utan att märka någon grind,
-# men så att ett skript inte kan öppna hundra samtal.
-LLM_TAK = 3
+# Hur många molnjobb som får skriva samtidigt. Taket finns så att ett skript
+# inte kan öppna hundra samtal. Det var tre (en tavla, ett prov och en
+# omskrivning) och höjdes till sex 2026-10-11 på Rickards begäran, så att
+# flera Claude-sessioner kan generera prov och blad samtidigt. Miljövariabeln
+# TRANSKRIBERA_LLM_TAK ändrar det utan kodändring; läses när servern startar.
+def _las_tak(standard: int = 6) -> int:
+    try:
+        return max(1, int(os.environ.get("TRANSKRIBERA_LLM_TAK", standard)))
+    except ValueError:
+        return standard
 
-# Beskedet över taket. Numret följer LLM_TAK — ändras taket ska meningen med.
-LLM_UPPTAGET = "Modellen skriver redan tre saker — vänta en stund."
+
+LLM_TAK = _las_tak()
+
+# Beskedet över taket. Numret följer LLM_TAK, och utan ett ord för talet står
+# meningen utan tal.
+_TALORD = {1: "en sak", 2: "två saker", 3: "tre saker", 4: "fyra saker",
+           5: "fem saker", 6: "sex saker", 7: "sju saker", 8: "åtta saker",
+           9: "nio saker", 10: "tio saker", 11: "elva saker", 12: "tolv saker"}
+LLM_UPPTAGET = (f"Modellen skriver redan {_TALORD[LLM_TAK]}. Vänta en stund."
+                if LLM_TAK in _TALORD else
+                "Modellen skriver redan så mycket den får. Vänta en stund.")
 
 # EN plats för bakgrundsförslagen, utanför LLM_TAK. Mätt 2026-09-06 ur
 # spar-tabellen: tre automatiska Gy25-förslag (planeringspanelen frågar varje
