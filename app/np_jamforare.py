@@ -159,10 +159,17 @@ def parse_npj(raw: str) -> dict[str, dict]:
 
 
 def npj_fynd(enheter: list[dict], domar: dict[str, dict],
-             np: list[dict], profil: str = "prov") -> list[dict]:
+             np: list[dict], profil: str = "prov",
+             poang_last: bool = False) -> list[dict]:
     """Ett nivåfynd per enhet där NP sätter andra poäng än provet. «ingen»,
     [0, 0, 0] och tystnad fäller aldrig, och inte heller ett NP-id som inte
-    finns i profilen."""
+    finns i profilen.
+
+    `poang_last`: omprovets poäng är originalets, plats för plats
+    (exam_gen.likvardighetsvakt). «Sätt poängen till …» går då inte att
+    följa, och NA26F:s omprov (exam 211, 2026-10-11) stod kvar med tolv
+    nivåfynd efter alla rundor. Där säger fyndet i stället samma sak som på
+    bladet: behåll poängen, byt uppgiften."""
     kanda = {u["id"]: u for u in np}
     blad = profil == "arbetsblad"
     ut = []
@@ -212,6 +219,11 @@ def npj_fynd(enheter: list[dict], domar: dict[str, dict],
             text += (f" Bladet är på {e['niva']}-nivå: behåll poängen och byt "
                      f"uppgiften mot en som prövar det en {e['niva']}-uppgift "
                      "prövar på nationella provet.")
+        elif poang_last:
+            text += (f" Det här är ett omprov och poängen ({trip(egna)}) är "
+                     "originalets: behåll poängen och byt uppgiften mot en som "
+                     "prövar det en uppgift med de poängen prövar på nationella "
+                     "provet.")
         else:
             text += (f" Sätt poängen till ({trip(dom['poang'])}) som nationella "
                      "provet gör, och behåll uppgiften. Går balansen inte ihop då, "
@@ -223,6 +235,7 @@ def npj_fynd(enheter: list[dict], domar: dict[str, dict],
 
 def doma_np(exam: dict, enheter: list[dict], *, model: str,
             llm=llm_client.generate, profil: str = "prov",
+            poang_last: bool = False,
             log_cb: Callable[[str], None] | None = None) -> list[dict]:
     """Ett anrop → nivåfynd där nationella provet sätter en annan nivå."""
     log = log_cb or (lambda _m: None)
@@ -245,4 +258,4 @@ def doma_np(exam: dict, enheter: list[dict], *, model: str,
         log(f"Jämförelsen med nationella provet kunde inte köras ({e}), "
             "provet levereras ändå.")
         return []
-    return npj_fynd(enheter, parse_npj(raw), np, profil)
+    return npj_fynd(enheter, parse_npj(raw), np, profil, poang_last)

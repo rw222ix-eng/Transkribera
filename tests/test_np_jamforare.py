@@ -110,3 +110,16 @@ def test_generaliseringen_laser_inte_ordets_forsta_bokstav():
          "typ": "problem", "losning": "3"}]}
     fynd = [f for f in exam_gen.bladets_npvakter(exam) if f["code"] == "kursvakt"]
     assert [f["path"] for f in fynd] == ["uppgift 3", "uppgift 4"]
+
+
+def test_omprovet_behaller_originalets_poang_och_byter_uppgift():
+    """NA26F:s omprov (exam 211, 2026-10-11): poängen är låsta mot
+    originalet, så «sätt poängen till …» gick inte att följa och tolv
+    nivåfynd stod kvar efter alla rundor."""
+    enheter = [{"nr": "1", "niva": "E", "poang": [1, 0, 0]}]
+    domar = {"1": _dom("NpMa1a vt17 D18b", [1, 1, 0])}
+    vanligt = np_jamforare.npj_fynd(enheter, domar, NP, "prov")
+    omprov = np_jamforare.npj_fynd(enheter, domar, NP, "prov", poang_last=True)
+    assert "Sätt poängen till" in vanligt[0]["message"]
+    assert "Sätt poängen till" not in omprov[0]["message"]
+    assert "behåll poängen och byt uppgiften" in omprov[0]["message"]

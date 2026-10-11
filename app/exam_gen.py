@@ -4371,6 +4371,7 @@ def niva_fynd(exam: dict, *, model: str, llm=llm_client.generate,
               skala: str = "", niva_mal: dict | None = None,
               bara: list[int] | None = None,
               profil: str = "",
+              poang_last: bool = False,
               log_cb: Callable[[str], None] | None = None
               ) -> tuple[list[dict], bool]:
     """Hela nivåkontrollen: två oberoende domar plus de deterministiska
@@ -4406,7 +4407,8 @@ def niva_fynd(exam: dict, *, model: str, llm=llm_client.generate,
     if profil in ("prov", "arbetsblad"):
         from app import np_jamforare            # lånar domarenheter härifrån
         np = np_jamforare.doma_np(exam, enheter, model=model, llm=llm,
-                                  profil=profil, log_cb=log_cb)
+                                  profil=profil, poang_last=poang_last,
+                                  log_cb=log_cb)
     np_nr = {f.get("nr") for f in np}
     return (np + [f for f in domarnas if f.get("nr") not in np_nr]
             + e_nivasignaler(enheter, niva_mal)), True
@@ -13565,6 +13567,7 @@ def _domar_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                 niva_mal: dict | None = None,
                 delmoment: list[dict] | None = None,
                 kurs: str = "",
+                poang_last: bool = False,
                 log_cb: Callable[[str], None] | None = None) -> dict:
     """Domarrundan + högst EN reparationsrunda på dess fynd (C4).
 
@@ -13595,7 +13598,8 @@ def _domar_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
     log = log_cb or (lambda _m: None)
     signaler = _signaler(exam)
     niva, kordes = niva_fynd(exam, model=model, llm=llm, skala=skala,
-                             niva_mal=niva_mal, profil=profil, log_cb=log_cb)
+                             niva_mal=niva_mal, profil=profil,
+                             poang_last=poang_last, log_cb=log_cb)
 
     def svar(ut: dict, matt: bool) -> dict:
         return {**ut, "nivafynd": niva, "nivakoll": kordes, "nivamatt": matt}
@@ -13734,6 +13738,7 @@ def _niva_grind(res: dict, *, model: str, llm, profil: str, skala: str,
                 koder: list[str] | None, niva_mal: dict | None,
                 delmoment: list[dict] | None = None,
                 max_rounds: int | None = None,
+                poang_last: bool = False,
                 log_cb: Callable[[str], None] | None = None) -> dict:
     """Extra riktade rundor på nivåfynden, sedan `nivafel`.
 
@@ -13781,7 +13786,7 @@ def _niva_grind(res: dict, *, model: str, llm, profil: str, skala: str,
             # ingen rört.
             fynd, kordes = niva_fynd(exam, model=model, llm=llm, skala=skala,
                                      niva_mal=niva_mal, log_cb=log_cb,
-                                     profil=profil,
+                                     profil=profil, poang_last=poang_last,
                                      bara=None if rent else
                                      sorted({_uppgiftsnr(f.get("nr"))
                                              for f in fynd}))
@@ -14645,7 +14650,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                       antal=antal, skeleton=grammatik, koder=koder,
                       niva_mal=niva_mal, delmoment=delmoment, kurs=kurs,
                       rounds_used=res["rounds"], max_rounds=max_rounds,
-                      log_cb=log_cb)
+                      poang_last=referensprov is not None, log_cb=log_cb)
     # ── GRINDEN ──────────────────────────────────────────────────────
     # Nivåfynden får två EXTRA riktade rundor, utanför rundbudgeten ovan: den
     # är delad med schemafel och balans, och nivån ska inte tappas för att en
@@ -14653,7 +14658,8 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # `nivafel` och läraren får veta det.
     res = _niva_grind(res, model=model, llm=llm, profil=profil, skala=skala,
                       antal=antal, skeleton=grammatik, koder=koder,
-                      niva_mal=niva_mal, delmoment=delmoment, log_cb=log_cb)
+                      niva_mal=niva_mal, delmoment=delmoment,
+                      poang_last=referensprov is not None, log_cb=log_cb)
     # ── BOKGRINDEN, och bara på GRUPPUPPGIFTEN ───────────────────────
     # Lärarens dom 2026-09-09 gäller gruppuppgiften: den ska följa bokens sort
     # och gå att förstå vid första läsningen. Passet ligger EFTER nivågrinden
