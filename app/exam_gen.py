@@ -10683,7 +10683,12 @@ _INTE_NAMN = frozenset((
     "sverige", "sveriges", "figur", "figuren", "tabell", "tabellen", "bild",
     "bilden", "diagram", "diagrammet", "graf", "grafen", "uppgift",
     "uppgiften", "del", "exempel", "kapitel", "avsnitt", "excel", "geogebra",
-    "desmos"))
+    "desmos",
+    # Prov 215 (2026-10-11): «(2) $x - 2y = -1$ Hon påstår …» och «… $= 0$
+    # Linje (1), linje (2) …». Formeln saknar punkt, så ordet efter den står
+    # «mitt i» en mening, och blad 226:10 fälldes för att det skrev «Hon».
+    "hon", "han", "hen", "linje", "linjen", "linjer", "linjerna", "punkt",
+    "punkten", "ekvation", "ekvationen", "ekvationerna"))
 # Förnamn i fornamn.txt som också är vanliga ord först i en mening: «Hans
 # lön är …» handlar inte om någon som heter Hans.
 _TVETYDIGA_NAMN = frozenset((

@@ -929,3 +929,17 @@ def test_provets_vakter_kors_igen_efter_nivagrinden(monkeypatch):
     assert len(anrop) == 2
     assert anrop[0][0] is True and anrop[1][0] is False
     assert anrop[1][2] == anrop[1][1] + 1
+
+
+def test_pronomen_efter_en_formel_ar_inget_namn():
+    """Prov 215 (2026-10-11): formeln utan punkt gjorde «Hon» och «Linje» till
+    ord mitt i en mening, och blad 226:10 fick provlånslarm på «Hon»."""
+    prov = {"uppgifter": [
+        {"text": "Ella löser ekvationssystemet:\n(1) $3x + 2y = 21$\n"
+                 "(2) $x - 2y = -1$\nHon påstår att lösningen är $x = 5$.",
+         "poang": [1, 0, 0], "typ": "rutin"},
+        {"text": "Två linjer har ekvationerna:\n(1) $x + y = 6$\n"
+                 "Linje (1) och $x$-axeln avgränsar en triangel.",
+         "poang": [1, 0, 0], "typ": "rutin"}]}
+    namn = exam_gen.provets_namn_och_sammanhang(prov)["namn"]
+    assert "Hon" not in namn and "Linje" not in namn and "Ella" in namn
