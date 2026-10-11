@@ -292,14 +292,21 @@ _ANTAL_PERIODER = (r"(?:under|på|för)\s+(?:de\s+|alla\s+|hela\s+)?"
                    r"\s+(?:första\s+)?(?:år|åren|månader|månaderna|terminer)")
 _SUMMA = (
     "summor",
-    "summor: aritmetisk och geometrisk summa, summatecken, och räntan "
-    "sammanlagt över många perioders amortering, där varje period har en ny "
-    "skuld",
+    "summor: aritmetisk och geometrisk summa och summatecken",
     re.compile(
         r"(?i:(?:aritmetisk|geometrisk)\w*\s+summa|summaformel"
         r"|summan\s+av\s+(?:de|alla)\s+(?:\d+\s+)?första)"
-        r"|\\sum(?![A-Za-z])|∑"
-        rf"|(?i:amort\w*[^?]{{0,300}}?ränt\w*[^?]{{0,120}}?"
+        r"|\\sum(?![A-Za-z])|∑"))
+# Räntan sammanlagt över en hel amortering är en summa för hand. I Ma 1a står
+# den i det centrala innehållet med kalkylprogram (G25-M1A-DIG-1, Rickard
+# 2026-10-11: «kolla Ma 1a:s centrala innehåll»), så den fälls bara i 1c, där
+# kalkylprogram inte används.
+_AMORTERINGSSUMMA = (
+    "räntan sammanlagt över många perioders amortering",
+    "räntan sammanlagt över många perioders amortering, där varje period har "
+    "en ny skuld",
+    re.compile(
+        rf"(?i:amort\w*[^?]{{0,300}}?ränt\w*[^?]{{0,120}}?"
         rf"(?:sammanlagt|totalt|sammantaget|allt\s+som\s+allt)[^?]{{0,60}}?"
         rf"(?:{_ANTAL_PERIODER}|hela\s+lånetiden))"
         r"|(?i:ränt\w*[^?]{0,40}?hela\s+lånetiden)"))
@@ -318,8 +325,9 @@ _ANNUITET = (
     re.compile(r"(?i:annuitet\w*|amorteringsplan\w*)"))
 for _niva in ("1a", "1b", "1c", "2a"):
     UTANFOR.setdefault(_niva, []).extend([_SUMMA, _ANNUITET])
-for _niva in ("1a", "1b", "1c"):
-    UTANFOR.setdefault(_niva, []).append(_KALKYL)
+# Kalkylprogram står i Ma 1a:s centrala innehåll (DIG-1, YRK-2) och används
+# där; i 1c används de inte (Rickard 2026-10-11).
+UTANFOR.setdefault("1c", []).extend([_KALKYL, _AMORTERINGSSUMMA])
 
 # Det som bara ska gälla övningspapper, tills läraren sagt ja för proven.
 # Tom sedan kvadreringsreglerna flyttade till UTANFOR; mekanismen står kvar.

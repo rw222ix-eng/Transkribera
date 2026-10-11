@@ -401,9 +401,12 @@ def test_rantan_sammanlagt_over_manga_manader_ar_en_summa():
     t = ("Sara lånar 60 000 kr. Räntan är 4,8 % per år och betalas varje månad. "
          "Hon amorterar lika mycket varje månad, och efter 5 år är lånet betalt. "
          "Hur mycket betalar Sara i ränta sammanlagt under de 5 åren?")
+    assert "räntan sammanlagt över många perioders amortering" in _traffar(
+        "Matematik, nivå 1c", t)
+    # Ma 1a har ränta och amortering i kalkylprogram i sitt centrala innehåll.
+    assert _traffar("Matematik, nivå 1a", t) == []
     for kurs in ("Matematik, nivå 1c", "Matematik, nivå 1a", "Matematik, nivå 2a"):
-        assert "summor" in _traffar(kurs, t)
-    assert "summor" in _traffar("Matematik, nivå 1c", r"Beräkna $\sum_{k=1}^{5} k$.")
+        assert "summor" in _traffar(kurs, r"Beräkna $\sum_{k=1}^{5} k$.")
     # En månads ränta, och två månader, står kvar.
     assert _traffar("Matematik, nivå 1c",
                     "Han amorterar 1 500 kr varje månad. Beräkna räntan för den "
@@ -416,7 +419,7 @@ def test_rantan_sammanlagt_over_manga_manader_ar_en_summa():
 def test_kalkylprogram_forutsatts_aldrig_i_kurs_1():
     assert "kalkylprogram" in _traffar("Matematik, nivå 1c",
                                        "Gör en amorteringsplan i ett kalkylprogram.")
-    assert "kalkylprogram" in _traffar("Matematik, nivå 1a", "Använd GeoGebras kalkylblad.")
+    assert "kalkylprogram" not in _traffar("Matematik, nivå 1a", "Använd ett kalkylprogram.")
     assert "kalkylprogram" not in _traffar("Matematik, nivå 2a", "Använd kalkylbladet.")
 
 
