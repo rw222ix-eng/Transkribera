@@ -11686,7 +11686,20 @@ def _ramens_listor(ram: dict | None) -> dict:
             "fordjupning": ([f for f in alla if f.get("fordjupning")]
                             + list((ram or {}).get("fordjupning") or [])),
             "delmoment": (ram or {}).get("delmoment") or [],
-            "avsnitt": (ram or {}).get("avsnitt") or []}
+            "avsnitt": (ram or {}).get("avsnitt") or [],
+            "syskon": (ram or {}).get("syskon") or []}
+
+
+def med_syskon(prov: dict | None, syskon: list[dict] | None) -> dict | None:
+    """Provet med dess omprov (db.omprov_till) för kopierings- och
+    lånevakten: bladet ska varken skriva av eller låna namn och sammanhang ur
+    något av dem. Bara för de två: de andra vakterna läser provets
+    uppgiftsnummer och delar, och omprovets uppgifter står efter provets."""
+    extra = [u for s in (syskon or []) if isinstance(s, dict)
+             for u in (s.get("uppgifter") or [])]
+    if not prov or not extra:
+        return prov
+    return {**prov, "uppgifter": list(prov.get("uppgifter") or []) + extra}
 
 
 # Koderna ovningsvakter ger, för slutkontrollen som rensar de gamla innan den
@@ -11951,10 +11964,12 @@ def ovningsvakter(exam: dict, *, prov: dict | None = None,
                   forbjudna: list[dict] | None = None,
                   delmoment: list[dict] | None = None,
                   avsnitt: list[dict] | None = None,
-                  fordjupning: list[dict] | None = None) -> list[dict]:
+                  fordjupning: list[dict] | None = None,
+                  syskon: list[dict] | None = None) -> list[dict]:
     """Det provets vakter kräver, på arbetsbladet inför provet. Noll
     modellanrop. Bladets egna (radvakt, scenvakt, personvakt, könen) står
-    sist, samma ordning som i _raknade_fynd."""
+    sist, samma ordning som i _raknade_fynd. `syskon` är provets omprov:
+    kopian och lånet räknas mot dem också (med_syskon)."""
     kurs = str((exam or {}).get("kurs") or "")
     fel = ci_utanfor.ci_vakt(exam, kurs, "arbetsblad")
     forbud = forbudsvakt(exam, delmoment, forbjudna, avsnitt)
@@ -11967,7 +11982,8 @@ def ovningsvakter(exam: dict, *, prov: dict | None = None,
     fel += forbud
     if prov:
         sedda = set()
-        texter = uppgiftstexter(prov)
+        jamfor = med_syskon(prov, syskon)
+        texter = uppgiftstexter(jamfor)
         for f in (variationsflaggor(exam, texter) if texter else []):
             m = re.match(r"(\d+)", str(f.get("nr") or ""))
             if not m or int(m.group(1)) in sedda:
@@ -11979,7 +11995,7 @@ def ovningsvakter(exam: dict, *, prov: dict | None = None,
                 f"«{f.get('text') or ''}». Byt ut den mot en ny som övar samma "
                 "metod med ett annat sammanhang och andra tal."))
         fel += [_err(f"uppgift {f['nr']}", "provlan", f["message"])
-                for f in lanevakt(exam, prov) if f["nr"] not in sedda]
+                for f in lanevakt(exam, jamfor) if f["nr"] not in sedda]
         fel += [f for f in uttrycksvakt(exam, prov)
                 if _uppgiftsnr(f["path"].removeprefix("uppgift ")) not in sedda]
     fel += raknarfri_talvakt(exam, prov)

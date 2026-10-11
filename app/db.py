@@ -2721,6 +2721,59 @@ def ar_omprov(conn: sqlite3.Connection, exam_id: int) -> bool:
     return rad is not None
 
 
+def omprov_till(conn: sqlite3.Connection, exam_id: int) -> list[dict]:
+    """Godkända omprov på provet `exam_id`, som provets JSON.
+
+    Bladet inför BA26B:s prov 131 lades under «Omprov kap 1» när klassen
+    skrivit provet, och omprovet 174 (2/11) fick samma namn och sammanhang
+    som bladen (granskningen 2026-10-11). Bladet jämfördes bara med 131.
+    Exam-raden vet inte vilket prov ett omprov gäller, så kopplingen räknas:
+    samma klass och kurs, senare datum, dokumentet märkt «Omprov», och
+    originalet är det senaste vanliga provet före omprovet med samma titel
+    eller, utan titel som stämmer, det senaste alls.
+
+    Raderna läses ur exams utan JSON, och «Omprov» bara på provdokument med
+    samma klass och datum: ar_omprov över alla provdokumentens versioner tog
+    nio sekunder (1 GB blobbar), och efterkontrollen kör det här vid varje
+    GET på ett blad."""
+    rad = conn.execute(
+        "SELECT id, group_id, course_id, datum FROM exams WHERE id = ?",
+        (int(exam_id),)).fetchone()
+    if not rad or not rad["group_id"] or not rad["course_id"] \
+            or not rad["datum"]:
+        return []
+    prov = conn.execute(
+        "SELECT id, titel, datum FROM exams WHERE group_id = ? "
+        "AND course_id = ? AND COALESCE(typ, 'prov') = 'prov' "
+        "AND status = 'godkänt' AND datum IS NOT NULL",
+        (rad["group_id"], rad["course_id"])).fetchall()
+
+    def omprov(e) -> bool:
+        return conn.execute(
+            "SELECT 1 FROM dokument d JOIN dokument_versioner v "
+            "ON v.dokument_id = d.id WHERE lower(d.typ) = 'prov' "
+            "AND d.group_id = ? AND d.datum = ? "
+            "AND CAST(json_extract(v.data, '$.provId') AS INTEGER) = ? "
+            "AND lower(json_extract(v.data, '$.variant')) = 'omprov' LIMIT 1",
+            (rad["group_id"], e["datum"], int(e["id"]))).fetchone() is not None
+
+    def titel(e) -> str:
+        return str(e["titel"] or "").strip().lower()
+
+    ut: list[dict] = []
+    for o in prov:
+        if o["datum"] <= rad["datum"] or not omprov(o):
+            continue
+        fore = [e for e in prov if e["datum"] < o["datum"] and not omprov(e)]
+        samma = [e for e in fore if titel(e) == titel(o)]
+        original = max(samma or fore, key=lambda e: e["datum"], default=None)
+        if original and original["id"] == rad["id"]:
+            vy = get_exam(conn, int(o["id"]))
+            if vy and vy.get("exam"):
+                ut.append(vy["exam"])
+    return ut
+
+
 def set_dokument_ordning(conn: sqlite3.Connection, ids: list[int]) -> list[dict]:
     """Högens ordning som klienten håller den. Ett syskon ligger direkt efter
     sitt original, och en ångrad radering hamnar tillbaka på sin plats — det är

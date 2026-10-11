@@ -787,3 +787,54 @@ def test_gruppuppgift_utan_provets_uppgifter_skrivs_ur_boken(client,
     assert "kopia" in [f["kod"] for f in svar["efterkontroll"]]
     kvar = client.get(f"/api/exams/{svar['id']}").json()
     assert "kopia" in [f["kod"] for f in kvar["efterkontroll"]]
+
+
+# ───────────────────── provets omprov (2026-10-11) ────────────────────
+
+def test_bladet_far_inte_lana_ur_provets_omprov():
+    """BA26B 2026-10-11: bladen inför prov 131 låg kvar inför omprovet 174,
+    som hade Elias och Maja som bladen. Kopian och lånet räknas mot omprovet
+    också, de andra vakterna bara mot provet."""
+    prov = _blad_ur(["Tuva mäter ett staket.", "Lös $2x = 8$."])
+    omprov = _prov_131()
+    blad = _blad_ur([
+        "Noah köper golvlister till hallen. Hur många meter behövs?",
+        "Saga lastar ved i en kärra. Varje vedträ väger $3$ kg."])
+    assert routes_exam._lanfynd(blad, prov) == []
+    jamfor = exam_gen.med_syskon(prov, [omprov])
+    assert len(jamfor["uppgifter"]) == len(prov["uppgifter"]) * 2
+    assert [f["nr"] for f in routes_exam._lanfynd(blad, jamfor)] == [1]
+    assert "provlan" in [f["code"] for f in exam_gen.ovningsvakter(
+        blad, prov=prov, syskon=[omprov])]
+    assert "provlan" not in [f["code"] for f in exam_gen.ovningsvakter(
+        blad, prov=prov)]
+    # Utan omprov är provet orört (byte för byte samma dict).
+    assert exam_gen.med_syskon(prov, []) is prov
+    assert exam_gen.med_syskon(None, [omprov]) is None
+
+
+def test_omprov_till_hittar_omprovet_pa_titeln(client):
+    forsta, gid, cid = _godkant_prov(
+        client, titel="Tal och procent", datum="2026-10-07",
+        klass="BA26B", kurs="Matematik, nivå 1a")
+    annat, _, _ = _godkant_prov(
+        client, titel="Uttryck och formler", datum="2026-10-20",
+        klass="BA26B", kurs="Matematik, nivå 1a")
+    om, _, _ = _godkant_prov(
+        client, titel="Tal och procent", datum="2026-11-02",
+        klass="BA26B", kurs="Matematik, nivå 1a")
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    try:
+        # Utan «Omprov» på dokumentet är det ett vanligt prov.
+        assert appdb.omprov_till(conn, forsta) == []
+        appdb.create_dokument(conn, dokument={
+            "typ": "Prov", "klass": "BA26B", "kurs": "Matematik, nivå 1a",
+            "datum": "2026-11-02", "provId": om, "variant": "Omprov"},
+            status="godkant")
+        ut = appdb.omprov_till(conn, forsta)
+        assert [e["titel"] for e in ut] == ["Tal och procent"]
+        # Det senare provet med en annan titel äger inte omprovet.
+        assert appdb.omprov_till(conn, annat) == []
+        assert appdb.omprov_till(conn, om) == []
+    finally:
+        conn.close()

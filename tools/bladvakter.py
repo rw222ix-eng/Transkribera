@@ -23,7 +23,8 @@ def main(ids):
         prov = db.get_exam(conn, pid)["exam"] if pid else None
         doc, _ = exam_spec.validate_exam_json(ex)
         fynd = R.efterkontroll(view, doc, exam_spec.poangsummor(doc) if doc else None,
-                               base=BASE, infor=prov, db_file=BASE / "transkribera.db")
+                               base=BASE, infor=prov, db_file=BASE / "transkribera.db",
+                               syskon=db.omprov_till(conn, pid) if pid else [])
         extra = exam_gen.vektornamnvakt(ex) + exam_gen.deluppgiftsvakt(ex)
         print(f"== {i} (prov {pid}) {len(fynd)} fynd, {len(extra)} extra")
         for f in fynd:

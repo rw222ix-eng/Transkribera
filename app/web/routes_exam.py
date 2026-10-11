@@ -837,8 +837,10 @@ def efterkontroll(view: dict, doc, summor: dict | None, *,
                   bok: dict | None = None, sidor: dict[int, int] | None = None,
                   base: Path | None = None,
                   infor: dict | None = None,
-                  db_file: Path | None = None) -> list[dict]:
-    """Alla deterministiska fynd på ETT papper, i läsordning.
+                  db_file: Path | None = None,
+                  syskon: list[dict] | None = None) -> list[dict]:
+    """Alla deterministiska fynd på ETT papper, i läsordning. `syskon` är
+    provets omprov (db.omprov_till): kopian och lånet räknas mot dem också.
 
     `doc` är den validerade ExamDoc, är den None gick pappret inte att
     validera alls, och då har `errors` redan sagt det som behöver sägas."""
@@ -880,10 +882,11 @@ def efterkontroll(view: dict, doc, summor: dict | None, *,
     ut += _forbudsfynd(view, infor, typ, db_file)
     # Kopieringsvakten sist bland fynden, och bara när anroparen pekat ut
     # provet (se _kopiefynd). Den tiger på varje annat papper i appen.
-    kopior = _kopiefynd(view.get("exam") or {}, infor)
+    jamfor = exam_gen.med_syskon(infor, syskon)
+    kopior = _kopiefynd(view.get("exam") or {}, jamfor)
     ut += kopior
     # Provets personer och sammanhang, på samma villkor (se _lanfynd).
-    ut += _lanfynd(view.get("exam") or {}, infor,
+    ut += _lanfynd(view.get("exam") or {}, jamfor,
                    utom={f["nr"] for f in kopior})
     # Taket är läsarens, inte serverns: tjugofyra rader i en ruta är en vägg,
     # och pappret som ger fler än så har ett annat problem än det listan kan
@@ -1315,6 +1318,19 @@ def create_router(base: Path, arbiter) -> APIRouter:
         finally:
             conn.close()
 
+    def _syskonunderlag(infor_prov_id) -> list[dict]:
+        """Provets omprov (db.omprov_till), tom lista utan prov. Bladet inför
+        ett prov ligger kvar i Classroom inför omprovet."""
+        if not infor_prov_id:
+            return []
+        conn = db.connect(db_file)
+        try:
+            return db.omprov_till(conn, int(infor_prov_id))
+        except (TypeError, ValueError):     # pragma: no cover, skräp-id
+            return []
+        finally:
+            conn.close()
+
     def _inforunderlag(infor_prov_id) -> dict | None:
         """Provet kopieringsvakten jämför mot, som dokument. None när inget id
         skickades, när raden är borta eller när den inte är ett godkänt prov.
@@ -1356,7 +1372,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
             infor_prov_id = (view.get("exam") or {}).get("infor_prov")
         fynd = efterkontroll(view, doc, summor, bok=bok, sidor=boksidor,
                              base=base, infor=_inforunderlag(infor_prov_id),
-                             db_file=db_file)
+                             db_file=db_file,
+                             syskon=_syskonunderlag(infor_prov_id))
         return {
             # ── EFTERKONTROLLEN (2026-09-19) ─────────────────────
             # De deterministiska fynden på pappret SOM DET LIGGER NU, räknade
@@ -2064,6 +2081,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
             # till samma klass är däremot hennes sak, hon kan vilja låna
             # parallellklassens prov, så det blir en rad i loggen.
             inforprov = None
+            infor_syskon: list[dict] = []
             # Provets datum och klass, för provets ram (se jobbet nedan).
             infor_datum, infor_grupp = "", None
             try:
@@ -2080,6 +2098,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                                      "ett papper som kan ändras")
                     else:
                         inforprov = rad["exam"]
+                        infor_syskon = db.omprov_till(conn, int(infor_prov_id))
                         infor_datum = str(rad.get("datum") or "")
                         infor_grupp = rad.get("group_id")
                         if group_id and rad.get("group_id") \
@@ -2157,7 +2176,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # vakten.
         if inforprov:
             tidigare_uppgifter = (list(tidigare_uppgifter)
-                                  + exam_gen.uppgiftstexter(inforprov))
+                                  + exam_gen.uppgiftstexter(inforprov)
+                                  + [t for s in infor_syskon
+                                     for t in exam_gen.uppgiftstexter(s)])
 
         llm = arbiter.try_acquire_llm()
         if not llm:
@@ -2297,6 +2318,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         "fordjupning": routes_planning.fordjupningar(
                             db_file, ram_body, group_id=ram_grupp,
                             course_id=course_id),
+                        # Provets omprov: kopian och lånet räknas mot dem
+                        # också (exam_gen.med_syskon).
+                        "syskon": infor_syskon,
                     }
                 # LÄRARENS VALDA UPPGIFTER, en och en — och bara för
                 # GRUPPUPPGIFTEN (lärarens dom 2026-09-09: «vissa uppgifter är
