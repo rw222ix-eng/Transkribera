@@ -10388,7 +10388,9 @@ SCEN_MAX_FYND = 3
 # «drake sinus» mot «draken» och $\sin 38^\circ$. Tecknen skrivs ut som ord, och
 # ett kort begreppsord («drake») räknas när ett ord i uppgiften börjar med det.
 _SCEN_TECKEN = (("%", " procent "), ("\\sin", " sinus "),
-                ("\\cos", " cosinus "), ("\\tan", " tangens "))
+                ("\\cos", " cosinus "), ("\\tan", " tangens "),
+                # Blad 243:2: «bråk målning» mot $\tfrac{3}{4}$.
+                ("frac", " bråk "))
 
 
 def _scen_namner(text: str, sokta: set[str]) -> bool:

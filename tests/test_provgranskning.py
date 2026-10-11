@@ -833,3 +833,10 @@ def test_scenvakten_godtar_forledet_som_efterled():
     """242:10: «stensättning» mot «lägger A m² marksten»."""
     u = _u(text="Ett lag lägger $A$ m$^2$ marksten.", scen=_scen("stensättning"))
     assert exam_gen.scenvakt(_prov([u])) == []
+
+
+def test_scenvakten_laser_brak():
+    """243:2: «bråk målning» mot «Maja målar … $\\tfrac{3}{4}$ timme»."""
+    u = _u(text="Maja målar en vägg. Första lagret tar $\\tfrac{3}{4}$ timme.",
+           scen=_scen("bråk målning"))
+    assert exam_gen.scenvakt(_prov([u])) == []
