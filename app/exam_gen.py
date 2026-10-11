@@ -10990,10 +10990,13 @@ def build_infor_prov(slots: list[dict] | None, nummer: list[int] | None,
         delar = (f", {s['deluppgifter']} deluppgifter"
                  if s["deluppgifter"] else "")
         vad = f", delmomentet {s['delmoment']}" if s["delmoment"] else ""
+        # Begreppen (2026-10-11, exam 209): utan dem visste modellen inte att
+        # provets uppgift 1 var en potensfunktion och skrev en linjär.
+        begr = f", prövar {s['begrepp']}" if s.get("begrepp") else ""
         rader.append(
             f"- provets uppgift {s['nr']}: {_delord(s['del'])}{s['typ']}, "
             f"förmåga {s['formaga']}, poäng (E/C/A) {tuple(s['poang'])}, nivå "
-            f"{s['niva'] or '–'}{vad}{delar}, facit på cirka {s['steg']} "
+            f"{s['niva'] or '–'}{vad}{begr}{delar}, facit på cirka {s['steg']} "
             "räknesteg")
     fordjup = ""
     if fordjupning:
@@ -11027,6 +11030,11 @@ def build_infor_prov(slots: list[dict] | None, nummer: list[int] | None,
         "form för form, aldrig texten:\n" + "\n".join(rader) + "\n"
         "SAMMA SORT, ALDRIG SAMMA UPPGIFT. En uppgift på bladet ska pröva "
         "samma metod som sin sort ovan och kräva ungefär lika många räknesteg. "
+        # Tom sträng utan begrepp i någon rad (kassetteregeln).
+        + ("Den ska pröva SAMMA BEGREPP I SAMMA FORM som sorten: en "
+           "potensfunktion övas med en potensfunktion, cosinus med cosinus, "
+           "en graf med en graf. Etiketten drillar räknas bara då. "
+           if any(s.get("begrepp") for s in valda) else "") +
         "Allt annat ska vara NYTT: andra tal, ett annat sammanhang, en annan "
         "infallsvinkel. Skriv inte av provet, och skriv inte provets uppgift "
         "med utbytta siffror. Då har klassen fått provet en vecka i förväg.\n"
@@ -11126,6 +11134,196 @@ def _infor_grupp(valda: list[dict], rader: list[str], antal: int,
         "du den tyngsta av dem.\n")
 
 
+# ── DRILLEN SKA ÖVA SAMMA SAK SOM PROVETS UPPGIFT (2026-10-11) ───────────
+# NA26F:s E-blad inför prov 156 (exam 209) märkte en linjär funktion
+# «drillar: 1» när provets uppgift 1 var en potensfunktion given som graf med
+# värdemängd, och en tangensuppgift «drillar: 11» när provets 11 räknade med
+# cosinus. drilltackning räknade etiketterna och var nöjd. Etiketten är
+# modellens påstående; innehållet är det som ska räknas.
+#
+# Deterministiskt, samma detektorer i andan av _DELBEGREPP. Varje FAMILJ är
+# en uppsättning alternativ (funktionstyp, trigonometrisk funktion, vad som
+# söks i triangeln, mängdbegrepp): har provets uppgift något ur familjen ska
+# bladets uppgift ha minst ett av SAMMA. Framställningen (graf, tabell,
+# diagram) är ett krav åt ett håll: står provets uppgift på en graf ska
+# drillen också göra det, men en drill får ha en graf där provet hade formel.
+# En familj provets uppgift inte har något ur ställer inget krav (fail-open):
+# en procentuppgift prövas inte på funktionstyp.
+_TRIG_RX = r"\\{f}\b|\b{f}\s*(?:\d|\(|\\|[a-zA-Zα-ω]\b)|\b{ord}"
+_DRILLFAMILJER: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
+    ("funktion", (
+        # Uttrycken räknas också: «120 - 15t», «P = 3t + 10», «150n + 400».
+        # Koefficienten sitter ihop med variabeln, så «3 m» är ingen funktion.
+        ("linjär funktion",
+         r"linjär|räta linjen|rät linje|\blinjen\b|k-värde|"
+         r"riktningskoefficient|"
+         r"\d\s*[-+]\s*[\d,.{}]*\d(?:\s*\\cdot\s*)?[a-z]\b(?!\s*[\^²³])|"
+         r"(?<![\w{])[\d,.{}]*\d(?:\s*\\cdot\s*)?[a-z]\b(?!\s*[\^²³])"
+         r"\s*[-+]\s*\d"),
+        # Bara x och t som bas, som i _DELBEGREPP: «k^{2} + (2k)^{2}» i en
+        # vektoruppgift (prov 156:16) är ingen potensfunktion.
+        ("potensfunktion",
+         r"potensfunktion|(?<![a-zA-Z\\])[xt]\s*\^\s*\{?\s*-?[\d,.]+"
+         r"|(?<![a-zA-Z\\])[xt][²³]"),
+        ("andragradsfunktion",
+         r"andragrad|parabel|(?<![a-zA-Z\\])x\s*\^\s*\{?\s*2\b|x²"),
+        ("exponentialfunktion",
+         r"exponential|exponentiell|[\d}]\s*\^\s*\{?\s*[a-z]\b"))),
+    ("trig", (
+        ("sinus", _TRIG_RX.format(f="sin", ord="sinus")),
+        ("cosinus", _TRIG_RX.format(f="cos", ord="cosinus")),
+        ("tangens", _TRIG_RX.format(f="tan", ord="tangens")))),
+    ("mangd", (
+        ("definitionsmängd", r"definitionsmängd"),
+        ("värdemängd", r"värdemängd"))),
+    ("vektor", (
+        ("vektorer", r"\\vec\b|\\overrightarrow|vektor"),)),
+)
+# Funktionstypen i ORD (eller figur). Provets 156:15 är en exponentiell
+# modell vars facit löser x^2 = 0,7225: symbolerna säger tre funktionstyper,
+# orden en. På provets sida räknas orden när de finns, på bladets allt, så
+# att vakten är sträng mot vad provet prövar och snäll mot hur drillen
+# skriver det.
+_FUNKTIONSORD = {
+    "linjär funktion": r"linjär|räta linjen|rät linje|\blinjen\b|k-värde|"
+                       r"riktningskoefficient",
+    "potensfunktion": r"potensfunktion",
+    "andragradsfunktion": r"andragrad|parabel",
+    "exponentialfunktion": r"exponential|exponentiell",
+}
+# Symbolerna räknas på provets sida bara när uppgiften skriver en funktion
+# («f(x) =», «V(t) =», «y =»). Annars är «3x + 2» ett uttryck att förenkla
+# och «x^3 · x^2» en potenslag, inte en funktionstyp.
+_FUNKTIONSNOTATION_RE = re.compile(r"\b[a-zA-Z]\s*\(\s*[a-z]\s*\)\s*=|\by\s*=")
+_FIGURFUNKTION = {"linjar": "linjär funktion",
+                  "andragrad": "andragradsfunktion",
+                  "exponential": "exponentialfunktion"}
+# Vinkeln söks: arcus, «sin v = 24/85» med en okänd vinkel (exam 209:9 skrev
+# aldrig sin^-1), eller en fråga efter vinkeln.
+_ARCUS_RE = re.compile(
+    r"\\?(?:sin|cos|tan)\s*\^\s*\{?\s*-\s*1|\barc(?:us|sin|cos|tan)"
+    r"|\\?(?:sin|cos|tan)\s*(?:\\(?:alpha|beta|theta)|[vuwαβθ])\s*="
+    r"|(?:beräkna|bestäm|hur stor är)\s+(?:\w+\s+)?vinkeln", re.IGNORECASE)
+# Kvoten söks: «Ange sinus för vinkeln» (163:1) och «Ange sin v» är samma
+# sort, varken en sida eller en vinkel.
+_TRIGKVOT_RE = re.compile(
+    r"(?:ange|bestäm|beräkna|vad är)\s+\$?\\?(?:sin|cos|tan)\b"
+    r"|(?:ange|bestäm|beräkna|vad är)\s+(?:sinus|cosinus|tangens)\b",
+    re.IGNORECASE)
+_GRAFFIGUR = frozenset(("linjar", "andragrad", "exponential"))
+_DIAGRAMFIGUR = frozenset(("stapeldiagram", "ladagram"))
+_FRAMSTALLNING = {"graf": "given som graf", "tabell": "given som tabell",
+                  "diagram": "givet som diagram"}
+DRILLINNEHALL_MAX_FYND = 4
+
+
+def drillbegrepp(u: dict | None) -> dict[str, frozenset[str]]:
+    """Vad uppgiften prövar, familj för familj, plus «framstallning».
+
+    Funktionstyp och trigonometri läses i hela innehållet, facit med
+    (_uppgiftsinnehall): det var facit som visade att 209:8 räknade med tan.
+    Framställningen läses bara i det eleven får (texterna, figuren, tabellen),
+    för «rita grafen» i facit gör inte uppgiften till en graf. Uppgiftens
+    `innehall` läses inte: det är modellens egen etikett, som `drillar`."""
+    if not isinstance(u, dict):
+        return {}
+    allt = _uppgiftsinnehall(u)
+    dels = [d for d in (u.get("deluppgifter") or []) if isinstance(d, dict)]
+    given = " ".join([str(u.get("text") or "")]
+                     + [str(d.get("text") or "") for d in dels])
+    figur = str((u.get("figur") or {}).get("typ") or "") \
+        if isinstance(u.get("figur"), dict) else ""
+    ut: dict[str, frozenset[str]] = {}
+    for familj, drag in _DRILLFAMILJER:
+        ut[familj] = frozenset(
+            namn for namn, rx in drag if re.search(rx, allt, re.IGNORECASE))
+    ord_ = {n for n, rx in _FUNKTIONSORD.items()
+            if re.search(rx, allt, re.IGNORECASE)}
+    if figur in _FIGURFUNKTION:
+        ord_.add(_FIGURFUNKTION[figur])
+    # En vektoruppgift löser ekvationer i en skalär («2s - 3»), och det är
+    # ingen linjär funktion: där räknas bara orden.
+    ut["funktion"] = frozenset(ord_ if ut["vektor"] else ut["funktion"] | ord_)
+    ut["funktion_prov"] = frozenset(
+        ord_ or (ut["funktion"] if _FUNKTIONSNOTATION_RE.search(allt)
+                 else ()))
+    # Vad som söks i triangeln: vinkeln (arcus) eller en sida ur en given
+    # vinkel. Deluppgift för deluppgift: 156:10 a) söker sidan, b) vinkeln.
+    stam = str(u.get("text") or "")
+    enheter = ([stam + " " + " ".join(str(d.get(f) or "") for f in
+                                      ("text", "losning", "bedomning"))
+                for d in dels] or [allt])
+    riktning = set()
+    for t in enheter:
+        if not any(re.search(rx, t, re.IGNORECASE)
+                   for _n, rx in _DRILLFAMILJER[1][1]):
+            continue
+        riktning.add("ett trigonometriskt värde söks" if _TRIGKVOT_RE.search(t)
+                     else "vinkeln söks" if _ARCUS_RE.search(t)
+                     else "sidan söks ur en given vinkel")
+    ut["riktning"] = frozenset(riktning)
+    fram = set()
+    if figur in _GRAFFIGUR or re.search(r"\bgraf(?:en|er|erna)?\b|"
+                                        r"koordinatsystem", given,
+                                        re.IGNORECASE):
+        fram.add("graf")
+    if u.get("tabell") or any(d.get("tabell") for d in dels) or re.search(
+            r"\btabell", given, re.IGNORECASE):
+        fram.add("tabell")
+    if figur in _DIAGRAMFIGUR or re.search(r"diagram", given, re.IGNORECASE):
+        fram.add("diagram")
+    ut["framstallning"] = frozenset(fram)
+    return ut
+
+
+def drillbegreppsrad(u: dict | None) -> str:
+    """Provuppgiftens begrepp som en kort rad för «Inför provet»-blocket,
+    eller tom sträng. Begrepp, aldrig text: «potensfunktion, värdemängd,
+    given som graf» lämnar inte ut uppgiften."""
+    b = drillbegrepp(u)
+    if not b:
+        return ""
+    b["funktion"] = b["funktion_prov"]
+    delar = [" eller ".join(sorted(b[f])) for f in
+             ("funktion", "trig", "riktning", "vektor") if b.get(f)]
+    delar += sorted(b.get("mangd") or ())
+    delar += [_FRAMSTALLNING[f] for f in sorted(b.get("framstallning") or ())]
+    return ", ".join(delar)
+
+
+def drillavvikelse(provuppgift: dict | None,
+                   uppgift: dict | None) -> list[str]:
+    """Det bladets uppgift INTE delar med provets uppgift den säger sig
+    drilla, som korta satser. Tom lista = samma sort."""
+    p, b = drillbegrepp(provuppgift), drillbegrepp(uppgift)
+    if not p or not b:
+        return []
+    ut: list[str] = []
+    for familj in ("funktion", "trig", "riktning", "mangd", "vektor"):
+        pf = p["funktion_prov"] if familj == "funktion" else p[familj]
+        if pf and not (pf & b[familj]):
+            har = (" eller ".join(sorted(b[familj])) if b[familj]
+                   else "inget av det")
+            ut.append(f"provets uppgift: {' eller '.join(sorted(pf))}, "
+                      f"bladets: {har}")
+    for f in sorted(p["framstallning"] - b["framstallning"]):
+        ut.append(f"provets uppgift är {_FRAMSTALLNING[f]}, bladets är det "
+                  "inte")
+    return ut
+
+
+def infor_slots(prov: dict | None) -> list[dict]:
+    """provslots med provuppgiftens begrepp («begrepp», drillbegreppsrad)
+    för «Inför provet»-blocket. Eget anrop och inte en nyckel i _slotrad:
+    omprovets slotjämförelse ska inte se fältet."""
+    uppg = [u for u in (prov or {}).get("uppgifter") or []
+            if isinstance(u, dict)]
+    slots = provslots(prov)
+    for s, u in zip(slots, uppg):
+        s["begrepp"] = drillbegreppsrad(u)
+    return slots
+
+
 def _drillkrav(valda: int, plats: int, profil: str) -> int:
     """Hur många av de valda sorterna pappret måste öva.
 
@@ -11140,7 +11338,8 @@ def _drillkrav(valda: int, plats: int, profil: str) -> int:
 
 
 def drilltackning(exam: dict, nummer: list[int] | None,
-                  profil: str = "arbetsblad") -> list[dict]:
+                  profil: str = "arbetsblad",
+                  prov: dict | None = None) -> list[dict]:
     """Blev varje vald sort faktiskt övad? Deterministiskt, noll modellanrop.
 
     Räknar uppgifternas egna `drillar` mot de nummer läraren valde. Ett fynd
@@ -11152,18 +11351,62 @@ def drilltackning(exam: dict, nummer: list[int] | None,
     grammatiken för att schemat spruckit (to_response_format), och då är
     tystnad rätt svar: «kontrollen kördes inte» får inte se ut som «allt
     saknas» och kosta en reparationsrunda på ett blad som kan vara helt
-    riktigt."""
+    riktigt.
+
+    INNEHÅLLET RÄKNAS, INTE BARA ETIKETTEN (2026-10-11, exam 209). Med
+    `prov` prövas varje märkt uppgift mot provets uppgift med samma nummer
+    (drillavvikelse). En uppgift som övar något annat räknas inte som drill
+    och får ett eget fynd, «drillinnehall», med vad provets uppgift prövar,
+    så att reparationsrundan skriver om just den uppgiften."""
     valda = [n for n in (nummer or [])]
     if not valda:
         return []
     uppgifter = [u for u in (exam or {}).get("uppgifter") or []
                  if isinstance(u, dict)]
-    markta = [u.get("drillar") for u in uppgifter
-              if isinstance(u.get("drillar"), int)]
-    if not markta:
+    if not any(isinstance(u.get("drillar"), int) for u in uppgifter):
         return []
+    provets = {i: u for i, u in enumerate(
+        (prov or {}).get("uppgifter") or [], 1) if isinstance(u, dict)}
+    innehall: list[dict] = []
+    felmarkta: set[int] = set()
+    markta: list[int] = []
+    for i, u in enumerate(uppgifter, 1):
+        n = u.get("drillar")
+        if not isinstance(n, int):
+            continue
+        avvik = drillavvikelse(provets.get(n), u) if n in valda else []
+        if not avvik:
+            markta.append(n)
+            continue
+        felmarkta.add(n)
+        innehall.append(_err(
+            f"uppgift {i}", "drillinnehall",
+            f"Uppgift {i} är märkt drillar={n} men övar inte samma sak som "
+            f"provets uppgift {n}: {'; '.join(avvik)}. Provets uppgift {n} "
+            f"prövar {drillbegreppsrad(provets.get(n)) or 'något annat'}. "
+            f"Skriv om uppgift {i} så att den prövar samma begrepp i samma "
+            "form, med andra tal och ett annat sammanhang, och behåll "
+            f"drillar={n}."))
+    innehall = innehall[:DRILLINNEHALL_MAX_FYND]
     drillade = set(markta)
+    # Ett nummer som bara har felmärkta uppgifter har redan sitt fynd ovan,
+    # med uppgiften som ska skrivas om. Täckningsfyndet hade sagt «ingen
+    # uppgift är märkt», och det vore osant.
     saknas = [n for n in valda if n not in drillade]
+    fel = _drilltackningsfel(uppgifter, valda, markta, drillade,
+                             [n for n in saknas if n not in felmarkta],
+                             saknas, profil)
+    return innehall + fel
+
+
+def _drilltackningsfel(uppgifter: list[dict], valda: list[int],
+                       markta: list[int], drillade: set[int],
+                       saknas: list[int], alla_saknade: list[int],
+                       profil: str) -> list[dict]:
+    """Täckningsdelen av drilltackning, på de etiketter som höll. `saknas`
+    är de saknade numren utan ett eget innehållsfynd, `alla_saknade` alla."""
+    if not alla_saknade:
+        return []
     # FLER SORTER ÄN UPPGIFTER. Ett blad med sex uppgifter kan inte öva tolv
     # sorter, och prompten säger «tar du de tyngsta först». Då är luckorna
     # väntade och inget fel: skarpt (prov 88, 2026-09-19) fällde kontrollen
@@ -11185,15 +11428,21 @@ def drilltackning(exam: dict, nummer: list[int] | None,
             f"Gruppuppgiften har {plats} uppgifter men övar bara {len(ovade)} "
             f"av provets sorter, och minst {krav} ska övas. Byt ut en uppgift "
             "mot en som övar provets uppgift "
-            f"{', '.join(map(str, saknas))} och märk den med fältet drillar.")]
+            f"{', '.join(map(str, alla_saknade))} och märk den med fältet "
+            "drillar.")]
     if len(valda) > plats:
         dubbla = sorted({n for n in markta if markta.count(n) > 1 and n in valda})
+        # Inga dubbla och felmärkta uppgifter: luckan är de felmärkta, och
+        # deras innehållsfynd säger redan vad som ska skrivas om.
+        if not dubbla and saknas != alla_saknade:
+            return []
         return [_err(
             "uppgifter", "drilltackning",
             f"Bladet har {plats} uppgifter men övar bara {len(ovade)} av "
             "provets valda sorter: "
             f"uppgifter märkta drillar={dubbla} delar sort, medan provets "
-            f"uppgift {', '.join(map(str, saknas))} inte övas alls. Byt ut en "
+            f"uppgift {', '.join(map(str, alla_saknade))} inte övas alls. "
+            "Byt ut en "
             "av de dubbla mot en uppgift av en sort som saknas och märk den.")]
     fel = []
     for n in saknas:
@@ -13090,7 +13339,9 @@ def _infor_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
     log = log_cb or (lambda _m: None)
     # Gruppuppgiften har ett eget krav och egna ord (_drillkrav), och `prov`
     # är None för den: ovningsvakter är mätta på bladet.
-    tack = drilltackning(exam, nummer, profil)
+    # `prov` tänder innehållsprövningen (drillinnehall): en etikett räknas
+    # bara när uppgiften övar samma sak som provets uppgift.
+    tack = drilltackning(exam, nummer, profil, prov)
     pappret = "gruppuppgiften" if profil == "gruppuppgift" else "bladet"
     ovning = (ovningsvakter(exam, prov=prov, **_ramens_listor(ram))
               if prov else [])
@@ -13106,10 +13357,14 @@ def _infor_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
         return {"exam": exam, "errors": errors, "rounds": rounds_used}
     if rounds_used >= max_rounds:
         return {"exam": exam, "errors": errors + fel, "rounds": rounds_used}
-    if tack:
-        log(f"Inför provet: {len(tack)} av provets uppgifter saknar övning "
-            f"{'i' if profil == 'gruppuppgift' else 'på'} {pappret}, "
-            "byter ut …")
+    fel_inneh = [f for f in tack if f["code"] == "drillinnehall"]
+    if fel_inneh:
+        log(f"Inför provet: {len(fel_inneh)} uppgifter på {pappret} övar "
+            "inte det provets uppgift prövar, skriver om …")
+    if len(tack) > len(fel_inneh):
+        log(f"Inför provet: {len(tack) - len(fel_inneh)} av provets uppgifter "
+            f"saknar övning {'i' if profil == 'gruppuppgift' else 'på'} "
+            f"{pappret}, byter ut …")
     if ovning:
         log("Inför provet: " + ", ".join(sorted({f["code"] for f in ovning}))
             + f" på {len({f['path'] for f in ovning})} ställen, lagar …")
@@ -14044,7 +14299,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # `inforslots` är provets FORM (provslots) och inget annat. Texterna
     # lämnar aldrig det här anropet. `drillade` styr täckningen nedan och
     # räknas ur samma lista som blocket, så de två kan inte glida isär.
-    inforslots = provslots(inforprov) if inforprov else []
+    inforslots = infor_slots(inforprov) if inforprov else []
     # Provets personer och sammanhang (lärarens dom 2026-09-24) som namn och
     # enstaka ord. Bladet ska ha andra; vakten är routes_exam._lanfynd.
     # GRUPPUPPGIFTEN får samma block i sin egen form (Rickard 2026-09-27),
