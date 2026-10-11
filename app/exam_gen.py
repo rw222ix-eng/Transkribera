@@ -14895,6 +14895,19 @@ def _varvsvakt(fore: dict, res: dict, *, model: str, llm, profil: str,
         lasta = elevlasare.doma_elevlasare(
             exam, model=model, inriktning=inriktning, profil=profil, llm=llm,
             log_cb=log_cb, bara=rorda)
+    # NP-JÄMFÖRAREN PÅ C-BLADETS RÖRDA UPPGIFTER (Rickards ja samma dag, «om
+    # det krävs för att få bra kvalitet»). Varvet dömer inte nivån (se
+    # grinden nedan), och 202:12 och 183:10 stod som C-uppgifter som NP sätter
+    # på E respektive A. Ett anrop per varv, bara på det rena C-bladet: på A-
+    # bladet dömer jämföraren nästan varje uppgift till C (granskningen
+    # 2026-10-11), och det fyndet lagas inte genom att skriva om.
+    if profil == "arbetsblad" and exam_spec.ren_niva(niva_mal) == "C":
+        from app import np_jamforare            # lånar domarenheter härifrån
+        enheter = [e for e in domarenheter(exam)
+                   if _uppgiftsnr(e["nr"]) in rorda]
+        lasta = lasta + np_jamforare.doma_np(exam, enheter, model=model,
+                                             llm=llm, profil=profil,
+                                             log_cb=log_cb)
     nya = raknade + lasta
     if not nya:
         return res

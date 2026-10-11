@@ -194,3 +194,34 @@ def test_bladets_varv_las_av_elevlasaren_bara_pa_rorda(monkeypatch):
                         model="m", llm=llm, profil="arbetsblad",
                         niva_mal=None, infor=None, max_rounds=3)
     assert sett == {}
+
+
+def test_c_bladets_varv_jamfors_med_np_bara_pa_rorda(monkeypatch):
+    """Rickards ja 2026-10-11: på C-bladet jämförs de rörda uppgifterna med
+    nationella provet i varvet, inte på A-bladet."""
+    from app import elevlasare, np_jamforare
+    sett = {}
+    monkeypatch.setattr(elevlasare, "doma_elevlasare", lambda *a, **k: [])
+
+    def falsk_np(exam, enheter, **k):
+        sett["nr"] = [e["nr"] for e in enheter]
+        return [{"path": "uppgift 2", "code": "niva", "nr": "2",
+                 "message": "uppgift 2 är E på nationella provet."}]
+
+    monkeypatch.setattr(np_jamforare, "doma_np", falsk_np)
+    fore = _exam()
+    varv = copy.deepcopy(fore)
+    varv["uppgifter"][1]["text"] = "Lös ekvationen $x^2 - 5x + 6 = 0$."
+    c_mal = exam_gen.exam_spec.nivaval("arbetsblad", "C-nivå")["mal"]
+    llm, calls = _llm(varv)
+    exam_gen._varvsvakt(fore, {"exam": varv, "errors": [], "rounds": 1},
+                        model="m", llm=llm, profil="arbetsblad",
+                        niva_mal=c_mal, infor=_exam(), max_rounds=3)
+    assert sett["nr"] and all(n.startswith("2") for n in sett["nr"])
+    assert "E på nationella provet" in _reparationer(calls)[0]
+    sett.clear()
+    a_mal = exam_gen.exam_spec.nivaval("arbetsblad", "A-nivå")["mal"]
+    exam_gen._varvsvakt(fore, {"exam": varv, "errors": [], "rounds": 1},
+                        model="m", llm=llm, profil="arbetsblad",
+                        niva_mal=a_mal, infor=_exam(), max_rounds=3)
+    assert sett == {}
