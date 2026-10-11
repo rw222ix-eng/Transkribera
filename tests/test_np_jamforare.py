@@ -157,35 +157,39 @@ def test_bladets_fynd_star_bara_nar_samma_uppgift_falls_igen(monkeypatch):
     assert [f["nr"] for f in utan] == ["3", "5b"] and len(sedda) == 1
 
 
+
 def test_a_uppgift_med_c_bladets_metod_faller(monkeypatch):
     """Exam 236:4 (2026-10-11): vektorn i vind med resultanten rakt fram är
     samma metod som C-bladets 9 (233), och då är den en C-uppgift (Rickards
-    dom 8/10). Utan C-bladet är prompten och schemat som förut."""
+    dom 8/10). Jämförelsen är ett eget anrop, och NP-prompten är som förut."""
     import json
     monkeypatch.setattr(np_jamforare, "np_enheter", lambda _k: NP)
     enheter = [{"nr": "4", "niva": "A", "poang": [0, 0, 2]},
                {"nr": "5", "niva": "A", "poang": [0, 0, 1]}]
     cblad = [{"nr": "9", "niva": "C", "poang": [0, 1, 0],
               "kort": {"text": "färjan", "losning": "sin v = 3/12"}}]
-    scheman = []
+    anrop = []
 
     def llm(_m, prompt, **k):
-        scheman.append(k["response_format"]["json_schema"]["schema"])
-        assert ("C-BLADET TILL SAMMA PROV" in prompt) == bool(cblad_med)
+        namn = k["response_format"]["json_schema"]["name"]
+        anrop.append(namn)
+        if namn == "cbladjamforelse":
+            assert "C-BLADET" in prompt and '"färjan"' in prompt
+            return json.dumps({"jamforelser": [
+                {"nr": "4", "cblad": "9", "motivering": ""},
+                {"nr": "5", "cblad": "", "motivering": ""}]})
+        assert "C-BLADET" not in prompt
         return json.dumps({"jamforelser": [
-            {"nr": "4", "np": "NpMa1a vt17 D18b", "poang": [0, 0, 2],
-             "motivering": "", "cblad": "9"},
-            {"nr": "5", "np": "NpMa1a vt17 D18b", "poang": [0, 0, 1],
-             "motivering": "", "cblad": "ingen"}]})
+            {"nr": nr, "np": "NpMa1a vt17 D18b", "poang": [0, 0, p],
+             "motivering": ""} for nr, p in (("4", 2), ("5", 1))]})
 
     ex = {"kurs": "Matematik, nivå 1a"}
-    cblad_med = cblad
     fynd = np_jamforare.doma_np(ex, enheter, model="m", llm=llm,
-                                profil="arbetsblad", cblad=cblad)
+                                profil="arbetsblad", upprepa=True, cblad=cblad)
     assert [f["nr"] for f in fynd] == ["4"]
     assert "uppgift 9 på C-bladet" in fynd[0]["message"]
-    assert "cblad" in json.dumps(scheman[0])
-    cblad_med = None
+    assert anrop == ["npjamforelse", "cbladjamforelse", "cbladjamforelse"]
+    anrop.clear()
     assert np_jamforare.doma_np(ex, enheter, model="m", llm=llm,
                                 profil="arbetsblad") == []
-    assert scheman[1] is np_jamforare.NPJ_SCHEMA
+    assert anrop == ["npjamforelse"]

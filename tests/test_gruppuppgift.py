@@ -1572,6 +1572,9 @@ def test_provets_balans_faller_varvet_som_forut():
         == exam_gen.BALANSVARNING
     assert exam_gen.balansvarningar("gruppuppgift", ("uppgift", 2)) \
         == exam_gen.BALANSVARNING
+    # Blad 237: den enda kortsvarsuppgiften byttes, och «saknar
+    # rutinuppgifter» kastade varvet.
+    assert "blandning" in exam_gen.balansvarningar("arbetsblad", ("uppgift", 1))
 
 
 def test_en_omskrivning_utan_mal_ager_balansen_sjalv():

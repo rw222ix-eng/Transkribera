@@ -3052,7 +3052,13 @@ OVNINGSPROFILER = frozenset({"gruppuppgift", "arbetsblad"})
 # river den ska fällas som förut. Och GENERERINGEN rörs inte heller, på någon
 # profil: ett nytt papper ska födas balanserat, och där finns hela
 # rundbudgeten att laga det med.
-BALANSVARNING: frozenset[str] = frozenset({"formagabalans", "nivabalans"})
+#
+# BLANDNINGEN hör hit av samma skäl (blad 237, 2026-10-11): A-bladets enda
+# kortsvarsuppgift byttes på NP-jämförarens fynd mot en med redovisning, och
+# «provet saknar rutinuppgifter» kastade varvet tre gånger utan att något
+# skrevs (232 samma kväll, «1 problem» i båda rundorna).
+BALANSVARNING: frozenset[str] = frozenset({"formagabalans", "nivabalans",
+                                           "blandning"})
 
 
 def balansvarningar(profil: str, riktning) -> frozenset[str]:
