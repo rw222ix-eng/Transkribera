@@ -300,6 +300,20 @@ def _kapitelspann(doc, bok: dict | None) -> tuple[int, int] | None:
     return min(f for f, _ in sidor), max(t for _, t in sidor)
 
 
+def _kapitelmoment(doc, bok: dict | None) -> str:
+    """Avsnitten i provets kapitel som momentrad («3.1 · 3.2 · 3.3 · 5.1 …»).
+
+    Spannet ovan går från första till sista kapitlet. Ett prov på kap 3 och
+    kap 5 (NA26F prov 3) fick då kap 4 med, och efterkontrollen krävde dess
+    delmoment. Raden låter routes_planning.bok_luckor hoppa över kapitlet
+    emellan, samma väg som genereringen."""
+    kapitel = {str(it.avsnitt or "").split(".")[0] for it in doc.uppgifter
+               if (it.avsnitt or "").strip()}
+    return " · ".join(str(a.get("nr") or "")
+                      for a in ((bok or {}).get("avsnitt") or [])
+                      if str(a.get("nr") or "").split(".")[0] in kapitel)
+
+
 def _lektionsfynd(view: dict, doc, bok: dict | None, db_file: Path) -> list[dict]:
     """Varje delmoment klassen haft enligt kalendern ska ha en uppgift.
 
@@ -321,7 +335,8 @@ def _lektionsfynd(view: dict, doc, bok: dict | None, db_file: Path) -> list[dict
         delmoment = routes_planning.undervisade_delmoment(
             db_file, {"bok": {"id": bok["id"], "fran": spann[0],
                               "till": spann[1]},
-                      "datum": view.get("datum") or ""},
+                      "datum": view.get("datum") or "",
+                      "moment": _kapitelmoment(doc, bok)},
             group_id=view["group_id"], course_id=view["course_id"])
     except Exception:                       # pragma: no cover, trasig bas
         return []

@@ -279,6 +279,23 @@ def bok_val(body: dict) -> tuple[int, int, int] | None:
     return (bid, fran, max(fran, till)) if fran > 0 else None
 
 
+def bok_luckor(db_file: Path, body: dict) -> list[tuple[int, int]]:
+    """Sidorna mellan momentradens avsnitt som spannet hoppar över
+    (bok.luckor_ur_moment): kap 4 när provet är kap 3 och kap 5. Tom lista
+    utan bok, utan moment eller när avsnitten ligger i följd."""
+    val = bok_val(body)
+    moment = str(body.get("moment") or "").strip()
+    if val is None or not moment:
+        return []
+    bid, fran, till = val
+    conn = db.connect(db_file)
+    try:
+        avsnitt = (db.get_bok(conn, bid) or {}).get("avsnitt") or []
+    finally:
+        conn.close()
+    return bok.luckor_ur_moment(moment, avsnitt, fran, till)
+
+
 def bok_ur_kalendern(db_file: Path, datum: str, *, group_id: int | None,
                      course_id: int | None) -> dict | None:
     """`bok: {id, fran, till}` för ALLT KLASSEN HAFT fram till `datum`
@@ -551,13 +568,15 @@ def bok_text(db_file: Path, body: dict) -> str:
         rad = db.get_bok(conn, bid)
         if rad is None:
             return ""
-        uppg = db.bok_uppgifter(conn, bid, fran, till)
+        luckor = bok_luckor(db_file, body)
+        uppg = bok.utan_luckor(db.bok_uppgifter(conn, bid, fran, till), luckor)
         # Urvalets sidor först i teckenbudgeten: på ett fyrsidigt uppslag föll
         # sista sidan bort, och det var den som bar lärarens valda uppgifter
         # (Origo 2a s. 27–30, urvalet 1218–1227 — se bok.urvalets_sidor).
         urval = bok_urval(body)
         text = bok.uppslag_text(conn, bid, fran, till,
-                                viktiga=bok.urvalets_sidor(uppg, urval))
+                                viktiga=bok.urvalets_sidor(uppg, urval),
+                                luckor=luckor)
     finally:
         conn.close()
     return bok.build_bok_block(rad, fran, till, text, uppg, urval)
@@ -632,8 +651,9 @@ def bok_urval_text(db_file: Path, body: dict) -> str:
         rad = db.get_bok(conn, bid)
         if rad is None:
             return ""
-        sidor = db.bok_sidor(conn, bid, fran, till)
-        uppg = db.bok_uppgifter(conn, bid, fran, till)
+        luckor = bok_luckor(db_file, body)
+        sidor = bok.utan_luckor(db.bok_sidor(conn, bid, fran, till), luckor)
+        uppg = bok.utan_luckor(db.bok_uppgifter(conn, bid, fran, till), luckor)
     finally:
         conn.close()
     return bok.build_urval_block(rad, fran, till, sidor, uppg, bok_urval(body))
@@ -686,8 +706,9 @@ def bok_provuppgifter(db_file: Path, body: dict) -> list[dict]:
     try:
         if db.get_bok(conn, bid) is None:
             return []
-        sidor = db.bok_sidor(conn, bid, fran, till)
-        uppg = db.bok_uppgifter(conn, bid, fran, till)
+        luckor = bok_luckor(db_file, body)
+        sidor = bok.utan_luckor(db.bok_sidor(conn, bid, fran, till), luckor)
+        uppg = bok.utan_luckor(db.bok_uppgifter(conn, bid, fran, till), luckor)
     finally:
         conn.close()
     return bok.provuppgifter(sidor, uppg)
@@ -764,6 +785,7 @@ def fordjupningar(db_file: Path, body: dict, *, group_id: int | None,
         rader = db.lektionsinnehall_for_kurs(conn, gid, cid)
     finally:
         conn.close()
+    rader = bok.lektioner_utan_luckor(rader, bok_luckor(db_file, body))
     return exam_gen.fordjupningar_ur_lektioner(
         rader, fran=fran, till=till,
         provdatum=(body.get("datum") or "").strip())
@@ -789,7 +811,7 @@ def bok_avsnitt(db_file: Path, body: dict) -> list[dict]:
         sidor = db.bok_sidor(conn, bid, fran, till, med_text=False)
     finally:
         conn.close()
-    return bok.avsnittslista(sidor)
+    return bok.avsnittslista(bok.utan_luckor(sidor, bok_luckor(db_file, body)))
 
 
 def undervisade_delmoment(db_file: Path, body: dict, *,
@@ -823,16 +845,19 @@ def undervisade_delmoment(db_file: Path, body: dict, *,
     except (TypeError, ValueError):
         return []
     provdatum = (body.get("datum") or "").strip()
+    # Kap 4 mellan kap 3 och kap 5 är inget delmoment (bok.luckor_ur_moment).
+    luckor = bok_luckor(db_file, body)
     conn = db.connect(db_file)
     try:
         rader = (db.lektionsinnehall_for_kurs(conn, gid, cid)
                  if gid and cid else [])
-        ut = exam_gen.delmoment_ur_lektioner(rader, fran=fran, till=till,
-                                             provdatum=provdatum)
+        ut = exam_gen.delmoment_ur_lektioner(
+            bok.lektioner_utan_luckor(rader, luckor), fran=fran, till=till,
+            provdatum=provdatum)
         if ut:
             return ut
-        return exam_gen.delmoment_ur_sidor(
-            db.bok_sidor(conn, bid, fran, till, med_text=False))
+        return exam_gen.delmoment_ur_sidor(bok.utan_luckor(
+            db.bok_sidor(conn, bid, fran, till, med_text=False), luckor))
     finally:
         conn.close()
 
@@ -856,10 +881,12 @@ def undervisade_lektionsmal(db_file: Path, body: dict, *,
     if not gid or not cid:
         return []
     provdatum = (body.get("datum") or "").strip()
+    luckor = bok_luckor(db_file, body)
     conn = db.connect(db_file)
     try:
         datum = set()
-        for r in db.lektionsinnehall_for_kurs(conn, gid, cid):
+        for r in bok.lektioner_utan_luckor(
+                db.lektionsinnehall_for_kurs(conn, gid, cid), luckor):
             d = str(r.get("datum") or "")
             if provdatum and d >= provdatum:
                 continue
@@ -911,8 +938,10 @@ def bok_nivaer(db_file: Path, body: dict, *, profil: str,
         rad = db.get_bok(conn, bid)
         if rad is None:
             return ""
-        sidor = db.bok_sidor(conn, bid, fran, till, med_text=not urval)
-        uppg = db.bok_uppgifter(conn, bid, fran, till)
+        luckor = bok_luckor(db_file, body)
+        sidor = bok.utan_luckor(
+            db.bok_sidor(conn, bid, fran, till, med_text=not urval), luckor)
+        uppg = bok.utan_luckor(db.bok_uppgifter(conn, bid, fran, till), luckor)
     finally:
         conn.close()
     bland = ({u["nr"] for u in bok.valda_uppgifter(sidor, uppg)}

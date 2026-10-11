@@ -1786,3 +1786,42 @@ def test_utan_remsa_finns_inga_forebilder():
     assert bok.remsuppgifter(sidor, uppgifter, {"remsa": ""}) == []
     # Och ett nummer som inte står på sidorna hittas inte på.
     assert bok.remsuppgifter(sidor, uppgifter, {"remsa": "9999"}) == []
+
+
+# ── LUCKOR I SPANNET (2026-10-11) ──────────────────────────────────────────
+# NA26F prov 3 prövar kap 3 och kap 5 i Liber 1c, ett enda bokspann s. 100–271.
+# Kap 4 emellan prövades på prov 2 och får varken bli delmoment eller förebild.
+_LIBER = [{"nr": "3.1", "fran": 100, "till": 107}, {"nr": "3.3", "fran": 118, "till": 141},
+          {"nr": "4.1", "fran": 142, "till": 145}, {"nr": "4.5", "fran": 191, "till": 223},
+          {"nr": "5.1", "fran": 224, "till": 234}, {"nr": "5.4", "fran": 249, "till": 271}]
+
+
+def test_luckan_mellan_kapitlen_hoppas_over():
+    moment = "3.1 Procentuella förändringar · 3.3 Sannolikhetslära · 5.1 Statistik · 5.4 Samband"
+    # Avsnitt som raden inte nämner (3.2, 5.2–5.3) hoppas också över.
+    assert bok.luckor_ur_moment(moment, _LIBER, 100, 271) == [(108, 117), (142, 223),
+                                                              (235, 248)]
+    # I följd, utan nummer eller tomt: allt som förut.
+    assert bok.luckor_ur_moment("4.1 · 4.5", _LIBER[2:4], 142, 223) == [(146, 190)]
+    assert bok.luckor_ur_moment("3.3 · 4.1", _LIBER, 100, 271) == []
+    assert bok.luckor_ur_moment("Inför provet – E-nivå", _LIBER, 1, 271) == []
+    assert bok.luckor_ur_moment("", _LIBER, 1, 271) == []
+    # Ett decimaltal är inget avsnitt: «x = 3,5» och «2.50 kr» ger ingen lucka.
+    assert bok.luckor_ur_moment("3.1 · pris 5.40 kr", _LIBER, 100, 271) == []
+
+
+def test_lektioner_i_luckan_faller_bort():
+    luckor = [(142, 223)]
+    rader = [{"datum": "2026-11-13", "fran": 142, "till": 143, "delar": []},
+             {"datum": "2026-11-20", "fran": 100, "till": 103, "delar": []},
+             {"datum": "2026-12-01", "fran": 200, "till": 237,
+              "delar": [{"fran": 200, "till": 210, "rubrik": "Modellering"},
+                        {"fran": 224, "till": 237, "rubrik": "Diagram"}]},
+             # Delvis i luckan står kvar (TE26A:s kapiteltest s. 138–214).
+             {"datum": "2027-01-25", "fran": 138, "till": 214, "delar": []}]
+    ut = bok.lektioner_utan_luckor(rader, luckor)
+    assert [r["datum"] for r in ut] == ["2026-11-20", "2026-12-01", "2027-01-25"]
+    assert [d["rubrik"] for d in ut[1]["delar"]] == ["Diagram"]
+    assert bok.lektioner_utan_luckor(rader, []) is rader
+    assert [s["sida"] for s in bok.utan_luckor(
+        [{"sida": 141}, {"sida": 142}, {"sida": 224}], luckor)] == [141, 224]

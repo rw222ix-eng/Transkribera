@@ -672,7 +672,7 @@ def provuppgifter(sidor: list[dict], uppgifter: list[dict],
 
 
 def uppslag_text(conn, bok_id: int, fran: int, till: int,
-                 max_tecken: int = 24000, viktiga=None) -> str:
+                 max_tecken: int = 24000, viktiga=None, luckor=None) -> str:
     """Sidorna som text — det tavlan, provet och arbetsbladet skrivs ur.
 
     Bara sidor som FAKTISKT lästs kommer med. En sida som inte är läst nämns
@@ -682,10 +682,12 @@ def uppslag_text(conn, bok_id: int, fran: int, till: int,
 
     `viktiga` är sidnummer som ligger utanför taket: urvalets sidor får plats
     först, och resten fyller på i ordning så långt budgeten räcker.
+
+    `luckor` är sidorna mellan provets avsnitt (luckor_ur_moment).
     """
     viktiga = set(viktiga or ())
     bitar: list[tuple[int, str]] = []
-    for rad in db.bok_sidor(conn, bok_id, fran, till):
+    for rad in utan_luckor(db.bok_sidor(conn, bok_id, fran, till), luckor):
         text = (rad.get("text") or "").strip()
         if not text:
             continue
@@ -992,6 +994,90 @@ def avsnittslista(sidor: list[dict]) -> list[dict]:
         ut.append({"avsnitt": g["avsnitt"], "etikett": _etikett(g),
                    "fran": g["sidor"][0]["sida"], "till": g["sidor"][-1]["sida"],
                    "sidor": len(g["sidor"])})
+    return ut
+
+
+# ── LUCKOR I SPANNET (2026-10-11) ──────────────────────────────────────────
+# NA26F prov 3 (14/1) prövar kap 3 och kap 5, Liber s. 100–141 och 224–271.
+# Bokspannet är ett enda intervall, s. 100–271, och kap 4 mellan dem prövades
+# redan på prov 2 (19/11). Utan luckan blev kap 4:s lektioner delmoment, och
+# kapitlets sidor och uppgifter stod i provets bokblock och förebilder.
+_AVSNITTSNR = re.compile(r"(?<![\d.,])(\d+\.\d+)(?![\d.,])")
+
+
+def luckor_ur_moment(moment: str, avsnitt: list[dict], fran: int,
+                     till: int) -> list[tuple[int, int]]:
+    """Sidorna MELLAN momentradens avsnitt, som spannet hoppar över.
+
+    Avsnitten läses ur momentraden («3.1 Procentuella förändringar · … · 5.4
+    Samband och orsakssamband») och slås upp i bokens register. Bara luckor
+    mellan två nämnda avsnitt räknas: sidor före det första och efter det
+    sista rörs inte, för bladens ram ur kalendern börjar med flit på kursens
+    första sida. Tom lista när raden inte nämner något känt avsnitt eller när
+    avsnitten ligger i följd, och då är allt precis som förut."""
+    nr = set(_AVSNITTSNR.findall(moment or ""))
+    spann = []
+    for a in avsnitt or []:
+        try:
+            if str(a.get("nr") or "") in nr and a.get("fran") and a.get("till"):
+                spann.append((int(a["fran"]), int(a["till"])))
+        except (TypeError, ValueError):
+            continue
+    ut: list[tuple[int, int]] = []
+    slut = None
+    for f, t in sorted(spann):
+        if slut is not None and f > slut + 1:
+            lf, lt = max(slut + 1, int(fran)), min(f - 1, int(till))
+            if lf <= lt:
+                ut.append((lf, lt))
+        slut = t if slut is None else max(slut, t)
+    return ut
+
+
+def i_lucka(sida, luckor: list[tuple[int, int]]) -> bool:
+    try:
+        s = int(sida)
+    except (TypeError, ValueError):
+        return False
+    return any(f <= s <= t for f, t in luckor or [])
+
+
+def utan_luckor(rader: list[dict], luckor: list[tuple[int, int]]) -> list[dict]:
+    """Sidor eller bokuppgifter (nyckeln «sida») utanför luckorna."""
+    if not luckor:
+        return rader
+    return [r for r in rader if not i_lucka(r.get("sida"), luckor)]
+
+
+def lektioner_utan_luckor(rader: list[dict],
+                          luckor: list[tuple[int, int]]) -> list[dict]:
+    """Kalenderns lektionsrader utan de delar som ligger helt i en lucka.
+
+    En del som bara delvis ligger i luckan står kvar (TE26A:s kapiteltest
+    25/1 spänner s. 138–214). En lektion vars alla delar föll bort faller
+    själv bort."""
+    if not luckor:
+        return rader
+
+    def helt_i(f, t) -> bool:
+        try:
+            f, t = int(f or 0), int(t or f or 0)
+        except (TypeError, ValueError):
+            return False
+        return f > 0 and any(lf <= f and max(f, t) <= lt for lf, lt in luckor)
+
+    ut: list[dict] = []
+    for r in rader or []:
+        delar = r.get("delar") if isinstance(r.get("delar"), list) else []
+        delar = [d for d in delar if isinstance(d, dict)]
+        if delar:
+            kvar = [d for d in delar
+                    if not helt_i(d.get("fran") or r.get("fran"),
+                                  d.get("till") or d.get("fran") or r.get("till"))]
+            if kvar:
+                ut.append({**r, "delar": kvar} if len(kvar) < len(delar) else r)
+        elif not helt_i(r.get("fran"), r.get("till")):
+            ut.append(r)
     return ut
 
 
