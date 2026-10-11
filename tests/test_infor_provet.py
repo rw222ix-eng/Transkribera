@@ -948,7 +948,7 @@ def test_pronomen_efter_en_formel_ar_inget_namn():
 def test_ligger_och_bakomliggande_ar_ingen_situation():
     """Prov 219 (2026-10-11): blad 228:5 fälldes för att strumpor «ligger»."""
     ut = exam_gen.provets_namn_och_sammanhang({"uppgifter": [
-        {"text": "Kortet ligger på bordet. Priset ändras varje år. En "
+        {"text": "Kortet ligger på bordet. Priset ändras varje år. Hon cyklar uppför. En "
                  "bakomliggande faktor förklarar sambandet."}]})
-    for o in ("ligger", "ändras", "bakomliggande"):
+    for o in ("ligger", "ändras", "bakomliggande", "uppför"):
         assert o not in ut["sammanhang"], o

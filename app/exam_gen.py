@@ -10721,7 +10721,9 @@ _SAMMANHANG_STOPP = frozenset((
     # Prov 219 (2026-10-11) gav «ligger», «ändras» och «bakomliggande»
     # (statistikens «bakomliggande faktor»), och blad 228:5 fälldes för att
     # strumporna «ligger» i en låda.
-    "ligger", "låg", "legat", "ändras", "ändrades", "bakomliggande"))
+    "ligger", "låg", "legat", "ändras", "ändrades", "bakomliggande",
+    # Riktningar (prov 215 «cyklar … uppför», blad 226:4 «uppför läktaren»).
+    "uppför", "nerför", "nedför", "uppåt", "nedåt", "neråt"))
 # Verbformer som nästan aldrig är ett substantiv: «ritade», «planerar».
 _VERBSLUT = ("ade", "ades", "erar", "erade")
 # Matematikens ord, som stammar utan å, ä och ö. Kursplanens ord (_kursord)
