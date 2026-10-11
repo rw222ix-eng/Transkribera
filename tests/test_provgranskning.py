@@ -510,6 +510,8 @@ def test_scenvakten_laser_tecken_och_korta_ord():
     assert exam_gen.scenvakt(_prov([u4, u6])) == []
     u = _u(text="Att hyra en kajak kostar 150 kr.", scen=_scen("kajakhyra"))
     assert exam_gen.scenvakt(_prov([u])) == []
+    u = _u(text="Taket lutar vinkeln $v$ från väggen.", scen=_scen("taklutning"))
+    assert exam_gen.scenvakt(_prov([u])) == []
 
 
 # ── kedjan: fynden går i EN reparationsprompt, och räknas om till slut ───

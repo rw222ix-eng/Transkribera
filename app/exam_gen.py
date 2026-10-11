@@ -10381,8 +10381,14 @@ def _scen_namner(text: str, sokta: set[str]) -> bool:
     if course_data.namner(text, sokta):
         return True
     # Blad 235: «kajakhyra» är ett sammansatt ord, och uppgiften säger «kajak».
-    return any(o.startswith(s) or (len(o) >= 5 and s.startswith(o))
-               for s in sokta for o in course_data.ordstammar(text))
+    # Blad 236: «taklutning» mot «taket» och «lutar», båda leden står där.
+    ord_ = course_data.ordstammar(text)
+    if any(o.startswith(s) or (len(o) >= 5 and s.startswith(o))
+           for s in sokta for o in ord_):
+        return True
+    return any(any(o.startswith(s[:i]) for o in ord_)
+               and any(o.startswith(s[i:i + 3]) for o in ord_)
+               for s in sokta for i in range(3, len(s) - 2))
 
 
 def scenvakt(exam: dict) -> list[dict]:
