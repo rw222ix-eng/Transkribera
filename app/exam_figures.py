@@ -270,7 +270,10 @@ def _stapeldiagram(f: "exam_spec.FigStapeldiagram") -> str:
     scale = H / topp if topp > 0 else 1.0
     rader = [
         r"\begin{tikzpicture}[line join=round]",
-        rf"\draw[->] (0,0)--(0,{_f(H + 0.6)}) node[above]{{antal}};",
+        # Ingen axeletikett. «antal» stod här fast, och NA26F prov 3 (exam
+        # 219, 2026-10-11) fick «antal» på ett diagram över busskortets pris i
+        # kr och ett över insamlade kronor. Stammen säger vad staplarna visar.
+        rf"\draw[->] (0,0)--(0,{_f(H + 0.6)});",
         rf"\draw[->] (0,0)--({_f(len(f.varden) + 0.6)},0) node[right]{{ }};",
     ]
     for yt in _nice_ticks(0, max(f.varden)):

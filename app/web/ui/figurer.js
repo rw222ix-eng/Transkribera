@@ -532,7 +532,8 @@ window.Figurer = (() => {
   }
 
   /* ── Stapeldiagrammet ──
-     Fast höjd 4 (gånger U), en enhet per stapel, y-axeln heter «antal». */
+     Fast höjd 4 (gånger U), en enhet per stapel. Ingen axeletikett: stammen
+     säger vad staplarna visar (exam 219, «antal» på ett diagram i kr). */
   function stapeldiagram(o) {
     const kat = o.kategorier || [], var_ = (o.varden || []).map(Number);
     if (!var_.length) return null;
@@ -540,7 +541,6 @@ window.Figurer = (() => {
     const P = (x, y) => `(${r4(x * U)}, ${r4(y * U)})`;
     const rader = [];
     rader.push(`line(${P(0, 0)}, ${P(0, H + 0.6)}, mark: (end: "straight"))`);
-    rader.push(`content(${P(0, H + 0.6)}, anchor: "south", padding: 0.1)[antal]`);
     rader.push(`line(${P(0, 0)}, ${P(var_.length + 0.6, 0)}, mark: (end: "straight"))`);
     niceTicks(0, topp).forEach(yt => {
       if (yt <= 0) return;
