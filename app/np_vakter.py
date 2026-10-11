@@ -536,6 +536,10 @@ _STORHET_RE = re.compile(
     r"\$([a-zA-Z])\$\s+(?:kr|kronor|öre|timmar|timme|minuter|minut|sekunder"
     r"|dagar|dygn|veckor|månader|år|st|stycken|m|cm|mm|dm|km|liter|l|dl|cl"
     r"|ml|kg|hg|g|mg|ton|grader|procent|personer)(?![\wåäö])")
+# IndA prov 2 (exam 215, 2026-10-11): «Skriv linjens ekvation på formen
+# $y = kx + m$» fälldes som en E-uppgift med två konstanter. Formen eleven
+# ska skriva svaret i är ingen parameter; NP skriver så på E.
+_FORMEN_RE = re.compile(r"(?:på|i)\s+(?:\w+\s+)?formen\s+\$[^$]+\$", re.I)
 _SOKT_RE = re.compile(
     r"(?:bestäm|beräkna|ange)\s+(?:talet|värdet på|det positiva värdet på"
     r"|de värden på|alla möjliga värden på|konstanten)\s+\$([a-zA-Z])\$",
@@ -553,7 +557,8 @@ def konstanter(text: str) -> set[str]:
     vanligaste kvarvarande bokstaven den okända."""
     rakning: Counter = Counter()
     definierade: set[str] = set()
-    for b in _MATH_RE.findall(str(text or "")):
+    text = _FORMEN_RE.sub(" ", str(text or ""))
+    for b in _MATH_RE.findall(text):
         b = _VEKTOR_RE.sub(" ", b)
         m = _LHS_RE.match(b)
         if m:

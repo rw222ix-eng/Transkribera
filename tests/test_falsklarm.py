@@ -36,3 +36,12 @@ def test_rubrikens_extra_meningar_ar_inga_delmoment():
     dm = exam_gen.delmoment_ur_lektioner(rader, fran=1, till=200,
                                          provdatum="2026-10-01")
     assert [d["delmoment"] for d in dm] == ["Mönster och generella samband"]
+
+
+def test_formen_svaret_skrivs_i_ar_inga_konstanter():
+    """IndA prov 2 (exam 215): «på formen $y = kx + m$» är NP:s E-fråga."""
+    k = np_vakter.konstanter
+    assert k(r"Skriv linjens ekvation $3x - 4y = 24$ på formen $y = kx + m$.") == set()
+    assert k(r"Skriv ekvationen i allmän formen $ax + by + c = 0$.") == set()
+    # Konstanter i själva uppgiften räknas fortfarande.
+    assert k(r"Linjen $ax + by = 6$ ska skrivas på formen $y = kx + m$.") == {"a", "b"}
