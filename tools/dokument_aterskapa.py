@@ -98,7 +98,11 @@ def main(exam_id, mall_id, overrides, status="utkast"):
     # vanligt prov till omprov, och tvärtom. Den sätts med overrides.
     for k in ("id", "pdf", "tex", "losningsblad", "bilder", "andradVid", "variant"):
         mall.pop(k, None)
-    doc, fel = exam_spec.validate_exam_json(exam, ex["typ"] or "prov")
+    # Med lärarens nivåval, som appen: utan det mäts ett «Bara E»-prov mot de
+    # blandade NP-banden och fälls alltid (E-provet 222, 2026-10-11).
+    nv = exam_spec.nivaval(ex["typ"] or "prov", ex["nivaval"])
+    doc, fel = exam_spec.validate_exam_json(exam, ex["typ"] or "prov",
+                                            nv["mal"] if nv else None)
     v = dict(mall)
     v.update({
         "typ": {"prov": "Prov", "arbetsblad": "Arbetsblad", "gruppuppgift": "Gruppuppgift"}.get(ex["typ"], "Prov"),
