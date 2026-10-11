@@ -619,6 +619,24 @@ def _cifynd(exam: dict, typ: str = "prov") -> list[dict]:
             for f in fel]
 
 
+def _delbegreppsfynd(exam: dict, typ: str) -> list[dict]:
+    """Varje begrepp de taggade punkterna nämner, och grafisk ekvations-
+    lösning i GeoGebra (exam_gen.ci_delbegrepp, grafisk_digitalvakt; Rickard
+    2026-10-11 över prov 156, där cosinus saknades). Koderna är uppgifternas
+    egna: efterkontrollen har inte beställningens kryss."""
+    if typ != "prov":
+        return []
+    koder = sorted({str(k) for u in ((exam or {}).get("uppgifter") or [])
+                    if isinstance(u, dict) for k in (u.get("innehall") or [])})
+    try:
+        fel = (exam_gen.ci_delbegrepp(exam, koder)
+               + exam_gen.grafisk_digitalvakt(exam, koder))
+    except Exception:                       # pragma: no cover
+        return []
+    return [_fynd(f["code"], f["message"], _uppgiftsnr(f.get("path", "")))
+            for f in fel]
+
+
 def _nptypfynd(doc, typ: str) -> list[dict]:
     """Noll NP-typer i en mätt kurs (niva_rubrik.np_typer_saknas).
 
@@ -842,6 +860,7 @@ def efterkontroll(view: dict, doc, summor: dict | None, *,
     ut += _nptypfynd(doc, typ)
     ut += _formfynd(doc, typ)
     ut += _cifynd(view.get("exam") or {}, typ)
+    ut += _delbegreppsfynd(view.get("exam") or {}, typ)
     ut += _ovningsfynd(view.get("exam") or {}, infor, typ)
     ut += _forbudsfynd(view, infor, typ, db_file)
     # Kopieringsvakten sist bland fynden, och bara när anroparen pekat ut
@@ -981,6 +1000,15 @@ _ATGARD = {
                  "metod, samma sammanhang, samma poäng.",
     "provuttryck": "Byt talen i uttrycket så att det inte är provets. Samma "
                    "metod, samma sammanhang, samma poäng.",
+    # Punktens delbegrepp och GeoGebra-delen (prov 156, 2026-10-11).
+    "delbegrepp": "Byt ut en uppgift ur det innehåll som har flest uppgifter "
+                  "mot en som kräver begreppet, eller ge begreppet en enkel "
+                  "a) på E- eller C-nivå, så som fyndet säger. Samma del och "
+                  "samma summa poäng.",
+    "geogebra": "Skriv del C med digitala verktyg (GeoGebra på datorn) och "
+                "formelblad i hjälpmedelsraden, och låt en uppgift där lösa "
+                "en ekvation f(x) = a grafiskt i GeoGebra, så som fyndet "
+                "säger. Samma summa poäng.",
     "bildfigur": "Flytta det eleven räknar med från bilden till texten eller "
                  "en tabell, och skriv scenen utan antal. Samma matematik, "
                  "samma tal, samma poäng.",
@@ -1765,10 +1793,16 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # Bara provet har delar: arbetsbladet och gruppuppgiften skickar dem
         # aldrig, och skulle de göra det är regeln ändå ingenting värd på ett
         # papper utan del A och del B.
+        hjalpmedel_a = body.get("hjalpmedel_a") or ""
+        hjalpmedel_b = body.get("hjalpmedel_b") or ""
+        # Grafisk ekvationslösning görs i GeoGebra (Rickard 2026-10-11, prov
+        # 156): med den punkten kryssad får del C datorn, vad som än stod.
+        if typ == "prov" and delar and exam_gen.kraver_geogebra(punkt_koder) \
+                and not exam_gen.har_digital_del({"hjalpmedel": hjalpmedel_b}):
+            hjalpmedel_a = hjalpmedel_a or exam_gen.HJALPMEDEL_FORVAL["B"]
+            hjalpmedel_b = exam_gen.GRAFISK_HJALPMEDEL
         hjalpmedelsregel = (
-            exam_gen.hjalpmedelsregel(body.get("hjalpmedel_a") or "",
-                                      body.get("hjalpmedel_b") or "",
-                                      delar=delar)
+            exam_gen.hjalpmedelsregel(hjalpmedel_a, hjalpmedel_b, delar=delar)
             if typ == "prov" else "")
         # ── YRKET (lärarens fynd 2026-09-12) ────────────────────────
         # Klassens inriktning ur klassprofilen, skickad av plan.js bara när

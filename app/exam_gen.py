@@ -3448,6 +3448,10 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
              if koder else
              "Uppgifterna ska pröva följande centrala innehåll:\n- ")
             + "\n- ".join(punkter))
+        # Punkternas delbegrepp (prov 156): tom sträng utan utlösande punkt.
+        delbegrepp = build_delbegrepp(koder, profil) if profil == "prov" else ""
+        if delbegrepp:
+            block.append(delbegrepp)
     # Direkt efter innehållet: fallgroparna är innehållets fallgropar, och
     # kravet ska läsas i samma andetag som punkterna det gäller.
     block.append(FALLGROPAR)
@@ -9456,6 +9460,273 @@ def ci_taggning(exam: dict, koder: list[str] | None) -> list[dict]:
     return fel[:CI_MAX_FYND]
 
 
+# ── PUNKTENS DELBEGREPP: VARJE BEGREPP PUNKTEN NÄMNER SKA PRÖVAS ─────────
+# Prov 156 (NA26F, Rickard 2026-10-11): TRI-1 var taggad på fyra uppgifter
+# och ci_tackning var nöjd, men ingen uppgift krävde cosinus. Både sinus-
+# och tangensuppgifterna fanns, så punkten «Begreppen sinus, cosinus och
+# tangens» såg prövad ut. Exponentialfunktionen bar bara C- och A-poäng.
+# «För att slippa hålla på såhär i framtiden behöver vi lägga till en regel i
+# provgeneratorn.»
+#
+# Tabellen är BEGREPPET, inte koden: utlösaren läses ur punktens egen text
+# (course_data.kodtexter), så samma rad gäller 1b, 1c och 2c där samma
+# formulering står. Detektorn läses mot uppgiftens hela innehåll, facit och
+# bedömning med (_uppgiftsinnehall), för det är facit som visar att 156:11
+# löstes med tan och inte med cos. Bara begrepp som går att känna igen säkert
+# står här; ett begrepp utan rad prövas inte, och det är fail-open med flit.
+#
+# Tredje fältet är NIVÅKRAVET. Ett begrepp («Begreppen sinus, cosinus …»,
+# definitionsmängden) ska bära en E- eller C-poäng. En metod punkten räknar
+# upp efter «däribland» (vektorns längd, multiplikation med skalär) räcker
+# det att någon uppgift kräver, för fyra vektoroperationer på E sprängde
+# NP:s E-band (156 hade dem på C och A).
+_DELBEGREPP: tuple[tuple[str, tuple[tuple[str, str, bool], ...]], ...] = (
+    (r"sinus, cosinus och tangens", (
+        ("sinus", r"\\sin\b|\bsin\b|\bsinus", True),
+        ("cosinus", r"\\cos\b|\bcos\b|\bcosinus", True),
+        ("tangens", r"\\tan\b|\btan\b|\btangens", True))),
+    (r"arcusfunktion", (
+        ("arcusfunktionerna (vinkeln ur en kvot)",
+         r"\\?(?:sin|cos|tan)\s*\^\s*\{?\s*-\s*1|\barc(?:us|sin|cos|tan)", True),)),
+    (r"definitionsmängd", (("definitionsmängd", r"definitionsmängd", True),)),
+    (r"värdemängd", (("värdemängd", r"värdemängd", True),)),
+    (r"begreppet linjär funktion", (
+        ("linjär funktion",
+         r"linjär|räta linjen|\blinjen\b|k-värde|riktningskoefficient", True),)),
+    (r"begreppet exponentialfunktion", (
+        ("exponentialfunktion",
+         r"exponential|exponentiell|[\d}]\s*\^\s*\{?\s*[a-z]\s*\}?", True),)),
+    (r"begreppet potensfunktion", (
+        ("potensfunktion",
+         r"potensfunktion|(?<![a-zA-Z\\])[xt]\s*\^\s*\{?\s*-?[\d,.]+", True),)),
+    (r"grafiska metoder för att lösa ekvationer", (
+        ("grafisk ekvationslösning",
+         r"grafisk|grafen|\bgraf\b|geogebra", False),)),
+    (r"addition, subtraktion", (
+        ("addition av vektorer",
+         r"\\(?:vec|overrightarrow)\{\s*\w+\s*\}\s*\+\s*[\w\\]", False),
+        ("subtraktion av vektorer",
+         r"\\(?:vec|overrightarrow)\{\s*\w+\s*\}\s*-\s*[\w\\]", False))),
+    (r"absolutbelopp", (
+        ("vektorns absolutbelopp (längd)",
+         r"absolutbelopp|\|\s*\\(?:vec|overrightarrow)|\blängd|lika lång", False),)),
+    (r"multiplikation med skalär", (
+        ("multiplikation med skalär",
+         r"skalär|(?<![\w\\])(?:\d+|[a-z])\s*\\vec", False),)),
+    (r"symmetrilinje, extrempunkt och nollställen", (
+        ("symmetrilinje", r"symmetrilinj", False),
+        ("extrempunkt",
+         r"extrempunkt|maximi|minimi|största värde|minsta värde|vertex", False),
+        ("nollställen", r"nollställ", False))),
+)
+DELBEGREPP_MAX_FYND = 4
+
+
+def delbegrepp_for(koder: list[str] | None) -> list[tuple[str, str, str, bool]]:
+    """[(kod, begrepp, detektor, nivåkrav)] för de kryssade punkterna, i kodordning.
+    Ett begrepp som två punkter nämner står en gång, under den första."""
+    etiketter = course_data.kodtexter()
+    ut: list[tuple[str, str, str, bool]] = []
+    sedda: set[str] = set()
+    for k in (koder or []):
+        text = (etiketter.get(str(k)) or "").casefold()
+        if not text:
+            continue
+        for utlosare, delar in _DELBEGREPP:
+            if not re.search(utlosare, text):
+                continue
+            for namn, detektor, niva in delar:
+                if namn not in sedda:
+                    sedda.add(namn)
+                    ut.append((str(k), namn, detektor, niva))
+    return ut
+
+
+def _poangenheter(exam: dict) -> list[tuple[int, str, str, tuple[int, int, int]]]:
+    """[(uppgiftsnr, del, innehåll, (E, C, A))] — en enhet per deluppgift,
+    med stammen inräknad, och en per uppgift utan deluppgifter. Nivån räknas
+    där begreppet faktiskt prövas: 156:13 a) var C och b) A."""
+    ut = []
+    for i, u in enumerate((exam or {}).get("uppgifter") or [], 1):
+        if not isinstance(u, dict):
+            continue
+        dels = [d for d in (u.get("deluppgifter") or []) if isinstance(d, dict)]
+        if not dels:
+            ut.append((i, str(u.get("del") or ""), _uppgiftsinnehall(u),
+                       _trippel(u.get("poang"))))
+            continue
+        stam = str(u.get("text") or "")
+        for d in dels:
+            text = " ".join(str(d.get(f) or "")
+                            for f in ("text", "losning", "bedomning"))
+            ut.append((i, str(u.get("del") or ""), stam + " " + text,
+                       _trippel(d.get("poang"))))
+    return ut
+
+
+def ci_delbegrepp(exam: dict, koder: list[str] | None) -> list[dict]:
+    """Prövas varje begrepp som de kryssade punkterna NÄMNER, och på mer än
+    A-nivå?
+
+    Samma fail-open som ci_tackning: inga koder, eller ingen taggad uppgift.
+    Nivåkravet är delmomentniva:s (inte bara A), inte ett E-krav: femton
+    begrepp ryms inte i NP:s E-band (se kommentaren över _DIGITALT_RE)."""
+    begrepp = delbegrepp_for(koder)
+    if not begrepp:
+        return []
+    uppgifter = [u for u in ((exam or {}).get("uppgifter") or [])
+                 if isinstance(u, dict)]
+    if not any(u.get("innehall") for u in uppgifter):
+        return []
+    enheter = _poangenheter(exam)
+    fel: list[dict] = []
+    for kod, namn, detektor, niva in begrepp:
+        rx = re.compile(detektor, re.IGNORECASE)
+        traff = [(nr, p) for nr, _del, text, p in enheter if rx.search(text)]
+        if not traff:
+            fel.append(_err(
+                "uppgifter", "delbegrepp",
+                f"Innehållspunkten {kod} nämner {namn}, men ingen uppgift "
+                "kräver det: varken uppgiftstexten, facit eller bedömningen "
+                "använder det. Att punkten är taggad räcker inte när ett av "
+                "dess begrepp aldrig används. Byt ut en uppgift ur det "
+                "innehåll som har flest uppgifter mot en där lösningen KRÄVER "
+                f"{namn}, gärna på E-nivå, samma del och samma poäng, och "
+                f"sätt {kod} i fältet \"innehall\"."))
+            continue
+        e = sum(p[0] for _nr, p in traff)
+        c = sum(p[1] for _nr, p in traff)
+        if niva and not e and not c:
+            nr = sorted({n for n, _p in traff})
+            lista = ", ".join(str(n) for n in nr)
+            fel.append(_err(
+                f"uppgift {nr[0]}", "delbegrepp",
+                f"Begreppet {namn} ({kod}) prövas bara på A-nivå (uppgift "
+                f"{lista}). En elev som läser för E eller C prövas då inte i "
+                "det. Ge det minst en E- eller C-poäng: en enkel a) före den "
+                "svåra b), och ta poängen från ett innehåll som redan bär "
+                "flera, så att summan och fördelningen står kvar."))
+    return fel[:DELBEGREPP_MAX_FYND]
+
+
+# ── GRAFISK EKVATIONSLÖSNING GÖRS I GEOGEBRA (Rickard 2026-10-11) ────────
+# «Grafisk ekvationslösning, det måste de ju göra med hjälp av datorn. De har
+# inte grafräknare, de får använda GeoGebra.» Prov 156 hade ALG-3 kryssad och
+# en del C «med räknare»: den enda grafiska uppgiften var att läsa av en
+# given graf i del B, och uppgift 7 (märkt grafisk) löstes algebraiskt.
+#
+# Tre regler, alla räknade: (1) en kryssad punkt om grafiska metoder kräver
+# en del med digitala verktyg, (2) där ska minst en uppgift be eleven lösa en
+# ekvation i GeoGebra, och (3) ingen uppgift i en del utan verktyget ber
+# eleven lösa grafiskt utan en given graf. Att läsa av en graf som står i
+# figuren (156:1a) är tillåtet var som helst.
+_GRAFISK_CI_RE = re.compile(r"grafiska metoder för att lösa ekvationer",
+                            re.IGNORECASE)
+_GRAFISK_UPPG_RE = re.compile(
+    r"grafiskt|grafisk lösning|med hjälp av en graf|rita\w*\s+(?:upp\s+)?graf",
+    re.IGNORECASE)
+_VERKTYG_RE = re.compile(r"geogebra|digitalt?\s+verktyg", re.IGNORECASE)
+_EKVATION_RE = re.compile(r"ekvation|lös|skär|när\b|= ?\d", re.IGNORECASE)
+GRAFISK_MAX_FYND = 3
+# Hjälpmedlet del C får när punkten är kryssad (routes_exam, generate).
+GRAFISK_HJALPMEDEL = "Digitala verktyg och formelblad"
+
+
+def kraver_geogebra(koder: list[str] | None) -> bool:
+    """Är en kryssad punkt de grafiska metoderna för att lösa ekvationer?"""
+    etiketter = course_data.kodtexter()
+    return any(_GRAFISK_CI_RE.search(etiketter.get(str(k)) or "")
+               for k in (koder or []))
+
+
+def digitala_delar(exam: dict) -> set[str]:
+    """Delarna där hjälpmedelsraden tillåter digitala verktyg. «*» när raden
+    tillåter dem utan att nämna någon del (ett blad, ett prov utan delar)."""
+    text = str((exam or {}).get("hjalpmedel") or "")
+    ut: set[str] = set()
+    stycken = re.split(r"(?=\bDel\s+[A-Z]\b)", text)
+    delade = [s for s in stycken if re.match(r"Del\s+[A-Z]\b", s)]
+    for s in delade:
+        if _DIGITALT_RE.search(s) and not _UTAN_DIGITALT_RE.search(s):
+            ut.add(s.split()[1])
+    if not delade and har_digital_del(exam):
+        ut.add("*")
+    return ut
+
+
+def grafisk_digitalvakt(exam: dict, koder: list[str] | None) -> list[dict]:
+    """De tre reglerna ovan. Tyst utan punkten."""
+    if not kraver_geogebra(koder):
+        return []
+    uppgifter = [u for u in ((exam or {}).get("uppgifter") or [])
+                 if isinstance(u, dict)]
+    if not uppgifter:
+        return []
+    digitala = digitala_delar(exam)
+    fel: list[dict] = []
+    if not digitala:
+        fel.append(_err(
+            "hjalpmedel", "geogebra",
+            "Grafisk ekvationslösning är kryssad, och den gör eleverna i "
+            "GeoGebra på datorn: de har ingen grafräknare. Provet har ingen "
+            "del med digitala verktyg. Skriv del C med digitala verktyg "
+            "(GeoGebra på datorn) och formelblad, och låt en uppgift där be "
+            "eleven lösa en ekvation av typen f(x) = a grafiskt i GeoGebra."))
+    else:
+        def _digital(u: dict) -> bool:
+            return "*" in digitala or str(u.get("del") or "") in digitala
+        if not any(_digital(u) and _VERKTYG_RE.search(_uppgiftsinnehall(u))
+                   and _EKVATION_RE.search(_uppgiftsinnehall(u))
+                   for u in uppgifter):
+            del_ = sorted(d for d in digitala if d != "*")
+            var = f"del {del_[0]}" if del_ else "provet"
+            fel.append(_err(
+                "uppgifter", "geogebra",
+                "Grafisk ekvationslösning är kryssad men ingen uppgift ber "
+                f"eleven lösa en ekvation i GeoGebra. Byt ut en uppgift i {var} "
+                "mot en där eleven löser en ekvation av typen f(x) = a "
+                "grafiskt i GeoGebra (en modell ur ett sammanhang går bra) och "
+                "redovisar hur. Uppgiften säger «GeoGebra». Samma del och "
+                "samma poäng."))
+    for i, u in enumerate(uppgifter, 1):
+        if "*" in digitala or str(u.get("del") or "") in digitala:
+            continue
+        if u.get("figur"):
+            continue
+        if _GRAFISK_UPPG_RE.search(_uppgiftsinnehall(u)):
+            fel.append(_err(
+                f"uppgift {i}", "geogebra",
+                f"Uppgift {i} ber eleven lösa grafiskt utan en given graf, i "
+                "en del utan digitala verktyg. Eleverna löser grafiskt i "
+                "GeoGebra. Ge uppgiften grafen som figur så att eleven läser "
+                "av den, eller låt den kräva en algebraisk lösning."))
+    return fel[:GRAFISK_MAX_FYND]
+
+
+def build_delbegrepp(koder: list[str] | None, profil: str) -> str:
+    """Delbegreppen och GeoGebra-regeln som promptblock, eller TOM STRÄNG
+    (kassetteregeln: utan en utlösande punkt är prompten orörd)."""
+    begrepp = delbegrepp_for(koder)
+    rader = []
+    if begrepp and profil == "prov":
+        rader.append(
+            "VARJE BEGREPP SOM PUNKTERNA NÄMNER SKA KRÄVAS av minst en uppgift "
+            "eller deluppgift, i lösningen och inte bara i rubriken: "
+            + "; ".join(f"{namn} ({kod})" for kod, namn, _d, _n in begrepp)
+            + ". Uppgiften om trianglar räknar inte cosinus för att den om "
+            "sinus finns. Inget BEGREPP får prövas bara på A-nivå: "
+            + ", ".join(namn for _k, namn, _d, n in begrepp if n)
+            + " ska ge minst en E- eller C-poäng.")
+    if profil == "prov" and kraver_geogebra(koder):
+        rader.append(
+            "GRAFISK EKVATIONSLÖSNING GÖRS I GEOGEBRA på datorn: eleverna har "
+            "ingen grafräknare. Minst en uppgift i delen med digitala verktyg "
+            "ber eleven lösa en ekvation av typen f(x) = a grafiskt i "
+            "GeoGebra och säger «GeoGebra». En del utan verktyget får bara be "
+            "eleven läsa av en graf som står i figuren.")
+    return "\n".join(rader)
+
+
 # ── A-POÄNGENS EGEN VAKT (2026-09-19, omprov 87) ─────────────────────────
 # Fem av sju A-poäng i omprovet bar ett TIPS som gav bort metoden («Förkorta
 # bort 800 och subtrahera exponenterna»), ingen uppgift var en «undersök om»,
@@ -12447,6 +12718,10 @@ def _raknade_fynd(exam: dict, *, avsnitt: list[dict] | None, antal: int | None,
                 + np_vakter.np_vakter(exam, kurs, poang_tak)
                 # Varje uppgift har sin förebild i kapitlet (prov 119).
                 + forebildsvakt(exam, kurs, koder)
+                # Varje begrepp punkten nämner, cosinus med, och grafisk
+                # ekvationslösning i GeoGebra (prov 156, 2026-10-11).
+                + ci_delbegrepp(exam, koder)
+                + grafisk_digitalvakt(exam, koder)
                 # Lärarens dom 2026-09-23 kväll: ingen metod ur ett senare
                 # kapitel (exam 128), ingen situation en annan klass redan
                 # haft (exam 129).
