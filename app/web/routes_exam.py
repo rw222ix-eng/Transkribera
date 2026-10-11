@@ -2446,6 +2446,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # som takten: efterkontrollen efter nästa varv behöver den.
                 if res["exam"] is not None and inforprov:
                     res["exam"]["infor_prov"] = int(infor_prov_id)
+                # OMPROVETS ORIGINAL (ExamDoc.omprov_av), av samma skäl:
+                # «Laga fynden» ska veta att poängen är originalets.
+                if res["exam"] is not None and referensprov is not None:
+                    res["exam"]["omprov_av"] = int(omprov_av)
                 # Hjälpmedelsraden är MODELLENS så länge läraren inte sagt
                 # något: den skiljer delarna åt med lärarens egna ord, och
                 # skärmen har läst dokumentets regel sedan blad.js planvalProv.
@@ -2687,6 +2691,20 @@ def create_router(base: Path, arbiter) -> APIRouter:
         infor_id = (view.get("exam") or {}).get("infor_prov") \
             if (view.get("typ") or "") == "arbetsblad" else None
         infor = _inforunderlag(infor_id) if infor_id else None
+        # Omprovets original (ExamDoc.omprov_av): varvet mäter likvärdigheten
+        # mot det, omräknat till E-planen på andra omprovet (omprov_pa_e).
+        omprov_id = (view.get("exam") or {}).get("omprov_av") \
+            if (view.get("typ") or "prov") == "prov" else None
+        referens = None
+        if omprov_id:
+            conn = db.connect(db_file)
+            try:
+                rad = db.get_exam(conn, int(omprov_id))
+            finally:
+                conn.close()
+            referens = (rad or {}).get("exam")
+            if referens and exam_spec.ren_e_band(nivaval and nivaval["mal"]):
+                referens = exam_gen.omprov_pa_e(referens)
 
         def job(emit):
             steg = Stege(emit, _STEG_OM)
@@ -2701,7 +2719,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     inriktning=inriktning,
                     profil=view.get("typ") or "prov",
                     niva_mal=nivaval["mal"] if nivaval else None,
-                    infor=infor,
+                    infor=infor, referens=referens,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     steg_cb=steg.na)
                 # Klockslagen överlever omskrivningen: modellen skriver om
@@ -2719,6 +2737,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # Provkopplingen likaså (ExamDoc.infor_prov).
                 if isinstance(res.get("exam"), dict) and infor_id:
                     res["exam"]["infor_prov"] = infor_id
+                # Omprovets original likaså (ExamDoc.omprov_av).
+                if isinstance(res.get("exam"), dict) and omprov_id:
+                    res["exam"]["omprov_av"] = omprov_id
                 # Plåtvalet överlever inte omskrivningen av sig självt:
                 # modellen skriver om hela dokumentet, och `scen.plat` står
                 # inte i grammatiken. Matchningen körs därför om — den är ren

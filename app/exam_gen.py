@@ -14808,8 +14808,12 @@ def _poangpass(fore: dict, res: dict, *, model: str, llm, profil: str,
 # efterkontrollen. Poängvakten har sitt eget pass (_poangpass) och räknas
 # inte en gång till här.
 def varvsvakter(exam: dict, profil: str, *, infor: dict | None = None,
-                poang_tak: int | None = None) -> list[dict]:
-    """De deterministiska vakterna på ett omskrivet papper. Noll anrop."""
+                poang_tak: int | None = None,
+                referens: dict | None = None) -> list[dict]:
+    """De deterministiska vakterna på ett omskrivet papper. Noll anrop.
+
+    `referens` är omprovets original (ExamDoc.omprov_av): då mäts
+    likvärdigheten också, och NP-vakterna ber aldrig om fler poäng."""
     kurs = str((exam or {}).get("kurs") or "")
     if profil == "arbetsblad" and infor:
         # Bladet inför provet: provets vakter, i den ordning genereringen
@@ -14818,7 +14822,9 @@ def varvsvakter(exam: dict, profil: str, *, infor: dict | None = None,
     fel = ci_utanfor.ci_vakt(exam, kurs, profil) + konsbalansvakt(exam)
     if profil == "prov":
         return (fel + sprakvakt(exam) + a_nivavakt(exam)
-                + np_vakter.np_vakter(exam, kurs, poang_tak))
+                + np_vakter.np_vakter(exam, kurs, poang_tak,
+                                      poang_last=referens is not None)
+                + likvardighetsvakt(exam, referens))
     # En mening per rad på alla papper utom provet (se _raknade_fynd), och
     # fackorden med exempel på arbetsbladet (lärarens dom 2026-10-02).
     if profil == "arbetsblad":
@@ -14859,7 +14865,8 @@ def _rorda_uppgifter(fore: dict, efter: dict) -> set[int]:
 
 def _varvets_egna_fynd(fore_nycklar: set, efter: dict, rorda: set[int], *,
                        profil: str, infor: dict | None,
-                       poang_tak: int | None) -> list[dict]:
+                       poang_tak: int | None,
+                       referens: dict | None = None) -> list[dict]:
     """Fynden på `efter` som varvet självt införde: på en uppgift det rörde,
     och inte där redan före varvet.
 
@@ -14875,7 +14882,7 @@ def _varvets_egna_fynd(fore_nycklar: set, efter: dict, rorda: set[int], *,
         satt_raknarrad_ur_provet(papper, infor)
     ovningspappret_stadat(papper, profil)
     return [f for f in varvsvakter(papper, profil, infor=infor,
-                                   poang_tak=poang_tak)
+                                   poang_tak=poang_tak, referens=referens)
             if f.get("code") != "poangvakt"
             and _fyndets_uppgift(f) in rorda
             and (_fyndets_uppgift(f), f.get("code")) not in fore_nycklar]
@@ -14884,6 +14891,7 @@ def _varvets_egna_fynd(fore_nycklar: set, efter: dict, rorda: set[int], *,
 def _varvsvakt(fore: dict, res: dict, *, model: str, llm, profil: str,
                niva_mal: dict | None, infor: dict | None, max_rounds: int,
                inriktning: str = "",
+               referens: dict | None = None,
                log_cb: Callable[[str], None] | None = None,
                steg_cb: Callable[[str], None] | None = None) -> dict:
     """Vakterna på varvets resultat, och EN låst lagningsrunda för det varvet
@@ -14914,8 +14922,8 @@ def _varvsvakt(fore: dict, res: dict, *, model: str, llm, profil: str,
     tak = exam_spec.poang_tak_for(fore.get("tid_min"), fore.get("takt"))
     fore_nycklar = {(_fyndets_uppgift(f), f.get("code"))
                     for f in varvsvakter(fore, profil, infor=infor,
-                                         poang_tak=tak)}
-    matt = dict(profil=profil, infor=infor, poang_tak=tak)
+                                         poang_tak=tak, referens=referens)}
+    matt = dict(profil=profil, infor=infor, poang_tak=tak, referens=referens)
     raknade = _varvets_egna_fynd(fore_nycklar, exam, rorda, **matt)
     # ELEVLÄSAREN PÅ DE RÖRDA UPPGIFTERNA, på bladet inför provet (Rickards
     # ja 2026-10-11). Granskningen av bladen hittade tvetydigheter som ett
@@ -15111,11 +15119,15 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
                 bok: str = "", historik=None, inriktning: str = "",
                 niva_mal: dict | None = None,
                 infor: dict | None = None,
+                referens: dict | None = None,
                 llm=llm_client.generate,
                 max_rounds: int = MAX_ROUNDS,
                 log_cb: Callable[[str], None] | None = None,
                 steg_cb: Callable[[str], None] | None = None) -> dict:
     """Riktad omgenerering (per-uppgift-chatt); validera + auto-reparera.
+
+    `referens` är omprovets original (routes_exam slår upp det ur
+    ExamDoc.omprov_av): varvet höjer då ingen poäng och mäter likvärdigheten.
 
     `niva_mal` är dokumentets PERSISTERADE nivåval (exams.nivaval →
     exam_spec.NIVAVAL) — utan det mäts ett «Bara E»-prov mot NP-banden i
@@ -15195,9 +15207,12 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
     # gör det värt något: nivåsignalerna ska läsa den poäng uppgiften slutar
     # med, och elevexemplen skrivas mot den. Körs efter grinden ovan, så ett
     # varv som ändå kastades får ingen poängrunda.
-    res = _poangpass(exam, res, model=model, llm=llm, profil=profil,
-                     riktning=riktning, niva_mal=niva_mal,
-                     max_rounds=max_rounds, log_cb=log_cb)
+    # Inte på omprovet: poängen är originalets (exam 214, 2026-10-11, där
+    # passet gav uppgift 4 en tredje poäng).
+    if referens is None:
+        res = _poangpass(exam, res, model=model, llm=llm, profil=profil,
+                         riktning=riktning, niva_mal=niva_mal,
+                         max_rounds=max_rounds, log_cb=log_cb)
     # ── VARVETS EGNA FYND (se _varvsvakt) ────────────────────────────
     # Efter poängpasset, så att vakterna läser den poäng uppgiften slutar
     # med, och FÖRE nivågrinden och bedömningspasset: en uppgift som lagas här
@@ -15205,7 +15220,8 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
     # anrop till efteråt.
     res = _varvsvakt(exam, res, model=model, llm=llm, profil=profil,
                      niva_mal=niva_mal, infor=infor, max_rounds=max_rounds,
-                     inriktning=inriktning, log_cb=log_cb, steg_cb=steg)
+                     inriktning=inriktning, referens=referens,
+                     log_cb=log_cb, steg_cb=steg)
     # Poängen som önskemålet sa (se poangonske). Efter varvsvakten, så att
     # dess lagning inte flyttar poängen tillbaka efter att den satts.
     res = _poangonskepass(exam, instruction, res, model=model, llm=llm,

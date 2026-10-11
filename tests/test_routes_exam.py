@@ -2373,6 +2373,46 @@ def test_omprov_av_ett_omprov_blir_bara_e(client, monkeypatch):
         sum(exam_gen._uppgiftspoang(u)) for u in original["uppgifter"])
 
 
+def test_omskrivningen_av_ett_omprov_far_originalet(client, monkeypatch):
+    """«Laga fynden» på omprovet 214 (2026-10-11) gav uppgift 4 en poäng till:
+    varvet visste inte att poängen är originalets. Pappret bär nu
+    `omprov_av`, och varvet får originalet som referens."""
+    _stub_generate(monkeypatch)
+    gammalt, gid, cid = _godkant_prov(
+        client, titel="Prov 1 · kapitel 1", datum="2026-09-16",
+        klass="TE26A", kurs="Matematik, nivå 2b")
+    res = _done(client.post("/api/exams/generate", json={
+        "course_id": cid, "group_id": gid, "antal": 6,
+        "datum": "2026-11-02", "moment": "kapitel 1", "omprov_av": gammalt}))
+    assert res["exam"]["omprov_av"] == gammalt
+    fangat = {}
+
+    def fake_refine(exam, message, *, model, referens=None, **_kw):
+        fangat["referens"] = referens
+        return {"exam": exam, "errors": [], "rounds": 1}
+    monkeypatch.setattr(exam_gen, "refine_exam", fake_refine)
+    ut = _done(client.post(f"/api/exams/{res['id']}/refine",
+                           json={"message": "laga fynden"}))
+    assert fangat["referens"]["titel"] == "Prov 1 · kapitel 1"
+    assert ut["exam"]["omprov_av"] == gammalt
+
+
+def test_varvet_pa_omprovet_mater_likvardigheten():
+    original = copy.deepcopy(_exam_doc())
+    nytt = copy.deepcopy(original)
+    u = nytt["uppgifter"][0]
+    if u.get("deluppgifter"):
+        u["deluppgifter"][0]["poang"] = [int(x) + (i == 0) for i, x in
+                                         enumerate(u["deluppgifter"][0]["poang"])]
+    else:
+        u["poang"] = [int(u["poang"][0]) + 1] + list(u["poang"][1:])
+    koder = {f["code"] for f in exam_gen.varvsvakter(nytt, "prov",
+                                                     referens=original)}
+    assert "likvardighet" in koder
+    assert "likvardighet" not in {f["code"] for f in
+                                  exam_gen.varvsvakter(nytt, "prov")}
+
+
 def test_okant_omprov_av_lamnar_prompten_som_den_var(client, monkeypatch):
     calls = _stub_generate(monkeypatch)
     r = client.post("/api/exams/generate", json={

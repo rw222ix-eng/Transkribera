@@ -742,6 +742,11 @@ class ExamDoc(_Model):
     # namn eller räknarraden ur provets delar (fail-open i _kopiefynd). Nu
     # bär bladet den själv. Tomt på prov, gruppuppgift och vanliga blad.
     infor_prov: int | None = None
+    # OMPROVETS ORIGINAL, som exam-id (2026-10-11). Appens fält, aldrig
+    # modellens. Samma skäl som infor_prov: «Laga fynden» på omprovet 214
+    # visste inte att poängen är originalets och gav uppgift 4 en poäng till.
+    # Varvet läser originalet härifrån och kör likvärdighetsvakten.
+    omprov_av: int | None = None
     # KLOCKSLAGEN, när läraren valt dem. Förlagan skriver «Provtid: kl.
     # 12.45–14.15 (90 minuter).» och inte «Provtid: 90 minuter.» — eleven som
     # sitter i salen vill veta när pennan ska ner, inte hur länge hon får hålla
@@ -915,6 +920,8 @@ def _bygg_response_format(antal: int | None = None,
     schema["properties"].pop("takt", None)
     # PROVKOPPLINGEN likaså (ExamDoc.infor_prov): routen skriver den.
     schema["properties"].pop("infor_prov", None)
+    # OMPROVETS ORIGINAL likaså (ExamDoc.omprov_av).
+    schema["properties"].pop("omprov_av", None)
     # DEN UTFÖRLIGA LÖSNINGEN STÅR INTE HELLER I GRAMMATIKEN (se
     # _Uppgiftsbas.utforlig): den skrivs av ett eget pass efter godkännandet.
     # Poppas ur BÅDA uppgiftsdefinitionerna innan skelettet kopierar dem
