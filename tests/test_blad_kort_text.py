@@ -255,3 +255,15 @@ def test_vakterna_gar_inte_i_ring_pa_forklaringen():
     tva = _blad(_uppg("Linjen går genom $(1,\\ 2)$.\nBestäm $k$.\nRita linjen.",
                       (0, 2, 0)))
     assert exam_gen.uppdragsvakt(tva)
+
+
+def test_ett_visat_fackord_behover_inget_nytt_exempel():
+    """Blad 228:6b (2026-10-11): exemplet med procentenheter stod i meningen
+    före frågan, och språkvakten fällde ordet i frågan."""
+    text = ("Banken påstår att räntan höjs med 1 %.\nEn ränta som går från 10 % "
+            "till 12 % höjs med 2 procentenheter.\nAvgör om banken ska skriva "
+            "1 % eller 1 procentenhet och förklara varför.")
+    assert exam_gen._fackord_utan_exempel(text) == []
+    # Står ordet först utan exempel fälls det som förut.
+    assert exam_gen._fackord_utan_exempel(
+        "Ange skillnaden i procentenheter.\nRäntan går från 10 % till 12 %.")

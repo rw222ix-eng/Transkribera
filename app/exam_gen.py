@@ -12433,14 +12433,22 @@ def _fackord_utan_exempel(text) -> list[str]:
     ut: list[str] = []
     meningar = [m.group(0) for m in _FACKMENING.finditer(maskad)
                 if m.group(0).strip()]
+    # Ett ord som redan står med matte i en tidigare mening är visat (blad
+    # 228:6b, 2026-10-11): «En ränta som går från 10 % till 12 % höjs med 2
+    # procentenheter.» och sedan «Avgör om banken ska skriva 1 % eller 1
+    # procentenhet …».
+    visade: set[str] = set()
     for j, mening in enumerate(meningar):
-        if "§" in mening:
-            continue
+        har = [namn for namn, r in _FACKORD_RE.items() if r.search(mening)]
         nasta = meningar[j + 1] if j + 1 < len(meningar) else ""
-        if "§" in nasta and _EXEMPELMENING_RE.search(nasta):
-            continue
-        ut += [namn for namn, r in _FACKORD_RE.items()
-               if namn not in ut and r.search(mening)]
+        # Två tal i meningen är ett exempel också utan $…$: «från 10 % till
+        # 12 % höjs med 2 procentenheter». Ett ensamt tal («i 2 decimaler»)
+        # är det inte.
+        exempel = "§" in mening or len(re.findall(r"\d+", mening)) >= 2
+        if not exempel and not ("§" in nasta and _EXEMPELMENING_RE.search(nasta)):
+            ut += [n for n in har if n not in ut and n not in visade]
+        if exempel:
+            visade.update(har)
     return ut
 
 
