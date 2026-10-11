@@ -54,6 +54,10 @@ for (const id of ids) {
     n => (window.Dokument.sparade().find(v => v.id === n) || {}).pdf || null, id);
   const pdfFore = await pdfIHogen();
   const fore = Date.now();
+  /* Filens egen tid före klicket: dok 276 (2026-10-11) hade en gammal PDF
+     med mtime före klockan, och «skriven efter klicket» slog till på den. */
+  let mtimeFore = null;
+  try { mtimeFore = pdfFore ? statSync(pdfFore).mtimeMs : null; } catch { mtimeFore = null; }
   await page.locator('#godkann').click();
   const r = await svar;
   console.log('   approve svarade', r.status());
@@ -70,7 +74,10 @@ for (const id of ids) {
     pdf = await pdfIHogen().catch(() => null);
     if (pdf && pdf !== pdfFore) ny = true;
     else if (pdf) {
-      try { ny = statSync(pdf).mtimeMs >= fore - 2000; } catch { ny = false; }
+      try {
+        const m = statSync(pdf).mtimeMs;
+        ny = m >= fore - 2000 && (mtimeFore === null || m !== mtimeFore);
+      } catch { ny = false; }
     }
     if (!ny) await vila(1000);
   }
