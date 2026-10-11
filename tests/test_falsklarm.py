@@ -60,5 +60,8 @@ def test_provstammen_forklarar_inte_begreppet():
         "Till exempel: $200 \\cdot 1{,}5 = 300$.\n\nAnge förändringsfaktorn."))
     assert len(fall) == 1 and fall[0]["code"] == "forklaring"
     assert exam_gen.forklaringsvakt(prov(
+        "Faktorn är det som står framför parentesen, både tal och bokstav.\n\n"
+        "Faktorisera $4x^2 + 6x$."))
+    assert exam_gen.forklaringsvakt(prov(
         "Skostorleken ges av formeln: $S = 1{,}5(L + 2)$, där $L$ är fotens "
         "längd i cm.\n\nBestäm Omars skostorlek.")) == []

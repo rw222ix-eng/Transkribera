@@ -9856,9 +9856,10 @@ _TIPS_RE = re.compile(
 # definieras inget begrepp och inget räkneexempel visas; på bladen får
 # förklaringen stå (svag svenska). Formen och inte innehållet, som tipset.
 _BEGREPPSDEF_RE = re.compile(
-    r"(?<![\wåäö])[\wåäö-]+\s+är\s+(?:talet|det tal|den faktor|faktorn"
+    r"(?<![\wåäö])[\wåäö-]+\s+är\s+(?:(?:talet|det tal|den faktor|faktorn"
     r"|kvoten|skillnaden|summan|produkten|andelen)\s+(?:du|man|som|mellan)"
-    r"(?![\wåäö])", re.IGNORECASE)
+    # «Faktorn är det som står framför parentesen» (exam 218 uppg 2b v987).
+    r"|det\s+som)(?![\wåäö])", re.IGNORECASE)
 _RAKNEEXEMPEL_RE = re.compile(
     r"(?<![\wåäö])(?:till exempel|exempel|t\.\s?ex\.)\s*:?[^.?!\n]{0,80}"
     r"\$[^$]*=[^$]*\$", re.IGNORECASE)
