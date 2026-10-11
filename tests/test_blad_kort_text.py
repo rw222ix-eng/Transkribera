@@ -230,3 +230,28 @@ def test_forklaringen_efter_fragan_raknas_inte():
     # Ett krav efter frågan räknas fortfarande (blad 183:6).
     krav = "\nSvara med minst en decimal.\nFörklara kort vad du gör i varje steg."
     assert exam_gen._utan_forklaring_efter_fragan(fraga + krav) == fraga + krav
+
+
+def test_vakterna_gar_inte_i_ring_pa_forklaringen():
+    """Blad 223:6 (2026-10-11): radlängden delade förklaringen i två meningar,
+    språkvakten fällde då «termer», och dolt-krav-raden räknades som ett
+    andra uppdrag. Tre omskrivningar gick runt i ringen."""
+    text = ("Linjen $L$ är parallell med linjen $2{,}4x - 1{,}6y + 4 = 0$.\n"
+            "$L$ och linjen $y = -x + 4$ skär $x$-axeln i samma punkt.\n"
+            "Bestäm ekvationen för $L$ i allmän form.\n"
+            "I allmän form står alla termer i vänsterledet.\n"
+            "Högerledet är 0, som i $5x - 2y + 7 = 0$.\n"
+            "Skriv din lösning steg för steg så att någon annan kan följa hur "
+            "du räknar.")
+    exam = _blad(_uppg(text, (0, 3, 0)))
+    assert exam_gen.facktermsvakt(exam) == []
+    assert exam_gen.uppdragsvakt(exam) == []
+    assert _fynd(exam) == []
+    # Utan exemplet fälls ordet som förut.
+    utan = _blad(_uppg("Bestäm ekvationen i allmän form.\nI allmän form står "
+                       "alla termer i vänsterledet."))
+    assert exam_gen.facktermsvakt(utan)
+    # Två riktiga uppdrag fälls som förut.
+    tva = _blad(_uppg("Linjen går genom $(1,\\ 2)$.\nBestäm $k$.\nRita linjen.",
+                      (0, 2, 0)))
+    assert exam_gen.uppdragsvakt(tva)

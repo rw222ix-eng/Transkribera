@@ -12196,7 +12196,7 @@ def textmangdvakt(exam: dict) -> list[dict]:
 # räknas inte. «Svara med minst en decimal.» och «Förklara kort …» är krav
 # och inte förklaringar, så de räknas som förut (blad 183:6).
 _FORKLARINGSMENING_RE = re.compile(
-    r"(?<![\wåäö])(betyder|kallas|till exempel|ett exempel|exempel på"
+    r"(?<![\wåäö])(betyder|kallas|till exempel|ett exempel|exempel på|som i"
     r"|i [\wåäö]+ form står)(?![\wåäö])", re.IGNORECASE)
 
 
@@ -12294,7 +12294,14 @@ def bladets_formvakt(exam: dict) -> list[dict]:
 _UPPDRAG_START = re.compile(
     r"^(?:Bestäm|Beräkna|Förklara|Undersök|Avgör|Visa|Skriv|Kryssa|Lös|Ange|"
     r"Teckna|Utred|Rita|Ta reda på|Jämför|Ge)\b")
-_UPPDRAG_UNDANTAG = re.compile(r"^(?:Skriv|Ge) svaret\b|^Svara\b")
+# Redovisningsraden är formen på samma lösning, inget eget uppdrag. Blad
+# 223:6 (2026-10-11): bedömningen ger en K-poäng för redovisningen, dolt-
+# krav-vakten krävde «Skriv din lösning steg för steg …» i texten, och den
+# här vakten räknade raden som ett andra uppdrag utan a), b).
+_UPPDRAG_UNDANTAG = re.compile(
+    r"^(?:Skriv|Ge) svaret\b|^Svara\b|^Redovisa\b"
+    r"|^(?:Skriv|Visa) (?:din|dina|hela) (?:lösning|uträkning|beräkning|redovisning)"
+    r"|^(?:Skriv|Visa) hur du (?:räknar|har räknat|löser|har löst|kommer fram)")
 _UPPDRAG_MENING = re.compile(r"(?<=[.!?])\s+|\n+")
 
 
@@ -12399,17 +12406,29 @@ FACKORD_BLAD = {
 _FACKORD_RE = {namn: re.compile(rf"(?<![\wåäö]){m}(?![\wåäö])", re.I)
                for namn, m in FACKORD_BLAD.items()}
 _FACKMENING = re.compile(r"[^.!?\n]+[.!?]?")
+# Exemplet i NÄSTA mening räknas också (blad 223:6, IndA C inför prov 215,
+# 2026-10-11): «… alla termer i vänsterledet och 0 i högerledet, som i
+# $5x - 2y + 7 = 0$.» blev 85 tecken, radlängdsvakten delade den, och då
+# fällde den här vakten «termer» igen. Tre omskrivningar gick runt i den
+# ringen. En mening med matte som säger att den är exemplet godtas.
+_EXEMPELMENING_RE = re.compile(
+    r"(?<![\wåäö])(exempel|som i|t\.\s?ex)(?![\wåäö])", re.IGNORECASE)
 
 
 def _fackord_utan_exempel(text) -> list[str]:
-    """Fackorden i texten som står i en mening utan matte ($…$)."""
+    """Fackorden i texten som står i en mening utan matte ($…$), och som inte
+    följs av en mening med exemplet i matte."""
     if not isinstance(text, str):
         return []
     maskad = _maska(_RAKNARMARKE.sub("", text))
     ut: list[str] = []
-    for m in _FACKMENING.finditer(maskad):
-        mening = m.group(0)
+    meningar = [m.group(0) for m in _FACKMENING.finditer(maskad)
+                if m.group(0).strip()]
+    for j, mening in enumerate(meningar):
         if "§" in mening:
+            continue
+        nasta = meningar[j + 1] if j + 1 < len(meningar) else ""
+        if "§" in nasta and _EXEMPELMENING_RE.search(nasta):
             continue
         ut += [namn for namn, r in _FACKORD_RE.items()
                if namn not in ut and r.search(mening)]
