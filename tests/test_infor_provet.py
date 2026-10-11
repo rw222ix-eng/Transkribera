@@ -838,3 +838,35 @@ def test_omprov_till_hittar_omprovet_pa_titeln(client):
         assert appdb.omprov_till(conn, om) == []
     finally:
         conn.close()
+
+
+def test_flera_uppdrag_blir_deluppgifter():
+    """189:11 och 188:6 (2026-10-11): uppdragen i egna meningar, och
+    elevläsaren läste att eleven missar ett. En mening med «och förklara
+    varför» är ett uppdrag, och en poäng går inte att dela."""
+    blad = _blad_ur([
+        "Räknare tillåten. Takhöjden är $H$ m.\nBestäm $v$ som ett uttryck "
+        "i $H$.\nFörklara varför villkoret du använder stämmer.",
+        "Avgör om Liam har rätt och förklara varför.",
+        "En fyr står på en klippa.\nRita en figur.\nBeräkna fyrens höjd."])
+    blad["uppgifter"][0]["poang"] = [0, 0, 3]
+    blad["uppgifter"][1]["poang"] = [0, 2, 0]
+    blad["uppgifter"][2]["poang"] = [0, 1, 0]
+    for u in blad["uppgifter"]:
+        u.pop("deluppgifter", None)
+    fynd = exam_gen.uppdragsvakt(blad)
+    assert [f["path"] for f in fynd] == ["uppgift 1"]
+    assert "«Bestäm …», «Förklara …»" in fynd[0]["message"]
+
+
+def test_bokstaven_som_ar_en_enhet():
+    """179:7 och 157:8/12a (2026-10-11): «8m» lästes som 8 meter."""
+    blad = _blad_ur([
+        "Massan i kg ges av formeln: $m=1{,}6Ad$, där $A$ är arean.",
+        "Ersättningen ges av uttrycket: $0{,}12L$.",
+        "Linjen $L$ har ekvationen $y = kx + m$.",
+        "Rummet är $4{,}0$ m långt. Arean är $b \\cdot l$ m$^2$.",
+        "Medlet i gram är $8\\,\\text{g}$ per kg."])
+    nr = [f["path"] for f in exam_gen.enhetsbokstavsvakt(blad)]
+    assert nr == ["uppgift 1", "uppgift 2"]
+    assert "«L» (liter)" in exam_gen.enhetsbokstavsvakt(blad)[1]["message"]

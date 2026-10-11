@@ -12136,6 +12136,97 @@ def bladets_formvakt(exam: dict) -> list[dict]:
     return ut
 
 
+# FLERA UPPDRAG I SAMMA UPPGIFT (granskningen av bladen 2026-10-11). «Bestäm
+# $v$ som ett uttryck i $H$ … Förklara varför villkoret du använder stämmer.»
+# (189:11), «Kryssa det första steg som är fel. Förklara … Skriv en
+# fullständig lösning.» (188:6): elevläsaren läste varje gång att eleven
+# missar ett av uppdragen, och bedömningen ger dem var sin poäng. Lärarens dom
+# 2026-10-02 är att delfrågorna står som deluppgifter på bladet;
+# delfragor_till_deluppgifter gör om dem när de redan bär a), b), men såg
+# inte uppdrag skrivna som egna meningar. «Avgör om … har rätt och förklara
+# varför.» är EN mening och ett uppdrag, och «Motivera …», «Skriv svaret …»
+# och «Svara …» säger hur svaret ska se ut, inte vad mer som ska göras.
+_UPPDRAG_START = re.compile(
+    r"^(?:Bestäm|Beräkna|Förklara|Undersök|Avgör|Visa|Skriv|Kryssa|Lös|Ange|"
+    r"Teckna|Utred|Rita|Ta reda på|Jämför|Ge)\b")
+_UPPDRAG_UNDANTAG = re.compile(r"^(?:Skriv|Ge) svaret\b|^Svara\b")
+_UPPDRAG_MENING = re.compile(r"(?<=[.!?])\s+|\n+")
+
+
+def uppdragsvakt(exam: dict) -> list[dict]:
+    """Två eller fler uppdrag i egna meningar i en uppgift utan
+    deluppgifter. Noll modellanrop, ett fynd per uppgift."""
+    ut: list[dict] = []
+    for i, u in enumerate((exam or {}).get("uppgifter") or [], 1):
+        # En poäng går inte att dela: «Rita en figur. Beräkna höjden.» för
+        # 1 C är ett uppdrag med en anvisning om formen.
+        if not isinstance(u, dict) or any(
+                isinstance(d, dict) for d in (u.get("deluppgifter") or [])) \
+                or sum(_uppgiftspoang(u)) < 2:
+            continue
+        maskad = _maska(_RAKNARMARKE.sub("", str(u.get("text") or "")))
+        uppdrag = [m.strip() for m in _UPPDRAG_MENING.split(maskad)
+                   if _UPPDRAG_START.match(m.strip())
+                   and not _UPPDRAG_UNDANTAG.match(m.strip())]
+        if len(uppdrag) < 2:
+            continue
+        verb = ", ".join(f"«{m.split()[0]} …»" for m in uppdrag)
+        ut.append(_err(
+            f"uppgift {i}", "begriplighet",
+            f"uppgift {i} har {len(uppdrag)} uppdrag i egna meningar ({verb}) "
+            f"utan a), b): {SPRAKVAKTENS_MARKE}. Eleven missar lätt ett av "
+            "dem. Gör varje uppdrag till en egen deluppgift med sin del av "
+            "poängen och bedömningen, och låt stammen bära sammanhanget."
+            + BEHALL_PLANEN))
+    return ut
+
+
+# BOKSTAVEN SOM ÄR EN ENHET (granskningen av bladen 2026-10-11). «$m=1{,}6Ad$»
+# bredvid «4,0 m» och «m²» (179:7), «$0{,}12L$» (157:8), «$8m$» där m är
+# cementets vikt i kg (157:12a): elevläsaren läste «8 meter» och «0,12 liter».
+# Yrkesklassen räknar med enheterna varje dag. Bara m, L, l och g, och bara
+# där bokstaven ser ut som en enhet: direkt efter en siffra («8m») eller först
+# i en formel («m = …»). «linjen $L$» och «$b \cdot l$» står kvar, «$12$
+# m$^2$» står utanför matten, och \text{m} räknas inte. «$y = kx + m$» står
+# kvar: där är m räta linjens egen bokstav.
+_ENHETSBOKSTAV = re.compile(
+    r"(?<=\d)([mLlg])(?![A-Za-zåäö^_])|^([mLlg])(?=\s*=)")
+_MATTE_TEXT = re.compile(r"\\(?:text|mathrm|textrm|operatorname)\s*\{[^}]*\}")
+_MATTE_SEGMENT = re.compile(r"\$([^$]+)\$")
+_ENHETENS_NAMN = {"m": "meter", "L": "liter", "l": "liter", "g": "gram"}
+
+
+def enhetsbokstavsvakt(exam: dict) -> list[dict]:
+    """Variabler som heter som en enhet. Noll modellanrop, ett fynd per
+    uppgift."""
+    ut: list[dict] = []
+    for i, u in enumerate((exam or {}).get("uppgifter") or [], 1):
+        if not isinstance(u, dict):
+            continue
+        texter = [u.get("text")] + [d.get("text") for d in (
+            u.get("deluppgifter") or []) if isinstance(d, dict)]
+        hittade: list[str] = []
+        for t in texter:
+            for seg in _MATTE_SEGMENT.findall(str(t or "")):
+                seg = _MATTE_TEXT.sub(" ", seg)
+                if re.search(r"(?<![A-Za-z\\])k\s*x", seg):
+                    continue
+                for m in _ENHETSBOKSTAV.finditer(seg.strip()):
+                    bokstav = m.group(1) or m.group(2)
+                    if bokstav not in hittade:
+                        hittade.append(bokstav)
+        if not hittade:
+            continue
+        lista = " och ".join(f"«{b}» ({_ENHETENS_NAMN[b]})" for b in hittade)
+        ut.append(_err(
+            f"uppgift {i}", "begriplighet",
+            f"uppgift {i} använder {lista} som bokstav för ett tal, och "
+            f"bokstaven är också en enhet: {SPRAKVAKTENS_MARKE}. Eleven läser "
+            "«8m» som 8 meter. Byt till en bokstav som inte är en enhet, "
+            "samma bokstav i text, facit och bedömning." + BEHALL_PLANEN))
+    return ut
+
+
 # FACKORDEN PÅ BLADET (lärarens dom 2026-10-02, se build_sprak_blad). Det
 # räknebara i «för elever är det som att läsa ett annat språk»: ett
 # matematiskt fackord i en mening som inte visar det med ett exempel i matte.
@@ -12261,6 +12352,9 @@ def ovningsvakter(exam: dict, *, prov: dict | None = None,
     fel += textmangdvakt(exam)
     # Och i provets form (samma dag, domarna ur provgranskningen).
     fel += bladets_formvakt(exam)
+    # Och ett uppdrag per deluppgift, inga enheter som bokstäver (granskningen
+    # av bladen 2026-10-11).
+    fel += uppdragsvakt(exam) + enhetsbokstavsvakt(exam)
     # Scenvakten står INTE här: provkörningen på de femton bladen fällde
     # hälften av dem på ett begrepp som inte stod ordagrant i texten
     # («färgåtgång» om en vägg som ska målas), och en reparationsrunda skriver

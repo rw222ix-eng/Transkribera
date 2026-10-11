@@ -777,7 +777,11 @@ def _ovningsfynd(exam: dict, infor: dict | None, typ: str) -> list[dict]:
                + exam_gen.bladets_npvakter(exam or {})
                # Kort text som provet (Rickard 2026-09-26).
                + exam_gen.textmangdvakt(exam or {})
-               + exam_gen.bladets_formvakt(exam or {}))
+               + exam_gen.bladets_formvakt(exam or {})
+               # Ett uppdrag per deluppgift, inga enheter som bokstäver
+               # (granskningen av bladen 2026-10-11).
+               + exam_gen.uppdragsvakt(exam or {})
+               + exam_gen.enhetsbokstavsvakt(exam or {}))
     except Exception:                       # pragma: no cover
         return ut
     ut += [_fynd(f["code"], f["message"], _uppgiftsnr(f.get("path", "")))
