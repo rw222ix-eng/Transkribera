@@ -295,3 +295,13 @@ def test_deluppgiften_lases_med_sin_stam():
     u2 = _uppg("Räntan höjs.", (0, 0, 0), deluppgifter=[
         _del("Hur många procentenheter höjs räntan?", (0, 1, 0))])
     assert exam_gen.facktermsvakt(_blad(u2))
+
+
+def test_beteckningar_och_metod_ar_redovisning():
+    """Blad 226:11 (2026-10-11): «Skriv vad dina bokstäver står för.» och
+    «Ställ upp ett ekvationssystem och lös det …» räknades som två uppdrag."""
+    exam = _blad(_uppg("Ett företag sålde muggar för 2 400 kr.\nBestäm priset "
+                       "per mugg.\nSkriv vad dina bokstäver står för.\nStäll upp "
+                       "ett ekvationssystem och lös det med en uträkning.",
+                       (0, 0, 3)))
+    assert exam_gen.uppdragsvakt(exam) == []

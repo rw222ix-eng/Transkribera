@@ -12327,7 +12327,11 @@ _UPPDRAG_START = re.compile(
 _UPPDRAG_UNDANTAG = re.compile(
     r"^(?:Skriv|Ge) svaret\b|^Svara\b|^Redovisa\b"
     r"|^(?:Skriv|Visa) (?:din|dina|hela) (?:lösning|uträkning|beräkning|redovisning)"
-    r"|^(?:Skriv|Visa) hur du (?:räknar|har räknat|löser|har löst|kommer fram)")
+    r"|^(?:Skriv|Visa) hur du (?:räknar|har räknat|löser|har löst|kommer fram)"
+    # Blad 226:11 (2026-10-11): dolt-krav-vakten bad om beteckningarna och
+    # metoden, och raderna räknades som två uppdrag till.
+    r"|^(?:Skriv|Ange|Förklara) vad (?:dina|era|de) (?:bokstäver|beteckningar|variabler)"
+    r"|^Ställ upp (?:ett|en) (?:ekvationssystem|ekvation)\b")
 _UPPDRAG_MENING = re.compile(r"(?<=[.!?])\s+|\n+")
 
 
