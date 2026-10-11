@@ -4808,6 +4808,69 @@ def build_forebild_prov(typer: list[dict] | None) -> str:
     )
 
 
+# ── A-BLADETS FÖREBILD ────────────────────────────────────────────────────
+# A-bladet inför BA26B:s prov 131 (Tal och procent, Ma 1a) genererades två
+# gånger 2026-10-11/12 (exam 246 och 247), och NP-jämföraren fällde 7 resp. 8
+# A-uppgifter i två körningar var: närmaste uppgift på NpMa1a var en E- eller
+# C-uppgift (andel ur delförhållande, volym ur nederbörd, ursprungspris ur
+# påslag, mönster inom budget, linjärt ur tabell). Bladet fick aldrig veta
+# vad NP prövar på A: build_forebild_prov ges bara till provet, så modellen
+# gjorde A av fler räknesteg i en C-situation. Rickard: laga generatorns
+# A-nivå innan något godkänns. Blocket bär samma enheter, samma «vad» och
+# samma avgörande steg som NP-jämföraren dömer mot (np_jamforare.np_enheter),
+# så att generatorn och domaren läser samma lista.
+
+
+def np_a_uppgifter(kurs: str) -> list[dict]:
+    """Kursens A-enheter på nationella provet: {id, poang, svar, vad, avgor}.
+    Tom lista för en kurs NP-profilen inte har mätt."""
+    nyckel = niva_rubrik.kursnyckel(kurs or "")
+    rader = (((niva_rubrik._las_np_profil().get("kurser") or {})
+              .get(nyckel) or {}).get("uppgifter") or [])
+    ut = []
+    for u in rader:
+        if not isinstance(u, dict) or u.get("niva") != "A":
+            continue
+        p = [int(x or 0) for x in (u.get("poang") or [0, 0, 0])[:3]]
+        if sum(p) > 4:
+            continue                     # matrisbedömda helheter (C15, C17)
+        ut.append({
+            "id": f"NpMa{nyckel} {u.get('termin', '')} "
+                  f"{u.get('delprov', '')}{u.get('nr', '')}{u.get('del') or ''}",
+            "poang": p,
+            "svar": "endast svar" if u.get("kortsvar") else "lösning",
+            "vad": u.get("form_parafras") or "",
+            "avgor": u.get("avgorande_steg") or ""})
+    return ut
+
+
+def build_forebild_a_blad(enheter: list[dict] | None) -> str:
+    """NP:s A-uppgifter som förebild för ett RENT A-blad, eller TOM STRÄNG
+    (kursen är inte mätt: prompten som förut)."""
+    if not enheter:
+        return ""
+    return (
+        "NATIONELLA PROVETS A-UPPGIFTER i kursen, med det avgörande steget "
+        "som ger A-poängen:\n"
+        f"{json.dumps(enheter, ensure_ascii=False)}\n"
+        "Varje uppgift på det här A-bladet ska pröva samma sorts A-steg som "
+        "en av dem, i bladets eget innehåll, med egna tal och eget "
+        "sammanhang: ett uttryck i en bokstav ur ett samband mellan två, en "
+        "procent av något som självt anges i en annan bokstav, en formel "
+        "löst baklänges när två storheter är kopplade, en tillsatt mängd så "
+        "att en andel blir en given procent, ett tal som ligger lika många "
+        "procent över ett tal som under ett annat, en brytpunkt där två "
+        "modeller ger lika. Uppgiften gör det typen gör och inget mer.\n"
+        "FLER RÄKNESTEG GER INTE A. En uppgift vars närmaste uppgift på "
+        "nationella provet är en E- eller C-uppgift är en E- eller C-uppgift, "
+        "hur många steg den än har: en andel ur ett delförhållande, en volym "
+        "ur en area och en höjd, ett ursprungspris ur ett pris med påslag, "
+        "hur långt ett mönster räcker inom en budget, om en tabell är linjär. "
+        "Sådana hör till E- och C-bladen. Inga olikheter och inget som ska "
+        "gälla för alla tal."
+    )
+
+
 # ── BEGRIPLIGHETEN, OCH SÄRSKILT UPPGIFT 2 ────────────────────────────────
 # Stegringen står kvar (lärarens dom 2026-08-20: alla klarar den första, några
 # få den sista). Det som ändras är var TVÅAN ligger: den ska ligga nära ettan,
@@ -14721,6 +14784,10 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # förebild på alla tio uppgifter utan att någon rad sa det. Raden går i
     # jobbets logg och i serverns; efterkontrollen säger samma sak på pappret
     # (routes_exam._nptypfynd).
+    # A-BLADET får NP:s A-uppgifter (build_forebild_a_blad, 247 2026-10-12).
+    # E- och C-bladen och blandade blad: tom sträng som förut.
+    if profil == "arbetsblad" and exam_spec.ren_niva(niva_mal) == "A":
+        forebildblock = build_forebild_a_blad(np_a_uppgifter(kurs))
     if profil == "prov" and not forebildblock:
         saknas = niva_rubrik.np_typer_saknas(kurs, koder)
         if saknas:

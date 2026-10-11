@@ -834,6 +834,21 @@ def test_provet_far_nationella_provets_typer_som_forebilder():
     assert "remsa" not in r
 
 
+def test_a_bladet_far_np_a_uppgifterna_som_forebild():
+    """A-bladet inför BA26B prov 131 (exam 246, 247): 7 och 8 A-uppgifter vars
+    närmaste NP-uppgift var E eller C. Bladet ska få samma A-enheter som
+    NP-jämföraren dömer mot, och en omätt kurs ger en oförändrad prompt."""
+    enh = exam_gen.np_a_uppgifter("Matematik, nivå 1a")
+    assert enh and all(sum(u["poang"]) <= 4 for u in enh)
+    assert any(u["id"] == "NpMa1a vt22 D30" for u in enh)
+    r = exam_gen.build_forebild_a_blad(enh)
+    assert "NpMa1a vt22 D30" in r and "FLER RÄKNESTEG GER INTE A" in r
+    # Inget citerat fältnamn: grammatiken ska inte få förebildsfältet.
+    assert not exam_gen._forebild_i_grammatiken(r, "arbetsblad")
+    assert exam_gen.np_a_uppgifter("Fysik 1") == []
+    assert exam_gen.build_forebild_a_blad([]) == ""
+
+
 def test_forebildsfaltet_star_i_grammatiken_nar_prompten_ber_om_det():
     """Regeln är promptens egen: fältet ska finnas exakt när det som skickas
     nämner det. Antingen uppdraget som ber om en förebild, eller pappret som
