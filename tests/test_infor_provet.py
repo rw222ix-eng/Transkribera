@@ -313,6 +313,12 @@ def test_meningsinledande_ord_blir_inte_namn():
                  "tillväxt i procent.",
          "innehall": ["andragradsfunktioner"]}]})
     assert ut["sammanhang"] == []
+    # Vardagsverb och lägesord är ingen situation (prov 130, blad 220:10).
+    ut = exam_gen.provets_namn_och_sammanhang({"uppgifter": [
+        {"text": "Ekvationen saknar lösning. Plattorna ligger i rader runt "
+                 "gången."}]})
+    for o in ("saknar", "rader", "runt"):
+        assert o not in ut["sammanhang"], o
 
 
 def test_prompten_namner_namnen_men_inte_provets_texter():
