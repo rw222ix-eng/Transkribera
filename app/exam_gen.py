@@ -12345,7 +12345,7 @@ _UPPDRAG_UNDANTAG = re.compile(
     r"|^(?:Skriv|Visa) hur du (?:räknar|har räknat|löser|har löst|kommer fram)"
     # Blad 226:11 (2026-10-11): dolt-krav-vakten bad om beteckningarna och
     # metoden, och raderna räknades som två uppdrag till.
-    r"|^(?:Skriv|Ange|Förklara) vad (?:dina|era|de) (?:bokstäver|beteckningar|variabler)"
+    r"|^(?:Skriv|Ange|Förklara) vad (?:dina|era|de|varje) (?:bokstäver|beteckningar|variabler|uttryck)"
     r"|^Ställ upp (?:ett|en) (?:ekvationssystem|ekvation)\b")
 _UPPDRAG_MENING = re.compile(r"(?<=[.!?])\s+|\n+")
 

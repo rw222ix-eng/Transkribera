@@ -284,6 +284,12 @@ def test_kravet_som_texten_staller_ar_inget_fynd():
     assert np_vakter.doltkravvakt(_prov([red])) == []
     red["typ"] = "rutin"
     assert _koder(np_vakter.doltkravvakt(_prov([red])), "doltkrav") == {"1"}
+    # Blad 235:6: «säger i ord vad varje uttryck står för» utan att texten ber om det.
+    ord_ = _u(text="Visa att ramens area är $4x + 10$.",
+              bedomning="+1 C lätt att följa och säger i ord vad varje uttryck står för")
+    assert _koder(np_vakter.doltkravvakt(_prov([ord_])), "doltkrav") == {"1"}
+    ord_["text"] += " Skriv vad varje uttryck står för."
+    assert np_vakter.doltkravvakt(_prov([ord_])) == []
 
 
 # ── ordval och textlängd fäller aldrig ───────────────────────────────────

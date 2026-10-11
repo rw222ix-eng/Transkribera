@@ -759,6 +759,14 @@ DOLDA_KRAV: list[tuple[str, re.Pattern, re.Pattern]] = [
      re.compile(r"redovis|visar (?:hur|räkningen|beräkningen)|tydlig lösning",
                 re.I),
      re.compile(r"redovis|visa (?:hur|din|dina)|lösning", re.I)),
+    # Blad 235:6 (2026-10-11): «+1 C … säger i ord vad varje uttryck står
+    # för», och texten sa bara «Visa att ramens area är 4x + 10». Bara «i ord»:
+    # «det framgår vad varje sträcka står för» (233:11) klarar en lösning med
+    # namngivna steg, och det är redovisningens vanliga form.
+    ("att uttrycken beskrivs i ord",
+     re.compile(r"(?<![\wåäö])i ord(?![\wåäö])", re.I),
+     re.compile(r"står för|(?<![\wåäö])i ord(?![\wåäö])|förklara|motivera"
+                r"|beskriv", re.I)),
 ]
 
 
