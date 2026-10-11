@@ -12192,12 +12192,19 @@ def textmangdvakt(exam: dict) -> list[dict]:
                 nr = f"{i}{chr(ord('a') + j)}"
                 f = _fakta_fore_fragan(d.get("text"))
                 o = _ord(f"{stam} {d.get('text') or ''}".strip())
-                if f > BLAD_DEL_FAKTA or o > BLAD_ORD_FORE_FRAGAN:
+                # En C- eller A-deluppgift får villkoren ett problem behöver,
+                # som en hel uppgift på samma nivå (blad 226:1a, 2026-10-11:
+                # «skär L till höger om y-axeln» och «bildar en triangel med
+                # arean 3» är A-problemet, ingen bakgrund).
+                dniva = _niva_ur_poang(d.get("poang")) or "E"
+                d_o = BLAD_ORD_FORE_FRAGAN if dniva == "E" else ORD_FORE_FRAGAN
+                d_f = BLAD_DEL_FAKTA if dniva == "E" else BLAD_DEL_FAKTA + 1
+                if f > d_f or o > d_o:
                     ut.append(_err(
                         f"uppgift {nr}", "textmangd",
                         f"uppgift {nr} har {o} ord och {f} meningar fakta "
-                        f"före frågan (taket på bladet är {BLAD_ORD_FORE_FRAGAN} "
-                        f"ord och {BLAD_DEL_FAKTA} mening). Stryk bakgrund som "
+                        f"före frågan (taket på bladet är {d_o} "
+                        f"ord och {d_f} mening). Stryk bakgrund som "
                         "inte behövs för att räkna och slå ihop meningar om "
                         "samma sak." + BEHALL_PLANEN))
             continue
@@ -12252,8 +12259,14 @@ def _utan_forklaring_efter_fragan(text: str) -> str:
     k = next((j for j, m in enumerate(mm) if _ar_fraga(m)), None)
     if k is None:
         return text
+    # Redovisningsraden som dolt-krav-vakten kräver («Skriv vad dina
+    # bokstäver står för.», «Redovisa din lösning …», blad 226:11) räknas
+    # inte heller: den är formen på samma lösning (_UPPDRAG_UNDANTAG).
     efter = [m for m in mm[k + 1:]
-             if not (_FORKLARINGSMENING_RE.search(m) or _BEGREPPSDEF_RE.search(m))]
+             if not (_FORKLARINGSMENING_RE.search(m) or _BEGREPPSDEF_RE.search(m)
+                     or (_UPPDRAG_UNDANTAG.match(m.strip())
+                         and not re.match(r"(?:Svara|Skriv svaret|Ge svaret)",
+                                          m.strip())))]
     # Orörd text när inget stryks: _MENING delar också på radbrytningar, och
     # sammanslagna meningar kan flytta vilken mening som räknas som sist.
     return text if len(efter) == len(mm) - k - 1 else " ".join(mm[:k + 1] + efter)

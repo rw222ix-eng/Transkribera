@@ -305,3 +305,25 @@ def test_beteckningar_och_metod_ar_redovisning():
                        "ett ekvationssystem och lös det med en uträkning.",
                        (0, 0, 3)))
     assert exam_gen.uppdragsvakt(exam) == []
+
+
+def test_a_deluppgiften_far_problemets_villkor():
+    """Blad 226:1a (2026-10-11): två villkor är A-problemet, ingen bakgrund."""
+    u = _uppg("Figuren visar linjen $L$.", (0, 0, 0), deluppgifter=[
+        _del("Linjen $y = ax + 1$ skär $L$ till höger om $y$-axeln.\nDe två "
+             "linjerna och $y$-axeln bildar en triangel med arean 3 "
+             "areaenheter.\nAnge $a$.", (0, 0, 1))])
+    assert _fynd(_blad(u)) == []
+    # Samma text på E fälls som förut.
+    u["deluppgifter"][0]["poang"] = [1, 0, 0]
+    assert _fynd(_blad(u))
+
+
+def test_redovisningsraden_efter_fragan_raknas_inte():
+    """Blad 226:11 (2026-10-11): raderna dolt-krav-vakten kräver."""
+    u = _uppg("Ett företag i skolan sålde muggar på en julmarknad för 2 400 kr.\n"
+              "Alla muggar kostade lika mycket.\nMed 10 kr lägre pris hade de "
+              "sålt 20 muggar fler och ändå fått 2 400 kr.\nBestäm priset per "
+              "mugg och hur många muggar de sålde.\nSkriv vad dina bokstäver "
+              "står för.\nRedovisa din lösning med en uträkning.", (0, 0, 3))
+    assert _fynd(_blad(u)) == []
