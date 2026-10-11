@@ -444,3 +444,18 @@ def test_lektioner_om_annuitet_och_kalkylblad_ar_inga_delmoment():
 def test_geogebra_ersatter_bara_grafraknaren():
     rad = exam_gen.build_delbegrepp(["G25-M1C-ALG-3"], "prov")
     assert "BARA till att rita funktioner" in rad and "kalkylblad" in rad
+
+
+def test_rantan_tills_lanet_ar_betalt_ar_en_summa():
+    """Blad 228:3 (NA26F inför prov 219, 2026-10-11) gick igenom: texten sa
+    «betalar tillbaka» och «tills lånet är betalt», facit räknade
+    $150 + 140 + \\ldots + 10$."""
+    t = ("Liam lånar 15 000 kr till en moped. Varje månad betalar han tillbaka "
+         "1 000 kr av lånet. Hur mycket betalar Liam i ränta sammanlagt, tills "
+         "lånet är betalt?")
+    assert "räntan sammanlagt över många perioders amortering" in _traffar(
+        "Matematik, nivå 1c", t)
+    for kurs in ("Matematik, nivå 1c", "Matematik, nivå 2a"):
+        assert "summor" in _traffar(kurs, r"$150 + 140 + \ldots + 10 = 1\,200$")
+        assert "summor" in _traffar(kurs, "150 + 140 + … + 10")
+    assert _traffar("Matematik, nivå 1c", "$150 + 140 = 290$") == []

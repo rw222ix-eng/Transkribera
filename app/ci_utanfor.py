@@ -296,7 +296,11 @@ _SUMMA = (
     re.compile(
         r"(?i:(?:aritmetisk|geometrisk)\w*\s+summa|summaformel"
         r"|summan\s+av\s+(?:de|alla)\s+(?:\d+\s+)?första)"
-        r"|\\sum(?![A-Za-z])|∑"))
+        r"|\\sum(?![A-Za-z])|∑"
+        # Facit som lägger ihop en följd: «150 + 140 + \ldots + 10» (blad
+        # 228:3, NA26F inför prov 219, 2026-10-11). Uppgiftstexten nämnde
+        # varken summa eller amortering.
+        r"|\+\s*(?:\\[lc]dots|…|\.\.\.)\s*\+"))
 # Räntan sammanlagt över en hel amortering är en summa för hand. I Ma 1a står
 # den i det centrala innehållet med kalkylprogram (G25-M1A-DIG-1, Rickard
 # 2026-10-11: «kolla Ma 1a:s centrala innehåll»), så den fälls bara i 1c, där
@@ -309,7 +313,11 @@ _AMORTERINGSSUMMA = (
         rf"(?i:amort\w*[^?]{{0,300}}?ränt\w*[^?]{{0,120}}?"
         rf"(?:sammanlagt|totalt|sammantaget|allt\s+som\s+allt)[^?]{{0,60}}?"
         rf"(?:{_ANTAL_PERIODER}|hela\s+lånetiden))"
-        r"|(?i:ränt\w*[^?]{0,40}?hela\s+lånetiden)"))
+        r"|(?i:ränt\w*[^?]{0,40}?hela\s+lånetiden)"
+        # «Hur mycket betalar Liam i ränta sammanlagt, tills lånet är betalt?»
+        # (blad 228:3): ingen «amortering», inget antal perioder.
+        r"|(?i:ränt\w*[^?]{0,60}?(?:sammanlagt|totalt|sammantaget|allt\s+som"
+        r"\s+allt)[^?]{0,60}?tills\s+(?:hela\s+)?lånet\s+är\s+\w*betal\w*)"))
 _KALKYL = (
     "kalkylprogram",
     "kalkylprogram och kalkylblad (också GeoGebras): en uppgift får aldrig "
