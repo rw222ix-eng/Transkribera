@@ -966,3 +966,12 @@ def test_ligger_och_bakomliggande_ar_ingen_situation():
                  "bakomliggande faktor förklarar sambandet."}]})
     for o in ("ligger", "ändras", "bakomliggande", "uppför"):
         assert o not in ut["sammanhang"], o
+
+
+def test_firma_och_mojligt_ar_inte_provets():
+    """Blad 242 (2026-10-11): «Firma A» är en etikett och «möjligt» ingen
+    situation, och lånevakten fällde bladet för båda."""
+    ut = exam_gen.provets_namn_och_sammanhang({"uppgifter": [
+        {"text": "Är det möjligt att Firma A och Firma B kostar lika?"}]})
+    assert "Firma" not in ut["namn"]
+    assert "möjligt" not in ut["sammanhang"]

@@ -10743,7 +10743,10 @@ _INTE_NAMN = frozenset((
     # Linje (1), linje (2) …». Formeln saknar punkt, så ordet efter den står
     # «mitt i» en mening, och blad 226:10 fälldes för att det skrev «Hon».
     "hon", "han", "hen", "linje", "linjen", "linjer", "linjerna", "punkt",
-    "punkten", "ekvation", "ekvationen", "ekvationerna"))
+    "punkten", "ekvation", "ekvationen", "ekvationerna",
+    # Blad 242:5 (2026-10-11): «Firma A» och «Firma B» är etiketter, inget
+    # namn provet äger.
+    "firma", "firman", "firmor", "firmorna"))
 # Förnamn i fornamn.txt som också är vanliga ord först i en mening: «Hans
 # lön är …» handlar inte om någon som heter Hans.
 _TVETYDIGA_NAMN = frozenset((
@@ -10778,7 +10781,9 @@ _SAMMANHANG_STOPP = frozenset((
     # strumporna «ligger» i en låda.
     "ligger", "låg", "legat", "ändras", "ändrades", "bakomliggande",
     # Riktningar (prov 215 «cyklar … uppför», blad 226:4 «uppför läktaren»).
-    "uppför", "nerför", "nedför", "uppåt", "nedåt", "neråt"))
+    "uppför", "nerför", "nedför", "uppåt", "nedåt", "neråt",
+    # Blad 242:1: «Är det möjligt att …» är ingen situation.
+    "möjligt", "möjlig", "möjliga", "omöjligt"))
 # Verbformer som nästan aldrig är ett substantiv: «ritade», «planerar».
 _VERBSLUT = ("ade", "ades", "erar", "erade")
 # Matematikens ord, som stammar utan å, ä och ö. Kursplanens ord (_kursord)
