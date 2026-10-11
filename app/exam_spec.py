@@ -1923,6 +1923,14 @@ KRAV_DEFAULT = {
     # Höjs E utan att D följer med krymper D-spannet, och det är precis den
     # skärpning läraren bad om.
     "e_extra": 0,
+
+    # ── RENT E-PROV («Bara E») ──
+    # Rickard 2026-10-11, E-omprovet för TE26A: på ett papper med bara
+    # E-poäng är 26 % av totalen en annan gräns än på NP, där E-delen är
+    # 29–45 % av poängen (niva_rubrik) och E-gränsen alltså ungefär två
+    # tredjedelar av E-poängen. Två tredjedelar av papprets poäng, och bara
+    # när pappret saknar C- och A-poäng (betygsrader == ["E"]).
+    "e_andel_rent": Fraction(2, 3),
 }
 
 
@@ -2013,10 +2021,11 @@ def kravgranser_ur_summor(summor: dict, config: dict | None = None,
     # NP:s tal, inte en procentsats som ska rundas med. Taket är provets egen
     # totalpoäng. En E-gräns över maxpoängen är ingen skärpning, den är ett
     # prov ingen kan bli godkänd på.
-    regelns_e = _granstal(total, cfg["e_andel"])
+    rader = betygsrader(summor)
+    e_andel = cfg["e_andel_rent"] if rader == ["E"] else cfg["e_andel"]
+    regelns_e = _granstal(total, e_andel)
     extra = min(e_skarpning(cfg), max(total - regelns_e, 0))
     e_minst = regelns_e + extra
-    rader = betygsrader(summor)
     granser = {
         "total": total,
         # Vilka rader tabellen ska ha. Se betygsrader.
@@ -2031,7 +2040,8 @@ def kravgranser_ur_summor(summor: dict, config: dict | None = None,
         # papper utan C-poäng är en regel för ett betyg som inte finns.
         "regel": (
             "NP-modellen (Ma 1c ht 2024). "
-            f"E: minst {_procent(cfg['e_andel'])} av totalpoängen"
+            + ("Rent E-prov. " if rader == ["E"] else "")
+            + f"E: minst {_procent(e_andel)} av totalpoängen"
             + (f", plus lärarens skärpning på {extra} p" if extra else "")
             + ". "
             + (f"C: minst {_procent(cfg['c_andel'])} av totalpoängen. "

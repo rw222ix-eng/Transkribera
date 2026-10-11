@@ -2319,6 +2319,27 @@ def test_omprov_av_skickar_originalet_som_referensprov(client, monkeypatch):
     assert [u["typ"] for u in ref["uppgifter"]]
 
 
+def test_omprov_bara_e_arver_originalets_platser_som_e(client, monkeypatch):
+    """Rickard 2026-10-11: «Bara E» med `omprov_av` ger originalets platser
+    som E-uppgifter, inte nivåvalets eget skelett."""
+    calls = _stub_generate(monkeypatch)
+    gammalt, gid, cid = _godkant_prov(
+        client, titel="Prov 1 · kapitel 1", datum="2026-09-16",
+        klass="TE26A", kurs="Matematik, nivå 2b")
+    r = client.post("/api/exams/generate", json={
+        "course_id": cid, "group_id": gid, "antal": 6,
+        "datum": "2026-11-02", "moment": "kapitel 1",
+        "omprov_av": gammalt, "nivamix": "Bara E"})
+    assert r.status_code == 200
+    _done(r)
+    ref = calls[-1]["referensprov"]
+    skelett = calls[-1]["skeleton"]
+    assert len(skelett) == len(ref["uppgifter"])
+    assert all(s["poang"][1:] == [0, 0] for s in skelett)
+    assert all(sum(exam_gen._uppgiftspoang(u)[1:]) == 0
+               for u in ref["uppgifter"])
+
+
 def test_okant_omprov_av_lamnar_prompten_som_den_var(client, monkeypatch):
     calls = _stub_generate(monkeypatch)
     r = client.post("/api/exams/generate", json={

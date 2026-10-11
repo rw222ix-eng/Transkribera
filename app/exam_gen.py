@@ -10323,7 +10323,8 @@ def _slotrad(u: dict, nr: int) -> dict:
             "avsnitt": str(u.get("avsnitt") or ""),
             "deluppgifter": len([d for d in (u.get("deluppgifter") or [])
                                  if isinstance(d, dict)]),
-            "steg": _raknesteg(_losningstext(u))}
+            "steg": _raknesteg(_losningstext(u)),
+            "omraknad": bool(u.get("omraknad"))}
 
 
 def _losningstext(u: dict) -> str:
@@ -10379,6 +10380,51 @@ def skelett_ur_prov(referens: dict | None) -> list[dict] | None:
     return slots
 
 
+def omprov_pa_e(referens: dict | None) -> dict | None:
+    """Originalet omräknat till ett RENT E-PROV, plats för plats.
+
+    Rickard 2026-10-11: TE26A-eleverna som föll på omprov 132 skriver ett nytt
+    omprov «bara på E-nivå». «Bara E» och `omprov_av` krockade förut: nivåvalet
+    byggde ett eget E-skelett, men planen i prompten och likvärdighetsvakten
+    mätte mot originalets C- och A-platser, så varje sådan plats fälldes som
+    olikvärdig. Hans val: samma platser och delmoment som originalet, varje
+    plats en E-uppgift.
+
+    Platsens E-poäng står kvar; en plats som bara hade C- eller A-poäng får en
+    E-poäng. Deluppgifter behålls bara när minst två bar E-poäng. Platsen
+    märks `omraknad`: den har inget facit att mäta stegen mot (en E-uppgift
+    på originalets A-plats är kortare, och ska vara det). Kommunikation blir
+    Resonemang, NP ger aldrig EK-poäng (exam_spec.ren_e_band)."""
+    if not referens or not referens.get("uppgifter"):
+        return referens
+    ut = []
+    for u in referens["uppgifter"]:
+        if not isinstance(u, dict):
+            continue
+        e, c, a = _uppgiftspoang(u)
+        ny = {k: v for k, v in u.items() if k != "deluppgifter"}
+        if u.get("formaga") == "K":
+            ny["formaga"] = "R"
+        delar = [d for d in (u.get("deluppgifter") or [])
+                 if isinstance(d, dict) and _trippel(d.get("poang"))[0]]
+        if not (c or a):
+            if u.get("deluppgifter"):
+                ny["deluppgifter"] = u["deluppgifter"]
+            ut.append(ny)
+            continue
+        ny["omraknad"] = True
+        ny.pop("losning", None)
+        if len(delar) >= 2:
+            ny["poang"] = [0, 0, 0]
+            ny["deluppgifter"] = [
+                {**{k: v for k, v in d.items() if k != "losning"},
+                 "poang": [_trippel(d.get("poang"))[0], 0, 0]} for d in delar]
+        else:
+            ny["poang"] = [e or 1, 0, 0]
+        ut.append(ny)
+    return {**referens, "uppgifter": ut}
+
+
 def build_omprov(referens: dict | None) -> str:
     """Omprovsblocket, eller TOM STRÄNG.
 
@@ -10398,12 +10444,22 @@ def build_omprov(referens: dict | None) -> str:
         delar = (f", {s['deluppgifter']} deluppgifter"
                  if s["deluppgifter"] else "")
         vad = f", delmomentet {s['delmoment']}" if s["delmoment"] else ""
+        steg = ("en E-uppgift på originalets delmoment" if s["omraknad"]
+                else f"facit på cirka {s['steg']} räknesteg")
         rader.append(
             f"- uppgift {s['nr']}: del {s['del']}, {s['typ']}, förmåga "
             f"{s['formaga']}, poäng (E/C/A) {tuple(s['poang'])}, nivå "
-            f"{s['niva'] or '–'}{vad}{delar}, facit på cirka {s['steg']} "
-            "räknesteg")
-    return (
+            f"{s['niva'] or '–'}{vad}{delar}, {steg}")
+    # E-provet (omprov_pa_e): platser som var C eller A är omräknade, och
+    # modellen ska veta att nivån är lärarens val, inte en lättnad att rätta.
+    e_prov = (
+        "OMPROVET ÄR ETT E-PROV. Läraren har valt att eleven skriver om provet "
+        "bara på E-nivå. Platser som i originalet gav C- eller A-poäng är "
+        "omräknade: skriv där en E-uppgift på samma delmoment, en "
+        "grundläggande uppgift av den sort nationella provet ger E-poäng för. "
+        "Övriga platser är lika stora som originalets.\n"
+        if any(s["omraknad"] for s in slots) else "")
+    return (e_prov +
         "DET HÄR ÄR ETT OMPROV. Eleven skriver om ett prov hon redan har "
         "gjort, och omprovet ska vara LIKVÄRDIGT det, varken lättare eller "
         "svårare. Nedan står originalets uppgifter som en plan, plats för "
@@ -11950,7 +12006,8 @@ def likvardighetsvakt(exam: dict, referens: dict | None) -> list[dict]:
         if ny["formaga"] != gammal["formaga"] and gammal["formaga"]:
             avvik.append(f"förmågan är {ny['formaga']} men ska vara "
                          f"{gammal['formaga']}")
-        if abs(ny["steg"] - gammal["steg"]) > OMPROV_STEGTOLERANS:
+        if not gammal["omraknad"] and \
+                abs(ny["steg"] - gammal["steg"]) > OMPROV_STEGTOLERANS:
             riktning = "färre" if ny["steg"] < gammal["steg"] else "fler"
             avvik.append(f"facit tar {ny['steg']} räknesteg mot originalets "
                          f"{gammal['steg']}, alltså {riktning} steg, "

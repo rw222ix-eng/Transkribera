@@ -362,6 +362,43 @@ def test_likvardighetsvakten_ar_fail_open_utan_referens():
     assert exam_gen.likvardighetsvakt(REFERENS, None) == []
 
 
+def test_omprov_pa_e_raknar_om_c_och_a_platserna():
+    """Rickard 2026-10-11: E-omprovet efter 132 har originalets platser, var
+    och en en E-uppgift. Förut mätte vakten «Bara E»-pappret mot originalets
+    C-platser och fällde dem alla."""
+    original = _prov([
+        _u(poang=(2, 0, 0), losning="$7\\sqrt{2}$"),
+        _u(poang=(0, 2, 0), typ="redovisning", formaga="K",
+           losning="$a = 3$ ger $b = 12$ och $c = 4$ och $d = 5$"),
+    ])
+    e_plan = exam_gen.omprov_pa_e(original)
+    skelett = exam_gen.skelett_ur_prov(e_plan)
+    assert [s["poang"] for s in skelett] == [[2, 0, 0], [1, 0, 0]]
+    assert skelett[1]["formaga"] == "R"      # NP ger aldrig EK-poäng
+    block = exam_gen.build_omprov(e_plan)
+    assert "E-PROV" in block and "(0, 2, 0)" not in block
+    # Ett E-papper på planen går igenom, fast den omräknade platsen har ett
+    # kortare facit än originalets C-uppgift.
+    e_prov = _prov([
+        _u(poang=(2, 0, 0), losning="$5\\sqrt{2}$"),
+        _u(poang=(1, 0, 0), typ="redovisning", formaga="R", losning="$4$"),
+    ])
+    assert exam_gen.likvardighetsvakt(e_prov, e_plan) == []
+    # Ett vanligt omprov ser ingen skillnad.
+    assert "E-PROV" not in exam_gen.build_omprov(REFERENS)
+
+
+def test_rent_e_prov_har_e_grans_pa_tva_tredjedelar():
+    """Rickard 2026-10-11: 26 % av ett papper med bara E-poäng hade gett 4 av
+    14 p. NP:s E-gräns är ungefär två tredjedelar av E-poängen."""
+    g = exam_spec.kravgranser_ur_summor({"total": 14, "e": 14, "c": 0, "a": 0})
+    assert g["E"]["minst"] == 10 and g["betyg"] == ["E"]
+    assert "Rent E-prov" in g["regel"] and "67 %" in g["regel"]
+    blandat = exam_spec.kravgranser_ur_summor(
+        {"total": 30, "e": 9, "c": 13, "a": 8})
+    assert blandat["E"]["minst"] == 8
+
+
 # ── 5. TIDEN ────────────────────────────────────────────────────────────
 
 def test_provet_som_ar_langre_an_passet_sager_det():

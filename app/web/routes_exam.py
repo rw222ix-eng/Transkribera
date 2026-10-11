@@ -2007,6 +2007,14 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         referensprov = rad["exam"]
             except (TypeError, ValueError):
                 referensprov = None
+            # OMPROV PÅ E-NIVÅ (Rickard 2026-10-11): «Bara E» och `omprov_av`
+            # tillsammans ger originalets platser omräknade till E-uppgifter,
+            # och då är det den omräknade planen som är skelettet, prompten
+            # och likvärdighetens måttstock. Nivåvalets eget skelett ovan hade
+            # haft andra platser än originalet. Se exam_gen.omprov_pa_e.
+            if referensprov is not None and exam_spec.ren_e_band(niva_mal):
+                referensprov = exam_gen.omprov_pa_e(referensprov)
+                skelett = exam_gen.skelett_ur_prov(referensprov) or skelett
             if referensprov is None and typ == "prov":
                 omprov_forslag = _omprovskandidat(
                     conn, group_id=group_id, course_id=course_id,
