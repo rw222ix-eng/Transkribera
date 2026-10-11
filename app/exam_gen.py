@@ -10412,6 +10412,13 @@ def provslots(exam: dict | None) -> list[dict]:
             if isinstance(u, dict)]
 
 
+def omprovsplan(exam: dict | None) -> list[tuple]:
+    """Det på omprovet som inte får ändras: platsernas antal, poäng, typ och
+    förmåga, i ordning (refine_exam kastar ett varv som ändrar det)."""
+    return [(tuple(s["poang"]), s["typ"], s["formaga"])
+            for s in provslots(exam)]
+
+
 def skelett_ur_prov(referens: dict | None) -> list[dict] | None:
     """Referensprovets form som SKELETT, i exam_spec.balanced_skeleton form.
 
@@ -15243,6 +15250,23 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
     res = _poangonskepass(exam, instruction, res, model=model, llm=llm,
                           profil=profil, niva_mal=niva_mal,
                           max_rounds=max_rounds, log_cb=log_cb)
+    # ── OMPROVETS PLAN HÅLLER (2026-10-11) ───────────────────────────
+    # «Laga fynden» på omprovet 218 strök uppgift 5 (ekvationerna), flyttade
+    # upp resten och skrev en ny rutinuppgift på plats 7. Varvsvakten fällde
+    # det, men ett varv kastas aldrig av den. På ett omprov gör det det: en
+    # plats med andra poäng, en annan typ eller förmåga är ett annat prov, och
+    # då står pappret kvar som det var, med fyndet i svaret.
+    if referens is not None and res.get("exam") is not None \
+            and res["exam"] is not exam \
+            and omprovsplan(res["exam"]) != omprovsplan(exam):
+        log("Varvet bröt omprovets plan (uppgifternas platser, poäng, typ "
+            "eller förmåga): pappret står kvar som det var.")
+        res = {**res, "exam": exam, "errors": list(res.get("errors") or []) + [
+            _err("uppgifter", "likvardighet",
+                 "Omskrivningen ändrade omprovets plan: en plats fick andra "
+                 "poäng, en annan typ eller förmåga, eller försvann. Pappret "
+                 "står kvar som det var. Be om en ändring per uppgift, och "
+                 "behåll uppgiftens poäng, typ och förmåga.")]}
     # ── GRINDEN, men bara den DETERMINISTISKA halvan ─────────────────
     # E-signalerna körs: de kostar ingenting, och det är precis dem läraren kan
     # råka ut för här — «gör uppgift 7 svårare» på ett rent E-papper är en

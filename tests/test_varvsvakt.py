@@ -225,3 +225,22 @@ def test_c_bladets_varv_jamfors_med_np_bara_pa_rorda(monkeypatch):
                         model="m", llm=llm, profil="arbetsblad",
                         niva_mal=a_mal, infor=_exam(), max_rounds=3)
     assert sett == {}
+
+
+def test_varvet_som_bryter_omprovets_plan_kastas():
+    """«Laga fynden» på omprovet 218 (2026-10-11) strök en uppgift och skrev
+    en ny på en annan plats. På ett omprov står pappret då kvar som det var."""
+    fore = _exam()
+    varv = copy.deepcopy(fore)
+    u = varv["uppgifter"][1]
+    u["typ"] = "problem" if u.get("typ") != "problem" else "rutin"
+    llm, _calls = _llm(varv)
+    res = exam_gen.refine_exam(fore, "skriv om den", nummer=2, model="m",
+                               llm=llm, referens=copy.deepcopy(fore))
+    assert res["exam"] is fore
+    assert any(f.get("code") == "likvardighet" for f in res["errors"])
+    # Utan original (inget omprov) står varvet kvar som förut.
+    llm2, _ = _llm(varv)
+    res2 = exam_gen.refine_exam(fore, "skriv om den", nummer=2, model="m",
+                                llm=llm2)
+    assert exam_gen.omprovsplan(res2["exam"]) != exam_gen.omprovsplan(fore)
