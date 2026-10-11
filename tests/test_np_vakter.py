@@ -647,3 +647,12 @@ def test_efterkontrollen_hojer_inte_omprovets_poang(exam88):
              if f["kod"] == "stegvakt"]
     assert any("Höj poängen till" in t for t in vanligt)
     assert lasta and not any("Höj poängen till" in t for t in lasta)
+
+
+def test_forklarade_beteckningar_ar_ingen_motivering():
+    """Blad 226:11 (2026-10-11): «beteckningarna är förklarade» fälldes som
+    en dold motivering, fast texten bad om bokstävernas betydelse."""
+    k = [p for n, p, _ in np_vakter.DOLDA_KRAV if n == "en motivering"][0]
+    assert not k.search("välstrukturerad redovisning där beteckningarna är "
+                        "förklarade och svaret är 40 kr")
+    assert k.search("förklarar varför") and k.search("korrekt förklaring")

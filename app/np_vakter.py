@@ -741,8 +741,12 @@ DOLDA_KRAV: list[tuple[str, re.Pattern, re.Pattern]] = [
     # rätt» och «Tabellen nedan visar» räknades som att frågan bad om den.
     # «Avgör» räcker bara på en enpoängare, där avgörandet ÄR motiveringen
     # (_AVGOR_RE nedan, doltkravvakt).
+    # «beteckningarna är förklarade» (blad 226:11, 2026-10-11) är ingen
+    # motivering utan att bokstäverna står beskrivna, och texten bad om det
+    # med «Skriv vad dina bokstäver står för.»
     ("en motivering",
-     re.compile(r"motiver|förklar|visar (?:hur|varför)", re.I),
+     re.compile(r"motiver|förklar(?!ade?(?![\wåäö]))|visar (?:hur|varför)",
+                re.I),
      re.compile(r"(?<![\wåäö])(?:motivera|förklara|visa|resonera|undersök"
                 r"|utred|beskriv|jämför)(?![\wåäö])|varför", re.I)),
     ("en enhet",
