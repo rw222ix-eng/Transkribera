@@ -17,7 +17,7 @@
    dokumentrad i taget, och skriver om PDF:en på disk:
 
      cd e2e && node godkann-avritat.mjs <dokument_id> [fler …] */
-import { statSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { chromium } from 'playwright';
 
 const BAS = process.env.APP || 'http://127.0.0.1:18731';
@@ -74,8 +74,30 @@ for (const id of ids) {
     }
     if (!ny) await vila(1000);
   }
-  if (pdf && ny) console.log('   pdf:', pdf);
-  else {
+  /* FILEN SKRIVS FÄRDIGT EFTER SVARET (handoff 2026-10-11): sökvägen kommer i
+     högen medan appen fortfarande skriver PDF:en, och en fil som lästes eller
+     laddades upp direkt var halv. Skriptet svarar först när storleken stått
+     still två mätningar i rad med 3 s emellan, och skriver sidantalet. */
+  if (pdf && ny) {
+    let forra = -1, stabil = false;
+    for (let t = 0; t < 60 && !stabil; t++) {
+      await vila(3000);
+      let nu = -1;
+      try { nu = statSync(pdf).size; } catch { nu = -1; }
+      stabil = nu > 0 && nu === forra;
+      forra = nu;
+    }
+    if (!stabil) {
+      console.log(`   FEL: ${pdf} blev aldrig klar (storleken ändras fortfarande)`);
+      process.exitCode = 1;
+    }
+    let sidor = 0;
+    try {
+      sidor = (readFileSync(pdf).toString('latin1').match(/\/Type\s*\/Page(?![s\w])/g) || []).length;
+    } catch { sidor = 0; }
+    console.log('   pdf:', pdf);
+    console.log(`   klar: ${forra} byte, ${sidor} sidor`);
+  } else {
     console.log(`   FEL: ingen ny PDF för dokument ${id}`
       + (pdf ? ` (${pdf} är inte omskriven, godkännandet föll troligen)` : ' (pdf-fältet kom inte i högen)'));
     process.exitCode = 1;
