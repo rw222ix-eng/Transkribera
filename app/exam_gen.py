@@ -12390,7 +12390,9 @@ _UPPDRAG_UNDANTAG = re.compile(
     # Blad 226:11 (2026-10-11): dolt-krav-vakten bad om beteckningarna och
     # metoden, och raderna räknades som två uppdrag till.
     r"|^(?:Skriv|Ange|Förklara) vad (?:dina|era|de|varje) (?:bokstäver|beteckningar|variabler|uttryck)"
-    r"|^Ställ upp (?:ett|en) (?:ekvationssystem|ekvation)\b")
+    r"|^Ställ upp (?:ett|en) (?:ekvationssystem|ekvation)\b"
+    # Blad 237:8: «Skriv varje par som $x = …$ och $y = …$.» är svarets form.
+    r"|^Skriv (?:varje|alla|svaret|svaren|ditt svar|dina svar)\b[^.]*\bsom\b")
 _UPPDRAG_MENING = re.compile(r"(?<=[.!?])\s+|\n+")
 
 

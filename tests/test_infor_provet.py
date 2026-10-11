@@ -865,6 +865,20 @@ def test_flera_uppdrag_blir_deluppgifter():
     assert "«Bestäm …», «Förklara …»" in fynd[0]["message"]
 
 
+
+def test_svarets_form_ar_inget_uppdrag():
+    """237:8: «Skriv varje par som $x = …$ och $y = …$.» säger hur svaret
+    ska se ut, och «Visa …» är det enda uppdraget."""
+    blad = _blad_ur([
+        "Räknare tillåten. Det gäller att $9^x \\cdot 27^y = 3^{13}$.\n"
+        "Vilka heltal större än 0 kan $x$ och $y$ vara?\n"
+        "Skriv varje par som $x = …$ och $y = …$.\n"
+        "Visa med en uträkning att det inte finns några fler par."])
+    blad["uppgifter"][0]["poang"] = [0, 0, 3]
+    blad["uppgifter"][0].pop("deluppgifter", None)
+    assert exam_gen.uppdragsvakt(blad) == []
+
+
 def test_bokstaven_som_ar_en_enhet():
     """179:7 och 157:8/12a (2026-10-11): «8m» lästes som 8 meter."""
     blad = _blad_ur([
