@@ -309,8 +309,15 @@ _KALKYL = (
     "förutsätta dem",
     re.compile(r"(?i:kalkylprogram|kalkylblad|kalkylark|(?<![\wåäö])excel"
                r"(?![\wåäö]))"))
+# Annuitetslån och amorteringsplaner står inte i det centrala innehållet och
+# gås inte igenom (Rickard 2026-10-11). Ett lån med rak amortering och en
+# månads ränta står kvar.
+_ANNUITET = (
+    "annuitetslån och amorteringsplaner",
+    "annuitetslån, annuitet och amorteringsplaner",
+    re.compile(r"(?i:annuitet\w*|amorteringsplan\w*)"))
 for _niva in ("1a", "1b", "1c", "2a"):
-    UTANFOR.setdefault(_niva, []).append(_SUMMA)
+    UTANFOR.setdefault(_niva, []).extend([_SUMMA, _ANNUITET])
 for _niva in ("1a", "1b", "1c"):
     UTANFOR.setdefault(_niva, []).append(_KALKYL)
 

@@ -2387,7 +2387,11 @@ def build_spridning(avsnitt: list[dict], antal: int,
 # ekvationer med GeoGebra», IndA prov 1): Origo 2a:s kvadratkomplettering
 # s. 53–55 är fördjupning och ligger utanför det centrala innehållet, och
 # exam 130 fick två uppgifter ur den.
+# «annuitet» och «amorteringsplan»: Rickard 2026-10-11, de ingår inte i kursen
+# fast kalendern hade lektionen «Annuitetslån och amorteringsplan i GeoGebras
+# kalkylblad» (NA26F 26/11, TE26A 13/1).
 _EJ_PROVBART = ("programmering", "kalkylblad", "geogebra", "excel",
+                "annuitet", "amorteringsplan",
                 "repetition", "kapiteltest", "blandade uppgifter",
                 "aktivitet", "laboration", "provräkning", "utvärdering",
                 "fördjupning")
@@ -3000,7 +3004,8 @@ def build_hjalpmedel(regel: str) -> str:
         "digitala hjälpmedel får ingen uppgift som kräver räknare eller graf"
         "ritande program, och en del där formelbladet är tillåtet prövar inte "
         "om eleven minns en formel utantill. Räknaren är INTE ett digitalt "
-        "verktyg: digitalt verktyg betyder GeoGebra på datorn. En del med "
+        "verktyg: digitalt verktyg betyder GeoGebra på datorn. "
+        + _GEOGEBRA_TILL + ". En del med "
         "räknare får ingen uppgift som kräver graf eller GeoGebra, och "
         "uppgifterna där säger «räknare»; en del med digitala verktyg säger "
         "«GeoGebra» eller «digitalt verktyg».")
@@ -9767,6 +9772,16 @@ def grafisk_digitalvakt(exam: dict, koder: list[str] | None) -> list[dict]:
     return fel[:GRAFISK_MAX_FYND]
 
 
+# VAD GEOGEBRA FÅR ANVÄNDAS TILL (Rickard 2026-10-11, NA26F prov 3): det
+# ersätter grafräknaren och inget mer. Uppgift 11 i exam 217 förutsatte en
+# amorteringsplan i kalkylblad, som klassen aldrig gjort.
+_GEOGEBRA_TILL = (
+    "GeoGebra används BARA till att rita funktioner, hitta skärningspunkter "
+    "mellan grafer, anpassa en funktion till mätvärden (regression) och "
+    "grundläggande statistik, aldrig till kalkylblad, CAS eller "
+    "amorteringsplaner")
+
+
 def build_delbegrepp(koder: list[str] | None, profil: str) -> str:
     """Delbegreppen och GeoGebra-regeln som promptblock, eller TOM STRÄNG
     (kassetteregeln: utan en utlösande punkt är prompten orörd)."""
@@ -9787,7 +9802,8 @@ def build_delbegrepp(koder: list[str] | None, profil: str) -> str:
             "ingen grafräknare. Minst en uppgift i delen med digitala verktyg "
             "ber eleven lösa en ekvation av typen f(x) = a grafiskt i "
             "GeoGebra och säger «GeoGebra». En del utan verktyget får bara be "
-            "eleven läsa av en graf som står i figuren.")
+            "eleven läsa av en graf som står i figuren. "
+            + _GEOGEBRA_TILL + ".")
     return "\n".join(rader)
 
 

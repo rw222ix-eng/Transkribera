@@ -418,3 +418,26 @@ def test_kalkylprogram_forutsatts_aldrig_i_kurs_1():
                                        "Gör en amorteringsplan i ett kalkylprogram.")
     assert "kalkylprogram" in _traffar("Matematik, nivå 1a", "Använd GeoGebras kalkylblad.")
     assert "kalkylprogram" not in _traffar("Matematik, nivå 2a", "Använd kalkylbladet.")
+
+
+def test_annuitet_och_amorteringsplan_ingar_inte():
+    """Rickard 2026-10-11: varken centralt innehåll eller något han går igenom."""
+    for kurs in ("Matematik, nivå 1c", "Matematik, nivå 1a", "Matematik, nivå 2a"):
+        assert "annuitetslån och amorteringsplaner" in _traffar(
+            kurs, "Lånet är ett annuitetslån på 200 000 kr.")
+    assert "annuitetslån och amorteringsplaner" in _traffar(
+        "Matematik, nivå 1c", "Gör en amorteringsplan för de tre första månaderna.")
+    assert _traffar("Matematik, nivå 1c",
+                    "Han amorterar 1 500 kr varje månad. Beräkna räntan för den "
+                    "första månaden.") == []
+
+
+def test_lektioner_om_annuitet_och_kalkylblad_ar_inga_delmoment():
+    assert exam_gen._ej_provbart("Annuitetslån och amorteringsplan i GeoGebras kalkylblad")
+    assert exam_gen._ej_provbart("Annuitetslån")
+    assert not exam_gen._ej_provbart("Lån, ränta och amortering")
+
+
+def test_geogebra_ersatter_bara_grafraknaren():
+    rad = exam_gen.build_delbegrepp(["G25-M1C-ALG-3"], "prov")
+    assert "BARA till att rita funktioner" in rad and "kalkylblad" in rad
