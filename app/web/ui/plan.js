@@ -3089,6 +3089,17 @@
        Skickas BARA när fältet är ifyllt, och det är samma sparsamhet som
        egnaOrd och hjälpmedlen: en tom ruta ska ge exakt den begäran som gick i
        väg innan fältet fanns, annars mäter kassetterna ingenting. */
+    /* AVSNITTEN I MOMENTRADEN (2026-10-11). Ett prov på kap 3 och kap 5
+       (NA26F prov 3) har ETT bokspann, s. 100–271, och kap 4 emellan blev
+       delmoment och förebilder. Servern läser avsnittsnumren och hoppar över
+       sidorna mellan dem (routes_planning.bok_luckor). Eget fält och inte
+       `moment`: det smalnar av undvik-listan till papper med samma rubrik.
+       Bara när raden bär ett avsnittsnummer, annars är kroppen byte för byte
+       den som gick före raden (kassettregeln). */
+    const avsnittsrad = () => {
+      const m = moment.value.trim();
+      return /(^|[^\d.,])\d+\.\d+(?![\d.,])/.test(m) ? { bok_moment: m } : {};
+    };
     const yrket = () => {
       const i = window.Profil && window.Profil.inriktningFor
         ? window.Profil.inriktningFor(utkast.klass) : '';
@@ -3169,7 +3180,7 @@
            vanligt prov ger byte för byte samma kropp som förut. */
         ...(omprovAv && refDok && refDok.provId
           ? { omprov_av: refDok.provId } : {}),
-        ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(), ...yrket(), ...u,
+        ...utfall(), ...bokval(), ...avsnittsrad(), ...forlagan(), ...egnaOrd(), ...yrket(), ...u,
       }, { signal, log })).then(kravDone).then(r => {
         if (!r.exam) throw new Error('Provet gick inte att skriva den här gången. Försök igen.');
         return r;
@@ -3207,7 +3218,7 @@
         infor_prov_id: i0.inforProv.id,
         infor_nummer: (i0.inforNummer || []).slice(),
       } : {}),
-      ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(), ...yrket(), ...u,
+      ...utfall(), ...bokval(), ...avsnittsrad(), ...forlagan(), ...egnaOrd(), ...yrket(), ...u,
     }, { signal, log })).then(kravDone).then(r => {
       if (!r.exam) throw new Error('Arbetsbladet gick inte att skriva den här gången. Försök igen.');
       return r;

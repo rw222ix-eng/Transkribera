@@ -282,9 +282,12 @@ def bok_val(body: dict) -> tuple[int, int, int] | None:
 def bok_luckor(db_file: Path, body: dict) -> list[tuple[int, int]]:
     """Sidorna mellan momentradens avsnitt som spannet hoppar över
     (bok.luckor_ur_moment): kap 4 när provet är kap 3 och kap 5. Tom lista
-    utan bok, utan moment eller när avsnitten ligger i följd."""
+    utan bok, utan moment eller när avsnitten ligger i följd.
+
+    Panelen skickar raden som `bok_moment` (plan.js avsnittsrad), API-anrop
+    och efterkontrollen som `moment`."""
     val = bok_val(body)
-    moment = str(body.get("moment") or "").strip()
+    moment = str(body.get("bok_moment") or body.get("moment") or "").strip()
     if val is None or not moment:
         return []
     bid, fran, till = val
