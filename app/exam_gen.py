@@ -10398,6 +10398,11 @@ def _scen_namner(text: str, sokta: set[str]) -> bool:
         return True
     # Och ett långt sammansatt begrepp vars förled står i ett sammansatt ord
     # i uppgiften: «taklutning» mot «taksidor» (236:7, andra versionen).
+    # Blad 237:8: «biobiljetter» mot «vuxenbiljett», ett gemensamt led på
+    # minst sex bokstäver.
+    if any(s[i:i + 6] in o for s in sokta if len(s) >= 8
+           for i in range(len(s) - 5) for o in ord_):
+        return True
     return any(any(o.startswith(s[:i]) for o in ord_)
                and (any(o.startswith(s[i:i + 3]) for o in ord_)
                     or (len(s) >= 8 and any(len(o) >= 6 and o.startswith(s[:i])

@@ -814,3 +814,9 @@ def test_scenvakten_godtar_forledet_i_ett_sammansatt_ord():
     assert exam_gen.scenvakt(_prov([u])) == []
     u = _u(text="Beräkna $\\sqrt{49}$ i ett problem.", scen=_scen("procent"))
     assert [f["code"] for f in exam_gen.scenvakt(_prov([u]))] == ["scenvakt"]
+
+
+def test_scenvakten_godtar_ett_gemensamt_led():
+    """237:8: «biobiljetter» mot «En vuxenbiljett på bion kostar a kr»."""
+    u = _u(text="En vuxenbiljett på bion kostar $a$ kr.", scen=_scen("biobiljetter"))
+    assert exam_gen.scenvakt(_prov([u])) == []
