@@ -2022,8 +2022,26 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         referensprov = rad["exam"]
             except (TypeError, ValueError):
                 referensprov = None
-            # OMPROV PÅ E-NIVÅ (Rickard 2026-10-11): «Bara E» och `omprov_av`
-            # tillsammans ger originalets platser omräknade till E-uppgifter,
+            # ANDRA OMPROVET ÄR ETT E-PROV (Rickard 2026-10-11): «först ett
+            # vanligt prov; får eleven F eller är inte på plats, då får hen
+            # omprov. Misslyckas hen eller är inte på plats på det, då ges ett
+            # omprovstillfälle igen, men då bara E-prov.» Den som inte klarat
+            # första omprovet klarar sällan att plugga in ett allt äldre kapitel
+            # på egen hand. Är originalet självt ett omprov blir nivåvalet
+            # «Bara E», vad panelen än skickade, och jobbloggen säger varför.
+            andra_omprov_logg = ""
+            if referensprov is not None and typ == "prov" \
+                    and not exam_spec.ren_e_band(niva_mal) \
+                    and db.ar_omprov(conn, int(omprov_av)):
+                nivaval_etikett = "Bara E"
+                nivaval = exam_spec.nivaval(typ, nivaval_etikett)
+                niva_mal = nivaval["mal"]
+                andra_omprov_logg = (
+                    f"Prov {int(omprov_av)} är självt ett omprov, så det här är "
+                    "andra omprovet: bara E-uppgifter, samma platser och "
+                    "poäng, E-gränsen som på ett vanligt prov.")
+            # OMPROV PÅ E-NIVÅ: «Bara E» och `omprov_av` tillsammans ger
+            # originalets platser omräknade till E-uppgifter med samma poäng,
             # och då är det den omräknade planen som är skelettet, prompten
             # och likvärdighetens måttstock. Nivåvalets eget skelett ovan hade
             # haft andra platser än originalet. Se exam_gen.omprov_pa_e.
@@ -2151,6 +2169,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
             # skriver först (routes_planning, «Inför provet …»).
             if infor_logg:
                 emit({"type": "log", "msg": infor_logg})
+            if andra_omprov_logg:
+                emit({"type": "log", "msg": andra_omprov_logg})
             try:
                 if arbiter.ensure_llm() is None:
                     raise RuntimeError("Språkmodellen är inte installerad.")

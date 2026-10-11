@@ -2340,6 +2340,39 @@ def test_omprov_bara_e_arver_originalets_platser_som_e(client, monkeypatch):
                for u in ref["uppgifter"])
 
 
+def test_omprov_av_ett_omprov_blir_bara_e(client, monkeypatch):
+    """Rickard 2026-10-11: andra omprovet är bara ett E-prov, vad panelen än
+    skickade. Originalet är ett omprov när dess dokument bär «Omprov»."""
+    calls = _stub_generate(monkeypatch)
+    forsta, gid, cid = _godkant_prov(
+        client, titel="Omprov 1 · kapitel 1", datum="2026-10-05",
+        klass="TE26A", kurs="Matematik, nivå 2b")
+    kropp = {"course_id": cid, "group_id": gid, "antal": 6,
+             "datum": "2026-11-02", "moment": "kapitel 1",
+             "omprov_av": forsta}
+    # Utan dokument med «Omprov» är det ett vanligt omprov, nivåvalet orört.
+    _done(client.post("/api/exams/generate", json=kropp))
+    assert calls[-1]["niva_mal"] is None
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    try:
+        appdb.create_dokument(conn, dokument={
+            "typ": "Prov", "klass": "TE26A", "kurs": "Matematik, nivå 2b",
+            "provId": forsta, "variant": "Omprov"}, status="godkant")
+    finally:
+        conn.close()
+    r = client.post("/api/exams/generate", json=kropp)
+    resultat = _done(r)
+    assert resultat["nivaval"] == "Bara E"
+    assert any("andra omprovet" in (e.get("msg") or "") for e in _events(r))
+    skelett = calls[-1]["skeleton"]
+    assert all(s["poang"][1:] == [0, 0] for s in skelett)
+    # Samma totalpoäng som originalet.
+    original = appdb.get_exam(appdb.connect(client.base_dir / "transkribera.db"),
+                              forsta)["exam"]
+    assert sum(sum(s["poang"]) for s in skelett) == sum(
+        sum(exam_gen._uppgiftspoang(u)) for u in original["uppgifter"])
+
+
 def test_okant_omprov_av_lamnar_prompten_som_den_var(client, monkeypatch):
     calls = _stub_generate(monkeypatch)
     r = client.post("/api/exams/generate", json={

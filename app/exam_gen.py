@@ -10431,18 +10431,21 @@ def skelett_ur_prov(referens: dict | None) -> list[dict] | None:
 def omprov_pa_e(referens: dict | None) -> dict | None:
     """Originalet omräknat till ett RENT E-PROV, plats för plats.
 
-    Rickard 2026-10-11: TE26A-eleverna som föll på omprov 132 skriver ett nytt
-    omprov «bara på E-nivå». «Bara E» och `omprov_av` krockade förut: nivåvalet
-    byggde ett eget E-skelett, men planen i prompten och likvärdighetsvakten
-    mätte mot originalets C- och A-platser, så varje sådan plats fälldes som
-    olikvärdig. Hans val: samma platser och delmoment som originalet, varje
-    plats en E-uppgift.
+    Rickard 2026-10-11: den som inte klarat första omprovet skriver ett andra
+    «bara på E-nivå». Samma antal uppgifter, samma tid och samma totalpoäng,
+    men C- och A-uppgifterna byts mot E-uppgifter. Gränsen står kvar på NP:s
+    26 % (exam_spec.kravgranser_ur_summor): «att det blir lättare totalt är
+    avsikten».
 
-    Platsens E-poäng står kvar; en plats som bara hade C- eller A-poäng får en
-    E-poäng. Deluppgifter behålls bara när minst två bar E-poäng. Platsen
-    märks `omraknad`: den har inget facit att mäta stegen mot (en E-uppgift
-    på originalets A-plats är kortare, och ska vara det). Kommunikation blir
-    Resonemang, NP ger aldrig EK-poäng (exam_spec.ren_e_band)."""
+    «Bara E» och `omprov_av` krockade förut: nivåvalet byggde ett eget
+    E-skelett, men planen i prompten och likvärdighetsvakten mätte mot
+    originalets C- och A-platser och fällde dem alla.
+
+    Varje plats behåller sina poäng, flyttade till E, och deluppgifterna
+    behåller sin indelning. Platsen märks `omraknad` och tappar sitt facit:
+    en E-uppgift på originalets A-plats är kortare, och ska vara det, så
+    stegen mäts inte där. Kommunikation blir Resonemang, NP ger aldrig
+    EK-poäng (exam_spec.ren_e_band)."""
     if not referens or not referens.get("uppgifter"):
         return referens
     ut = []
@@ -10450,25 +10453,18 @@ def omprov_pa_e(referens: dict | None) -> dict | None:
         if not isinstance(u, dict):
             continue
         e, c, a = _uppgiftspoang(u)
-        ny = {k: v for k, v in u.items() if k != "deluppgifter"}
+        ny = dict(u)
         if u.get("formaga") == "K":
             ny["formaga"] = "R"
-        delar = [d for d in (u.get("deluppgifter") or [])
-                 if isinstance(d, dict) and _trippel(d.get("poang"))[0]]
-        if not (c or a):
+        if c or a:
+            ny["omraknad"] = True
+            ny.pop("losning", None)
+            ny["poang"] = [sum(_trippel(u.get("poang"))), 0, 0]
             if u.get("deluppgifter"):
-                ny["deluppgifter"] = u["deluppgifter"]
-            ut.append(ny)
-            continue
-        ny["omraknad"] = True
-        ny.pop("losning", None)
-        if len(delar) >= 2:
-            ny["poang"] = [0, 0, 0]
-            ny["deluppgifter"] = [
-                {**{k: v for k, v in d.items() if k != "losning"},
-                 "poang": [_trippel(d.get("poang"))[0], 0, 0]} for d in delar]
-        else:
-            ny["poang"] = [e or 1, 0, 0]
+                ny["deluppgifter"] = [
+                    {**{k: v for k, v in d.items() if k != "losning"},
+                     "poang": [sum(_trippel(d.get("poang"))), 0, 0]}
+                    for d in u["deluppgifter"] if isinstance(d, dict)]
         ut.append(ny)
     return {**referens, "uppgifter": ut}
 
@@ -10503,9 +10499,10 @@ def build_omprov(referens: dict | None) -> str:
     e_prov = (
         "OMPROVET ÄR ETT E-PROV. Läraren har valt att eleven skriver om provet "
         "bara på E-nivå. Platser som i originalet gav C- eller A-poäng är "
-        "omräknade: skriv där en E-uppgift på samma delmoment, en "
-        "grundläggande uppgift av den sort nationella provet ger E-poäng för. "
-        "Övriga platser är lika stora som originalets.\n"
+        "omräknade: skriv där en E-uppgift på samma delmoment och med samma "
+        "poäng, en grundläggande uppgift av den sort nationella provet ger "
+        "E-poäng för, med ett E-steg per poäng. Övriga platser är lika stora "
+        "som originalets.\n"
         if any(s["omraknad"] for s in slots) else "")
     return (e_prov +
         "DET HÄR ÄR ETT OMPROV. Eleven skriver om ett prov hon redan har "

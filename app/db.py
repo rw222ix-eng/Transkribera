@@ -2705,6 +2705,22 @@ def satt_dokument_granser(conn: sqlite3.Connection, exam_id: int,
     return rorda
 
 
+def ar_omprov(conn: sqlite3.Connection, exam_id: int) -> bool:
+    """Är provet `exam_id` självt ett omprov? Exam-raden vet det inte, det är
+    dokumentets `variant` som bär det (plan.js och dokument_aterskapa sätter
+    «Omprov»). Ett dokument räcker, lösningsbladet är en klon av samma papper.
+
+    I SQL och bara bland provdokumenten: blobbarna bär plåtarna som data-URL,
+    och att läsa in alla dokument i Python tog minuter (2026-10-11)."""
+    rad = conn.execute(
+        "SELECT v.dokument_id FROM dokument d JOIN dokument_versioner v "
+        "ON v.dokument_id = d.id WHERE lower(d.typ) = 'prov' "
+        "AND json_extract(v.data, '$.provId') = ? "
+        "AND lower(json_extract(v.data, '$.variant')) = 'omprov' LIMIT 1",
+        (int(exam_id),)).fetchone()
+    return rad is not None
+
+
 def set_dokument_ordning(conn: sqlite3.Connection, ids: list[int]) -> list[dict]:
     """Högens ordning som klienten håller den. Ett syskon ligger direkt efter
     sitt original, och en ångrad radering hamnar tillbaka på sin plats — det är

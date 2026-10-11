@@ -363,17 +363,21 @@ def test_likvardighetsvakten_ar_fail_open_utan_referens():
 
 
 def test_omprov_pa_e_raknar_om_c_och_a_platserna():
-    """Rickard 2026-10-11: E-omprovet efter 132 har originalets platser, var
-    och en en E-uppgift. Förut mätte vakten «Bara E»-pappret mot originalets
-    C-platser och fällde dem alla."""
+    """Rickard 2026-10-11: andra omprovet har originalets platser och poäng,
+    men C- och A-uppgifterna blir E-uppgifter. Förut mätte vakten
+    «Bara E»-pappret mot originalets C-platser och fällde dem alla."""
     original = _prov([
         _u(poang=(2, 0, 0), losning="$7\\sqrt{2}$"),
         _u(poang=(0, 2, 0), typ="redovisning", formaga="K",
            losning="$a = 3$ ger $b = 12$ och $c = 4$ och $d = 5$"),
+        _u(poang=(0, 0, 0), deluppgifter=[{"poang": [1, 0, 0]},
+                                          {"poang": [0, 1, 1]}]),
     ])
     e_plan = exam_gen.omprov_pa_e(original)
     skelett = exam_gen.skelett_ur_prov(e_plan)
-    assert [s["poang"] for s in skelett] == [[2, 0, 0], [1, 0, 0]]
+    # Samma totalpoäng, allt på E, deluppgifterna kvar.
+    assert [s["poang"] for s in skelett] == [[2, 0, 0], [2, 0, 0], [3, 0, 0]]
+    assert skelett[2]["delar"] == [[1, 0, 0], [2, 0, 0]]
     assert skelett[1]["formaga"] == "R"      # NP ger aldrig EK-poäng
     block = exam_gen.build_omprov(e_plan)
     assert "E-PROV" in block and "(0, 2, 0)" not in block
@@ -381,19 +385,20 @@ def test_omprov_pa_e_raknar_om_c_och_a_platserna():
     # kortare facit än originalets C-uppgift.
     e_prov = _prov([
         _u(poang=(2, 0, 0), losning="$5\\sqrt{2}$"),
-        _u(poang=(1, 0, 0), typ="redovisning", formaga="R", losning="$4$"),
+        _u(poang=(2, 0, 0), typ="redovisning", formaga="R", losning="$4$"),
+        _u(poang=(0, 0, 0), deluppgifter=[{"poang": [1, 0, 0], "losning": "7"},
+                                          {"poang": [2, 0, 0], "losning": "8"}]),
     ])
     assert exam_gen.likvardighetsvakt(e_prov, e_plan) == []
     # Ett vanligt omprov ser ingen skillnad.
     assert "E-PROV" not in exam_gen.build_omprov(REFERENS)
 
 
-def test_rent_e_prov_har_e_grans_pa_tva_tredjedelar():
-    """Rickard 2026-10-11: 26 % av ett papper med bara E-poäng hade gett 4 av
-    14 p. NP:s E-gräns är ungefär två tredjedelar av E-poängen."""
-    g = exam_spec.kravgranser_ur_summor({"total": 14, "e": 14, "c": 0, "a": 0})
-    assert g["E"]["minst"] == 10 and g["betyg"] == ["E"]
-    assert "Rent E-prov" in g["regel"] and "67 %" in g["regel"]
+def test_rent_e_prov_har_np_s_e_grans():
+    """Rickard 2026-10-11: «NP:s gräns, 26 %, samma som ett vanligt prov.»
+    E-provet har lättare uppgifter, gränsen står kvar."""
+    g = exam_spec.kravgranser_ur_summor({"total": 30, "e": 30, "c": 0, "a": 0})
+    assert g["E"]["minst"] == 8 and g["betyg"] == ["E"]
     blandat = exam_spec.kravgranser_ur_summor(
         {"total": 30, "e": 9, "c": 13, "a": 8})
     assert blandat["E"]["minst"] == 8
