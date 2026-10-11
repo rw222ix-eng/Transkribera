@@ -155,3 +155,37 @@ def test_bladets_fynd_star_bara_nar_samma_uppgift_falls_igen(monkeypatch):
     utan = np_jamforare.doma_np(ex, enheter, model="m", llm=llm,
                                 profil="arbetsblad")
     assert [f["nr"] for f in utan] == ["3", "5b"] and len(sedda) == 1
+
+
+def test_a_uppgift_med_c_bladets_metod_faller(monkeypatch):
+    """Exam 236:4 (2026-10-11): vektorn i vind med resultanten rakt fram är
+    samma metod som C-bladets 9 (233), och då är den en C-uppgift (Rickards
+    dom 8/10). Utan C-bladet är prompten och schemat som förut."""
+    import json
+    monkeypatch.setattr(np_jamforare, "np_enheter", lambda _k: NP)
+    enheter = [{"nr": "4", "niva": "A", "poang": [0, 0, 2]},
+               {"nr": "5", "niva": "A", "poang": [0, 0, 1]}]
+    cblad = [{"nr": "9", "niva": "C", "poang": [0, 1, 0],
+              "kort": {"text": "färjan", "losning": "sin v = 3/12"}}]
+    scheman = []
+
+    def llm(_m, prompt, **k):
+        scheman.append(k["response_format"]["json_schema"]["schema"])
+        assert ("C-BLADET TILL SAMMA PROV" in prompt) == bool(cblad_med)
+        return json.dumps({"jamforelser": [
+            {"nr": "4", "np": "NpMa1a vt17 D18b", "poang": [0, 0, 2],
+             "motivering": "", "cblad": "9"},
+            {"nr": "5", "np": "NpMa1a vt17 D18b", "poang": [0, 0, 1],
+             "motivering": "", "cblad": "ingen"}]})
+
+    ex = {"kurs": "Matematik, nivå 1a"}
+    cblad_med = cblad
+    fynd = np_jamforare.doma_np(ex, enheter, model="m", llm=llm,
+                                profil="arbetsblad", cblad=cblad)
+    assert [f["nr"] for f in fynd] == ["4"]
+    assert "uppgift 9 på C-bladet" in fynd[0]["message"]
+    assert "cblad" in json.dumps(scheman[0])
+    cblad_med = None
+    assert np_jamforare.doma_np(ex, enheter, model="m", llm=llm,
+                                profil="arbetsblad") == []
+    assert scheman[1] is np_jamforare.NPJ_SCHEMA

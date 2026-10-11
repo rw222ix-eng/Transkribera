@@ -71,6 +71,15 @@ NPJ_SCHEMA = {
     "additionalProperties": False,
 }
 
+# A-BLADET MOT C-BLADET (Rickards dom 8/10, exam 236 2026-10-11): en uppgift
+# med samma metod som en C-uppgift i samma situation är en C-uppgift. Fältet
+# `cblad` finns bara när C-bladet till samma prov skickas med, så att prompten
+# och schemat annars är byte för byte som förut (kassetterna).
+NPJ_SCHEMA_CBLAD = json.loads(json.dumps(NPJ_SCHEMA))
+_rad = NPJ_SCHEMA_CBLAD["properties"]["jamforelser"]["items"]
+_rad["properties"]["cblad"] = {"type": "string"}
+_rad["required"] = _rad["required"] + ["cblad"]
+
 
 @lru_cache(maxsize=1)
 def _profil() -> dict:
@@ -109,7 +118,8 @@ def _provets(e: dict) -> dict:
             "text": k.get("text") or "", "losning": k.get("losning") or ""}
 
 
-def build_npj_prompt(enheter: list[dict], np: list[dict]) -> str:
+def build_npj_prompt(enheter: list[dict], np: list[dict],
+                     cblad: list[dict] | None = None) -> str:
     """NP-jämförarens prompt. Ordet «NP-jämförare» står här och ingen
     annanstans i appen (tests/fejk.py väljer band på det)."""
     return (
@@ -136,7 +146,25 @@ def build_npj_prompt(enheter: list[dict], np: list[dict]) -> str:
         "Bedöm inte hur uppgiften är formulerad, bara vad den prövar. Nivån på "
         "det nya provet står med för att du ska se den; ändra inte din bedömning "
         "för att den står där.\n"
-        "Svara med enbart JSON."
+        + (_cblad_stycke(cblad) if cblad else "")
+        + "Svara med enbart JSON."
+    )
+
+
+def _cblad_stycke(cblad: list[dict]) -> str:
+    return (
+        "\nC-BLADET TILL SAMMA PROV (övningsbladet på C-nivå):\n"
+        f"{json.dumps([_provets(e) for e in cblad], ensure_ascii=False)}\n\n"
+        "4. För varje enhet på A-nivå: ta det steg i facit som ger A-poängen, "
+        "insikten. Finns en uppgift på C-bladet där SAMMA insikt är det "
+        "avgörande steget, så att en elev som löst C-uppgiften redan har gjort "
+        "det steget? Exempel: båda översätter «pekar rakt fram» till att en "
+        "koordinat är 0 och räknar vinkeln ur samma rätvinkliga triangel. Skriv "
+        "då C-uppgiftens nr i fältet cblad. Andra tal, namn eller sammanhang gör "
+        "den inte till en annan uppgift. Att båda använder sinus, tangens eller "
+        "Pythagoras sats räcker INTE: en okänd som tar ut sig, en tredje "
+        "dimension eller två villkor som C-uppgiften saknar är en egen insikt. "
+        "Finns ingen, eller är enheten inte på A-nivå, skriv «ingen».\n"
     )
 
 
@@ -154,13 +182,15 @@ def parse_npj(raw: str) -> dict[str, dict]:
             poang = ([int(x) if isinstance(x, (int, float)) else 0 for x in p][:3]
                      if isinstance(p, list) and len(p) >= 3 else [0, 0, 0])
             ut[nr] = {"np": str(d.get("np") or "").strip(), "poang": poang,
-                      "motivering": str(d.get("motivering") or "").strip()}
+                      "motivering": str(d.get("motivering") or "").strip(),
+                      "cblad": str(d.get("cblad") or "").strip()}
     return ut
 
 
 def npj_fynd(enheter: list[dict], domar: dict[str, dict],
              np: list[dict], profil: str = "prov",
-             poang_last: bool = False) -> list[dict]:
+             poang_last: bool = False,
+             cblad: list[dict] | None = None) -> list[dict]:
     """Ett nivåfynd per enhet där NP sätter andra poäng än provet. «ingen»,
     [0, 0, 0] och tystnad fäller aldrig, och inte heller ett NP-id som inte
     finns i profilen.
@@ -181,6 +211,19 @@ def npj_fynd(enheter: list[dict], domar: dict[str, dict],
         # är inte en A-uppgift i kursen utan något utanför den (A-bladet inför
         # BA26B prov 2: olikheter, «för alla a», $c(x - 2)^2$). Provet fäller
         # inte på det, där har stugan och andra egna situationer ingen tvilling.
+        # Samma metod som en uppgift på C-bladet till samma prov: C-uppgift.
+        # Bara ett nr som finns på C-bladet räknas.
+        cnr = dom.get("cblad") or ""
+        if (blad and e["niva"] == "A" and cblad
+                and cnr in {str(c["nr"]) for c in cblad}):
+            ut.append(exam_gen._fynd(e, "C", (
+                f"uppgift {e['nr']} löses med samma metod som uppgift {cnr} på "
+                "C-bladet till samma prov, och då är den en C-uppgift (Rickards "
+                "dom 8/10). Behåll poängen och byt den mot en A-uppgift där "
+                "eleven behöver en insikt som C-uppgiften inte kräver: ett "
+                "villkor eleven själv översätter till matematik, ett uttryck i "
+                "en variabel eller två villkor som texten inte kopplar ihop.")))
+            continue
         if blad and e["niva"] == "A" and dom["np"] == "ingen":
             ut.append(exam_gen._fynd(e, "?", (
                 f"uppgift {e['nr']} prövar något som ingen uppgift på "
@@ -236,6 +279,7 @@ def npj_fynd(enheter: list[dict], domar: dict[str, dict],
 def doma_np(exam: dict, enheter: list[dict], *, model: str,
             llm=llm_client.generate, profil: str = "prov",
             poang_last: bool = False, upprepa: bool = False,
+            cblad: list[dict] | None = None,
             log_cb: Callable[[str], None] | None = None) -> list[dict]:
     """Ett anrop → nivåfynd där nationella provet sätter en annan nivå.
 
@@ -248,30 +292,35 @@ def doma_np(exam: dict, enheter: list[dict], *, model: str,
     np = np_enheter(exam.get("kurs") or "")
     if not np or not enheter:
         return []
+    # C-bladet följer bara med när det finns en A-enhet att jämföra.
+    if not any(e.get("niva") == "A" for e in enheter):
+        cblad = None
     fynd = _doma_en_gang(enheter, np, model=model, llm=llm, profil=profil,
-                         poang_last=poang_last, log=log)
+                         poang_last=poang_last, cblad=cblad, log=log)
     if not upprepa or not fynd:
         return fynd
     fallda = {f.get("nr") for f in fynd}
     igen = _doma_en_gang([e for e in enheter if e["nr"] in fallda], np,
                          model=model, llm=llm, profil=profil,
-                         poang_last=poang_last, log=log)
+                         poang_last=poang_last, cblad=cblad, log=log)
     kvar = {f.get("nr") for f in igen}
     return [f for f in fynd if f.get("nr") in kvar]
 
 
 def _doma_en_gang(enheter: list[dict], np: list[dict], *, model: str, llm,
                   profil: str, poang_last: bool,
-                  log: Callable[[str], None]) -> list[dict]:
+                  log: Callable[[str], None],
+                  cblad: list[dict] | None = None) -> list[dict]:
     log("Jämför uppgifterna med nationella provet …")
     try:
         raw = llm(
-            model, build_npj_prompt(enheter, np),
+            model, build_npj_prompt(enheter, np, cblad),
             system=NPJ_SYSTEM,
             options={"temperature": 0.0},
             response_format={"type": "json_schema",
                              "json_schema": {"name": "npjamforelse",
-                                             "schema": NPJ_SCHEMA}},
+                                             "schema": NPJ_SCHEMA_CBLAD
+                                             if cblad else NPJ_SCHEMA}},
             max_tokens=NPJ_MAX_TOKENS,
             token_cb=None,
         )
@@ -279,4 +328,4 @@ def _doma_en_gang(enheter: list[dict], np: list[dict], *, model: str, llm,
         log(f"Jämförelsen med nationella provet kunde inte köras ({e}), "
             "provet levereras ändå.")
         return []
-    return npj_fynd(enheter, parse_npj(raw), np, profil, poang_last)
+    return npj_fynd(enheter, parse_npj(raw), np, profil, poang_last, cblad)

@@ -4384,6 +4384,7 @@ def niva_fynd(exam: dict, *, model: str, llm=llm_client.generate,
               bara: list[int] | None = None,
               profil: str = "",
               poang_last: bool = False,
+              cblad: list[dict] | None = None,
               log_cb: Callable[[str], None] | None = None
               ) -> tuple[list[dict], bool]:
     """Hela nivåkontrollen: två oberoende domar plus de deterministiska
@@ -4421,7 +4422,8 @@ def niva_fynd(exam: dict, *, model: str, llm=llm_client.generate,
         np = np_jamforare.doma_np(exam, enheter, model=model, llm=llm,
                                   profil=profil, poang_last=poang_last,
                                   upprepa=profil == "arbetsblad",
-                                  log_cb=log_cb)
+                                  cblad=cblad if profil == "arbetsblad"
+                                  else None, log_cb=log_cb)
     np_nr = {f.get("nr") for f in np}
     return (np + [f for f in domarnas if f.get("nr") not in np_nr]
             + e_nivasignaler(enheter, niva_mal)), True
@@ -10394,8 +10396,12 @@ def _scen_namner(text: str, sokta: set[str]) -> bool:
     if any(o.startswith(s) or (len(o) >= 5 and s.startswith(o))
            for s in sokta for o in ord_):
         return True
+    # Och ett långt sammansatt begrepp vars förled står i ett sammansatt ord
+    # i uppgiften: «taklutning» mot «taksidor» (236:7, andra versionen).
     return any(any(o.startswith(s[:i]) for o in ord_)
-               and any(o.startswith(s[i:i + 3]) for o in ord_)
+               and (any(o.startswith(s[i:i + 3]) for o in ord_)
+                    or (len(s) >= 8 and any(len(o) >= 6 and o.startswith(s[:i])
+                                            and o != s[:i] for o in ord_)))
                for s in sokta for i in range(3, len(s) - 2))
 
 
@@ -13848,6 +13854,7 @@ def _domar_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                 delmoment: list[dict] | None = None,
                 kurs: str = "",
                 poang_last: bool = False,
+                cblad: list[dict] | None = None,
                 log_cb: Callable[[str], None] | None = None) -> dict:
     """Domarrundan + högst EN reparationsrunda på dess fynd (C4).
 
@@ -13879,7 +13886,8 @@ def _domar_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
     signaler = _signaler(exam)
     niva, kordes = niva_fynd(exam, model=model, llm=llm, skala=skala,
                              niva_mal=niva_mal, profil=profil,
-                             poang_last=poang_last, log_cb=log_cb)
+                             poang_last=poang_last, cblad=cblad,
+                             log_cb=log_cb)
 
     def svar(ut: dict, matt: bool) -> dict:
         return {**ut, "nivafynd": niva, "nivakoll": kordes, "nivamatt": matt}
@@ -14019,6 +14027,7 @@ def _niva_grind(res: dict, *, model: str, llm, profil: str, skala: str,
                 delmoment: list[dict] | None = None,
                 max_rounds: int | None = None,
                 poang_last: bool = False,
+                cblad: list[dict] | None = None,
                 log_cb: Callable[[str], None] | None = None) -> dict:
     """Extra riktade rundor på nivåfynden, sedan `nivafel`.
 
@@ -14067,6 +14076,7 @@ def _niva_grind(res: dict, *, model: str, llm, profil: str, skala: str,
             fynd, kordes = niva_fynd(exam, model=model, llm=llm, skala=skala,
                                      niva_mal=niva_mal, log_cb=log_cb,
                                      profil=profil, poang_last=poang_last,
+                                     cblad=cblad,
                                      bara=None if rent else
                                      sorted({_uppgiftsnr(f.get("nr"))
                                              for f in fynd}))
@@ -14657,6 +14667,9 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # läser hela bokuppslaget och fick ingen förbudslista. Samma lista provet
     # skrevs mot, med provets datum. Bara med valt prov: annars som förut.
     ram = infor_ram if (inforprov and profil == "arbetsblad") else None
+    # A-bladet jämförs med C-bladet till samma prov (np_jamforare, exam 236).
+    cblad = (domarenheter((ram or {}).get("c_bladet"))
+             if (ram or {}).get("c_bladet") else None)
     ram_forbjudna = [f for f in (ram or {}).get("forbjudna") or []
                      if not f.get("fordjupning")]
     if ram_forbjudna and not forbjudna:
@@ -14930,7 +14943,8 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                       antal=antal, skeleton=grammatik, koder=koder,
                       niva_mal=niva_mal, delmoment=delmoment, kurs=kurs,
                       rounds_used=res["rounds"], max_rounds=max_rounds,
-                      poang_last=referensprov is not None, log_cb=log_cb)
+                      poang_last=referensprov is not None, cblad=cblad,
+                      log_cb=log_cb)
     # ── GRINDEN ──────────────────────────────────────────────────────
     # Nivåfynden får två EXTRA riktade rundor, utanför rundbudgeten ovan: den
     # är delad med schemafel och balans, och nivån ska inte tappas för att en
@@ -14939,7 +14953,8 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     res = _niva_grind(res, model=model, llm=llm, profil=profil, skala=skala,
                       antal=antal, skeleton=grammatik, koder=koder,
                       niva_mal=niva_mal, delmoment=delmoment,
-                      poang_last=referensprov is not None, log_cb=log_cb)
+                      poang_last=referensprov is not None, cblad=cblad,
+                      log_cb=log_cb)
     # ── BOKGRINDEN, och bara på GRUPPUPPGIFTEN ───────────────────────
     # Lärarens dom 2026-09-09 gäller gruppuppgiften: den ska följa bokens sort
     # och gå att förstå vid första läsningen. Passet ligger EFTER nivågrinden

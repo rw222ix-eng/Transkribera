@@ -2774,6 +2774,24 @@ def omprov_till(conn: sqlite3.Connection, exam_id: int) -> list[dict]:
     return ut
 
 
+def blad_pa_niva(conn: sqlite3.Connection, prov_id: int,
+                 niva: str) -> dict | None:
+    """Det senaste godkända bladet på `niva` («C-nivå») inför provet, som JSON.
+
+    A-bladet inför TE26A prov 3 (exam 236, 2026-10-11) hade en uppgift med
+    samma metod som C-bladets 9 (vektorn i vind, resultanten rakt fram), och
+    Rickards dom 8/10 säger att den då är en C-uppgift. A-bladet jämförs
+    därför med C-bladet till samma prov (np_jamforare)."""
+    rad = conn.execute(
+        "SELECT e.id FROM exams e JOIN exam_versions v "
+        "ON v.id = e.current_version WHERE e.typ = 'arbetsblad' "
+        "AND e.nivaval = ? AND e.status = 'godkänt' "
+        "AND json_extract(v.exam_json, '$.infor_prov') = ? "
+        "ORDER BY e.id DESC LIMIT 1", (niva, int(prov_id))).fetchone()
+    vy = get_exam(conn, int(rad["id"])) if rad else None
+    return (vy or {}).get("exam") or None
+
+
 def set_dokument_ordning(conn: sqlite3.Connection, ids: list[int]) -> list[dict]:
     """Högens ordning som klienten håller den. Ett syskon ligger direkt efter
     sitt original, och en ångrad radering hamnar tillbaka på sin plats — det är

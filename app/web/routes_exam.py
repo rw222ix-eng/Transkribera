@@ -2120,6 +2120,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
             # parallellklassens prov, så det blir en rad i loggen.
             inforprov = None
             infor_syskon: list[dict] = []
+            infor_cblad: dict | None = None
             # Provets datum och klass, för provets ram (se jobbet nedan).
             infor_datum, infor_grupp = "", None
             try:
@@ -2137,6 +2138,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     else:
                         inforprov = rad["exam"]
                         infor_syskon = db.omprov_till(conn, int(infor_prov_id))
+                        infor_cblad = db.blad_pa_niva(
+                            conn, int(infor_prov_id), "C-nivå")
                         infor_datum = str(rad.get("datum") or "")
                         infor_grupp = rad.get("group_id")
                         if group_id and rad.get("group_id") \
@@ -2359,6 +2362,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         # Provets omprov: kopian och lånet räknas mot dem
                         # också (exam_gen.med_syskon).
                         "syskon": infor_syskon,
+                        # C-bladet till samma prov: A-uppgifterna jämförs
+                        # med det (np_jamforare, exam 236 2026-10-11).
+                        "c_bladet": infor_cblad,
                     }
                 # LÄRARENS VALDA UPPGIFTER, en och en — och bara för
                 # GRUPPUPPGIFTEN (lärarens dom 2026-09-09: «vissa uppgifter är

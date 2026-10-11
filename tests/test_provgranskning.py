@@ -805,3 +805,12 @@ def test_svarsmallen_ar_en_forklaring_pa_provet():
                           "alltså se ut så här: $x^{?}$."),
                   _u(text="Skriv $x^4 \\cdot x^{-7}$ som en potens.")])
     assert [f["path"] for f in exam_gen.forklaringsvakt(prov)] == ["uppgift 1"]
+
+
+def test_scenvakten_godtar_forledet_i_ett_sammansatt_ord():
+    """236:7: «taklutning» mot «Taket har två taksidor»."""
+    u = _u(text="Taket har två taksidor som är $s$ m långa.",
+           scen=_scen("taklutning"))
+    assert exam_gen.scenvakt(_prov([u])) == []
+    u = _u(text="Beräkna $\\sqrt{49}$ i ett problem.", scen=_scen("procent"))
+    assert [f["code"] for f in exam_gen.scenvakt(_prov([u]))] == ["scenvakt"]
