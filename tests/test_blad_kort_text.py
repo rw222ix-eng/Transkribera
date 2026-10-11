@@ -198,3 +198,21 @@ def test_uppmaningen_ar_inget_namn():
                            "typ": "rutin"}]}
     namn = exam_gen.provets_namn_och_sammanhang(prov)["namn"]
     assert "Bestäm" not in namn and "Noah" in namn
+
+
+def test_bladets_ordtak_ar_textmangdvakten():
+    """Blad 221:9 (IndA inför prov 215): ett ekvationssystem med decimaler.
+    Ordvakten räknar «$1{,}2x$» som tre ord, textmängdvakten som ett. Bladets
+    efterkontroll mäter som skrivningen, med textmängdvakten."""
+    u = _uppg("Räknare tillåten. Linjerna (1) och (2) skär varandra.\n"
+              "(1) $1{,}2x + 0{,}5y = 4{,}6$\n(2) $0{,}8x - 0{,}5y = 1{,}4$",
+              poang=(0, 0, 0), deluppgifter=[_del(
+                  "Hugo adderar ekvationerna och får $2x = 3{,}2$.\n"
+                  "Avgör om Hugo har räknat rätt och förklara varför.")])
+    exam = _blad(u)
+    assert exam_gen.ordvakt(exam)
+    marke = exam_gen.ORDVAKTENS_MARKE
+    assert any(marke in f["text"] for f in routes_exam._sprakfynd(exam, "prov"))
+    assert not any(marke in f["text"]
+                   for f in routes_exam._sprakfynd(exam, "prov", blad=True))
+    assert exam_gen.textmangdvakt(exam) == []

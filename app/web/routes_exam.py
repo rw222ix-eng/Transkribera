@@ -473,14 +473,21 @@ def _bildfynd(doc, base: Path) -> list[dict]:
     return ut
 
 
-def _sprakfynd(exam: dict, typ: str) -> list[dict]:
+def _sprakfynd(exam: dict, typ: str, blad: bool = False) -> list[dict]:
     """Språkvakten en gång till, på det som ligger framme. Den kördes vid
-    skrivningen; en omskrivning kan lägga tillbaka precis det den tog bort."""
+    skrivningen; en omskrivning kan lägga tillbaka precis det den tog bort.
+
+    Ordtaket bara på provet. Bladets ordtak är textmängdvakten (30 ord, ett
+    decimaltal är ett ord, i _ovningsfynd), samma som skrivningen
+    och omskrivningen mäter. Ordvakten räknar «$1{,}2x$» som tre ord och fällde
+    blad 221:9 (IndA inför prov 215, 2026-10-11) på ett ekvationssystem med
+    decimaler som textvakten släppte. Rickard 11/10: bladen får dessutom gå
+    över 40 ord med förklaringar för svag svenska."""
     if typ != "prov":
         return []
     try:
         fel = exam_gen.sprakvakt(exam)
-        ordfel = exam_gen.ordvakt(exam)
+        ordfel = [] if blad else exam_gen.ordvakt(exam)
     except Exception:                       # pragma: no cover
         return []
     # Ordtaket med eget fynd per uppgift (exam 219 uppgift 15, 2026-10-11):
@@ -891,7 +898,8 @@ def efterkontroll(view: dict, doc, summor: dict | None, *,
     # Bladet inför provet ska vara lika lätt att läsa som provet: samma
     # språkvakt (2026-09-24 kväll). Andra blad som förut.
     ut += _sprakfynd(view.get("exam") or {},
-                     "prov" if typ == "arbetsblad" and infor else typ)
+                     "prov" if typ == "arbetsblad" and infor else typ,
+                     blad=typ == "arbetsblad")
     # Lärarens dom 2026-10-02: fackorden med exempel på varje blad, och
     # delfrågorna som deluppgifter på bladet och gruppuppgiften.
     ut += _facktermfynd(view.get("exam") or {}, typ)
