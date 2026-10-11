@@ -45,3 +45,20 @@ def test_formen_svaret_skrivs_i_ar_inga_konstanter():
     assert k(r"Skriv ekvationen i allmän formen $ax + by + c = 0$.") == set()
     # Konstanter i själva uppgiften räknas fortfarande.
     assert k(r"Linjen $ax + by = 6$ ska skrivas på formen $y = kx + m$.") == {"a", "b"}
+
+
+def test_provstammen_forklarar_inte_begreppet():
+    """Rickard 2026-10-11, exam 219 uppgift 1: definition och räkneexempel i
+    provets stam gör uppgiften för lätt. En formel som ges står kvar."""
+    from app import exam_gen
+
+    def prov(t):
+        return {"titel": "t", "kurs": "Matematik, nivå 1c", "uppgifter": [
+            {"text": t, "typ": "rutin", "poang": [1, 0, 0], "losning": "x"}]}
+    fall = exam_gen.forklaringsvakt(prov(
+        "Förändringsfaktorn är talet du gångrar det gamla priset med.\n"
+        "Till exempel: $200 \\cdot 1{,}5 = 300$.\n\nAnge förändringsfaktorn."))
+    assert len(fall) == 1 and fall[0]["code"] == "forklaring"
+    assert exam_gen.forklaringsvakt(prov(
+        "Skostorleken ges av formeln: $S = 1{,}5(L + 2)$, där $L$ är fotens "
+        "längd i cm.\n\nBestäm Omars skostorlek.")) == []

@@ -556,6 +556,19 @@ def _delfragefynd(exam: dict, typ: str) -> list[dict]:
     return ut
 
 
+def _forklaringsfynd(exam: dict, typ: str) -> list[dict]:
+    """En provstam som definierar begreppet eller visar ett räkneexempel
+    (exam_gen.forklaringsvakt, Rickard 2026-10-11). Bara provet."""
+    if typ != "prov":
+        return []
+    try:
+        fel = exam_gen.forklaringsvakt(exam)
+    except Exception:                       # pragma: no cover
+        return []
+    return [_fynd("forklaring", f["message"], _uppgiftsnr(f.get("path", "")))
+            for f in fel]
+
+
 def _tipsfynd(exam: dict, typ: str) -> list[dict]:
     """Tryckta tips, en gång till på det som ligger framme (exam_gen.a_nivavakt,
     som sedan 2026-09-19 fäller «Tips:» på alla nivåer). Prov 88 fick sina
@@ -884,6 +897,7 @@ def efterkontroll(view: dict, doc, summor: dict | None, *,
     ut += _facktermfynd(view.get("exam") or {}, typ)
     ut += _delfragefynd(view.get("exam") or {}, typ)
     ut += _tipsfynd(view.get("exam") or {}, typ)
+    ut += _forklaringsfynd(view.get("exam") or {}, typ)
     ut += _npfynd(view.get("exam") or {}, typ)
     # Provets meningar står i ett stycke sedan 2026-09-25 (exam_latex
     # _ihop_stycken), så radlängden mäts bara på de andra papperen.

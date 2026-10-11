@@ -9849,6 +9849,41 @@ _TIPS_RE = re.compile(
     re.IGNORECASE)
 
 
+# FÖRKLARINGEN I PROVETS STAM (Rickard 2026-10-11, NA26F prov 3 exam 219
+# uppgift 1): «Förändringsfaktorn är talet du gångrar det gamla priset med för
+# att få det nya priset. Till exempel: 200 kr · 1,5 = 300 kr.» Uppgiften
+# prövade just begreppet, och förklaringen gjorde den för lätt. På proven
+# definieras inget begrepp och inget räkneexempel visas; på bladen får
+# förklaringen stå (svag svenska). Formen och inte innehållet, som tipset.
+_BEGREPPSDEF_RE = re.compile(
+    r"(?<![\wåäö])[\wåäö-]+\s+är\s+(?:talet|det tal|den faktor|faktorn"
+    r"|kvoten|skillnaden|summan|produkten|andelen)\s+(?:du|man|som|mellan)"
+    r"(?![\wåäö])", re.IGNORECASE)
+_RAKNEEXEMPEL_RE = re.compile(
+    r"(?<![\wåäö])(?:till exempel|exempel|t\.\s?ex\.)\s*:?[^.?!\n]{0,80}"
+    r"\$[^$]*=[^$]*\$", re.IGNORECASE)
+FORKLARING_MAX_FYND = 4
+
+
+def forklaringsvakt(exam: dict) -> list[dict]:
+    """En provstam som definierar ett begrepp eller visar ett räkneexempel.
+    Bara provet: anroparen kör den inte på bladen."""
+    fel: list[dict] = []
+    for e in domarenheter(exam):
+        kort = e["kort"]
+        t = f"{kort.get('stam', '')} {kort.get('text', '')}"
+        m = _BEGREPPSDEF_RE.search(t) or _RAKNEEXEMPEL_RE.search(t)
+        if not m:
+            continue
+        fel.append(_err(
+            f"uppgift {e['nr']}", "forklaring",
+            f"Uppgift {e['nr']} förklarar det den prövar («{m.group(0)[:60]}»). "
+            "På provet definieras inget begrepp och inget räkneexempel visas: "
+            "förklaringen gör uppgiften för lätt. Stryk meningen. Samma "
+            "uppgift, samma tal, samma poäng."))
+    return fel[:FORKLARING_MAX_FYND]
+
+
 def a_nivavakt(exam: dict) -> list[dict]:
     """A-poäng som inte kräver en insikt.
 
@@ -13265,7 +13300,7 @@ def _raknade_fynd(exam: dict, *, avsnitt: list[dict] | None, antal: int | None,
            # ett prov med den (app/ci_utanfor.py, Rickard 2026-09-17).
            + ci_utanfor.ci_vakt(exam, kurs, profil))
     if profil == "prov":
-        fel += (a_nivavakt(exam) + kravradsvakt(exam)
+        fel += (a_nivavakt(exam) + forklaringsvakt(exam) + kravradsvakt(exam)
                 + blandat_krav_vakt(exam)
                 + rubrikordsvakt(exam, kurs)
                 + likvardighetsvakt(exam, referensprov)
@@ -14863,7 +14898,7 @@ def varvsvakter(exam: dict, profil: str, *, infor: dict | None = None,
         return ovningsvakter(exam, prov=infor)
     fel = ci_utanfor.ci_vakt(exam, kurs, profil) + konsbalansvakt(exam)
     if profil == "prov":
-        return (fel + sprakvakt(exam) + a_nivavakt(exam)
+        return (fel + sprakvakt(exam) + a_nivavakt(exam) + forklaringsvakt(exam)
                 + np_vakter.np_vakter(exam, kurs, poang_tak,
                                       poang_last=referens is not None)
                 + likvardighetsvakt(exam, referens))
