@@ -16,6 +16,8 @@ import re
 import subprocess
 import sys
 
+from app.dold_process import dold_process_kwargs
+
 # Två heltal på en rad, ingenting annat. Utskriften har rubrik, streckrad och
 # en fotnot om administrerade undantag, som alla saknar det mönstret.
 _SPANN = re.compile(r"^\s*(\d+)\s+(\d+)\s*$")
@@ -41,7 +43,8 @@ def las_spann(kor=None) -> list[tuple[int, int]]:
             return subprocess.run(
                 ["netsh", "int", "ipv4", "show", "excludedportrange",
                  "protocol=tcp"],
-                capture_output=True, text=True, timeout=5).stdout
+                capture_output=True, text=True, timeout=5,
+                **dold_process_kwargs()).stdout
     try:
         return tolka_spann(kor())
     except Exception:

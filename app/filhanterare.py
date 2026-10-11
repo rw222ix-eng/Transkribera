@@ -27,6 +27,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from app.dold_process import dold_process_kwargs
+
 # Öppningskommandot per system. Windows saknas här med flit: `os.startfile` är
 # ingen process utan ett anrop rakt in i skalet.
 _OPPNA = {"darwin": ["open"], "linux": ["xdg-open"]}
@@ -45,11 +47,11 @@ def _kor(argv: list[str], *, vanta: bool = True) -> None:
     `vanta=False` för explorer, som svarar 1 även när den lyckades — väntar man
     på den blir varje lyckad «visa i mappen» ett falskt fel."""
     if not vanta:
-        subprocess.Popen(argv)  # noqa: S603 — argv, aldrig skal
+        subprocess.Popen(argv, **dold_process_kwargs())  # noqa: S603 — argv, aldrig skal
         return
     try:
         r = subprocess.run(argv, capture_output=True, text=True,  # noqa: S603
-                           timeout=20)
+                           timeout=20, **dold_process_kwargs())
     except FileNotFoundError:
         # Ett skrivbordslöst Linux har ingen xdg-open. Serverns 500-svar visas
         # för läraren, och «[Errno 2] ... 'xdg-open'» säger henne ingenting.

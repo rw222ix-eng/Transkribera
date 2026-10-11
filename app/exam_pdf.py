@@ -16,6 +16,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from app.dold_process import dold_process_kwargs
+
 _TIMEOUT_S = 180
 
 
@@ -81,7 +83,7 @@ def compile_pdf(tex: str, out_dir: Path, jobname: str, *,
     try:
         proc = runner(cmd, capture_output=True, text=True, timeout=timeout,
                       env=env, cwd=str(out_dir), encoding="utf-8",
-                      errors="replace")
+                      errors="replace", **dold_process_kwargs())
     except subprocess.TimeoutExpired:
         log = f"Kompileringen tog mer än {timeout} s och avbröts."
         (out_dir / f"{jobname}.log.txt").write_text(log, encoding="utf-8")

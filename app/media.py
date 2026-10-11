@@ -4,6 +4,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from app.dold_process import dold_process_kwargs
+
 
 def parse_duration(ffprobe_output: str) -> float | None:
     for line in ffprobe_output.splitlines():
@@ -28,6 +30,7 @@ def probe_duration(path: Path) -> float | None:
             ["ffprobe", "-v", "error", "-show_entries", "format=duration",
              "-of", "default=noprint_wrappers=1", str(path)],
             capture_output=True, text=True, timeout=30,
+            **dold_process_kwargs(),
         )
         return parse_duration(out.stdout)
     except Exception:
@@ -42,7 +45,8 @@ AUDIO_EXTS = {".mp3", ".m4a", ".wav", ".aac", ".ogg", ".oga", ".opus", ".flac"}
 
 def _run(cmd: list[str], cwd: str):
     proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True,
-                          encoding="utf-8", errors="replace")
+                          encoding="utf-8", errors="replace",
+                          **dold_process_kwargs())
     return proc.returncode, (proc.stderr or "")
 
 

@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Callable
 
 from app import debug_log
+from app.dold_process import dold_process_kwargs
 
 # Statusen frågas ofta (varje vy som visar «Var arbetet körs»), och varje fråga
 # startar en nodeprocess. Ett kort minne räcker för att det ska kännas direkt.
@@ -121,7 +122,9 @@ def status(force: bool = False, gammalt_duger: bool = False) -> dict:
             try:
                 proc = subprocess.run([exe, "auth", "status"], capture_output=True,
                                       text=True, encoding="utf-8", errors="replace",
-                                      timeout=30, cwd=_neutral_cwd())
+                                      timeout=30, cwd=_neutral_cwd(),
+                                      stdin=subprocess.DEVNULL,
+                                      **dold_process_kwargs())
                 data = json.loads(proc.stdout or "{}")
                 svar = {"finns": True, "inloggad": bool(data.get("loggedIn")),
                         "epost": data.get("email") or "",
@@ -203,7 +206,7 @@ def _cli_version(exe: str) -> tuple[int, int, int] | None:
             ut = subprocess.run([exe, "--version"], capture_output=True, text=True,
                                 encoding="utf-8", errors="replace", timeout=30,
                                 stdin=subprocess.DEVNULL,
-                                cwd=_neutral_cwd()).stdout
+                                cwd=_neutral_cwd(), **dold_process_kwargs()).stdout
             m = re.match(r"\s*(\d+)\.(\d+)\.(\d+)", ut or "")
             _CLI_VERSION[nyckel] = tuple(int(x) for x in m.groups()) if m else None
         except Exception:                       # noqa: BLE001 — en fråga som faller får aldrig fälla anropet
@@ -446,7 +449,7 @@ def generate(prompt: str, *, system: str | None = None,
     proc = subprocess.Popen(
         argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         text=True, encoding="utf-8", errors="replace", cwd=_neutral_cwd(),
-        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        **dold_process_kwargs())
 
     def mata():
         try:

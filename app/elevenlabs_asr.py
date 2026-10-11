@@ -36,6 +36,8 @@ from typing import Callable
 
 import httpx
 
+from app.dold_process import dold_process_kwargs
+
 API_URL = "https://api.elevenlabs.io/v1/speech-to-text"
 MODEL = "scribe_v2"
 PRIS_USD_PER_TIMME = 0.22
@@ -124,7 +126,7 @@ def _koda_om(audio: Path, dest: Path) -> Path:
         ["ffmpeg", "-y", "-v", "error", "-i", str(audio), "-vn",
          "-ac", "1", "-ar", "16000", "-c:a", "libopus", "-b:a", "24k",
          str(dest)],
-        check=True, capture_output=True)
+        check=True, capture_output=True, **dold_process_kwargs())
     return dest
 
 
