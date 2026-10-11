@@ -827,3 +827,9 @@ def test_scenvakten_godtar_bojningen():
     u = _u(text="Lönen är $142{,}5t$, där $t$ är antalet timmar.",
            scen=_scen("lön per timme"))
     assert exam_gen.scenvakt(_prov([u])) == []
+
+
+def test_scenvakten_godtar_forledet_som_efterled():
+    """242:10: «stensättning» mot «lägger A m² marksten»."""
+    u = _u(text="Ett lag lägger $A$ m$^2$ marksten.", scen=_scen("stensättning"))
+    assert exam_gen.scenvakt(_prov([u])) == []

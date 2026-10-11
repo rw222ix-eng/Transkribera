@@ -10411,6 +10411,11 @@ def _scen_namner(text: str, sokta: set[str]) -> bool:
     if any(s[i:i + 6] in o for s in sokta if len(s) >= 8
            for i in range(len(s) - 5) for o in ord_):
         return True
+    # Blad 242:10: «stensättning» mot «marksten», förledet som efterled.
+    if any(s[:i] in o and not o.startswith(s[:i]) and len(o) >= 6
+           for s in sokta if len(s) >= 8 for i in range(4, len(s) - 3)
+           for o in ord_):
+        return True
     return any(any(o.startswith(s[:i]) for o in ord_)
                and (any(o.startswith(s[i:i + 3]) for o in ord_)
                     or (len(s) >= 8 and any(len(o) >= 6 and o.startswith(s[:i])
