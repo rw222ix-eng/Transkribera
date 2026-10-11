@@ -73,6 +73,25 @@ def _minor(maj: list[float], box_max: float) -> list[float]:
     return out
 
 
+# ETT STEG PER ENHET (IndA prov 2, exam 215 uppgift 5a, 2026-10-11): «Rita
+# linjen y = x − 1 i samma figur. Lös ekvationssystemet med hjälp av graferna.»
+# y-ticksen stod var femte enhet, mellanlinjerna på 2,5, och skärningen (2, 1)
+# låg mellan två linjer. Ryms axeln på högst ENHETER_MAX enheter går
+# mellanlinjerna vid varje heltal, så eleven kan rita och läsa av punkter.
+ENHETER_MAX = 24
+
+
+def _rutlinjer(lo: float, hi: float, skala, maj: list[float],
+               box_max: float) -> list[float]:
+    """Mellanlinjerna: en per heltal när axeln är kort, annars _minor."""
+    a, b = math.ceil(lo - 1e-9), math.floor(hi + 1e-9)
+    if b - a > ENHETER_MAX or b < a:
+        return _minor(maj, box_max)
+    return [round(skala(v), 10) for v in range(a, b + 1)
+            if -1e-9 <= skala(v) <= box_max + 1e-9
+            and all(abs(skala(v) - m) > 1e-6 for m in maj)]
+
+
 def _funktionsgraf(fn, xlo: float, xhi: float, samples: int = 80) -> str:
     """Ritar en funktion i en FAST ruta (BOXW×BOXH): data mappas in, så
     koordinaten aldrig spränger TeX oavsett funktionens storlek. Kurvan
@@ -103,9 +122,9 @@ def _funktionsgraf(fn, xlo: float, xhi: float, samples: int = 80) -> str:
     rader = [r"\begin{tikzpicture}[line join=round]"]
     # Tydligt rutnät (helt synligt, ingen svag ton): minorlinjer på halva
     # tickavståndet + majorlinjer vid de etiketterade ticksen, bakom allt annat.
-    for gx in _minor(xmaj, BOXW):
+    for gx in _rutlinjer(xlo, xhi, X, xmaj, BOXW):
         rader.append(rf"\draw[black!30,thin] ({_f(gx)},0)--({_f(gx)},{_f(BOXH)});")
-    for gy in _minor(ymaj, BOXH):
+    for gy in _rutlinjer(ylo, yhi, Y, ymaj, BOXH):
         rader.append(rf"\draw[black!30,thin] (0,{_f(gy)})--({_f(BOXW)},{_f(gy)});")
     for gx in xmaj:
         rader.append(rf"\draw[black!50,thin] ({_f(gx)},0)--({_f(gx)},{_f(BOXH)});")

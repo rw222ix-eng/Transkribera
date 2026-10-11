@@ -89,6 +89,9 @@ window.BladBygg = (() => {
      klistras efter frågan. */
   const ENSAM_FORMEL = /^\$[^$]+\$$/;
   const DELRAD = /^[a-h]\)\s/;
+  /* Ett ekvationssystems rader, «(1) $x + y = 96$», står var på sin rad
+     (IndA prov 2, exam 215, 2026-10-11). Spegel av exam_latex._EKVRAD_RE. */
+  const EKVRAD = /^\(\d+\)\s*\$[^$]+\$\s*[.,]?$/;
   const ihop = s => {
     const ut = [];
     let buf = [];
@@ -100,6 +103,9 @@ window.BladBygg = (() => {
         } else if (DELRAD.test(r) && buf.length) {
           ut.push(buf.join(' '));
           buf = [r];
+        } else if (EKVRAD.test(r)) {
+          if (buf.length) { ut.push(buf.join(' ')); buf = []; }
+          ut.push(r);
         } else buf.push(r);
       });
     if (buf.length) ut.push(buf.join(' '));

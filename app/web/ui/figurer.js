@@ -341,6 +341,18 @@ window.Figurer = (() => {
     }
     return ut;
   }
+  /* _rutlinjer: en mellanlinje per heltal när axeln rymmer högst 24 enheter
+     (exam_figures.ENHETER_MAX), annars minorLinjer. */
+  function rutLinjer(lo, hi, skala, maj, boxMax) {
+    const a = Math.ceil(lo - 1e-9), b = Math.floor(hi + 1e-9);
+    if (b - a > 24 || b < a) return minorLinjer(maj, boxMax);
+    const ut = [];
+    for (let v = a; v <= b; v++) {
+      const g = skala(v);
+      if (g >= -1e-9 && g <= boxMax + 1e-9 && maj.every(m => Math.abs(g - m) > 1e-6)) ut.push(Math.round(g * 1e10) / 1e10);
+    }
+    return ut;
+  }
   /* _flabel: elevens tal. Aldrig 1e+06, decimalkomma, högst fyra decimaler.
      Minustecknet är ett riktigt minus, inte bindestrecket. */
   function etikett(x) {
@@ -373,7 +385,7 @@ window.Figurer = (() => {
       xlo, xhi, ylo, yhi, xticks, yticks,
       x0: xlo <= 0 && 0 <= xhi ? X(0) : 0,
       y0: ylo <= 0 && 0 <= yhi ? Y(0) : 0,
-      xmaj: xticks.map(X), ymaj: yticks.map(Y),
+      xmaj: xticks.map(X), ymaj: yticks.map(Y), X, Y,
       punkter: xs.map((x, i) => [X(x), Y(ys[i])])
     };
   }
@@ -413,8 +425,8 @@ window.Figurer = (() => {
        origo, som i lärarens förlaga. */
     const tunn = 'stroke: (thickness: 0.5pt, paint: luma(180))';
     const grov = 'stroke: (thickness: 0.6pt, paint: luma(128))';
-    minorLinjer(L.xmaj, BOXW).forEach(g => rader.push(`line(${P(g, 0)}, ${P(g, BOXH)}, ${tunn})`));
-    minorLinjer(L.ymaj, BOXH).forEach(g => rader.push(`line(${P(0, g)}, ${P(BOXW, g)}, ${tunn})`));
+    rutLinjer(L.xlo, L.xhi, L.X, L.xmaj, BOXW).forEach(g => rader.push(`line(${P(g, 0)}, ${P(g, BOXH)}, ${tunn})`));
+    rutLinjer(L.ylo, L.yhi, L.Y, L.ymaj, BOXH).forEach(g => rader.push(`line(${P(0, g)}, ${P(BOXW, g)}, ${tunn})`));
     L.xmaj.forEach(g => rader.push(`line(${P(g, 0)}, ${P(g, BOXH)}, ${grov})`));
     L.ymaj.forEach(g => rader.push(`line(${P(0, g)}, ${P(BOXW, g)}, ${grov})`));
     rader.push(`line(${P(0, L.y0)}, ${P(BOXW + 0.3, L.y0)}, mark: (end: "straight"))`);

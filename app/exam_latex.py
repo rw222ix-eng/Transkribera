@@ -458,6 +458,17 @@ def _krav(typ: str | None) -> str:
 # frågan. Spegel av blad-bygg.js DELRAD.
 _DELRAD_RE = re.compile(r"^[a-h]\)\s")
 
+# Ett ekvationssystems rader, «(1) $x + y = 96$», står var på sin rad. Stammen
+# i ett stycke klistrade ihop dem med meningarna runt («… ekvationssystemet:
+# (1) x + y = 96 (2) 55x + 85y = 6 180 Bestäm …», IndA prov 2, exam 215,
+# 2026-10-11): fyra uppgifter blev oläsliga.
+_EKVRAD_RE = re.compile(r"^\(\d+\)\s*\$[^$]+\$\s*[.,]?$")
+
+
+def _egen_rad(text: str) -> bool:
+    """Står raden på egen rad även i ett hopslaget stycke?"""
+    return bool(_EKVRAD_RE.match(text or ""))
+
 
 def _ihop(rader: list[str], forst_i_raden: bool) -> list[str]:
     """Textraderna hopslagna till en rad per stycke; formelrader för sig.
@@ -476,6 +487,11 @@ def _ihop(rader: list[str], forst_i_raden: bool) -> list[str]:
         elif _DELRAD_RE.match(rad) and buf:
             ut.append(" ".join(buf))
             buf = [rad]
+        elif _egen_rad(rad):
+            if buf:
+                ut.append(" ".join(buf))
+                buf = []
+            ut.append(rad)
         else:
             buf.append(rad)
     if buf:
@@ -526,6 +542,8 @@ def _stycken(text: str, luft: bool = False,
                        "text": _exponentbrak(_intervallminus(m.group(1)))})
         else:
             ut.append({"formel": False, "text": escape_mixed(rad)})
+            if _egen_rad(rad):
+                ut[-1]["egen_rad"] = True
         ut[-1]["luft"] = luft and tom
         tom = False
     # DISPLAYFORMELN HÖR TILL SITT STYCKE. Förlagan skriver «… ges av» och
@@ -643,7 +661,8 @@ def _ihop_stycken(stycken: list[dict]) -> list[dict]:
         s = dict(s, luft=False)
         forra = ut[-1] if ut else None
         if (forra is not None and not s["formel"] and not forra["formel"]
-                and not _DELRAD_RE.match(s["text"])):
+                and not _DELRAD_RE.match(s["text"])
+                and not s.get("egen_rad") and not forra.get("egen_rad")):
             forra["text"] = f"{forra['text']} {s['text']}"
             forra["par_efter"] = s["par_efter"]
         else:

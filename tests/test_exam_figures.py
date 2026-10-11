@@ -302,3 +302,23 @@ def test_stora_naturliga_tal_kompilerar_pa_en_sida(d, tmp_path):
     tikz = exam_figures.render_figur(_bygg(d))
     assert _kompilera(tikz, tmp_path), f"{d['typ']} kompilerar inte"
     assert _sidantal(tikz, tmp_path) == 1, f"{d['typ']} blev fler sidor"
+
+
+def test_kort_axel_far_en_rutlinje_per_heltal():
+    """IndA prov 2 uppg 5a (exam 215): skärningen (2, 1) måste gå att läsa av."""
+    tex = exam_figures._funktionsgraf(lambda x: -2 * x + 5, -1, 7)
+    tunna = [r for r in tex.splitlines() if r.startswith(r"\draw[black!30")]
+    # 9 x-heltal (−1…7) och y från −9 till 7, minus huvudlinjerna.
+    assert len(tunna) > 15
+    # En lång axel faller tillbaka på halva tickavståndet.
+    lang = exam_figures._funktionsgraf(lambda x: 100 * x, -1, 7)
+    assert len([r for r in lang.splitlines() if r.startswith(r"\draw[black!30")]) < 20
+
+
+def test_ekvationssystemets_rader_star_var_for_sig():
+    from app import exam_latex
+    t = ("Försäljningen beskrivs av ekvationssystemet:\n(1) $x + y = 96$\n"
+         "(2) $55x + 85y = 6\\,180$\n\nBestäm hur många sallader kaféet sålde.")
+    for st in (exam_latex._ihop_stycken(exam_latex._stycken(t, luft=True)),
+               exam_latex._stycken(t, ihop=True)):
+        assert [s["text"][:3] for s in st] == ["För", "(1)", "(2)", "Bes"]
