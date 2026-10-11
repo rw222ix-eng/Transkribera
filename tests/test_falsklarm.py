@@ -11,6 +11,9 @@ def test_vektornamn_och_storheter_ar_inga_konstanter():
              r"ekvationen $2x - y - 1 = 0$.") == set()
     assert k(r"Vektorn $\vec{a} = (k,\ 2)$ är parallell med $\vec{u}$. "
              r"Bestäm talet $k$.") == set()
+    # Blad 220:11: båda talen eleven ska bestämma är svaret.
+    assert k(r"Ekvationen $x^2 + px + q = 0$ har lösningarna $x = -2$ och "
+             r"$x = 5$. Bestäm talen $p$ och $q$.") == set()
 
 
 def test_riktiga_konstanter_raknas_fortfarande():

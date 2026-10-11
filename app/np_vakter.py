@@ -555,6 +555,11 @@ _SOKT_RE = re.compile(
     r"(?:bestäm|beräkna|ange)\s+(?:talet|värdet på|det positiva värdet på"
     r"|de värden på|alla möjliga värden på|konstanten)\s+\$([a-zA-Z])\$",
     re.I)
+# Blad 220:11 (2026-10-11): «Bestäm talen $p$ och $q$» fälldes med två
+# konstanter på C. Båda är svaret, inga parametrar.
+_SOKTA_RE = re.compile(
+    r"(?:bestäm|beräkna|ange)\s+(?:talen|värdena på|konstanterna)\s+"
+    r"\$([a-zA-Z])\$\s+och\s+\$([a-zA-Z])\$", re.I)
 
 
 def konstanter(text: str) -> set[str]:
@@ -583,6 +588,8 @@ def konstanter(text: str) -> set[str]:
     definierade |= set(_DAR_AR_RE.findall(str(text or "")))
     for rx in (_NAMNGIVEN_RE, _STORHET_RE, _SOKT_RE):
         definierade |= set(rx.findall(str(text or "")))
+    for par in _SOKTA_RE.findall(str(text or "")):
+        definierade |= set(par)
     kvar = set(rakning) - definierade - {"x", "y"}
     if "x" not in rakning and "y" not in rakning and kvar:
         kvar.discard(max(sorted(kvar), key=lambda b: rakning[b]))
