@@ -10399,7 +10399,9 @@ def _scen_namner(text: str, sokta: set[str]) -> bool:
     # Blad 235: «kajakhyra» är ett sammansatt ord, och uppgiften säger «kajak».
     # Blad 236: «taklutning» mot «taket» och «lutar», båda leden står där.
     ord_ = course_data.ordstammar(text)
+    # Blad 240:3: «timme» mot «timmar», stammen utan sista bokstaven.
     if any(o.startswith(s) or (len(o) >= 5 and s.startswith(o))
+           or (len(s) >= 5 and o.startswith(s[:-1]))
            for s in sokta for o in ord_):
         return True
     # Och ett långt sammansatt begrepp vars förled står i ett sammansatt ord

@@ -820,3 +820,10 @@ def test_scenvakten_godtar_ett_gemensamt_led():
     """237:8: «biobiljetter» mot «En vuxenbiljett på bion kostar a kr»."""
     u = _u(text="En vuxenbiljett på bion kostar $a$ kr.", scen=_scen("biobiljetter"))
     assert exam_gen.scenvakt(_prov([u])) == []
+
+
+def test_scenvakten_godtar_bojningen():
+    """240:3: «lön per timme» mot «antalet timmar»."""
+    u = _u(text="Lönen är $142{,}5t$, där $t$ är antalet timmar.",
+           scen=_scen("lön per timme"))
+    assert exam_gen.scenvakt(_prov([u])) == []
