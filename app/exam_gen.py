@@ -2390,11 +2390,12 @@ def build_spridning(avsnitt: list[dict], antal: int,
 _EJ_PROVBART = ("programmering", "kalkylblad", "geogebra", "excel",
                 "repetition", "kapiteltest", "blandade uppgifter",
                 "aktivitet", "laboration", "provräkning", "utvärdering",
-                "fördjupning",
-                # Rubrikens extra meningar (granskningen 2026-10-11: prov 129
-                # och 175 fick fynd om «Testa dig själv 2» och «Mönster och
-                # generella samband. Räkna ifatt»). Ingen av dem är innehåll.
-                "testa dig själv", "blandade övningar", "räkna ifatt")
+                "fördjupning")
+# Rubrikens extra meningar (granskningen 2026-10-11: prov 129 och 175 fick
+# fynd om «Testa dig själv 2» och «Mönster och generella samband. Räkna
+# ifatt»). Till skillnad från orden ovan märker de inte resten av rubriken:
+# bara meningen själv stryks. «Fördjupning» i en rubrik stryker hela.
+_EJ_INNEHALL_MENING = ("testa dig själv", "blandade övningar", "räkna ifatt")
 
 
 def _delmomentnamn(text: str) -> str:
@@ -2407,7 +2408,8 @@ def _provbara_delar(rubrik: str) -> str:
     samband. Räkna ifatt» blir «Mönster och generella samband», och en
     rubrik där ingen mening är provbar blir tom."""
     delar = re.split(r"(?<=[.!?])\s+", str(rubrik or ""))
-    return " ".join(d for d in delar if d.strip() and not _ej_provbart(d))
+    return " ".join(d for d in delar if d.strip() and not any(
+        o in d.casefold() for o in _EJ_INNEHALL_MENING))
 
 
 def _ej_provbart(namn: str) -> bool:
