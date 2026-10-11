@@ -943,3 +943,12 @@ def test_pronomen_efter_en_formel_ar_inget_namn():
          "poang": [1, 0, 0], "typ": "rutin"}]}
     namn = exam_gen.provets_namn_och_sammanhang(prov)["namn"]
     assert "Hon" not in namn and "Linje" not in namn and "Ella" in namn
+
+
+def test_ligger_och_bakomliggande_ar_ingen_situation():
+    """Prov 219 (2026-10-11): blad 228:5 fälldes för att strumpor «ligger»."""
+    ut = exam_gen.provets_namn_och_sammanhang({"uppgifter": [
+        {"text": "Kortet ligger på bordet. Priset ändras varje år. En "
+                 "bakomliggande faktor förklarar sambandet."}]})
+    for o in ("ligger", "ändras", "bakomliggande"):
+        assert o not in ut["sammanhang"], o

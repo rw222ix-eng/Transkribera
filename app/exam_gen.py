@@ -10717,7 +10717,11 @@ _SAMMANHANG_STOPP = frozenset((
     # Prov 130 (2026-10-11) gav sammanhangen «saknar», «runt», «rader» och
     # «startat», och blad 220:10 fälldes för «ekvationen saknar lösning».
     "saknar", "saknas", "saknade", "runt", "rader", "raden", "startat",
-    "startade"))
+    "startade",
+    # Prov 219 (2026-10-11) gav «ligger», «ändras» och «bakomliggande»
+    # (statistikens «bakomliggande faktor»), och blad 228:5 fälldes för att
+    # strumporna «ligger» i en låda.
+    "ligger", "låg", "legat", "ändras", "ändrades", "bakomliggande"))
 # Verbformer som nästan aldrig är ett substantiv: «ritade», «planerar».
 _VERBSLUT = ("ade", "ades", "erar", "erade")
 # Matematikens ord, som stammar utan å, ä och ö. Kursplanens ord (_kursord)
