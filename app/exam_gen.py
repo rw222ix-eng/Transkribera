@@ -4861,6 +4861,13 @@ def build_forebild_a_blad(enheter: list[dict] | None) -> str:
         "att en andel blir en given procent, ett tal som ligger lika många "
         "procent över ett tal som under ett annat, en brytpunkt där två "
         "modeller ger lika. Uppgiften gör det typen gör och inget mer.\n"
+        # Exam 248 (2026-10-12): 5a tog NP:s D31 men gav procenten (20 %)
+        # i texten, 6a tog D24 men räknade på ett bestämt pris. Båda fälldes
+        # till E och C i två körningar.
+        "A-STEGET TAR ELEVEN SJÄLV. Det typen låter eleven ta fram står "
+        "aldrig i texten: söker NP-uppgiften procenten, så söks procenten; "
+        "är ett belopp okänt i NP-uppgiften, är det en bokstav här och "
+        "aldrig ett givet tal.\n"
         "FLER RÄKNESTEG GER INTE A. En uppgift vars närmaste uppgift på "
         "nationella provet är en E- eller C-uppgift är en E- eller C-uppgift, "
         "hur många steg den än har: en andel ur ett delförhållande, en volym "
@@ -14802,6 +14809,17 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # lämnar aldrig det här anropet. `drillade` styr täckningen nedan och
     # räknas ur samma lista som blocket, så de två kan inte glida isär.
     inforslots = infor_slots(inforprov) if inforprov else []
+    # A-BLADET ÖVAR PROVETS A-SORTER (exam 248, 2026-10-12). «Blandat» gav
+    # A-bladet inför BA26B prov 131 alla tio sorter, och sju av dem var E
+    # eller C (negativa tal, bråk, enhetsbyten). Modellen gjorde då A av
+    # fler steg i E-situationer, och NP-jämföraren fällde sju uppgifter i två
+    # körningar också med NP:s A-uppgifter som förebild. Ett rent A-blad
+    # utan lärarens egna nummer övar därför bara de sorter som bär A-poäng;
+    # saknar provet sådana står hela provet kvar som förut.
+    if (profil == "arbetsblad" and not infor_nummer
+            and exam_spec.ren_niva(niva_mal) == "A"):
+        a_sorter = [s for s in inforslots if (s.get("poang") or [0, 0, 0])[2]]
+        inforslots = a_sorter or inforslots
     # Provets personer och sammanhang (lärarens dom 2026-09-24) som namn och
     # enstaka ord. Bladet ska ha andra; vakten är routes_exam._lanfynd.
     # GRUPPUPPGIFTEN får samma block i sin egen form (Rickard 2026-09-27),

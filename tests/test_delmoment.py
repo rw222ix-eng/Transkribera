@@ -843,6 +843,7 @@ def test_a_bladet_far_np_a_uppgifterna_som_forebild():
     assert any(u["id"] == "NpMa1a vt22 D30" for u in enh)
     r = exam_gen.build_forebild_a_blad(enh)
     assert "NpMa1a vt22 D30" in r and "FLER RÄKNESTEG GER INTE A" in r
+    assert "A-STEGET TAR ELEVEN SJÄLV" in r
     # Inget citerat fältnamn: grammatiken ska inte få förebildsfältet.
     assert not exam_gen._forebild_i_grammatiken(r, "arbetsblad")
     assert exam_gen.np_a_uppgifter("Fysik 1") == []

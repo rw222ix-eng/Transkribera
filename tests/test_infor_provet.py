@@ -684,6 +684,36 @@ def _fanga_generering(profil, inforprov, nummer):
     return anrop
 
 
+def test_a_bladet_blandat_ovar_provets_a_sorter():
+    """Exam 248 (2026-10-12): «blandat» gav A-bladet alla provets sorter, och
+    E-sorterna blev A-uppgifter som NP-jämföraren fällde. Ett rent A-blad
+    utan valda nummer övar bara sorterna med A-poäng; med valda nummer, och
+    på andra nivåer, är allt som förut."""
+    prov = _prov_131()
+    slots = exam_gen.infor_slots(prov)
+    med_a = [s["nr"] for s in slots if s["poang"][2]]
+    utan_a = [s["nr"] for s in slots if not s["poang"][2]]
+    assert med_a and utan_a
+    mal = exam_spec.nivaval("arbetsblad", "A-nivå")["mal"]
+
+    def prompt(niva_mal, nummer):
+        anrop = []
+        exam_gen.generate_exam(
+            "Matematik, nivå 2b", "TE27", ["Andragrad"], model="", antal=4,
+            profil="arbetsblad", inforprov=prov, infor_nummer=nummer,
+            niva_mal=niva_mal, llm=lambda m, p, **k: anrop.append(p) or "",
+            max_rounds=1, doma=False, bokuppgifter=[])
+        return anrop[0]
+
+    a = prompt(mal, [])
+    assert all(f"provets uppgift {n}:" in a for n in med_a)
+    assert not any(f"provets uppgift {n}:" in a for n in utan_a)
+    valt = prompt(mal, [utan_a[0]])
+    assert f"provets uppgift {utan_a[0]}:" in valt
+    vanligt = prompt(None, [])
+    assert all(f"provets uppgift {n}:" in vanligt for n in utan_a)
+
+
 def test_generatorn_ger_gruppuppgiften_blocket_och_faltet():
     prompt, schema = _fanga_generering("gruppuppgift", _prov_131(), [1, 3])[0]
     assert "DEN HÄR GRUPPUPPGIFTEN ÖVAR INFÖR ETT PROV" in prompt
