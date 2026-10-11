@@ -587,8 +587,11 @@ def _npfynd(exam: dict, typ: str) -> list[dict]:
         # Passets tak ur pappret självt, så att stegvakten inte ber om en
         # poäng till på ett papper som redan ligger på taket (exam 128).
         tak = exam_spec.poang_tak_for(exam.get("tid_min"), exam.get("takt"))
+        # Omprovets poäng är originalets (ExamDoc.omprov_av): Laga-knappen
+        # ska aldrig be om en poäng till där (exam 218, 2026-10-11).
         fel = np_vakter.np_vakter(exam, kurs=str(exam.get("kurs") or ""),
-                                  poang_tak=tak)
+                                  poang_tak=tak,
+                                  poang_last=bool(exam.get("omprov_av")))
     except Exception:                       # pragma: no cover
         return []
     return [_fynd(f["code"], f["message"], _uppgiftsnr(f.get("path", "")))

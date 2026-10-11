@@ -636,3 +636,14 @@ def test_stegvakten_hojer_inte_omprovets_poang(exam88):
     assert _koder(fel, "stegvakt") == {"9"}
     assert "Höj poängen till" not in fel[0]["message"]
     assert "ta bort ett steg" in fel[0]["message"]
+
+
+def test_efterkontrollen_hojer_inte_omprovets_poang(exam88):
+    """Laga-knappen på omprovet 218 (2026-10-11) sa «Höj poängen till 2»."""
+    omprov = {**copy.deepcopy(exam88), "omprov_av": 81}
+    vanligt = [f["text"] for f in routes_exam._npfynd(exam88, "prov")
+               if f["kod"] == "stegvakt"]
+    lasta = [f["text"] for f in routes_exam._npfynd(omprov, "prov")
+             if f["kod"] == "stegvakt"]
+    assert any("Höj poängen till" in t for t in vanligt)
+    assert lasta and not any("Höj poängen till" in t for t in lasta)
