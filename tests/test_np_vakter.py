@@ -627,3 +627,12 @@ def test_ruta_och_svarsrad_fragar_efter_samma_sak():
     assert _koder(np_vakter.rutvakt(_prov([u])), "ruta") == {"1"}
     u["text"] = "Bestäm $k$. Svara med ett uttryck i $n$."
     assert np_vakter.rutvakt(_prov([u])) == []
+
+
+def test_stegvakten_hojer_inte_omprovets_poang(exam88):
+    """Omprovets poäng är originalets (exam 214, 2026-10-11): rådet är ett
+    steg mindre, aldrig en poäng till."""
+    fel = np_vakter.stegvakt(exam88, poang_last=True)
+    assert _koder(fel, "stegvakt") == {"9"}
+    assert "Höj poängen till" not in fel[0]["message"]
+    assert "ta bort ett steg" in fel[0]["message"]

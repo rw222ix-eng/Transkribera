@@ -750,3 +750,16 @@ def test_en_uppgift_far_prova_flera_avsnitt_i_samma_grupp():
     fel = exam_gen.avsnittstackning(_prov(utan), AVSNITT_1C, 12, KODER_1C)
     texter = " ".join(f["message"] for f in fel)
     assert "2.2 Tecken" in texter and "2.3 Intervall" in texter
+
+
+def test_likvardigheten_kraver_inte_fler_steg_an_np_betalar():
+    """126:9 tog elva steg på fyra poäng. Omprovet ska inte behöva kopiera
+    steg som stegvakten sedan fäller (exam 214, 2026-10-11)."""
+    lang = "$a = 1$ ger $b = 2$ ger $c = 3$ ger $d = 4$ ger $e = 5$ ger $f = 6$"
+    original = _prov([_u(poang=(1, 1, 0), typ="problem", losning=lang)])
+    steg = exam_gen.provslots(original)[0]["steg"]
+    assert steg > 4
+    kort = _prov([_u(poang=(1, 1, 0), typ="problem",
+                     losning="$a = 1$ ger $b = 2$ ger $c = 3$")])
+    assert exam_gen.provslots(kort)[0]["steg"] >= 2
+    assert exam_gen.likvardighetsvakt(kort, original) == []

@@ -400,3 +400,18 @@ def test_poangrundan_som_spracker_pappret_kastas_och_varnar():
     assert len(anrop) == 1 and res["rounds"] == 2
     assert res["exam"] is efter
     assert [f["code"] for f in res["errors"]] == ["poangvakt"]
+
+
+def test_omprovets_poang_hojs_aldrig():
+    """NA26F:s omprov (exam 214, 2026-10-11): poängen är originalets, och
+    «höj poängen» stod kvar som fynd efter alla rundor."""
+    fel = exam_gen.poangvakt(_prov(UPPG8), poang_last=True)
+    assert fel and all("höj INTE" in f["message"] or "Höj INTE" in f["message"]
+                       for f in fel)
+    u = {"del": "C", "typ": "problem", "formaga": "PL", "poang": [0, 2, 0],
+         "text": "Bestäm hur mycket kaféet sparar per år.",
+         "losning": "51 700 kr",
+         "bedomning": ("+1 C rätt uttryck och besparingen 51 700 kr\n"
+                       "+1 C korrekt svar med enhet")}
+    m = exam_gen.poangvakt(_prov(u), poang_last=True)[0]["message"]
+    assert "höj INTE" in m and "höj poängen så" not in m

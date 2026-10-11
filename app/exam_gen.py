@@ -12425,9 +12425,16 @@ def likvardighetsvakt(exam: dict, referens: dict | None) -> list[dict]:
         if ny["formaga"] != gammal["formaga"] and gammal["formaga"]:
             avvik.append(f"förmågan är {ny['formaga']} men ska vara "
                          f"{gammal['formaga']}")
-        if not gammal["omraknad"] and \
-                abs(ny["steg"] - gammal["steg"]) > OMPROV_STEGTOLERANS:
-            riktning = "färre" if ny["steg"] < gammal["steg"] else "fler"
+        # Stegmålet är originalets, men aldrig fler än NP betalar för
+        # poängen (np_vakter.stegvakt): 126:9 tog elva steg på fyra poäng,
+        # och omprovet 214 kunde då varken bli likvärdigt eller klara
+        # stegvakten (2026-10-11). Över taket är originalet inget mått.
+        mal = min(gammal["steg"], int(np_vakter.STEG_PER_POANG_TAK
+                                      * sum(gammal["poang"])))
+        if not gammal["omraknad"] and (
+                ny["steg"] < mal - OMPROV_STEGTOLERANS
+                or ny["steg"] > gammal["steg"] + OMPROV_STEGTOLERANS):
+            riktning = "färre" if ny["steg"] < mal else "fler"
             avvik.append(f"facit tar {ny['steg']} räknesteg mot originalets "
                          f"{gammal['steg']}, alltså {riktning} steg, "
                          "uppgiften är inte lika stor")
@@ -12621,7 +12628,8 @@ _RAKNEORD = {1: "en", 2: "två", 3: "tre"}
 
 
 def poangvakt(exam: dict, profil: str = "prov",
-              poang_tak: int | None = None) -> list[dict]:
+              poang_tak: int | None = None,
+              poang_last: bool = False) -> list[dict]:
     """Ger uppgiften en poäng per sak den ber om? Deterministiskt, ingen
     modell, ingen kostnad, och samma felform som avsnittstackning.
 
@@ -12657,6 +12665,11 @@ def poangvakt(exam: dict, profil: str = "prov",
     # ett 22-poängspapper med tak 23 fick båda rådet «höj», och pappret blev
     # 24. Det första fyndet får det som ryms, resten får «stryk».
     utrymme = (poang_tak - total) if poang_tak is not None else None
+    # OMPROVET: poängen är originalets, plats för plats, och får inte höjas
+    # alls (NA26F:s omprov, exam 214, 2026-10-11, där «höj poängen» stod kvar
+    # som fynd efter alla rundor).
+    if poang_last:
+        utrymme = 0
     ut: list[dict] = []
     rader: list[dict] = []
     for e in domarenheter(exam or {}):
@@ -12675,10 +12688,11 @@ def poangvakt(exam: dict, profil: str = "prov",
             if utrymme is not None and not pa_taket:
                 utrymme -= (krav - summa)
             if pa_taket:
+                vad = ("poängen är omprovets original" if poang_last else
+                       f"pappret ligger redan på taket {poang_tak} p")
                 rad = (f"uppgift {nr} kräver {_RAKNEORD.get(krav, krav)} "
                        f"saker ({', '.join(verb[:POANG_TAK])}) men ger "
-                       f"{summa} p, och pappret ligger redan på taket "
-                       f"{poang_tak} p. Höj INTE poängen: skriv om uppgiften "
+                       f"{summa} p, och {vad}. Höj INTE poängen: skriv om uppgiften "
                        f"så att den ber om exakt {_RAKNEORD.get(summa, summa)} "
                        "sak(er), stryk en uppmaning eller slå ihop två till "
                        "en prestation. Behåll poängtrippeln, delen och "
@@ -12696,6 +12710,17 @@ def poangvakt(exam: dict, profil: str = "prov",
         for r in exam_spec.bedomningsrader(e.get("bedomning")):
             if r["not"] or r["poang"] != 1 or len(_prestationsled(r["krav"])) < 2:
                 continue
+            if poang_last:
+                rader.append({
+                    **_err(f"uppgift {nr}", "poangvakt",
+                           f"uppgift {nr} ger EN poäng för två prestationer: "
+                           f"«+1 {r['niva']} {_kort(r['krav'], 60)}». Det här "
+                           "är ett omprov och poängen är originalets: höj INTE "
+                           "poängen. Skriv om raden så att den nämner EN "
+                           "prestation, och stryk den andra ur uppgiften om "
+                           "den inte är ett mellanled till svaret."),
+                    "nr": nr})
+                break
             rader.append({
                 **_err(f"uppgift {nr}", "poangvakt",
                        f"uppgift {nr} ger EN poäng för två prestationer: "
@@ -13187,7 +13212,8 @@ def _raknade_fynd(exam: dict, *, avsnitt: list[dict] | None, antal: int | None,
            + delmomenttackning(exam, delmoment or [], bokuppgifter)
            # Inget delmoment bara på A-nivå (exam 126, 2026-09-24 kväll).
            + delmomentniva(exam, delmoment or [])
-           + poangvakt(exam, profil, poang_tak)
+           + poangvakt(exam, profil, poang_tak,
+                       poang_last=referensprov is not None)
            + avsnittsniva(exam, avsnitt or [], bokuppgifter, koder)
            + delmomentvikt(exam, delmoment or [])
            + delmomentmarkning(exam, delmoment or [])
@@ -13205,7 +13231,8 @@ def _raknade_fynd(exam: dict, *, avsnitt: list[dict] | None, antal: int | None,
                 # metodföreskrift, parametrar, kursgräns, modellfamilj, dolt
                 # krav. Mätningen och reglerna står i app/np_vakter.py. Taket
                 # följer med sedan exam 128 (stegvakten höjde över det).
-                + np_vakter.np_vakter(exam, kurs, poang_tak)
+                + np_vakter.np_vakter(exam, kurs, poang_tak,
+                                      poang_last=referensprov is not None)
                 # Varje uppgift har sin förebild i kapitlet (prov 119).
                 + forebildsvakt(exam, kurs, koder)
                 # Varje begrepp punkten nämner, cosinus med, och grafisk

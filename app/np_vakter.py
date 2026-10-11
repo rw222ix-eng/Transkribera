@@ -311,7 +311,8 @@ def rakna_steg(losning: str) -> int:
     return steg
 
 
-def stegvakt(exam: dict, poang_tak: int | None = None) -> list[dict]:
+def stegvakt(exam: dict, poang_tak: int | None = None,
+             poang_last: bool = False) -> list[dict]:
     """Fler räknesteg än poängen betalar för, på lösningsuppgifter.
 
     PÅ TAKET HÖJS INGET (exam 128, 2026-09-23 kväll). Pappret skrevs på
@@ -319,7 +320,11 @@ def stegvakt(exam: dict, poang_tak: int | None = None) -> list[dict]:
     poängen»: lagningen gav uppgift 9 en fjärde C-poäng och pappret blev 21 p,
     63 minuter i hennes takt. Poängvakten (exam_gen.poangvakt) hade redan
     samma regel; här saknades den. Ligger pappret på taket ska ett steg bort
-    ur uppgiften i stället."""
+    ur uppgiften i stället.
+
+    `poang_last`: omprovets poäng är originalets (NA26F:s omprov, exam 214,
+    2026-10-11: «Höj poängen till 2» gick inte att följa, fyndet stod kvar).
+    Då är rådet alltid ett steg mindre."""
     # Taket med riktmärkets marginal (exam_spec.TAKT_MARGINAL, lärarens dom
     # 2026-09-25): under den får en uppgift en poäng till.
     pa_taket = poang_tak is not None and sum(
@@ -335,7 +340,10 @@ def stegvakt(exam: dict, poang_tak: int | None = None) -> list[dict]:
         steg = rakna_steg(e["kort"].get("losning", ""))
         if steg / poang <= STEG_PER_POANG_TAK:
             continue
-        atgard = (f"Pappret ligger på passets tak {poang_tak} p, så höj INTE "
+        atgard = ("Det här är ett omprov och poängen är originalets, så höj "
+                  "INTE poängen: ta bort ett steg ur uppgiften."
+                  if poang_last else
+                  f"Pappret ligger på passets tak {poang_tak} p, så höj INTE "
                   "poängen: ta bort ett steg ur uppgiften."
                   if pa_taket else
                   "Höj poängen till "
@@ -411,13 +419,14 @@ def formbyten(text: str) -> list[str]:
     return ut
 
 
-def formbytesvakt(exam: dict, poang_tak: int | None = None) -> list[dict]:
+def formbytesvakt(exam: dict, poang_tak: int | None = None,
+                  poang_last: bool = False) -> list[dict]:
     """Fler formbyten än poäng i en enhet (enhetsbyte och grundpotensform
     räknas var för sig). På passets tak (stegvakten, exam 128) är rådet bara
     ett byte, aldrig en poäng till."""
     # Taket med riktmärkets marginal (exam_spec.TAKT_MARGINAL, lärarens dom
     # 2026-09-25): under den får en uppgift en poäng till.
-    pa_taket = poang_tak is not None and sum(
+    pa_taket = poang_last or poang_tak is not None and sum(
         _poang(e) for e in _enheter(exam)) >= exam_spec.poang_tak_med_marginal(
             poang_tak)
     fel: list[dict] = []
@@ -433,7 +442,9 @@ def formbytesvakt(exam: dict, poang_tak: int | None = None) -> list[dict]:
             "grundpotensform är var sitt steg, och nationella provet i Ma 1a "
             "ger en E-poäng per steg. Låt uppgiften be om ett byte («Skriv "
             "307 km i grundpotensform.»)"
-            + (". Pappret ligger på passets tak, så höj INTE poängen."
+            + (". Poängen är omprovets original, så höj INTE poängen."
+               if poang_last else
+               ". Pappret ligger på passets tak, så höj INTE poängen."
                if pa_taket else
                " eller dela den i två deluppgifter med var sin poäng.")))
     return fel[:FORMBYTE_MAX_FYND]
@@ -1070,15 +1081,18 @@ KODER = ("stegvakt", "formbyte", "poangform", "metodvakt", "parametervakt",
 
 
 def np_vakter(exam: dict, kurs: str = "",
-              poang_tak: int | None = None) -> list[dict]:
+              poang_tak: int | None = None,
+              poang_last: bool = False) -> list[dict]:
     """De nio vakterna på ett prov, i den ordning läraren läser dem. Körs på
     profilen «prov» i exam_gen._raknade_fynd (fixrundan och slutgrinden) och i
     routes_exam.efterkontroll (canvasen och Laga-knappen).
 
     `poang_tak` är passets tak ur lärarens takt (exam_spec.poang_tak_for).
     Bara stegvakten läser det: på taket ber den om ett steg mindre i stället
-    för en poäng mer. None är beteendet före taket."""
-    return (stegvakt(exam, poang_tak) + formbytesvakt(exam, poang_tak)
+    för en poäng mer. None är beteendet före taket. `poang_last` (omprovet,
+    vars poäng är originalets) ger samma råd utan tak."""
+    return (stegvakt(exam, poang_tak, poang_last)
+            + formbytesvakt(exam, poang_tak, poang_last)
             + poangformvakt(exam, kurs) + metodvakt(exam)
             + parametervakt(exam, kurs) + kursvakt(exam, kurs)
             + familjvakt(exam) + doltkravvakt(exam) + lasregelvakt(exam)
