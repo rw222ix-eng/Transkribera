@@ -7050,6 +7050,32 @@ def nummerlista(nummer) -> list[int]:
     return ut
 
 
+def provnummer_pa_niva(prov: dict | None, mix) -> list[int]:
+    """Provets uppgifter som har poäng på bladets nivå, i provets ordning.
+
+    Bladet inför provet utan valda nummer betydde «blandat», och då prövade
+    ingen vakt att provets sorter övades (drilltackning är tyst utan nummer).
+    2026-10-11 blev NA26F:s E-blad inför prov 156 två gånger utan provets
+    potensfunktion, formeln ur tabellen och cosinus, fast uppgifterna var
+    märkta som övning på dem. Ett blad på EN nivå övar nu de av provets
+    uppgifter som ger poäng på den nivån, och drilltackning kräver dem.
+    `mix` är nivåvalets (E, C, A)-andelar; en nivå med andel noll räknas inte."""
+    if not isinstance(prov, dict) or not mix:
+        return []
+    ut: list[int] = []
+    for i, u in enumerate(prov.get("uppgifter") or [], 1):
+        if not isinstance(u, dict):
+            continue
+        rader = [u.get("poang")] + [d.get("poang") for d in u.get("deluppgifter") or []
+                                    if isinstance(d, dict)]
+        for p in rader:
+            if isinstance(p, (list, tuple)) and any(
+                    (p[k] if k < len(p) else 0) and mix[k] for k in range(3)):
+                ut.append(i)
+                break
+    return ut
+
+
 def build_refine_prompt(exam: dict, instruction: str,
                         nummer=None,
                         mal: dict | None = None, bok: str = "",

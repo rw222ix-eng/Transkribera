@@ -2108,6 +2108,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 infor_logg = (f"Inför provet «{titel}»: gruppuppgiften bygger "
                               "på provets uppgifter "
                               f"{', '.join(map(str, infor_nummer))}.")
+        # BLADET PÅ EN NIVÅ UTAN VALDA NUMMER (2026-10-11). «Blandat» lät
+        # bladet välja fritt, och drilltackning var tyst: NA26F:s E-blad inför
+        # prov 156 saknade två gånger provets potensfunktion och cosinus. Med
+        # ett nivåval övar bladet de av provets uppgifter som ger poäng på den
+        # nivån (exam_gen.provnummer_pa_niva). Utan nivåval står «blandat».
+        elif inforprov and typ == "arbetsblad" and not infor_nummer and nivaval:
+            infor_nummer = exam_gen.provnummer_pa_niva(inforprov, nivaval["mix"])
         # «Följ den här förlagan» och «undvik det du gjort förut» är motsatta
         # order. Referensläget löser det genom att släppa undvik-listan —
         # förlagan gör detsamma, av samma skäl: läraren har PEKAT på ett papper.

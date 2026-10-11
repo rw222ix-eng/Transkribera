@@ -511,6 +511,39 @@ def test_falten_nar_generatorn_bara_for_arbetsblad(client, monkeypatch):
     assert calls[-1]["inforprov"] is None and calls[-1]["infor_nummer"] == []
 
 
+def test_provnummer_pa_niva_tar_uppgifter_med_poang_pa_nivan():
+    """Deluppgifternas poäng räknas: provets uppgift 1 bär sina E-poäng i a)
+    och b), inte i stammen (prov 156, 2026-10-11)."""
+    prov = {"uppgifter": [
+        {"poang": [0, 0, 0], "deluppgifter": [{"poang": [1, 0, 0]}, {"poang": [0, 0, 1]}]},
+        {"poang": [0, 2, 0]},
+        {"poang": [0, 0, 3]},
+        {"poang": [2, 0, 0]},
+    ]}
+    assert exam_gen.provnummer_pa_niva(prov, (1.0, 0.0, 0.0)) == [1, 4]
+    assert exam_gen.provnummer_pa_niva(prov, (0.0, 1.0, 0.0)) == [2]
+    assert exam_gen.provnummer_pa_niva(prov, (0.0, 0.0, 1.0)) == [1, 3]
+    assert exam_gen.provnummer_pa_niva(None, (1.0, 0.0, 0.0)) == []
+
+
+def test_nivabladet_utan_nummer_ovar_provets_uppgifter_pa_nivan(client, monkeypatch):
+    """Tom lista på ett blad med nivåval blir provets uppgifter på den nivån,
+    så att drilltackning prövar dem. Utan nivåval står «blandat» kvar."""
+    calls = _stub_generate(monkeypatch)
+    prov_id, gid, cid = _godkant_prov(
+        client, titel="Prov 1", datum="2026-10-20",
+        klass="TE27D", kurs="Matematik, nivå 2b")
+    kropp = {"course_id": cid, "group_id": gid, "antal": 6, "typ": "arbetsblad",
+             "infor_prov_id": prov_id, "infor_nummer": []}
+    _done(client.post("/api/exams/generate", json={**kropp, "niva": "E-nivå"}))
+    prov = calls[-1]["inforprov"]
+    vantat = exam_gen.provnummer_pa_niva(
+        prov, exam_spec.nivaval("arbetsblad", "E-nivå")["mix"])
+    assert vantat and calls[-1]["infor_nummer"] == vantat
+    _done(client.post("/api/exams/generate", json=kropp))
+    assert calls[-1]["infor_nummer"] == []
+
+
 def test_provets_texter_gar_in_i_undvik_listan(client, monkeypatch):
     """Kopiorna ska fällas gratis av variationsvakten. Vägen via förlagan var
     inte farbar: den nollar undvik-listan och stänger av vakten."""
