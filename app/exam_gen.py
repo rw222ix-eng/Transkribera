@@ -12479,10 +12479,15 @@ def facktermsvakt(exam: dict) -> list[dict]:
             continue
         delar = [d for d in (u.get("deluppgifter") or []) if isinstance(d, dict)]
         ord_: list[str] = []
+        # Deluppgiften läses med sin stam: ett ord som stammen visat med ett
+        # exempel är visat också i b) (blad 228:6, 2026-10-11).
+        stam = str(u.get("text") or "")
         for x in [u] + delar:
             for falt in ("text", "notis"):
-                ord_ += [o for o in _fackord_utan_exempel(x.get(falt))
-                         if o not in ord_]
+                t = x.get(falt)
+                if x is not u and falt == "text" and isinstance(t, str):
+                    t = stam + "\n" + t
+                ord_ += [o for o in _fackord_utan_exempel(t) if o not in ord_]
         if not ord_:
             continue
         lista = ", ".join(f"«{o}»" for o in ord_)

@@ -282,3 +282,16 @@ def test_raden_om_vad_bokstaven_betyder_ar_inget_faktum():
     u2 = _uppg("Sara dricker kaffe.\nHon dricker te.\nHon äter en bulle.",
                (0, 0, 0), deluppgifter=[_del("Beräkna summan.", (0, 0, 1))])
     assert _fynd(_blad(u2))
+
+
+def test_deluppgiften_lases_med_sin_stam():
+    """Blad 228:6 (2026-10-11): stammen visade procentenheter med ett exempel,
+    och språkvakten fällde ordet i 6b."""
+    u = _uppg("Räntan höjs från $4\\,\\%$ till $5\\,\\%$, alltså med $1$ "
+              "procentenhet.", (0, 0, 0), deluppgifter=[
+                  _del("Hur många procentenheter höjs räntan nästa gång?",
+                       (0, 1, 0))])
+    assert exam_gen.facktermsvakt(_blad(u)) == []
+    u2 = _uppg("Räntan höjs.", (0, 0, 0), deluppgifter=[
+        _del("Hur många procentenheter höjs räntan?", (0, 1, 0))])
+    assert exam_gen.facktermsvakt(_blad(u2))
