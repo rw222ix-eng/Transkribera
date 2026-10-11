@@ -278,6 +278,42 @@ _KVADRERING = ("kvadrerings- och konjugatreglerna",
 # vakten; gamla 119 och 81 hade inte gjort det.
 for _niva in ("1a", "1b", "1c"):
     UTANFOR.setdefault(_niva, []).append(_KVADRERING)
+
+# ── SUMMOR OCH KALKYLPROGRAM (Rickard 2026-10-11, NA26F prov 3) ───────────
+# Exam 217 uppgift 11: «Hon amorterar lika mycket varje månad … Hur mycket
+# betalar Sara i ränta sammanlagt under de 5 åren?», med facit
+# (240 + 4)/2 · 60. Rickard: aritmetiska och geometriska summor ingår inte i
+# Ma 1c, inte heller räntan sammanlagt över många månaders amortering. Och
+# kalkylprogram förutsätts aldrig: klassen har inte använt dem, och GeoGebra
+# används bara för grafisk lösning. Kalendern hade lektionen «Annuitetslån och
+# amorteringsplan i GeoGebras kalkylblad» (26/11), som aldrig hölls så.
+_ANTAL_PERIODER = (r"(?:under|på|för)\s+(?:de\s+|alla\s+|hela\s+)?"
+                   r"(?:[3-9]|\d{2,}|tre|fyra|fem|sex|sju|åtta|nio|tio|tolv)"
+                   r"\s+(?:första\s+)?(?:år|åren|månader|månaderna|terminer)")
+_SUMMA = (
+    "summor",
+    "summor: aritmetisk och geometrisk summa, summatecken, och räntan "
+    "sammanlagt över många perioders amortering, där varje period har en ny "
+    "skuld",
+    re.compile(
+        r"(?i:(?:aritmetisk|geometrisk)\w*\s+summa|summaformel"
+        r"|summan\s+av\s+(?:de|alla)\s+(?:\d+\s+)?första)"
+        r"|\\sum(?![A-Za-z])|∑"
+        rf"|(?i:amort\w*[^?]{{0,300}}?ränt\w*[^?]{{0,120}}?"
+        rf"(?:sammanlagt|totalt|sammantaget|allt\s+som\s+allt)[^?]{{0,60}}?"
+        rf"(?:{_ANTAL_PERIODER}|hela\s+lånetiden))"
+        r"|(?i:ränt\w*[^?]{0,40}?hela\s+lånetiden)"))
+_KALKYL = (
+    "kalkylprogram",
+    "kalkylprogram och kalkylblad (också GeoGebras): en uppgift får aldrig "
+    "förutsätta dem",
+    re.compile(r"(?i:kalkylprogram|kalkylblad|kalkylark|(?<![\wåäö])excel"
+               r"(?![\wåäö]))"))
+for _niva in ("1a", "1b", "1c", "2a"):
+    UTANFOR.setdefault(_niva, []).append(_SUMMA)
+for _niva in ("1a", "1b", "1c"):
+    UTANFOR.setdefault(_niva, []).append(_KALKYL)
+
 # Det som bara ska gälla övningspapper, tills läraren sagt ja för proven.
 # Tom sedan kvadreringsreglerna flyttade till UTANFOR; mekanismen står kvar.
 BARA_OVNING: dict[str, list[tuple]] = {}

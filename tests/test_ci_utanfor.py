@@ -390,3 +390,31 @@ def test_formelreglerna_galler_bara_1c():
     papper = _papper({"text": "Rita $f(x) = x^2 - 4x + 3$ och $g(f(x))$."},
                      kurs="Matematik, nivå 2c")
     assert ci_utanfor.ci_vakt(papper) == []
+
+
+# ── SUMMOR OCH KALKYLPROGRAM (Rickard 2026-10-11, exam 217 uppgift 11) ────
+def _traffar(kurs, text):
+    return [n for n, _k, p in ci_utanfor.utanfor(kurs) if p.search(text)]
+
+
+def test_rantan_sammanlagt_over_manga_manader_ar_en_summa():
+    t = ("Sara lånar 60 000 kr. Räntan är 4,8 % per år och betalas varje månad. "
+         "Hon amorterar lika mycket varje månad, och efter 5 år är lånet betalt. "
+         "Hur mycket betalar Sara i ränta sammanlagt under de 5 åren?")
+    for kurs in ("Matematik, nivå 1c", "Matematik, nivå 1a", "Matematik, nivå 2a"):
+        assert "summor" in _traffar(kurs, t)
+    assert "summor" in _traffar("Matematik, nivå 1c", r"Beräkna $\sum_{k=1}^{5} k$.")
+    # En månads ränta, och två månader, står kvar.
+    assert _traffar("Matematik, nivå 1c",
+                    "Han amorterar 1 500 kr varje månad. Beräkna räntan för den "
+                    "andra månaden.") == []
+    assert _traffar("Matematik, nivå 1c",
+                    "Hon amorterar 500 kr. Hur mycket ränta betalar hon "
+                    "sammanlagt de två första månaderna?") == []
+
+
+def test_kalkylprogram_forutsatts_aldrig_i_kurs_1():
+    assert "kalkylprogram" in _traffar("Matematik, nivå 1c",
+                                       "Gör en amorteringsplan i ett kalkylprogram.")
+    assert "kalkylprogram" in _traffar("Matematik, nivå 1a", "Använd GeoGebras kalkylblad.")
+    assert "kalkylprogram" not in _traffar("Matematik, nivå 2a", "Använd kalkylbladet.")
