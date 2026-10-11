@@ -11149,6 +11149,16 @@ def _infor_grupp(valda: list[dict], rader: list[str], antal: int,
 # drillen också göra det, men en drill får ha en graf där provet hade formel.
 # En familj provets uppgift inte har något ur ställer inget krav (fail-open):
 # en procentuppgift prövas inte på funktionstyp.
+# Procentuell förändring per tidsenhet är exponentiell (exam 210:9, «Varje
+# år ökar antalet med lika många procent», falsklarm i 4a07847).
+_TIDSENHET = r"(?:år|månad|vecka|dag|dygn|timme|minut|kvart|sekund|decennium)"
+_PROCENT_PER_TID = (
+    r"lika många procent|procent per " + _TIDSENHET
+    + r"|%\s*(?:per|varje|om|i)\s+(?:\w+\s+)?" + _TIDSENHET
+    + r"|(?:halveras|fördubblas|tredubblas|halveringstid)"
+    + r"|(?:varje|per)\s+" + _TIDSENHET + r"\w*\s+(?:\w+\s+){0,3}?"
+    r"(?:ökar|minskar|växer|sjunker|stiger)\w*\s+(?:\w+\s+){0,3}?"
+    r"(?:med\s+)?[\d,{}]+\s*(?:%|procent)")
 _TRIG_RX = r"\\{f}\b|\b{f}\s*(?:\d|\(|\\|[a-zA-Zα-ω]\b)|\b{ord}"
 _DRILLFAMILJER: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
     ("funktion", (
@@ -11167,8 +11177,11 @@ _DRILLFAMILJER: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
          r"|(?<![a-zA-Z\\])[xt][²³]"),
         ("andragradsfunktion",
          r"andragrad|parabel|(?<![a-zA-Z\\])x\s*\^\s*\{?\s*2\b|x²"),
+        # «Förändringsfaktor» bara här, på bladets sida: på provets sida kan
+        # det vara en enstaka prisändring.
         ("exponentialfunktion",
-         r"exponential|exponentiell|[\d}]\s*\^\s*\{?\s*[a-z]\b"))),
+         r"exponential|exponentiell|förändringsfaktor|"
+         r"[\d}]\s*\^\s*\{?\s*[a-z]\b|" + _PROCENT_PER_TID))),
     ("trig", (
         ("sinus", _TRIG_RX.format(f="sin", ord="sinus")),
         ("cosinus", _TRIG_RX.format(f="cos", ord="cosinus")),
@@ -11189,7 +11202,7 @@ _FUNKTIONSORD = {
                        r"riktningskoefficient",
     "potensfunktion": r"potensfunktion",
     "andragradsfunktion": r"andragrad|parabel",
-    "exponentialfunktion": r"exponential|exponentiell",
+    "exponentialfunktion": r"exponential|exponentiell|" + _PROCENT_PER_TID,
 }
 # Symbolerna räknas på provets sida bara när uppgiften skriver en funktion
 # («f(x) =», «V(t) =», «y =»). Annars är «3x + 2» ett uttryck att förenkla

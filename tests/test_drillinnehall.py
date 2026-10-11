@@ -133,3 +133,47 @@ def test_blocket_sager_begreppen_men_aldrig_texterna():
     # Utan begrepp är blocket byte för byte som förut.
     gammalt = exam_gen.build_infor_prov(exam_gen.provslots(PROVET), [1, 11], 6)
     assert "SAMMA BEGREPP" not in gammalt and "prövar " not in gammalt
+
+
+# Prov 156:15 och exam 210:4, 210:9 (falsklarm i 4a07847, 2026-10-11).
+PROV_15 = {
+    "text": "En patient tar en tablett med 400 mg läkemedel.\nMängden i kroppen "
+            "minskar med lika många procent varje timme.",
+    "deluppgifter": [{"text": "Ställ upp en exponentiell modell för mängden "
+                      "$m$ mg efter $t$ timmar.",
+                      "losning": "$m = 400 \\cdot 0{,}85^{t}$\n"
+                                 "$400 \\cdot x^{2} = 289$"}],
+}
+PROCENT_PER_AR = {
+    "text": "Räknare tillåten. År 2020 hade 138 hus i en kommun solceller.\nÅr "
+            "2024 hade 412 hus solceller.\nVarje år ökar antalet med lika "
+            "många procent.\nBestäm hur många hus som har solceller år 2026.",
+    "losning": "$712$\n$138 \\cdot a^4 = 412$\n"
+               "$a = \\left(\\dfrac{412}{138}\\right)^{1/4} \\approx 1{,}314$",
+}
+BROMSSTRACKA = {
+    "text": "Räknare tillåten. Bromssträckan för en bil är proportionell mot "
+            "farten i kvadrat.\nVid farten 50 km/h är bromssträckan 14 m.\n"
+            "Bestäm den högsta farten då bromssträckan högst får vara 30 m.",
+    "losning": "$73$\n$s = a \\cdot v^2$\n$0{,}0056v^2 = 30$",
+}
+
+
+def test_procent_per_tidsenhet_ar_exponentiell():
+    """210:9 övar 156:15 på riktigt, fast ordet «exponentiell» saknas."""
+    assert exam_gen.drillavvikelse(PROV_15, PROCENT_PER_AR) == []
+    for text in ("Värdet minskar med 12 % per år.",
+                 "Varje månad minskar värdet med 3 %.",
+                 "Mängden halveras varje timme.",
+                 "Förändringsfaktorn är 1,05."):
+        assert "exponentialfunktion" in exam_gen.drillbegrepp(
+            {"text": text})["funktion"], text
+    # En enstaka prisändring är ingen tillväxt.
+    assert exam_gen.drillbegrepp(
+        {"text": "En jacka sänks med 25 %."})["funktion"] == frozenset()
+
+
+def test_kvadratisk_proportionalitet_ar_inte_exponentiell():
+    """210:4 (bromssträcka ∝ v²) märkt 15 fälls med rätta."""
+    assert exam_gen.drillavvikelse(PROV_15, BROMSSTRACKA) == [
+        "provets uppgift: exponentialfunktion, bladets: inget av det"]
