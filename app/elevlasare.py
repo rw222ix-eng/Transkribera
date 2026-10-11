@@ -421,10 +421,16 @@ def elevlasarfynd(enheter: list[dict], domar: dict[str, dict],
 def doma_elevlasare(exam: dict, *, model: str, inriktning: str = "",
                     profil: str = "prov",
                     llm=llm_client.generate,
-                    log_cb: Callable[[str], None] | None = None) -> list[dict]:
-    """Ett elevläsaranrop → fynd där eleven inte läser uppgiften som facit."""
+                    log_cb: Callable[[str], None] | None = None,
+                    bara: set[int] | None = None) -> list[dict]:
+    """Ett elevläsaranrop → fynd där eleven inte läser uppgiften som facit.
+    `bara` begränsar läsningen till vissa uppgiftsnummer (omskrivningsvarvet
+    läser bara det det rörde)."""
     log = log_cb or (lambda _m: None)
     enheter = exam_gen.domarenheter(exam)
+    if bara is not None:
+        enheter = [e for e in enheter
+                   if exam_gen._uppgiftsnr(e["nr"]) in set(bara)]
     if not enheter:
         return []
     log("Läser uppgifterna som en elev …")

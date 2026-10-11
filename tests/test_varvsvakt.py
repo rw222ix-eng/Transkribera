@@ -162,3 +162,35 @@ def test_rorda_uppgifter_ser_notisen_men_inte_platen():
     efter["uppgifter"][1]["notis"] = "Tips: faktorisera."
     efter["uppgifter"][2]["scen"].pop("plat")
     assert exam_gen._rorda_uppgifter(fore, efter) == {2}
+
+
+def test_bladets_varv_las_av_elevlasaren_bara_pa_rorda(monkeypatch):
+    """Rickards ja 2026-10-11: omskrivningsvarvet på bladet inför provet
+    läser de uppgifter det rörde som en elev, och bara dem."""
+    sett = {}
+
+    def falsk_elevlasare(exam, **k):
+        sett["bara"] = k.get("bara")
+        sett["profil"] = k.get("profil")
+        return [{"path": "uppgift 2", "code": "elevlasare",
+                 "message": "uppgift 2: eleven läser «minst» som «exakt»."}]
+
+    from app import elevlasare
+    monkeypatch.setattr(elevlasare, "doma_elevlasare", falsk_elevlasare)
+    fore = _exam()
+    varv = copy.deepcopy(fore)
+    varv["uppgifter"][1]["text"] = "Lös ekvationen $x^2 - 5x + 6 = 0$."
+    llm, calls = _llm(varv)
+    res = exam_gen._varvsvakt(fore, {"exam": varv, "errors": [], "rounds": 1},
+                              model="m", llm=llm, profil="arbetsblad",
+                              niva_mal=None, infor=_exam(), max_rounds=3)
+    assert sett == {"bara": {2}, "profil": "arbetsblad"}
+    assert len(_reparationer(calls)) == 1
+    assert "läser «minst» som «exakt»" in _reparationer(calls)[0]
+    assert res["rounds"] == 2
+    # Utan provet (inget blad inför provet) läser ingen elev.
+    sett.clear()
+    exam_gen._varvsvakt(fore, {"exam": varv, "errors": [], "rounds": 1},
+                        model="m", llm=llm, profil="arbetsblad",
+                        niva_mal=None, infor=None, max_rounds=3)
+    assert sett == {}

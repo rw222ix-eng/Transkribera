@@ -14850,6 +14850,7 @@ def _varvets_egna_fynd(fore_nycklar: set, efter: dict, rorda: set[int], *,
 
 def _varvsvakt(fore: dict, res: dict, *, model: str, llm, profil: str,
                niva_mal: dict | None, infor: dict | None, max_rounds: int,
+               inriktning: str = "",
                log_cb: Callable[[str], None] | None = None,
                steg_cb: Callable[[str], None] | None = None) -> dict:
     """Vakterna på varvets resultat, och EN låst lagningsrunda för det varvet
@@ -14882,7 +14883,19 @@ def _varvsvakt(fore: dict, res: dict, *, model: str, llm, profil: str,
                     for f in varvsvakter(fore, profil, infor=infor,
                                          poang_tak=tak)}
     matt = dict(profil=profil, infor=infor, poang_tak=tak)
-    nya = _varvets_egna_fynd(fore_nycklar, exam, rorda, **matt)
+    raknade = _varvets_egna_fynd(fore_nycklar, exam, rorda, **matt)
+    # ELEVLÄSAREN PÅ DE RÖRDA UPPGIFTERNA, på bladet inför provet (Rickards
+    # ja 2026-10-11). Granskningen av bladen hittade tvetydigheter som ett
+    # varv efter genereringen skrivit in (184:9, 183:9), och varvet kör bara
+    # räknade vakter. Ett anrop per varv, bara de uppgifter varvet rörde, och
+    # varje fynd räknas som varvets eget: elevläsaren kördes inte före.
+    lasta: list[dict] = []
+    if profil == "arbetsblad" and infor:
+        from app import elevlasare              # lånar domarenheter härifrån
+        lasta = elevlasare.doma_elevlasare(
+            exam, model=model, inriktning=inriktning, profil=profil, llm=llm,
+            log_cb=log_cb, bara=rorda)
+    nya = raknade + lasta
     if not nya:
         return res
     if res["rounds"] >= max_rounds:
@@ -14913,7 +14926,9 @@ def _varvsvakt(fore: dict, res: dict, *, model: str, llm, profil: str,
         log("Lagningen bröt valideringen: varvet står kvar, fynden som varningar.")
         return varning
     kvar = _varvets_egna_fynd(fore_nycklar, kandidat, rorda, **matt)
-    if len(kvar) >= len(nya):
+    # Elevläsarens fynd prövas inte om (ett anrop till): lagningen räknas när
+    # den inte lämnar fler räknade fynd än den fick.
+    if kvar and len(kvar) >= len(raknade):
         return varning
     if kvar:
         log(f"{len(kvar)} fynd står kvar efter lagningen, som varningar.")
@@ -15144,7 +15159,7 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
     # anrop till efteråt.
     res = _varvsvakt(exam, res, model=model, llm=llm, profil=profil,
                      niva_mal=niva_mal, infor=infor, max_rounds=max_rounds,
-                     log_cb=log_cb, steg_cb=steg)
+                     inriktning=inriktning, log_cb=log_cb, steg_cb=steg)
     # Poängen som önskemålet sa (se poangonske). Efter varvsvakten, så att
     # dess lagning inte flyttar poängen tillbaka efter att den satts.
     res = _poangonskepass(exam, instruction, res, model=model, llm=llm,
