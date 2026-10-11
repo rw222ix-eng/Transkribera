@@ -899,3 +899,33 @@ def test_infor_passet_far_en_egen_runda(monkeypatch):
                            llm=lambda *a, **k: json.dumps(blad),
                            max_rounds=3, doma=False)
     assert sett == {"rounds_used": 3, "max_rounds": 4}
+
+
+def test_provets_vakter_kors_igen_efter_nivagrinden(monkeypatch):
+    """Blad 224 (2026-10-11): nivågrindens extrarundor skrev om uppgifterna
+    efter _infor_pass, och tio räknade fynd stod kvar som varningar. Passet
+    körs en gång till efter grinden, utan elevläsaren och med en egen runda."""
+    anrop = []
+
+    def falsk_pass(exam, errors, **k):
+        anrop.append((k["doma"], k["rounds_used"], k["max_rounds"]))
+        return {"exam": exam, "errors": errors, "rounds": k["rounds_used"]}
+
+    def genom(res_eller_exam, *a, **k):
+        if isinstance(res_eller_exam, dict) and "exam" in res_eller_exam:
+            return res_eller_exam
+        return {"exam": res_eller_exam, "errors": a[0] if a else [],
+                "rounds": k.get("rounds_used", 0)}
+
+    monkeypatch.setattr(exam_gen, "_infor_pass", falsk_pass)
+    monkeypatch.setattr(exam_gen, "_domar_pass", genom)
+    monkeypatch.setattr(exam_gen, "_niva_grind", genom)
+    blad = _blad_doc([1] * 7)
+    exam_gen.generate_exam("Matematik, nivå 2b", "TE27", ["Andragrad"],
+                           model="", antal=7, profil="arbetsblad",
+                           inforprov=_prov_131(), infor_nummer=[1, 3],
+                           llm=lambda *a, **k: json.dumps(blad),
+                           max_rounds=3, doma=True)
+    assert len(anrop) == 2
+    assert anrop[0][0] is True and anrop[1][0] is False
+    assert anrop[1][2] == anrop[1][1] + 1

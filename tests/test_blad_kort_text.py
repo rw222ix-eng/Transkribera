@@ -216,3 +216,17 @@ def test_bladets_ordtak_ar_textmangdvakten():
     assert not any(marke in f["text"]
                    for f in routes_exam._sprakfynd(exam, "prov", blad=True))
     assert exam_gen.textmangdvakt(exam) == []
+
+
+def test_forklaringen_efter_fragan_raknas_inte():
+    """Rickard 2026-10-11: på bladen får förklaringar för svag svenska gå över
+    taket. Blad 223:6 fick förklaringen av allmän form efter frågan."""
+    fraga = ("Linjen $L$ är parallell med linjen $2{,}4x - 1{,}6y + 4 = 0$.\n"
+             "$L$ och linjen $y = -x + 4$ skär $x$-axeln i samma punkt.\n"
+             "Bestäm ekvationen för $L$ i allmän form.")
+    forkl = ("\nI allmän form står alla termer i vänsterledet och 0 i "
+             "högerledet.\nEtt exempel är $5x - 2y + 7 = 0$.")
+    assert _fynd(_blad(_uppg(fraga + forkl, (0, 3, 0)))) == []
+    # Ett krav efter frågan räknas fortfarande (blad 183:6).
+    krav = "\nSvara med minst en decimal.\nFörklara kort vad du gör i varje steg."
+    assert exam_gen._utan_forklaring_efter_fragan(fraga + krav) == fraga + krav

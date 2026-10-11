@@ -12137,7 +12137,8 @@ def textmangdvakt(exam: dict) -> list[dict]:
     _rentext gör «0{,}3» till «0 , 3», tre ord, och en E-deluppgift med två
     decimaltal nådde taket på talen i stället för på texten (26/9)."""
     def _ord(text: str) -> int:
-        return _ord_fore_fragan(text.replace("{,}", ","))
+        return _ord_fore_fragan(_utan_forklaring_efter_fragan(
+            text.replace("{,}", ",")))
 
     ut: list[dict] = []
     for i, u in enumerate((exam or {}).get("uppgifter") or [], 1):
@@ -12185,6 +12186,30 @@ def textmangdvakt(exam: dict) -> list[dict]:
                 f"när det blir kortare. {rad}" + _efter_fragan_rad(stam, o, tak_o)
                 + BEHALL_PLANEN))
     return ut
+
+
+# FÖRKLARINGEN EFTER FRÅGAN (Rickard 2026-10-11): på bladen får förklaringar
+# för svag svenska göra texten längre än taket. Blad 223:6 (IndA C inför prov
+# 215) fick «I allmän form står alla termer i vänsterledet …» och «Ett exempel
+# är $5x - 2y + 7 = 0$.» efter frågan, som språkvakten bett om, och textvakten
+# fällde dem som text före frågan. En sådan mening efter den första frågan
+# räknas inte. «Svara med minst en decimal.» och «Förklara kort …» är krav
+# och inte förklaringar, så de räknas som förut (blad 183:6).
+_FORKLARINGSMENING_RE = re.compile(
+    r"(?<![\wåäö])(betyder|kallas|till exempel|ett exempel|exempel på"
+    r"|i [\wåäö]+ form står)(?![\wåäö])", re.IGNORECASE)
+
+
+def _utan_forklaring_efter_fragan(text: str) -> str:
+    mm = _stammens_meningar(text)
+    k = next((j for j, m in enumerate(mm) if _ar_fraga(m)), None)
+    if k is None:
+        return text
+    efter = [m for m in mm[k + 1:]
+             if not (_FORKLARINGSMENING_RE.search(m) or _BEGREPPSDEF_RE.search(m))]
+    # Orörd text när inget stryks: _MENING delar också på radbrytningar, och
+    # sammanslagna meningar kan flytta vilken mening som räknas som sist.
+    return text if len(efter) == len(mm) - k - 1 else " ".join(mm[:k + 1] + efter)
 
 
 def _efter_fragan_rad(stam: str, o: int, tak: int) -> str:
@@ -14809,6 +14834,21 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # skrivit om uppgifter sedan fixrundan sa sitt, och prov 82 levererades
     # utan ett delmoment som fixrundan hade lagat. Se blocket vid _slutgrind.
     res = slut(res, SLUTRUNDOR)
+    # ── BLADET INFÖR PROVET: PROVETS VAKTER EFTER NIVÅGRINDEN (2026-10-11) ──
+    # Blad 224 (IndA A, jobb 1585): _infor_pass lagade sex ställen, sedan
+    # skrev nivågrindens tre extrarundor om uppgifterna, och tio räknade fynd
+    # (uppdrag utan a/b, dolt krav, förbjudet avsnitt, radlängd) stod kvar
+    # som varningar. Slutgrinden går inte på ett blad utan kapitelram. En
+    # runda till med samma vakter, utan elevläsaren (doma=False): bara det
+    # som räknas, och fail-open som passet självt.
+    if (inforprov and profil == "arbetsblad" and drillade
+            and res["exam"] is not None):
+        res = {**res, **_infor_pass(
+            res["exam"], res["errors"], model=model, llm=llm, profil=profil,
+            antal=antal, skeleton=grammatik, nummer=drillade, koder=koder,
+            niva_mal=niva_mal, prov=inforprov, ram=ram, doma=False,
+            inriktning=inriktning, rounds_used=res["rounds"],
+            max_rounds=res["rounds"] + 1, log_cb=log_cb)}
     # ── BEDÖMNINGSPASSET (2026-08-23) ────────────────────────────────
     # Sist av allt, och bara på PROVET: det är provets bedömningsanvisning
     # läraren rättar efter, och arbetsbladets och gruppuppgiftens facit heter
