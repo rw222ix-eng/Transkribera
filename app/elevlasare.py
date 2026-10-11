@@ -120,6 +120,12 @@ def _utan_facit(e: dict) -> dict:
     if kort.get("stam"):
         rad["stam"] = kort["stam"]
     rad["text"] = kort.get("text") or ""
+    # Det eleven också ser på pappret. Domarkortet bär dem sedan c61cb5c, men
+    # här föll de bort, och elevläsaren skrev «Jag ser inte tabellen» om blad
+    # 226:5 och 226:9 (2026-10-11) och letade efter tal som stod i tabellen.
+    for falt in ("tabell", "stegtabell", "alternativ"):
+        if kort.get(falt):
+            rad[falt] = kort[falt]
     return rad
 
 

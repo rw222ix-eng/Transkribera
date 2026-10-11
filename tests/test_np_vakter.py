@@ -656,3 +656,14 @@ def test_forklarade_beteckningar_ar_ingen_motivering():
     assert not k.search("välstrukturerad redovisning där beteckningarna är "
                         "förklarade och svaret är 40 kr")
     assert k.search("förklarar varför") and k.search("korrekt förklaring")
+
+
+def test_elevlasaren_ser_tabellen_och_alternativen():
+    """Blad 226:5 och 9 (2026-10-11): elevläsaren skrev «Jag ser inte
+    tabellen», för _utan_facit tog bara stam och text."""
+    from app import elevlasare
+    e = {"nr": "5", "kort": {"text": "Tabellen nedan visar två beställningar.",
+                             "tabell": {"rubriker": ["A"], "rader": [["1"]]},
+                             "alternativ": ["1", "2"], "losning": "hemligt"}}
+    rad = elevlasare._utan_facit(e)
+    assert rad["tabell"] and rad["alternativ"] and "losning" not in rad
