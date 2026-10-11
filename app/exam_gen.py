@@ -9864,6 +9864,13 @@ _BEGREPPSDEF_RE = re.compile(
 _RAKNEEXEMPEL_RE = re.compile(
     r"(?<![\wåäö])(?:till exempel|exempel|t\.\s?ex\.)\s*:?[^.?!\n]{0,80}"
     r"\$[^$]*=[^$]*\$", re.IGNORECASE)
+# SVARSMALLEN (E-provet 222, 2026-10-11): «Svaret ska vara ett enda $x$ med
+# en exponent, alltså se ut så här: $x^{?}$» och «Skriv svaret på samma sätt
+# som antalet slag är skrivet, alltså som $a \cdot 10^{n}$». Elevläsarens
+# lagning skrev in svarets form, och då är det formen som inte prövas längre.
+_SVARSMALL_RE = re.compile(
+    r"(?<![\wåäö])(?:alltså|det vill säga|dvs\.?)\s+(?:se ut\s+)?"
+    r"(?:som|så här)\s*:?\s*\$", re.IGNORECASE)
 FORKLARING_MAX_FYND = 4
 
 
@@ -9874,7 +9881,8 @@ def forklaringsvakt(exam: dict) -> list[dict]:
     for e in domarenheter(exam):
         kort = e["kort"]
         t = f"{kort.get('stam', '')} {kort.get('text', '')}"
-        m = _BEGREPPSDEF_RE.search(t) or _RAKNEEXEMPEL_RE.search(t)
+        m = (_BEGREPPSDEF_RE.search(t) or _RAKNEEXEMPEL_RE.search(t)
+             or _SVARSMALL_RE.search(t))
         if not m:
             continue
         fel.append(_err(

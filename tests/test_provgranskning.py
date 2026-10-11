@@ -796,3 +796,12 @@ def test_likvardigheten_jamfor_platsens_delmoment():
     assert "originalets plats prövar" in \
         exam_gen.likvardighetsvakt(fel_sak, original)[0]["message"]
     assert exam_gen.likvardighetsvakt(samma, original) == []
+
+
+def test_svarsmallen_ar_en_forklaring_pa_provet():
+    """E-provet 222 (2026-10-11): «alltså se ut så här: $x^{?}$» visar
+    svarets form, och då prövas formen inte längre."""
+    prov = _prov([_u(text="Skriv $\\sqrt[5]{x}$ som en potens. Svaret ska "
+                          "alltså se ut så här: $x^{?}$."),
+                  _u(text="Skriv $x^4 \\cdot x^{-7}$ som en potens.")])
+    assert [f["path"] for f in exam_gen.forklaringsvakt(prov)] == ["uppgift 1"]
