@@ -329,6 +329,32 @@ def test_stadningen_gor_spoken_till_avbrutna(db_file):
         conn.close()
 
 
+def test_stadningen_ror_inte_en_levande_servers_jobb(db_file):
+    """Ett skript som bygger routern mot samma bas medan Superappen lever ska
+    inte döda Superappens jobb (2026-10-11, jobb 1471–1474). Bara jobb vars
+    process är död, eller vars pid är okänd (före v31), blir avbrutna."""
+    import subprocess
+    import sys
+    levande = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    dod = subprocess.Popen([sys.executable, "-c", "pass"])
+    dod.wait()
+    conn = appdb.connect(db_file)
+    try:
+        ids = {}
+        for namn, pid in (("levande", levande.pid), ("dod", dod.pid), ("okand", None)):
+            ids[namn] = appdb.skapa_jobb(conn, typ="arbetsblad")
+            appdb.satt_jobb_status(conn, ids[namn], "running")
+            with appdb.skriv(conn):
+                conn.execute("UPDATE jobb SET pid = ? WHERE id = ?", (pid, ids[namn]))
+        assert appdb.stada_jobb(conn) == 2
+        status = {n: appdb.hamta_jobb(conn, i)["status"] for n, i in ids.items()}
+        assert status == {"levande": "running", "dod": "avbrutet", "okand": "avbrutet"}
+    finally:
+        conn.close()
+        levande.kill()
+        levande.wait()
+
+
 def test_ett_avslutat_jobb_flyttas_inte_igen(db_file):
     """En tråd som hinner skriva sitt `done` efter Avbryt får inte skriva över
     avbrottet — då hade listan sagt att pappret blev skrivet."""

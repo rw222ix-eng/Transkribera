@@ -18,12 +18,13 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import sqlite3
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 30
+SCHEMA_VERSION = 31
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -776,6 +777,18 @@ _EGRANS_MIGRATION = """
 ALTER TABLE exams ADD COLUMN e_extra INTEGER;
 """
 
+# Jobbets process (v31), ENDAST additiv. Rollback: kolumnen kan lämnas kvar
+# (NULL = okänd process, städas som förut) + PRAGMA user_version=30.
+#
+# stada_jobb körs när en process bygger routern, och den gjorde varje körande
+# jobb till «avbrutet», också jobb som en ANNAN levande server körde. 2026-10-11
+# dog fyra refiner i Superappen (jobb 1471–1474) när ett granskningsskript i en
+# annan session byggde appen med TestClient mot samma bas. Med processens pid på
+# raden städas bara jobb vars process inte längre lever.
+_JOBBPID_MIGRATION = """
+ALTER TABLE jobb ADD COLUMN pid INTEGER;
+"""
+
 # Bokens genomräknade exempel (v24) — ENDAST additiv; rollback: kolumnen kan
 # lämnas kvar (NULL är giltigt) + PRAGMA user_version=23.
 #
@@ -909,13 +922,14 @@ _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                27: _JOBB_MIGRATION,
                                28: _SPAR_MIGRATION,
                                29: _LEKTIONSRUBRIK_MIGRATION,
-                               30: _EGRANS_MIGRATION}
+                               30: _EGRANS_MIGRATION,
+                               31: _JOBBPID_MIGRATION}
 
 # Migreringar som bara innehåller ALTER TABLE … ADD COLUMN. De körs sats för
 # sats så att en redan tillagd kolumn hoppas över i stället för att fälla hela
 # migreringen — se _apply_migrations.
 _ALTER_MIGRATIONER = {6, 12, 13, 14, 16, 17, 18, 21, 22, 23, 24, 25, 26, 29,
-                      30}
+                      30, 31}
 
 _LESSON_SELECT = """
 SELECT l.*, g.namn AS group_namn, c.namn AS course_namn
@@ -3714,10 +3728,10 @@ def skapa_jobb(conn: sqlite3.Connection, *, typ: str,
     """Ett nytt jobb i kö. Id:t är det klienten får som första SSE-event."""
     with skriv(conn):
         cur = conn.execute(
-            "INSERT INTO jobb(typ, status, skapad, dokument_id) "
-            "VALUES (?, 'queued', ?, ?)",
+            "INSERT INTO jobb(typ, status, skapad, dokument_id, pid) "
+            "VALUES (?, 'queued', ?, ?, ?)",
             (str(typ), _nu(),
-             None if dokument_id is None else str(dokument_id)))
+             None if dokument_id is None else str(dokument_id), os.getpid()))
     return int(cur.lastrowid)
 
 
@@ -3834,13 +3848,39 @@ def stada_jobb(conn: sqlite3.Connection) -> int:
 
     Trådarna bor i serverprocessen; startar den om finns ingen kvar som kan
     skriva deras slut. Utan den här raden hade en omstart lämnat spöken som en
-    ny flik visat som «pågår» för alltid. Körs en gång vid uppstart."""
+    ny flik visat som «pågår» för alltid. Körs en gång vid uppstart.
+
+    BARA JOBB VARS PROCESS ÄR DÖD (v31). Varje process som bygger routern kör
+    den här, också ett skript med TestClient mot samma bas medan Superappen
+    lever, och då dog Superappens jobb (2026-10-11, jobb 1471–1474). Ett jobb
+    utan pid (skapat före v31) städas som förut."""
+    rader = conn.execute(
+        "SELECT id, pid FROM jobb WHERE status IN ('queued', 'running')"
+    ).fetchall()
+    doda = [int(r[0]) for r in rader if not _process_lever(r[1])]
+    if not doda:
+        return 0
     with skriv(conn):
         cur = conn.execute(
             "UPDATE jobb SET status = 'avbrutet', klar = ?, "
             "fel = COALESCE(fel, 'Servern startade om medan jobbet kördes.') "
-            "WHERE status IN ('queued', 'running')", (_nu(),))
+            f"WHERE status IN ('queued', 'running') AND id IN "
+            f"({','.join('?' * len(doda))})", (_nu(), *doda))
     return int(cur.rowcount or 0)
+
+
+def _process_lever(pid) -> bool:
+    """Lever processen som skapade jobbet? Den egna processen räknas som död:
+    en process som just byggt routern har inga trådar kvar från ett jobb med
+    samma pid, så ett sådant jobb är en kvarleva från en återanvänd pid.
+    Okänd pid (NULL, före v31) räknas också som död."""
+    if not pid or int(pid) == os.getpid():
+        return False
+    try:
+        import psutil
+        return psutil.pid_exists(int(pid))
+    except Exception:                       # pragma: no cover
+        return False
 
 
 def rensa_jobb(conn: sqlite3.Connection, behall: int = 200) -> int:
