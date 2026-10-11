@@ -1482,3 +1482,31 @@ def test_domaren_ser_stegtabellen_och_alternativen_men_inte_facit():
     assert e[1]["kort"]["alternativ"] == ["1", "2", "3"]
     assert "forsta_fel" not in str(e) and "ratt_alternativ" not in str(e)
     assert set(e[2]["kort"]) == {"text", "losning", "typ", "formaga"}
+
+
+def test_del_utan_rubrik_bredvid_namngivna_delar_ar_inget_delmoment():
+    """NA26F 4/12 (exam 219, 2026-10-11): s. 246 utan rubrik ärvde lektionens
+    hela rubrik och blev ett falskt delmoment."""
+    rader = [{"datum": "2026-12-04", "fran": 240, "till": 253,
+              "rubrik": "Analys och hantering av statistiska data. Samband och orsaks",
+              "delar": [{"fran": 240, "till": 243, "rubrik": "Analys och hantering av statistiska data"},
+                        {"fran": 249, "till": 253, "rubrik": "Samband och orsakssamband"},
+                        {"fran": 246, "till": 246}]},
+             # Utan någon rubrik i delarna står lektionens rubrik kvar.
+             {"datum": "2026-12-05", "fran": 260, "till": 262, "rubrik": "Korrelation",
+              "delar": [{"fran": 260, "till": 261}, {"fran": 262, "till": 262}]}]
+    namn = [d["delmoment"] for d in exam_gen.delmoment_ur_lektioner(
+        rader, fran=224, till=271, provdatum="2027-01-14")]
+    assert namn == ["Analys och hantering av statistiska data",
+                    "Samband och orsakssamband", "Korrelation"]
+
+
+def test_efterkontrollen_kor_provets_ordtak():
+    """Exam 219 uppgift 15: 43 ord före frågan efter en omskrivning, inget fynd."""
+    from app.web import routes_exam
+    lang = " ".join(["Eleverna"] + ["svarar"] * 42) + ". Hur många procent svarar ja?"
+    exam = {"titel": "t", "kurs": "Matematik, nivå 1c", "uppgifter": [
+        {"text": lang, "typ": "problem", "poang": [0, 2, 0], "losning": "x"}]}
+    fynd = routes_exam._sprakfynd(exam, "prov")
+    assert any(f["kod"] == "begriplighet" and f["nr"] == 1 and "taket är 40" in f["text"]
+               for f in fynd)

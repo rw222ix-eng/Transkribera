@@ -2504,7 +2504,14 @@ def delmoment_ur_lektioner(rader: list[dict], *, fran: int, till: int,
         fordjupat = _fordjupade(rubrik)
         delar = [d for d in (r.get("delar") or []) if isinstance(d, dict)] \
             if isinstance(r.get("delar"), list) else []
+        # En del utan egen rubrik bredvid delar med rubrik är ett tillägg
+        # (NA26F 4/12: s. 246, programmeringsövningen), inte ett delmoment.
+        # Den ärvde förut lektionens hela rubrik och blev ett falskt delmoment
+        # «Analys och hantering … Samband och orsaks» (exam 219, 2026-10-11).
+        namngivna = any(str(d.get("rubrik") or "").strip() for d in delar)
         for d in (delar or [{}]):
+            if namngivna and not str(d.get("rubrik") or "").strip():
+                continue
             if _delmomentnamn(str(d.get("rubrik") or "")).casefold() \
                     in fordjupat:
                 continue
@@ -5223,17 +5230,7 @@ def begriplighetssignaler(exam: dict, profil: str = "gruppuppgift") -> list[dict
         ut: list[dict] = sprakvakt(exam)
         # Svarsform ur provets kapitel och korta deluppgifter (2026-10-08).
         ut += intervallvakt(exam) + deluppgiftsvakt(exam) + tidsvektorvakt(exam)
-        for e in domarenheter(exam):
-            kort = e["kort"]
-            text = f"{kort.get('stam', '')} {kort.get('text', '')}".strip()
-            ord_ = _ord_fore_fragan(text)
-            if ord_ > ORD_FORE_FRAGAN:
-                ut.append(_err(
-                    f"uppgift {e['nr']}", "begriplighet",
-                    f"uppgift {e['nr']} har {ord_} {ORDVAKTENS_MARKE} "
-                    f"(taket är {ORD_FORE_FRAGAN}). Korta ned "
-                    "till en situation och de tal som faktiskt behövs, och "
-                    "ställ frågan tidigare." + BEHALL_PLANEN))
+        ut += ordvakt(exam)
         return ut[:MAX_DOMAR_PROBLEM]
     if profil != "gruppuppgift":
         return []
@@ -5750,6 +5747,28 @@ def build_begriplighet_prompt(kort: list[dict], inriktning: str = "",
 # provet blir en vakt läraren slutar tro på. Elevläsaren tar de övriga
 # kraven, som inte går att räkna: läser eleven uppgiften som facit gör?
 ORD_FORE_FRAGAN = 40
+
+
+def ordvakt(exam: dict) -> list[dict]:
+    """Provets ordtak: högst ORD_FORE_FRAGAN ord före frågan, per enhet.
+
+    Egen funktion sedan 2026-10-11 så att efterkontrollen kan köra den
+    (routes_exam._sprakfynd). NA26F prov 3 (exam 219) uppgift 15 fick 43 ord
+    av en omskrivning, och efterkontrollen sa ingenting: den körde bara
+    språkvakten. Rickard 10/10: «max fyrtio ord per uppgift»."""
+    ut: list[dict] = []
+    for e in domarenheter(exam):
+        kort = e["kort"]
+        text = f"{kort.get('stam', '')} {kort.get('text', '')}".strip()
+        ord_ = _ord_fore_fragan(text)
+        if ord_ > ORD_FORE_FRAGAN:
+            ut.append(_err(
+                f"uppgift {e['nr']}", "begriplighet",
+                f"uppgift {e['nr']} har {ord_} {ORDVAKTENS_MARKE} "
+                f"(taket är {ORD_FORE_FRAGAN}). Korta ned "
+                "till en situation och de tal som faktiskt behövs, och "
+                "ställ frågan tidigare." + BEHALL_PLANEN))
+    return ut
 
 
 def _parse_begriplighet(raw: str) -> dict[str, dict]:

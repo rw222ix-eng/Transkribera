@@ -480,19 +480,28 @@ def _sprakfynd(exam: dict, typ: str) -> list[dict]:
         return []
     try:
         fel = exam_gen.sprakvakt(exam)
+        ordfel = exam_gen.ordvakt(exam)
     except Exception:                       # pragma: no cover
         return []
+    # Ordtaket med eget fynd per uppgift (exam 219 uppgift 15, 2026-10-11):
+    # efterkontrollen körde bara språkvakten, och 43 ord före frågan stod kvar
+    # utan ett ord. Meddelandet är vaktens eget, med taket i klartext.
+    ord_ut = [_fynd("begriplighet", f["message"][0].upper() + f["message"][1:]
+                    .split(". Korta ned")[0] + ". Korta ned till de tal som "
+                    "behövs och ställ frågan tidigare.",
+                    _uppgiftsnr(f.get("path", "")))
+              for f in ordfel]
     # Vaktens meddelanden är skrivna TILL MODELLEN («Skriv vad eleven ska
     # GÖRA …»). Läraren behöver numret och den första meningen; resten är
     # reparationsinstruktioner hon inte ska behöva läsa.
     nummer = sorted({_uppgiftsnr(f.get("path", "")) for f in fel} - {None})
     if not nummer:
-        return []
+        return ord_ut
     return [_fynd(
         "sprak", "Språkvakten fäller uppgift "
         + ", ".join(str(n) for n in nummer)
         + ": för långa meningar, staplade räkneord eller ord som är svårare än "
-        "matematiken. Läs dem högt en gång.")]
+        "matematiken. Läs dem högt en gång.")] + ord_ut
 
 
 def _facktermfynd(exam: dict, typ: str) -> list[dict]:
