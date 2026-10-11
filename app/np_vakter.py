@@ -522,6 +522,24 @@ _LHS_RE = re.compile(r"^\s*([a-zA-Z])(?:_\{[^}]*\}|_[a-zA-Z0-9])?\s*=")
 _TILLDELAD_RE = re.compile(r"^\s*([a-zA-Z])\s*=\s*-?\d")
 _DAR_AR_RE = re.compile(r"\$([a-zA-Z])\$\s+(?:är|betecknar|anger|står för)")
 _FUNK_RE = re.compile(r"([a-zA-Z])\s*\(")
+# Granskningen 2026-10-11 (prov 156 och 163): vakten räknade vektornamnen
+# (u, v, w), objektens namn («linjen $L$») och storheterna («$t$ timmar»)
+# som konstanter, och en E-uppgift «Beräkna $\vec{u} + \vec{v}$» fälldes.
+# Ett namn på en sak är ingen parameter, och inte heller det tal uppgiften
+# ber eleven bestämma («Bestäm talet $k$»).
+_VEKTOR_RE = re.compile(r"\\(?:vec|overrightarrow)\s*\{\s*([a-zA-Z]+)\s*\}")
+_NAMNGIVEN_RE = re.compile(
+    r"(?:linjen|linjerna|punkten|punkterna|vinkeln|sidan|sträckan|triangeln"
+    r"|hörnet|toppen|kateten|hypotenusan|vektorn|kurvan|grafen)\s+"
+    r"\$([a-zA-Z])\$", re.I)
+_STORHET_RE = re.compile(
+    r"\$([a-zA-Z])\$\s+(?:kr|kronor|öre|timmar|timme|minuter|minut|sekunder"
+    r"|dagar|dygn|veckor|månader|år|st|stycken|m|cm|mm|dm|km|liter|l|dl|cl"
+    r"|ml|kg|hg|g|mg|ton|grader|procent|personer)(?![\wåäö])")
+_SOKT_RE = re.compile(
+    r"(?:bestäm|beräkna|ange)\s+(?:talet|värdet på|det positiva värdet på"
+    r"|de värden på|alla möjliga värden på|konstanten)\s+\$([a-zA-Z])\$",
+    re.I)
 
 
 def konstanter(text: str) -> set[str]:
@@ -536,6 +554,7 @@ def konstanter(text: str) -> set[str]:
     rakning: Counter = Counter()
     definierade: set[str] = set()
     for b in _MATH_RE.findall(str(text or "")):
+        b = _VEKTOR_RE.sub(" ", b)
         m = _LHS_RE.match(b)
         if m:
             definierade.add(m.group(1))
@@ -546,6 +565,8 @@ def konstanter(text: str) -> set[str]:
         definierade |= set(_FUNK_RE.findall(ren))
         rakning.update(re.findall(r"[a-zA-Z]", ren))
     definierade |= set(_DAR_AR_RE.findall(str(text or "")))
+    for rx in (_NAMNGIVEN_RE, _STORHET_RE, _SOKT_RE):
+        definierade |= set(rx.findall(str(text or "")))
     kvar = set(rakning) - definierade - {"x", "y"}
     if "x" not in rakning and "y" not in rakning and kvar:
         kvar.discard(max(sorted(kvar), key=lambda b: rakning[b]))

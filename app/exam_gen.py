@@ -2390,12 +2390,24 @@ def build_spridning(avsnitt: list[dict], antal: int,
 _EJ_PROVBART = ("programmering", "kalkylblad", "geogebra", "excel",
                 "repetition", "kapiteltest", "blandade uppgifter",
                 "aktivitet", "laboration", "provräkning", "utvärdering",
-                "fördjupning")
+                "fördjupning",
+                # Rubrikens extra meningar (granskningen 2026-10-11: prov 129
+                # och 175 fick fynd om «Testa dig själv 2» och «Mönster och
+                # generella samband. Räkna ifatt»). Ingen av dem är innehåll.
+                "testa dig själv", "blandade övningar", "räkna ifatt")
 
 
 def _delmomentnamn(text: str) -> str:
     """Rubriken som delmomentnamn: ett mellanslag, ingen skiljeteckensvans."""
     return " ".join((text or "").split()).strip(" .,;:·-–—")
+
+
+def _provbara_delar(rubrik: str) -> str:
+    """Rubriken utan de meningar som inte är innehåll: «Mönster och generella
+    samband. Räkna ifatt» blir «Mönster och generella samband», och en
+    rubrik där ingen mening är provbar blir tom."""
+    delar = re.split(r"(?<=[.!?])\s+", str(rubrik or ""))
+    return " ".join(d for d in delar if d.strip() and not _ej_provbart(d))
 
 
 def _ej_provbart(namn: str) -> bool:
@@ -2439,7 +2451,7 @@ def _delmomentlista(poster: list[tuple[int, int, str]],
     då är talet sidantalet, vilket är samma sorts mått på samma sak."""
     ut: dict[str, dict] = {}
     for fran, till, rubrik in poster:
-        namn = _delmomentnamn(rubrik)
+        namn = _delmomentnamn(_provbara_delar(rubrik))
         if not namn or _ej_provbart(namn):
             continue
         p = ut.get(namn.casefold())

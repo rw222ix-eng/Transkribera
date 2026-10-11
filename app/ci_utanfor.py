@@ -197,6 +197,12 @@ _MATTESTYCKE = re.compile(r"\$\$?([^$]+)\$\$?")
 _KVADRATPARENTES = re.compile(r"\(([^()]*)\)\s*\^\s*\{?\s*2\s*\}?")
 _ENSAM_BOKSTAV = re.compile(r"(?<![A-Za-z])[A-Za-z](?![A-Za-z])")
 _KVADRAT = re.compile(r"\^\s*\{?\s*2\s*\}?")
+# Kvadraten av något med en bokstav i: x², (a − b)². Identiteten och de två
+# kvadraterna kräver en sådan. «(4 + t)² + 6² = 100» är en ekvation med en
+# kvadrat av ett tal, som löses med roten ur (prov 163, granskningen
+# 2026-10-11), inte kvadreringsregeln.
+_KVADRAT_BOKSTAV = re.compile(
+    r"(?:[A-Za-z]|\([^()]*[A-Za-z][^()]*\))\s*\^\s*\{?\s*2\s*\}?")
 _PARENTESPAR = re.compile(r"\(([^()]+)\)\s*(?:\\cdot\s*)?\(([^()]+)\)")
 _TVA_TERMER = re.compile(r"^\s*([^+\-−]+?)\s*([+\-−])\s*([^+\-−]+?)\s*$")
 _UTVECKLA = re.compile(r"(?i:utveckla|förenkla|faktorisera|skrivas?\s+som\s+"
@@ -251,9 +257,9 @@ class _Kvadreringsregler:
                         and re.search(r"[+\-−]", inre)):
                     continue
                 ovrigt = s[:kv.start()] + s[kv.end():]
-                identitet = "=" in s and _KVADRAT.search(ovrigt)
-                tva_kvadrater = re.search(r"[-−]", ovrigt) and _KVADRAT.search(
-                    ovrigt)
+                identitet = "=" in s and _KVADRAT_BOKSTAV.search(ovrigt)
+                tva_kvadrater = re.search(r"[-−]", ovrigt) and \
+                    _KVADRAT_BOKSTAV.search(ovrigt)
                 if identitet or tva_kvadrater or verb:
                     return _Traff(kv.group(0).strip())
         return None
