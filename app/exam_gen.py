@@ -4887,8 +4887,11 @@ def _rentext(text: str) -> str:
     LÄSAS. Utan städningen räknas `\\mu\\text{m}` som fyra ord och `\\,` som
     ett tal."""
     t = re.sub(r"\\[a-zA-Z]+", " ", str(text or ""))
-    return " ".join(t.replace("$", " ").replace("{", " ").replace("}", " ")
-                    .split())
+    t = t.replace("$", " ").replace("{", " ").replace("}", " ")
+    # Radbrytningen står kvar: _MENING delar på den. Blad 242:1 (2026-10-11)
+    # hade formeln sist på raden utan punkt, och «… $2x(9xy - 3y) + 6x$
+    # ⏎ Skriv svaret …» räknades som en uppmaning på 17 ord.
+    return "\n".join(" ".join(r.split()) for r in t.splitlines() if r.strip())
 
 
 def _langsta_mening(text: str) -> int:

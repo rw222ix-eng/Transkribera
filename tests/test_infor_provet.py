@@ -975,3 +975,15 @@ def test_firma_och_mojligt_ar_inte_provets():
         {"text": "Är det möjligt att Firma A och Firma B kostar lika?"}]})
     assert "Firma" not in ut["namn"]
     assert "möjligt" not in ut["sammanhang"]
+
+
+def test_radbrytningen_avslutar_en_mening():
+    """Blad 242:1: formeln sist på raden utan punkt, och nästa rad lästes
+    som samma uppmaning (17 ord)."""
+    u = {"text": "Utan räknare. Bryt ut så mycket som möjligt ur uttrycket: "
+                 "$2x(9xy - 3y) + 6x$\nSkriv svaret på samma form som i "
+                 "exemplet nedan.", "poang": [0, 1, 0], "typ": "rutin"}
+    assert "\n" in exam_gen._rentext(u["text"])
+    fynd = [f for f in exam_gen.sprakvakt({"uppgifter": [u]})
+            if "uppmaning" in f["message"]]
+    assert fynd == []
