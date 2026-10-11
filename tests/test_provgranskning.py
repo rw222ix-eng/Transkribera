@@ -501,6 +501,15 @@ def test_scenvakten_mater_inte_det_engelska_stycket():
     assert exam_gen.scenvakt(_prov([u])) == []
 
 
+def test_scenvakten_laser_tecken_och_korta_ord():
+    """Blad 233: «12 %» är procent, $\\sin$ är sinus och «draken» är drake."""
+    u4 = _u(text="En skylt visar 12 %. Bestäm hur mycket lägre han kommer.",
+            scen=_scen("lutning i procent"))
+    u6 = _u(text="Draken flyger.", losning="$45 \\cdot \\sin 38^\\circ$",
+            scen=_scen("drake sinus"))
+    assert exam_gen.scenvakt(_prov([u4, u6])) == []
+
+
 # ── kedjan: fynden går i EN reparationsprompt, och räknas om till slut ───
 
 def test_de_nya_fynden_gar_i_samma_reparationsrunda_som_de_gamla():

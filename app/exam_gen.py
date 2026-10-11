@@ -10368,6 +10368,19 @@ def konsbalansvakt(exam: dict) -> list[dict]:
 # uppgift om exponentiell tillväxt är en bedömning, och den lämnas åt läraren
 # och åt bilddomaren.
 SCEN_MAX_FYND = 3
+# Blad 233 (2026-10-11): «lutning i procent» fälldes mot «visar 12 %» och
+# «drake sinus» mot «draken» och $\sin 38^\circ$. Tecknen skrivs ut som ord, och
+# ett kort begreppsord («drake») räknas när ett ord i uppgiften börjar med det.
+_SCEN_TECKEN = (("%", " procent "), ("\\sin", " sinus "),
+                ("\\cos", " cosinus "), ("\\tan", " tangens "))
+
+
+def _scen_namner(text: str, sokta: set[str]) -> bool:
+    for tecken, ord_ in _SCEN_TECKEN:
+        text = text.replace(tecken, ord_)
+    if course_data.namner(text, sokta):
+        return True
+    return any(o.startswith(s) for s in sokta for o in course_data.ordstammar(text))
 
 
 def scenvakt(exam: dict) -> list[dict]:
@@ -10395,7 +10408,7 @@ def scenvakt(exam: dict) -> list[dict]:
             continue
         begrepp = str(scen.get("begrepp") or "").strip()
         sokta = course_data.ordstammar(begrepp)
-        if not sokta or course_data.namner(_uppgiftsinnehall(u), sokta):
+        if not sokta or _scen_namner(_uppgiftsinnehall(u), sokta):
             continue
         fel.append(_err(
             f"uppgift {i}", "scenvakt",
