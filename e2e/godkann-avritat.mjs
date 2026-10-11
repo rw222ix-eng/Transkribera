@@ -72,8 +72,12 @@ for (const id of ids) {
   let pdf = null, ny = false;
   for (let t = 0; t < 600 && !ny; t++) {
     pdf = await pdfIHogen().catch(() => null);
-    if (pdf && pdf !== pdfFore) ny = true;
-    else if (pdf) {
+    /* Ny sökväg räcker inte: efter dokument_peka_om var högens pdf tom före
+       klicket, och den gamla filen (dok 279, 325, 2026-10-11) räknades som ny.
+       Filen måste alltid vara skriven efter klicket. */
+    if (pdf && pdf !== pdfFore) {
+      try { ny = statSync(pdf).mtimeMs >= fore - 2000; } catch { ny = false; }
+    } else if (pdf) {
       try {
         const m = statSync(pdf).mtimeMs;
         ny = m >= fore - 2000 && (mtimeFore === null || m !== mtimeFore);
