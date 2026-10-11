@@ -244,3 +244,17 @@ def test_varvet_som_bryter_omprovets_plan_kastas():
     res2 = exam_gen.refine_exam(fore, "skriv om den", nummer=2, model="m",
                                 llm=llm2)
     assert exam_gen.omprovsplan(res2["exam"]) != exam_gen.omprovsplan(fore)
+
+
+def test_varvet_som_ror_planen_mot_originalet_star_kvar():
+    """E-provet 222 (2026-10-11): uppgift 9 hade fel typ mot originalet.
+    Ett varv som rättar typen är en lagning, inte ett brott mot planen."""
+    original = _exam()
+    fore = copy.deepcopy(original)
+    u = fore["uppgifter"][1]
+    u["typ"] = "problem" if u.get("typ") != "problem" else "rutin"
+    varv = copy.deepcopy(original)
+    llm, _ = _llm(varv)
+    res = exam_gen.refine_exam(fore, "rätta typen", nummer=2, model="m",
+                               llm=llm, referens=copy.deepcopy(original))
+    assert exam_gen.planavvikelse(res["exam"], original) == 0

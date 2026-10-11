@@ -10488,6 +10488,15 @@ def omprovsplan(exam: dict | None) -> list[tuple]:
             for s in provslots(exam)]
 
 
+def planavvikelse(exam: dict | None, referens: dict | None) -> int:
+    """Antalet platser där omprovets plan skiljer sig från originalets.
+    Ett annat antal platser räknas som att alla avviker."""
+    egen, mal = omprovsplan(exam), omprovsplan(referens)
+    if len(egen) != len(mal):
+        return max(len(egen), len(mal))
+    return sum(a != b for a, b in zip(egen, mal))
+
+
 def skelett_ur_prov(referens: dict | None) -> list[dict] | None:
     """Referensprovets form som SKELETT, i exam_spec.balanced_skeleton form.
 
@@ -15329,9 +15338,13 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
     # det, men ett varv kastas aldrig av den. På ett omprov gör det det: en
     # plats med andra poäng, en annan typ eller förmåga är ett annat prov, och
     # då står pappret kvar som det var, med fyndet i svaret.
+    # MÅTTET ÄR ORIGINALET, inte pappret före varvet: ett varv som för en
+    # avvikande plats TILLBAKA till originalets poäng, typ eller förmåga
+    # (E-provet 222, 2026-10-11) är just det likvärdigheten ber om.
     if referens is not None and res.get("exam") is not None \
             and res["exam"] is not exam \
-            and omprovsplan(res["exam"]) != omprovsplan(exam):
+            and planavvikelse(res["exam"], referens) \
+            > planavvikelse(exam, referens):
         log("Varvet bröt omprovets plan (uppgifternas platser, poäng, typ "
             "eller förmåga): pappret står kvar som det var.")
         res = {**res, "exam": exam, "errors": list(res.get("errors") or []) + [
