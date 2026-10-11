@@ -2476,6 +2476,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # «Laga fynden» ska veta att poängen är originalets.
                 if res["exam"] is not None and referensprov is not None:
                     res["exam"]["omprov_av"] = int(omprov_av)
+                    # Titeln är originalets med « (omprov)» (Rickard
+                    # 2026-10-11): modellen döpte 218 till något eget.
+                    res["exam"]["titel"] = exam_gen.omprovstitel(
+                        referensprov.get("titel"))
                 # Hjälpmedelsraden är MODELLENS så länge läraren inte sagt
                 # något: den skiljer delarna åt med lärarens egna ord, och
                 # skärmen har läst dokumentets regel sedan blad.js planvalProv.
@@ -2766,6 +2770,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # Omprovets original likaså (ExamDoc.omprov_av).
                 if isinstance(res.get("exam"), dict) and omprov_id:
                     res["exam"]["omprov_av"] = omprov_id
+                    # … och titeln behåller sitt « (omprov)».
+                    if exam_gen.OMPROV_SUFFIX.strip() not in str(
+                            res["exam"].get("titel") or ""):
+                        res["exam"]["titel"] = exam_gen.omprovstitel(
+                            res["exam"].get("titel"))
                 # Plåtvalet överlever inte omskrivningen av sig självt:
                 # modellen skriver om hela dokumentet, och `scen.plat` står
                 # inte i grammatiken. Matchningen körs därför om — den är ren

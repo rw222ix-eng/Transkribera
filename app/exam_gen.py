@@ -10467,6 +10467,19 @@ def provslots(exam: dict | None) -> list[dict]:
             if isinstance(u, dict)]
 
 
+OMPROV_SUFFIX = " (omprov)"
+
+
+def omprovstitel(titel: str | None) -> str:
+    """Omprovets titel: originalets plus « (omprov)», en gång (Rickard
+    2026-10-11: «Algebra och ekvationer (omprov)» för omprovet av 126).
+    Ett omprov av ett omprov får inte två suffix."""
+    bas = str(titel or "").strip()
+    while bas.lower().endswith(OMPROV_SUFFIX.strip().lower()):
+        bas = bas[: -len(OMPROV_SUFFIX.strip())].rstrip()
+    return (bas + OMPROV_SUFFIX) if bas else OMPROV_SUFFIX.strip()
+
+
 def omprovsplan(exam: dict | None) -> list[tuple]:
     """Det på omprovet som inte får ändras: platsernas antal, poäng, typ och
     förmåga, i ordning (refine_exam kastar ett varv som ändrar det)."""

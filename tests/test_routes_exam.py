@@ -2385,6 +2385,8 @@ def test_omskrivningen_av_ett_omprov_far_originalet(client, monkeypatch):
         "course_id": cid, "group_id": gid, "antal": 6,
         "datum": "2026-11-02", "moment": "kapitel 1", "omprov_av": gammalt}))
     assert res["exam"]["omprov_av"] == gammalt
+    # Titeln är originalets med « (omprov)» (Rickard 2026-10-11).
+    assert res["exam"]["titel"] == "Prov 1 · kapitel 1 (omprov)"
     fangat = {}
 
     def fake_refine(exam, message, *, model, referens=None, **_kw):

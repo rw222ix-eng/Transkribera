@@ -763,3 +763,12 @@ def test_likvardigheten_kraver_inte_fler_steg_an_np_betalar():
                      losning="$a = 1$ ger $b = 2$ ger $c = 3$")])
     assert exam_gen.provslots(kort)[0]["steg"] >= 2
     assert exam_gen.likvardighetsvakt(kort, original) == []
+
+
+def test_omprovets_titel_ar_originalets_med_omprov():
+    """Rickard 2026-10-11: «Algebra och ekvationer (omprov)». Ett omprov av
+    ett omprov får inte två suffix."""
+    assert exam_gen.omprovstitel("Algebra och ekvationer") == \
+        "Algebra och ekvationer (omprov)"
+    assert exam_gen.omprovstitel("Tal och uttryck (omprov)") == \
+        "Tal och uttryck (omprov)"
