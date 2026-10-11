@@ -267,3 +267,18 @@ def test_ett_visat_fackord_behover_inget_nytt_exempel():
     # Står ordet först utan exempel fälls det som förut.
     assert exam_gen._fackord_utan_exempel(
         "Ange skillnaden i procentenheter.\nRäntan går från 10 % till 12 %.")
+
+
+def test_raden_om_vad_bokstaven_betyder_ar_inget_faktum():
+    """Blad 231:4 (2026-10-11): radlängden delade «…, där $t$ är tiden …» i
+    två meningar, och textmängdvakten fällde stammen för tre meningar."""
+    u = _uppg("Sara dricker en kopp kaffe.\nKoffeinet i hennes kropp i mg ges "
+              "av: $K = 160 \\cdot 0{,}87^{t}$.\nHär är $t$ tiden i timmar efter "
+              "att hon drack kaffet.", (0, 0, 0), deluppgifter=[
+                  _del("Bestäm hur många procent koffeinet sjunker med per "
+                       "minut.", (0, 0, 1))])
+    assert _fynd(_blad(u)) == []
+    # Tre faktameningar i stammen fälls som förut.
+    u2 = _uppg("Sara dricker kaffe.\nHon dricker te.\nHon äter en bulle.",
+               (0, 0, 0), deluppgifter=[_del("Beräkna summan.", (0, 0, 1))])
+    assert _fynd(_blad(u2))

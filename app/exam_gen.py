@@ -12147,13 +12147,14 @@ def textmangdvakt(exam: dict) -> list[dict]:
     decimaltal nådde taket på talen i stället för på texten (26/9)."""
     def _ord(text: str) -> int:
         return _ord_fore_fragan(_utan_forklaring_efter_fragan(
-            text.replace("{,}", ",")))
+            _utan_variabeldefinition(text.replace("{,}", ","))))
 
     ut: list[dict] = []
     for i, u in enumerate((exam or {}).get("uppgifter") or [], 1):
         if not isinstance(u, dict):
             continue
-        stam = _RAKNARMARKE.sub("", str(u.get("text") or ""))
+        stam = _utan_variabeldefinition(
+            _RAKNARMARKE.sub("", str(u.get("text") or "")))
         delar = [d for d in (u.get("deluppgifter") or []) if isinstance(d, dict)]
         if delar:
             s = len(_stammens_meningar(stam))
@@ -12207,6 +12208,20 @@ def textmangdvakt(exam: dict) -> list[dict]:
 _FORKLARINGSMENING_RE = re.compile(
     r"(?<![\wåäö])(betyder|kallas|till exempel|ett exempel|exempel på|som i"
     r"|i [\wåäö]+ form står)(?![\wåäö])", re.IGNORECASE)
+
+
+# VAD BOKSTAVEN BETYDER (blad 231:4, NA26F A inför prov 219, 2026-10-11):
+# radlängdsvakten delade «… ges av: $K = 160 \cdot 0{,}87^{t}$, där $t$ är
+# tiden …» i två meningar, och textmängdvakten fällde sedan stammen för tre
+# meningar och deluppgiften för 39 ord. Meningen som bara säger vad en
+# bokstav i formeln betyder är formelns förklaring, inget faktum till.
+_VARIABELDEF_RE = re.compile(r"^\s*(?:Här|Där)\s+är\s+\$[^$]{1,12}\$\s")
+
+
+def _utan_variabeldefinition(text: str) -> str:
+    rader = str(text or "").split("\n")
+    kvar = [r for r in rader if not _VARIABELDEF_RE.match(r)]
+    return text if len(kvar) == len(rader) else "\n".join(kvar)
 
 
 def _utan_forklaring_efter_fragan(text: str) -> str:
