@@ -627,8 +627,17 @@ def bok_prov_text(base: Path, db_file: Path, body: dict, emit=None) -> str:
     try:
         if db.get_bok(conn, bid) is None:
             return ""
-        if bok.olasta(conn, bid, fran, till, text=False):
-            bok.las_spann(base, conn, bid, fran, till, emit=emit, bara="fakta")
+        # HELA spannet, i bitar om bok.MAX_SPANN, utan luckorna. las_spann
+        # läser bara de 40 första sidorna, och NA26F prov 3 (s. 100–271, kap
+        # 4 hoppas över) fick då faktan för kap 3 men inte för kap 5: ramen
+        # saknade 5.1–5.4, och statistikuppgifterna märktes med 3.x
+        # (exam 217, 2026-10-11). Lästa sidor kostar ingenting.
+        for f, t in bok.delar_utan_luckor(fran, till, bok_luckor(db_file, body)):
+            for a in range(f, t + 1, bok.MAX_SPANN):
+                b = min(t, a + bok.MAX_SPANN - 1)
+                if bok.olasta(conn, bid, a, b, text=False):
+                    bok.las_spann(base, conn, bid, a, b, emit=emit,
+                                  bara="fakta")
         olasta = bok.olasta(conn, bid, fran, till)
         if PROV_TEXTSIDOR and olasta:
             for sida in bok.jamnt(olasta, PROV_TEXTSIDOR):

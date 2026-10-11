@@ -1825,3 +1825,9 @@ def test_lektioner_i_luckan_faller_bort():
     assert bok.lektioner_utan_luckor(rader, []) is rader
     assert [s["sida"] for s in bok.utan_luckor(
         [{"sida": 141}, {"sida": 142}, {"sida": 224}], luckor)] == [141, 224]
+
+
+def test_spannet_utan_luckor_ar_delarna_som_lases():
+    assert bok.delar_utan_luckor(100, 271, [(142, 223)]) == [(100, 141), (224, 271)]
+    assert bok.delar_utan_luckor(100, 271, []) == [(100, 271)]
+    assert bok.delar_utan_luckor(100, 271, [(100, 120), (260, 271)]) == [(121, 259)]

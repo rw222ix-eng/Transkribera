@@ -1034,6 +1034,20 @@ def luckor_ur_moment(moment: str, avsnitt: list[dict], fran: int,
     return ut
 
 
+def delar_utan_luckor(fran: int, till: int,
+                      luckor: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Spannet `fran`–`till` som de intervall som blir kvar utan luckorna."""
+    ut: list[tuple[int, int]] = []
+    start = int(fran)
+    for lf, lt in sorted(luckor or []):
+        if lf > start:
+            ut.append((start, min(lf - 1, int(till))))
+        start = max(start, lt + 1)
+    if start <= int(till):
+        ut.append((start, int(till)))
+    return [(f, t) for f, t in ut if f <= t]
+
+
 def i_lucka(sida, luckor: list[tuple[int, int]]) -> bool:
     try:
         s = int(sida)
