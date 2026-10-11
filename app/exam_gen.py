@@ -14497,13 +14497,22 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # uppgift ut här ska sympy räkna på den nya. Villkoret är drillistan, inte
     # profilen, så ett arbetsblad utan valt prov går exakt de anrop det gick
     # förut (kassetteregeln).
+    #
+    # EN EGEN RUNDA, utanför budgeten (granskningen av bladen 2026-10-11).
+    # Blad 189: balansreparationen tog runda 2 och 3, passet körde
+    # elevläsaren och kom fram till runda 3 av 3 utan något kvar att laga
+    # med. Fynden («en gemensam lösning» som går att läsa som exakt en, en
+    # prisdomän som bara tillät höjning) stod kvar som varningar ingen
+    # efterkontroll visar igen. Passet har aldrig mer än en runda, så taket
+    # är en runda till.
     if res["exam"] is not None and drillade:
         res = _infor_pass(res["exam"], res["errors"], model=model, llm=llm,
                           profil=profil, antal=antal, skeleton=grammatik,
                           nummer=drillade, koder=koder, niva_mal=niva_mal,
                           prov=inforprov if profil == "arbetsblad" else None,
                           ram=ram, doma=doma, inriktning=inriktning,
-                          rounds_used=res["rounds"], max_rounds=max_rounds,
+                          rounds_used=res["rounds"],
+                          max_rounds=max(max_rounds, res["rounds"] + 1),
                           log_cb=log_cb)
     # ── RÄKNEVERKET (Etapp 4) ────────────────────────────────────────
     # Deterministiskt och FÖRE modelldomarna: det som går att räkna ut ska

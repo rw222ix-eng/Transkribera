@@ -870,3 +870,26 @@ def test_bokstaven_som_ar_en_enhet():
     nr = [f["path"] for f in exam_gen.enhetsbokstavsvakt(blad)]
     assert nr == ["uppgift 1", "uppgift 2"]
     assert "«L» (liter)" in exam_gen.enhetsbokstavsvakt(blad)[1]["message"]
+
+
+def test_infor_passet_far_en_egen_runda(monkeypatch):
+    """Blad 189 (2026-10-11): balansreparationen tog sista rundan, och
+    elevläsarens fynd blev bara varningar. Passet får alltid en runda."""
+    sett = {}
+
+    def falsk_pass(exam, errors, **k):
+        sett.update(rounds_used=k["rounds_used"], max_rounds=k["max_rounds"])
+        return {"exam": exam, "errors": errors, "rounds": k["rounds_used"]}
+
+    def falsk_reparation(exam, errors, **k):
+        return {"exam": exam, "errors": [], "rounds": k["max_rounds"]}
+
+    monkeypatch.setattr(exam_gen, "_infor_pass", falsk_pass)
+    monkeypatch.setattr(exam_gen, "_repair_until_valid", falsk_reparation)
+    blad = _blad_doc([1] * 7)
+    exam_gen.generate_exam("Matematik, nivå 2b", "TE27", ["Andragrad"],
+                           model="", antal=7, profil="arbetsblad",
+                           inforprov=_prov_131(), infor_nummer=[1, 3],
+                           llm=lambda *a, **k: json.dumps(blad),
+                           max_rounds=3, doma=False)
+    assert sett == {"rounds_used": 3, "max_rounds": 4}
