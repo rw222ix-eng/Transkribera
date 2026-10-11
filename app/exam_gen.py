@@ -12566,6 +12566,18 @@ def ovningsvakter(exam: dict, *, prov: dict | None = None,
             + forvaxlingsvakt(exam) + konsbalansvakt(exam))
 
 
+def _delmoment_gemensamt(ny: str, gammal: str) -> bool:
+    """Delar två platsers delmoment något ord om minst sex bokstäver?
+    Sant när någon av dem saknar delmoment (inget att jämföra) eller när de
+    har en ordstam gemensam: «Ekvationer med parenteser» och «Ekvationer
+    och balansmetoden» prövar samma sak med olika etikett."""
+    def ord_(t: str) -> set[str]:
+        t = re.sub(r"\(s\.[^)]*\)", " ", str(t or "")).lower()
+        return {w[:6] for w in re.findall(r"[a-zåäö]+", t) if len(w) >= 6}
+    a, b = ord_(ny), ord_(gammal)
+    return not a or not b or bool(a & b)
+
+
 def likvardighetsvakt(exam: dict, referens: dict | None) -> list[dict]:
     """Är omprovet likvärdigt sitt original, slot för slot?
 
@@ -12613,6 +12625,13 @@ def likvardighetsvakt(exam: dict, referens: dict | None) -> list[dict]:
         if ny["formaga"] != gammal["formaga"] and gammal["formaga"]:
             avvik.append(f"förmågan är {ny['formaga']} men ska vara "
                          f"{gammal['formaga']}")
+        # DELMOMENTET (E-provet 222, 2026-10-11): plats 7 skulle pröva
+        # potenslagar med exponenter som inte är heltal och blev en linjär
+        # ekvation om ett gym, med rätt poäng, typ och förmåga. Inget ord i
+        # gemensamt mellan platsens delmoment = en annan sak prövas.
+        if not _delmoment_gemensamt(ny["delmoment"], gammal["delmoment"]):
+            avvik.append(f"den prövar «{ny['delmoment']}» men originalets "
+                         f"plats prövar «{gammal['delmoment']}»")
         # Stegmålet är originalets, men aldrig fler än NP betalar för
         # poängen (np_vakter.stegvakt): 126:9 tog elva steg på fyra poäng,
         # och omprovet 214 kunde då varken bli likvärdigt eller klara

@@ -772,3 +772,14 @@ def test_omprovets_titel_ar_originalets_med_omprov():
         "Algebra och ekvationer (omprov)"
     assert exam_gen.omprovstitel("Tal och uttryck (omprov)") == \
         "Tal och uttryck (omprov)"
+
+
+def test_likvardigheten_jamfor_platsens_delmoment():
+    """E-provet 222 (2026-10-11): plats 7 skulle pröva potenslagar och blev
+    en linjär ekvation, med rätt poäng, typ och förmåga."""
+    original = _prov([_u(delmoment="Exponenter som inte är heltal; Potenslagar")])
+    fel_sak = _prov([_u(delmoment="Uttryck")])
+    samma = _prov([_u(delmoment="Potenslagar (s. 10–11)")])
+    assert "originalets plats prövar" in \
+        exam_gen.likvardighetsvakt(fel_sak, original)[0]["message"]
+    assert exam_gen.likvardighetsvakt(samma, original) == []
