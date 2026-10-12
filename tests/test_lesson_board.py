@@ -25,9 +25,10 @@ SHOTAR_2709 = lb.FEW_SHOTS_REGELSAMLING
 
 
 def _facit() -> dict:
-    """Lärarens godkända tavla 2026-09-29, shot 1 i den nya formen. Stubbarna
-    som skriver en tavla i standardformen svarar med den: den gamla formens
-    Pythagoras fälls numera av formvakterna (vanstervakt, hogervakt)."""
+    """Lärarens godkända tavla, shot 1 i den nya formen (sedan 2026-10-12
+    NA26F «Vektorer i koordinatform», dokument 350). Stubbarna som skriver en
+    tavla i standardformen svarar med den: den gamla formens Pythagoras
+    fälls numera av formvakterna (vanstervakt, hogervakt)."""
     return copy.deepcopy(lb.FEW_SHOTS[0][1])
 
 
@@ -237,13 +238,20 @@ def test_few_shotarna_ar_svarta_utom_dar_fargen_betyder_nagot():
     varnar, och färg inne i figurer för att skilja linjer och vinklar åt.
 
     NIVÅRUBRIKERNA ÄR BLÅ sedan lärarens handrättning 2026-09-29 («en
-    kolumn per nivå med blå rubrik»): «E-nivå», «C-nivå», «A-nivå»."""
-    for uppdrag, doc in lb.FEW_SHOTS + SHOTAR_2709:
+    kolumn per nivå med blå rubrik»): «E-nivå», «C-nivå», «A-nivå».
+
+    RÄKNARRADEN sedan domen 2026-10-06: «Utan räknare» i svart (uttryckligt
+    black i lärarens tavlor) och «Med räknare» i rött."""
+    for uppdrag, doc in lb.FEW_SHOTS + lb.FEW_SHOTS_INTRO + SHOTAR_2709:
         for sek in _alla_sektioner(doc):
             if sek["kind"] == "graph":
                 continue                 # figurens färger skiljer linjer åt
             if sek.get("text") in ("E-nivå", "C-nivå", "A-nivå"):
                 assert sek.get("color") == "blue", (uppdrag, sek)
+                continue
+            if sek.get("text") == "Utan räknare" or lb._TIDTEXT_RE.match(
+                    str(sek.get("text") or "")):
+                assert sek.get("color") in (None, "black"), (uppdrag, sek)
                 continue
             assert sek.get("color") in (None, "red"), (uppdrag, sek)
             strecket = sek.get("underline")
@@ -382,14 +390,21 @@ def test_budgettaken_ar_matta_och_shotarna_haller_dem():
     kostar ingenting). TE26A bär 354 och är en modelltavla (K = 10 + 3t,
     whiteboard_spec._ar_modellformel), som vägs mot 400. Högern mäts som
     valideringen mäter den, 170 per kolumn över hela tavlan: NA26F:s
-    A-kolumn bär 214 (två delar som står på egna ben), tavlan 359 av 510."""
-    assert (ws._MAX_BOARD_TEXT, ws._MAX_COLUMN_TEXT) == (205, 170)
+    A-kolumn bär 214 (två delar som står på egna ben), tavlan 359 av 510.
+
+    OMMÄTT 2026-10-12 (205 → 265) mot lärarens tre tavlor till 13/10, nu
+    shotarna: NA26F 183, IndA 216 och BA26B:s introtavla 252 tecken, ingen
+    av dem en modelltavla. Det som håller vänstern kort är radtaken i
+    vanstervakt (tre per steg, nio sammanlagt)."""
+    assert (ws._MAX_BOARD_TEXT, ws._MAX_COLUMN_TEXT) == (265, 170)
     assert (ws._MAX_TEXT_CHARS, ws._MAX_ITEM_CHARS) == (60, 50)
-    te, na = (ws.validate_board_json(d)[0].boards for _u, d in lb.FEW_SHOTS)
-    assert ws._text_volym(te[0].sections, vanster=True) == 354
-    assert ws.ar_modelltavla(te[0]) and not ws.ar_modelltavla(na[0])
-    assert ws._text_volym(na[0].sections, vanster=True) == 131
-    for uppdrag, doc in lb.FEW_SHOTS + SHOTAR_2709:
+    na, ind = (ws.validate_board_json(d)[0].boards for _u, d in lb.FEW_SHOTS)
+    intro = ws.validate_board_json(lb.FEW_SHOTS_INTRO[0][1])[0].boards
+    assert [ws._text_volym(b[0].sections, vanster=True)
+            for b in (na, ind, intro)] == [183, 216, 252]
+    assert not any(ws.ar_modelltavla(b[0]) for b in (na, ind, intro))
+    assert len(intro) == 1
+    for uppdrag, doc in lb.FEW_SHOTS + lb.FEW_SHOTS_INTRO + SHOTAR_2709:
         parsed, _fel = ws.validate_board_json(doc)
         assert _budget(_fel) == [], uppdrag
         for i, board in enumerate(parsed.boards):
@@ -1051,7 +1066,7 @@ def test_generate_valid_first_try():
     res = lb.generate_board("Ma1c", "TE26A", "Formler", model="m", llm=llm)
     assert res["errors"] == []
     assert res["rounds"] == 1
-    assert res["board"]["title"] == "Modeller och rimlighet"
+    assert res["board"]["title"] == "Vektorer i koordinatform"
     # grammatiktvånget skickas med
     assert calls[0]["response_format"]["type"] == "json_schema"
     assert calls[0]["system"] == lb.SYSTEM
@@ -1151,9 +1166,9 @@ def test_nedskalningen_far_sitt_atgardsrad():
         model="m", llm=llm)
     assert res["errors"] == []
     assert "skalade ner till 70%" in calls[0]["prompt"]
-    # Den nya formens råd (2026-09-29): exemplet är ETT, i delar, och en del
-    # flyttar. Den gamla formens råd om två figurer står i regelsamlingens.
-    assert "flytta en del (a–d) till nästa kolumn" in calls[0]["prompt"].lower()
+    # Den nya formens råd (2026-10-12): en uppgift flyttar till nästa
+    # kolumn. Den gamla formens råd om två figurer står i regelsamlingens.
+    assert "flytta en uppgift till nästa kolumn" in calls[0]["prompt"].lower()
     assert "aldrig två figurer" in lb.REPAIR_HINTS_REGELSAMLING.lower()
 
 
@@ -2693,9 +2708,9 @@ def test_delarna_ger_prompten_bada_momenten():
     assert "Tecken i matematiska utsagor och intervall" in block
     assert "boken s. 50–52" in block and "boken s. 53–57" in block
     assert "2144, 2146–2151" in block
-    # Den nya formen (2026-09-29): ETT exempel, minst en del per moment.
-    assert "BÅDA momenten" in block and "minst en del per moment" in block
-    assert "ETT exempel i en situation" in block
+    # Den nya formen (2026-10-12): rena uppgifter, minst en per moment.
+    assert "BÅDA momenten" in block and "minst en uppgift per moment" in block
+    assert "högst fem" in block
     p = lb.build_prompt("Ma1c", "NA26F", "Potensekvationer · Tecken",
                         delar=block)
     assert block in p
@@ -2720,7 +2735,7 @@ def test_domaren_matter_bada_momenten_ocksa_utan_bok():
                                  lb.build_delar_block(DELAR))
     assert lb.DELARMARKOR in t
     assert "varje del för sig" in t
-    assert "minst en del per moment" in t
+    assert "minst en uppgift per moment" in t
     # Utan delar är prompten ordagrant den gamla.
     assert lb.build_tackning_prompt({"boards": []}, "bok") == \
         lb.build_tackning_prompt({"boards": []}, "bok", "")
@@ -3048,8 +3063,8 @@ def test_nivaraden_star_bara_nar_nivan_ar_vald():
                         form=lb.tavelform(True, "A-nivå"))
     assert "NIVÅN: läraren har valt A-NIVÅ" in a
     # «INSIKT, inte en procedur» är den gamla formens A-rad (regelsamlingen);
-    # den nya formens A-rad lägger två A-delar i samma situation.
-    assert "A-kolumnen bär två delar" in a
+    # den nya formens A-rad (2026-10-12) ger E och C en uppgift var, A två.
+    assert "E och C får EN uppgift var" in a
     assert "INSIKT, inte en procedur" in lb.build_prompt(
         "Ma2c", "TE24", "andragradsuttryck",
         form=lb.tavelform(True, "A-nivå", "", True))
@@ -3271,13 +3286,18 @@ def test_gamla_anrop_utan_falten_beter_sig_som_forr():
 # ── REGELSAMLINGEN (Vidma-formen, 2026-09-21) ────────────────────────────────
 
 def test_regelsamlingen_kanns_igen_ur_momentet():
-    """Reglerna ÄR momentet, eller lektionen är en repetition: då blir
-    vänstern ett numrerat formelblad. Allt annat är som förut."""
+    """Reglerna ÄR momentet: då blir vänstern ett numrerat formelblad. Allt
+    annat är som förut.
+
+    EN REPETITION ÄR INGEN REGELSAMLING sedan 2026-10-12: lärarens IndA-tavla
+    «Repetition kapitel 1» inför provet är den nya formens, och han strök
+    formelbladets regler från den."""
     for m in ("Repetition · Potenslagarna inför provet", "Potensreglerna",
-              "Deriveringsreglerna", "Repetera kap 1", "Logaritmlagarna"):
+              "Deriveringsreglerna", "Logaritmlagarna"):
         assert lb.ar_regelsamling(m), m
     for m in ("Faktorisering som lösningsmetod", "1.3 Andragradsekvationer",
-              "Pythagoras sats", "procent", "", None):
+              "Pythagoras sats", "procent", "", None, "Repetera kap 1",
+              "Repetition kap 1 – kapiteltest", "Inför provet"):
         assert not lb.ar_regelsamling(m), m
 
 
@@ -3559,22 +3579,29 @@ def test_shotarna_bar_ar_inte_och_att_tanka_pa_utan_ar_inte():
         assert "Centrum: ingen randvinkel." not in text
 
 
-# ── DEN NYA FORMEN (lärarens dom 2026-09-29, Rickard) ───────────────────────
-# TE26A «Formler», dokument 302: «ett enda exempel som jag utgår ifrån och
-# sen blir det successivt lite svårare. Alltså E, C och A», och om vänstern:
-# «mycket mindre text och mer saker som faktiskt hjälper eleverna … Så att
-# man får liksom ett syfte.» Hans handrättade tavla, «Skitbra», ligger i
-# tests/tavlor/facit-te26a-formler-2026-09-29.json ordagrant ur planeringen
-# 9e7b9ff0a7cf. «Spara så att de framtida tavlorna också får samma
-# ändringar.»
+# ── DEN NYA FORMEN (lärarens domar 2026-09-29 och 2026-10-12, Rickard) ──────
+# Till 2026-10-12 var högern ETT exempel i tre nivåer (TE26A «Formler»,
+# dokument 302) och vänstern en berättelse i tre eller fyra steg (TE26A och
+# NA26F 2026-09-30, dokument 303 och 304). De tavlorna ligger kvar som
+# fixturer (facit-te26a-formler-2026-09-29.json, facit-*-2026-10-02.json).
 #
-# BERÄTTELSEN (lärarens handrättning 2026-09-30, tavlorna till 2/10):
-# vänstern följer genomgångens ordning i tre eller fyra steg, knyter an till
-# förra lektionen, visar varifrån begreppet kommer, har namnen vid figuren
-# och visar aldrig svaret på en högeruppgift; högern är vardagsnära, och
-# varje del står på egna ben. Hans två tavlor ligger ordagrant i
-# tests/tavlor/facit-te26a-modeller-2026-10-02.json och
-# facit-na26f-trigonometri-2026-10-02.json och är de två shotarna.
+# BEGREPPEN OCH RENA UPPGIFTER (lärarens dom 2026-10-12 över tavlorna till
+# 13/10): «alldeles för mycket information och text» i de första
+# versionerna, och de korta andra versionerna blev «väldigt nöjd». Vänstern
+# förklarar begreppen i tre eller fyra steg utan formelbladets regler och
+# med högst tre korta textrader per steg; högern är tre till fem rena
+# uppgifter i E-, C- och A-ordning med räknarraden och en lösning på två
+# eller tre rader. Yrkesklassen BA26B fick en introtavla på fem minuter med
+# ETT bräde. Hans tre tavlor ligger ordagrant i
+# tests/tavlor/facit-na26f-vektorer-2026-10-13.json,
+# facit-inda-repetition-2026-10-13.json och facit-ba26b-intro-2026-10-13.json
+# och är shotarna.
+
+FACIT_1013 = ("facit-na26f-vektorer-2026-10-13.json",
+              "facit-inda-repetition-2026-10-13.json")
+FACIT_INTRO = "facit-ba26b-intro-2026-10-13.json"
+INTRO = lb.tavelform(False, "", "Bygg och anläggning", False, True)
+
 
 def _fragorna(doc: dict) -> list[str]:
     """De numrerade rubrikraderna i vänsterns spalter, i läsordning."""
@@ -3593,47 +3620,63 @@ def _avrundad(o):
     return o
 
 
+def _alla_vakter(doc: dict, form) -> list:
+    _p, fel = ws.validate_board_json(ws.normalize_board(copy.deepcopy(doc)))
+    return (fel + lb.formvakter(doc, form) + lb.formupprepning(doc, True)
+            + lb.utrakningsvakt(doc, True) + lb.raknevakt(doc)
+            + lb.grafvakt(doc) + lb.stodordsfragor(doc)
+            + lb.hanvisningar(doc) + lb.vanligtfel_kvar(doc, form))
+
+
 def test_shotarna_ar_lararens_godkanda_tavlor():
-    """Shotarna är facit, utan de två rader systemet lägger dit själv:
-    lektionstiden (satt_tid) och «Förra gången» (satt_forra). NA26F:s
-    koordinater är avrundade till tre decimaler, och shot 2 bär krysset
-    «Vanligt fel» i C-delen, som försvinner när läraren valt bort det."""
-    for (_u, shot), fil in zip(lb.FEW_SHOTS, (
-            "facit-te26a-modeller-2026-10-02.json",
-            "facit-na26f-trigonometri-2026-10-02.json")):
-        facit = _avrundad(_kontrolltavlan(fil))
-        shot = lb._shot_utan_vanligt_fel(shot)
-        assert shot["boards"][1] == facit["boards"][1], fil
-        fv, sv = facit["boards"][0]["sections"], shot["boards"][0]["sections"]
-        assert fv[0]["text"][:1].isdigit() and sv[0]["kind"] == "heading"
-        assert fv[1] == sv[0]
-        assert fv[2]["items"][0].startswith(lb.FORRA_PREFIX)
-        assert fv[2]["items"][1:] == sv[1]["items"]
-        assert fv[3:] == sv[2:]
-        # Och hans tavlor går igenom varje vakt, budgeten inräknad.
-        parsed, fel = ws.validate_board_json(ws.normalize_board(facit))
-        assert parsed is not None and fel == [], (fil, fel)
-        form = lb.tavelform(False, "", "Teknik")
-        assert lb.formvakter(facit, form) == [], fil
-        assert lb.formupprepning(facit, True) == [], fil
-        assert lb.utrakningsvakt(facit, True) == [], fil
-        assert lb.raknevakt(facit) == [], fil
-    na = lb.FEW_SHOTS[1][1]
-    rott = [s["latex"] for s in na["boards"][1]["columns"][1]["sections"]
-            if s.get("color") == "red" and s["kind"] == "math"]
-    assert rott == [r"\cancel{c = 15 \cdot \sin 40^\circ}"]
-    assert lb.formvakter(na, lb.tavelform(True, "")) == []
+    """Shotarna är facit utan lektionstiden (satt_tid lägger dit den), med
+    koordinaterna på tre decimaler. Och lärarens tavlor går igenom VARJE
+    vakt, budgeten inräknad: en vakt som fäller hans tavla är fel vakt."""
+    shotar = lb.FEW_SHOTS + lb.FEW_SHOTS_INTRO
+    for (_u, shot), fil in zip(shotar, FACIT_1013 + (FACIT_INTRO,)):
+        facit = _kontrolltavlan(fil)
+        fv = facit["boards"][0]["sections"]
+        assert lb._TIDTEXT_RE.match(fv[0]["text"]), fil
+        utan_tid = copy.deepcopy(facit)
+        utan_tid["boards"][0]["sections"] = fv[1:]
+        assert shot == _avrundad(utan_tid), fil
+        form = INTRO if fil == FACIT_INTRO else lb.tavelform(False, "")
+        assert _alla_vakter(facit, form) == [], fil
+        assert _alla_vakter(shot, form) == [], fil
+    # Ingen av dem bär «Vanligt fel»: krysset var av på alla tre.
+    for _u, shot in shotar:
+        assert lb._shot_utan_vanligt_fel(shot) == shot
+    # Varje tal är efterräknat (kommentaren vid FEW_SHOTS); räknevakten
+    # prövar de led som går att pröva.
+    assert len(lb.FEW_SHOTS) == 2 and len(lb.FEW_SHOTS_INTRO) == 1
 
 
-def test_nya_shotarna_ar_berattelser():
-    """Vänstern: rubrik, agenda, streck, öppningsrubrik och en row med två
-    spalter och tre eller fyra numrerade steg. Högern: ETT exempel, tre
-    kolumner med blå nivårubrik, delarna a), b), c) … i samma situation."""
-    for (uppdrag, doc), delmarkorer in zip(
-            lb.FEW_SHOTS, (["a)", "b)", "c)"], ["a)", "b)", "c)", "d)"])):
+def test_gamla_formens_tavlor_falls_av_de_nya_vakterna():
+    """Tavlorna från 2026-09-29 och 2026-09-30 var lärarens egna, men den
+    nya formen säger emot dem: ett exempel i delar utan räknarrad och med
+    långa uträkningar, och TE26A:s vänster bar 13 textrader."""
+    form = lb.tavelform(False, "")
+    for fil, vanster in (("facit-te26a-modeller-2026-10-02.json",
+                          ["vanster_for_manga"]),
+                         ("facit-na26f-trigonometri-2026-10-02.json", []),
+                         ("facit-te26a-formler-2026-09-29.json",
+                          ["vanster_varfor"])):
+        doc = _kontrolltavlan(fil)
+        assert sorted({f["code"] for f in lb.vanstervakt(doc)}) == vanster, fil
+        koder = {f["code"] for f in lb.hogervakt(doc)}
+        assert {"raknarrad", "losning_lang"} <= koder, (fil, koder)
+        assert lb.formvakter(doc, form), fil
+
+
+def test_nya_shotarna_ar_begrepp_och_rena_uppgifter():
+    """Vänstern: rubrik, agenda, streck och en row med två spalter och tre
+    eller fyra numrerade steg, ingen öppningsrubrik. Högern: EN rubrik,
+    blå nivårubriker i E-, C- och A-ordning, tre till fem uppgifter, var och
+    en med räknarraden och en lösning som slutar i svaret."""
+    for (uppdrag, doc), uppgifter in zip(lb.FEW_SHOTS, (3, 5)):
         s = _vanstersektioner(doc)
         assert [x["kind"] for x in s] == ["heading", "list", "divider",
-                                          "heading", "row"], uppdrag
+                                          "row"], uppdrag
         rad = s[-1]["children"]
         assert len(rad) == 2 and all(c["width"] == 400 for c in rad), uppdrag
         fragor = _fragorna(doc)
@@ -3641,68 +3684,122 @@ def test_nya_shotarna_ar_berattelser():
         assert [f[:2] for f in fragor] == \
             [f"{n}." for n in range(1, len(fragor) + 1)], fragor
         text = json.dumps(doc, ensure_ascii=False).lower()
-        assert "att tänka på" not in text and "varför" not in text, uppdrag
+        assert "att tänka på" not in text, uppdrag
         # Högern.
         kolumner = doc["boards"][1]["columns"]
         assert len(kolumner) == 3
-        assert [k["sections"][0]["text"] for k in kolumner[1:]] == \
-            ["C-nivå", "A-nivå"]
         rubriker = [x for k in kolumner for x in k["sections"]
                     if x["kind"] == "heading"]
-        assert len(rubriker) == 1 and \
-            rubriker[0]["text"].startswith("Exempel: "), uppdrag
-        form = lb.tavelform(True, "")
-        assert lb.formvakter(doc, form) == [], uppdrag
-        assert lb.formupprepning(doc, True) == [], uppdrag
-        assert lb.utrakningsvakt(doc, True) == [], uppdrag
-        delar: list = []
-        for k in kolumner:
-            lb._exempelrader(k["sections"], "k", delar, True)
-        markorer = [e["text"][0][1][:2] for e in delar if e["text"]]
-        assert markorer == delmarkorer, markorer
-        # Varje del bär sin uträkning, minst två led.
-        assert all(len(e["kedja"]) >= 2 for e in delar if e["text"]), uppdrag
-    # TE26A börjar i förra lektionen och prövar i två rader; NA26F visar
-    # varifrån kvoterna kommer och har namnen vid figuren.
-    te, na = (_fragorna(d) for _u, d in lb.FEW_SHOTS)
-    assert te[0] == "1. Förra gången: formel" and " eller " in te[-1]
-    assert na[0] == "1. Var kommer det ifrån?"
-    assert na[1] == "2. Kvoterna har namn"
+        assert len(rubriker) == 1, uppdrag
+        platt = [x for k in kolumner for x in k["sections"]]
+        nivor = [x["text"] for x in platt if x.get("text") in lb._NIVARUBRIKER]
+        assert nivor[0] == "E-nivå" and nivor == sorted(
+            nivor, key=lb._NIVARUBRIKER.index), nivor
+        markorer = [x["text"][:2] for x in platt if x["kind"] == "text"
+                    and lb._DELMARKOR_RE.match(x["text"])]
+        assert markorer == ["a)", "b)", "c)", "d)", "e)"][:uppgifter]
+        raknare = [x for x in platt if x.get("text") in lb._RAKNARRADER]
+        assert len(raknare) == uppgifter
+        assert all(x["color"] == ("red" if x["text"] == "Med räknare"
+                                  else "black") for x in raknare)
+        svar = [x for x in platt if x["kind"] == "math"
+                and x["latex"].startswith("\\text{Svar: ")]
+        assert len(svar) == uppgifter, uppdrag
+        assert lb.hogervakt(doc) == []
+    # NA26F förklarar varifrån komposanterna och koordinaterna kommer;
+    # IndA har metoderna med sina namn och formeln står på formelbladet.
+    na, ind = (_fragorna(d) for _u, d in lb.FEW_SHOTS)
+    assert na == ["1. Basvektorer", "2. Komposanter", "3. Koordinater"]
+    assert ind[2] == "3. Andragrad: pq-formeln"
+    assert "Formeln står på formelbladet" in json.dumps(
+        lb.FEW_SHOTS[1][1], ensure_ascii=False)
+
+
+def test_introtavlan_ar_ett_brade_med_begreppen():
+    """BA26B (lärarens dom 2026-10-12): «Det funkar inte med den klassen» att
+    läraren står och pratar. Fem minuter vid ETT bräde, bara begreppen, och
+    sedan gruppuppgiften."""
+    doc = lb.FEW_SHOTS_INTRO[0][1]
+    assert len(doc["boards"]) == 1
+    assert _fragorna(doc) == ["1. Vad är ett uttryck?",
+                              "2. Variabel och konstant",
+                              "3. Uttryckets värde", "4. Skrivsättet"]
+    assert "Fem minuter här, sedan gruppuppgiften" in \
+        _vanstersektioner(doc)[1]["items"]
+    p = lb.build_prompt("Matematik, nivå 1a", "BA26B", "Algebraiska uttryck",
+                        form=INTRO)
+    assert p.startswith(lb.INSTRUCTION_INTRO)
+    assert "exakt EN tavla" in p and "FEM MINUTER" in p
+    assert "KLASSEN: klassen går Bygg och anläggning" in p
+    assert "Högertavlan är TRE TILL FEM" not in p
+    assert "NIVÅN:" not in p
+    # Shoten är BA26B:s, inte de vanliga.
+    assert "Vektorer i koordinatform" not in p
+    assert "Algebraiska uttryck, introtavla" in p
+    # Två bräden fälls, ett går igenom.
+    tva = copy.deepcopy(lb.FEW_SHOTS[0][1])
+    assert [f["code"] for f in lb.formvakter(tva, INTRO)
+            if f["code"] == "intro_ett_brade"] == ["intro_ett_brade"]
+    assert lb.formvakter(doc, INTRO) == []
+    # Introtavlan går före regelsamlingen och har ingen nivå.
+    f = lb.tavelform(True, "A-nivå", "", True, True)
+    assert f.intro and not f.regelsamling and f.niva == "" and f.ny_form
+
+
+def test_introtavlan_doms_inte_och_sparar_ett_brade():
+    """Täckningsdomaren har inget urval att döma en introtavla mot (det gör
+    gruppuppgiften), så den körs inte; vakterna prövar formen."""
+    doc = copy.deepcopy(lb.FEW_SHOTS_INTRO[0][1])
+    llm, calls = _stub_llm([json.dumps(doc)])
+    res = lb.generate_board("Matematik, nivå 1a", "BA26B",
+                            "Algebraiska uttryck", model="m", llm=llm,
+                            vanligt_fel=False, inriktning="Bygg och anläggning",
+                            intro=True)
+    assert len(calls) == 1 and res["errors"] == [], res["errors"]
+    assert calls[0]["prompt"].startswith(lb.INSTRUCTION_INTRO)
+    assert len(res["board"]["boards"]) == 1
+
+
+def test_utan_intro_ar_prompten_den_vanliga():
+    """Kassettregeln: intro=False är standardformen, byte för byte."""
+    assert lb.build_prompt("Ma1c", "NA26F", "Vektorer") == lb.build_prompt(
+        "Ma1c", "NA26F", "Vektorer", form=lb.tavelform(True, "", "", False,
+                                                       False))
+    assert lb.tavelform() == lb.STANDARDFORM
 
 
 def test_prompten_bar_den_nya_formen():
-    """Prompten bär formen själv, inte bara shotarna: berättelsen, förra
-    lektionen, namnen vid figuren, aldrig högerns svar, ETT vardagsnära
-    exempel i tre nivåer där varje del står på egna ben."""
-    p = lb.build_prompt("Ma1c", "TE26A", "Modeller och rimlighet")
-    for rad in ("5. VÄNSTERN ÄR GENOMGÅNGEN SOM EN BERÄTTELSE",
-                "BÖRJA DÄR ELEVERNA ÄR", "visa VARIFRÅN det kommer",
-                "SIST ETT JÄTTELÄTT EXEMPEL",
-                "6. FÖRRA LEKTIONEN SOM KONTRAST",
+    """Prompten bär formen själv, inte bara shotarna: begreppen på vänstern
+    utan formelbladets regler, högst tre korta rader per steg, och tre till
+    fem rena uppgifter med räknarrad och kort lösning."""
+    p = lb.build_prompt("Ma1c", "NA26F", "Vektorer i koordinatform")
+    for rad in ("Under strecket står DIREKT en row",
+                "Ingen öppningsrubrik",
+                "5. VÄNSTERN FÖRKLARAR BEGREPPEN, INTE FORMELBLADETS REGLER",
+                "VAD BEGREPPET BETYDER OCH HUR DET SER UT",
+                "VAD SKILLNADEN ÄR", "VARFÖR VI HAR DET OCH VARIFRÅN DET KOMMER",
+                "METODEN MED SITT NAMN",
                 "7. NAMNEN STÅR VID FIGUREN", "RADIANER",
                 "8. VÄNSTERN VISAR ALDRIG SVARET PÅ EN HÖGERUPPGIFT",
-                "ingen «Varför X?» med tillämpningar",
-                "Högertavlan är ETT genomgående exempel i tre nivåer",
-                "ENKEL OCH VARDAGSNÄRA",
-                "«E-nivå», «C-nivå», «A-nivå» (size 20, weight 700, color blue)",
-                "Kolumnerna blir UNGEFÄR LIKA HÖGA",
-                "VARJE DEL STÅR PÅ EGNA BEN",
-                "Situationen är ALDRIG provets eller bokens",
-                "VARJE del byter HANDGREPP",
-                "skriv aldrig en andra situation eller ett andra exempel",
-                "VARJE del har sin egen triangel",
-                "HÖGST FEM textrader under ett steg",
-                "med tre \"columns\" för exemplet"):
+                "inga regler eller formler som står på formelbladet",
+                "Högertavlan är TRE TILL FEM RENA UPPGIFTER",
+                "«Utan räknare»", "«Med räknare»",
+                "LÖSNINGEN är TVÅ ELLER TRE math-rader",
+                "Ingen förklarande text mellan leden",
+                "heltal och vänliga tal",
+                "Varje nivårubrik står EN gång",
+                "HÖGST TRE textrader under ett steg och HÖGST NIO",
+                "med tre \"columns\" för uppgifterna"):
         assert rad in p, rad
-    # Den gamla formens och 2026-09-29 års regler står inte i prompten.
+    # Den gamla formens och 2026-09-29/30 års regler står inte i prompten.
     for gammal in ("8g. ATT TÄNKA PÅ", "8d. ANKARET", "6c. PILEN",
                    "TRE EXEMPEL ÄR TRE METODTYPER", "FALLGALLERI",
-                   "1–3 exempel, aldrig fler", "Randvinkelsatsen",
-                   "DE FYRA FRÅGORNA", "«2. Delarna»", "«3. Varför formler?»",
-                   "Talen återbrukas ur tidigare delar",
-                   "cyklistens rörelseenergi\", \"size\""):
+                   "Högertavlan är ETT genomgående exempel i tre nivåer",
+                   "4. Öppningsrubriken", "SIST ETT JÄTTELÄTT EXEMPEL",
+                   "VARJE del har sin egen triangel",
+                   "HÖGST FEM textrader under ett steg",
+                   "Exempel: elsparkcykelns batteri"):
         assert gammal not in p, gammal
-    assert "elsparkcykelns batteri" in p and "draken i snöret" in p
     assert len(p) < 35_000, len(p)
     # Förra lektionen: blocket står bara när kalendern har en rubrik.
     assert lb.FORRAMARKOR not in p
@@ -3720,7 +3817,7 @@ def test_regelsamlingen_ar_orord():
     p = lb.build_prompt("Ma1c", "NA26F", "Potenslagarna", form=f)
     assert p.startswith(lb.INSTRUCTION_REGELSAMLING + lb.REGELSAMLING_BLOCK)
     assert "8g. ATT TÄNKA PÅ" in p and "Randvinkelsatsen" in p
-    assert "cyklistens rörelseenergi" not in p
+    assert "Vektorer i koordinatform" not in p
     assert f.lappinstruktion() == lb.LAPP_INSTRUKTION_REGELSAMLING
     assert "Pröva RÖDA TRÅDEN" in f.domarinstruktion()
     # …och standardformen bär inget av regelsamlingens gamla skelett.
@@ -3729,182 +3826,238 @@ def test_regelsamlingen_ar_orord():
     assert "Pröva RÖDA TRÅDEN" not in ny.domarinstruktion()
 
 
+def _ind() -> dict:
+    return copy.deepcopy(lb.FEW_SHOTS[1][1])
+
+
 def test_vanstervakt_faller_det_som_inte_ska_sta_dar():
-    """«Att tänka på», «Vanligt fel», ett «Varför»-steg, för få steg, för
-    många rader under ett steg, en rad som är en mening och namn i en lista
-    under figuren."""
-    doc = _facit()
+    """«Att tänka på», «Vanligt fel», ett «Varför»-steg, för få steg, fler
+    än tre rader under ett steg, fler än nio sammanlagt, en rad som är en
+    mening, formelbladets regler och namn i en lista under figuren."""
+    doc = _ind()
     spalt1, spalt2 = [c["children"] for c in
                       _vanstersektioner(doc)[-1]["children"]]
     spalt2 += [{"kind": "text", "text": "5. Att tänka på", "weight": 700},
                {"kind": "math", "latex": "t > 0"},
                {"kind": "text", "text": "Vanligt fel:", "color": "red",
                 "weight": 700}]
-    spalt1.insert(2, {"kind": "text", "text": "Den räknar ut kostnaden för "
-                                              "hyran av cykeln"})
-    spalt1.insert(3, {"kind": "text", "text": "Sjätte raden"})
+    spalt1.insert(2, {"kind": "text", "text": "Den räknar ut produkten av "
+                                              "två parenteser"})
     koder = sorted(f["code"] for f in lb.vanstervakt(doc))
+    # Steg 1 får fyra rader, och vänstern tio: två fynd om mängden.
     assert koder == ["vanster_att_tanka_pa", "vanster_for_manga",
-                     "vanster_rad_lang", "vanster_vanligt_fel"], koder
-    # För få steg, och ett «Varför»-steg.
+                     "vanster_for_manga", "vanster_rad_lang",
+                     "vanster_vanligt_fel"], koder
+    # Tre rader under ett steg går, fyra fälls (lärarens tak 2026-10-12).
     doc = _facit()
     spalt2 = _vanstersektioner(doc)[-1]["children"][1]["children"]
-    spalt2[:] = [{"kind": "text", "text": "3. Varför modeller?",
-                  "weight": 700, "size": 20}]
-    doc2 = _facit()
+    assert lb.vanstervakt(doc) == []
+    spalt2.insert(5, {"kind": "text", "text": "Ett ord till"})
+    fynd = lb.vanstervakt(doc)
+    assert [f["code"] for f in fynd] == ["vanster_for_manga"]
+    assert "fler än 3 rader" in fynd[0]["message"]
+    # Fler än nio sammanlagt: en rad till under steg 3 (två rader där nu).
+    doc = _ind()
+    spalt2 = _vanstersektioner(doc)[-1]["children"][1]["children"]
+    spalt2.insert(3, {"kind": "text", "text": "p och q är tal"})
+    fynd = lb.vanstervakt(doc)
+    assert [f["code"] for f in fynd] == ["vanster_for_manga"]
+    assert "fler än 9 textrader" in fynd[0]["message"]
+    # Formelbladets regler (lärarens dom 2026-10-12: «de har de på
+    # formelbladet»).
+    doc = _ind()
+    spalt2 = _vanstersektioner(doc)[-1]["children"][1]["children"]
+    spalt2[2]["latex"] = ("x = -\\frac{p}{2} \\pm \\sqrt{\\left(\\frac{p}{2}"
+                          "\\right)^2 - q}")
+    spalt2.insert(3, {"kind": "math",
+                      "latex": "(a + b)^2 = a^2 + 2ab + b^2"})
+    fynd = lb.vanstervakt(doc)
+    assert [f["code"] for f in fynd] == ["vanster_formelblad"] * 2
+    assert "pq-formeln" in fynd[0]["message"]
+    assert "kvadreringsregeln" in fynd[1]["message"]
+    for latex in ("x^2 + px + q = 0", "3x(x + 2) \\;\\rightarrow\\; 3x^2 + 6x",
+                  "(x + 3)^2 = x^2 + 6x + 9", "\\vec{v} = 3\\vec{e}_x"):
+        assert lb._formelbladsregel(latex) == "", latex
+    assert lb._formelbladsregel("(a+b)(a-b) = a^2 - b^2") == "konjugatregeln"
+    assert lb._formelbladsregel("a^x \\cdot a^y = a^{x+y}") == "potenslagarna"
+    # För få steg, och ett «Varför»-steg.
+    doc = _ind()
+    _vanstersektioner(doc)[-1]["children"][1]["children"][:] = [
+        {"kind": "text", "text": "3. Varför andragrad?", "weight": 700,
+         "size": 20}]
+    doc2 = _ind()
     _vanstersektioner(doc2)[-1]["children"][1]["children"][:] = []
     assert [f["code"] for f in lb.vanstervakt(doc)] == ["vanster_varfor"]
     fynd = lb.vanstervakt(doc2)
     assert [f["code"] for f in fynd] == ["vanster_fragor"]
     assert fynd[0]["message"].endswith("Nu: 1., 2..")
-    # Namnen i en lista under figuren (NA26F 2026-09-30).
-    na = copy.deepcopy(lb.FEW_SHOTS[1][1])
+    # Namnen i en lista under en triangel (NA26F 2026-09-30, den gamla
+    # tavlan: dess figur är en polygon, vektorernas rutnät är det inte).
+    na = _kontrolltavlan("facit-na26f-trigonometri-2026-10-02.json")
     assert lb.vanstervakt(na) == []
     spalt = _vanstersektioner(na)[-1]["children"][1]["children"]
     spalt.insert(2, {"kind": "text", "text": "c = hypotenusan", "size": 18})
     assert [f["code"] for f in lb.vanstervakt(na)] == ["vanster_namnlista"]
-    # Facit fälls på ingenting, den gamla formen på det mesta, och
-    # 2026-09-29 års tavla på sitt «3. Varför formler?».
-    assert lb.vanstervakt(_facit()) == []
-    gamla = {f["code"] for f in lb.vanstervakt(_valid_doc())}
-    assert {"vanster_att_tanka_pa"} <= gamla
-    formler = _kontrolltavlan("facit-te26a-formler-2026-09-29.json")
-    assert [f["code"] for f in lb.vanstervakt(formler)] == ["vanster_varfor"]
 
 
 def test_svarsvakten_faller_hogerns_svar_pa_vanstern():
-    """«Rookie mistake, eleverna skriver bara av» (TE26A 2026-09-30):
-    vänsterns modell var först E-uppgiftens B = 100 − 6x. Vakten fäller ett
-    samband med specifika tal som står på båda sidor, ett bråk med samma
-    värde, ett decimalt resultat och en figur med samma tal. Den allmänna
-    formeln (W = m·v²/2) och vänsterns egna tal står kvar."""
+    """«Rookie mistake, eleverna skriver bara av» (TE26A 2026-09-30): ett
+    samband, ett bråk eller ett decimalt resultat från högern på vänstern
+    fälls. Vänsterns egna tal står kvar."""
     assert lb.svarsvakt(_facit()) == []
-    assert lb.svarsvakt(lb.FEW_SHOTS[1][1]) == []
+    assert lb.svarsvakt(_ind()) == []
+    assert lb.svarsvakt(lb.FEW_SHOTS_INTRO[0][1]) == []
     doc = _facit()
     spalt2 = _vanstersektioner(doc)[-1]["children"][1]["children"]
-    spalt2[3]["latex"] = "B = 100 - 6x"
+    spalt2[9]["latex"] = "\\tan u \\approx 36{,}9^\\circ"
     assert [f["code"] for f in lb.svarsvakt(doc)] == ["vanster_svar"]
-    na = copy.deepcopy(lb.FEW_SHOTS[1][1])
-    sista = _vanstersektioner(na)[-1]["children"][1]["children"][-1]
-    sista["latex"] = "\\sin v = \\frac{3}{5}"
-    fynd = lb.svarsvakt(na)
-    assert [f["code"] for f in fynd] == ["vanster_svar"]
-    assert "3/5" in fynd[0]["message"]
-    na = copy.deepcopy(lb.FEW_SHOTS[1][1])
-    sista = _vanstersektioner(na)[-1]["children"][1]["children"][-1]
-    sista["latex"] = "\\cos v \\approx 0{,}8"
-    assert [f["code"] for f in lb.svarsvakt(na)] == ["vanster_svar"]
-    na = copy.deepcopy(lb.FEW_SHOTS[1][1])
-    figur = _vanstersektioner(na)[-1]["children"][1]["children"][4]
-    for t, tal in zip(figur["texts"], ("12", "16", "20")):
-        t["text"] = tal
-    assert [f["code"] for f in lb.svarsvakt(na)] == ["vanster_svar"]
+    ind = _ind()
+    spalt1 = _vanstersektioner(ind)[-1]["children"][0]["children"]
+    spalt1[9]["latex"] = "x^2 = 36"
+    assert [f["code"] for f in lb.svarsvakt(ind)] == ["vanster_svar"]
     # Formvakterna bär den.
     assert "vanster_svar" in [f["code"] for f in
                               lb.formvakter(doc, lb.tavelform(True, ""))]
 
 
-def test_hogervakten_kraver_egna_ben_och_en_figur_per_del():
-    """«Varje deluppgift står på egna ben» och «en triangel med talen vid
-    varje högeruppgift» (NA26F 2026-09-30). Nivårubriken står en gång."""
-    na = copy.deepcopy(lb.FEW_SHOTS[1][1])
-    assert lb.hogervakt(na) == []
-    c = na["boards"][1]["columns"][1]["sections"]
-    c[1]["text"] = "b) Samma drake som i a), nu 15 m högt."
-    figur = next(i for i, s in enumerate(c) if s["kind"] == "graph")
-    del c[figur]
-    na["boards"][1]["columns"][2]["sections"].append(
-        {"kind": "text", "text": "A-nivå", "weight": 700, "color": "blue"})
-    koder = sorted(f["code"] for f in lb.hogervakt(na))
-    assert koder == ["del_hanvisning", "del_utan_figur", "nivarubrik"], koder
-    # Algebra har inga figurer, och a) får exemplets figur överst.
-    assert lb.hogervakt(_facit()) == []
-    assert not lb._hanvisar_till_del("a) Batteriet är fullt, 100 %.")
-    assert not lb._hanvisar_till_del("a = 12 m (höjden)")
+def test_hogervakten_kraver_rena_uppgifter_med_raknarrad():
+    """Tre till fem uppgifter, räknarraden under varje, uppgiftstexten högst
+    tre rader och lösningen högst tre rader varav högst en text (lärarens
+    dom 2026-10-12). Varje uppgift står på egna ben (2026-09-30)."""
+    assert lb.hogervakt(_facit()) == [] and lb.hogervakt(_ind()) == []
+    ind = _ind()
+    k0 = ind["boards"][1]["columns"][0]["sections"]
+    del k0[7]                                   # b):s «Utan räknare»
+    k0.insert(3, {"kind": "text", "text": "Skriv svaret i enklaste form."})
+    k0.insert(3, {"kind": "text", "text": "Utveckla först parenteserna."})
+    k0.insert(3, {"kind": "text", "text": "Tänk på minustecknet."})
+    k2 = ind["boards"][1]["columns"][2]["sections"]
+    k2.insert(6, {"kind": "text", "text": "Diskriminanten är 0"})
+    k2.insert(6, {"kind": "math", "latex": "25 - k = 0"})
+    k2[1]["text"] = "e) Samma ekvation som i d), men med k."
+    koder = sorted(f["code"] for f in lb.hogervakt(ind))
+    assert koder == ["del_hanvisning", "losning_lang", "raknarrad",
+                     "uppgift_lang"], koder
+    # Det röda strukna ledet («Vanligt fel») räknas inte i lösningen.
+    ind = _ind()
+    ind["boards"][1]["columns"][0]["sections"].insert(5, {
+        "kind": "math", "color": "red",
+        "latex": "\\cancel{x^2 + 16 - x^2 - 3x}"})
+    assert lb.hogervakt(ind) == []
+    # Antalet: två är för få, sex för många.
+    ind = _ind()
+    ind["boards"][1]["columns"][1]["sections"] = []
+    ind["boards"][1]["columns"][2]["sections"] = []
+    # C och A försvann med kolumnerna, och Blandat vill ha mer än E.
+    assert [f["code"] for f in lb.hogervakt(ind)] == ["nivarubrik",
+                                                      "for_fa_delar"]
+    ind = _ind()
+    ind["boards"][1]["columns"][2]["sections"] += [
+        {"kind": "text", "text": "f) Lös x² = 2x."},
+        {"kind": "text", "text": "Utan räknare", "color": "black"},
+        {"kind": "math", "latex": "x(x - 2) = 0"},
+        {"kind": "math", "latex": "\\text{Svar: } x_1 = 0,\\ x_2 = 2"}]
+    assert [f["code"] for f in lb.hogervakt(ind)] == ["for_manga_delar"]
+    assert not lb._hanvisar_till_del("a) A(−3, 2) och B(1, 5).")
     assert lb._hanvisar_till_del("c) Vinkeln är densamma som i uppgift b.")
 
 
-def test_hogervakt_kraver_ett_exempel_i_nivaer():
-    doc = _facit()
+def test_hogervakten_vill_ha_nivaerna_i_ordning():
+    doc = _ind()
     kol = doc["boards"][1]["columns"]
     kol[2]["sections"].insert(0, {"kind": "heading",
                                   "text": "Exempel: pizzans area"})
-    kol[1]["sections"][0]["text"] = "Nivå C"
     koder = sorted(f["code"] for f in lb.hogervakt(doc))
-    assert koder == ["flera_exempel", "nivarubrik"], koder
-    # Nivåvalet: E-nivå vill bara ha E, och C-rubriken fälls då.
-    assert [f["code"] for f in lb.hogervakt(_facit(), "E-nivå")] == \
+    assert koder == ["flera_exempel"], koder
+    # A före C fälls.
+    doc = _ind()
+    kol = doc["boards"][1]["columns"]
+    kol[1]["sections"][4]["text"], kol[2]["sections"][0]["text"] = \
+        "A-nivå", "C-nivå"
+    assert [f["code"] for f in lb.hogervakt(doc)] == ["nivarubrik"]
+    # Nivåvalet: E-nivå vill bara ha E, och C- och A-rubrikerna fälls då.
+    assert [f["code"] for f in lb.hogervakt(_ind(), "E-nivå")] == \
         ["nivarubrik", "nivarubrik"]
-    assert lb.hogervakt(_facit(), "A-nivå") == []
-    # Blandat kräver minst tre delar.
+    assert lb.hogervakt(_ind(), "A-nivå") == []
+    # A-nivå kräver A; NA26F har E och C och går igenom i Blandat och C-nivå.
+    assert [f["code"] for f in lb.hogervakt(_facit(), "A-nivå")] == \
+        ["nivarubrik"]
+    assert lb.hogervakt(_facit(), "C-nivå") == []
+    # Blandat med bara E fälls.
     doc = _facit()
-    doc["boards"][1]["columns"][2]["sections"] = [
-        {"kind": "text", "text": "A-nivå", "weight": 700, "color": "blue"}]
-    assert [f["code"] for f in lb.hogervakt(doc)] == ["for_fa_delar"]
+    doc["boards"][1]["columns"][2]["sections"][0]["text"] = "Uppgift"
+    assert [f["code"] for f in lb.hogervakt(doc)] == ["nivarubrik"]
     # Och den tiger när högern löser förlagan.
     form = lb.tavelform(True, "")
     assert lb.formvakter(doc, form, "", [{"t": "x"}]) == []
 
 
-def test_formvakten_laser_delarna_i_den_nya_formen():
-    """Samma situation är kravet, men varje del byter handgrepp. En del som
-    gör samma sak som en tidigare med nya tal fälls, som två exempel gjorde
-    förut. Samma FAKTUM med samma tal i två delar är ingen upprepning (varje
-    del står på egna ben), men samma fråga är det."""
-    doc = _facit()
-    c = doc["boards"][1]["columns"][1]["sections"]
-    c[1:] = [
-        {"kind": "text", "text": "b) Batteriet är fullt, 100 %."},
-        {"kind": "text", "text": "Varje km drar 5 %."},
-        {"kind": "math", "latex": "x \\text{ km drar } 5x \\text{ \\%}"},
-        {"kind": "math", "latex": "B = 100 - 5x"},
-        {"kind": "math", "latex": "x = 4 \\text{ ger } B = 80"},
-        {"kind": "math", "latex": "\\text{Svar: } B = 100 - 5x"}]
-    fynd = lb.formupprepning(doc, True)
+def test_formvakten_laser_uppgifterna_i_den_nya_formen():
+    """Varje uppgift har sitt handgrepp. En uppgift som gör samma sak som en
+    tidigare med nya tal fälls."""
+    ind = _ind()
+    k1 = ind["boards"][1]["columns"][1]["sections"]
+    k1[0]["text"] = "c) Lös x² + 9 = 58."
+    k1[2]["latex"] = "x^2 = 49"
+    k1[3]["latex"] = "\\text{Svar: } x = \\pm 7"
+    fynd = lb.formupprepning(ind, True)
     assert [f["code"] for f in fynd] == ["upprepad_form"], fynd
     # Utan delningen (den gamla formen, förlagan) ser vakten ingenting.
-    assert lb.formupprepning(doc) == []
-    # Samma faktum i två delar står kvar; samma fråga fälls.
-    na = copy.deepcopy(lb.FEW_SHOTS[1][1])
-    assert lb.formupprepning(na, True) == []
-    rad = na["boards"][1]["columns"][2]["sections"][1]["children"][0]
-    rad["children"][3]["text"] = "Hur långt är snöret nu?"
-    assert [f["code"] for f in lb.formupprepning(na, True)] == \
-        ["upprepad_situation"]
-    # En del utan uträkning fälls också, men inte exempelrubriken över en
-    # figur.
-    doc = _facit()
-    doc["boards"][1]["columns"][2]["sections"][1:] = [
-        {"kind": "text", "text": "c) Lös ut x ur formeln."}]
+    assert lb.formupprepning(ind) == []
+    assert lb.formupprepning(_ind(), True) == []
+    # En uppgift utan uträkning fälls också.
+    ind = _ind()
+    ind["boards"][1]["columns"][2]["sections"][1:] = [
+        {"kind": "text", "text": "e) Lös ut x ur formeln."}]
     assert "utrakning_saknas" in [f["code"] for f in
-                                  lb.utrakningsvakt(doc, True)]
-    assert lb.utrakningsvakt(lb.FEW_SHOTS[1][1], True) == []
+                                  lb.utrakningsvakt(ind, True)]
+    assert lb.utrakningsvakt(_facit(), True) == []
 
 
 PROV_BROMS = ("Bromssträckan i m på is ges av formeln: $s = 0{,}039v^{2}$, "
               "där $v$ är farten i km/h. Bestäm den högsta farten bilen får "
               "ha, då bromssträckan högst får vara 45 m.")
+PROV_K = ("Bestäm k så att ekvationen $x^2 + 6x + k = 0$ har exakt en "
+          "lösning.\npq-formeln: $x = -3 \\pm \\sqrt{9 - k}$, en lösning när "
+          "$9 - k = 0$.")
 
 
 def test_provsituationen_falls_ocksa_med_andra_tal():
     """Jobb 1183 skrev bromssträckan inför prov 129, vars uppgift 10 är
     bromssträckan på is. Varken en mening eller ett led var provets, men
-    situationen var det, och läraren bytte den för hand."""
-    assert lb.provsituation(_facit(), PROV_BROMS) == []
-    broms = _facit()
-    broms["boards"][1]["columns"][0]["sections"][0]["text"] = \
-        "Exempel: bilens bromssträcka"
+    situationen var det, och läraren bytte den för hand.
+
+    SAMMA SORT ÄR RÄTT sedan 2026-10-12: IndA:s A-uppgift löses med
+    x = −5 ± √(25 − k) där provet har x = −3 ± √(9 − k). Lösningen (raderna
+    efter räknarraden) prövas inte mot provets formler."""
+    assert lb.provsituation(_ind(), PROV_K) == []
+    assert lb.provsituation(_ind(), PROV_BROMS) == []
+    broms = _ind()
+    broms["boards"][1]["columns"][0]["sections"][2]["text"] = \
+        "a) En bils bromssträcka är 40 m."
     fynd = lb.provsituation(broms, PROV_BROMS)
     assert [f["code"] for f in fynd] == ["provsituation"]
     assert "bromsst" in fynd[0]["message"]
-    # Samma formel med andra tal är också provets situation.
-    formel = _facit()
-    formel["boards"][1]["columns"][0]["sections"][1]["latex"] = \
-        "s = 0{,}04 \\cdot v^2"
+    # Samma formel med andra tal i UPPGIFTEN är provets situation.
+    formel = _ind()
+    formel["boards"][1]["columns"][0]["sections"].insert(3, {
+        "kind": "math", "latex": "s = 0{,}04 \\cdot v^2"})
     assert [f["code"] for f in lb.provsituation(formel, PROV_BROMS)] == \
         ["provsituation"]
     # Utan prov tiger den.
     assert lb.provsituation(broms, "") == []
+
+
+def test_provkopian_kraver_ord_och_inte_bara_tal():
+    """NA26F:s «a) A(−3, 2) och B(1, 5).» bar fyra tal och «och», och en lång
+    provmening med talen fällde den, fast provet inte har punkterna."""
+    prov = ("Punkterna A(1, 2), B(3, 5) och C(2, 1) bildar en triangel, och "
+            "sidan AB är 5 cm.")
+    assert lb.provkopior(_facit(), prov) == []
+    kopia = _facit()
+    kopia["boards"][1]["columns"][0]["sections"][2]["text"] = \
+        "a) Punkterna A(1, 2) och B(3, 5) bildar en triangel."
+    assert [f["code"] for f in lb.provkopior(kopia, prov)] == ["provkopia"]
 
 
 def test_nya_formen_tar_aldrig_in_att_tanka_pa():
@@ -3922,29 +4075,33 @@ def test_nya_formen_tar_aldrig_in_att_tanka_pa():
 def test_skelettvakten_skyddar_fragorna():
     """Budgetlappen får korta raderna men aldrig stryka ett steg eller
     raderna under ett «X eller Y?»-steg."""
-    doc = _facit()
-    vag = "boards[0].sections[4].children"
-    for nyckel in (f"{vag}[0].children[0]", f"{vag}[0].children[5]",
-                   f"{vag}[1].children[0]", f"{vag}[1].children[7]",
-                   f"{vag}[1].children[8]", f"{vag}[1].children[11]"):
+    doc = _ind()
+    vag = "boards[0].sections[3].children"
+    # Steg 1 och 2 är «X eller Y?»-steg, och raderna under dem skyddas.
+    for nyckel in (f"{vag}[0].children[0]", f"{vag}[0].children[1]",
+                   f"{vag}[0].children[6]", f"{vag}[0].children[10]",
+                   f"{vag}[1].children[0]", f"{vag}[1].children[4]"):
         assert lb.skelettvakten(doc, [nyckel], _budgetproblem()) == nyckel
-    for nyckel in (f"{vag}[0].children[2]", f"{vag}[1].children[2]",
-                   "boards[0].sections[1]"):
+    for nyckel in (f"{vag}[1].children[1]", f"{vag}[1].children[3]",
+                   f"{vag}[1].children[7]", "boards[0].sections[1]"):
         assert lb.skelettvakten(doc, [nyckel], _budgetproblem()) == "", nyckel
     assert "numrerade stegrubriker" in lb.LAPP_INSTRUKTION
 
 
 def test_domaren_i_den_nya_formen():
-    """Domaren prövar frågorna, delarna och stegringen, och ber aldrig om en
-    ny situation eller en rad under «Att tänka på»."""
+    """Domaren prövar vänsterns begrepp, uppgifterna och stegringen, och ber
+    aldrig om en rad under «Att tänka på» eller en sjätte uppgift."""
     t = lb.build_tackning_prompt({"boards": []}, "LÄRARENS URVAL: 1201")
-    for rad in ("SAMMA SITUATION ÄR BESTÄLLD", "Föreslå ALDRIG en ny situation",
-                "Pröva STEGRINGEN", "Pröva VÄNSTERN", "Pröva DUBBLETTERNA",
-                "Kräv ALDRIG en ny rad på vänstern för ett randfall",
-                "HÖGST FYRA delar"):
+    for rad in ("tre till fem rena uppgifter", "HÖGST FEM uppgifter",
+                "aldrig en sjätte", "Pröva STEGRINGEN", "Pröva VÄNSTERN",
+                "Pröva DUBBLETTERNA", "formelbladet",
+                "Har varje uppgift sin räknarrad",
+                "Kräv ALDRIG en ny rad på vänstern för ett randfall"):
         assert rad in t, rad
     for gammal in ("Pröva RANDFALLEN", "Pröva RÖDA TRÅDEN",
-                   "HÖGST TRE exempel", "Pröva ATT TÄNKA PÅ"):
+                   "HÖGST TRE exempel", "Pröva ATT TÄNKA PÅ",
+                   "SAMMA SITUATION ÄR BESTÄLLD", "HÖGST FYRA delar",
+                   "Pröva ÖPPNINGSRUBRIKEN"):
         assert gammal not in t, gammal
     # Nivåvalet följer med, så att en E-tavla inte fälls för att C saknas.
     e = lb.tavelform(True, "E-nivå").domarinstruktion()
@@ -3952,18 +4109,15 @@ def test_domaren_i_den_nya_formen():
     assert "NIVÅN:" not in lb.tavelform(True, "").domarinstruktion()
 
 
-def test_nya_formens_kryss_galler_exemplet():
+def test_nya_formens_kryss_galler_uppgiften():
     """«Vanligt fel» står aldrig på vänstern i den nya formen. Krysset säger
-    om exemplet bär ett struket rött led i den del där felet händer."""
-    fel = "\\\\cancel{c = 15 \\\\cdot \\\\sin 40^\\\\circ}"
-    pa = lb.build_prompt("Ma1c", "NA26F", "Trigonometri")
-    assert "VANLIGT FEL står EN gång, i den del där felet händer" in pa
-    assert fel in pa                                    # shot 2:s C-del
-    av = lb.build_prompt("Ma1c", "NA26F", "Trigonometri",
+    om en uppgift bär ett struket rött led där felet händer."""
+    pa = lb.build_prompt("Ma1c", "NA26F", "Vektorer")
+    assert "VANLIGT FEL står EN gång, i den uppgift där felet händer" in pa
+    av = lb.build_prompt("Ma1c", "NA26F", "Vektorer",
                          form=lb.tavelform(False, ""))
     assert "Läraren har VALT BORT «Vanligt fel»" in av
     assert "VANLIGT FEL står EN gång" not in av
-    assert fel not in av
     assert "Vanligt fel:" not in av
 
 
@@ -3971,30 +4125,31 @@ def test_generate_board_far_formvakternas_fynd_att_ratta():
     """En tavla i den gamla formen fälls i samma varv: reparationsrundan får
     fynden och deras åtgärdsråd, och facit går igenom."""
     llm, calls = _stub_llm([json.dumps(_valid_doc()), json.dumps(_facit())])
-    res = lb.generate_board("Ma1c", "TE26A", "Formler", model="m", llm=llm,
+    res = lb.generate_board("Ma1c", "NA26F", "Vektorer", model="m", llm=llm,
                             doma=False)
     assert len(calls) == 2 and res["errors"] == [], res["errors"]
     rattning = calls[1]["prompt"]
     for fynd in ("«Att tänka på» står på vänstern",
                  "vänstern ska vara genomgången i TRE eller FYRA",
-                 "alltså fler än en situation", "nivårubriken «C-nivå» saknas"):
+                 "högern bär 2 rubriker", "högern har 0 uppgifter"):
         assert fynd in rattning, fynd
-    assert "'fler än en situation' eller 'nivårubrik'" in rattning
+    assert "'fler än en rubrik' eller 'nivårubrik'" in rattning
+    assert "'uppgifter på högern'" in rattning
 
 
 def test_forra_lektionen_nar_skrivningen_och_domaren():
-    """«Knyt an till förra lektionen som kontrast» (TE26A 2026-09-30).
-    Kalenderns rubrik går in i skrivningen och domaren, bara när den finns,
-    och aldrig i regelsamlingen."""
+    """«Knyt an till förra lektionen» (TE26A 2026-09-30). Kalenderns rubrik
+    går in i skrivningen och domaren, bara när den finns, och aldrig i
+    regelsamlingen."""
     llm, calls = _stub_llm([json.dumps(_facit()), '{"saknas": []}'])
-    lb.generate_board("Ma1c", "TE26A", "Modeller och rimlighet", model="m",
-                      llm=llm, forra="Formler")
+    lb.generate_board("Ma1c", "NA26F", "Vektorer i koordinatform", model="m",
+                      llm=llm, forra="Vektorer")
     assert len(calls) == 2
     for c in calls:
-        assert "FÖRRA LEKTIONEN med klassen hade rubriken «Formler»" \
+        assert "FÖRRA LEKTIONEN med klassen hade rubriken «Vektorer»" \
             in c["prompt"]
     llm, calls = _stub_llm([json.dumps(_facit()), '{"saknas": []}'])
-    lb.generate_board("Ma1c", "TE26A", "Modeller", model="m", llm=llm)
+    lb.generate_board("Ma1c", "NA26F", "Vektorer", model="m", llm=llm)
     assert all(lb.FORRAMARKOR not in c["prompt"] for c in calls)
     p = lb.build_prompt("Ma1c", "NA26F", "Potenslagarna",
                         form=lb.tavelform(regelsamling=True),
@@ -4002,19 +4157,18 @@ def test_forra_lektionen_nar_skrivningen_och_domaren():
     assert lb.FORRAMARKOR not in p
 
 
-def test_en_bred_rad_i_en_nivakolumn_falls():
+def test_en_bred_rad_i_en_kolumn_falls():
     """Den första skarpa tavlan i formen (Olikheter, 2026-09-29) skrev två
     förklarande led i C-kolumnen som gick in i A-kolumnen vid renderingen.
     Shotarnas rader ryms, de två raderna gör det inte."""
     assert all(f["code"] != "rad_bred" for _u, d in lb.FEW_SHOTS
                for f in lb.hogervakt(d))
-    doc = _facit()
+    doc = _ind()
     kol = doc["boards"][1]["columns"][1]["sections"]
-    kol.insert(5, {"kind": "math", "latex":
-                   "x \\le 10 \\text{ (dela med } -150\\text{, vänd tecknet)}"})
-    kol.insert(6, {"kind": "math", "latex": "\\text{Pröva } x = 11\\text{: } "
-                   "2\\,300 - 1\\,650 = 650 < 800"})
+    kol[7]["latex"] = "x \\le 10 \\text{ (dela med } -150\\text{, vänd tecknet)}"
+    kol[2]["latex"] = ("\\text{Pröva } x = 11\\text{: } "
+                       "2\\,300 - 1\\,650 = 650 < 800")
     fynd = [f for f in lb.hogervakt(doc) if f["code"] == "rad_bred"]
     assert [f["path"] for f in fynd] == [
-        "boards[1].columns[1].sections[5]", "boards[1].columns[1].sections[6]"]
-    assert "'för bred för en nivåkolumn'" in lb.REPAIR_HINTS
+        "boards[1].columns[1].sections[2]", "boards[1].columns[1].sections[7]"]
+    assert "'för bred för en kolumn'" in lb.REPAIR_HINTS

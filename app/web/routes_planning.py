@@ -221,6 +221,17 @@ def tavelform_val(body: dict) -> tuple[bool, str, str]:
             inriktning_val(body))
 
 
+def intro_val(body: dict) -> bool:
+    """Panelens «Passets form: Intro 5 min» (plan.js skickar `upplagg: "intro"`).
+
+    Lärarens dom 2026-10-12 över yrkesklassen BA26B: ingen lång genomgång,
+    fem minuter vid ETT bräde med bara begreppen, sedan gruppuppgiften
+    (lesson_board.Tavelform.intro). Panelen förväljer det för en klass med
+    inriktning i klassprofilen, och läraren kan välja om. Saknas fältet är
+    det en vanlig genomgång, och prompten är den som gick före valet."""
+    return str(body.get("upplagg") or "").strip().lower() == "intro"
+
+
 def tavelform_ur_laget(st: dict, body: dict) -> tuple[bool, str, str, bool]:
     """Samma val för en omskrivning eller en reparation. Begäran vinner när
     den bär fälten (läraren kan ha kryssat om i panelen och sparat om
@@ -439,7 +450,8 @@ def lektionens_provnummer(db_file: Path, body: dict, exam: dict, *,
 
 def infor_prov_tavla(db_file: Path, body: dict, *, moment: str = "",
                      nummer=None, los: bool = False,
-                     regelsamling: bool = False) -> dict | None:
+                     regelsamling: bool = False,
+                     intro: bool = False) -> dict | None:
     """«Inför provet» för tavlan (lesson_board.build_infor_prov), eller None.
 
     `infor_prov_id` pekar ut provet och `infor_nummer` lärarens val ur det.
@@ -482,7 +494,8 @@ def infor_prov_tavla(db_file: Path, body: dict, *, moment: str = "",
             # Regelsamlingen får den gamla formens block, alla andra den
             # nya (lärarens dom 2026-09-29, lesson_board.build_infor_prov).
             "block": lesson_board.build_infor_prov(
-                valda, titel, datum, los=los, regelsamling=regelsamling),
+                valda, titel, datum, los=los, regelsamling=regelsamling,
+                intro=intro),
             "dom": lesson_board.build_infor_prov_dom(
                 valda, los=los, regelsamling=regelsamling),
             "text": lesson_board.provtexter(exam)}
@@ -1338,14 +1351,19 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # beteendet: raden är med, nivån är Blandat. Förvalet AV bor i
         # planeringspanelen, inte här.
         vanligt_fel, niva, inriktning = tavelform_val(body)
+        # Introtavlan (intro_val): ett bräde, fem minuter, före gruppuppgiften.
+        # Sparas med planeringen, så att omskrivningen och reparationen
+        # skriver om ett bräde och inte lägger dit en höger.
+        intro = intro_val(body)
         # Vidma-formen (lesson_board.REGELSAMLING_BLOCK): avgörs ur momentet
         # här, en gång, och SPARAS med planeringen som de andra formvalen.
-        regelsamling = lesson_board.ar_regelsamling(moment)
+        # Introtavlan går före den (lesson_board.tavelform).
+        regelsamling = lesson_board.ar_regelsamling(moment) and not intro
         # «Inför provet» (lärarens princip 2026-09-27): provet först, boken i
         # andra hand. None utan valt prov, och då är kedjan den gamla.
         infor = infor_prov_tavla(db_file, body, moment=moment,
                                  los=bool(los_uppg),
-                                 regelsamling=regelsamling)
+                                 regelsamling=regelsamling, intro=intro)
         # «Förra gången»: kalenderns rubrik. Läses FÖRE skrivningen sedan
         # lärarens dom 2026-09-30 («knyt an till förra lektionen som
         # kontrast»): vänsterns berättelse får börja där
@@ -1402,6 +1420,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     svart=svart_txt, fokus=fokus_txt, delar=delar_txt,
                     vanligt_fel=vanligt_fel, niva=niva, inriktning=inriktning,
                     regelsamling=regelsamling,
+                    **({"intro": True} if intro else {}),
                     prov=(infor or {}).get("block") or "",
                     prov_dom=(infor or {}).get("dom") or "",
                     provtext=(infor or {}).get("text") or "",
@@ -1425,6 +1444,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     "forra": forra,
                     "vanligt_fel": vanligt_fel, "niva": niva,
                     "inriktning": inriktning, "regelsamling": regelsamling,
+                    **({"intro": True} if intro else {}),
                     # Numren sparas som de valdes, så att omskrivningen
                     # läser samma uppgifter ur provet (se refine).
                     **({"infor_prov": {k: infor[k] for k in
@@ -1587,6 +1607,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     rounds_used=st["rounds"],
                     vanligt_fel=vanligt_fel, niva=niva, inriktning=inriktning,
                     regelsamling=regelsamling,
+                    # Bara när tavlan ÄR en introtavla: ett anrop utan
+                    # fältet är det som gick före valet.
+                    **({"intro": True} if st.get("intro") else {}),
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 # Modellen har skrivit om hela tavlan och kan ha tappat
@@ -1665,7 +1688,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
         infor = (infor_prov_tavla(db_file, {"infor_prov_id": ip.get("id")},
                                   nummer=ip.get("nummer") or [],
                                   los=bool(los_uppg),
-                                  regelsamling=regelsamling)
+                                  regelsamling=regelsamling,
+                                  intro=bool(st.get("intro")))
                  if ip and ip.get("nummer") else None)
         if infor and infor["block"]:
             bok_txt = f"{bok_txt}\n\n{infor['block']}" if bok_txt else infor["block"]
@@ -1712,6 +1736,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     malen=malen, bok=bok_txt, historik=historik,
                     vanligt_fel=vanligt_fel, niva=niva, inriktning=inriktning,
                     regelsamling=regelsamling,
+                    # Bara när tavlan ÄR en introtavla: ett anrop utan
+                    # fältet är det som gick före valet.
+                    **({"intro": True} if st.get("intro") else {}),
                     # Kursens gränser (lesson_board.build_utanfor_tavla,
                     # förslag 5 i veckoanalysen 2026-09-27) gäller varvet
                     # som skrivningen.

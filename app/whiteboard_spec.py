@@ -668,7 +668,17 @@ _MAX_ITEM_CHARS = 50
 # TE26A «Modeller och rimlighet» bär 354: förra gångens formel, lika och
 # olika, hyran med sina bokstäver. Den är en modelltavla (K = 10 + 3t, se
 # _ar_modellformel) och vägs mot 400. Ingen av dem behövde ett högre tak.
-_MAX_BOARD_TEXT = 205
+#
+# OMMÄTT 2026-10-12 (205 → 265) mot lärarens tre tavlor till 13/10 (Rickard,
+# «väldigt nöjd», tests/tavlor/facit-*-2026-10-13.json). Hans dom var «mycket
+# mindre text», och de bär mindre text än berättelsen 2026-09-30: högst tre
+# rader under ett steg och nio sammanlagt (lesson_board.vanstervakt, där
+# taken sänktes från fem och fjorton). Men räknat i tecken bär IndA 216 och
+# BA26B:s introtavla 252, för agendan står med («Fem minuter här, sedan
+# gruppuppgiften», 37 tecken) och raderna är fulla meningar på ~30 tecken i
+# stället för halva. En vakt som fäller lärarens tavla är fel vakt. Taket är
+# 252 + 5 %, och det som håller vänstern kort är radtaken, inte talet.
+_MAX_BOARD_TEXT = 265
 _MAX_COLUMN_TEXT = 170
 # MODELLTAVLOR FÅR MER (lärarens beslut 2026-09-17). Hennes godkända tavla
 # för Liber Ma1c s. 69–72 (formler ur verkligheten: ställa upp, jämföra,
@@ -839,8 +849,19 @@ def _har_tal(text: str) -> bool:
     return bool(re.search(r"\d", text))
 
 
+# SVARSMÄNGDEN ÄR INGEN KEDJA (lärarens tavla 2026-10-12, IndA, dokument
+# 351). Under «4. Andragrad: nollprodukt» står x(x - 5) = 0 och sedan
+# «x = 0 \text{ eller } x = 5». Rensad blev raden x=0x=5, tre led som slutar
+# i ett tal, och siffervakten läste den som en uträkning. Det är två
+# likheter bredvid varandra, och var och en prövas för sig.
+_ELLER_RE = re.compile(r"\\text\s*\{\s*(?:eller|och)\s*\}")
+
+
 def _ar_utrakning(latex: str) -> bool:
     """En math-rad som RÄKNAR: «⇒ k = 60» eller en kedja som slutar i ett tal."""
+    delar = _ELLER_RE.split(latex or "")
+    if len(delar) > 1:
+        return any(_ar_utrakning(d) for d in delar)
     ren = _talrensad(latex)
     pil = _PIL_RE.search(latex or "")
     if pil:

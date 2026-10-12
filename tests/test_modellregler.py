@@ -16,6 +16,7 @@ text, över de vanliga taken 280/340. Hennes beslut samma dag: modelltavlor
 får mer (whiteboard_spec._MAX_BOARD_TEXT_MODELL 400/220 per kolumn), och en
 modelltavla känns igen på formeln med tal på vänstern (ar_modelltavla)."""
 import json
+from pathlib import Path
 
 from app import lesson_board as lb
 from app import whiteboard_spec as ws
@@ -242,8 +243,9 @@ def test_modelltavlan_kanns_igen_pa_formeln_med_tal():
     """Kännetecknet är formeln med tal på vänstern: en bokstav till vänster
     om = och minst två tal som inte är ensiffriga till höger. Geometrins
     O = 2πr, bråkets ½bh och den förbjudna allmänna formen y = kx + m räknas
-    inte. Bland shotarna är bara lärarens modelltavla 2026-09-30 (TE26A,
-    hyran K = 10 + 3t: två tal, ett flersiffrigt) en modelltavla."""
+    inte. Lärarens modelltavla 2026-09-30 (TE26A, hyran K = 10 + 3t: två
+    tal, ett flersiffrigt) är en modelltavla; den är fixtur sedan 2026-10-12,
+    och ingen av shotarna (vektorer, repetitionen) är det."""
     for latex in ("K = 200 + 0{,}80x", "V = 400 - 50t", "h = 45 - 4{,}9t^2",
                   "T = 21 - 21 \\cdot 2^{-t}", "V(t) = 400 - 50t",
                   "K = 10 + 3t"):
@@ -253,7 +255,11 @@ def test_modelltavlan_kanns_igen_pa_formeln_med_tal():
                   "(a + b)(c + d) = ac + ad", "", "y = 2x + 1"):
         assert not ws._ar_modellformel(latex), latex
     assert [ws.ar_modelltavla(ws.validate_board_json(doc)[0].boards[0])
-            for _u, doc in lb.FEW_SHOTS] == [True, False]
+            for _u, doc in lb.FEW_SHOTS] == [False, False]
+    te = json.loads((Path(__file__).parent / "tavlor" /
+                     "facit-te26a-modeller-2026-10-02.json").read_text(
+                         encoding="utf-8"))
+    assert ws.ar_modelltavla(ws.validate_board_json(te)[0].boards[0])
 
 
 def test_bara_modelltavlan_far_den_storre_budgeten():

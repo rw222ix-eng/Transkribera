@@ -357,6 +357,17 @@
          planerar man fritt måste både starten och längden gå att sätta. Samma
          vred som provets: rulla på klockslaget eller på minuterna. */
       { id: 'langd', namn: 'Klockslag och längd', typ: 'lektionstid' },
+      /* ── PASSETS FORM: GENOMGÅNG ELLER INTRO ─────────────────
+         Lärarens dom 2026-10-12 över yrkesklassen BA26B: «Det funkar inte med
+         den klassen» att han står och pratar. Eleverna ska vara aktiva från
+         början: fem minuter vid ETT bräde med bara begreppen, sedan en
+         gruppuppgift steg för steg (lesson_board.Tavelform.intro).
+         Förvalet följer klassprofilen: en klass med inriktning (yrkesprogram,
+         i dag BA26B «Bygg och anläggning») får «Intro 5 min», alla andra
+         «Genomgång». Läraren kan välja om; valet står kvar tills klassen
+         byts (ritaTypval). «Genomgång» skickas inte alls, så en vanlig tavla
+         ger samma begäran som före raden (kassettregeln). */
+      { id: 'upplagg', namn: 'Passets form', typ: 'seg', val: ['Genomgång', 'Intro 5 min'] },
       { id: 'exempel', namn: 'Exempel att skriva upp', typ: 'antal', min: 1, max: 4 },
       /* ── «Vanligt fel» är ett VAL, inte en regel ────────────
          Veckospåret 1–6 sep 2026 (spardata/forslag/2026-09-06.md): 17 av 35
@@ -582,7 +593,7 @@
        kvar det gamla beteendet som default — se lesson_board.Tavelform — så
        förvalet måste stå HÄR och skickas med varje begäran. */
     Tavla: { langd: 45, starttid: '', exempel: 2, vanligtFel: false, niva: 'Blandat',
-             inforProv: null, inforNummer: [] },
+             upplagg: 'Genomgång', inforProv: null, inforNummer: [] },
     /* `takt` = minuter per poäng, lärarens egen (se PROV_TAKT nedan). Den
        ligger i upplägget och inte i koden därför att den ÄR ett val: hon ska
        kunna dra den mot NP:s 4,4 för ett tyngre prov eller mot sin gamla 2,4
@@ -1115,6 +1126,15 @@
       if (st && st !== s.tidSchema) { s.starttid = st; s.tidSchema = st; }
       if (!st) s.tidSchema = null;
       if (!s.starttid) s.starttid = '08:15';
+      /* Upplägget följer klassen (se raden «Passets form» ovan): byts klassen
+         sätts förvalet om, annars står lärarens val kvar. */
+      const kl = ($('#p-klass') || {}).value || '';
+      if (kl !== s.upplaggKlass) {
+        const inr = window.Profil && window.Profil.inriktningFor
+          ? window.Profil.inriktningFor(kl) : '';
+        s.upplagg = inr ? 'Intro 5 min' : 'Genomgång';
+        s.upplaggKlass = kl;
+      }
     }
     if (typ === 'Prov') {
       /* Provets dag ärvs ur lektionen tills läraren klickar en annan i kalendern.
@@ -3118,6 +3138,8 @@
            den kassetterna spelades in mot. */
         vanligt_fel: !!i0.vanligtFel,
         ...(i0.niva && i0.niva !== 'Blandat' ? { niva: i0.niva } : {}),
+        /* Introtavlan: bara när läraren (eller klassens förval) valt den. */
+        ...(i0.upplagg === 'Intro 5 min' ? { upplagg: 'intro' } : {}),
         /* INFÖR PROVET, samma regel som bladets nedan: fälten finns bara när
            ett prov är valt, annars är kroppen byte för byte den som gick före
            raden (kassettregeln). Tom `infor_nummer` följer med när provet är

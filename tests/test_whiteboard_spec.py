@@ -632,10 +632,11 @@ def test_gamla_kontrolltavlan_faller_pa_det_nya_taket():
     270. Det är vad läraren beställde 2026-09-21 — «bara ha kvar det mest
     väsentliga, ta bort lite text». Taket sänktes igen 2026-09-27, 270 →
     190, när receptet ströks (lesson_board 8f), och mättes om 2026-09-29
-    till 205 mot lärarens tavla «Formler» (se _MAX_BOARD_TEXT)."""
+    till 205 mot lärarens tavla «Formler», och 2026-10-12 till 265 mot
+    hans tre tavlor till 13/10 (se _MAX_BOARD_TEXT). Den här bär 317."""
     fel = ws.validate_board_json(_kontrolltavlan())[1]
     assert [f["code"] for f in fel] == ["textbudget"], fel
-    assert "~205" in fel[0]["message"]
+    assert "~265" in fel[0]["message"]
 
 
 def test_randfallen_under_att_tanka_pa_ar_inte_undantagna_langre():

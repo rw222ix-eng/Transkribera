@@ -122,6 +122,16 @@ def _utan_budget(errors: list) -> list:
 # derivata, och f'(1) = 2 som jättelätt exempel. Högern är pulkan i backen,
 # s(t) = 2t² utskriven i varje del. Definitionen står under steg 3 i spalt
 # 2 under grafen, så tavellapp.json pekar på children[1].children[2].
+#
+# OCH OM 2026-10-12 med lärarens tavlor till 13/10 (Rickard, «väldigt
+# nöjd»): vänstern förklarar begreppen i fyra steg utan öppningsrubrik, och
+# högern är fem rena uppgifter a)–e) i E-, C- och A-ordning med räknarrad
+# och kort lösning. Bandet: sekantens lutning ur grafen, h mot 0, derivatan
+# f'(1) som gränsvärde och x² förkortad; högern bestämmer f'(3) ur en
+# tangent, ändringskvoten för x² + 2x, f'(2) för 3x² (med «Vanligt fel»
+# struket i rött), f'(x) för 4x − x² och f'(4) för 1/x. Raden är sektion 3,
+# så tavellapp.json pekar på sections[3].children[1].children[1] och
+# målrutans id är tav4.
 
 
 def test_tavlan_ur_kassetten_ar_giltig_wb_json(fejk_claude):
@@ -177,8 +187,8 @@ def test_bandet_bar_vansterns_skelett(fejk_claude):
     """En RIKTIG modellrunda mot prompten ska bära formen, inte bara
     prompten: det är det enda sättet att veta att den följs av något annat
     än testerna. Till 2026-09-29 mätte testet «Att tänka på» i spalt 2 (och
-    till 2026-09-27 receptet). Sedan lärarens dom den dagen är vänstern fyra
-    frågor och högern ETT exempel i tre nivåer."""
+    till 2026-09-27 receptet). Sedan lärarens dom 2026-10-12 är vänstern
+    begreppen i tre eller fyra steg och högern tre till fem rena uppgifter."""
     fejk_claude(kassett="tavla")
     board = lesson_board.generate_board(
         "Matematik 3c", "NA25", "Derivatans definition", model="",
@@ -210,8 +220,8 @@ def test_bandet_bar_vansterns_skelett(fejk_claude):
                 if s.get("kind") == "list"], hogern
     assert lesson_board.utrakningsvakt(board, True) == []
     assert lesson_board.raknevakt(board) == []
-    # ETT exempel, delarna a)–d) i samma situation, var och en med sin
-    # uträkning och på egna ben.
+    # Rena uppgifter a)–e) i E-, C- och A-ordning, var och en med räknarrad,
+    # sin uträkning och på egna ben (2026-10-12).
     assert lesson_board.hogervakt(board) == []
     delar: list = []
     for kol in hogern["columns"]:
@@ -439,13 +449,13 @@ def test_mal_last_omskrivning_ror_bara_rutan_lararen_pekade_pa(fejk_claude):
     board = lesson_board.generate_board(
         "Matematik 3c", "NA25", "Derivatans definition", model="",
         max_rounds=1)["board"]
-    # Bandets form (omspelat 2026-09-20, kväll): raden är sektion 4 på
-    # vänstern. Sedan 2026-09-30 står definitionen i spalt 2. Definitionen var SISTA barnet i spalt 1 till omspelningen
+    # Bandets form (omspelat 2026-09-20, kväll): raden var sektion 4 på
+    # vänstern, och är sektion 3 sedan 2026-10-12 (ingen öppningsrubrik). Sedan 2026-09-30 står definitionen i spalt 2. Definitionen var SISTA barnet i spalt 1 till omspelningen
     # 2026-09-23 kväll; sedan dess står ÄR/INTE-raderna under formeln (8e),
     # och formeln är den med \lim. Sedan 2026-09-29 står den under «1. Vad
     # är det?» och skrivs med s och t. Lappbandet pekar på samma väg, så
     # byter tavlabandet form måste tavellapp.json följa med.
-    rad = board["boards"][0]["sections"][4]
+    rad = board["boards"][0]["sections"][3]
     assert rad["kind"] == "row"          # klumpen läraren inte kunde peka i
     spalt = rad["children"][1]["children"]
     plats = next(i for i, s in enumerate(spalt)
@@ -457,16 +467,16 @@ def test_mal_last_omskrivning_ror_bara_rutan_lararen_pekade_pa(fejk_claude):
     # mellan omspelningarna; lappen skriver alltid den andra.
     ut = lesson_board.refine_board(board, "skriv definitionen med x i stället",
                                    model="", max_rounds=1,
-                                   mal={"el": f"tav5.1.{plats}",
+                                   mal={"el": f"tav4.1.{plats}",
                                         "namn": "Formel 1",
                                         "innehall": fore["latex"]})
     assert _utan_budget(ut["errors"]) == [], ut["errors"]
     assert ut["rounds"] == 1             # en lapp, inte en hel tavla
-    spalt1 = ut["board"]["boards"][0]["sections"][4]["children"][1]["children"]
+    spalt1 = ut["board"]["boards"][0]["sections"][3]["children"][1]["children"]
     assert "f'(x)" in spalt1[plats]["latex"] and "f'(x)" not in fore["latex"]
     # …och ALLT annat på båda tavlorna står kvar, byte för byte.
     kopia = copy.deepcopy(ut["board"])
-    kopia["boards"][0]["sections"][4]["children"][1]["children"][plats] = fore
+    kopia["boards"][0]["sections"][3]["children"][1]["children"][plats] = fore
     assert kopia == board
 
 

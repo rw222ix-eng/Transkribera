@@ -1,0 +1,824 @@
+{
+ "title": "Vektorer i koordinatform",
+ "boards": [
+  {
+   "width": 900,
+   "height": 780,
+   "padding": {
+    "top": 30,
+    "right": 30,
+    "bottom": 30,
+    "left": 40
+   },
+   "chrome": "aluminium",
+   "tray": true,
+   "name": "vanster",
+   "sections": [
+    {
+     "kind": "heading",
+     "text": "Vektorer i koordinatform",
+     "size": 34,
+     "align": "center",
+     "underline": {
+      "amplitude": 2,
+      "thickness": 3,
+      "reserve": 14
+     },
+     "gapAfter": 14
+    },
+    {
+     "kind": "list",
+     "bullet": "•",
+     "size": 19,
+     "gap": 4,
+     "indent": 22,
+     "align": "center",
+     "items": [
+      "Komposanter och koordinater",
+      "Boken s. 288 och 299–300"
+     ],
+     "gapAfter": 10
+    },
+    {
+     "kind": "divider",
+     "width": 620,
+     "gapAfter": 18
+    },
+    {
+     "kind": "row",
+     "gap": 24,
+     "children": [
+      {
+       "kind": "col",
+       "width": 400,
+       "gap": 6,
+       "children": [
+        {
+         "kind": "text",
+         "text": "1. Basvektorer",
+         "size": 22,
+         "weight": 700,
+         "gapAfter": 10
+        },
+        {
+         "kind": "math",
+         "latex": "\\vec{e}_x = (1,\\ 0) \\qquad \\vec{e}_y = (0,\\ 1)",
+         "size": 22,
+         "gapAfter": 10
+        },
+        {
+         "kind": "graph",
+         "width": 330,
+         "height": 200,
+         "xRange": [
+          -0.6,
+          4.4
+         ],
+         "yRange": [
+          -0.7,
+          2.6
+         ],
+         "grid": true,
+         "axes": false,
+         "gridStep": 1,
+         "arrows": [
+          {
+           "from": [
+            0,
+            0
+           ],
+           "to": [
+            1,
+            0
+           ],
+           "color": "red",
+           "strokeWidth": 2.5,
+           "headSize": 10
+          },
+          {
+           "from": [
+            1,
+            0
+           ],
+           "to": [
+            2,
+            0
+           ],
+           "color": "red",
+           "strokeWidth": 2.5,
+           "headSize": 10
+          },
+          {
+           "from": [
+            2,
+            0
+           ],
+           "to": [
+            3,
+            0
+           ],
+           "color": "red",
+           "strokeWidth": 2.5,
+           "headSize": 10
+          },
+          {
+           "from": [
+            3,
+            0
+           ],
+           "to": [
+            3,
+            1
+           ],
+           "color": "red",
+           "strokeWidth": 2.5,
+           "headSize": 10
+          },
+          {
+           "from": [
+            3,
+            1
+           ],
+           "to": [
+            3,
+            2
+           ],
+           "color": "red",
+           "strokeWidth": 2.5,
+           "headSize": 10
+          },
+          {
+           "from": [
+            0,
+            0
+           ],
+           "to": [
+            3,
+            2
+           ],
+           "color": "black",
+           "strokeWidth": 3,
+           "headSize": 14
+          }
+         ],
+         "texts": [
+          {
+           "x": 1.5,
+           "y": -0.55,
+           "text": "3 steg (1, 0)",
+           "size": 15,
+           "color": "red",
+           "italic": false,
+           "anchor": "middle"
+          },
+          {
+           "x": 3.2,
+           "y": 1,
+           "text": "2 steg (0, 1)",
+           "size": 15,
+           "color": "red",
+           "italic": false,
+           "anchor": "start"
+          },
+          {
+           "x": 1.2,
+           "y": 1.3,
+           "text": "v",
+           "size": 22,
+           "color": "black",
+           "italic": true,
+           "anchor": "end"
+          }
+         ],
+         "points": [
+          {
+           "x": 0,
+           "y": 0,
+           "size": 7,
+           "color": "black"
+          }
+         ],
+         "gapAfter": 6
+        },
+        {
+         "kind": "math",
+         "latex": "\\vec{v} = 3\\vec{e}_x + 2\\vec{e}_y",
+         "size": 24,
+         "gapAfter": 0
+        }
+       ]
+      },
+      {
+       "kind": "col",
+       "width": 400,
+       "gap": 5,
+       "children": [
+        {
+         "kind": "text",
+         "text": "2. Komposanter",
+         "size": 22,
+         "weight": 700,
+         "gapAfter": 8
+        },
+        {
+         "kind": "math",
+         "latex": "3\\vec{e}_x \\text{ och } 2\\vec{e}_y",
+         "size": 21,
+         "gapAfter": 5
+        },
+        {
+         "kind": "text",
+         "text": "Pilar längs axlarna",
+         "size": 18,
+         "gapAfter": 3
+        },
+        {
+         "kind": "text",
+         "text": "Varför? Sned pil blir två raka",
+         "size": 18,
+         "gapAfter": 3
+        },
+        {
+         "kind": "text",
+         "text": "Som på kartan: 3 öster, 2 norr",
+         "size": 18,
+         "gapAfter": 20
+        },
+        {
+         "kind": "text",
+         "text": "3. Koordinater",
+         "size": 22,
+         "weight": 700,
+         "gapAfter": 8
+        },
+        {
+         "kind": "math",
+         "latex": "3 \\text{ och } 2",
+         "size": 21,
+         "gapAfter": 5
+        },
+        {
+         "kind": "text",
+         "text": "Talen framför basvektorerna",
+         "size": 18,
+         "gapAfter": 3
+        },
+        {
+         "kind": "text",
+         "text": "Varför? Kortare att skriva",
+         "size": 18,
+         "gapAfter": 5
+        },
+        {
+         "kind": "math",
+         "latex": "3\\vec{e}_x + 2\\vec{e}_y = (3,\\ 2)",
+         "size": 22,
+         "gapAfter": 20
+        },
+        {
+         "kind": "math",
+         "latex": "\\text{Komposant} = \\text{pil}",
+         "size": 21,
+         "gapAfter": 4
+        },
+        {
+         "kind": "math",
+         "latex": "\\text{Koordinat} = \\text{tal}",
+         "size": 21,
+         "gapAfter": 0
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "width": 1800,
+   "height": 780,
+   "padding": {
+    "top": 30,
+    "right": 30,
+    "bottom": 30,
+    "left": 30
+   },
+   "chrome": "aluminium",
+   "tray": true,
+   "name": "hoger",
+   "columns": [
+    {
+     "weight": 1,
+     "sections": [
+      {
+       "kind": "heading",
+       "text": "Uppgifter",
+       "size": 28,
+       "underline": {},
+       "gapAfter": 10
+      },
+      {
+       "kind": "text",
+       "text": "E-nivå",
+       "size": 20,
+       "weight": 700,
+       "color": "blue",
+       "gapAfter": 8
+      },
+      {
+       "kind": "text",
+       "text": "a) A(−3, 2) och B(1, 5).",
+       "size": 21,
+       "gapAfter": 3
+      },
+      {
+       "kind": "text",
+       "text": "Skriv AB med basvektorer.",
+       "size": 21,
+       "gapAfter": 4
+      },
+      {
+       "kind": "text",
+       "text": "Utan räknare",
+       "size": 18,
+       "weight": 700,
+       "color": "black",
+       "gapAfter": 8
+      },
+      {
+       "kind": "graph",
+       "width": 300,
+       "height": 200,
+       "xRange": [
+        -3.8,
+        2.2
+       ],
+       "yRange": [
+        -0.6,
+        5.8
+       ],
+       "grid": true,
+       "axes": false,
+       "gridStep": 1,
+       "arrows": [
+        {
+         "from": [
+          -3,
+          2
+         ],
+         "to": [
+          1,
+          5
+         ],
+         "color": "black",
+         "strokeWidth": 3,
+         "headSize": 14
+        },
+        {
+         "from": [
+          -3,
+          2
+         ],
+         "to": [
+          1,
+          2
+         ],
+         "color": "blue",
+         "strokeWidth": 2,
+         "headSize": 0,
+         "dashed": true
+        },
+        {
+         "from": [
+          1,
+          2
+         ],
+         "to": [
+          1,
+          5
+         ],
+         "color": "blue",
+         "strokeWidth": 2,
+         "headSize": 0,
+         "dashed": true
+        }
+       ],
+       "texts": [
+        {
+         "x": -1,
+         "y": 1.45,
+         "text": "4 steg",
+         "size": 16,
+         "color": "blue",
+         "italic": false,
+         "anchor": "middle"
+        },
+        {
+         "x": 1.2,
+         "y": 3.5,
+         "text": "3 steg",
+         "size": 16,
+         "color": "blue",
+         "italic": false,
+         "anchor": "start"
+        }
+       ],
+       "points": [
+        {
+         "x": -3,
+         "y": 2,
+         "size": 7,
+         "color": "black",
+         "label": "A(−3, 2)",
+         "labelSize": 16,
+         "outward": [
+          -4,
+          4
+         ]
+        },
+        {
+         "x": 1,
+         "y": 5,
+         "size": 7,
+         "color": "black",
+         "label": "B(1, 5)",
+         "labelSize": 16,
+         "outward": [
+          -4,
+          4
+         ]
+        }
+       ],
+       "rightAngles": [
+        {
+         "x": 1,
+         "y": 2,
+         "leg1": [
+          -1,
+          0
+         ],
+         "leg2": [
+          0,
+          1
+         ],
+         "size": 12
+        }
+       ],
+       "gapAfter": 8
+      },
+      {
+       "kind": "math",
+       "latex": "\\overrightarrow{AB} = (4,\\ 3)",
+       "size": 23,
+       "gapAfter": 6
+      },
+      {
+       "kind": "math",
+       "latex": "\\text{Svar: } 4\\vec{e}_x + 3\\vec{e}_y",
+       "size": 23,
+       "gapAfter": 0
+      }
+     ]
+    },
+    {
+     "weight": 1,
+     "sections": [
+      {
+       "kind": "text",
+       "text": "b) u = (3, −1), v = (−2, 4).",
+       "size": 21,
+       "gapAfter": 3
+      },
+      {
+       "kind": "text",
+       "text": "Beräkna 2u − v.",
+       "size": 21,
+       "gapAfter": 4
+      },
+      {
+       "kind": "text",
+       "text": "Utan räknare",
+       "size": 18,
+       "weight": 700,
+       "color": "black",
+       "gapAfter": 8
+      },
+      {
+       "kind": "math",
+       "latex": "2\\vec{u} = (6,\\ -2)",
+       "size": 23,
+       "gapAfter": 6
+      },
+      {
+       "kind": "graph",
+       "width": 300,
+       "height": 230,
+       "xRange": [
+        -0.6,
+        8.8
+       ],
+       "yRange": [
+        -6.8,
+        0.8
+       ],
+       "grid": true,
+       "axes": false,
+       "gridStep": 1,
+       "arrows": [
+        {
+         "from": [
+          0,
+          0
+         ],
+         "to": [
+          6,
+          -2
+         ],
+         "color": "black",
+         "strokeWidth": 3,
+         "headSize": 14
+        },
+        {
+         "from": [
+          6,
+          -2
+         ],
+         "to": [
+          8,
+          -6
+         ],
+         "color": "black",
+         "strokeWidth": 3,
+         "headSize": 14
+        },
+        {
+         "from": [
+          0,
+          0
+         ],
+         "to": [
+          8,
+          -6
+         ],
+         "color": "blue",
+         "strokeWidth": 3,
+         "headSize": 14
+        }
+       ],
+       "texts": [
+        {
+         "x": 3,
+         "y": -0.4,
+         "text": "2u",
+         "size": 18,
+         "color": "black",
+         "italic": true,
+         "anchor": "middle"
+        },
+        {
+         "x": 7.3,
+         "y": -3.9,
+         "text": "−v",
+         "size": 18,
+         "color": "black",
+         "italic": true,
+         "anchor": "start"
+        },
+        {
+         "x": 3.4,
+         "y": -3.6,
+         "text": "2u − v",
+         "size": 18,
+         "color": "blue",
+         "italic": true,
+         "anchor": "end"
+        }
+       ],
+       "points": [
+        {
+         "x": 0,
+         "y": 0,
+         "size": 7,
+         "color": "black"
+        }
+       ],
+       "gapAfter": 8
+      },
+      {
+       "kind": "math",
+       "latex": "\\text{Svar: } (8,\\ -6)",
+       "size": 23,
+       "gapAfter": 0
+      }
+     ]
+    },
+    {
+     "weight": 1,
+     "sections": [
+      {
+       "kind": "text",
+       "text": "C-nivå",
+       "size": 20,
+       "weight": 700,
+       "color": "blue",
+       "gapAfter": 8
+      },
+      {
+       "kind": "text",
+       "text": "c) En robotgräsklippare kör",
+       "size": 21,
+       "gapAfter": 3
+      },
+      {
+       "kind": "text",
+       "text": "O → P → Q. Hur många",
+       "size": 21,
+       "gapAfter": 3
+      },
+      {
+       "kind": "text",
+       "text": "grader svänger den vid P?",
+       "size": 21,
+       "gapAfter": 4
+      },
+      {
+       "kind": "text",
+       "text": "Med räknare",
+       "size": 18,
+       "weight": 700,
+       "color": "red",
+       "gapAfter": 8
+      },
+      {
+       "kind": "graph",
+       "width": 380,
+       "height": 230,
+       "xRange": [
+        -0.8,
+        9.9
+       ],
+       "yRange": [
+        -0.8,
+        5.4
+       ],
+       "grid": true,
+       "axes": false,
+       "gridStep": 1,
+       "arrows": [
+        {
+         "from": [
+          0,
+          0
+         ],
+         "to": [
+          4,
+          3
+         ],
+         "color": "black",
+         "strokeWidth": 3,
+         "headSize": 14
+        },
+        {
+         "from": [
+          4,
+          3
+         ],
+         "to": [
+          8,
+          0
+         ],
+         "color": "black",
+         "strokeWidth": 3,
+         "headSize": 14
+        },
+        {
+         "from": [
+          4,
+          3
+         ],
+         "to": [
+          6.4,
+          4.8
+         ],
+         "color": "black",
+         "strokeWidth": 2,
+         "headSize": 0,
+         "dashed": true
+        },
+        {
+         "from": [
+          0,
+          0
+         ],
+         "to": [
+          8,
+          0
+         ],
+         "color": "black",
+         "strokeWidth": 2,
+         "headSize": 0,
+         "dashed": true
+        }
+       ],
+       "texts": [
+        {
+         "x": 5.15,
+         "y": 2.55,
+         "text": "sväng",
+         "size": 16,
+         "color": "red",
+         "italic": false,
+         "anchor": "start"
+        }
+       ],
+       "points": [
+        {
+         "x": 0,
+         "y": 0,
+         "size": 7,
+         "color": "black",
+         "label": "O",
+         "labelSize": 16,
+         "outward": [
+          -4,
+          -4
+         ]
+        },
+        {
+         "x": 4,
+         "y": 3,
+         "size": 7,
+         "color": "black",
+         "label": "P(4, 3)",
+         "labelSize": 16,
+         "outward": [
+          -1,
+          0.15
+         ]
+        },
+        {
+         "x": 8,
+         "y": 0,
+         "size": 7,
+         "color": "black",
+         "label": "Q(8, 0)",
+         "labelSize": 16,
+         "outward": [
+          4,
+          -4
+         ]
+        }
+       ],
+       "arcs": [
+        {
+         "cx": 0,
+         "cy": 0,
+         "r": 1.4,
+         "from": 0,
+         "to": 0.644,
+         "color": "blue",
+         "label": "u",
+         "labelColor": "blue",
+         "interior": [
+          1.5,
+          0.4
+         ]
+        },
+        {
+         "cx": 4,
+         "cy": 3,
+         "r": 1,
+         "from": -0.644,
+         "to": 0.644,
+         "color": "red",
+         "interior": [
+          5,
+          3
+         ]
+        }
+       ],
+       "gapAfter": 8
+      },
+      {
+       "kind": "math",
+       "latex": "\\tan u = \\dfrac{3}{4} \\text{ ger } u \\approx 36{,}9^\\circ",
+       "size": 22,
+       "gapAfter": 6
+      },
+      {
+       "kind": "math",
+       "latex": "2 \\cdot 36{,}9^\\circ \\approx 74^\\circ",
+       "size": 22,
+       "gapAfter": 6
+      },
+      {
+       "kind": "math",
+       "latex": "\\text{Svar: ca } 74^\\circ",
+       "size": 23,
+       "gapAfter": 0
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

@@ -1703,3 +1703,41 @@ def test_yrket_nar_en_tavla_som_skrevs_innan_faltet_fylldes_i(llm_ready,
                          json={"message": "och kortare"}))
     assert sett["inriktning"] == "El och energi", "yrket skrevs inte tillbaka"
     assert sett["vanligt_fel"] is False
+
+
+# ── INTROTAVLAN (lärarens dom 2026-10-12, BA26B) ────────────────────────────
+# Panelens «Upplägg: Intro 5 min» skickar `upplagg: "intro"`. Rutten ger
+# generate_board intro=True, sparar valet i planeringen, och omskrivningen
+# och reparationen skriver om ett bräde. Utan fältet är anropet det gamla.
+
+def test_introvalet_gar_till_genereringen_och_omskrivningen(llm_ready,
+                                                             monkeypatch):
+    sett: list[dict] = []
+    intro = copy.deepcopy(lesson_board.FEW_SHOTS_INTRO[0][1])
+
+    def fake_generate(*a, **kw):
+        sett.append(kw)
+        return {"board": copy.deepcopy(intro), "errors": [], "rounds": 1}
+    monkeypatch.setattr(lesson_board, "generate_board", fake_generate)
+    vanlig = _done(llm_ready.post("/api/planning/generate",
+                                  json={"moment": "Algebraiska uttryck"}))
+    assert "intro" not in sett[-1]
+    pid = _done(llm_ready.post("/api/planning/generate",
+                               json={"moment": "Algebraiska uttryck",
+                                     "upplagg": "intro",
+                                     "inriktning": "Bygg och anläggning"})
+                )["id"]
+    assert sett[-1]["intro"] is True and sett[-1]["regelsamling"] is False
+    fanget = {}
+
+    def fake_refine(board, instruction, **kw):
+        fanget.update(kw)
+        return {"board": board, "errors": [], "rounds": 1}
+    monkeypatch.setattr(lesson_board, "refine_board", fake_refine)
+    _done(llm_ready.post(f"/api/planning/{pid}/refine",
+                         json={"message": "kortare"}))
+    assert fanget["intro"] is True
+    fanget.clear()
+    _done(llm_ready.post(f"/api/planning/{vanlig['id']}/refine",
+                         json={"message": "kortare"}))
+    assert "intro" not in fanget

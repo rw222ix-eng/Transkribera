@@ -1,0 +1,176 @@
+{
+ "title": "Algebraiska uttryck",
+ "boards": [
+  {
+   "width": 900,
+   "height": 780,
+   "padding": {
+    "top": 30,
+    "right": 30,
+    "bottom": 30,
+    "left": 40
+   },
+   "chrome": "aluminium",
+   "tray": true,
+   "name": "vanster",
+   "sections": [
+    {
+     "kind": "heading",
+     "text": "Algebraiska uttryck",
+     "size": 34,
+     "align": "center",
+     "underline": {
+      "amplitude": 2,
+      "thickness": 3,
+      "reserve": 14
+     },
+     "gapAfter": 14
+    },
+    {
+     "kind": "list",
+     "bullet": "•",
+     "size": 19,
+     "gap": 4,
+     "indent": 22,
+     "align": "center",
+     "items": [
+      "Fem minuter här, sedan gruppuppgiften",
+      "Boken s. 88–90"
+     ],
+     "gapAfter": 10
+    },
+    {
+     "kind": "divider",
+     "width": 620,
+     "gapAfter": 18
+    },
+    {
+     "kind": "row",
+     "gap": 24,
+     "children": [
+      {
+       "kind": "col",
+       "width": 400,
+       "gap": 5,
+       "children": [
+        {
+         "kind": "text",
+         "text": "1. Vad är ett uttryck?",
+         "size": 22,
+         "weight": 700,
+         "gapAfter": 8
+        },
+        {
+         "kind": "text",
+         "text": "En uträkning med en bokstav",
+         "size": 18,
+         "gapAfter": 4
+        },
+        {
+         "kind": "text",
+         "text": "Skruv: 60 kr per låda, frakt 40 kr",
+         "size": 18,
+         "gapAfter": 6
+        },
+        {
+         "kind": "math",
+         "latex": "40 + 60x",
+         "size": 26,
+         "gapAfter": 4
+        },
+        {
+         "kind": "text",
+         "text": "x = antal lådor",
+         "size": 18,
+         "gapAfter": 20
+        },
+        {
+         "kind": "text",
+         "text": "2. Variabel och konstant",
+         "size": 22,
+         "weight": 700,
+         "gapAfter": 8
+        },
+        {
+         "kind": "math",
+         "latex": "\\underbrace{40}_{\\text{konstant}} + 60\\underbrace{x}_{\\text{variabel}}",
+         "size": 26,
+         "gapAfter": 6
+        },
+        {
+         "kind": "text",
+         "text": "Variabel: kan ändras",
+         "size": 18,
+         "gapAfter": 3
+        },
+        {
+         "kind": "text",
+         "text": "Konstant: ändras aldrig",
+         "size": 18,
+         "gapAfter": 0
+        }
+       ]
+      },
+      {
+       "kind": "col",
+       "width": 400,
+       "gap": 5,
+       "children": [
+        {
+         "kind": "text",
+         "text": "3. Uttryckets värde",
+         "size": 22,
+         "weight": 700,
+         "gapAfter": 8
+        },
+        {
+         "kind": "text",
+         "text": "Sätt in ett tal i stället för x",
+         "size": 18,
+         "gapAfter": 6
+        },
+        {
+         "kind": "math",
+         "latex": "x = 3",
+         "size": 22,
+         "gapAfter": 4
+        },
+        {
+         "kind": "math",
+         "latex": "40 + 60 \\cdot 3 = 220",
+         "size": 24,
+         "gapAfter": 4
+        },
+        {
+         "kind": "text",
+         "text": "Tre lådor kostar 220 kr",
+         "size": 18,
+         "gapAfter": 20
+        },
+        {
+         "kind": "text",
+         "text": "4. Skrivsättet",
+         "size": 22,
+         "weight": 700,
+         "gapAfter": 8
+        },
+        {
+         "kind": "math",
+         "latex": "60 \\cdot x = 60x",
+         "size": 24,
+         "gapAfter": 4
+        },
+        {
+         "kind": "text",
+         "text": "Gångertecknet skrivs inte ut",
+         "size": 18,
+         "gapAfter": 0
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

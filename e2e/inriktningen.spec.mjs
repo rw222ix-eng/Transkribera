@@ -121,6 +121,9 @@ test("yrket följer med tavlans skrivjobb, per klass", async ({ page }) => {
                         klass: KLASS, kurs: "Matematik, nivå 2c" });
   await expect.poll(() => anrop.length).toBe(1);
   expect(anrop[0].inriktning).toBe(YRKE);
+  /* Lärarens dom 2026-10-12 (BA26B): en klass med inriktning får
+     introtavlan som förval, «Passets form: Intro 5 min». */
+  expect(anrop[0].upplagg).toBe("intro");
 });
 
 test("en klass utan inriktning skickar ingen nyckel alls", async ({ page }) => {
@@ -135,4 +138,5 @@ test("en klass utan inriktning skickar ingen nyckel alls", async ({ page }) => {
                         kurs: "Matematik – fortsättning, nivå 1c" });
   await expect.poll(() => anrop.length).toBe(1);
   expect("inriktning" in anrop[0]).toBe(false);
+  expect("upplagg" in anrop[0]).toBe(false);
 });
