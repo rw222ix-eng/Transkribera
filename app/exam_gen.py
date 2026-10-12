@@ -4865,9 +4865,15 @@ def build_forebild_a_blad(enheter: list[dict] | None) -> str:
         # i texten, 6a tog D24 men räknade på ett bestämt pris. Båda fälldes
         # till E och C i två körningar.
         "A-STEGET TAR ELEVEN SJÄLV. Det typen låter eleven ta fram står "
-        "aldrig i texten: söker NP-uppgiften procenten, så söks procenten; "
-        "är ett belopp okänt i NP-uppgiften, är det en bokstav här och "
-        "aldrig ett givet tal.\n"
+        "aldrig i texten: söker NP-uppgiften procenten, så söks procenten, "
+        "och ett belopp som är okänt i NP-uppgiften blir aldrig ett givet "
+        "tal här.\n"
+        # Lagningen av 248 (2026-10-12): «ett okänt belopp är en bokstav»
+        # fälldes av förbudsvakten, BA26B räknar med bokstäver först efter
+        # prov 131. Förbudslistan ovan vinner alltid över typen.
+        "FÖRBUDET GÄLLER ÄVEN HÄR. Kräver en typ något som förbudslistan "
+        "säger att klassen inte har gjort, till exempel att räkna med "
+        "bokstäver, väljer du en annan typ.\n"
         "FLER RÄKNESTEG GER INTE A. En uppgift vars närmaste uppgift på "
         "nationella provet är en E- eller C-uppgift är en E- eller C-uppgift, "
         "hur många steg den än har: en andel ur ett delförhållande, en volym "
