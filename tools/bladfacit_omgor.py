@@ -38,6 +38,9 @@ def facittexter(exam: dict) -> list[tuple[str, str]]:
 
 
 def main(dok: int, spara: bool) -> int:
+    # Ur en worktree finns ingen databas, och db.connect hade skapat en tom.
+    if not (ROT / "transkribera.db").exists():
+        sys.exit(f"{ROT} har ingen transkribera.db: kör från E:/Transkribera, inte från en worktree.")
     conn = db.connect(ROT / "transkribera.db")
     conn.row_factory = sqlite3.Row
     v = json.loads(conn.execute("select data from dokument_versioner where dokument_id=? "
