@@ -95,6 +95,14 @@ def main(dok: int, spara: bool) -> int:
     if n == 0:
         print("inget att spara: facit höll redan")
         return 0
+    # Servern först: svarar den inte blir inget halvsparat (dok 275, 13/10:
+    # exam 237 pekade på en ny version, dokumentet på den gamla, och verktyget
+    # vägrade sedan köra bladet igen).
+    try:
+        urllib.request.urlopen(f"{API}/api/var-kors", timeout=10).read()
+    except OSError as e:
+        sys.exit(f"servern {API} svarar inte ({e}): inget sparat.")
+    gammal = ex["current_version"]
     ny = db.add_exam_version(conn, eid, exam)
     vid = conn.execute("select current_version from exams where id=?", (eid,)).fetchone()[0]
     nya = {u["nr"]: u for u in fran_prov(exam)}
@@ -109,8 +117,14 @@ def main(dok: int, spara: bool) -> int:
     req = urllib.request.Request(f"{API}/api/dokument/{dok}/versioner", method="POST",
                                  data=json.dumps({"dokument": v}, ensure_ascii=False).encode("utf-8"),
                                  headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=120) as r:
-        r.read()
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            r.read()
+    except OSError as e:
+        # Dokumentet pekar kvar på den gamla versionen: exam gör det också.
+        conn.execute("update exams set current_version=? where id=?", (gammal, eid))
+        conn.commit()
+        sys.exit(f"POST mot {API} föll ({e}): exam {eid} tillbaka på version-id {gammal}, inget sparat.")
     print(f"SPARAT: dok {dok} -> exam {eid} version-id {vid} ({bool(ny)}). "
           f"Godkänn: cd e2e && node godkann-avritat.mjs {dok}")
     return 0
