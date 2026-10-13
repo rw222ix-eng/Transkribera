@@ -1854,3 +1854,33 @@ def test_som_pa_provet_inga_tips_luft_fore_fragan_och_ingen_mening_i_facit():
         gamla, gamla[:2] + ["$2x + 3 \\neq 4x$ ← olika"], grupp=True)
     assert not exam_gen.meningsrad("540 ← kvar från a)")
     assert not exam_gen.meningsrad("19 sektioner")
+
+
+def test_rutinlistan_far_uppmaningen_i_stammen_som_pa_provet():
+    """Prov 175 uppgift 3: «Lös ekvationerna.» och bara uttrycken i a) och b)."""
+    ex = {"uppgifter": [{"text": "Uttrycken nedan har termer med bokstäver.",
+                         "deluppgifter": [{"text": "Förenkla uttrycket: $7x + 5 - 3x - 9$."},
+                                          {"text": "Förenkla $2a - 6b - a + 4b$ så långt som möjligt."}]},
+                        {"text": "Nora", "deluppgifter": [{"text": "Förenkla $x + x$."},
+                                                           {"text": "Hur många?"}]}]}
+    exam_gen.ovningspappret_stadat(ex, "gruppuppgift")
+    u = ex["uppgifter"][0]
+    assert u["text"] == "Förenkla uttrycken så långt som möjligt."
+    assert [d["text"] for d in u["deluppgifter"]] == ["$7x + 5 - 3x - 9$", "$2a - 6b - a + 4b$"]
+    # En deluppgift med en annan fråga: inget flyttas.
+    assert ex["uppgifter"][1]["deluppgifter"][0]["text"] == "Förenkla $x + x$."
+
+
+def test_parenteser_fallas_bara_nar_lektionens_bok_saknar_dem():
+    ex = {"titel": "Förenkla uttryck", "nyckelfraga": "Vilka termer får slås ihop?",
+          "uppgifter": [{"text": "Liam påstår att $3(n - 20) = 3n - 20$."},
+                        {"text": "Mattorna är $x + (x + 2)$ m."}]}
+    assert exam_gen.gruppvakter(ex) == []                    # ingen bok: inget prövas
+    t = exam_gen._LEKTIONEN_UTAN_PARENTES.set(True)
+    try:
+        assert [f["path"] for f in exam_gen.gruppvakter(ex)] == ["uppgifter[0]"]
+    finally:
+        exam_gen._LEKTIONEN_UTAN_PARENTES.reset(t)
+    assert exam_gen.lektionen_utan_parentes([{"text": "Förenkla 4y + 1 − y + 6"}])
+    assert not exam_gen.lektionen_utan_parentes([{"text": "Förenkla 3(x + 2)"}])
+    assert not exam_gen.lektionen_utan_parentes([])

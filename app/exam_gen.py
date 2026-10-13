@@ -12,6 +12,7 @@ någonstans i prompterna).
 """
 from __future__ import annotations
 
+import contextvars
 import copy
 import json
 import logging
@@ -3480,6 +3481,7 @@ def ovningspappret_stadat(exam: dict | None, profil: str) -> dict | None:
     delfragor_till_deluppgifter(exam, profil)
     gruppens_delsvar(exam, profil)
     korta_instruktion(exam, profil)
+    rutinlista_i_stammen(exam, profil)
     satt_raknarmarkering(exam, profil)
     # Efter markeringen: i exam 256 var stammen BARA förklaringen, och en tom
     # stam får inte bli kvar. Med «Utan räknare.» först går den att stryka.
@@ -3522,6 +3524,46 @@ def gruppens_delsvar(exam: dict | None, profil: str) -> dict | None:
 # när deluppgifterna själva bär uppmaningen.
 _BEGREPPSORD = re.compile(r"\b(?:term\w*|variab\w*|konstant\w*|koefficient\w*)",
                           re.I)
+
+
+# RUTINLISTAN SOM PÅ PROVET (Rickard 2026-10-13, exam 257 uppgift 1, jämfört
+# med prov 175 uppgift 3): provet skriver «Lös ekvationerna.» i stammen och
+# bara «$7x - 4 = 3x + 8$» i a) och b). Gruppuppgiften skrev «Förenkla
+# uttrycket: $7x + 5 - 3x - 9$.» i varje deluppgift och en förklaring av
+# termerna i stammen. Bär alla deluppgifter samma uppmaning och ett uttryck
+# flyttas uppmaningen till stammen.
+_RUTINDEL_RE = re.compile(
+    r"^\s*(förenkla|lös|beräkna|faktorisera)(?:\s+(?:uttrycket|ekvationen))?"
+    r"(?:\s+så\s+långt\s+som\s+möjligt)?\s*:?\s*(\$[^$]+\$)\s*"
+    r"(?:så\s+långt\s+som\s+möjligt)?\s*\.?\s*$", re.I)
+_RUTINSTAM = {"förenkla": "Förenkla uttrycken så långt som möjligt.",
+              "lös": "Lös ekvationerna.", "beräkna": "Beräkna.",
+              "faktorisera": "Faktorisera uttrycken så långt som möjligt."}
+
+
+def rutinlista_i_stammen(exam: dict | None, profil: str) -> bool:
+    """Uppmaningen i stammen, bara uttrycket i deluppgiften. Sant när något
+    flyttades."""
+    if not isinstance(exam, dict) or profil != "gruppuppgift":
+        return False
+    andrat = False
+    for u in exam.get("uppgifter") or []:
+        delar = [d for d in (u.get("deluppgifter") or []) if isinstance(d, dict)] \
+            if isinstance(u, dict) else []
+        traffar = [_RUTINDEL_RE.match(str(d.get("text") or "")) for d in delar]
+        if len(delar) < 2 or not all(traffar):
+            continue
+        verb = {m.group(1).lower() for m in traffar}
+        if len(verb) != 1:
+            continue
+        stam = _RUTINSTAM[verb.pop()]
+        text = str(u.get("text") or "").strip()
+        if stam.lower() not in text.lower():
+            u["text"] = f"{text}\n{stam}" if text else stam
+        for d, m in zip(delar, traffar):
+            d["text"] = m.group(2)
+        andrat = True
+    return andrat
 
 
 # INGA TIPS PÅ GRUPPUPPGIFTEN (Rickard 2026-10-13, exam 256 1b och 4): «Har
@@ -8462,9 +8504,28 @@ NYCKELFRAGA_ORD = 8
 _PROCENT_RE = re.compile(r"%|procent", re.I)
 
 
+# PARENTESER FINNS INTE PÅ LEKTIONENS SIDOR (Rickard 2026-10-13, exam 257
+# uppgift 2 och 3b): «det måste bygga på vad som faktiskt eleverna ska ha».
+# Liber 1a s. 92–93 slår ihop termer utan en enda parentes, och pappret
+# bad eleverna multiplicera in $3(n - 20)$. Läses ur bokens uppgifter för
+# lektionen (bok.remsuppgifter) som generate_exam sätter här; utan bok
+# (omskrivningen, en beställning utan sidor) prövas inget.
+_PARENTES_RE = re.compile(r"(?:\d|[a-zA-Z]|\)|[-−])\s*\(\s*[^()]*[a-zA-Z][^()]*\)")
+_LEKTIONEN_UTAN_PARENTES: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "lektionen_utan_parentes", default=False)
+
+
+def lektionen_utan_parentes(bokuppgifter: list[dict] | None) -> bool:
+    """Har lektionens bokuppgifter text men ingen parentes med variabel?"""
+    texter = [str(u.get("text") or "") for u in bokuppgifter or ()
+              if isinstance(u, dict)]
+    return bool(texter) and not any(_PARENTES_RE.search(t) for t in texter)
+
+
 def gruppvakter(exam: dict) -> list[dict]:
-    """Gruppuppgiftens räknade fynd: nyckelfrågans längd och procent utanför
-    momentet. Matas in i reparationsloopen som valideringens övriga fel."""
+    """Gruppuppgiftens räknade fynd: nyckelfrågans längd, procent utanför
+    momentet och parenteser lektionen inte har. Matas in i reparationsloopen
+    som valideringens övriga fel."""
     fel = []
     nf = str(exam.get("nyckelfraga") or "")
     if len(_MATTE_RE.sub(" M ", nf).split()) > NYCKELFRAGA_ORD:
@@ -8487,6 +8548,21 @@ def gruppvakter(exam: dict) -> list[dict]:
                     f"är «{exam.get('titel') or ''}». Procent hör till ett "
                     "tidigare moment och förvirrar eleverna. Skriv om "
                     "uppgiften utan procent, med bara lektionens innehåll."))
+    if _LEKTIONEN_UTAN_PARENTES.get():
+        for i, u in enumerate(exam.get("uppgifter") or [], 1):
+            if not isinstance(u, dict):
+                continue
+            delar = [d for d in u.get("deluppgifter") or [] if isinstance(d, dict)]
+            texter = [u.get("text"), u.get("losning")] + [
+                t for d in delar for t in (d.get("text"), d.get("losning"))]
+            if any(_PARENTES_RE.search(" ".join(_MATTE_RE.findall(str(t or ""))))
+                   for t in texter):
+                fel.append(_err(
+                    f"uppgifter[{i - 1}]", "senare_moment",
+                    f"Uppgift {i} räknar med parenteser, men lektionens "
+                    "sidor i boken har inga. Skriv om uppgiften så att den "
+                    "bara slår ihop termer, utan parentes i uppgiften eller "
+                    "lösningen."))
     return fel
 
 
@@ -15189,7 +15265,21 @@ def _slutgrind(res: dict, *, model: str, llm, profil: str,
     return med_signaler({**res, "exam": exam, "errors": ovrigt + kvar})
 
 
-def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
+def generate_exam(*args, **kwargs) -> dict:
+    """_generate_exam med lektionens bok i gruppvakter: utan parenteser på
+    lektionens sidor fälls parenteser på gruppuppgiften (_PARENTES_RE).
+    Sätts och återställs runt anropet, så att inget annat anrop i samma tråd
+    ärver det."""
+    token = _LEKTIONEN_UTAN_PARENTES.set(
+        kwargs.get("profil") == "gruppuppgift"
+        and lektionen_utan_parentes(kwargs.get("bokuppgifter")))
+    try:
+        return _generate_exam(*args, **kwargs)
+    finally:
+        _LEKTIONEN_UTAN_PARENTES.reset(token)
+
+
+def _generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                   antal: int = 10, tid_min: int = 120,
                   takt: float | None = None, delar: bool = True,
                   memory: str = "", teman: str = "", referens: str = "",
