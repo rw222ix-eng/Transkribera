@@ -1,130 +1,3 @@
-{"tid": "2026-09-12T11:36:22", "art": "api", "vag": "POST /api/bocker/{id}/las", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
-{"tid": "2026-09-12T11:36:22", "art": "api", "vag": "POST /api/planning/ci-forslag", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 77}}
-{"tid": "2026-09-12T11:37:27", "art": "api", "vag": "POST /api/planning/generate", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
-{"tid": "2026-09-12T11:48:22", "art": "api", "vag": "POST /api/dokument", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-12T11:48:23", "art": "api", "vag": "POST /api/bocker/{id}/losningar", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-12T11:50:16", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-12T11:50:53", "art": "onske", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"message": "Ta bort vanligt fel. Och sen så vill jag ha med att inte bara förlängning utan förkortning också. Och division med bråk", "mal": "Hur stor del är cement? · figuren", "malen": []}}
-{"tid": "2026-09-12T11:50:53", "art": "api", "vag": "POST /api/planning/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-12T11:51:14", "art": "utfall", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"andrade": ["tav7.1.2", "tav7.1.3", "tav7.1.4"], "fel": 0}}
-{"tid": "2026-09-12T11:51:14", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-12T11:52:18", "art": "onske", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"message": "Alltså en halvmeter delad i fem delar är ju tio centimeter. Det här kan ju liksom eleverna räkna ut direkt liksom som enheter och sånt där. Vi behöver något mer relevant exempel på när man faktiskt behöver använda det här. Vi behöver ändra liksom så att, så att det inte blir med såhär måttband, en halvmeter, utan det, det måste sättas i någon praktisk kontext där man faktiskt behöver använda liksom bråkräkning så. Division som en bråk.", "mal": "Halvmetern delad i fem delar.", "malen": []}}
-{"tid": "2026-09-12T11:52:18", "art": "api", "vag": "POST /api/planning/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-12T11:52:44", "art": "utfall", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"andrade": ["tav21"], "fel": 0}}
-{"tid": "2026-09-12T11:52:45", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-12T11:53:42", "art": "onske", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"message": "Detta måste stämma överens. Detta måste stämma överens med vad uppgiften faktiskt går ut på det här med grus och gjutningen där", "mal": "Exempel 3: måttbandet · figuren", "malen": []}}
-{"tid": "2026-09-12T11:53:42", "art": "api", "vag": "POST /api/planning/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-12T11:54:02", "art": "utfall", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"andrade": ["tav22"], "fel": 0}}
-{"tid": "2026-09-12T11:54:03", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-12T11:54:09", "art": "onske", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"message": "Detta måste vi utveckla med kanske två korta exempel", "mal": "Hur stor del är cement? · blocket", "malen": []}}
-{"tid": "2026-09-12T11:54:09", "art": "api", "vag": "POST /api/planning/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-12T11:55:08", "art": "utfall", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"andrade": ["tav7.1.1", "tav7.1.2"], "fel": 0}}
-{"tid": "2026-09-12T11:55:08", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-12T11:55:08", "art": "onske", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"message": "Ta bort behövs inte", "mal": "Exempel 3: måttbandet · blocket", "malen": []}}
-{"tid": "2026-09-12T11:55:08", "art": "api", "vag": "POST /api/planning/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-12T11:55:14", "art": "utfall", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"andrade": ["tav23"], "fel": 0}}
-{"tid": "2026-09-12T11:55:14", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-12T11:55:14", "art": "onske", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"message": "Ta bort behövs inte", "mal": "Understrykningen", "malen": []}}
-{"tid": "2026-09-12T11:55:14", "art": "api", "vag": "POST /api/planning/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-12T11:55:23", "art": "utfall", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"andrade": ["tav24"], "fel": 0}}
-{"tid": "2026-09-12T11:55:23", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 31}}
-{"tid": "2026-09-12T11:55:23", "art": "onske", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"message": "Ta bort behövs inte", "mal": "Vanligt fel:", "malen": []}}
-{"tid": "2026-09-12T11:55:24", "art": "api", "vag": "POST /api/planning/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-12T11:55:44", "art": "utfall", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"andrade": ["tav16"], "fel": 0}}
-{"tid": "2026-09-12T11:55:45", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-12T11:55:45", "art": "onske", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"message": "Ta bort behövs inte", "mal": "Exempel 3: måttbandet", "malen": []}}
-{"tid": "2026-09-12T11:55:45", "art": "api", "vag": "POST /api/planning/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-12T11:55:54", "art": "utfall", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"andrade": ["tav18"], "fel": 0}}
-{"tid": "2026-09-12T11:55:54", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-12T11:56:35", "art": "onske", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"message": "Jag upplever att vi har, på, på högra delen så har vi såhär, det står det förhållanden och sen står det säv, betong, bla bla bla. Sen nedanför står det enklaste formen går inte förkorta och sen så kommer en massa, eh, bråkräkningar. De vill jag att vi flyttar till vänster istället under delen delat med det hela.", "mal": "Hur stor del är cement? · blocket", "malen": []}}
-{"tid": "2026-09-12T11:56:36", "art": "api", "vag": "POST /api/planning/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-12T11:56:53", "art": "utfall", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"andrade": ["tav7.0", "tav7.1"], "fel": 0}}
-{"tid": "2026-09-12T11:56:54", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-12T11:57:20", "art": "onske", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"message": "Ta bort behövs inte", "mal": "Exempel 2: samma bygge · formel 5", "malen": []}}
-{"tid": "2026-09-12T11:57:20", "art": "api", "vag": "POST /api/planning/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-12T11:57:29", "art": "utfall", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"andrade": ["tav17"], "fel": 0}}
-{"tid": "2026-09-12T11:57:30", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-12T11:57:39", "art": "onske", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"message": "Ta bort behövs inte", "mal": "Vanligt fel · formel 5", "malen": []}}
-{"tid": "2026-09-12T11:57:39", "art": "api", "vag": "POST /api/planning/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-12T11:57:46", "art": "utfall", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"andrade": ["tav19"], "fel": 0}}
-{"tid": "2026-09-12T11:57:46", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-12T11:57:48", "art": "onske", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"message": "Ta bort behövs inte", "mal": "Vanligt fel:", "malen": []}}
-{"tid": "2026-09-12T11:57:48", "art": "api", "vag": "POST /api/planning/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-12T11:57:53", "art": "utfall", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"andrade": ["tav18"], "fel": 0}}
-{"tid": "2026-09-12T11:57:53", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-12T11:59:02", "art": "onske", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"message": "Här behöver vi komplettera med själva uträkningen också", "mal": "Exempel 1 · blocket", "malen": []}}
-{"tid": "2026-09-12T11:59:02", "art": "api", "vag": "POST /api/planning/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-12T11:59:22", "art": "utfall", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"andrade": ["tav11"], "fel": 0}}
-{"tid": "2026-09-12T11:59:22", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-12T11:59:22", "art": "onske", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"message": "Här behöver vi komplettera med själva uträkningen", "mal": "Exempel 2: samma bygge · blocket", "malen": []}}
-{"tid": "2026-09-12T11:59:22", "art": "api", "vag": "POST /api/planning/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-12T11:59:38", "art": "utfall", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"andrade": ["tav15"], "fel": 0}}
-{"tid": "2026-09-12T11:59:39", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 30}}
-{"tid": "2026-09-12T12:00:59", "art": "onske", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"message": "Det måste framgå varför man ska få kort då både och ni ger", "mal": "Hur stor del är cement?", "malen": []}}
-{"tid": "2026-09-12T12:00:59", "art": "api", "vag": "POST /api/planning/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
-{"tid": "2026-09-12T12:01:08", "art": "utfall", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"andrade": ["tav5"], "fel": 0}}
-{"tid": "2026-09-12T12:01:08", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 32}}
-{"tid": "2026-09-12T12:01:43", "art": "onske", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"message": "Det måste framgå varför man ska förkorta med nio", "mal": "Exempel 1 · blocket", "malen": []}}
-{"tid": "2026-09-12T12:01:43", "art": "api", "vag": "POST /api/planning/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-12T12:01:53", "art": "utfall", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"andrade": ["tav11.0"], "fel": 0}}
-{"tid": "2026-09-12T12:01:53", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
-{"tid": "2026-09-12T12:02:40", "art": "onske", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"message": "Här måste det framgå att man är ute efter hur stor, eh, andel av det totala passet är städning", "mal": "Passet 6 h, städning 45 min.", "malen": []}}
-{"tid": "2026-09-12T12:02:40", "art": "api", "vag": "POST /api/planning/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 47}}
-{"tid": "2026-09-12T12:02:48", "art": "utfall", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"andrade": ["tav14"], "fel": 0}}
-{"tid": "2026-09-12T12:02:49", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 30}}
-{"tid": "2026-09-12T12:04:11", "art": "onske", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"message": "Det känns som exempel ett är lite otydligt vad som liksom är syftet. För där räknar man ju ut då, ehm, andelen hela och andelen kapade. Men när man förkortar så får man inte samma nämnare. Så man kan inte se tydligt liksom hur stor del av den totala så. Alltså typ vi har tre femtedelar kapade och två femtedelar hela exempelvis. Men det, det får vi inte i slutet. Så jag vet inte riktigt vad syftet är med den. Vi behöver ändra den så det blir tydligare.", "mal": null, "malen": []}}
-{"tid": "2026-09-12T12:04:11", "art": "api", "vag": "POST /api/planning/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
-{"tid": "2026-09-12T12:05:53", "art": "utfall", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"andrade": ["tav10", "tav11", "tav12", "tav15", "tav16", "tav17", "tav19"], "fel": 0}}
-{"tid": "2026-09-12T12:05:54", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-12T12:05:54", "art": "onske", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"message": "Här behöver vi komplettera med en uträkning under tal linjen", "mal": "Understrykningen", "malen": []}}
-{"tid": "2026-09-12T12:05:54", "art": "api", "vag": "POST /api/planning/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
-{"tid": "2026-09-12T12:06:47", "art": "utfall", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"andrade": ["tav19"], "fel": 0}}
-{"tid": "2026-09-12T12:06:47", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
-{"tid": "2026-09-12T12:11:02", "art": "onske", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"message": "Ta bort dessa röda ritade vanligt fel. Eller ja, det finns ju bara en nu under exempel två. Ta bort den", "mal": null, "malen": []}}
-{"tid": "2026-09-12T12:11:02", "art": "api", "vag": "POST /api/planning/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-12T12:11:38", "art": "utfall", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"andrade": ["tav17"], "fel": 0}}
-{"tid": "2026-09-12T12:11:38", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 30}}
-{"tid": "2026-09-12T12:11:38", "art": "onske", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"message": "På uppgift tre så behöver vi ha en uträkning under tallinjen som visar hur man ja, ska lösa uppgiften helt enkelt.", "mal": null, "malen": []}}
-{"tid": "2026-09-12T12:11:38", "art": "api", "vag": "POST /api/planning/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-12T12:13:04", "art": "utfall", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"andrade": ["tav7.0.1", "tav7.1.0", "tav7.1.1", "tav7.1.2", "tav7.1.3", "tav7.1.4", "tav17", "tav21"], "fel": 0}}
-{"tid": "2026-09-12T12:13:05", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 47}}
-{"tid": "2026-09-12T12:16:49", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 30}}
-{"tid": "2026-09-12T12:16:51", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
-{"tid": "2026-09-12T12:18:04", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
-{"tid": "2026-09-12T12:19:19", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-12T12:19:39", "art": "onske", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"message": "Detta försvann nu efter din ändring på vänstra delen av tavlan\n\nFörhållande: jämför två delar, skrivs 2:3\nSaft 1:4 - en del saft på fyra vatten\nBetong 1:3 - en hink cement på tre grus\nEnklaste form: går inte att förkorta", "mal": null, "malen": []}}
-{"tid": "2026-09-12T12:19:39", "art": "api", "vag": "POST /api/planning/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
-{"tid": "2026-09-12T12:21:08", "art": "utfall", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"andrade": ["tav3", "tav7.0", "tav7.1", "tav10", "tav11", "tav12.1", "tav12.2", "tav15", "tav16", "tav17", "tav20", "tav21", "tav22.1"], "fel": 0}}
-{"tid": "2026-09-12T12:21:09", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 30}}
-{"tid": "2026-09-12T12:21:41", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-12T12:21:45", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 30}}
-{"tid": "2026-09-12T12:21:47", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 32}}
-{"tid": "2026-09-12T12:21:51", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-12T12:22:10", "art": "onske", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"message": "Jag vill ha en uträkning under denna som visar hur man löser uppgiften", "mal": "Exempel 2: samma bygge · figuren", "malen": []}}
-{"tid": "2026-09-12T12:22:10", "art": "api", "vag": "POST /api/planning/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-12T12:24:49", "art": "utfall", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"andrade": ["tav20"], "fel": 1}}
-{"tid": "2026-09-12T12:24:49", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-12T12:26:08", "art": "onske", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"message": "Hela exempel tre tycker jag är otydlig. Vi byter ut den till en annan uppgift som, som visar samma sak. Eller ja, som berör samma matematiska sak", "mal": null, "malen": []}}
-{"tid": "2026-09-12T12:26:08", "art": "api", "vag": "POST /api/planning/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-12T12:27:41", "art": "utfall", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"andrade": ["tav10", "tav11", "tav12.0", "tav12.1", "tav13", "tav16", "tav18", "tav20", "tav21", "tav22", "tav23.0", "tav23.1", "tav23.2"], "fel": 0}}
-{"tid": "2026-09-12T12:27:41", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 47}}
-{"tid": "2026-09-12T12:27:41", "art": "onske", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"message": "Lägg in detta\nFörhållande: jämför två delar, skrivs 2:3\nSaft 1:4 - en del saft på fyra vatten\nBetong 1:3 - en hink cement på tre grus\nEnklaste form: går inte att förkorta", "mal": "Andelar och förhållanden · figuren", "malen": []}}
-{"tid": "2026-09-12T12:27:41", "art": "api", "vag": "POST /api/planning/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
-{"tid": "2026-09-12T12:30:31", "art": "utfall", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"andrade": ["tav7.1"], "fel": 1}}
-{"tid": "2026-09-12T12:30:31", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 61}}
-{"tid": "2026-09-12T12:34:21", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 30}}
-{"tid": "2026-09-12T12:34:23", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 30}}
-{"tid": "2026-09-12T12:35:37", "art": "onske", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"message": "Byt ut exempel 3 mot ett yrkesnära bygg-exempel där division med bråk betyder «hur många gånger ryms»: En burk färg rymmer 3/4 liter. Väggen kräver 4½ liter. Hur många burkar behövs? Figur: sex burkar ritade på rad, varje burk märkt 3/4 l, en parentes under hela raden märkt 4½ l. Metodsteg: «Fråga: hur många 3/4 ryms i 4½?», «Blandat tal till bråk: 4½ = 9/2», «Invertera och multiplicera: 9/2 · 4/3», «Kontroll: 6 · 3/4 = 18/4 = 4½». Formelkedja: 9/2 ÷ 3/4 = 9/2 · 4/3 = 36/6 = 6 burkar. Uppställning i stegen, ingen färdig uträkning, läraren räknar på tavlan.", "mal": null, "malen": []}}
-{"tid": "2026-09-12T12:35:37", "art": "api", "vag": "POST /api/planning/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-12T12:37:21", "art": "utfall", "vag": null, "doktyp": "tavla", "dok_id": "57d9e4fca5b4", "detalj": {"andrade": ["tav12.0", "tav15", "tav20", "tav21", "tav22", "tav23", "tav24"], "fel": 0}}
-{"tid": "2026-09-12T12:37:21", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 47}}
-{"tid": "2026-09-12T12:38:30", "art": "api", "vag": "POST /api/planning/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 30}}
-{"tid": "2026-09-12T12:38:30", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 46}}
-{"tid": "2026-09-12T12:38:30", "art": "api", "vag": "POST /api/kalenderposter", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 46}}
-{"tid": "2026-09-12T12:38:30", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
-{"tid": "2026-09-12T12:38:30", "art": "api", "vag": "POST /api/planning/export", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
-{"tid": "2026-09-12T12:38:43", "art": "api", "vag": "POST /api/tavla/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 547}}
-{"tid": "2026-09-12T12:39:05", "art": "api", "vag": "POST /api/tavla/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 547}}
 {"tid": "2026-09-13T16:07:32", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
 {"tid": "2026-09-13T16:07:33", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
 {"tid": "2026-09-13T16:08:43", "art": "api", "vag": "POST /api/bocker/{id}/las", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
@@ -9950,3 +9823,163 @@
 {"tid": "2026-10-12T03:10:27", "art": "onske", "vag": null, "doktyp": "arbetsblad", "dok_id": "248", "detalj": {"message": "Laga fynden nedan på pappret som det ligger. De gäller uppgift 4, 5. Allt annat står still: uppgifternas antal, deras poäng och deras nivåer ändras inte om inget fynd säger det.\n\n1. Uppgift 4: uppgift 4 har poängen (0/0/2), men närmaste uppgift på nationella provet, NpMa1a vt17 D23 (1/2/0): «längd på mönstrad gång inom budget ur bild av mönstret och styckpriser», ger den (1/2/0). Båda är flerstegsuppgifter med styckpris och hela enheter, och det avgörande är att ta fram priset per m² och vecka ur tabellen och avrunda 2,4 veckor uppåt till 3, ungefär lika många steg som på NP och därför [1, 2, 0]. Bladet är på A-nivå: behåll poängen och byt uppgiften mot en som prövar det en A-uppgift prövar på nationella provet.\n2. Uppgift 5: uppgift 5b löses med samma metod som uppgift 6c på C-bladet till samma prov, och då är den en C-uppgift (Rickards dom 8/10). Behåll poängen och byt den mot en A-uppgift där eleven behöver en insikt som C-uppgiften inte kräver: ett villkor eleven själv översätter till matematik, ett uttryck i en variabel eller två villkor som texten inte kopplar ihop.\n3. Uppgift 4: uppgift 4 har 65 ord och 6 meningar före frågan (taket på bladet är 40 ord och 4 meningar på A-nivå). Stryk bakgrund som inte behövs för att räkna, slå ihop meningar om samma sak och lägg ett villkor i frågan när det blir kortare. Dela den inte i ledda steg: planeringen är en del av A-uppgiften. Behåll uppgiftens poäng, förmåga och plats i stegringen: det är TEXTEN som ska skrivas om.\n4. Uppgift 5: uppgift 5b har 63 ord och 2 meningar fakta före frågan (taket på bladet är 40 ord och 2 mening). Stryk bakgrund som inte behövs för att räkna och slå ihop meningar om samma sak. Behåll uppgiftens poäng, förmåga och plats i stegringen: det är TEXTEN som ska skrivas om.\n5. Rent A-blad. Rör bara uppgift 4 och 5. Poängen står kvar. Korta texten före frågan under bladets tak, och byt namnet Elias mot ett namn som inte står på provet. Inga bokstäver i uppgift eller facit (klassen har inte räknat med bokstäver), inga olikheter.", "nummer": [4, 5], "mal": null, "malen": []}}
 {"tid": "2026-10-12T03:10:27", "art": "api", "vag": "POST /api/exams/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
 {"tid": "2026-10-12T03:15:02", "art": "utfall", "vag": null, "doktyp": "arbetsblad", "dok_id": "248", "detalj": {"andrade": ["avtal1", "uppg4", "uppg5"], "fel": 0, "koder": []}}
+{"tid": "2026-10-12T11:54:41", "art": "api", "vag": "POST /api/dokument", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T11:54:45", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T11:54:46", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T11:55:20", "art": "api", "vag": "POST /api/planning/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 31}}
+{"tid": "2026-10-12T11:55:20", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 47}}
+{"tid": "2026-10-12T11:55:20", "art": "api", "vag": "POST /api/kalenderposter", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 31}}
+{"tid": "2026-10-12T11:55:20", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T11:55:21", "art": "api", "vag": "POST /api/planning/export", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T11:55:39", "art": "api", "vag": "POST /api/dokument", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T11:55:40", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T11:56:07", "art": "api", "vag": "POST /api/planning/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 31}}
+{"tid": "2026-10-12T11:56:07", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 31}}
+{"tid": "2026-10-12T11:56:07", "art": "api", "vag": "POST /api/kalenderposter", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 47}}
+{"tid": "2026-10-12T11:56:07", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T11:56:08", "art": "api", "vag": "POST /api/planning/export", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T11:56:25", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T11:56:57", "art": "api", "vag": "POST /api/tavla/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 390}}
+{"tid": "2026-10-12T11:57:16", "art": "api", "vag": "POST /api/tavla/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 250}}
+{"tid": "2026-10-12T12:01:26", "art": "api", "vag": "POST /api/dokument", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
+{"tid": "2026-10-12T12:01:27", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
+{"tid": "2026-10-12T12:01:55", "art": "api", "vag": "POST /api/planning/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 30}}
+{"tid": "2026-10-12T12:01:55", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 30}}
+{"tid": "2026-10-12T12:01:55", "art": "api", "vag": "POST /api/kalenderposter", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 45}}
+{"tid": "2026-10-12T12:01:55", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
+{"tid": "2026-10-12T12:01:56", "art": "api", "vag": "POST /api/planning/export", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
+{"tid": "2026-10-12T12:02:15", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T12:02:50", "art": "api", "vag": "POST /api/tavla/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 452}}
+{"tid": "2026-10-12T12:42:04", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T12:42:04", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
+{"tid": "2026-10-12T12:42:17", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
+{"tid": "2026-10-12T12:42:32", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
+{"tid": "2026-10-12T12:42:36", "art": "api", "vag": "POST /api/planning/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 30}}
+{"tid": "2026-10-12T12:42:36", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 30}}
+{"tid": "2026-10-12T12:42:36", "art": "api", "vag": "POST /api/kalenderposter", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 46}}
+{"tid": "2026-10-12T12:42:36", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 30}}
+{"tid": "2026-10-12T12:42:36", "art": "api", "vag": "POST /api/planning/export", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
+{"tid": "2026-10-12T12:43:38", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T12:43:52", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T12:43:56", "art": "api", "vag": "POST /api/planning/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
+{"tid": "2026-10-12T12:43:56", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 30}}
+{"tid": "2026-10-12T12:43:56", "art": "api", "vag": "POST /api/kalenderposter", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 30}}
+{"tid": "2026-10-12T12:43:56", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 30}}
+{"tid": "2026-10-12T12:43:56", "art": "api", "vag": "POST /api/planning/export", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T12:45:13", "art": "api", "vag": "POST /api/dokument", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T12:45:19", "art": "api", "vag": "POST /api/dokument", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 766}}
+{"tid": "2026-10-12T12:45:20", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T12:45:41", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T12:45:41", "art": "api", "vag": "POST /api/exams/{id}/oppna", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 30}}
+{"tid": "2026-10-12T12:45:44", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T12:45:44", "art": "api", "vag": "POST /api/kalenderposter", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T12:45:45", "art": "api", "vag": "POST /api/dokument", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 609}}
+{"tid": "2026-10-12T12:45:45", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T12:45:45", "art": "api", "vag": "DELETE /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 404, "ms": 15}}
+{"tid": "2026-10-12T12:46:28", "art": "api", "vag": "PUT /api/dokument/ordning", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 43077}}
+{"tid": "2026-10-12T12:46:30", "art": "api", "vag": "POST /api/exams/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
+{"tid": "2026-10-12T12:46:30", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T12:46:38", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T12:48:36", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T12:48:54", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T12:48:54", "art": "api", "vag": "POST /api/exams/{id}/oppna", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 32}}
+{"tid": "2026-10-12T12:48:58", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
+{"tid": "2026-10-12T12:48:58", "art": "api", "vag": "POST /api/kalenderposter", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T12:48:58", "art": "api", "vag": "POST /api/dokument", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 514}}
+{"tid": "2026-10-12T12:48:58", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
+{"tid": "2026-10-12T12:48:58", "art": "api", "vag": "DELETE /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 404, "ms": 30}}
+{"tid": "2026-10-12T12:49:17", "art": "api", "vag": "PUT /api/dokument/ordning", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 18421}}
+{"tid": "2026-10-12T12:49:18", "art": "api", "vag": "POST /api/exams/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T12:49:18", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T12:49:33", "art": "api", "vag": "DELETE /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T12:49:53", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T12:50:24", "art": "api", "vag": "POST /api/tavla/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 234}}
+{"tid": "2026-10-12T12:50:43", "art": "api", "vag": "POST /api/tavla/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 233}}
+{"tid": "2026-10-12T12:51:14", "art": "api", "vag": "DELETE /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T12:51:14", "art": "api", "vag": "DELETE /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T12:51:15", "art": "api", "vag": "POST /api/dokument", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T12:51:22", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T12:51:37", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 30}}
+{"tid": "2026-10-12T12:51:37", "art": "api", "vag": "POST /api/exams/{id}/oppna", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 30}}
+{"tid": "2026-10-12T12:51:41", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T12:51:41", "art": "api", "vag": "POST /api/kalenderposter", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T12:51:41", "art": "api", "vag": "POST /api/dokument", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 438}}
+{"tid": "2026-10-12T12:51:41", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T12:51:42", "art": "api", "vag": "POST /api/exams/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T12:51:43", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T13:02:32", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 30}}
+{"tid": "2026-10-12T13:02:32", "art": "api", "vag": "POST /api/dokument/{id}/versioner", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
+{"tid": "2026-10-12T13:02:53", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T13:03:11", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
+{"tid": "2026-10-12T13:03:14", "art": "api", "vag": "POST /api/planning/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
+{"tid": "2026-10-12T13:03:14", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 30}}
+{"tid": "2026-10-12T13:03:14", "art": "api", "vag": "POST /api/kalenderposter", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 47}}
+{"tid": "2026-10-12T13:03:14", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
+{"tid": "2026-10-12T13:03:14", "art": "api", "vag": "POST /api/planning/export", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T13:04:16", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T13:04:34", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
+{"tid": "2026-10-12T13:04:37", "art": "api", "vag": "POST /api/planning/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T13:04:37", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 30}}
+{"tid": "2026-10-12T13:04:37", "art": "api", "vag": "POST /api/kalenderposter", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 30}}
+{"tid": "2026-10-12T13:04:37", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T13:04:37", "art": "api", "vag": "POST /api/planning/export", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T13:05:39", "art": "api", "vag": "POST /api/dokument", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
+{"tid": "2026-10-12T13:05:40", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T13:06:11", "art": "api", "vag": "POST /api/planning/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 32}}
+{"tid": "2026-10-12T13:06:11", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 32}}
+{"tid": "2026-10-12T13:06:11", "art": "api", "vag": "POST /api/kalenderposter", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 47}}
+{"tid": "2026-10-12T13:06:11", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T13:06:12", "art": "api", "vag": "POST /api/planning/export", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T13:06:31", "art": "api", "vag": "DELETE /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T13:06:31", "art": "api", "vag": "DELETE /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T13:06:32", "art": "api", "vag": "POST /api/dokument", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T13:06:40", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T13:07:00", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T13:07:00", "art": "api", "vag": "POST /api/exams/{id}/oppna", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T13:07:03", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T13:07:03", "art": "api", "vag": "POST /api/kalenderposter", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
+{"tid": "2026-10-12T13:07:04", "art": "api", "vag": "POST /api/dokument", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 608}}
+{"tid": "2026-10-12T13:07:04", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 625}}
+{"tid": "2026-10-12T13:07:05", "art": "api", "vag": "POST /api/exams/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T13:07:06", "art": "api", "vag": "PATCH /api/dokument/{id}", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T13:07:15", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T13:07:53", "art": "api", "vag": "POST /api/tavla/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 92}}
+{"tid": "2026-10-12T13:08:16", "art": "api", "vag": "POST /api/tavla/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 250}}
+{"tid": "2026-10-12T13:08:39", "art": "api", "vag": "POST /api/tavla/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 250}}
+{"tid": "2026-10-12T13:43:24", "art": "api", "vag": "POST /api/exams/generate", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 1452}}
+{"tid": "2026-10-12T14:02:41", "art": "api", "vag": "POST /api/exams/generate", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 608}}
+{"tid": "2026-10-12T14:03:15", "art": "api", "vag": "GET /api/exams/{id}/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 404, "ms": 15}}
+{"tid": "2026-10-12T14:21:23", "art": "api", "vag": "POST /api/exams/generate", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 4218}}
+{"tid": "2026-10-12T14:51:06", "art": "onske", "vag": null, "doktyp": "arbetsblad", "dok_id": "252", "detalj": {"message": "Byt uppgift 4. Förändringsfaktor och procentuell förändring år för år kommer först i kapitel 3, och Thilde har inte läst det. Skriv i stället en C-uppgift om att jämföra två formler i procent, som provets uppgift 9b: två givna formler för pris eller kostnad, sätt in samma värde i båda och beräkna hur många procent dyrare den ena är än den andra. Ingen förändringsfaktor, ingen ränta, inga upprepade procentuella förändringar. Behåll 1 C-poäng och räknare tillåten.", "nummer": [4], "mal": null, "malen": []}}
+{"tid": "2026-10-12T14:51:06", "art": "api", "vag": "POST /api/exams/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T14:51:31", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
+{"tid": "2026-10-12T14:53:39", "art": "api", "vag": "POST /api/dokument", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
+{"tid": "2026-10-12T14:53:46", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T14:53:46", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T14:54:06", "art": "utfall", "vag": null, "doktyp": "arbetsblad", "dok_id": "252", "detalj": {"andrade": ["uppg4"], "fel": 0, "koder": []}}
+{"tid": "2026-10-12T14:54:15", "art": "api", "vag": "PUT /api/klassprofil", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
+{"tid": "2026-10-12T14:54:55", "art": "api", "vag": "POST /api/dokument", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
+{"tid": "2026-10-12T14:54:55", "art": "api", "vag": "POST /api/exams/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T14:54:59", "art": "api", "vag": "POST /api/exams/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
+{"tid": "2026-10-12T14:55:48", "art": "api", "vag": "POST /api/exams/{id}/oppna", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T14:55:48", "art": "onske", "vag": null, "doktyp": "arbetsblad", "dok_id": "251", "detalj": {"message": "Laga fynden nedan på pappret som det ligger. De gäller uppgift 7, 10 och 12. Allt annat står still: uppgifternas antal, deras poäng och deras nivåer ändras inte om inget fynd säger det.\n\n1. Uppgift 7 har delfrågorna a), b) … i texten, och poängen går inte att dela på dem. Varje delfråga ska vara en egen deluppgift med en svarslinje under sig.\n2. Uppgift 10 har delfrågorna a), b) … i texten, och poängen går inte att dela på dem. Varje delfråga ska vara en egen deluppgift med en svarslinje under sig.\n3. Uppgift 12 har delfrågorna a), b) … i texten, och poängen går inte att dela på dem. Varje delfråga ska vara en egen deluppgift med en svarslinje under sig.\n4. uppgift 12 har 29 ord och 4 meningar före frågan (taket på bladet är 30 ord och 3 meningar på E-nivå). Stryk bakgrund som inte behövs för att räkna, slå ihop meningar om samma sak och lägg ett villkor i frågan när det blir kortare. Dela den i a) och b) om den ställer två frågor. Behåll uppgiftens poäng, förmåga och plats i stegringen: det är TEXTEN som ska skrivas om. Korta texten före frågan: stammen ger sammanhanget, varje faktum står i den deluppgift där det behövs, och bakgrund som inte behövs för att räkna stryks. Ett C- eller A-problem delas inte i ledda steg. Samma tal, samma svar, samma poäng.", "nummer": [7, 10, 12], "mal": null, "malen": []}}
+{"tid": "2026-10-12T14:55:48", "art": "api", "vag": "POST /api/exams/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T14:58:01", "art": "utfall", "vag": null, "doktyp": "arbetsblad", "dok_id": "251", "detalj": {"andrade": ["uppg7", "uppg10", "uppg12"], "fel": 0, "koder": []}}
+{"tid": "2026-10-12T14:58:02", "art": "api", "vag": "POST /api/exams/{id}/oppna", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T14:58:02", "art": "onske", "vag": null, "doktyp": "arbetsblad", "dok_id": "252", "detalj": {"message": "Laga fynden nedan på pappret som det ligger. De gäller uppgift 6. Allt annat står still: uppgifternas antal, deras poäng och deras nivåer ändras inte om inget fynd säger det.\n\n1. Uppgift 6 har Maja och handlar om «vänner», precis som provet. Bladet ska öva samma sort av uppgift som provet, men med andra namn och andra sammanhang. Byt namnet och situationen mot något som inte står på provet. Provet har redan Leo, Maja, Napoli, Pizzeria, Roma och Sara. Provets sammanhang är «blixt», «direkt», «elsparkcykel», «hyra», «hårstrå», «lånecykel», «pizzerior», «pizzor», «rutnat», «stuga», «tändstickor», «vänner» och «åska»; välj något helt annat. Byt namnen och situationen i uppgiften mot sådana som inte finns på provet. Metoden, poängen, förmågan och platsen står kvar. Talen får bytas om den nya situationen kräver det.", "nummer": [6], "mal": null, "malen": []}}
+{"tid": "2026-10-12T14:58:02", "art": "api", "vag": "POST /api/exams/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
+{"tid": "2026-10-12T15:00:46", "art": "utfall", "vag": null, "doktyp": "arbetsblad", "dok_id": "252", "detalj": {"andrade": ["uppg6"], "fel": 1, "koder": ["elevlasare:uppgift 6"]}}
+{"tid": "2026-10-12T15:01:17", "art": "api", "vag": "POST /api/exams/{id}/oppna", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 31}}
+{"tid": "2026-10-12T15:01:17", "art": "onske", "vag": null, "doktyp": "arbetsblad", "dok_id": "251", "detalj": {"message": "Laga fynden nedan på pappret som det ligger. De gäller uppgift 12. Allt annat står still: uppgifternas antal, deras poäng och deras nivåer ändras inte om inget fynd säger det.\n\n1. uppgift 12b har 34 ord och 0 meningar fakta före frågan (taket på bladet är 30 ord och 1 mening). Stryk bakgrund som inte behövs för att räkna och slå ihop meningar om samma sak. Behåll uppgiftens poäng, förmåga och plats i stegringen: det är TEXTEN som ska skrivas om. Korta texten före frågan: stammen ger sammanhanget, varje faktum står i den deluppgift där det behövs, och bakgrund som inte behövs för att räkna stryks. Ett C- eller A-problem delas inte i ledda steg. Samma tal, samma svar, samma poäng.", "nummer": [12], "mal": null, "malen": []}}
+{"tid": "2026-10-12T15:01:17", "art": "api", "vag": "POST /api/exams/{id}/refine", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 297}}
+{"tid": "2026-10-12T15:03:13", "art": "utfall", "vag": null, "doktyp": "arbetsblad", "dok_id": "251", "detalj": {"andrade": ["uppg12"], "fel": 0, "koder": []}}
+{"tid": "2026-10-12T15:03:25", "art": "api", "vag": "POST /api/exams/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 47}}
+{"tid": "2026-10-12T15:03:31", "art": "api", "vag": "POST /api/exams/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 31}}
+{"tid": "2026-10-12T15:04:05", "art": "api", "vag": "GET /api/exams/{id}/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 16}}
+{"tid": "2026-10-12T15:04:05", "art": "api", "vag": "GET /api/exams/{id}/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T15:11:04", "art": "api", "vag": "POST /api/exams/{id}/oppna", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
+{"tid": "2026-10-12T15:11:04", "art": "api", "vag": "POST /api/exams/{id}/oppna", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 14}}
+{"tid": "2026-10-12T15:11:17", "art": "api", "vag": "POST /api/exams/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 31}}
+{"tid": "2026-10-12T15:11:18", "art": "api", "vag": "POST /api/exams/{id}/approve", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 47}}
+{"tid": "2026-10-12T15:11:33", "art": "api", "vag": "GET /api/exams/{id}/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 15}}
+{"tid": "2026-10-12T15:11:33", "art": "api", "vag": "GET /api/exams/{id}/pdf", "doktyp": null, "dok_id": null, "detalj": {"status": 200, "ms": 0}}
