@@ -573,8 +573,9 @@ INSTRUCTION = (
     "nationella provet trycker aldrig tips eller ledtrådar, och metoden är "
     # Gemener på «arbetsblad» och «gruppuppgift» med flit: kassettväljaren
     # (tests/fejk.py _VAL) lägger i bladets band på VERSALT «ARBETSBLAD».
-    "det som prövas. Ett prov med «Tips:» avvisas. På arbetsblad och "
-    "gruppuppgift: EN kort ledtråd till uppgiften eller deluppgiften, satt i "
+    "det som prövas. Ett prov med «Tips:» avvisas. Gruppuppgiften är skriven "
+    "som provet och lämnar också fältet tomt. På arbetsblad: EN kort "
+    "ledtråd till uppgiften eller deluppgiften, satt i "
     "kursiv på egen rad under frågan: 'Tips: Gör en skiss och kalla bredden "
     "för $x$ cm.' Den ska ge vägen in, aldrig svaret, och står bara på de "
     "flerstegsuppgifter där en elev annars fastnar redan på första steget, "
@@ -595,7 +596,8 @@ INSTRUCTION = (
     "«genom faktorisering» i en uppgiftstext. Eleven väljer metoden, det är "
     "det som prövas. Tillåtet är bara «med algebraisk metod», «bryt ut» och "
     "«med hjälp av grafen». På arbetsblad och gruppuppgift får metoden stå "
-    "i notisen, aldrig i frågan.\n"
+    "i notisen, aldrig i frågan (på arbetsbladet; gruppuppgiften har ingen "
+    "notis).\n"
     # Lärarens dom 2026-09-24 (exam 130 uppgift 6, del A utan verktyg):
     # «det här med algebraisk metod kan man ju ta bort helt och hållet, för
     # det är underförstått».
@@ -1490,6 +1492,13 @@ PROVFORM_GRUPP = (
     "- STAMMEN FÖRKLARAR INGET. Har uppgiften deluppgifter är stammen tom "
     "eller ett sammanhang med tal; aldrig en mening om vad uttrycken består "
     "av («Uttrycken nedan har termer …»).\n"
+    "- RUTINLISTOR SOM PÅ PROVET: verbet i stammen och bara uttrycket i "
+    "varje deluppgift. Stammen «Förenkla uttrycken så långt som möjligt.» "
+    "eller «Lös ekvationerna.», deluppgifterna «$6x + 3 - 2x - 8$».\n"
+    "- FÖRST DET GIVNA, SEDAN FRÅGAN: frågan står sist, efter de givna "
+    "meningarna, och i en deluppgift med ny fakta står faktan först och "
+    "frågan sist («Hon lägger 40 takpannor i timmen.» sedan «Hur många …?»).\n"
+    "- INGA TIPS: fältet notis är tomt, som på provet.\n"
     "- NIVÅN SOM PÅ PROVET: uppgift 1 och 2 på E-nivå, uppgift 3 på C-nivå, "
     "uppgift 4 på A-nivå. Fyra olika frågesätt: inte fyra uppgifter av samma "
     "sort med nya tal.\n"
@@ -3475,6 +3484,7 @@ def ovningspappret_stadat(exam: dict | None, profil: str) -> dict | None:
     # Efter markeringen: i exam 256 var stammen BARA förklaringen, och en tom
     # stam får inte bli kvar. Med «Utan räknare.» först går den att stryka.
     stryk_forklarande_stam(exam, profil)
+    stryk_grupptips(exam, profil)
     return exam
 
 
@@ -3512,6 +3522,23 @@ def gruppens_delsvar(exam: dict | None, profil: str) -> dict | None:
 # när deluppgifterna själva bär uppmaningen.
 _BEGREPPSORD = re.compile(r"\b(?:term\w*|variab\w*|konstant\w*|koefficient\w*)",
                           re.I)
+
+
+# INGA TIPS PÅ GRUPPUPPGIFTEN (Rickard 2026-10-13, exam 256 1b och 4): «Har
+# du tagit hänsyn till hur mina egna prov är skrivna?» Proven har inga
+# tipsrutor, och gruppuppgiften skrivs som provet. Prompten ber om tomt
+# fält; strykningen här håller när modellen ändå skriver ett.
+def stryk_grupptips(exam: dict | None, profil: str) -> bool:
+    """Töm `notis` på gruppuppgiftens uppgifter och deluppgifter."""
+    if not isinstance(exam, dict) or profil != "gruppuppgift":
+        return False
+    andrat = False
+    for u in exam.get("uppgifter") or []:
+        for x in [u] + list(u.get("deluppgifter") or []) if isinstance(u, dict) else []:
+            if isinstance(x, dict) and x.get("notis"):
+                x["notis"] = None
+                andrat = True
+    return andrat
 
 
 def stryk_forklarande_stam(exam: dict | None, profil: str) -> bool:
@@ -6924,6 +6951,21 @@ def ord_fore_talet(r: str) -> bool:
     return not notis and bool(_ORD_FORE_TALET.match(rad))
 
 
+# INGEN MENING UTAN PIL (Rickard 2026-10-13, exam 256 uppgift 2): «$2x$ och
+# $2$ kan inte slås ihop till $4x$.» stod som en egen rad i facit. Ett steg
+# är matte med en kort förklaring efter pilen («$2x + 2 \neq 4x$ ← olika
+# slags termer»); en mening som bara upprepar svaret stryks.
+MENINGSRAD_ORD = 3
+
+
+def meningsrad(r: str) -> bool:
+    """Är stegraden en mening utan pil, snarare än matte?"""
+    rad, notis = exam_spec.elevrad_delar(r)
+    return (not notis and not facitfigur.ar_figurrad(rad)
+            and len(re.findall(r"[A-Za-zÅÄÖåäö]{2,}", _MATTE_RE.sub(" ", rad)))
+            >= MENINGSRAD_ORD)
+
+
 def bladfacit_fynd(losning: str, grupp: bool = False) -> list[str]:
     """Det passet ska laga i en enhets facit: för långa eller vaga
     förklaringar, rader med två steg och en saknad svarsrad. På
@@ -6946,6 +6988,10 @@ def bladfacit_fynd(losning: str, grupp: bool = False) -> list[str]:
         if grupp and ord_fore_talet(r):
             fynd.append(f"«{rad}» har orden före talet: skriv talet först "
                         "och orden efter en pil")
+        elif grupp and meningsrad(r):
+            fynd.append(f"«{rad}» är en mening utan pil: skriv den som matte "
+                        "med en kort förklaring efter pilen, eller stryk den "
+                        "om svaret redan säger det")
         if _notord(notis) > BLADFACIT_NOT_TAK:
             fynd.append(f"förklaringen «{notis}» har fler än "
                         f"{BLADFACIT_NOT_TAK} ord")
@@ -7004,15 +7050,21 @@ def bladfacit_hinder(gamla: list[str], nya: list[str], ny_svarsrad: bool = False
     # («$5a + 3$, eftersom …» blir «$5a + 3$» och två steg).
     if gamla_steg is gamla:
         i_svaret |= set(_matten(nya[:1], noter=False))
-    borta = (set(_matten(gamla_steg, noter=False))
-             - set(_matten(nya[1:], noter=True)) - i_svaret)
+    nymatte = _matten(nya[1:], noter=True)
+    borta = (set(_matten(gamla_steg, noter=False)) - set(nymatte) - i_svaret)
+    # På gruppuppgiften får en meningsrads matte gå upp i ett nytt uttryck
+    # («$2x$ och $2$ … $4x$» blir «$2x + 2 \neq 4x$»).
+    if grupp:
+        borta = {m for m in borta
+                 if not any(m.strip("$") in n for n in nymatte)}
     if borta:
         return f"räknesteget {sorted(borta)[0]} försvann: skriv av det tecken för tecken"
     # Ingen ny matte: varje $…$ fanns förut, eller är en del av ett gammalt
     # («← bryt ut $6x$» ur «$= 6x(3xy - y + 1)$»).
     gammal = _matten(gamla_steg, noter=True)
-    for m in _matten(nya[1:], noter=True):
-        if not (m in gammal or any(m.strip("$") in g for g in gammal)):
+    for m in nymatte:
+        if not (m in gammal or any(m.strip("$") in g for g in gammal)
+                or (grupp and _av_gamla_delar(m, gammal))):
             return (f"ny matte {m}: ändra aldrig ett $…$, och skriv ett tal i "
                     "förklaringen som inte står i raderna utan $…$")
     figur = [r for r in gamla if facitfigur.ar_figurrad(exam_spec.elevrad_delar(r)[0])]
@@ -7024,11 +7076,21 @@ def bladfacit_hinder(gamla: list[str], nya: list[str], ny_svarsrad: bool = False
         n = exam_spec.elevrad_delar(r)[1]
         if grupp and ord_fore_talet(r):
             return f"«{r}» har orden före talet: skriv talet först, orden efter ←"
+        if grupp and meningsrad(r):
+            return f"«{r}» är en mening utan pil: matte och pil, eller stryk den"
         if _notord(n) > BLADFACIT_NOT_TAK:
             return f"förklaringen «{n}» har {_notord(n)} ord, högst {BLADFACIT_NOT_TAK}"
         if vag_not(n):
             return f"förklaringen «{n}» nämner inget tal eller begrepp"
     return ""
+
+
+def _av_gamla_delar(m: str, gammal: list[str]) -> bool:
+    """Är $…$ en jämförelse mellan uttryck som redan står i raderna?
+    «$2x+2\neq4x$» ur «$x+(x+2)=2x+2$» och «$4x$»."""
+    delar = re.split(r"\\neq|≠|=", m.strip("$"))
+    return len(delar) >= 2 and all(
+        d and any(d in g for g in gammal) for d in delar)
 
 
 def bladfacit_haller(gamla: list[str], nya: list[str]) -> bool:
@@ -7097,6 +7159,10 @@ def build_bladfacit_prompt(exam: dict, enheter: list[tuple[str, dict]],
         "`ny_svarsrad`: true, skriv det korta svaret («$0{,}75x$ cm», "
         "«$21$») och låt räkningen stå som steg, ett per rad med pil "
         "(«$50 - 24 - 5 = 21$ ← dra bort 24 och 5»).\n"
+        + ("- Ingen rad under svaret är en mening. «$2x$ och $2$ kan inte "
+           "slås ihop till $4x$.» skrivs «$2x + 2 \\neq 4x$ ← olika slags "
+           "termer»; en mening som bara säger svaret igen stryks.\n"
+           if grupp else "") +
         "- En rad UTAN pil som bara upprepar ett delsvar ur svarsraden "
         "stryks, också när den säger det med andra ord: «Rad 1: $10^{9}$» "
         "under «Rad 1: $10^{9}$, Rad 2: $2^{16}$», «Månadskort vid minst 4 "
@@ -15582,7 +15648,8 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
         # kväll, exam 129), se mening_per_rad. FÖRE räknarbeskedet: «Utan
         # räknare.» hör till uppgiftens första rad och ska inte bli en egen.
         mening_per_rad(r.get("exam"))
-        if profil == "prov":
+        # Gruppuppgiften också: den skrivs som provet (Rickard 2026-10-13).
+        if profil in ("prov", "gruppuppgift"):
             fraga_for_sig(r.get("exam"))
         # BLADETS RÄKNARRAD UR PROVETS DELAR (Rickards dom 2026-09-24), före
         # markeringen som läser den. Utan valt prov skriver modellen raden.

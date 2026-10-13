@@ -1799,7 +1799,7 @@ def test_gruppens_facit_kort_svar_och_talet_fore_orden():
     assert any("hel mening" in f for f in exam_gen.bladfacit_fynd("\n".join(lang), True))
     assert exam_gen.bladfacit_fynd("\n".join(lang)) == []          # arbetsbladet
     assert "hel mening" in exam_gen.bladfacit_hinder(lang, lang, grupp=True)
-    kort = ["$0{,}75x$ cm", "Kvar blir 75 % av röret", lang[1]]
+    kort = ["$0{,}75x$ cm", lang[1]]
     assert exam_gen.bladfacit_hinder(lang, kort, True, grupp=True) == ""
     gamla = ["$540 - 100t$", "$60 + 40 = 100$ ← lägg ihop per timme", "Kvar från a): 540"]
     assert any("orden före talet" in f for f in exam_gen.bladfacit_fynd("\n".join(gamla), True))
@@ -1832,3 +1832,25 @@ def test_eftersom_i_svarsraden_blir_steg():
            "$-4 + 7 = 3$ ← lägg ihop talen"]
     assert exam_gen.bladfacit_hinder(gamla, nya, True, grupp=True) == ""
     assert "försvann" in exam_gen.bladfacit_hinder(gamla, nya[:2], True, grupp=True)
+
+
+def test_som_pa_provet_inga_tips_luft_fore_fragan_och_ingen_mening_i_facit():
+    """Rickard 2026-10-13: «Har du tagit hänsyn till hur mina egna prov är
+    skrivna?» Exam 256 hade tipsrutor och en meningsrad i facit."""
+    ex = {"uppgifter": [{"text": "Hugo och Sara bygger.", "notis": "Tips: Pröva.",
+                         "deluppgifter": [{"text": "a", "notis": "Tips: Slå ihop."}]}]}
+    assert exam_gen.stryk_grupptips(ex, "gruppuppgift")
+    assert not ex["uppgifter"][0]["notis"] and not ex["uppgifter"][0]["deluppgifter"][0]["notis"]
+    assert not exam_gen.stryk_grupptips({"uppgifter": [{"notis": "Tips"}]}, "arbetsblad")
+    gamla = ["Ali har fel.", "$x + (x + 2) = 2x + 2$ ← lägg ihop x-termerna",
+             "$2x$ och $2$ kan inte slås ihop till $4x$."]
+    assert any("mening utan pil" in f for f in exam_gen.bladfacit_fynd("\n".join(gamla), True))
+    assert exam_gen.bladfacit_fynd("\n".join(gamla)) == []          # arbetsbladet
+    nya = gamla[:2] + ["$2x + 2 \\neq 4x$ ← olika slags termer"]
+    assert exam_gen.bladfacit_hinder(gamla, nya, grupp=True) == ""
+    assert "mening utan pil" in exam_gen.bladfacit_hinder(gamla, gamla, grupp=True)
+    # En jämförelse av uttryck som inte står i raderna är ny matte.
+    assert "ny matte" in exam_gen.bladfacit_hinder(
+        gamla, gamla[:2] + ["$2x + 3 \\neq 4x$ ← olika"], grupp=True)
+    assert not exam_gen.meningsrad("540 ← kvar från a)")
+    assert not exam_gen.meningsrad("19 sektioner")
