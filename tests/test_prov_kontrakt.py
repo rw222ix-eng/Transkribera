@@ -161,7 +161,8 @@ def test_arbetsbladet_bar_sitt_facit_provet_inte():
     # lärarens dom 2026-09-23; cachen har ingen fet matematik). Arbetsbladets
     # facit har samma form sedan Rickards beställning 2026-09-25.
     fet = re.sub(r"\$([^$]*)\$", r"\\(\\pmb{\1}\\)", doc.uppgifter[0].losning).strip()
-    assert f"\\bedsvar{{{fet}}}" in ark, "arbetsbladet ska bära sitt facit"
+    # Svaret i ruta på bladet sedan Rickards dom 2026-10-13 (\\facitsvar).
+    assert f"\\facitsvar{{{fet}}}" in ark, "arbetsbladet ska bära sitt facit"
     assert losning not in prov, "provet får aldrig innehålla lösningarna"
     assert fet not in prov
     assert f"\\bedsvar{{{fet}}}" in bedomning, \

@@ -21,8 +21,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Callable
 
-from app import (ci_utanfor, course_data, exam_spec, kursdomare, llm_client,
-                 niva_rubrik, np_vakter, rakneverk)
+from app import (ci_utanfor, course_data, exam_spec, facitfigur, kursdomare,
+                 llm_client, niva_rubrik, np_vakter, rakneverk)
 
 _LOG = logging.getLogger(__name__)
 
@@ -6663,6 +6663,230 @@ def losningspass(exam: dict, *, model: str, llm=None,
     return skrivna
 
 
+# ── FACITPASSET PÅ ARBETSBLADET (Rickard 2026-10-13) ─────────────────────
+# «Facit ska ha kortare förklaringar … behåll svaret orört.» BLAD_FACIT ber
+# om formen, men bladen i Classroom bar förklaringar på sju, åtta ord («tvåan
+# i täljaren och nämnaren tar ut varandra») och rader med två steg («$5n + 1
+# = 100$ ger $n = 19{,}8$, alltså 19 sektioner»). Passet skriver om ENBART
+# orden: svarsraden, varje $…$ och varje figurrad står kvar tecken för tecken,
+# och det prövas här och inte i prompten. En enhet som inte håller behåller
+# sina gamla rader. Ett anrop per blad.
+BLADFACIT_NOT_TAK = 4
+_MATTE_RE = re.compile(r"\$[^$]*\$")
+_TVA_STEG_RE = re.compile(r"\$[^$]+\$[^$←]*?\b(?:ger|alltså)\b[^$←]*\$")
+
+BLADFACIT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "facit": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "rader": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["id", "rader"],
+            },
+        },
+    },
+    "required": ["facit"],
+}
+
+
+def _notord(notis: str) -> int:
+    """Förklaringens ord. Ett $…$ är ETT ord: «sätt in $n = 15$» är tre."""
+    return len(_MATTE_RE.sub(" M ", notis or "").split())
+
+
+def _matten(rader: list[str], *, noter: bool) -> list[str]:
+    """Raderna (och förklaringarna) som $…$, utan mellanslag."""
+    ut = []
+    for r in rader:
+        rad, notis = exam_spec.elevrad_delar(r)
+        for t in [rad] + ([notis] if noter else []):
+            ut += [re.sub(r"\s+", "", m) for m in _MATTE_RE.findall(t)]
+    return ut
+
+
+# KONKRET, INTE ALLMÄNT (Rickard 2026-10-13): «förklaringarna vid pilarna ska
+# nämna de faktiska talen och begreppet, till exempel «dela med 10» eller
+# «stryk tvåorna»». «flytta över», «lägg ihop», «förkorta» och «lös ut n» säger
+# vad man gör men inte med vad. En förklaring är vag när den saknar tal och
+# $…$ och bara består av de här orden.
+_VAGA_ORD = frozenset("""flytta över lägg ihop förenkla förkorta räkna ut lös
+    ta bort sätt in dela gånger dra stryk bryt multiplicera addera samla
+    båda sidor sidorna med på från till och""".split())
+
+
+def vag_not(notis: str) -> bool:
+    """Saknar förklaringen tal, $…$ och begrepp?"""
+    if not (notis or "").strip() or _MATTE_RE.search(notis) or re.search(r"\d", notis):
+        return False
+    ord_ = re.findall(r"[a-zåäöé]+", notis.lower())
+    return bool(ord_) and all(o in _VAGA_ORD or len(o) == 1 for o in ord_)
+
+
+def bladfacit_fynd(losning: str) -> list[str]:
+    """Det passet ska laga i en enhets facit: för långa eller vaga
+    förklaringar och rader med två steg. Tom lista = facit håller redan."""
+    fynd = []
+    for r in [x for x in str(losning or "").split("\n") if x.strip()][1:]:
+        rad, notis = exam_spec.elevrad_delar(r)
+        if _notord(notis) > BLADFACIT_NOT_TAK:
+            fynd.append(f"förklaringen «{notis}» har fler än "
+                        f"{BLADFACIT_NOT_TAK} ord")
+        if vag_not(notis):
+            fynd.append(f"förklaringen «{notis}» nämner inget tal eller begrepp")
+        if _TVA_STEG_RE.search(rad):
+            fynd.append(f"«{rad}» har två steg på en rad")
+    return fynd
+
+
+def bladfacit_haller(gamla: list[str], nya: list[str]) -> bool:
+    """Får de nya raderna ersätta de gamla? Svaret orört, samma matte (ingen
+    ny, ingen borttagen ur räkneleden), samma figurrader, korta och konkreta
+    förklaringar."""
+    if not nya or not gamla or nya[0].strip() != gamla[0].strip():
+        return False
+    if len(nya) > LOSNING_RADER_TAK + 4:
+        return False
+    # Inget räknesteg försvinner: varje $…$ ur de gamla stegen står kvar, i ett
+    # steg eller i en förklaring («← sätt in $x = -2$»).
+    if not set(_matten(gamla[1:], noter=False)) <= set(_matten(nya[1:], noter=True)):
+        return False
+    # Ingen ny matte: varje $…$ fanns förut, eller är en del av ett gammalt
+    # («← bryt ut $6x$» ur «$= 6x(3xy - y + 1)$»).
+    gammal = _matten(gamla[1:], noter=True)
+    if not all(m in gammal or any(m.strip("$") in g for g in gammal)
+               for m in _matten(nya[1:], noter=True)):
+        return False
+    figur = [r for r in gamla if facitfigur.ar_figurrad(exam_spec.elevrad_delar(r)[0])]
+    nyfigur = [r for r in nya if facitfigur.ar_figurrad(exam_spec.elevrad_delar(r)[0])]
+    if ([exam_spec.elevrad_delar(r)[0] for r in figur]
+            != [exam_spec.elevrad_delar(r)[0] for r in nyfigur]):
+        return False
+    return not any(_notord(n) > BLADFACIT_NOT_TAK or vag_not(n)
+                   for n in (exam_spec.elevrad_delar(r)[1] for r in nya[1:]))
+
+
+def _bladfacit_enheter(exam: dict, nummer: list[int] | None = None
+                       ) -> list[tuple[str, dict]]:
+    """[(id, mål)]: varje facit med minst ett steg. id är «3» eller «3b»."""
+    valda = set(nummer or [])
+    ut = []
+    for i, u in enumerate(exam.get("uppgifter") or [], 1):
+        if not isinstance(u, dict) or (valda and i not in valda):
+            continue
+        mal = [(str(i), u)] + [(f"{i}{'abcdefghijkl'[k]}", d) for k, d in
+                               enumerate((u.get("deluppgifter") or [])[:12])
+                               if isinstance(d, dict)]
+        ut += [(nid, m) for nid, m in mal
+               if len([r for r in str(m.get("losning") or "").split("\n")
+                       if r.strip()]) >= 2]
+    return ut
+
+
+def build_bladfacit_prompt(exam: dict, enheter: list[tuple[str, dict]],
+                           fynd: dict[str, list[str]] | None = None) -> str:
+    kort = [{"id": nid, "uppgift": str(m.get("text") or "")[:400],
+             "rader": [r for r in str(m.get("losning") or "").split("\n")
+                       if r.strip()],
+             **({"forra_forsoket_fall": fynd[nid]} if fynd and fynd.get(nid) else {})}
+            for nid, m in enheter]
+    return (
+        "Du gör facit på ett arbetsblad lättare att läsa. Eleverna läser "
+        "svenska med möda. Varje post nedan är ett facit: `rader` är svaret "
+        "på första raden och sedan ett steg per rad, ibland med en kort "
+        "förklaring efter pilen ←.\n"
+        f"{json.dumps(kort, ensure_ascii=False)}\n\n"
+        "Skriv om `rader` för VARJE post efter reglerna:\n"
+        "- Första raden är svaret. Skriv av den TECKEN FÖR TECKEN.\n"
+        "- Allt inom $…$ står kvar exakt som det är. Lägg aldrig till, ta "
+        "aldrig bort och räkna aldrig om ett tal eller ett uttryck. Matten "
+        "i räkneleden stannar i räkneleden. En förklaring får nämna en del "
+        "av ett uttryck som står i raden («bryt ut $2x$»).\n"
+        "- Ett steg per rad. En rad med två steg («$2a = -8$ ger $a = -4$», "
+        "«…, alltså 19 sektioner») delas i två rader, och «ger» och "
+        "«alltså» stryks.\n"
+        "- Förklaringen efter ← är högst FYRA ORD, ett $…$ räknas som ett "
+        "ord, och börjar med verbet. Ingen hel mening, ingen punkt.\n"
+        "- Förklaringen är KONKRET: den nämner talet eller begreppet steget "
+        "använder. Rätt: «dela med 10», «dra bort 20», «stryk tvåorna», "
+        "«bryt ut $2x$», «sätt in $x = -2$», «gånger 12», «avrunda uppåt», "
+        "«lägg ihop x-termerna», «förkorta med $2x + 5$». Fel: «flytta "
+        "över», «lägg ihop», «förkorta», «förenkla», «lös ut n», «räkna "
+        "ut» utan tal eller begrepp.\n"
+        "- Ord som står FÖRE matten («Multiplicera alla termer med 12: "
+        "$…$») flyttas till en pil efter den: «$…$ ← gånger 12».\n"
+        "- Ett steg som syns direkt får ingen pil. Hellre ingen förklaring "
+        "än en lång.\n"
+        "- Ord utan matte som bär ett tal («Sand:», «Kontroll:», «19 "
+        "sektioner») står kvar, kortade.\n"
+        "- En rad inom hakparenteser ([tallinje …], [bräda …], [procent …]) "
+        "är en figur: skriv av den tecken för tecken, förklaringen får "
+        "kortas.\n"
+        "- Vardagsord: «dela», «gånger», «dra bort», «lägg ihop», aldrig "
+        "«subtrahera», «dividera», «multiplicera», «ekvivalent».\n"
+        "- `forra_forsoket_fall` säger vad som var fel förra gången. Rätta "
+        "just det.\n"
+        "Svara med enbart JSON: {\"facit\": [{\"id\": …, \"rader\": […]}, "
+        "…]}, en post per post ovan med samma id."
+    )
+
+
+def _bladfacit_anrop(exam, enheter, fynd, *, model, llm) -> dict[str, list[str]]:
+    try:
+        raw = llm(
+            model, build_bladfacit_prompt(exam, enheter, fynd),
+            system=LOSNING_SYSTEM,
+            options={"temperature": 0.0},
+            response_format={"type": "json_schema",
+                             "json_schema": {"name": "bladfacit",
+                                             "schema": BLADFACIT_SCHEMA}},
+            max_tokens=LOSNING_MAX_TOKENS * 2,
+            token_cb=None,
+        )
+    except Exception:                               # noqa: BLE001
+        return {}
+    data = _json_objekt(raw)
+    return {str(p.get("id") or "").strip(): p.get("rader") or []
+            for p in ((data or {}).get("facit") or []) if isinstance(p, dict)}
+
+
+def bladfacitpass(exam: dict, *, model: str, llm=None,
+                  nummer: list[int] | None = None,
+                  log_cb: Callable[[str], None] | None = None) -> int:
+    """Korta förklaringarna i arbetsbladets facit. Returnerar antalet facit
+    som skrevs om. Fail-open: ett fel i anropet lämnar bladet som det var.
+    Ett facit som inte håller och fortfarande har fynd får ETT omtag, med
+    vad som föll."""
+    llm = llm or llm_client.generate
+    enheter = _bladfacit_enheter(exam, nummer)
+    if not enheter:
+        return 0
+    log_cb and log_cb("Kortar förklaringarna i facit …")
+    skrivna, fynd = 0, None
+    for _varv in range(2):
+        svar = _bladfacit_anrop(exam, enheter, fynd, model=model, llm=llm)
+        kvar, fynd = [], {}
+        for nid, mal in enheter:
+            gamla = [r for r in str(mal.get("losning") or "").split("\n") if r.strip()]
+            nya = [str(r).strip() for r in svar.get(nid) or [] if str(r).strip()]
+            if nya != gamla and bladfacit_haller(gamla, nya):
+                mal["losning"] = "\n".join(nya)
+                skrivna += 1
+            elif bladfacit_fynd("\n".join(gamla)):
+                kvar.append((nid, mal))
+                fynd[nid] = (bladfacit_fynd("\n".join(nya)) if nya else []) or [
+                    "svaret, ett räknesteg eller en figurrad ändrades, eller "
+                    "en ny $…$ kom in: skriv av dem tecken för tecken"]
+        if not kvar:
+            break
+        enheter = kvar
+    return skrivna
+
+
 # ── Deterministiska nivåsignaler ──────────────────────────────────────────
 # Billiga, körs alltid, och de AVGÖR ALDRIG ensamma — de blir varningar läraren
 # ser, inte problem som skickas till reparationsloopen.
@@ -11153,8 +11377,11 @@ BLAD_FACIT = (
     "bara svaret och aldrig en pil. Sedan ett steg per rad, i den ordning "
     "eleven räknar, så att hela vägen syns och inget steg måste fyllas i. "
     "Efter ett steg som inte förklarar sig självt står en pil och en kort "
-    "förklaring på vardagssvenska, högst SEX ord: «$x^2 - 6x = x(x - 6)$ ← "
-    "bryt ut $x$», «$5x = 7$ ← dela båda sidor med 5». Pilen är tecknet ← "
+    "förklaring på vardagssvenska, högst FYRA ord och verbet först, och "
+    "KONKRET: den nämner talet eller begreppet steget använder. "
+    "«$x^2 - 6x = x(x - 6)$ ← bryt ut $x$», «$5x = 7$ ← dela med 5», "
+    "«← stryk tvåorna», aldrig bara «flytta över» eller «förenkla». Aldrig "
+    "två steg på en rad («… ger …», «…, alltså …»). Pilen är tecknet ← "
     "och står utanför $…$. Ett steg som förklarar sig självt ($36 \\cdot 2 = "
     "72$) får ingen pil. Vardagsord: «räkna ut», «flytta över», «dela», "
     "«gånger in», «stryk», «bryt ut», aldrig «subtrahera», «dividera», "
@@ -15140,6 +15367,11 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
         res["errors"] = ([e for e in res["errors"]
                           if e.get("code") != "bedomningssignal"]
                          + bedomningssignaler(res["exam"]))
+    # ── FACITPASSET PÅ ARBETSBLADET (Rickard 2026-10-13) ──
+    # Sist, på det papper läraren får: bara orden i facit kortas, svaret och
+    # matten prövas orörda (bladfacit_haller).
+    if profil == "arbetsblad" and res["exam"] is not None:
+        bladfacitpass(res["exam"], model=model, llm=llm, log_cb=log_cb)
     return flagga(res)
 
 
@@ -15688,6 +15920,13 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
             steg("domare")
             bedomningspass(res["exam"], model=model, llm=llm, nummer=nummer,
                            log_cb=log_cb)
+    # Arbetsbladets facitpass på de uppgifter varvet ändrade, av samma skäl.
+    if (profil == "arbetsblad" and res["exam"] is not None
+            and res["exam"] is not exam):
+        nummer = andrade_uppgifter(exam, res["exam"])
+        if nummer:
+            bladfacitpass(res["exam"], model=model, llm=llm, nummer=nummer,
+                          log_cb=log_cb)
     # ── ÖVNINGSPAPPRETS TVÅ DETERMINISTISKA PASS ─────────────────────
     # Samma två pass som genereringen kör sist (se flagga i generate_exam),
     # och de körs HÄR av två skäl. Skrev varvet om hjälpmedelsraden ska

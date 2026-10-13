@@ -1975,33 +1975,40 @@ window.BladBygg = (() => {
      steget till vänster och «← förklaring» till höger på samma höjd, samma
      form som bedömningsanvisningens elevlösningar. En pil på svarsraden
      stryks: svaret är bara svaret. Spegel av exam_latex._facit_vy och
-     \facitsteg. */
+     \facitsteg.
+
+     TYDLIGARE (Rickard 2026-10-13): svaret står i en ruta, och förklaringen
+     i en egen spalt DIREKT efter uppgiftens bredaste steg, inte ute vid
+     kanten. Spalten är tabellens andra cell, så pilarna i en uppgift står
+     under varandra; ett steg utan förklaring spänner över båda och trycker
+     inte pilarna åt höger. */
   function facitRader(grupper, bokstav) {
     return grupper.map((g, i) => {
       const bara = elevradDelar(g.svar)[0];
       const svar = i === 0 && bokstav ? bedsvar(bokstav, bara) : bara;
-      return `<tr data-svar><td>${g.namn ? `<b class="lobeddel">${esc(g.namn)}</b>` : ''}${
-        svar ? `<b class="lobedsvar">${matBryt(svar, true)}</b>` : ''}</td></tr>`
+      return `<tr data-svar><td colspan="2">${g.namn ? `<b class="lobeddel">${esc(g.namn)}</b>` : ''}${
+        svar ? `<span class="lofacitsvar"><b class="lobedsvar">${matBryt(svar, true)}</b></span>` : ''}</td></tr>`
         + g.steg.map(s => {
           const [rad, not] = elevradDelar(s);
           /* Figurraden: tallinjen, brädan eller procentstapeln där steget
              står, med förklaringen bredvid som andra steg. */
           const fig = FACITFIGUR.html(rad);
-          if (fig) {
-            return not
-              ? `<tr><td class="lobedsteg" data-not=""${fig.figur ? ' data-figur="" style="align-items:center"' : ''}><span class="lofacitrad">${fig.html}</span><span class="lofacitnot">← ${mat(not)}</span></td></tr>`
-              : `<tr><td class="lobedsteg"${fig.figur ? ' data-figur=""' : ''}>${fig.html}</td></tr>`;
-          }
+          const steg = fig ? fig.html : matBryt(rad);
+          const figur = fig && fig.figur ? ' data-figur=""' : '';
           return not
-            ? `<tr><td class="lobedsteg" data-not=""><span class="lofacitrad">${matBryt(rad)}</span><span class="lofacitnot">← ${mat(not)}</span></td></tr>`
-            : `<tr><td class="lobedsteg">${matBryt(rad)}</td></tr>`;
+            ? `<tr data-not=""><td class="lobedsteg"${figur}><span class="lofacitrad">${steg}</span></td><td class="lofacitnot"${figur}>← ${mat(not)}</td></tr>`
+            : `<tr><td class="lobedsteg" colspan="2"${figur}>${steg}</td></tr>`;
         }).join('');
     }).join('');
   }
   function bladfacit(v, uppgifter) {
     const post = (u, k) => {
-      /* Deluppgifterna bär var sin lösning i `vag`, «a) …» (plan.js franProv). */
-      const kropp = !u.f && u.vag && u.vag.length
+      /* Deluppgifterna bär var sin lösning i `vag`, «a) …» (plan.js franProv).
+         Har uppgiften deluppgifter går `vag` först, också när `f` är ifyllt:
+         modellen skriver där en sammanfattning på en rad («a) $x = -2$, b)
+         …»), och facit visade bara den, utan en enda lösningsrad (BA26B
+         C-bladet, uppgift 12, Rickard 2026-10-13). */
+      const kropp = (!u.f || (u.del && u.del.length)) && u.vag && u.vag.length
         ? u.vag.map((s, j) => facitRader(facitGrupper(s[0], (u.delenhet || [])[j])
           .map(g => (g.namn ? g : Object.assign(g, { namn: `${BOKSTAVER[j]})` }))))).join('')
         : facitRader(facitGrupper(u.f, u.enhet),

@@ -311,8 +311,11 @@ test("bladets facit: svaret fett, ett steg per rad, samma grad",
     expect(matt.nej).toBe("Nej");
     expect(matt.kr).toContain("kr");
     expect(Number(matt.vikt)).toBeGreaterThanOrEqual(700);
-    // En grad för svar och steg.
-    expect(matt.grad[0]).toBeCloseTo(matt.grad[1], 1);
+    // Svaret i en ruta och ett snäpp större än stegen (Rickard 2026-10-13:
+    // «svaret ska vara framhävt»), men inte en rubrik: högst 15 % större.
+    expect(matt.grad[0] / matt.grad[1]).toBeGreaterThan(1.02);
+    expect(matt.grad[0] / matt.grad[1]).toBeLessThan(1.15);
+    expect(await ark.locator(".lofacitsvar").count()).toBe(4);
     // Linjen står mellan uppgifterna, inte över den första.
     expect(matt.linje[0]).toBe("0px");
     matt.linje.slice(1).forEach(b => expect(parseFloat(b)).toBeGreaterThan(0));

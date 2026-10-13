@@ -10,6 +10,7 @@ koden följer av beställningen:
 * provets nya vakter (5e8bae9) också på bladet: dolt krav, avrundning vid
   högsta eller minsta värde, «Endast svar» som bedöms på svaret.
 """
+import json
 from pathlib import Path
 
 from app import exam_gen, exam_latex, exam_spec
@@ -83,10 +84,10 @@ def test_latexfacit_i_bedomningens_form():
               "losning": "$x = 2$", "bedomning": "+1 E"}]})
     tex = exam_latex.render_arbetsblad(doc)
     facit = tex[tex.index("\\delprovband{Facit}"):]
-    assert "\\bedsvar{225~kr}" in facit or "\\bedsvar{225 kr}" in facit
+    assert "\\facitsvar{225~kr}" in facit or "\\facitsvar{225 kr}" in facit
     assert "\\noindent \\(P = 45 + 180\\)\\par" in facit
-    assert "\\bedsvar{a)\\enspace \\(\\pmb{x = 4}\\)}" in facit
-    assert "\\bedsvar{b)\\enspace \\(\\pmb{x = 2}\\)}" in facit
+    assert "\\facitsvar{a)\\enspace \\(\\pmb{x = 4}\\)}" in facit
+    assert "\\facitsvar{b)\\enspace \\(\\pmb{x = 2}\\)}" in facit
     # En linje mellan uppgifterna, ingen över den första.
     assert facit.count("\\rule{\\linewidth}{0.15mm}") == 1
     # Mallen tål en äldre vy utan fältet (servern har Python i minnet).
@@ -126,10 +127,66 @@ def test_facitets_steg_far_en_forklaring_efter_pilen():
     js = (UI / "blad-bygg.js").read_text(encoding="utf-8")
     assert "lofacitnot" in js and "elevradDelar(s)" in js
     css = (UI / "losning.css").read_text(encoding="utf-8")
-    assert ".lobedsteg[data-not]" in css
+    assert ".lobed[data-facit]>tbody{display:grid" in css
+    # Svaret i en ruta (Rickard 2026-10-13), på skärmen och i LaTeX.
+    assert "lofacitsvar" in js and ".lofacitsvar{" in css
+    assert "\\facitsvar{" in facit and "\\newcommand{\\facitsvar}" in tex
     # Prompten.
     assert "FACIT FÖR ELEVERNA" in exam_gen.BLAD_FACIT
-    assert "högst SEX ord" in exam_gen.BLAD_FACIT
+    assert "högst FYRA ord" in exam_gen.BLAD_FACIT
+
+
+# ─────────────────── facitpasset (Rickard 2026-10-13) ───────────────────
+
+GAMLA = ["$x = -2$",
+         "Multiplicera alla termer med 12: $4(2x + 1) = 3x + 12$",
+         "$2x + 10 = 3x + 12$ ger $x = -2$",
+         "$10A = 480$ ← $A$ är hela takets area i m$^2$"]
+
+
+def test_bladfacit_fynd_ser_langa_forklaringar_och_tva_steg():
+    fynd = exam_gen.bladfacit_fynd("\n".join(GAMLA))
+    assert any("två steg" in f for f in fynd)
+    assert any("fler än 4 ord" in f for f in fynd)
+    assert exam_gen.bladfacit_fynd("$x = 6$\n$3x = 18$ ← dela med 3") == []
+    # Konkret, inte allmänt (Rickard 2026-10-13).
+    assert any("inget tal" in f for f in exam_gen.bladfacit_fynd("$x = 6$\n$3x = 18$ ← flytta över"))
+    assert not exam_gen.vag_not("stryk tvåorna") and exam_gen.vag_not("förkorta")
+
+
+def test_bladfacit_haller_svaret_och_matten_orort():
+    nya = ["$x = -2$",
+           "$4(2x + 1) = 3x + 12$ ← gånger 12",
+           "$2x + 10 = 3x + 12$",
+           "$x = -2$ ← dra bort $2x$",
+           "$10A = 480$ ← $A$ = takets area"]
+    assert exam_gen.bladfacit_haller(GAMLA, nya)
+    # Svaret ändrat.
+    assert not exam_gen.bladfacit_haller(GAMLA, ["$x = -2,0$"] + nya[1:])
+    # Ett räknesteg borta.
+    assert not exam_gen.bladfacit_haller(GAMLA, nya[:2] + nya[3:])
+    # Ny matte.
+    assert not exam_gen.bladfacit_haller(GAMLA, nya + ["$x + 2 = 0$"])
+    # För lång förklaring.
+    assert not exam_gen.bladfacit_haller(
+        GAMLA, nya[:4] + ["$10A = 480$ ← $A$ är hela takets area"])
+
+
+def test_bladfacitpass_skriver_bara_det_som_haller():
+    exam = {"uppgifter": [
+        {"text": "Lös.", "losning": "\n".join(GAMLA)},
+        {"text": "Lös.", "losning": "$x = 6$\n$3x = 18$ ← dela båda sidor med tre nu"}]}
+    svar = {"facit": [
+        {"id": "1", "rader": ["$x = -2$", "$4(2x + 1) = 3x + 12$ ← gånger 12",
+                              "$2x + 10 = 3x + 12$", "$x = -2$",
+                              "$10A = 480$ ← $A$ = takets area"]},
+        {"id": "2", "rader": ["$x = 5$", "$3x = 18$ ← dela med 3"]}]}
+    n = exam_gen.bladfacitpass(exam, model="m",
+                               llm=lambda *a, **k: json.dumps(svar))
+    assert n == 1
+    assert exam["uppgifter"][0]["losning"].startswith("$x = -2$\n$4(2x + 1)")
+    # Svaret ändrat: uppgift 2 står kvar som den var.
+    assert exam["uppgifter"][1]["losning"].endswith("med tre nu")
 
 
 # ─────────────────────────── stammen i ett stycke ───────────────────────────

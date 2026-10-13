@@ -685,6 +685,16 @@
     \textcolor{ink700}{\(\leftarrow\)\enspace #2}\end{minipage}%
   \par\nopagebreak\vspace{0.6mm}\nopagebreak}
 
+((# SVARET I EN RUTA (Rickard 2026-10-13, spegel av losning.css
+    .lofacitsvar): ram och ljus botten, texten är facits svar orörd. #))
+\definecolor{facitbotten}{HTML}{F1EEE6}
+\newlength{\facitsvarbredd}
+\newcommand{\facitsvar}[1]{\par\noindent\settowidth{\facitsvarbredd}{\bfseries #1}%
+  \ifdim\facitsvarbredd>0.93\linewidth\setlength{\facitsvarbredd}{0.93\linewidth}\fi
+  {\setlength{\fboxsep}{1.2mm}\setlength{\fboxrule}{0.4mm}%
+  \fcolorbox{ink900}{facitbotten}{\parbox{\facitsvarbredd}{\raggedright\bfseries #1}}}%
+  \par\nopagebreak\vspace{0.8mm}\nopagebreak}
+
 ((# Skiljelinjen mellan två elevlösningar på samma uppgift. Står FÖRE varje
     lösning utom den första och aldrig efter den sista: en linje under hade
     sett ut som en avstämning. \nopagebreak först: bryts sidan här ska linjen

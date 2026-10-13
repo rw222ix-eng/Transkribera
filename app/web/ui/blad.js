@@ -1370,7 +1370,10 @@ window.Blad = (() => {
     forts.dataset.fortsuppg = '';
     if (uppg.dataset.el) { forts.dataset.el = uppg.dataset.el; forts.dataset.namn = uppg.dataset.namn || ''; }
     const nr = $('.prnr', uppg);
-    forts.innerHTML = `${nr ? nr.outerHTML : ''}<div><p class="prtext lofortsatt">Fortsättning från föregående sida.</p><table class="lobed"><tbody></tbody></table></div>`;
+    /* data-facit följer med: facitets spalter (losning.css) gäller också
+       fortsättningen. */
+    const facit = $('.lobed', uppg).hasAttribute('data-facit') ? ' data-facit=""' : '';
+    forts.innerHTML = `${nr ? nr.outerHTML : ''}<div><p class="prtext lofortsatt">Fortsättning från föregående sida.</p><table class="lobed"${facit}><tbody></tbody></table></div>`;
     const dit = $('tbody', forts);
     /* Fortsättningen FÖRST i kopian, efter huvudet: de uppgifter som redan
        flyttats dit står efter den i nummerordning. */

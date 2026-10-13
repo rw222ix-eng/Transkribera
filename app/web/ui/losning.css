@@ -212,10 +212,32 @@ $\dfrac{…}$
 .lobedsvar .katex{-webkit-text-stroke:.035em currentColor}
 .lobedsteg{font-size:calc(15.5px * var(--fsk, 1));line-height:1.45}
 /* Facitets steg med förklaring (Rickard 2026-09-26): steget till vänster och
-   «← förklaring» till höger på samma höjd, i mörkgrått (blad-bygg.js facitRader). */
-.lobedsteg[data-not]{display:grid;grid-template-columns:minmax(0,1fr) 40%;column-gap:16px;align-items:baseline}
+   «← förklaring» till höger på samma höjd, i mörkgrått (blad-bygg.js facitRader).
+
+   TYDLIGARE (Rickard 2026-10-13). Förklaringen stod i en spalt på 40 % ute
+   vid kanten: ögat fick hoppa över ett tomrum från «t = 38» till «← dela
+   med 3», och en förklaring på fem ord bröts på två rader. Nu är den en
+   egen cell, och tabellkroppen ett rutnät med två spalter: stegens spalt är
+   så bred som uppgiftens bredaste steg med förklaring (`fit-content`, högst
+   64 %), och pilarna står direkt efter den, under varandra. Raderna är
+   kvar som <tr> (`display:contents`), så blad.js delaUppgift flyttar dem
+   mellan sidor som förut. Svaret och steg utan förklaring spänner över
+   båda spalterna; en spännande cell som korsar `1fr` räknas inte när
+   spalten mäts, så ett långt svar trycker inte pilarna åt höger. */
+.lobed[data-facit]{display:block;table-layout:auto}
+.lobed[data-facit]>tbody{display:grid;grid-template-columns:fit-content(64%) minmax(0,1fr);column-gap:calc(22px * var(--fsk, 1));align-items:baseline}
+.lobed[data-facit] tr{display:contents}
+.lobed[data-facit] td{padding:calc(2px * var(--fsk, 1)) 0;width:auto}
+.lobed[data-facit] td[colspan]{grid-column:1/-1}
+.lobed[data-facit] td.lofacitnot{padding-left:0;white-space:normal;text-align:left}
+.lobed[data-facit] td[data-figur]{align-self:center}
 .lofacitrad{min-width:0;overflow-wrap:anywhere}
-.lofacitnot{font-size:calc(13.5px * var(--fsk, 1));line-height:1.35;color:#3A3835}
+.lofacitnot{font-size:calc(14px * var(--fsk, 1));line-height:1.35;color:#3A3835}
+/* SVARET I EN RUTA (Rickard 2026-10-13: «svaret ska vara framhävt»). Fetstil
+   ensam försvann bland stegen. Ram och ljus botten syns också i gråskala på
+   skolans skrivare; texten i rutan är facits svar, orörd. */
+.lofacitsvar{display:inline-block;max-width:100%;box-sizing:border-box;padding:calc(3px * var(--fsk, 1)) calc(12px * var(--fsk, 1));border:1.5px solid #1F1E1C;border-radius:calc(6px * var(--fsk, 1));background:#F1EEE6;margin-bottom:calc(4px * var(--fsk, 1))}
+.lofacitsvar .lobedsvar{font-size:calc(16.5px * var(--fsk, 1))}
 
 /* `table` och inte grid, med flit: raderna ska kunna brytas mellan sidor när
    paginera delar en uppgift som är högre än arket (blad.js delaUppgift), och
