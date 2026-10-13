@@ -1810,3 +1810,25 @@ def test_gruppens_facit_kort_svar_och_talet_fore_orden():
     assert not exam_gen.ord_fore_talet("Rad 1: $10^{9}$")
     assert not exam_gen.ord_fore_talet("Köket: $1{,}5x$ ← lägg till 50 %")
     assert not exam_gen.lang_svarsrad("1: Nej, 2: Ja, 3: Ja")
+
+
+def test_stam_som_bara_ar_forklaringen_stryks_efter_raknarmarkeringen():
+    """Exam 256: stammen var BARA förklaringen när städningen körde."""
+    ex = {"hjalpmedel": "Utan räknare.",
+          "uppgifter": [{"text": "Uttrycken nedan har termer med en variabel.",
+                         "deluppgifter": [{"text": "Förenkla $6x + 3 - 2x$."},
+                                          {"text": "Förenkla $9a - a$."}]}]}
+    exam_gen.ovningspappret_stadat(ex, "gruppuppgift")
+    assert "termer" not in ex["uppgifter"][0]["text"]
+
+
+def test_eftersom_i_svarsraden_blir_steg():
+    gamla = ["$5a + 3$, eftersom $9a - a - 3a = 5a$ och $-4 + 7 = 3$."]
+    assert exam_gen.bladfacit_fynd(gamla[0], True)
+    assert exam_gen.bladfacit_fynd(gamla[0]) == []
+    assert exam_gen._bladfacit_enheter(
+        {"uppgifter": [{"losning": gamla[0]}]}, grupp=True) != []
+    nya = ["$5a + 3$", "$9a - a - 3a = 5a$ ← lägg ihop a-termerna",
+           "$-4 + 7 = 3$ ← lägg ihop talen"]
+    assert exam_gen.bladfacit_hinder(gamla, nya, True, grupp=True) == ""
+    assert "försvann" in exam_gen.bladfacit_hinder(gamla, nya[:2], True, grupp=True)

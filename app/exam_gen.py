@@ -3470,9 +3470,11 @@ def ovningspappret_stadat(exam: dict | None, profil: str) -> dict | None:
     # Idempotent; fynden har redan sagts i reparationsrundan.
     delfragor_till_deluppgifter(exam, profil)
     gruppens_delsvar(exam, profil)
-    stryk_forklarande_stam(exam, profil)
     korta_instruktion(exam, profil)
     satt_raknarmarkering(exam, profil)
+    # Efter markeringen: i exam 256 var stammen BARA förklaringen, och en tom
+    # stam får inte bli kvar. Med «Utan räknare.» först går den att stryka.
+    stryk_forklarande_stam(exam, profil)
     return exam
 
 
@@ -6894,9 +6896,17 @@ def _upprepar_svaret(rad: str, svar: str) -> bool:
 SVARSRAD_ORD = 8
 
 
+# «$5a + 3$, eftersom $9a - a - 3a = 5a$ och $-4 + 7 = 3$.» (exam 256, 1b och
+# 3a): svaret och räkningen på samma rad. Räkningen ska stå som steg.
+_EFTERSOM_RE = re.compile(r"\beftersom\b", re.I)
+
+
 def lang_svarsrad(rad: str) -> bool:
-    """Är svarsraden en hel mening snarare än ett svar?"""
+    """Är svarsraden en hel mening, eller bär den räkningen, snarare än
+    bara svaret?"""
     rad = exam_spec.elevrad_delar(rad)[0]
+    if _EFTERSOM_RE.search(rad) and _MATTE_RE.search(rad):
+        return True
     return (_notord(rad) > SVARSRAD_ORD and len(_DELSVAR_NR_RE.findall(rad)) < 2
             and not facitfigur.ar_figurrad(rad))
 
@@ -6928,9 +6938,9 @@ def bladfacit_fynd(losning: str, grupp: bool = False) -> list[str]:
                     "flera delsvar; skriv en första rad utan pil som samlar "
                     "alla delsvar")
     elif grupp and alla and lang_svarsrad(alla[0]):
-        fynd.append(f"svarsraden «{alla[0]}» är en hel mening: sätt "
-                    "ny_svarsrad och skriv bara talet eller uttrycket, "
-                    "meningen blir ett steg")
+        fynd.append(f"svarsraden «{alla[0]}» är en hel mening eller bär "
+                    "räkningen: sätt ny_svarsrad och skriv bara talet eller "
+                    "uttrycket, räkningen blir steg med pil")
     for r in alla[1:]:
         rad, notis = exam_spec.elevrad_delar(r)
         if grupp and ord_fore_talet(r):
@@ -6990,6 +7000,10 @@ def bladfacit_hinder(gamla: list[str], nya: list[str], ny_svarsrad: bool = False
     utan_pil = _matten([r for r in gamla_steg if not exam_spec.elevrad_delar(r)[1]
                         and _upprepar_svaret(r, nya[0])], noter=False)
     i_svaret = set(_matten(nya[:1], noter=False)) & set(utan_pil)
+    # Ny svarsrad: det gamla svaret står i den, inte bland stegen
+    # («$5a + 3$, eftersom …» blir «$5a + 3$» och två steg).
+    if gamla_steg is gamla:
+        i_svaret |= set(_matten(nya[:1], noter=False))
     borta = (set(_matten(gamla_steg, noter=False))
              - set(_matten(nya[1:], noter=True)) - i_svaret)
     if borta:
@@ -7022,9 +7036,10 @@ def bladfacit_haller(gamla: list[str], nya: list[str]) -> bool:
     return not bladfacit_hinder(gamla, nya)
 
 
-def _bladfacit_enheter(exam: dict, nummer: list[int] | None = None
-                       ) -> list[tuple[str, dict]]:
-    """[(id, mål)]: varje facit med minst ett steg. id är «3» eller «3b»."""
+def _bladfacit_enheter(exam: dict, nummer: list[int] | None = None,
+                       grupp: bool = False) -> list[tuple[str, dict]]:
+    """[(id, mål)]: varje facit med minst ett steg. id är «3» eller «3b».
+    På gruppuppgiften också en ensam svarsrad med fynd («$21$, eftersom …»)."""
     valda = set(nummer or [])
     ut = []
     for i, u in enumerate(exam.get("uppgifter") or [], 1):
@@ -7035,7 +7050,8 @@ def _bladfacit_enheter(exam: dict, nummer: list[int] | None = None
                                if isinstance(d, dict)]
         ut += [(nid, m) for nid, m in mal
                if len([r for r in str(m.get("losning") or "").split("\n")
-                       if r.strip()]) >= 2]
+                       if r.strip()]) >= 2
+               or (grupp and bladfacit_fynd(str(m.get("losning") or ""), True))]
     return ut
 
 
@@ -7075,10 +7091,12 @@ def build_bladfacit_prompt(exam: dict, enheter: list[tuple[str, dict]],
         "`ny_svarsrad`: true och skriv en ny första rad som svarar på hela "
         "frågan, kort, med det som redan står i raderna. De gamla raderna "
         "står kvar som steg. Är första raden redan svaret, sätt inget.\n"
-        "- Har posten `lang_svarsrad` är första raden en hel mening. Svaret "
-        "i rutan är bara talet eller uttrycket, högst åtta ord: sätt "
-        "`ny_svarsrad`: true, skriv det korta svaret («$0{,}75x$ cm») och "
-        "låt meningen stå kvar som ett steg, kortad.\n"
+        "- Har posten `lang_svarsrad` är första raden en hel mening eller "
+        "bär räkningen («$21$, eftersom $50 - 24 - 5 = 21$»). Svaret i "
+        "rutan är bara talet eller uttrycket, högst åtta ord: sätt "
+        "`ny_svarsrad`: true, skriv det korta svaret («$0{,}75x$ cm», "
+        "«$21$») och låt räkningen stå som steg, ett per rad med pil "
+        "(«$50 - 24 - 5 = 21$ ← dra bort 24 och 5»).\n"
         "- En rad UTAN pil som bara upprepar ett delsvar ur svarsraden "
         "stryks, också när den säger det med andra ord: «Rad 1: $10^{9}$» "
         "under «Rad 1: $10^{9}$, Rad 2: $2^{16}$», «Månadskort vid minst 4 "
@@ -7152,7 +7170,7 @@ def bladfacitpass(exam: dict, *, model: str, llm=None,
     vad som föll."""
     llm = llm or llm_client.generate
     grupp = profil == "gruppuppgift"
-    enheter = _bladfacit_enheter(exam, nummer)
+    enheter = _bladfacit_enheter(exam, nummer, grupp)
     if not enheter:
         return 0
     log_cb and log_cb("Kortar förklaringarna i facit …")
