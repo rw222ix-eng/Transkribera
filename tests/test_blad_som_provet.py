@@ -172,6 +172,34 @@ def test_bladfacit_haller_svaret_och_matten_orort():
         GAMLA, nya[:4] + ["$10A = 480$ ← $A$ är hela takets area"])
 
 
+def test_bladfacit_saknad_svarsrad_far_en_som_samlar_delsvaren():
+    # TE26A E-bladet dok 272, 13/10: rutan visade första delsvaret som svaret.
+    gamla = ["$4^{3} = 64$ ← $4 \\cdot 4 \\cdot 4 = 64$",
+             "$\\sqrt[3]{125} = 5$ ← kolla $5 \\cdot 5 \\cdot 5 = 125$"]
+    assert exam_gen.saknar_svarsrad(gamla)
+    assert any("svarsraden saknas" in f for f in exam_gen.bladfacit_fynd("\n".join(gamla)))
+    assert exam_gen.bladfacit_haller(gamla, ["$4^{3} = 64$, $\\sqrt[3]{125} = 5$"] + gamla)
+    # Ny matte i svarsraden, en pil på den, eller ett delsvar borta.
+    assert not exam_gen.bladfacit_haller(gamla, ["$4^{3} = 65$, $\\sqrt[3]{125} = 5$"] + gamla)
+    assert not exam_gen.bladfacit_haller(gamla, ["$4^{3} = 64$ ← räkna"] + gamla)
+    assert not exam_gen.bladfacit_haller(gamla, ["$4^{3} = 64$"] + gamla[:1])
+    # Kedjans början och slut får stå i svarsraden.
+    kedja = ["$100^{1/2} = \\sqrt{100} = 10$ ← halv är roten",
+             "$a^{3} \\cdot a^{4} = a^{3 + 4} = a^{7}$"]
+    assert exam_gen.bladfacit_haller(
+        kedja, ["$100^{1/2} = 10$, $a^{3} \\cdot a^{4} = a^{7}$"] + kedja)
+    # Numrerade delsvar.
+    delsvar = ["1: Nej. $\\sqrt{9 + 16} = \\sqrt{25} = 5$",
+               "2: Ja. $\\sqrt{4 \\cdot 25} = \\sqrt{100} = 10$"]
+    assert exam_gen.saknar_svarsrad(delsvar)
+    assert exam_gen.bladfacit_haller(delsvar, ["1: Nej, 2: Ja"] + delsvar)
+    # Ett vanligt facit och en figurrad först saknar inte svarsrad.
+    assert not exam_gen.saknar_svarsrad(GAMLA)
+    assert not exam_gen.saknar_svarsrad(["[tallinje start 3 hopp -9] ← minus åt vänster", "$-6$"])
+    prompt = exam_gen.build_bladfacit_prompt({}, [("1", {"losning": "\n".join(gamla)})])
+    assert '"saknar_svarsrad": true' in prompt
+
+
 def test_bladfacitpass_skriver_bara_det_som_haller():
     exam = {"uppgifter": [
         {"text": "Lös.", "losning": "\n".join(GAMLA)},
