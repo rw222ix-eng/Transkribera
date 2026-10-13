@@ -3389,8 +3389,35 @@ def ovningspappret_stadat(exam: dict | None, profil: str) -> dict | None:
     # (routes_exam._stadat_som_varvet), ser samma form som _validate gav.
     # Idempotent; fynden har redan sagts i reparationsrundan.
     delfragor_till_deluppgifter(exam, profil)
+    gruppens_delsvar(exam, profil)
     korta_instruktion(exam, profil)
     satt_raknarmarkering(exam, profil)
+    return exam
+
+
+# Formerna som redan ÄR deluppgiftens svarsplats: en tabell, rutor eller
+# flerval ska inte få en svarsrad under sig också.
+_DELENS_SVARSPLATS = ("svarsfalt", "tabell", "stegtabell", "svarsrutor",
+                      "alternativ")
+
+
+def gruppens_delsvar(exam: dict | None, profil: str) -> dict | None:
+    """En svarsrad under varje deluppgift på gruppuppgiften.
+
+    Gruppens ark ritar svarsplatsen ur deluppgiftens `svarsfalt` och annars en
+    enda «Svar:» under hela uppgiften (blad-bygg.js, där bara arbetsbladet har
+    en rad per del). Exam 253 (BA26B 14/10): «Förenkla» a) och b) som
+    rutinuppgift fick en rad för två svar. Bär stammen egna fält rörs inget:
+    då är det de raderna läraren ska se."""
+    if not isinstance(exam, dict) or profil != "gruppuppgift":
+        return exam
+    for u in exam.get("uppgifter") or []:
+        delar = u.get("deluppgifter") or []
+        if len(delar) < 2 or u.get("svarsfalt"):
+            continue
+        for d in delar:
+            if isinstance(d, dict) and not any(d.get(k) for k in _DELENS_SVARSPLATS):
+                d["svarsfalt"] = ["Svar"]
     return exam
 
 

@@ -461,9 +461,14 @@ window.BladBygg = (() => {
        sätter former.kropp(u) FÖRE \begin{deluppgift}. */
     const former = tabell(u.tabell, 'gutab') + stegtabell(u.stegtabell);
     /* Lösbladsraden en gång, sist, när någon deluppgift ska redovisas. */
+    /* Har varje deluppgift sin egen rad (exam_gen.gruppens_delsvar) är en
+       kortsvarsuppgift redan besvarad där. Exam 253 fick annars «Svar:» under
+       a), under b) och en tredje under båda. */
+    const varjeDelFalt = u.del && u.del.length
+      && u.del.every((_, k) => ((u.delfalt || [])[k] || []).length);
     const yta = perDel && u.del && u.del.length
       ? (u.del.some((_, k) => delUt(k) !== 'kort') ? `<p class="gulos">${losblad}</p>` : '')
-      : svarsyta(u);
+      : (varjeDelFalt && u.ut === 'kort' ? '' : svarsyta(u));
     /* BILDEN FÖRE DELUPPGIFTERNA, som på provet: stammen, bilden, a), b)
        (slutkollen 2026-09-25, 130 E7). Utan deluppgifter står den som förut
        efter frågan och före svarsraden. */

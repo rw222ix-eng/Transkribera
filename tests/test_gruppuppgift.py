@@ -231,6 +231,27 @@ def test_ifyllnadsraderna_ersatter_svarsraden():
     assert r"\svarsrad" not in forsta, "dubbel svarsplats på samma uppgift"
 
 
+def test_varje_deluppgift_far_sin_svarsrad():
+    """Exam 253: «Förenkla» a) och b) fick EN «Svar:» för två svar. Delar
+    utan egen svarsplats får «Svar»; tabellen och stammens fält rörs inte."""
+    ex = {"uppgifter": [
+        {"deluppgifter": [{"text": "a"}, {"text": "b", "svarsfalt": ["Kostnad"]},
+                          {"text": "c", "tabell": {"rubriker": [], "rader": []}}]},
+        {"svarsfalt": ["Svar a)", "Svar b)"], "deluppgifter": [{"text": "a"}, {"text": "b"}]},
+        {"deluppgifter": [{"text": "ensam"}]},
+    ]}
+    exam_gen.ovningspappret_stadat(ex, "gruppuppgift")
+    d = ex["uppgifter"][0]["deluppgifter"]
+    assert d[0]["svarsfalt"] == ["Svar"]
+    assert d[1]["svarsfalt"] == ["Kostnad"]
+    assert "svarsfalt" not in d[2]
+    assert all("svarsfalt" not in x for x in ex["uppgifter"][1]["deluppgifter"])
+    assert "svarsfalt" not in ex["uppgifter"][2]["deluppgifter"][0]
+    blad = {"uppgifter": [{"deluppgifter": [{"text": "a"}, {"text": "b"}]}]}
+    exam_gen.gruppens_delsvar(blad, "arbetsblad")
+    assert all("svarsfalt" not in x for x in blad["uppgifter"][0]["deluppgifter"])
+
+
 def test_nyckelfragan_star_i_instruktionsbandet():
     """Metodregeln som EN fråga, överst på pappret — det gruppen läser när de
     fastnar. Den är momentets, inte appens, så den kommer ur dokumentet."""
@@ -1546,9 +1567,11 @@ def test_kvallens_fall_riktad_omskrivning_overlever_att_balansen_glider():
     # …och fynden står kvar i svaret, som varningar läraren ser.
     assert {e["code"] for e in res["errors"]} == {"formagabalans",
                                                   "nivabalans"}
-    # Uppgifterna hon INTE pekade på är orörda (mål-låset).
+    # Uppgifterna hon INTE pekade på är orörda (mål-låset), bortsett från
+    # städningens svarsrader, som generering och omskrivning delar.
+    stadad = exam_gen.gruppens_delsvar(copy.deepcopy(fore), "gruppuppgift")
     assert res["exam"]["uppgifter"][2]["deluppgifter"] \
-        == fore["uppgifter"][2]["deluppgifter"]
+        == stadad["uppgifter"][2]["deluppgifter"]
 
 
 def test_omskrivningen_bar_raknarmarkeringen_in_i_den_nya_texten():
