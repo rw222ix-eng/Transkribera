@@ -1458,15 +1458,18 @@ window.BladBygg = (() => {
   }
   /* Svaret och resten av första raden. Delas vid första meningsslutet utanför
      matematiken («Nej. Talet framför …») eller vid «, eftersom» («$5$,
-     eftersom $5 \cdot 5 \cdot 5 = 125$»): det som följer är ett steg. */
+     eftersom $5 \cdot 5 \cdot 5 = 125$»): det som följer är ett steg.
+     Ett svar i fall («$0 < a < 1$: … . $a = 1$: lika. …», TE26A A-bladet dok
+     275, 13/10) delas aldrig vid punkten: rutan visade bara första fallet. */
   const ORSAK = /^,?\s+(eftersom|för att)\s+/;
   function delaSvaret(rad) {
     const s = rad.replace(/^\s*svar\s*:\s*/i, '');
-    let iMat = false;
+    let iMat = false, fall = false;
     for (let i = 0; i < s.length; i++) {
       if (s[i] === '$' && (i === 0 || s[i - 1] !== '\\')) { iMat = !iMat; continue; }
       if (iMat) continue;
-      if (s[i] === '.' && /^\s+[A-ZÅÄÖ0-9$]/.test(s.slice(i + 1)) && !FORKORTNING.test(s.slice(0, i))) {
+      if (s[i] === ':') fall = true;
+      if (s[i] === '.' && !fall && /^\s+[A-ZÅÄÖ0-9$]/.test(s.slice(i + 1)) && !FORKORTNING.test(s.slice(0, i))) {
         return [s.slice(0, i).trimEnd(), s.slice(i + 1).trim()];
       }
       const m = ORSAK.exec(s.slice(i));

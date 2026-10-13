@@ -1040,16 +1040,20 @@ def _losrader(text: str | None) -> list[str]:
 
 
 def _dela_svaret(rad: str) -> tuple[str, str]:
-    """Svaret och resten av första raden (resten är ett steg)."""
+    """Svaret och resten av första raden (resten är ett steg). Ett svar i
+    fall («$k \\neq 2$: … . $k = 2$: ingen lösning.») delas aldrig vid
+    punkten (dok 275, 13/10); spegel av blad-bygg.js delaSvaret."""
     s = re.sub(r"^\s*svar\s*:\s*", "", rad, flags=re.I)
-    i_mat = False
+    i_mat = fall = False
     for i, c in enumerate(s):
         if c == "$" and (i == 0 or s[i - 1] != "\\"):
             i_mat = not i_mat
             continue
         if i_mat:
             continue
-        if (c == "." and re.match(r"\s+[A-ZÅÄÖ0-9$]", s[i + 1:])
+        if c == ":":
+            fall = True
+        if (c == "." and not fall and re.match(r"\s+[A-ZÅÄÖ0-9$]", s[i + 1:])
                 and not _FORKORTNING.search(s[:i])):
             return s[:i].rstrip(), s[i + 1:].strip()
         m = _ORSAK_RE.match(s, i)

@@ -207,6 +207,14 @@ def test_bladfacit_saknad_svarsrad_far_en_som_samlar_delsvaren():
     assert exam_gen.bladfacit_haller(rad, ["Rad 1: $10^{9}$, Rad 2: $2^{16}$, Rad 3: $2^{15}$"] + rad)
 
 
+def test_svar_i_fall_delas_inte_vid_punkten():
+    # TE26A A-bladet dok 275, 13/10: rutan visade bara första fallet.
+    rad = "$0 < a < 1$: $\\sqrt{a}$ är större. $a = 1$: lika. $a > 1$: $a$ är större."
+    assert exam_latex._dela_svaret(rad) == (rad, "")
+    assert exam_latex._dela_svaret("Nej, Leo har fel. Papperet är tunt.") == (
+        "Nej, Leo har fel", "Papperet är tunt.")
+
+
 def test_bladfacit_hinder_sager_varfor_och_omtaget_far_veta():
     # NA26F 311/312, 13/10: omtaget fick bara fynden och upprepade felet.
     assert "ny matte $t\\vec{v}$" in exam_gen.bladfacit_hinder(
