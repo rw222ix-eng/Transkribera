@@ -207,6 +207,24 @@ def test_bladfacit_saknad_svarsrad_far_en_som_samlar_delsvaren():
     assert exam_gen.bladfacit_haller(rad, ["Rad 1: $10^{9}$, Rad 2: $2^{16}$, Rad 3: $2^{15}$"] + rad)
 
 
+def test_bladfacit_ny_svarsrad_nar_forsta_raden_inte_svarar():
+    # BA26B dok 333 uppg 1, TE26A dok 325 12b (13/10): halva svaret i rutan.
+    gamla = ["900 kr är priset för varje timme han gräver.",
+             "1 500 kr är en fast avgift, samma oavsett antal timmar."]
+    ny = ["900 kr är timpriset och 1 500 kr den fasta avgiften."] + gamla
+    assert exam_gen.bladfacit_hinder(gamla, ny).startswith("svaret")
+    assert exam_gen.bladfacit_hinder(gamla, ny, True) == ""
+    # Ett gammalt steg får inte försvinna, inte heller med ny svarsrad.
+    steg = ["Bara gränsen kan vara gemensam.", "$a + 3 = 1$ ger $a = -2$"]
+    assert "försvann" in exam_gen.bladfacit_hinder(steg, ["Bara $a = -2$ fungerar.", steg[0]], True)
+
+    def llm(_m, _p, **_k):
+        return json.dumps({"facit": [{"id": "1", "rader": ny, "ny_svarsrad": True}]})
+    exam = {"uppgifter": [{"text": "Vad betyder talen?", "losning": "\n".join(gamla)}]}
+    assert exam_gen.bladfacitpass(exam, model="m", llm=llm) == 1
+    assert exam["uppgifter"][0]["losning"].startswith("900 kr är timpriset")
+
+
 def test_svar_i_fall_delas_inte_vid_punkten():
     # TE26A A-bladet dok 275, 13/10: rutan visade bara första fallet.
     rad = "$0 < a < 1$: $\\sqrt{a}$ är större. $a = 1$: lika. $a > 1$: $a$ är större."

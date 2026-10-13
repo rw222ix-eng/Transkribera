@@ -6712,6 +6712,7 @@ BLADFACIT_SCHEMA = {
                 "properties": {
                     "id": {"type": "string"},
                     "rader": {"type": "array", "items": {"type": "string"}},
+                    "ny_svarsrad": {"type": "boolean"},
                 },
                 "required": ["id", "rader"],
             },
@@ -6817,16 +6818,19 @@ def bladfacit_fynd(losning: str) -> list[str]:
     return fynd
 
 
-def bladfacit_hinder(gamla: list[str], nya: list[str]) -> str:
+def bladfacit_hinder(gamla: list[str], nya: list[str], ny_svarsrad: bool = False) -> str:
     """Varför de nya raderna INTE får ersätta de gamla, tom sträng när de
     får. Svaret orört, samma matte (ingen ny, ingen borttagen ur räkneleden),
     samma figurrader, korta och konkreta förklaringar. Saknade facit svarsrad
     är den nya första raden en svarsrad (ingen pil) ur matten som redan stod
     i raderna, och alla gamla rader är steg. Orsaken går till omtaget och till
-    loggen: utan den upprepade modellen samma fel (NA26F 311/312, 13/10)."""
+    loggen: utan den upprepade modellen samma fel (NA26F 311/312, 13/10).
+    `ny_svarsrad`: modellen säger att första raden inte svarar på frågan
+    (ett resonemang, eller halva svaret: TE26A dok 325 12b, BA26B dok 333
+    uppg 1). Samma regler som när svarsraden saknas."""
     if not nya or not gamla:
         return "inga rader"
-    if saknar_svarsrad(gamla):
+    if ny_svarsrad or saknar_svarsrad(gamla):
         if exam_spec.elevrad_delar(nya[0])[1]:
             return f"svarsraden «{nya[0]}» har en pil"
         if saknar_svarsrad(nya):
@@ -6916,6 +6920,12 @@ def build_bladfacit_prompt(exam: dict, enheter: list[tuple[str, dict]],
         "(«$100^{1/2} = 10$» ur «$100^{1/2} = \\sqrt{100} = 10$»). Delsvar "
         "med ord före numret samlas likadant: «Rad 1: $10^{9}$, Rad 2: "
         "$2^{16}$».\n"
+        "- Svarar första raden INTE på uppgiftens fråga (den är ett steg i "
+        "ett resonemang, eller bara en del av svaret: «900 kr är priset per "
+        "timme.» när frågan gäller både 900 och 1 500), sätt "
+        "`ny_svarsrad`: true och skriv en ny första rad som svarar på hela "
+        "frågan, kort, med det som redan står i raderna. Alla gamla rader "
+        "står kvar som steg. Är första raden redan svaret, sätt inget.\n"
         "- Allt inom $…$ står kvar exakt som det är. Lägg aldrig till, ta "
         "aldrig bort och räkna aldrig om ett tal eller ett uttryck. Matten "
         "i räkneleden stannar i räkneleden. En förklaring får nämna en del "
@@ -6951,7 +6961,7 @@ def build_bladfacit_prompt(exam: dict, enheter: list[tuple[str, dict]],
     )
 
 
-def _bladfacit_anrop(exam, enheter, fynd, *, model, llm) -> dict[str, list[str]]:
+def _bladfacit_anrop(exam, enheter, fynd, *, model, llm) -> dict[str, dict]:
     try:
         raw = llm(
             model, build_bladfacit_prompt(exam, enheter, fynd),
@@ -6966,7 +6976,8 @@ def _bladfacit_anrop(exam, enheter, fynd, *, model, llm) -> dict[str, list[str]]
     except Exception:                               # noqa: BLE001
         return {}
     data = _json_objekt(raw)
-    return {str(p.get("id") or "").strip(): p.get("rader") or []
+    return {str(p.get("id") or "").strip(): {"rader": p.get("rader") or [],
+                                             "ny": p.get("ny_svarsrad") is True}
             for p in ((data or {}).get("facit") or []) if isinstance(p, dict)}
 
 
@@ -6988,8 +6999,10 @@ def bladfacitpass(exam: dict, *, model: str, llm=None,
         kvar, fynd = [], {}
         for nid, mal in enheter:
             gamla = [r for r in str(mal.get("losning") or "").split("\n") if r.strip()]
-            nya = [str(r).strip() for r in svar.get(nid) or [] if str(r).strip()]
-            hinder = bladfacit_hinder(gamla, nya) if nya != gamla else "inget ändrat"
+            post = svar.get(nid) or {}
+            nya = [str(r).strip() for r in post.get("rader") or [] if str(r).strip()]
+            hinder = (bladfacit_hinder(gamla, nya, post.get("ny", False))
+                      if nya != gamla else "inget ändrat")
             if not hinder:
                 mal["losning"] = "\n".join(nya)
                 skrivna += 1
