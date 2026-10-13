@@ -576,7 +576,10 @@ window.BladBygg = (() => {
 
   /* ── Facit till arbetsbladet ─────────────────────── */
   function arkfacit(v, uppgifter) {
-    if (v.typ === 'Arbetsblad') return bladfacit(v, uppgifter);
+    /* Gruppuppgiften har bladfacitets form sedan 2026-10-13 (Rickard: «på
+       samma sätt som arbetsbladen»): svaret i ruta, ett steg per rad med
+       «← förklaring». */
+    if (v.typ === 'Arbetsblad' || v.typ === 'Gruppuppgift') return bladfacit(v, uppgifter);
     /* Gruppuppgiftens facit behåller poängen och uppgiftsraden: det läses MED
        bedömningen. Arbetsbladets facit är bladfacit nedan. */
     const poang = u => v.typ === 'Arbetsblad' ? '' : `<span class="prvarde">${u.p} p</span>`;

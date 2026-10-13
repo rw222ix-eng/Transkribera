@@ -1,4 +1,4 @@
-"""Gör om facit på ett godkänt arbetsblad genom generatorns facitpass, utan att röra uppgifterna.
+"""Gör om facit på ett godkänt arbetsblad eller en gruppuppgift genom generatorns facitpass, utan att röra uppgifterna.
 
 Användning:
   python tools/bladfacit_omgor.py <dokument_id>            # torrkörning: visar facit före/efter och räknedomen
@@ -61,8 +61,8 @@ def main(dok: int, spara: bool) -> int:
                                 "order by version desc limit 1", (dok,)).fetchone()["data"])
     eid = v.get("provId")
     ex = conn.execute("select * from exams where id=?", (eid,)).fetchone()
-    if ex is None or v.get("typ") != "Arbetsblad":
-        sys.exit(f"dok {dok}: inget arbetsblad med exam ({eid})")
+    if ex is None or v.get("typ") not in ("Arbetsblad", "Gruppuppgift"):
+        sys.exit(f"dok {dok}: inget arbetsblad eller gruppuppgift med exam ({eid})")
     if v.get("provVersion") != ex["current_version"]:
         sys.exit(f"dok {dok}: dokumentet visar version {v.get('provVersion')} men exam {eid} "
                  f"står på {ex['current_version']}. Reda ut vilken som är publicerad först.")

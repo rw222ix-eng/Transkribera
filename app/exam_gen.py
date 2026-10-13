@@ -1457,6 +1457,81 @@ FORLAGA_GRUPP = (
 )
 
 
+# ── PROVFORMEN (Rickard 2026-10-13, BA26B exam 253) ─────────────────────
+# «Uppgifterna 2, 3 och 4 är otydligt skrivna … Gruppuppgiften ska bli fyra
+# separata, provlika uppgifter, i stället för en enda sak som blir successivt
+# svårare. Den ska se ut som på mina NA-prov.» Och sedan: «prov i allmänhet,
+# speciellt de senaste». Formen ersätter mönstret ur exam 17 (FORLAGA_GRUPP:
+# tabellingången, felsökningstabellen, ställningen i ledda deluppgifter).
+# Språket hämtas ur lärarens senaste godkända prov (provsprak_block), som
+# routes_exam slår upp; utan dem står regeln ensam.
+PROVFORM_GRUPP = (
+    "PROVFORMEN (lärarens dom 2026-10-13): gruppuppgiften är FYRA SEPARATA "
+    "UPPGIFTER SKRIVNA SOM PÅ LÄRARENS PROV. Varje uppgift står på egna ben "
+    "med eget sammanhang och egna tal; ingen uppgift bygger vidare på en "
+    "annan, och pappret är inte en sak som blir svårare steg för steg.\n"
+    "- SPRÅKET ÄR PROVETS. En till fyra korta meningar. Först fakta, en sak "
+    "per mening och gärna en mening per rad («Varje säck kostar 80 kr.»), "
+    "sist frågan som en rak uppmaning eller fråga: «Förenkla … så långt som "
+    "möjligt.», «Beräkna …», «Skriv ett uttryck för …», «Hur mycket …?». Ett "
+    "förnamn får bära situationen. Inget «Ni», inga arbetsformer, inga tips "
+    "och ingen förklaring av vad uppgiften övar.\n"
+    "- EN UPPGIFT, EN FRÅGA. MINST TVÅ av de fyra uppgifterna är en enda "
+    "fråga utan deluppgifter. Deluppgifter bara när provet skulle ha dem: "
+    "högst två, i samma sammanhang, där a) är den enklare frågan och b) "
+    "bygger på den. En ren räkneuppgift utan sammanhang («Förenkla $5x + 8 "
+    "- x - 3$.») är lika provlik som en med sammanhang.\n"
+    "- BARA LEKTIONENS INNEHÅLL. Uppgifterna prövar det lektionens sidor går "
+    "igenom och det klassen redan haft, aldrig en metod som kommer senare i "
+    "kapitlet (parenteser att multiplicera in, ekvationer), även om provet "
+    "har den.\n"
+    "- NIVÅN SOM PÅ PROVET: uppgift 1 och 2 på E-nivå, uppgift 3 på C-nivå, "
+    "uppgift 4 på A-nivå. Fyra olika frågesätt: inte fyra uppgifter av samma "
+    "sort med nya tal.\n"
+    "- STORHETERNA ÄR TYDLIGA. Säg vad bokstaven står för och i vilken enhet, "
+    "och låt alla termer i ett uttryck vara samma sorts storhet (kr + kr, m + "
+    "m). En mening som måste läsas två gånger är fel skriven.\n"
+    "- INGA TABELLINGÅNGAR, INGA FELSÖKNINGSTABELLER med en påhittad elevs "
+    "lösning och inga svarsrutor att kryssa, om inte provets egna uppgifter "
+    "har den formen.\n"
+    "- HJÄLPMEDLET per uppgift i \"hjalpmedel\", och uppgifterna heter sina "
+    "SIFFROR där. Skriv aldrig uppgiftens nummer eller deluppgiftens a)/b) i "
+    "texten: mallen sätter dem.\n"
+    "- BESLUTEN PÅ PAPPRET, RÄKNINGEN PÅ LÖSBLAD: ge den fråga som ska "
+    "besvaras ett kort, namngivet \"svarsfalt\" ([\"Förenklat uttryck\"], "
+    "[\"Kostnad\"]). Har uppgiften deluppgifter sitter fältet på "
+    "deluppgiften.\n"
+    "- NYCKELFRÅGAN i fältet \"nyckelfraga\": momentets ena avgörande fråga, "
+    "högst en rad («Vilka termer får slås ihop?»).\n")
+
+
+def provsprak_block(prov: list[dict] | None, n: int = 10) -> str:
+    """Upp till `n` uppgiftstexter ur lärarens senaste godkända prov, som
+    språkförebild för gruppuppgiften (PROVFORM_GRUPP). Bara texterna: inga
+    lösningar, poäng eller figurer. Tom lista ger tom sträng."""
+    rader: list[str] = []
+    for ex in prov or []:
+        for u in (ex.get("uppgifter") or []) if isinstance(ex, dict) else []:
+            if len(rader) >= n:
+                break
+            if not isinstance(u, dict) or u.get("figur") or u.get("alternativ"):
+                continue
+            text = " ".join(str(u.get("text") or "").split())
+            delar = [" ".join(str(d.get("text") or "").split())
+                     for d in u.get("deluppgifter") or [] if isinstance(d, dict)]
+            if not text or len(text) + sum(map(len, delar)) > 420:
+                continue
+            post = {"text": text}
+            if delar:
+                post["deluppgifter"] = delar
+            rader.append(json.dumps(post, ensure_ascii=False))
+    if not rader:
+        return ""
+    return ("SÅ HÄR LÅTER LÄRARENS SENASTE PROV. Skriv uppgifterna med samma "
+            "språk, meningslängd och form. Aldrig samma tal, sammanhang eller "
+            "formuleringar:\n" + "\n".join(rader) + "\n")
+
+
 # ── TEXT → EKVATION ──────────────────────────────────────────────────────
 #
 # LÄRARENS ORD 2026-09-21, om uppgift 3 på gruppuppgiften till TE26A
@@ -3458,7 +3533,8 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
                  grupp: dict | None = None, riktat: str = "",
                  skeleton: list[dict] | None = None,
                  illustration: bool = True,
-                 bokuppgifter: list[dict] | None = None) -> str:
+                 bokuppgifter: list[dict] | None = None,
+                 provsprak: str = "") -> str:
     """Genereringsprompt: instruktion + valda innehållspunkter +
     minneskontext + tidigare provs teman (undvik upprepning som default).
     `profil` växlar mellan prov och arbetsblad (Fas 5). `utfall` är ett rättat
@@ -3650,54 +3726,18 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             f"EXAKT {antal} uppgifter (varken fler eller färre). {n} elever per "
             f"grupp arbetar tillsammans i {min_} minuter. {lofte}\n"
             f"{ORIGINALITET_UR_BOKEN}"
-            # STEGRINGEN (Del F, lärarens första dom). Här stod förut att
-            # uppgifterna är «fyra ingångar till samma sak, inte en trappa, så
-            # de behöver inte bli svårare nedåt». Lärarens skarpa lektion sa
-            # emot: stegringen var det som fungerade. ALLA klarade den första
-            # uppgiften, bara några få grupper den sista — men någon klarade
-            # den. Det är målprofilen, och den vinner över formuleringen.
-            #
-            # Kravet ligger i PROMPTEN, inte i valideringen: PROFILER har
-            # fortfarande stigande=False för gruppuppgift. Ordningsvalidatorn
-            # mäter svårighet i poängtripplar, och en gruppuppgift på fyra
-            # uppgifter har för få steg för att det måttet ska säga något om
-            # just den här stegringen. Mät i kassetterna innan den slås på.
-            "Uppgifterna ska KRÄVA att man pratar. Formen bär samtalet — en "
-            "uppgift som är öppen, som kan angripas "
-            "på flera sätt eller som ber gruppen enas om ett svar kräver "
-            "samtal oavsett vilken förmåga den prövar. Kravet ligger alltså "
-            "INTE på förmågefördelningen: en begrepps- eller procedurpoäng är "
-            "fullt legitim här när den är ingången till resonemanget.\n"
+            # PROVFORMEN (Rickard 2026-10-13) ersätter stegringen, ställningen,
+            # fallgropstabellen och mönstret ur exam 17: fyra separata
+            # uppgifter skrivna som på lärarens prov, med språket ur hans
+            # senaste godkända prov (provsprak). Se PROVFORM_GRUPP.
             "Balansen räknas på de poängbärande enheterna, alltså på "
             "DELUPPGIFTERNA när uppgiften har sådana. Sätter du egen formaga "
             "på en deluppgift är det den som räknas, inte förälderns — så "
             "deluppgifterna ska ÄRVA uppgiftens förmåga (utelämna formaga på "
             "dem). Annars står förmågan i uppgiften men bär noll poäng.\n"
-            f"{FALLGROPAR_GRUPP}\n"
-            "Bygg in ställningen i uppgiften: en uppgift som ska diskuteras "
-            "delas i deluppgifter som leder samtalet framåt (undersök, "
-            "formulera, motivera). MINST EN av uppgifterna ska ändå vara en "
-            "rutinuppgift där endast svar krävs — utan den saknar upplägget "
-            "ingången för den som inte kommer igång, och E-tyngden blir för "
-            "stor.\n"
-            "STEGRING: ordna uppgifterna så att den FÖRSTA är ingången varenda "
-            "grupp klarar och den SISTA utmanar de starkaste. Målet är mätt i "
-            "en riktig klass: alla klarar den första, och några få grupper — "
-            "men inte noll — klarar den sista. Är den sista så svår att ingen "
-            "kommer i mål är den fel skriven, och är den lika lätt som den "
-            "första finns ingen stegring.\n"
-            # Begripligheten står DIREKT EFTER stegringen ovan, och det är
-            # ingen slump: den säger var TVÅAN ligger i just den stegringen,
-            # och läses den någon annanstans blir den en allmän uppmaning att
-            # skriva enkelt. Lärarens dom 2026-09-09 gäller precis den platsen.
-            f"{BEGRIPLIGHET_GRUPP}\n"
-            # Förebilden står FÖRE mönstret, av samma skäl som nivåstegen står
-            # efter det: mönstret ger FORMEN, boken ger SORTEN, och den
-            # ordningen är hela lagningen av exam 75. Läses boken efteråt blir
-            # den en efterhandskontroll av ett papper som redan valt sina
-            # uppgifter ur förlagan.
             f"{build_forebild(bokuppgifter)}\n"
-            f"{FORLAGA_GRUPP}\n"
+            f"{PROVFORM_GRUPP}"
+            f"{provsprak}"
             # Ekvationsregeln står EFTER mönstret av samma skäl som nivån
             # nedan: mönstret ger formerna, och den här raden säger vilken av
             # dem momentet kräver. Tom sträng på allt som inte är ekvationer.
@@ -11731,16 +11771,15 @@ def _infor_grupp(valda: list[dict], rader: list[str], antal: int,
         # inte jämnt fördelade som på bladets tolv uppgifter.
         uppdrag = (
             f"FÖRDELA gruppuppgiftens {antal} uppgifter över sorterna ovan, en "
-            "sort per uppgift så långt de räcker, i gruppuppgiftens stegring: "
-            "den lättaste sorten först, den tyngsta sist. Är sorterna fler än "
-            f"{antal} väljer du de som bäst bär ett samtal i gruppen. Är de "
-            "färre övar flera uppgifter samma sort, och då stiger de i "
-            "svårighet.\n")
+            "sort per uppgift så långt de räcker, i provets ordning: E-sorterna "
+            "först, den tyngsta sist. Är sorterna fler än "
+            f"{antal} väljer du de som ligger närmast lektionens sidor. Är de "
+            "färre övar flera uppgifter samma sort med olika frågesätt.\n")
     else:
         uppdrag = (
-            f"ALLA gruppuppgiftens {antal} uppgifter ska öva sorten ovan, i "
-            "gruppuppgiftens stegring: den första är ingången varje grupp "
-            "klarar, den sista kräver lika mycket som provets uppgift.\n")
+            f"ALLA gruppuppgiftens {antal} uppgifter ska öva sorten ovan, som "
+            "fyra separata provuppgifter med olika frågesätt, från E-nivå till "
+            "provets egen nivå.\n")
     return (
         "DEN HÄR GRUPPUPPGIFTEN ÖVAR INFÖR ETT PROV. Provet är redan skrivet, "
         "eleverna har inte sett det, och de ska inte se det här heller. Nedan "
@@ -11760,10 +11799,9 @@ def _infor_grupp(valda: list[dict], rader: list[str], antal: int,
         "klassen fått provet i förväg.\n"
         + _andra_namn_och_sammanhang(undvik, "gruppuppgift")
         + uppdrag +
-        "DU FÅR GÖRA INGÅNGEN LÄTTARE. Ett förberedande steg före den svåra "
-        "frågan hör hemma i en gruppuppgift även när provets uppgift frågar "
-        "rakt ut, och det står som en egen deluppgift med egen fråga. Metoden "
-        "som ska övas får däremot aldrig bytas mot en enklare.\n"
+        # Provformen (Rickard 2026-10-13): inga ledda förberedande steg,
+        # uppgifterna är provuppgifter (PROVFORM_GRUPP).
+        "Metoden som ska övas får aldrig bytas mot en enklare.\n"
         + (INFOR_RAKNARE_GRUPP if any(s["del"] for s in valda) else "")
         + INFOR_BILD_GRUPP +
         # Samma stavning som bladets rad: orden \"drillar\" i citattecken
@@ -14949,6 +14987,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                   infor_nummer: list[int] | None = None,
                   infor_ram: dict | None = None,
                   lektionsmal: list[dict] | None = None,
+                  senaste_prov: list[dict] | None = None,
                   llm=llm_client.generate, max_rounds: int = MAX_ROUNDS,
                   log_cb: Callable[[str], None] | None = None,
                   steg_cb: Callable[[str], None] | None = None) -> dict:
@@ -15232,7 +15271,9 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                           profil=profil, koder=koder, grupp=grupp,
                           riktat=riktat, skeleton=skeleton,
                           illustration=illustration,
-                          bokuppgifter=bokuppgifter)
+                          bokuppgifter=bokuppgifter,
+                          provsprak=(provsprak_block(senaste_prov)
+                                     if profil == "gruppuppgift" else ""))
     exam = _llm_round(prompt, model, llm, antal, grammatik, koder,
                       profil=profil, log_cb=log_cb)
     rounds = 1
@@ -15525,7 +15566,8 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # ── FACITPASSET PÅ ARBETSBLADET (Rickard 2026-10-13) ──
     # Sist, på det papper läraren får: bara orden i facit kortas, svaret och
     # matten prövas orörda (bladfacit_haller).
-    if profil == "arbetsblad" and res["exam"] is not None:
+    # Gruppuppgiften också sedan 2026-10-13 (samma facitform).
+    if profil in ("arbetsblad", "gruppuppgift") and res["exam"] is not None:
         bladfacitpass(res["exam"], model=model, llm=llm, log_cb=log_cb)
     return flagga(res)
 
@@ -16076,7 +16118,7 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
             bedomningspass(res["exam"], model=model, llm=llm, nummer=nummer,
                            log_cb=log_cb)
     # Arbetsbladets facitpass på de uppgifter varvet ändrade, av samma skäl.
-    if (profil == "arbetsblad" and res["exam"] is not None
+    if (profil in ("arbetsblad", "gruppuppgift") and res["exam"] is not None
             and res["exam"] is not exam):
         nummer = andrade_uppgifter(exam, res["exam"])
         if nummer:

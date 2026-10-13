@@ -621,7 +621,7 @@ def test_gruppuppgiftens_block_talar_om_gruppuppgiften():
     block = _grupp_block([1, 3, 5], exam_gen.provets_namn_och_sammanhang(prov))
     assert block.startswith("DEN HÄR GRUPPUPPGIFTEN ÖVAR INFÖR ETT PROV")
     assert "PROVET FÖRST, BOKEN I ANDRA HAND" in block
-    assert "stegring" in block and "FÖRDELA gruppuppgiftens 4" in block
+    assert "provets ordning" in block and "FÖRDELA gruppuppgiftens 4" in block
     # Samma grundregler som bladets: sorter, andra namn, fältet.
     assert "SAMMA SORT, ALDRIG SAMMA UPPGIFT" in block
     assert "Noah och Ali" in block

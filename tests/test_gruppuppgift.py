@@ -511,7 +511,8 @@ def test_separat_facit_tar_lararens_sida_ur_gruppens_ark(client, monkeypatch):
 
 
 def test_prompten_talar_om_gruppen(monkeypatch):
-    """Modellen ska veta att fyra elever ska PRATA sig igenom pappret."""
+    """Modellen ska veta hur många som arbetar och hur länge, och att
+    uppgifterna är provuppgifter (Rickard 2026-10-13)."""
     p = exam_gen.build_prompt(
         "Matematik, nivå 2c", "NA25", ["Derivator"], antal=4,
         profil="gruppuppgift",
@@ -519,15 +520,10 @@ def test_prompten_talar_om_gruppen(monkeypatch):
     assert "GRUPPUPPGIFT" in p
     assert "4 elever per grupp" in p and "30 minuter" in p
     assert "sätts upp i salen" in p
-    # Kravet på samtal ligger på FORMEN, inte på förmågefördelningen. Raden löd
-    # förut «inte rutinräkning som en elev gör snabbast själv» och gav
-    # gruppuppgiften egna, sneda förmågemål; med lärarens jämnhetskrav (Del D)
-    # är en begrepps- eller procedurpoäng legitim också här, när den är
-    # ingången till resonemanget.
-    assert "KRÄVA att man pratar" in p
-    assert "flera sätt" in p and "ingången till resonemanget" in p
-    # Ställningen ligger i uppgiften, inte i en separat mall.
-    assert "deluppgifter som leder samtalet" in p
+    # Provformen ersatte samtalsformen och ställningen i ledda deluppgifter.
+    assert "FYRA SEPARATA UPPGIFTER SKRIVNA SOM PÅ LÄRARENS PROV" in p
+    assert "deluppgifter som leder samtalet" not in p
+    assert "KRÄVA att man pratar" not in p
 
 
 # ─────────────────────── förlagan som mönster (Del F, omskriven) ────────────
@@ -539,43 +535,36 @@ def test_prompten_talar_om_gruppen(monkeypatch):
 # DEN ska bära all framtida generering. Hennes anteckningar på vägen är
 # kravlistan, och den här sviten är kravlistan i testform.
 
-def test_prompten_bar_forlagans_monster():
+def test_prompten_bar_provformen():
+    """Rickard 2026-10-13 (exam 253): «fyra separata, provlika uppgifter, i
+    stället för en enda sak som blir successivt svårare». Mönstret ur exam 17
+    (tabellingången, felsökningstabellen) är ersatt, inte kompletterat."""
     p = exam_gen.build_prompt(
         "Matematik, nivå 1c", "NA25", ["Trigonometri"], antal=4,
         profil="gruppuppgift", grupp={"elever": 3, "langd_min": 45,
                                       "redovisning": "muntligt"})
-    assert "MÖNSTRET" in p
-    assert "nyckelfraga" in p          # fältet, inte bara idén
-    assert "BRYTA mönstret" in p       # en fråga som inte går att gissa
-    assert "svarsfalt" in p            # besluten skrivs på pappret
-    assert "lösblad" in p              # räkningen görs inte där
-    # Dom: kryssrutorna behövdes inte, och det ska stå UTTRYCKLIGEN — annars
-    # griper modellen efter svarsrutor, som finns i schemat.
-    assert "INGA TYP-KRYSSRUTOR" in p
-    # Den gamla förlagan är ersatt, inte kompletterad. Står båda kvar drar de
-    # åt olika håll: den ena vill ha situationer ur skilda världar, den andra
-    # ur klassens egen.
+    assert "PROVFORMEN" in p
+    assert "nyckelfraga" in p
+    assert "svarsfalt" in p and "lösblad" in p
+    assert "INGA TABELLINGÅNGAR, INGA FELSÖKNINGSTABELLER" in p
+    assert "uppgift 1 och 2 på E-nivå, uppgift 3 på C-nivå" in p
+    # Andra varvet samma kväll: alla fyra fick deluppgifter och parenteser
+    # som klassen inte haft (exam 254).
+    assert "MINST TVÅ av de fyra uppgifterna är en enda fråga" in p
+    assert "BARA LEKTIONENS INNEHÅLL" in p
+    assert "MÖNSTRET" not in p
+    assert "BRYTA mönstret" not in p
     assert "cosinussatsen" not in p
-    assert "potensekvation" not in p.lower()
-
-
 def test_prompten_bar_lararens_egna_domar_om_text_tal_och_kontext():
-    """De fyra anteckningar hon skrev om och om igen: kortare text, mindre
-    tal, heltalssvar och en kontext som angår klassen."""
+    """Kort text i provets språk, tydliga storheter och heltalssvar på 1a."""
     p = exam_gen.build_prompt(
         "Matematik, nivå 1a", "BA26B", ["Räkneordning"], antal=4,
         profil="gruppuppgift", grupp={"elever": 3, "langd_min": 50,
                                       "redovisning": "skriftligt"})
-    assert "KORT UPPGIFTSTEXT" in p and "läsas två gånger" in p
-    assert "SMÅ TAL, ENKLA MELLANLED" in p
+    assert "SPRÅKET ÄR PROVETS" in p and "läsas två gånger" in p
+    assert "STORHETERNA ÄR TYDLIGA" in p
     assert "SVARET är ett heltal" in p
-    assert "KONTEXTEN ÄR KLASSENS" in p and "skolprojekt" in p
-    # Fyra uppgifter är formen — hon strök ner från sex.
-    assert "FYRA UPPGIFTER" in p
-    # Arbetsgången bor i rutan, inte i uppgiften.
-    assert "står i instruktionsrutan, inte i uppgiften" in p
-
-
+    assert "Inget «Ni», inga arbetsformer, inga tips" in p
 def test_instruktionsrutan_far_momentets_minnesregel():
     """«Prioriteringsreglerna ska stå kort här i den här instruktionsrutan» —
     skrivet tre gånger samma natt. Rutan är det gruppen läser när den fastnar."""
@@ -591,32 +580,27 @@ def test_instruktionsrutan_far_momentets_minnesregel():
     assert exam_spec.GRUPP_GENOMGANG in p
 
 
-def test_utdragen_ur_pappret_ar_med_och_ar_giltig_json():
-    """Exemplaret är UTDRAG ur hennes papper, inte hela dokumentet
-    (promptbudget). Utdragen byggs ur dictar och json.dumpas — annars kan ett
-    LaTeX-snedstreck bli fel i en handskriven sträng och exemplet lära ut en
-    form appen inte kan läsa."""
-    p = exam_gen.build_prompt(
-        "Matematik, nivå 1a", "BA26B", ["Räkneordning"], antal=4,
-        profil="gruppuppgift", grupp={"elever": 3, "langd_min": 50,
-                                      "redovisning": "skriftligt"})
-    assert len(exam_gen._UTDRAG_GRUPP) == 4
-    for u in exam_gen._UTDRAG_GRUPP:
-        rad = json.dumps(u, ensure_ascii=False)
-        assert rad in p
-        assert json.loads(rad) == u
-    # De fyra formerna hon behöll: ingången, begreppen, felsökningen, formeln.
-    former = [set(u) for u in exam_gen._UTDRAG_GRUPP]
-    assert any("tabell" in f for f in former)
-    assert any("stegtabell" in f for f in former)
-    assert all("svarsfalt" in f or "deluppgifter" in f for f in former)
-    # Påhittade förnamn är tillåtna sedan 2026-08-20 (lärarens beslut) — men
-    # gränsen mot RIKTIGA elevnamn består, och SYSTEM ska säga båda halvorna.
+def test_provets_sprak_gar_in_bara_nar_det_finns():
+    """Språket hämtas ur lärarens senaste godkända prov (routes_exam
+    senaste_godkanda_prov). Bara texterna går in: inga lösningar och inga
+    figuruppgifter."""
+    prov = [{"uppgifter": [
+        {"text": "Förenkla $3x + 2x - 4$ så långt som möjligt.", "losning": "$5x - 4$"},
+        {"text": "Saga köper plankor.", "deluppgifter": [
+            {"text": "Hur mycket kostar 4 plankor?"}]},
+        {"text": "Grafen visar f.", "figur": {"typ": "graf"}},
+    ]}]
+    blk = exam_gen.provsprak_block(prov)
+    assert "SÅ HÄR LÅTER LÄRARENS SENASTE PROV" in blk
+    assert "Förenkla $3x + 2x - 4$" in blk and "Hur mycket kostar 4 plankor?" in blk
+    assert "$5x - 4$" not in blk and "Grafen visar" not in blk
+    assert exam_gen.provsprak_block([]) == ""
+    p = _grupprompt(provsprak=blk)
+    assert blk in p
+    assert "SÅ HÄR LÅTER" not in _grupprompt()
+    # Påhittade förnamn är tillåtna — men gränsen mot RIKTIGA elevnamn består.
     assert "påhittade förnamn är välkomna" in exam_gen.SYSTEM.lower()
     assert "riktiga elever" in exam_gen.SYSTEM.lower()
-    assert "En elev har beräknat" in p
-
-
 def test_nivaskalningen_skiljer_byggettan_fran_naturtvaan():
     """«Olika nivåer för olika elever»: samma mall, men talen och uttrycken
     skalas ur KURSEN. Utan blocket ärver 2c byggettans mått, för utdragen är
@@ -666,7 +650,7 @@ def test_en_okand_kurs_faller_tillbaka_pa_matten_i_monstret():
         "Naturkunskap", "NA25", ["Enheter"], antal=4, profil="gruppuppgift",
         grupp={"elever": 3, "langd_min": 45, "redovisning": "muntligt"})
     assert "kursnamnet säger inte vilken nivå det gäller" in p
-    assert "MÖNSTRET" in p
+    assert "PROVFORMEN" in p
 
 
 def test_monstret_ror_inte_provet_eller_arbetsbladet():
@@ -699,18 +683,16 @@ def test_uppdragsraden_som_kassetterna_matchar_pa_star_kvar():
     assert "vilken nivå den faktiskt ligger på" not in p
 
 
-def test_prompten_ber_om_stegringen_som_fungerade():
-    """Dom 1: alla klarade den första uppgiften, några få den sista — men
-    någon klarade den. Här stod förut motsatsen («inte en trappa»)."""
+def test_prompten_ber_om_provets_nivaordning():
+    """Stegringen i ledda steg är ersatt av provets ordning: E, E, C, A, med
+    fyra olika frågesätt (Rickard 2026-10-13)."""
     p = exam_gen.build_prompt(
         "Matematik, nivå 3c", "NA25", ["Logaritmer"], antal=4,
         profil="gruppuppgift", grupp={"elever": 3, "langd_min": 45,
                                       "redovisning": "muntligt"})
-    assert "STEGRING" in p
-    assert "men inte noll" in p
-    assert "inte en trappa" not in p
-
-
+    assert "NIVÅN SOM PÅ PROVET" in p
+    assert "Fyra olika frågesätt" in p
+    assert "STEGRING:" not in p
 def test_stegringen_ar_promptstyrd_inte_validerad():
     """Beslutspunkt, medvetet dokumenterad: ordningsvalidatorn mäter svårighet
     i poängtripplar över dokumentets halvor, och fyra uppgifter är för få steg
@@ -776,17 +758,11 @@ def test_utan_bok_lamnas_forebilden_tom_och_sorten_kommer_ur_punkten():
     assert "hitta aldrig på ett boknummer" in p
 
 
-def test_monstret_ger_formen_och_boken_ger_sorten():
-    """Kärnan i lagningen av exam 75: formeluppgiften ($P = 3 + 2n$) kom ur
-    mönstret och skrevs på ett prefixuppslag utan en enda formel."""
+def test_provformen_ger_formen_och_boken_ger_sorten():
+    """Förebilderna ur boken står kvar före provformen: boken ger sorten,
+    provet språket."""
     p = _grupprompt(bokuppgifter=_BOKUPPG)
-    assert "FORMEN HÄRIFRÅN, SORTEN UR BOKEN" in p
-    assert "DEN HÄR FORMEN SKRIVS BARA NÄR BOKENS SIDOR HAR FORMLER" in p
-    assert "annars vinner boken" in p
-    # Och lärarens egen mening om just den bytesaffären.
-    assert "teckna ett uttryck har inget med överslagsberäkning att göra" in p
-
-
+    assert p.index("BOKENS UPPGIFTER PÅ LÄRARENS SIDOR") < p.index("PROVFORMEN")
 def test_forebilden_star_i_gruppuppgiftens_grammatik_men_inte_i_provets():
     """Fältet kostar en kopia per uppgift i ett schema som ligger nära sitt tak
     (claude_code.SCHEMA_TAK_EXE) — och bara gruppuppgiftens uppdrag BER om

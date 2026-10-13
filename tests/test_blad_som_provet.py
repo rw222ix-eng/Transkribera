@@ -98,7 +98,7 @@ def test_latexfacit_i_bedomningens_form():
 def test_skarmens_facit_ar_speglingen():
     js = (UI / "blad-bygg.js").read_text(encoding="utf-8")
     assert "function bladfacit(" in js and "function facitGrupper(" in js
-    assert "if (v.typ === 'Arbetsblad') return bladfacit(v, uppgifter);" in js
+    assert "if (v.typ === 'Arbetsblad' || v.typ === 'Gruppuppgift') return bladfacit(v, uppgifter);" in js
     css = (UI / "losning.css").read_text(encoding="utf-8")
     assert '[data-form="fa"] .pruppg' in css and ".lobedsteg" in css
 

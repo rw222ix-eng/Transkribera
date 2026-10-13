@@ -75,6 +75,30 @@ _STEG_GODKANN = [
 _LLM_BUSY = {"error": gpu_arbiter.LLM_UPPTAGET, "kod": "upptaget"}
 
 
+
+def senaste_godkanda_prov(db_file, n: int = 3, forst=None) -> list[dict]:
+    """De `n` senast ändrade godkända proven, som exam_json. Gruppuppgiften
+    skrivs i deras språk (Rickard 2026-10-13: «prov i allmänhet, speciellt
+    de senaste»). `forst` är provet gruppuppgiften övar inför: det står
+    först, för det är klassens eget prov."""
+    conn = db.connect(db_file)
+    try:
+        rader = conn.execute(
+            "SELECT v.exam_json FROM exams e JOIN exam_versions v "
+            "ON v.id = e.current_version WHERE e.typ = 'prov' "
+            "AND e.status = 'godkänt' "
+            "ORDER BY (e.id = ?) DESC, e.updated_at DESC LIMIT ?",
+            (int(forst) if str(forst or "").isdigit() else -1, n)).fetchall()
+    finally:
+        conn.close()
+    ut = []
+    for r in rader:
+        try:
+            ut.append(json.loads(r[0]))
+        except (TypeError, ValueError):
+            continue
+    return ut
+
 def _safe_component(raw: str, fallback: str) -> str:
     name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", raw or "").strip().strip(".")
     return name[:80] or fallback
@@ -2411,6 +2435,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     avsnitt=avsnitt, delmoment=delmoment,
                     forbjudna=forbjudna, bokuppgifter=bokuppgifter,
                     lektionsmal=lektionsmal,
+                    # Gruppuppgiftens språk ur lärarens senaste prov
+                    # (Rickard 2026-10-13, exam_gen.PROVFORM_GRUPP).
+                    senaste_prov=(senaste_godkanda_prov(
+                        db_file, forst=infor_prov_id)
+                                  if typ == "gruppuppgift" else None),
                     hjalpmedel=exam_gen.build_hjalpmedel(hjalpmedelsregel),
                     svart=svart_block, fokus=fokus_block,
                     inriktning=inriktning, profil=typ,
