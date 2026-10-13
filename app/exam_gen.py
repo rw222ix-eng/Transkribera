@@ -6721,7 +6721,9 @@ _VAGA_ORD = frozenset("""flytta över lägg ihop förenkla förkorta räkna ut l
 
 def vag_not(notis: str) -> bool:
     """Saknar förklaringen tal, $…$ och begrepp?"""
-    if not (notis or "").strip() or _MATTE_RE.search(notis) or re.search(r"\d", notis):
+    # Ett uttryck utan $…$ («lägg till t·v») är också konkret.
+    if (not (notis or "").strip() or _MATTE_RE.search(notis) or re.search(r"\d", notis)
+            or re.search(r"\w\s*[·*+/^=]\s*\w", notis)):
         return False
     ord_ = re.findall(r"[a-zåäöé]+", notis.lower())
     return bool(ord_) and all(o in _VAGA_ORD or len(o) == 1 for o in ord_)
@@ -6733,8 +6735,9 @@ def vag_not(notis: str) -> bool:
 # första delsvaret som hela svaret, dess förklaring ströks och resten stod som
 # steg. Passet skriver då en NY första rad som samlar delsvaren, ur matten som
 # redan står i raderna.
-_DELSVAR_RE = re.compile(r"^\s*\d+\s*:\s")
-_DELSVAR_NR_RE = re.compile(r"(?:^|,)\s*\d+\s*:\s")
+# «Rad 1: $10^{9}$», «Rad 2: …» (BA26B A-bladet dok 271) är samma sak.
+_DELSVAR_RE = re.compile(r"^\s*(?:[A-Za-zÅÄÖåäö]+\s+)?\d+\s*:\s")
+_DELSVAR_NR_RE = re.compile(r"(?:^|,)\s*(?:[A-Za-zÅÄÖåäö]+\s+)?\d+\s*:\s")
 
 
 def saknar_svarsrad(rader: list[str]) -> bool:
@@ -6783,43 +6786,59 @@ def bladfacit_fynd(losning: str) -> list[str]:
     return fynd
 
 
-def bladfacit_haller(gamla: list[str], nya: list[str]) -> bool:
-    """Får de nya raderna ersätta de gamla? Svaret orört, samma matte (ingen
-    ny, ingen borttagen ur räkneleden), samma figurrader, korta och konkreta
-    förklaringar. Saknade facit svarsrad är den nya första raden en svarsrad
-    (ingen pil) ur matten som redan stod i raderna, och alla gamla rader är
-    steg."""
+def bladfacit_hinder(gamla: list[str], nya: list[str]) -> str:
+    """Varför de nya raderna INTE får ersätta de gamla, tom sträng när de
+    får. Svaret orört, samma matte (ingen ny, ingen borttagen ur räkneleden),
+    samma figurrader, korta och konkreta förklaringar. Saknade facit svarsrad
+    är den nya första raden en svarsrad (ingen pil) ur matten som redan stod
+    i raderna, och alla gamla rader är steg. Orsaken går till omtaget och till
+    loggen: utan den upprepade modellen samma fel (NA26F 311/312, 13/10)."""
     if not nya or not gamla:
-        return False
+        return "inga rader"
     if saknar_svarsrad(gamla):
-        if (exam_spec.elevrad_delar(nya[0])[1] or saknar_svarsrad(nya)
-                or not all(_ur_raderna(m, _matten(gamla, noter=True))
-                           for m in _matten(nya[:1], noter=False))):
-            return False
+        if exam_spec.elevrad_delar(nya[0])[1]:
+            return f"svarsraden «{nya[0]}» har en pil"
+        if saknar_svarsrad(nya):
+            return "svarsraden saknas fortfarande: första raden ska samla alla delsvar"
+        for m in _matten(nya[:1], noter=False):
+            if not _ur_raderna(m, _matten(gamla, noter=True)):
+                return f"svarsraden har ny matte {m}"
         gamla_steg = gamla
     elif nya[0].strip() != gamla[0].strip():
-        return False
+        return f"svaret «{gamla[0]}» ändrades till «{nya[0]}»"
     else:
         gamla_steg = gamla[1:]
     if len(nya) > LOSNING_RADER_TAK + 4:
-        return False
+        return f"{len(nya)} rader, högst {LOSNING_RADER_TAK + 4}"
     # Inget räknesteg försvinner: varje $…$ ur de gamla stegen står kvar, i ett
     # steg eller i en förklaring («← sätt in $x = -2$»).
-    if not set(_matten(gamla_steg, noter=False)) <= set(_matten(nya[1:], noter=True)):
-        return False
+    borta = set(_matten(gamla_steg, noter=False)) - set(_matten(nya[1:], noter=True))
+    if borta:
+        return f"räknesteget {sorted(borta)[0]} försvann: skriv av det tecken för tecken"
     # Ingen ny matte: varje $…$ fanns förut, eller är en del av ett gammalt
     # («← bryt ut $6x$» ur «$= 6x(3xy - y + 1)$»).
     gammal = _matten(gamla_steg, noter=True)
-    if not all(m in gammal or any(m.strip("$") in g for g in gammal)
-               for m in _matten(nya[1:], noter=True)):
-        return False
+    for m in _matten(nya[1:], noter=True):
+        if not (m in gammal or any(m.strip("$") in g for g in gammal)):
+            return (f"ny matte {m}: ändra aldrig ett $…$, och skriv ett tal i "
+                    "förklaringen som inte står i raderna utan $…$")
     figur = [r for r in gamla if facitfigur.ar_figurrad(exam_spec.elevrad_delar(r)[0])]
     nyfigur = [r for r in nya if facitfigur.ar_figurrad(exam_spec.elevrad_delar(r)[0])]
     if ([exam_spec.elevrad_delar(r)[0] for r in figur]
             != [exam_spec.elevrad_delar(r)[0] for r in nyfigur]):
-        return False
-    return not any(_notord(n) > BLADFACIT_NOT_TAK or vag_not(n)
-                   for n in (exam_spec.elevrad_delar(r)[1] for r in nya[1:]))
+        return "en figurrad ändrades"
+    for r in nya[1:]:
+        n = exam_spec.elevrad_delar(r)[1]
+        if _notord(n) > BLADFACIT_NOT_TAK:
+            return f"förklaringen «{n}» har {_notord(n)} ord, högst {BLADFACIT_NOT_TAK}"
+        if vag_not(n):
+            return f"förklaringen «{n}» nämner inget tal eller begrepp"
+    return ""
+
+
+def bladfacit_haller(gamla: list[str], nya: list[str]) -> bool:
+    """Får de nya raderna ersätta de gamla? Se bladfacit_hinder."""
+    return not bladfacit_hinder(gamla, nya)
 
 
 def _bladfacit_enheter(exam: dict, nummer: list[int] | None = None
@@ -6863,11 +6882,15 @@ def build_bladfacit_prompt(exam: dict, enheter: list[tuple[str, dict]],
         "$\\sqrt[3]{125} = 5$», «1: Nej, 2: Ja, 3: Ja». Leder raderna till "
         "ett svar är den nya raden det sista resultatet. Varje $…$ i den "
         "nya raden står redan i en rad, eller är radens början och slut "
-        "(«$100^{1/2} = 10$» ur «$100^{1/2} = \\sqrt{100} = 10$»).\n"
+        "(«$100^{1/2} = 10$» ur «$100^{1/2} = \\sqrt{100} = 10$»). Delsvar "
+        "med ord före numret samlas likadant: «Rad 1: $10^{9}$, Rad 2: "
+        "$2^{16}$».\n"
         "- Allt inom $…$ står kvar exakt som det är. Lägg aldrig till, ta "
         "aldrig bort och räkna aldrig om ett tal eller ett uttryck. Matten "
         "i räkneleden stannar i räkneleden. En förklaring får nämna en del "
-        "av ett uttryck som står i raden («bryt ut $2x$»).\n"
+        "av ett uttryck som står i raden («bryt ut $2x$»). Ett tal eller "
+        "uttryck i förklaringen som INTE står i raderna skrivs utan $…$ "
+        "(«lägg till t·v»).\n"
         "- Ett steg per rad. En rad med två steg («$2a = -8$ ger $a = -4$», "
         "«…, alltså 19 sektioner») delas i två rader, och «ger» och "
         "«alltså» stryks.\n"
@@ -6935,14 +6958,15 @@ def bladfacitpass(exam: dict, *, model: str, llm=None,
         for nid, mal in enheter:
             gamla = [r for r in str(mal.get("losning") or "").split("\n") if r.strip()]
             nya = [str(r).strip() for r in svar.get(nid) or [] if str(r).strip()]
-            if nya != gamla and bladfacit_haller(gamla, nya):
+            hinder = bladfacit_hinder(gamla, nya) if nya != gamla else "inget ändrat"
+            if not hinder:
                 mal["losning"] = "\n".join(nya)
                 skrivna += 1
             elif bladfacit_fynd("\n".join(gamla)):
                 kvar.append((nid, mal))
-                fynd[nid] = (bladfacit_fynd("\n".join(nya)) if nya else []) or [
-                    "svaret, ett räknesteg eller en figurrad ändrades, eller "
-                    "en ny $…$ kom in: skriv av dem tecken för tecken"]
+                log_cb and log_cb(f"  uppgift {nid}: omskrivningen nekad, {hinder}")
+                fynd[nid] = ([f"förra omskrivningen nekades: {hinder}"]
+                             + (bladfacit_fynd("\n".join(nya)) if nya else []))
         if not kvar:
             break
         enheter = kvar

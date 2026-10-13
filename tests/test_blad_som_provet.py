@@ -198,6 +198,29 @@ def test_bladfacit_saknad_svarsrad_far_en_som_samlar_delsvaren():
     assert not exam_gen.saknar_svarsrad(["[tallinje start 3 hopp -9] ← minus åt vänster", "$-6$"])
     prompt = exam_gen.build_bladfacit_prompt({}, [("1", {"losning": "\n".join(gamla)})])
     assert '"saknar_svarsrad": true' in prompt
+    # «Rad 1: …», «Rad 2: …» (BA26B A-bladet dok 271).
+    rad = ["Rad 1: $10^{9}$", "Rad 2: $2^{16}$", "Rad 3: $2^{15}$"]
+    assert exam_gen.saknar_svarsrad(rad)
+    assert exam_gen.bladfacit_haller(rad, ["Rad 1: $10^{9}$, Rad 2: $2^{16}$, Rad 3: $2^{15}$"] + rad)
+
+
+def test_bladfacit_hinder_sager_varfor_och_omtaget_far_veta():
+    # NA26F 311/312, 13/10: omtaget fick bara fynden och upprepade felet.
+    assert "ny matte $t\\vec{v}$" in exam_gen.bladfacit_hinder(
+        ["$5$", "$7 - t = 3t$ ger $t = 2$"],
+        ["$5$", "$7 - t = 3t$ ← lägg till $t\\vec{v}$", "$t = 2$"])
+    assert exam_gen.bladfacit_hinder(
+        ["$5$", "$7 - t = 3t$ ger $t = 2$"],
+        ["$5$", "$7 - t = 3t$ ← lägg till t·v", "$t = 2$"]) == ""
+    prompter = []
+
+    def llm(_m, prompt, **_k):
+        prompter.append(prompt)
+        return json.dumps({"facit": [{"id": "1", "rader": [
+            "$5$", "$7 - t = 3t$ ← lägg till $t\\vec{v}$", "$t = 2$"]}]})
+    exam = {"uppgifter": [{"text": "Lös.", "losning": "$5$\n$7 - t = 3t$ ger $t = 2$"}]}
+    assert exam_gen.bladfacitpass(exam, model="m", llm=llm) == 0
+    assert len(prompter) == 2 and "förra omskrivningen nekades: ny matte" in prompter[1]
 
 
 def test_bladfacitpass_skriver_bara_det_som_haller():
