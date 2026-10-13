@@ -3731,6 +3731,11 @@ def test_introtavlan_ar_ett_brade_med_begreppen():
     assert p.startswith(lb.INSTRUCTION_INTRO)
     assert "exakt EN tavla" in p and "FEM MINUTER" in p
     assert "KLASSEN: klassen går Bygg och anläggning" in p
+    # Lärarens dom 2026-10-13 (dok 369): samma enhet i alla termer, och nya
+    # yrken i stället för regel och trälist en gång till.
+    assert "SAMMA SORTS STORHET" in p and "3 reglar och 2 m list" in p
+    assert "målaren" in p and "plattsättaren" in p
+    assert "regel och trälist är redan använda" in p
     assert "Högertavlan är TRE TILL FEM" not in p
     assert "NIVÅN:" not in p
     # Shoten är BA26B:s, inte de vanliga.

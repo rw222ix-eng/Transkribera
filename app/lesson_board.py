@@ -1363,7 +1363,8 @@ _INTRO = (
     "5. BARA BEGREPPEN, i den här ordningen:\n"
     "  a) VAD DET HANDLAR OM, med ett EGET litet exempel ur något klassen "
     "känner igen («Skruv: 60 kr per låda, frakt 40 kr», 40 + 60x, «x = antal "
-    "lådor»).\n"
+    "lådor»). Varje term i uttrycket är SAMMA SORTS STORHET i samma enhet "
+    "(kr + kr, m² + m²): aldrig «3 reglar och 2 m list» som 3x + 2.\n"
     "  b) DE VIKTIGASTE ORDEN, visade i samma exempel "
     "(\\underbrace{40}_{\\text{konstant}} + "
     "60\\underbrace{x}_{\\text{variabel}}, «Variabel: kan ändras», «Konstant: "
@@ -1390,10 +1391,17 @@ def intro_yrkesrad(inriktning: str) -> str:
     inr = " ".join(str(inriktning or "").split())[:MAX_INRIKTNING]
     if not inr:
         return ""
+    # Lärarens dom 2026-10-13 över BA26B:s tavla (dok 369): «3 reglar och 2 m
+    # list» som 3x + 2 blandar enheter, och regel och trälist hade klassen
+    # redan haft. Exemplet byter yrke inom programmet från gång till gång.
     return (f"KLASSEN: klassen går {inr}. Exemplet får gärna vara ett "
             "föremål ur yrket som eleverna känner igen utan förklaring (en "
             "låda skruv, en säck betong), aldrig yrkets planeringslogik "
-            "(spill, påslag, marginal).\n")
+            "(spill, påslag, marginal). Hämta det ur programmets olika yrken, "
+            "till exempel målaren (väggyta i m², färg i liter) eller "
+            "plattsättaren (plattor och fog), och upprepa inte förra "
+            "lektionens sammanhang eller förlagans: regel och trälist är "
+            "redan använda.\n")
 
 # Åtgärdsråd som följer med reparationsprompten — motorns varningstexter
 # säger VAD som är fel, det här säger HUR modellen brukar kunna rätta det.
