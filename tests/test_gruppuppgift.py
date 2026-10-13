@@ -1763,3 +1763,50 @@ def test_gruppuppgiften_heter_som_i_drive_och_facit_ligger_bredvid(
         "1.3 Bråk och andelar – gruppuppgift - losningsforslag.pdf")
     r = client.get(f"/api/exams/{ex['id']}/losningsforslag")
     assert r.status_code == 200
+
+
+# ── Rickards dom över exam 255 (BA26B 14/10), 2026-10-13 ─────────────────
+def test_stammen_forklarar_inte_uttrycken():
+    ex = {"uppgifter": [{"text": "Utan räknare. Uttrycken nedan har termer med "
+                                 "en variabel och termer som bara är tal.",
+                         "deluppgifter": [{"text": "Förenkla $6x + 9 - 2x - 4$."}]},
+                        {"text": "Ett rör är 40 cm. Hur många termer?",
+                         "deluppgifter": [{"text": "a"}]}]}
+    assert exam_gen.stryk_forklarande_stam(ex, "gruppuppgift")
+    assert ex["uppgifter"][0]["text"] == "Utan räknare."
+    # Tal och frågor står kvar, och arbetsbladet rörs inte.
+    assert ex["uppgifter"][1]["text"] == "Ett rör är 40 cm. Hur många termer?"
+    assert not exam_gen.stryk_forklarande_stam(
+        {"uppgifter": [{"text": "Termerna nedan.", "deluppgifter": [{}]}]}, "arbetsblad")
+
+
+def test_gruppvakter_nyckelfragan_och_procent_utanfor_momentet():
+    ex = {"titel": "Förenkla uttryck",
+          "nyckelfraga": "Hur kan du skriva ett uttryck så kort som möjligt "
+                         "genom att lägga ihop termer av samma slag?",
+          "uppgifter": [{"text": "Förenkla $5x + 8 - x$."},
+                        {"text": "Hugo sågar av 25 % av röret."},
+                        {"text": "Maja", "deluppgifter": [{"text": "50 procent mer"}]}]}
+    koder = [f["code"] for f in exam_gen.gruppvakter(ex)]
+    assert koder == ["nyckelfraga_lang", "tidigare_moment", "tidigare_moment"]
+    ex.update(titel="Procent och förändringsfaktor", nyckelfraga="Vilka termer får slås ihop?")
+    assert exam_gen.gruppvakter(ex) == []
+
+
+def test_gruppens_facit_kort_svar_och_talet_fore_orden():
+    lang = ["Kvar blir 100 % − 25 % = 75 % av röret.",
+            "$x - 0{,}25x = 0{,}75x$ ← dra bort 25 %"]
+    assert any("hel mening" in f for f in exam_gen.bladfacit_fynd("\n".join(lang), True))
+    assert exam_gen.bladfacit_fynd("\n".join(lang)) == []          # arbetsbladet
+    assert "hel mening" in exam_gen.bladfacit_hinder(lang, lang, grupp=True)
+    kort = ["$0{,}75x$ cm", "Kvar blir 75 % av röret", lang[1]]
+    assert exam_gen.bladfacit_hinder(lang, kort, True, grupp=True) == ""
+    gamla = ["$540 - 100t$", "$60 + 40 = 100$ ← lägg ihop per timme", "Kvar från a): 540"]
+    assert any("orden före talet" in f for f in exam_gen.bladfacit_fynd("\n".join(gamla), True))
+    assert "orden före talet" in exam_gen.bladfacit_hinder(gamla, gamla[:2] + ["Kvar: 540"], grupp=True)
+    nya = ["$540 - 100t$", "540 ← kvar från a)", gamla[1]]
+    assert exam_gen.bladfacit_hinder(gamla, nya, grupp=True) == ""
+    # Numrerade delsvar och rader med pil är ingen etikett.
+    assert not exam_gen.ord_fore_talet("Rad 1: $10^{9}$")
+    assert not exam_gen.ord_fore_talet("Köket: $1{,}5x$ ← lägg till 50 %")
+    assert not exam_gen.lang_svarsrad("1: Nej, 2: Ja, 3: Ja")

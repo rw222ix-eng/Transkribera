@@ -11,8 +11,9 @@ jobbet lever vidare i `jobb`/`jobb_events` (app/web/sse.py) och följs där.
 Skriv vägen UTAN inledande snedstreck i Git Bash, annars gör MSYS om den till
 en Windows-sökväg (/Program Files/Git/api/…); skriptet lägger på strecket.
 """
-import json, sys, time, urllib.request, urllib.error
-API = "http://127.0.0.1:18731"
+import json, os, sys, time, urllib.request, urllib.error
+# TRANSKRIBERA_API pekar på en annan server, t.ex. en med ny kod bredvid appen.
+API = os.environ.get("TRANSKRIBERA_API", "http://127.0.0.1:18731")
 vag, kropp = "/" + sys.argv[1].lstrip("/"), json.loads(open(sys.argv[2], encoding="utf-8").read())
 data = json.dumps(kropp, ensure_ascii=False).encode("utf-8")
 start = time.time()

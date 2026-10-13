@@ -660,7 +660,8 @@ def test_begriplighetsdomen_ur_kassetten_gar_hela_vagen(fejk_claude):
     assert "Heddas lösning" in p and "$3x^2 - 27 = 0$" in p
 
 
-def test_gruppuppgiften_gar_genom_bokgrinden_och_ger_upp_arligt(fejk_claude):
+def test_gruppuppgiften_gar_genom_bokgrinden_och_ger_upp_arligt(fejk_claude,
+                                                                monkeypatch):
     """Hela bokgrinden i auto-läget: två domare, två riktade extrarundor, och
     ett papper som levereras med fynden SAGDA. Bandet svarar likadant varje
     gång — precis som en modell som inte förstår vad som är fel — så det som
@@ -669,6 +670,9 @@ def test_gruppuppgiften_gar_genom_bokgrinden_och_ger_upp_arligt(fejk_claude):
     Utan bok körs ingen relevansdom (det är hela villkoret i doma_relevans),
     så bokunderlaget måste följa med här."""
     fejk_claude("auto")
+    # Bandets nyckelfråga är inspelad före ordtaket (gruppvakter, 2026-10-13)
+    # och hade kostat en reparationsrunda som bokgrinden räknas på.
+    monkeypatch.setattr(exam_gen, "NYCKELFRAGA_ORD", 99)
     loggat: list[str] = []
     res = exam_gen.generate_exam(
         "Matematik, nivå 2c", "NA25", ["Andragradsfunktioner"], model="",

@@ -69,12 +69,15 @@ def main(dok: int, spara: bool) -> int:
     fore = json.loads(conn.execute("select exam_json from exam_versions where id=?",
                                    (ex["current_version"],)).fetchone()["exam_json"])
     exam = copy.deepcopy(fore)
-    n = exam_gen.bladfacitpass(exam, model=claude_code.MODELL, llm=llm, log_cb=print)
+    profil = "gruppuppgift" if v.get("typ") == "Gruppuppgift" else "arbetsblad"
+    n = exam_gen.bladfacitpass(exam, model=claude_code.MODELL, llm=llm, profil=profil,
+                               log_cb=print)
     print(f"dok {dok} · exam {eid} v{ex['current_version']} · facitpasset skrev om {n} facit")
     for (nid, a), (_, b) in zip(facittexter(fore), facittexter(exam)):
         if a != b:
             print(f"--- uppgift {nid}\nFÖRE:\n{a}\nEFTER:\n{b}")
-    kvar = [f for (_, t) in facittexter(exam) for f in exam_gen.bladfacit_fynd(t)]
+    kvar = [f for (_, t) in facittexter(exam)
+            for f in exam_gen.bladfacit_fynd(t, profil == "gruppuppgift")]
     for f in kvar:
         print("  kvar efter passet:", f)
     # Räknedomen två gånger: bara ett «nej» på samma uppgift i båda räknas.

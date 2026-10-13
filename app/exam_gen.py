@@ -1482,9 +1482,14 @@ PROVFORM_GRUPP = (
     "bygger på den. En ren räkneuppgift utan sammanhang («Förenkla $5x + 8 "
     "- x - 3$.») är lika provlik som en med sammanhang.\n"
     "- BARA LEKTIONENS INNEHÅLL. Uppgifterna prövar det lektionens sidor går "
-    "igenom och det klassen redan haft, aldrig en metod som kommer senare i "
-    "kapitlet (parenteser att multiplicera in, ekvationer), även om provet "
-    "har den.\n"
+    "igenom, aldrig en metod som kommer senare i kapitlet (parenteser att "
+    "multiplicera in, ekvationer), även om provet har den. Inte heller ett "
+    "TIDIGARE moment: procent i en uppgift om att förenkla uttryck får "
+    "eleverna att undra om lektionen handlar om procent. Sammanhanget får "
+    "vara vardagligt, men räkningen är lektionens och inget annat.\n"
+    "- STAMMEN FÖRKLARAR INGET. Har uppgiften deluppgifter är stammen tom "
+    "eller ett sammanhang med tal; aldrig en mening om vad uttrycken består "
+    "av («Uttrycken nedan har termer …»).\n"
     "- NIVÅN SOM PÅ PROVET: uppgift 1 och 2 på E-nivå, uppgift 3 på C-nivå, "
     "uppgift 4 på A-nivå. Fyra olika frågesätt: inte fyra uppgifter av samma "
     "sort med nya tal.\n"
@@ -1502,7 +1507,7 @@ PROVFORM_GRUPP = (
     "[\"Kostnad\"]). Har uppgiften deluppgifter sitter fältet på "
     "deluppgiften.\n"
     "- NYCKELFRÅGAN i fältet \"nyckelfraga\": momentets ena avgörande fråga, "
-    "högst en rad («Vilka termer får slås ihop?»).\n")
+    "högst åtta ord («Vilka termer får slås ihop?»).\n")
 
 
 def provsprak_block(prov: list[dict] | None, n: int = 10) -> str:
@@ -3465,6 +3470,7 @@ def ovningspappret_stadat(exam: dict | None, profil: str) -> dict | None:
     # Idempotent; fynden har redan sagts i reparationsrundan.
     delfragor_till_deluppgifter(exam, profil)
     gruppens_delsvar(exam, profil)
+    stryk_forklarande_stam(exam, profil)
     korta_instruktion(exam, profil)
     satt_raknarmarkering(exam, profil)
     return exam
@@ -3494,6 +3500,40 @@ def gruppens_delsvar(exam: dict | None, profil: str) -> dict | None:
             if isinstance(d, dict) and not any(d.get(k) for k in _DELENS_SVARSPLATS):
                 d["svarsfalt"] = ["Svar"]
     return exam
+
+
+# STAMMEN FÖRKLARAR INTE MATTEN (Rickard 2026-10-13, exam 255 uppgift 1):
+# «Uttrycken nedan har termer med en variabel och termer som bara är tal.»
+# stod kvar över två «Förenkla uttrycket: …» trots refine. Provet skriver
+# aldrig vad uttrycken består av. En mening i stammen som bara talar om
+# begreppen (termer, variabel, konstant) utan tal, $…$ eller fråga stryks
+# när deluppgifterna själva bär uppmaningen.
+_BEGREPPSORD = re.compile(r"\b(?:term\w*|variab\w*|konstant\w*|koefficient\w*)",
+                          re.I)
+
+
+def stryk_forklarande_stam(exam: dict | None, profil: str) -> bool:
+    """Stryk stammens begreppsförklaring på gruppuppgiften. Sant när något
+    ströks. Räknarmarkeringen och meningar med tal står kvar."""
+    if not isinstance(exam, dict) or profil != "gruppuppgift":
+        return False
+    andrat = False
+    for u in exam.get("uppgifter") or []:
+        delar = [d for d in u.get("deluppgifter") or [] if isinstance(d, dict)]
+        text = u.get("text")
+        if not delar or not isinstance(text, str):
+            continue
+        ny = text
+        for m in _meningar(text):
+            if (_BEGREPPSORD.search(m) and not re.search(r"\d|\$", m)
+                    and not m.rstrip().endswith("?")):
+                ny = ny.replace(m, "", 1)
+        ny = re.sub(r"[ \t]{2,}", " ", re.sub(r"\n{2,}", "\n", ny)).strip()
+        # En tom stam är ogiltig, så då står meningen kvar.
+        if ny and ny != text:
+            u["text"] = ny
+            andrat = True
+    return andrat
 
 
 def _rent_skelett(skeleton: list[dict] | None) -> str | None:
@@ -6847,18 +6887,55 @@ def _upprepar_svaret(rad: str, svar: str) -> bool:
             and (bool(_DELSVAR_RE.match(rad)) or text))
 
 
-def bladfacit_fynd(losning: str) -> list[str]:
+# SVARET I RUTAN ÄR KORT (Rickard 2026-10-13, exam 255 uppgift 2): rutan bar
+# «Kvar blir 100 % − 25 % = 75 % av röret.», en hel förklaring. Svaret är
+# talet eller uttrycket; resonemanget står som steg under. Flera delsvar
+# («1: Nej, 2: Ja, 3: Ja») får vara längre.
+SVARSRAD_ORD = 8
+
+
+def lang_svarsrad(rad: str) -> bool:
+    """Är svarsraden en hel mening snarare än ett svar?"""
+    rad = exam_spec.elevrad_delar(rad)[0]
+    return (_notord(rad) > SVARSRAD_ORD and len(_DELSVAR_NR_RE.findall(rad)) < 2
+            and not facitfigur.ar_figurrad(rad))
+
+
+# ORDEN FÖRE TALET BLIR EN PIL (Rickard 2026-10-13, exam 255 3b): «Kvar från
+# a): 540» stod som rad utan pil. Rätt form är «540 ← kvar från a)». Ett
+# numrerat delsvar («Rad 1: $10^{9}$») har en siffra före kolonet och är
+# ingen sådan rad.
+_ORD_FORE_TALET = re.compile(r"^\s*[A-Za-zÅÄÖåäö][^$\d:\[]*:\s*\S*[\d$]")
+
+
+def ord_fore_talet(r: str) -> bool:
+    """Står orden före talet, utan pil, på en stegrad?"""
+    rad, notis = exam_spec.elevrad_delar(r)
+    return not notis and bool(_ORD_FORE_TALET.match(rad))
+
+
+def bladfacit_fynd(losning: str, grupp: bool = False) -> list[str]:
     """Det passet ska laga i en enhets facit: för långa eller vaga
-    förklaringar, rader med två steg och en saknad svarsrad. Tom lista =
-    facit håller redan."""
+    förklaringar, rader med två steg och en saknad svarsrad. På
+    gruppuppgiften (`grupp`) också en för lång svarsrad och ord före talet:
+    arbetsbladens C- och A-svar är godkända med hela meningar och etiketter
+    («Minsta värdet: …»), 103 respektive 315 rader 13/10. Tom lista = facit
+    håller redan."""
     fynd = []
     alla = [x for x in str(losning or "").split("\n") if x.strip()]
     if len(alla) >= 2 and saknar_svarsrad(alla):
         fynd.append("svarsraden saknas: första raden är ett steg eller ett av "
                     "flera delsvar; skriv en första rad utan pil som samlar "
                     "alla delsvar")
+    elif grupp and alla and lang_svarsrad(alla[0]):
+        fynd.append(f"svarsraden «{alla[0]}» är en hel mening: sätt "
+                    "ny_svarsrad och skriv bara talet eller uttrycket, "
+                    "meningen blir ett steg")
     for r in alla[1:]:
         rad, notis = exam_spec.elevrad_delar(r)
+        if grupp and ord_fore_talet(r):
+            fynd.append(f"«{rad}» har orden före talet: skriv talet först "
+                        "och orden efter en pil")
         if _notord(notis) > BLADFACIT_NOT_TAK:
             fynd.append(f"förklaringen «{notis}» har fler än "
                         f"{BLADFACIT_NOT_TAK} ord")
@@ -6871,7 +6948,8 @@ def bladfacit_fynd(losning: str) -> list[str]:
     return fynd
 
 
-def bladfacit_hinder(gamla: list[str], nya: list[str], ny_svarsrad: bool = False) -> str:
+def bladfacit_hinder(gamla: list[str], nya: list[str], ny_svarsrad: bool = False,
+                     grupp: bool = False) -> str:
     """Varför de nya raderna INTE får ersätta de gamla, tom sträng när de
     får. Svaret orört, samma matte (ingen ny, ingen borttagen ur räkneleden),
     samma figurrader, korta och konkreta förklaringar. Saknade facit svarsrad
@@ -6888,12 +6966,18 @@ def bladfacit_hinder(gamla: list[str], nya: list[str], ny_svarsrad: bool = False
             return f"svarsraden «{nya[0]}» har en pil"
         if saknar_svarsrad(nya):
             return "svarsraden saknas fortfarande: första raden ska samla alla delsvar"
+        if grupp and lang_svarsrad(nya[0]):
+            return (f"svarsraden «{nya[0]}» är fortfarande en hel mening: "
+                    "bara talet eller uttrycket")
         for m in _matten(nya[:1], noter=False):
             if not _ur_raderna(m, _matten(gamla, noter=True)):
                 return f"svarsraden har ny matte {m}"
         gamla_steg = gamla
     elif nya[0].strip() != gamla[0].strip():
         return f"svaret «{gamla[0]}» ändrades till «{nya[0]}»"
+    elif grupp and lang_svarsrad(gamla[0]):
+        return (f"svarsraden «{gamla[0]}» är en hel mening: sätt ny_svarsrad "
+                "och skriv bara talet eller uttrycket")
     else:
         gamla_steg = gamla[1:]
     if len(nya) > LOSNING_RADER_TAK + 4:
@@ -6924,6 +7008,8 @@ def bladfacit_hinder(gamla: list[str], nya: list[str], ny_svarsrad: bool = False
         return "en figurrad ändrades"
     for r in nya[1:]:
         n = exam_spec.elevrad_delar(r)[1]
+        if grupp and ord_fore_talet(r):
+            return f"«{r}» har orden före talet: skriv talet först, orden efter ←"
         if _notord(n) > BLADFACIT_NOT_TAK:
             return f"förklaringen «{n}» har {_notord(n)} ord, högst {BLADFACIT_NOT_TAK}"
         if vag_not(n):
@@ -6954,12 +7040,15 @@ def _bladfacit_enheter(exam: dict, nummer: list[int] | None = None
 
 
 def build_bladfacit_prompt(exam: dict, enheter: list[tuple[str, dict]],
-                           fynd: dict[str, list[str]] | None = None) -> str:
+                           fynd: dict[str, list[str]] | None = None,
+                           grupp: bool = False) -> str:
     kort = [{"id": nid, "uppgift": str(m.get("text") or "")[:400],
              "rader": [r for r in str(m.get("losning") or "").split("\n")
                        if r.strip()],
              **({"saknar_svarsrad": True} if saknar_svarsrad(
                  [r for r in str(m.get("losning") or "").split("\n") if r.strip()]) else {}),
+             **({"lang_svarsrad": True} if grupp and lang_svarsrad(
+                 (str(m.get("losning") or "").strip().split("\n") or [""])[0]) else {}),
              **({"forra_forsoket_fall": fynd[nid]} if fynd and fynd.get(nid) else {})}
             for nid, m in enheter]
     return (
@@ -6986,6 +7075,10 @@ def build_bladfacit_prompt(exam: dict, enheter: list[tuple[str, dict]],
         "`ny_svarsrad`: true och skriv en ny första rad som svarar på hela "
         "frågan, kort, med det som redan står i raderna. De gamla raderna "
         "står kvar som steg. Är första raden redan svaret, sätt inget.\n"
+        "- Har posten `lang_svarsrad` är första raden en hel mening. Svaret "
+        "i rutan är bara talet eller uttrycket, högst åtta ord: sätt "
+        "`ny_svarsrad`: true, skriv det korta svaret («$0{,}75x$ cm») och "
+        "låt meningen stå kvar som ett steg, kortad.\n"
         "- En rad UTAN pil som bara upprepar ett delsvar ur svarsraden "
         "stryks, också när den säger det med andra ord: «Rad 1: $10^{9}$» "
         "under «Rad 1: $10^{9}$, Rad 2: $2^{16}$», «Månadskort vid minst 4 "
@@ -7012,8 +7105,12 @@ def build_bladfacit_prompt(exam: dict, enheter: list[tuple[str, dict]],
         "$…$») flyttas till en pil efter den: «$…$ ← gånger 12».\n"
         "- Ett steg som syns direkt får ingen pil. Hellre ingen förklaring "
         "än en lång.\n"
-        "- Ord utan matte som bär ett tal («Sand:», «Kontroll:», «19 "
-        "sektioner») står kvar, kortade.\n"
+        + ("- Ord före ett tal med kolon («Kvar från a): 540», «Sand: 40 kg») "
+           "skrivs med talet först och orden efter pilen: «540 ← kvar från "
+           "a)», «40 kg ← sand». Ett tal med enhet («19 sektioner») står kvar.\n"
+           if grupp else
+           "- Ord utan matte som bär ett tal («Sand:», «Kontroll:», «19 "
+           "sektioner») står kvar, kortade.\n") +
         "- En rad inom hakparenteser ([tallinje …], [bräda …], [procent …]) "
         "är en figur: skriv av den tecken för tecken, förklaringen får "
         "kortas.\n"
@@ -7026,10 +7123,10 @@ def build_bladfacit_prompt(exam: dict, enheter: list[tuple[str, dict]],
     )
 
 
-def _bladfacit_anrop(exam, enheter, fynd, *, model, llm) -> dict[str, dict]:
+def _bladfacit_anrop(exam, enheter, fynd, *, model, llm, grupp=False) -> dict[str, dict]:
     try:
         raw = llm(
-            model, build_bladfacit_prompt(exam, enheter, fynd),
+            model, build_bladfacit_prompt(exam, enheter, fynd, grupp),
             system=LOSNING_SYSTEM,
             options={"temperature": 0.0},
             response_format={"type": "json_schema",
@@ -7047,35 +7144,36 @@ def _bladfacit_anrop(exam, enheter, fynd, *, model, llm) -> dict[str, dict]:
 
 
 def bladfacitpass(exam: dict, *, model: str, llm=None,
-                  nummer: list[int] | None = None,
+                  nummer: list[int] | None = None, profil: str = "arbetsblad",
                   log_cb: Callable[[str], None] | None = None) -> int:
     """Korta förklaringarna i arbetsbladets facit. Returnerar antalet facit
     som skrevs om. Fail-open: ett fel i anropet lämnar bladet som det var.
     Ett facit som inte håller och fortfarande har fynd får ETT omtag, med
     vad som föll."""
     llm = llm or llm_client.generate
+    grupp = profil == "gruppuppgift"
     enheter = _bladfacit_enheter(exam, nummer)
     if not enheter:
         return 0
     log_cb and log_cb("Kortar förklaringarna i facit …")
     skrivna, fynd = 0, None
     for _varv in range(2):
-        svar = _bladfacit_anrop(exam, enheter, fynd, model=model, llm=llm)
+        svar = _bladfacit_anrop(exam, enheter, fynd, model=model, llm=llm, grupp=grupp)
         kvar, fynd = [], {}
         for nid, mal in enheter:
             gamla = [r for r in str(mal.get("losning") or "").split("\n") if r.strip()]
             post = svar.get(nid) or {}
             nya = [str(r).strip() for r in post.get("rader") or [] if str(r).strip()]
-            hinder = (bladfacit_hinder(gamla, nya, post.get("ny", False))
+            hinder = (bladfacit_hinder(gamla, nya, post.get("ny", False), grupp)
                       if nya != gamla else "inget ändrat")
             if not hinder:
                 mal["losning"] = "\n".join(nya)
                 skrivna += 1
-            elif bladfacit_fynd("\n".join(gamla)):
+            elif bladfacit_fynd("\n".join(gamla), grupp):
                 kvar.append((nid, mal))
                 log_cb and log_cb(f"  uppgift {nid}: omskrivningen nekad, {hinder}")
                 fynd[nid] = ([f"förra omskrivningen nekades: {hinder}"]
-                             + (bladfacit_fynd("\n".join(nya)) if nya else []))
+                             + (bladfacit_fynd("\n".join(nya), grupp) if nya else []))
         if not kvar:
             break
         enheter = kvar
@@ -8261,7 +8359,51 @@ def _validate(exam: dict, profil: str, koder: list[str] | None = None,
         errors = errors + exam_spec.validate_variation(doc)
     if doc is not None:
         errors = errors + exam_spec.validate_ci(doc, koder)
+    if profil == "gruppuppgift":
+        errors = errors + gruppvakter(exam)
     return doc, errors
+
+
+# NYCKELFRÅGAN ÄR KORT (Rickard 2026-10-13, exam 255): «Hur kan du skriva ett
+# uttryck så kort som möjligt genom att lägga ihop termer av samma slag?» är
+# 17 ord. Lärarens egen var fyra («Vad ska räknas först?»).
+NYCKELFRAGA_ORD = 8
+
+# BARA LEKTIONENS MOMENT (Rickard 2026-10-13, exam 255 uppgift 2 och 4):
+# «de har ju haft procent innan … det är dumt att ha med det kanske i en
+# uppgift för då kan eleverna bli förvirrade och tänka att: "Jaha, ska vi ha
+# procent nu?" När det handlar om att förenkla uttryck.» Procent är det
+# förra momentet som oftast smyger in. Står procent inte i momentets namn får
+# ingen uppgift ha det.
+_PROCENT_RE = re.compile(r"%|procent", re.I)
+
+
+def gruppvakter(exam: dict) -> list[dict]:
+    """Gruppuppgiftens räknade fynd: nyckelfrågans längd och procent utanför
+    momentet. Matas in i reparationsloopen som valideringens övriga fel."""
+    fel = []
+    nf = str(exam.get("nyckelfraga") or "")
+    if len(_MATTE_RE.sub(" M ", nf).split()) > NYCKELFRAGA_ORD:
+        fel.append(_err("nyckelfraga", "nyckelfraga_lang",
+                        f"Nyckelfrågan «{nf}» är för lång. Skriv den med "
+                        f"högst {NYCKELFRAGA_ORD} ord, som «Vilka termer får "
+                        "slås ihop?»."))
+    moment = f"{exam.get('titel') or ''} {exam.get('moment') or ''}"
+    if not _PROCENT_RE.search(moment):
+        for i, u in enumerate(exam.get("uppgifter") or [], 1):
+            if not isinstance(u, dict):
+                continue
+            texter = [u.get("text")] + [d.get("text") for d in
+                                         u.get("deluppgifter") or []
+                                         if isinstance(d, dict)]
+            if any(_PROCENT_RE.search(str(t or "")) for t in texter):
+                fel.append(_err(
+                    f"uppgifter[{i - 1}]", "tidigare_moment",
+                    f"Uppgift {i} räknar med procent, men lektionens moment "
+                    f"är «{exam.get('titel') or ''}». Procent hör till ett "
+                    "tidigare moment och förvirrar eleverna. Skriv om "
+                    "uppgiften utan procent, med bara lektionens innehåll."))
+    return fel
 
 
 # ── Hur långt modellen kommit, räknat ur strömmen ──────────────────────────
@@ -15568,7 +15710,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # matten prövas orörda (bladfacit_haller).
     # Gruppuppgiften också sedan 2026-10-13 (samma facitform).
     if profil in ("arbetsblad", "gruppuppgift") and res["exam"] is not None:
-        bladfacitpass(res["exam"], model=model, llm=llm, log_cb=log_cb)
+        bladfacitpass(res["exam"], model=model, llm=llm, profil=profil, log_cb=log_cb)
     return flagga(res)
 
 
@@ -16123,7 +16265,7 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
         nummer = andrade_uppgifter(exam, res["exam"])
         if nummer:
             bladfacitpass(res["exam"], model=model, llm=llm, nummer=nummer,
-                          log_cb=log_cb)
+                          profil=profil, log_cb=log_cb)
     # ── ÖVNINGSPAPPRETS TVÅ DETERMINISTISKA PASS ─────────────────────
     # Samma två pass som genereringen kör sist (se flagga i generate_exam),
     # och de körs HÄR av två skäl. Skrev varvet om hjälpmedelsraden ska
