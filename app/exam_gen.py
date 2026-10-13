@@ -6722,8 +6722,12 @@ BLADFACIT_SCHEMA = {
 
 
 def _notord(notis: str) -> int:
-    """Förklaringens ord. Ett $…$ är ETT ord: «sätt in $n = 15$» är tre."""
-    return len(_MATTE_RE.sub(" M ", notis or "").split())
+    """Förklaringens ord. Ett $…$ är ETT ord: «sätt in $n = 15$» är tre, och
+    så är «sätt in x = 3» utan $…$ (NA26F 312, 13/10: räknat som fem nekades
+    varje insättning)."""
+    s = _MATTE_RE.sub(" M ", notis or "")
+    s = re.sub(r"\S+(?:\s*[=<>≤≥·*/+]\s*\S+)+", " M ", s)
+    return len(s.split())
 
 
 def _matten(rader: list[str], *, noter: bool) -> list[str]:

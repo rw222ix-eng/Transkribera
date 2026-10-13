@@ -152,6 +152,9 @@ def test_bladfacit_fynd_ser_langa_forklaringar_och_tva_steg():
     # Konkret, inte allmänt (Rickard 2026-10-13).
     assert any("inget tal" in f for f in exam_gen.bladfacit_fynd("$x = 6$\n$3x = 18$ ← flytta över"))
     assert not exam_gen.vag_not("stryk tvåorna") and exam_gen.vag_not("förkorta")
+    # En likhet utan $…$ är ett ord, som med (NA26F 312, 13/10).
+    assert exam_gen._notord("sätt in x = 3") == 3 == exam_gen._notord("sätt in $x = 3$")
+    assert exam_gen.bladfacit_fynd("$x = 6$\n$2x = 12$ ← sätt in x = 6") == []
 
 
 def test_bladfacit_haller_svaret_och_matten_orort():
