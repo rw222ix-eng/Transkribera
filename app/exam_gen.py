@@ -6796,6 +6796,13 @@ def _ur_raderna(m: str, gammal: list[str]) -> bool:
     return False
 
 
+def _upprepar_svaret(rad: str, svar: str) -> bool:
+    """Står raden ordagrant i en svarsrad som har mer än raden?"""
+    norm = lambda t: re.sub(r"\s+", " ", t).strip().rstrip(".").strip().lower()
+    r, s = norm(rad), norm(exam_spec.elevrad_delar(svar)[0])
+    return bool(r) and r != s and r in s and not facitfigur.ar_figurrad(rad)
+
+
 def bladfacit_fynd(losning: str) -> list[str]:
     """Det passet ska laga i en enhets facit: för långa eller vaga
     förklaringar, rader med två steg och en saknad svarsrad. Tom lista =
@@ -6815,6 +6822,8 @@ def bladfacit_fynd(losning: str) -> list[str]:
             fynd.append(f"förklaringen «{notis}» nämner inget tal eller begrepp")
         if _TVA_STEG_RE.search(rad):
             fynd.append(f"«{rad}» har två steg på en rad")
+        if not notis and _upprepar_svaret(rad, alla[0]):
+            fynd.append(f"«{rad}» upprepar ett delsvar ur svarsraden: stryk raden")
     return fynd
 
 
@@ -6847,7 +6856,14 @@ def bladfacit_hinder(gamla: list[str], nya: list[str], ny_svarsrad: bool = False
         return f"{len(nya)} rader, högst {LOSNING_RADER_TAK + 4}"
     # Inget räknesteg försvinner: varje $…$ ur de gamla stegen står kvar, i ett
     # steg eller i en förklaring («← sätt in $x = -2$»).
-    borta = set(_matten(gamla_steg, noter=False)) - set(_matten(nya[1:], noter=True))
+    # En rad utan pil som bara upprepade ett delsvar får strykas när matten
+    # står i svarsraden (Rickard 13/10: «sluta upprepa delsvaren under
+    # rutan», 268/4, 271/1, 333/1).
+    utan_pil = _matten([r for r in gamla_steg if not exam_spec.elevrad_delar(r)[1]],
+                       noter=False)
+    i_svaret = set(_matten(nya[:1], noter=False)) & set(utan_pil)
+    borta = (set(_matten(gamla_steg, noter=False))
+             - set(_matten(nya[1:], noter=True)) - i_svaret)
     if borta:
         return f"räknesteget {sorted(borta)[0]} försvann: skriv av det tecken för tecken"
     # Ingen ny matte: varje $…$ fanns förut, eller är en del av ett gammalt
@@ -6911,8 +6927,8 @@ def build_bladfacit_prompt(exam: dict, enheter: list[tuple[str, dict]],
         "Skriv om `rader` för VARJE post efter reglerna:\n"
         "- Första raden är svaret. Skriv av den TECKEN FÖR TECKEN.\n"
         "- Har posten `saknar_svarsrad` är första raden ett steg eller ett av "
-        "flera delsvar. Skriv då en NY första rad, utan pil, och låt ALLA "
-        "gamla rader stå kvar som steg under den. Är raderna flera delsvar "
+        "flera delsvar. Skriv då en NY första rad, utan pil, och låt de "
+        "gamla raderna stå kvar som steg under den. Är raderna flera delsvar "
         "samlar den nya raden alla, åtskilda med komma: «$4^{3} = 64$, "
         "$\\sqrt[3]{125} = 5$», «1: Nej, 2: Ja, 3: Ja». Leder raderna till "
         "ett svar är den nya raden det sista resultatet. Varje $…$ i den "
@@ -6924,8 +6940,13 @@ def build_bladfacit_prompt(exam: dict, enheter: list[tuple[str, dict]],
         "ett resonemang, eller bara en del av svaret: «900 kr är priset per "
         "timme.» när frågan gäller både 900 och 1 500), sätt "
         "`ny_svarsrad`: true och skriv en ny första rad som svarar på hela "
-        "frågan, kort, med det som redan står i raderna. Alla gamla rader "
+        "frågan, kort, med det som redan står i raderna. De gamla raderna "
         "står kvar som steg. Är första raden redan svaret, sätt inget.\n"
+        "- En rad UTAN pil som bara upprepar ett delsvar ur svarsraden "
+        "stryks, också när den säger det med andra ord: «Rad 1: $10^{9}$» "
+        "under «Rad 1: $10^{9}$, Rad 2: $2^{16}$», «Månadskort vid minst 4 "
+        "besök …» under ett svar som redan säger det. En rad med pil, eller "
+        "med räkning utöver delsvaret, står kvar.\n"
         "- Allt inom $…$ står kvar exakt som det är. Lägg aldrig till, ta "
         "aldrig bort och räkna aldrig om ett tal eller ett uttryck. Matten "
         "i räkneleden stannar i räkneleden. En förklaring får nämna en del "

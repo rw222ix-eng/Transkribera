@@ -225,6 +225,20 @@ def test_bladfacit_ny_svarsrad_nar_forsta_raden_inte_svarar():
     assert exam["uppgifter"][0]["losning"].startswith("900 kr är timpriset")
 
 
+def test_bladfacit_stryker_rader_som_upprepar_delsvaren():
+    # Rickard 13/10: «sluta upprepa delsvaren under rutan» (271/1, 268/4).
+    svar = "Rad 1: $10^{9}$, Rad 2: $2^{16}$, Rad 3: $2^{15}$"
+    gamla = [svar, "Rad 1: $10^{9}$", "Rad 2: $2^{16}$ ← $2^{10} \\cdot 2^{6}$",
+             "Rad 3: $2^{15}$"]
+    fynd = exam_gen.bladfacit_fynd("\n".join(gamla))
+    assert sum("upprepar ett delsvar" in f for f in fynd) == 2
+    # Raderna utan pil får strykas, raden med pil står kvar.
+    assert exam_gen.bladfacit_hinder(gamla, gamla[:1] + gamla[2:3]) == ""
+    assert "försvann" in exam_gen.bladfacit_hinder(gamla, gamla[:2] + gamla[3:])
+    # En rad med räkning utöver delsvaret upprepar inte.
+    assert exam_gen.bladfacit_fynd("$x = 5$, $y = 2$\n$2x = 10$\n$x = 5$ ← dela med 2") == []
+
+
 def test_svar_i_fall_delas_inte_vid_punkten():
     # TE26A A-bladet dok 275, 13/10: rutan visade bara första fallet.
     rad = "$0 < a < 1$: $\\sqrt{a}$ är större. $a = 1$: lika. $a > 1$: $a$ är större."
