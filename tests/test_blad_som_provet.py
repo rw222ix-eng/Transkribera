@@ -237,6 +237,12 @@ def test_bladfacit_stryker_rader_som_upprepar_delsvaren():
     assert "försvann" in exam_gen.bladfacit_hinder(gamla, gamla[:2] + gamla[3:])
     # En rad med räkning utöver delsvaret upprepar inte.
     assert exam_gen.bladfacit_fynd("$x = 5$, $y = 2$\n$2x = 10$\n$x = 5$ ← dela med 2") == []
+    # En räknerad som är ett stegs resultat står kvar (NA26F 312/10).
+    assert exam_gen.bladfacit_fynd(
+        "Noah har fel: $f(x) = x$ och $f(x) = -x + 4$\n$k > 0$: $f(0) = 0$\n$f(x) = x$") == []
+    assert "försvann" in exam_gen.bladfacit_hinder(
+        ["$f(x) = x$, $g = 2$", "$k > 0$: $f(0) = 0$", "$f(x) = x$"],
+        ["$f(x) = x$, $g = 2$", "$k > 0$: $f(0) = 0$"])
 
 
 def test_svar_i_fall_delas_inte_vid_punkten():

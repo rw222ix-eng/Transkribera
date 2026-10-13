@@ -6797,10 +6797,14 @@ def _ur_raderna(m: str, gammal: list[str]) -> bool:
 
 
 def _upprepar_svaret(rad: str, svar: str) -> bool:
-    """Står raden ordagrant i en svarsrad som har mer än raden?"""
+    """Står raden ordagrant i en svarsrad som har mer än raden? Bara ett
+    delsvar («Rad 1: $10^{9}$») eller en textrad räknas: en ren räknerad
+    («$f(x) = x$» efter «$k > 0$: …», NA26F 312/10) är ett stegs resultat."""
     norm = lambda t: re.sub(r"\s+", " ", t).strip().rstrip(".").strip().lower()
     r, s = norm(rad), norm(exam_spec.elevrad_delar(svar)[0])
-    return bool(r) and r != s and r in s and not facitfigur.ar_figurrad(rad)
+    text = len(_MATTE_RE.sub(" ", rad).split()) >= 3
+    return (bool(r) and r != s and r in s and not facitfigur.ar_figurrad(rad)
+            and (bool(_DELSVAR_RE.match(rad)) or text))
 
 
 def bladfacit_fynd(losning: str) -> list[str]:
@@ -6859,8 +6863,8 @@ def bladfacit_hinder(gamla: list[str], nya: list[str], ny_svarsrad: bool = False
     # En rad utan pil som bara upprepade ett delsvar får strykas när matten
     # står i svarsraden (Rickard 13/10: «sluta upprepa delsvaren under
     # rutan», 268/4, 271/1, 333/1).
-    utan_pil = _matten([r for r in gamla_steg if not exam_spec.elevrad_delar(r)[1]],
-                       noter=False)
+    utan_pil = _matten([r for r in gamla_steg if not exam_spec.elevrad_delar(r)[1]
+                        and _upprepar_svaret(r, nya[0])], noter=False)
     i_svaret = set(_matten(nya[:1], noter=False)) & set(utan_pil)
     borta = (set(_matten(gamla_steg, noter=False))
              - set(_matten(nya[1:], noter=True)) - i_svaret)
