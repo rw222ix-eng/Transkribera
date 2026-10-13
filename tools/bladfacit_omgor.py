@@ -22,10 +22,24 @@ from pathlib import Path
 
 ROT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROT))
-from app import claude_code, db, exam_gen  # noqa: E402
+from app import claude_code, db, exam_gen, llm_client  # noqa: E402
 from tools.dokument_aterskapa import fran_prov  # noqa: E402
 
 API = "http://127.0.0.1:18731"
+
+# Passet och domaren är fail-open: ett anrop som faller ger «0 omskrivna» och
+# «inga fynd». 13/10 nådde kontot veckogränsen mitt i omgörningen, och fyra
+# arbetare läste tystnaden som rena blad. Här räknas varje fel, och ett enda
+# fel stoppar körningen (kod 3) innan något sparas.
+FEL: list[str] = []
+
+
+def llm(*a, **k):
+    try:
+        return llm_client.generate(*a, **k)
+    except Exception as e:                          # noqa: BLE001
+        FEL.append(f"{type(e).__name__}: {e}")
+        raise
 
 
 def facittexter(exam: dict) -> list[tuple[str, str]]:
@@ -55,7 +69,7 @@ def main(dok: int, spara: bool) -> int:
     fore = json.loads(conn.execute("select exam_json from exam_versions where id=?",
                                    (ex["current_version"],)).fetchone()["exam_json"])
     exam = copy.deepcopy(fore)
-    n = exam_gen.bladfacitpass(exam, model=claude_code.MODELL, log_cb=print)
+    n = exam_gen.bladfacitpass(exam, model=claude_code.MODELL, llm=llm, log_cb=print)
     print(f"dok {dok} · exam {eid} v{ex['current_version']} · facitpasset skrev om {n} facit")
     for (nid, a), (_, b) in zip(facittexter(fore), facittexter(exam)):
         if a != b:
@@ -64,7 +78,10 @@ def main(dok: int, spara: bool) -> int:
     for f in kvar:
         print("  kvar efter passet:", f)
     # Räknedomen två gånger: bara ett «nej» på samma uppgift i båda räknas.
-    domar = [exam_gen.doma_rakning(exam, model=claude_code.MODELL) for _ in range(2)]
+    domar = [exam_gen.doma_rakning(exam, model=claude_code.MODELL, llm=llm) for _ in range(2)]
+    if FEL:
+        print(f"LLM-ANROPET FÖLL ({len(FEL)} gånger): {FEL[0][:300]}. Inget sparat.")
+        return 3
     ena = {d["path"]: d for d in domar[0]}
     bada = [ena[d["path"]] for d in domar[1] if d["path"] in ena]
     for d in domar[0] + domar[1]:
