@@ -1822,6 +1822,19 @@ def test_stam_som_bara_ar_forklaringen_stryks_efter_raknarmarkeringen():
     assert "termer" not in ex["uppgifter"][0]["text"]
 
 
+def test_rutinlistans_stam_bara_markering_och_uppmaning():
+    """Exam 259 (BA26B 15/10): en förklaring utan begreppsord stod kvar."""
+    ex = {"uppgifter": [{"text": "Utan räknare. Båda ekvationerna nedan har $x$ på "
+                                 "bara ett ställe.\nLös ekvationerna.",
+                         "deluppgifter": [{"text": "$5x + 8 = 43$"}, {"text": "$40 - 3x = 16$"}]},
+                        {"text": "Utan räknare. Maja hyr en ställning. Lös ekvationerna.",
+                         "deluppgifter": [{"text": "Hur många dagar?"}]}]}
+    assert exam_gen.stryk_forklarande_stam(ex, "gruppuppgift")
+    assert ex["uppgifter"][0]["text"] == "Utan räknare.\nLös ekvationerna."
+    # Deluppgifter med egen text är ingen rutinlista: sammanhanget står kvar.
+    assert ex["uppgifter"][1]["text"] == "Utan räknare. Maja hyr en ställning. Lös ekvationerna."
+
+
 def test_eftersom_i_svarsraden_blir_steg():
     gamla = ["$5a + 3$, eftersom $9a - a - 3a = 5a$ och $-4 + 7 = 3$."]
     assert exam_gen.bladfacit_fynd(gamla[0], True)

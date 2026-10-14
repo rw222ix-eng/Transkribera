@@ -3617,11 +3617,21 @@ def stryk_forklarande_stam(exam: dict | None, profil: str) -> bool:
         if not delar or not isinstance(text, str):
             continue
         ny = text
+        # En rutinlista (stammen bär «Lös ekvationerna.», deluppgifterna bara
+        # $…$) har ingen annan mening än räknarmarkeringen, som prov 175
+        # uppg. 3. Exam 259 (BA26B 15/10) stod med «Båda ekvationerna nedan
+        # har $x$ på bara ett ställe.», som begreppsorden ovan inte fångar.
+        rutin = next((s for s in _RUTINSTAM.values() if s.lower() in text.lower()), None)
+        ren_lista = rutin and all(re.fullmatch(r"\s*\$[^$]+\$\s*", str(d.get("text") or ""))
+                                  for d in delar)
         for m in _meningar(text):
-            if (_BEGREPPSORD.search(m) and not re.search(r"\d|\$", m)
+            if ren_lista and m.lower() != rutin.lower() and not re.match(r"(utan|med) räknare\b", m, re.I):
+                ny = ny.replace(m, "", 1)
+            elif (_BEGREPPSORD.search(m) and not re.search(r"\d|\$", m)
                     and not m.rstrip().endswith("?")):
                 ny = ny.replace(m, "", 1)
         ny = re.sub(r"[ \t]{2,}", " ", re.sub(r"\n{2,}", "\n", ny)).strip()
+        ny = re.sub(r"[ \t]+\n", "\n", ny)
         # En tom stam är ogiltig, så då står meningen kvar.
         if ny and ny != text:
             u["text"] = ny
