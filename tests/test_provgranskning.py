@@ -394,14 +394,34 @@ def test_omprov_pa_e_raknar_om_c_och_a_platserna():
     assert "E-PROV" not in exam_gen.build_omprov(REFERENS)
 
 
-def test_rent_e_prov_har_np_s_e_grans():
-    """Rickard 2026-10-11: «NP:s gräns, 26 %, samma som ett vanligt prov.»
-    E-provet har lättare uppgifter, gränsen står kvar."""
+def test_rent_e_prov_har_en_tredjedel_som_e_grans():
+    """Rickard 2026-10-14: NP:s 26 % var för snällt på ett prov med bara
+    E-uppgifter. E-provet får en tredjedel, vanliga prov behåller sin gräns."""
     g = exam_spec.kravgranser_ur_summor({"total": 30, "e": 30, "c": 0, "a": 0})
-    assert g["E"]["minst"] == 8 and g["betyg"] == ["E"]
+    assert g["E"]["minst"] == 10 and g["betyg"] == ["E"]
+    assert "33 %" in g["regel"] and g["regel"].startswith("E-prov")
+    # Avrundat uppåt på exakta bråk: 31/3 = 10,33 ger 11.
+    assert exam_spec.kravgranser_ur_summor(
+        {"total": 31, "e": 31})["E"]["minst"] == 11
+    # Skärpningen läggs ovanpå e-provets gräns, med taket kvar.
+    skarpt = exam_spec.kravgranser_ur_summor(
+        {"total": 30, "e": 30}, {"e_extra": 2})
+    assert skarpt["E"] == {"minst": 12, "extra": 2}
     blandat = exam_spec.kravgranser_ur_summor(
         {"total": 30, "e": 9, "c": 13, "a": 8})
     assert blandat["E"]["minst"] == 8
+    assert blandat["regel"].startswith("NP-modellen")
+
+
+def test_rattat_e_prov_behaller_sin_stamplade_grans():
+    """Bara framåt: ett e-prov som stämplades med 26 % räknas inte om."""
+    from app import rattning
+    gammal = exam_spec.kravgranser_ur_summor(
+        {"total": 30, "e": 30}, None)
+    gammal["E"] = {"minst": 8}
+    rader = [{"peca": [3, 0, 0]} for _ in range(10)]
+    assert rattning.granser(rader, sparade=gammal)["E"]["minst"] == 8
+    assert rattning.granser(rader)["E"]["minst"] == 10
 
 
 # ── 5. TIDEN ────────────────────────────────────────────────────────────

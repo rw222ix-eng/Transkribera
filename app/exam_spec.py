@@ -1933,6 +1933,34 @@ KRAV_DEFAULT = {
 }
 
 
+# ══ GRÄNS PER PROVTYP (Rickard 2026-10-14) ══
+# E-provet (andra omprovet, «Bara E») har bara E-uppgifter, och NP:s 26 % var
+# «alldeles för snällt» där: gränsen räknades som för ett blandat prov fast
+# varje poäng är en E-poäng. E-provet får därför en egen E-andel, en tredjedel
+# av totalpoängen. Vanliga prov står kvar på KRAV_DEFAULT. Det här ersätter
+# beslutet 2026-10-11 («NP:s gräns, samma som ett vanligt prov»).
+#
+# Bara framåt: ett godkänt prov bär sina stämplade gränser (ExamDoc.granser,
+# rattning.granser), och de räknas inte om. Den nya andelen gäller papper som
+# stämplas efter ändringen.
+KRAV_PER_PROVTYP: dict[str, dict] = {
+    "prov": {},
+    "e-prov": {"e_andel": Fraction(1, 3)},   # E: minst 33 % av totalpoängen
+}
+
+
+def provtyp(summor: dict) -> str:
+    """«e-prov» när varje poäng ligger på E, annars «prov».
+
+    Läses ur summorna och inte ur nivåvalet: rättningen (rattning.granser) har
+    bara raderna, och försättsbladet, PATCH-rutten och elevens betyg måste
+    ställa samma fråga om samma tal. Ett papper utan poäng är inget e-prov."""
+    total = int(summor.get("total") or 0)
+    c = int(summor.get("c") or 0)
+    a = int(summor.get("a") or 0)
+    return "e-prov" if total > 0 and c == 0 and a == 0 else "prov"
+
+
 def _granstal(total: int, andel) -> int:
     """Kravgränsen i poäng: minsta heltal ≥ `andel` · `total`.
 
@@ -1954,7 +1982,8 @@ def _procent(andel) -> str:
     return f"{float(andel):.0%}".replace("%", " %")
 
 
-def kravkonfig(kurs: str = "", config: dict | None = None) -> dict:
+def kravkonfig(kurs: str = "", config: dict | None = None,
+               typ: str = "prov") -> dict:
     """Kravkonfigurationen som gäller, med anroparens tillägg överst.
 
     `kurs` är UTAN VERKAN sedan 2026-09-19 och står kvar bara för anroparnas
@@ -1963,9 +1992,10 @@ def kravkonfig(kurs: str = "", config: dict | None = None) -> dict:
     alla för ingenting. Den nya NP-modellen har en regel för alla kurser, se
     kommentaren över KRAV_DEFAULT.
 
-    Kvar är rangordningen: KRAV_DEFAULT i botten och `config`, ett uttryckligt
-    val i anropet som lärarens `e_extra`, överst."""
-    return {**KRAV_DEFAULT, **(config or {})}
+    Kvar är rangordningen: KRAV_DEFAULT i botten, provtypens egna andelar
+    (KRAV_PER_PROVTYP) ovanpå, och `config`, ett uttryckligt val i anropet som
+    lärarens `e_extra`, överst."""
+    return {**KRAV_DEFAULT, **KRAV_PER_PROVTYP.get(typ, {}), **(config or {})}
 
 
 def e_skarpning(config: dict | None = None) -> int:
@@ -2014,15 +2044,14 @@ def kravgranser_ur_summor(summor: dict, config: dict | None = None,
 
     `kurs` är utan verkan sedan 2026-09-19 (kravkonfig) och står kvar för
     anroparnas skull."""
-    cfg = kravkonfig(kurs, config)
+    typ = provtyp(summor)
+    cfg = kravkonfig(kurs, config, typ)
     total = int(summor.get("total") or 0)
     # Skärpningen läggs på EFTER avrundningen: den är lärarens poäng ovanpå
     # NP:s tal, inte en procentsats som ska rundas med. Taket är provets egen
     # totalpoäng. En E-gräns över maxpoängen är ingen skärpning, den är ett
     # prov ingen kan bli godkänd på.
-    # Samma E-andel också på ett rent E-prov (Rickard 2026-10-11, E-omprovet:
-    # «NP:s gräns, 26 %, samma som ett vanligt prov»). Uppgifterna blir
-    # lättare, gränsen står kvar, och det är avsikten.
+    # Ett rent E-prov har sin egen E-andel, se KRAV_PER_PROVTYP.
     rader = betygsrader(summor)
     e_andel = cfg["e_andel"]
     regelns_e = _granstal(total, e_andel)
@@ -2041,7 +2070,8 @@ def kravgranser_ur_summor(summor: dict, config: dict | None = None,
         # Regeln säger bara det tabellen visar: en mening om C-gränsen på ett
         # papper utan C-poäng är en regel för ett betyg som inte finns.
         "regel": (
-            "NP-modellen (Ma 1c ht 2024). "
+            ("E-prov, bara E-uppgifter. " if typ == "e-prov"
+             else "NP-modellen (Ma 1c ht 2024). ")
             + f"E: minst {_procent(e_andel)} av totalpoängen"
             + (f", plus lärarens skärpning på {extra} p" if extra else "")
             + ". "
