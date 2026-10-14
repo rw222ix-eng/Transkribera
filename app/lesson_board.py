@@ -3566,6 +3566,27 @@ def build_forra_block(rubrik: str | None, ny_form: bool = True) -> str:
         "dit.")
 
 
+# KOMMANDE LEKTIONER (Rickard 2026-10-14 om NA26F 15/10, dok 380): tavlan om
+# koordinatsystemet (bok s. 142–143) tog upp funktionen, f(x) = 4 och
+# värdemängden, som är nästa lektions sidor (146–154), och högern blandade in
+# vektorer. «Man får kolla vilka av de kommande lektionerna, vad de ska handla
+# om. Sen kanske vi kan bortse från vissa saker på den här lektionen.»
+# Kalenderns rubriker för klassens nästa lektioner (routes_planning.
+# kommande_lektioner) går därför in bredvid förra lektionen.
+KOMMANDEMARKOR = "KOMMANDE LEKTIONER med klassen"
+
+
+def build_kommande_block(kommande: str | None, ny_form: bool = True) -> str:
+    k = " ".join(str(kommande or "").split())[:400]
+    if not k or not ny_form:
+        return ""
+    return (
+        f"{KOMMANDEMARKOR} (kalenderns rubriker och boksidor): {k}. Det de "
+        "lektionerna går igenom står INTE på den här tavlan, varken på "
+        "vänstern eller i högerns uppgifter. Tavlan håller sig till dagens "
+        "sidor, och varje uppgift på högern övar något vänstern visar.")
+
+
 def build_prompt(course: str, group: str, moment: str, memory: str = "",
                  underlag: str = "", utfall: str = "", bok: str = "",
                  forlaga: str = "", svart: str = "", fokus: str = "",
@@ -7387,6 +7408,7 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
                    prov: str = "", prov_dom: str = "", provtext: str = "",
                    forlaga_uppgifter: list | None = None,
                    forra: str = "",
+                   kommande: str = "",
                    llm=llm_client.generate,
                    max_rounds: int = MAX_ROUNDS,
                    log_cb: Callable[[str], None] | None = None,
@@ -7465,6 +7487,11 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     # Förra lektionens rubrik (build_forra_block): tom sträng ger den gamla
     # prompten.
     forra_blk = build_forra_block(forra, form.ny_form)
+    # De kommande lektionerna (build_kommande_block) i samma block: tom
+    # sträng ger den gamla prompten.
+    kommande_blk = build_kommande_block(kommande, form.ny_form)
+    if kommande_blk:
+        forra_blk = f"{forra_blk}\n{kommande_blk}" if forra_blk else kommande_blk
     prompt = build_prompt(course, group, moment, memory, underlag, utfall, bok,
                           forlaga, svart, fokus, delar, form, prov,
                           build_los_block(forlaga_uppgifter), forra_blk)

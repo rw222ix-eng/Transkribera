@@ -538,6 +538,49 @@ def forra_lektionen(db_file: Path, body: dict, group: str | None = None) -> str:
     return str(sist.get("rubrik") or "")
 
 
+def kommande_lektioner(db_file: Path, body: dict, group: str | None = None,
+                       n: int = 2) -> str:
+    """Kalenderns rubriker och boksidor för klassens `n` NÄSTA lektioner i
+    samma kurs, som en rad, eller "". Syskon till forra_lektionen, samma rader
+    och samma integritetsgräns: bara rubrik, datum och sidor läses
+    (lesson_board.build_kommande_block)."""
+    datum = (body.get("datum") or "").strip()
+    klass = (body.get("klass") or group or "").strip()
+    if not datum or not klass:
+        return ""
+    kurs = (body.get("kurs") or "").strip()
+
+    def minut(t) -> int:
+        m = re.match(r"\s*(\d{1,2})[:.](\d{2})", str(t or ""))
+        return int(m.group(1)) * 60 + int(m.group(2)) if m else -1
+
+    start = minut(body.get("starttid"))
+    try:
+        conn = db.connect(db_file)
+        try:
+            rader = db.list_lektionsinnehall(conn)
+        finally:
+            conn.close()
+    except Exception:
+        return ""
+    efter = sorted(
+        (r for r in rader if r.get("klass") == klass
+         and (not kurs or not r.get("kurs") or r["kurs"] == kurs)
+         and (r.get("datum", "") > datum
+              or (r.get("datum") == datum and minut(r.get("tid")) > start >= 0))),
+        key=lambda r: (r["datum"], minut(r.get("tid"))))[:n]
+    ut = []
+    for r in efter:
+        rub = " ".join(str(r.get("rubrik") or "").split())
+        if not rub:
+            continue
+        sid = (f" (s. {r['fran']}–{r['till']})" if r.get("fran") and r.get("till")
+               and r["fran"] != r["till"] else
+               f" (s. {r['fran']})" if r.get("fran") else "")
+        ut.append(f"{r['datum']}: {rub}{sid}")
+    return "; ".join(ut)
+
+
 def bok_las_text(base: Path, db_file: Path, body: dict, emit=None) -> str:
     """Samma block som `bok_text`, men läser först de sidor som saknar något.
 
@@ -1370,6 +1413,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # (lesson_board.build_forra_block). satt_forra lägger samma rubrik i
         # agendan efteråt.
         forra = forra_lektionen(db_file, body, group)
+        # Klassens nästa lektioner (Rickard 2026-10-14): det de går igenom
+        # lämnas åt dem (lesson_board.build_kommande_block).
+        kommande = kommande_lektioner(db_file, body, group)
 
         llm = arbiter.try_acquire_llm()
         if not llm:
@@ -1426,6 +1472,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     provtext=(infor or {}).get("text") or "",
                     forlaga_uppgifter=los_uppg or None,
                     forra=forra,
+                    kommande=kommande,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 # Lektionstiden uppe till vänster är lärarens, inte modellens:

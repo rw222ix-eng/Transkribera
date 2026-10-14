@@ -4191,3 +4191,20 @@ def test_introtavlan_visar_bara_det_forlagan_anvander():
     vanlig = lb.build_prompt("Ma1c", "NA26F", "Funktioner",
                                        forlaga="FÖRLAGA: bladet")
     assert lb.INTRO_BARA_FORLAGAN not in vanlig
+
+
+def test_kommande_lektioner_lamnas_at_dem():
+    """Rickard 2026-10-14 om NA26F 15/10 (dok 380): tavlan om koordinat-
+    systemet tog upp värdemängden, som är nästa lektions sidor."""
+    assert lb.build_kommande_block("") == ""
+    blk = lb.build_kommande_block("2026-10-16: Funktioner i matematiken (s. 146–154)")
+    assert lb.KOMMANDEMARKOR in blk and "146–154" in blk and "INTE" in blk
+    sedda = []
+
+    def llm(_model, prompt, **_kw):
+        sedda.append(prompt)
+        return "{}"
+    lb.generate_board("Ma1c", "NA26F", "Koordinatsystemet", model="", llm=llm,
+                      max_rounds=0, doma=False,
+                      kommande="2026-10-16: Funktioner i matematiken (s. 146–154)")
+    assert lb.KOMMANDEMARKOR in sedda[0]

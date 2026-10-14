@@ -2684,6 +2684,19 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # sedan bar det vidare. Repareras här är diffen dessutom ärlig: annars
         # märks en ruta som ändrad i ett varv som bara rätade ut ett tecken.
         view["exam"] = exam_gen._repair_ctrl_chars(view["exam"])
+        # Kursens tidigare uppgifter till omskrivningen av ett övningspapper
+        # (Rickard 2026-10-14, minigrävaren i exam 259): de slitna
+        # sammanhangen i prompten och situationsvakten på varvet.
+        tidigare_uppg: list[str] = []
+        if (view.get("typ") or "prov") in exam_gen.OVNINGSPROFILER \
+                and view.get("course_id"):
+            egna = set(exam_gen.uppgiftstexter(view["exam"]))
+            conn = db.connect(db_file)
+            try:
+                tidigare_uppg = [t for t in db.tidigare_uppgiftstexter(
+                    conn, int(view["course_id"])) if t not in egna]
+            finally:
+                conn.close()
         # Dagen är lärarens också GENOM en omskrivning: modellen skriver om
         # hela dokumentet och satte tillbaka sin egen dag i varje varv. Båda
         # sidor av diffen stämplas, annars märks sidhuvudet som ändrat i ett
@@ -2793,6 +2806,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     profil=view.get("typ") or "prov",
                     niva_mal=nivaval["mal"] if nivaval else None,
                     infor=infor, referens=referens,
+                    tidigare=tidigare_uppg,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     steg_cb=steg.na)
                 # Klockslagen överlever omskrivningen: modellen skriver om

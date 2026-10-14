@@ -1918,3 +1918,28 @@ def test_sista_uppgiften_kraver_ett_samband_och_rutinlistan_bokens_sorter():
     huvudräkning, och boken s. 94–97 räknar x/n som pappret saknade."""
     assert "DEN SISTA KRÄVER ETT SAMBAND" in exam_gen.PROVFORM_GRUPP
     assert "RUTINLISTAN TÄCKER BOKENS SORTER" in exam_gen.PROVFORM_GRUPP
+
+
+def test_slitna_sammanhang_i_prompten_och_pa_varvet():
+    """Rickard 2026-10-14, exam 259: minigrävaren igen. Ord i fler än två
+    tidigare uppgifter släpptes av situationsvakten som kursens vardag."""
+    tidigare = ["Utan räknare. Ali hyr en minigrävare. Priset är 400 kr.",
+                "Räknare tillåten. Sara köper en byggställning.",
+                "Tabellen visar vad det kostar att hyra en minigrävare."]
+    sl = dict(exam_gen.slitna_sammanhang(tidigare))
+    assert sl.get("minigrävare") == 2 and "tillåt" not in sl
+    blk = exam_gen.build_slitna_block(tidigare, "gruppuppgift")
+    assert "minigrävare (2)" in blk
+    assert exam_gen.build_slitna_block(tidigare, "prov") == ""
+    assert exam_gen.build_slitna_block([], "gruppuppgift") == ""
+    # Omskrivningen får blocket i prompten.
+    sedda = []
+    fore = _grupppapper()
+
+    def llm(*a, **_kw):
+        sedda.append(" ".join(str(x) for x in a))
+        return json.dumps(fore)
+    exam_gen.refine_exam(fore, "skriv om uppgift 2", model="", nummer=2,
+                         profil="gruppuppgift", max_rounds=0, llm=llm,
+                         tidigare=tidigare)
+    assert any("minigrävare (2)" in p for p in sedda)
