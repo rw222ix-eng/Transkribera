@@ -1884,3 +1884,13 @@ def test_parenteser_fallas_bara_nar_lektionens_bok_saknar_dem():
     assert exam_gen.lektionen_utan_parentes([{"text": "Förenkla 4y + 1 − y + 6"}])
     assert not exam_gen.lektionen_utan_parentes([{"text": "Förenkla 3(x + 2)"}])
     assert not exam_gen.lektionen_utan_parentes([])
+
+
+def test_gruppuppgiften_har_inga_bilder():
+    """Rickard 2026-10-14, exam 258: bildrutan gav tomrum och en sida per uppgift."""
+    ex = {"uppgifter": [{"text": "a", "scen": {"begrepp": "gym", "scene": "SCENE."}},
+                        {"text": "b", "scen": None}]}
+    assert exam_gen.stryk_gruppbilder(ex, "gruppuppgift")
+    assert ex["uppgifter"][0]["scen"] is None
+    assert not exam_gen.stryk_gruppbilder(
+        {"uppgifter": [{"scen": {"begrepp": "x"}}]}, "arbetsblad")

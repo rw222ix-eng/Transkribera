@@ -1500,6 +1500,12 @@ PROVFORM_GRUPP = (
     "meningarna, och i en deluppgift med ny fakta står faktan först och "
     "frågan sist («Hon lägger 40 takpannor i timmen.» sedan «Hur många …?»).\n"
     "- INGA TIPS: fältet notis är tomt, som på provet.\n"
+    "- INGA BILDER: fältet scen är null på varje uppgift.\n"
+    "- DEN SISTA ÄR SVÅRAST MEN LÄTT ATT FÖRSTÅ. Svårigheten ligger i "
+    "matematiken, aldrig i att reda ut situationen. Ett enkelt "
+    "sammanhang med högst två eller tre storheter som hänger ihop på "
+    "ett sätt eleven känner igen, och inga detaljer som väcker frågor "
+    "vid sidan av matematiken («vilka dagar jobbar de?»).\n"
     "- NIVÅN SOM PÅ PROVET: uppgift 1 och 2 på E-nivå, uppgift 3 på C-nivå, "
     "uppgift 4 på A-nivå. Fyra olika frågesätt: inte fyra uppgifter av samma "
     "sort med nya tal.\n"
@@ -3487,6 +3493,7 @@ def ovningspappret_stadat(exam: dict | None, profil: str) -> dict | None:
     # stam får inte bli kvar. Med «Utan räknare.» först går den att stryka.
     stryk_forklarande_stam(exam, profil)
     stryk_grupptips(exam, profil)
+    stryk_gruppbilder(exam, profil)
     return exam
 
 
@@ -3580,6 +3587,21 @@ def stryk_grupptips(exam: dict | None, profil: str) -> bool:
             if isinstance(x, dict) and x.get("notis"):
                 x["notis"] = None
                 andrat = True
+    return andrat
+
+
+# INGA BILDER PÅ GRUPPUPPGIFTEN (Rickard 2026-10-14, exam 258): «Vi behöver
+# inte heller ha bilder på gruppuppgiften, så ta bort dem.» Bildrutan för
+# uppgift 3 och 4 gav tomrum och en sida per uppgift.
+def stryk_gruppbilder(exam: dict | None, profil: str) -> bool:
+    """Töm `scen` på gruppuppgiftens uppgifter."""
+    if not isinstance(exam, dict) or profil != "gruppuppgift":
+        return False
+    andrat = False
+    for u in exam.get("uppgifter") or []:
+        if isinstance(u, dict) and u.get("scen"):
+            u["scen"] = None
+            andrat = True
     return andrat
 
 
