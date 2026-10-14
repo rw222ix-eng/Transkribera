@@ -1578,15 +1578,19 @@ def test_provets_balans_faller_varvet_som_forut():
 
 def test_en_omskrivning_utan_mal_ager_balansen_sjalv():
     """Mål-låset är villkoret. Skriver varvet om HELA pappret finns ingen
-    enskild ändring att skydda, och då är balansen dess eget ansvar igen."""
-    assert exam_gen.balansvarningar("gruppuppgift", None) == frozenset()
+    enskild ändring att skydda, och då är balansen dess eget ansvar igen.
+    Gruppuppgiften är undantaget: den har alltid fyra uppgifter, och exam 259
+    fick sex när reparationen lagade balansen."""
+    assert exam_gen.balansvarningar("arbetsblad", None) == frozenset()
+    assert exam_gen.balansvarningar("gruppuppgift", None) == exam_gen.BALANSVARNING
     fore = _grupppapper()
     efter = _skriv_om_uppgift_tva(fore)
     res = exam_gen.refine_exam(
         fore, "skriv om hela pappret", model="", profil="gruppuppgift",
         max_rounds=1, llm=lambda *_a, **_kw: json.dumps(efter))
-    assert {e["code"] for e in res["errors"]} == {"formagabalans",
-                                                  "nivabalans"}
+    # Fynden följer med som varning, men ingen reparationsrunda körs.
+    assert {e["code"] for e in res["errors"]} <= {"formagabalans", "nivabalans"}
+    assert len(res["exam"]["uppgifter"]) == len(efter["uppgifter"])
 
 
 # ── INGET LÄMNAS IN (Rickard 2026-09-23) ──────────────────────────────────

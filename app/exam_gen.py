@@ -3160,7 +3160,13 @@ BALANSVARNING: frozenset[str] = frozenset({"formagabalans", "nivabalans",
 def balansvarningar(profil: str, riktning) -> frozenset[str]:
     """Vilka balanskoder som blir VARNINGAR i det här varvet — tom mängd när
     de ska fälla som förut. `riktning` är mål-låset (riktat_mal): är det None
-    skrev varvet om hela pappret, och då är balansen dess ansvar igen."""
+    skrev varvet om hela pappret, och då är balansen dess ansvar igen.
+
+    Utom på gruppuppgiften: den har alltid fyra uppgifter (Rickard 13/10), och
+    reparationen lagade balansen genom att lägga till uppgifter. Exam 259
+    (BA26B 15/10) gick från fyra till sex i en omskrivning utan mål."""
+    if profil == "gruppuppgift":
+        return BALANSVARNING
     if riktning is None or profil not in OVNINGSPROFILER:
         return frozenset()
     return BALANSVARNING
