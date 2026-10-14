@@ -1506,6 +1506,13 @@ PROVFORM_GRUPP = (
     "sammanhang med högst två eller tre storheter som hänger ihop på "
     "ett sätt eleven känner igen, och inga detaljer som väcker frågor "
     "vid sidan av matematiken («vilka dagar jobbar de?»).\n"
+    "- DEN SISTA KRÄVER ETT SAMBAND. Eleven måste ställa upp en ekvation "
+    "eller en linjär funktion för att lösa den, till exempel priset som "
+    "funktion av tiden ur två givna priser. En A-uppgift som går att lösa "
+    "med huvudräkning eller ren aritmetik (dra bort, dela) är för lätt.\n"
+    "- RUTINLISTAN TÄCKER BOKENS SORTER. Räknar lektionens sidor flera sorter "
+    "i exemplen (till exempel $3x + 5 = 26$ och $\\frac{x}{3} = 86$) får "
+    "rutinuppgiften en deluppgift av varje sort, högst tre.\n"
     "- NIVÅN SOM PÅ PROVET: uppgift 1 och 2 på E-nivå, uppgift 3 på C-nivå, "
     "uppgift 4 på A-nivå. Fyra olika frågesätt: inte fyra uppgifter av samma "
     "sort med nya tal.\n"
@@ -11429,9 +11436,8 @@ def omprov_pa_e(referens: dict | None) -> dict | None:
 
     Rickard 2026-10-11: den som inte klarat första omprovet skriver ett andra
     «bara på E-nivå». Samma antal uppgifter, samma tid och samma totalpoäng,
-    men C- och A-uppgifterna byts mot E-uppgifter. Gränsen står kvar på NP:s
-    26 % (exam_spec.kravgranser_ur_summor): «att det blir lättare totalt är
-    avsikten».
+    men C- och A-uppgifterna byts mot E-uppgifter. Gränsen är e-provets egen,
+    en tredjedel av totalpoängen (exam_spec.KRAV_PER_PROVTYP, 2026-10-14).
 
     «Bara E» och `omprov_av` krockade förut: nivåvalet byggde ett eget
     E-skelett, men planen i prompten och likvärdighetsvakten mätte mot

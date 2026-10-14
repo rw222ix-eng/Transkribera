@@ -1383,6 +1383,13 @@ _INTRO = (
 INSTRUCTION_INTRO = (
     _INLEDNING_INTRO + _REGLER + _KONCIS + _DRAMATURGI + _INTRO + _TID_FORRA
     + _TEXTBUDGET)
+# Följer förlagan i build_prompt, bara på introtavlan.
+INTRO_BARA_FORLAGAN = (
+    "ALLT PÅ TAVLAN FINNS I GRUPPUPPGIFTEN OVAN. Varje begrepp, ord och "
+    "sort av ekvation eller uttryck som tavlan tar upp ska eleverna möta i "
+    "gruppuppgiften. Ett ord eller en sort som gruppuppgiften inte använder "
+    "(till exempel «rot», eller en ekvation med bråk när gruppuppgiften "
+    "saknar bråk) står inte på tavlan.\n")
 
 
 def intro_yrkesrad(inriktning: str) -> str:
@@ -3582,6 +3589,12 @@ def build_prompt(course: str, group: str, moment: str, memory: str = "",
     # önskemålet läraren kan ge — «gör som det här pappret» — och den ska inte
     # tappas bakom minnet eller boken.
     forl = f"\n{forlaga}\n" if forlaga else ""
+    # INTROTAVLAN VISAR BARA DET GRUPPUPPGIFTEN ANVÄNDER (Rickard 2026-10-14,
+    # BA26B 15/10, dok 383 mot gruppuppgiften 381): «allt jag tar upp på
+    # tavlan ska också förekomma i gruppuppgiften». Tavlan tog upp x/5 = 3
+    # och ordet «rot», som pappret efter den aldrig använde.
+    if forlaga and form.intro:
+        forl += INTRO_BARA_FORLAGAN
     # Boken står SIST bland källorna och närmast uppdraget: läraren slog upp
     # just de här sidorna, och det är dem klassen har framför sig.
     bk = f"\n{bok}\n" if bok else ""

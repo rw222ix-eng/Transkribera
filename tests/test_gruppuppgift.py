@@ -1911,3 +1911,10 @@ def test_gruppuppgiften_har_inga_bilder():
     assert ex["uppgifter"][0]["scen"] is None
     assert not exam_gen.stryk_gruppbilder(
         {"uppgifter": [{"scen": {"begrepp": "x"}}]}, "arbetsblad")
+
+
+def test_sista_uppgiften_kraver_ett_samband_och_rutinlistan_bokens_sorter():
+    """Rickard 2026-10-14, exam 259: klinkerfogarna (A) gick att lösa med
+    huvudräkning, och boken s. 94–97 räknar x/n som pappret saknade."""
+    assert "DEN SISTA KRÄVER ETT SAMBAND" in exam_gen.PROVFORM_GRUPP
+    assert "RUTINLISTAN TÄCKER BOKENS SORTER" in exam_gen.PROVFORM_GRUPP

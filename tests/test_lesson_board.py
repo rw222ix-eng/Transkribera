@@ -4177,3 +4177,17 @@ def test_en_bred_rad_i_en_kolumn_falls():
     assert [f["path"] for f in fynd] == [
         "boards[1].columns[1].sections[2]", "boards[1].columns[1].sections[7]"]
     assert "'för bred för en kolumn'" in lb.REPAIR_HINTS
+
+
+def test_introtavlan_visar_bara_det_forlagan_anvander():
+    """Rickard 2026-10-14, BA26B 15/10: dok 383 tog upp x/5 = 3 och «rot»,
+    som gruppuppgiften efter tavlan aldrig använde."""
+    intro = lb.tavelform(vanligt_fel=False, intro=True)
+    med = lb.build_prompt("Ma1a", "BA26B", "Linjära ekvationer",
+                                    forlaga="FÖRLAGA: gruppuppgiften", form=intro)
+    assert lb.INTRO_BARA_FORLAGAN in med
+    utan = lb.build_prompt("Ma1a", "BA26B", "Linjära ekvationer", form=intro)
+    assert lb.INTRO_BARA_FORLAGAN not in utan
+    vanlig = lb.build_prompt("Ma1c", "NA26F", "Funktioner",
+                                       forlaga="FÖRLAGA: bladet")
+    assert lb.INTRO_BARA_FORLAGAN not in vanlig
