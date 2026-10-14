@@ -11437,7 +11437,7 @@ def omprov_pa_e(referens: dict | None) -> dict | None:
     Rickard 2026-10-11: den som inte klarat första omprovet skriver ett andra
     «bara på E-nivå». Samma antal uppgifter, samma tid och samma totalpoäng,
     men C- och A-uppgifterna byts mot E-uppgifter. Gränsen är e-provets egen,
-    en tredjedel av totalpoängen (exam_spec.KRAV_PER_PROVTYP, 2026-10-14).
+    hälften av poängen (exam_spec.KRAV_PER_PROVTYP, 2026-10-14).
 
     «Bara E» och `omprov_av` krockade förut: nivåvalet byggde ett eget
     E-skelett, men planen i prompten och likvärdighetsvakten mätte mot
@@ -14314,6 +14314,54 @@ def situationsvakt(exam: dict, tidigare: list[str] | None) -> list[dict]:
     return fel[:SITUATION_MAX_FYND]
 
 
+# SLITNA SAMMANHANG (Rickard 2026-10-14, BA26B 15/10, exam 259 uppgift 4):
+# «Det här jävla exemplet med minigrävaren. Den har vi hela tiden.» Den stod i
+# prov 131 och bladen 179 och 240, och en omskrivning skrev in den igen.
+# Situationsvakten ovan släpper den: ett ord i fler än SITUATION_MAX_DF
+# tidigare uppgifter räknas som kursens vardag. Just de orden är de slitna
+# sammanhangen, och de går därför till prompten som en lista att undvika på
+# övningspappren. Provet rörs inte (kassettregeln, och provets variation
+# vaktas av fingeravtrycken).
+SLITNA_MIN_DF = 2
+SLITNA_MAX = 60
+# Ord i uppgiftstexter som inte är sammanhang (räknarmarkeringen, matteord).
+_SLITNA_STOPP = frozenset(("tillåt", "tillåten", "innehåll", "möjligt",
+                           "parentes", "parenteser", "höjder", "längd",
+                           "längden", "bredden", "storlek"))
+_MARKERING_RE = re.compile(r"^\s*(?:utan räknare|räknare tillåten|med räknare)"
+                           r"[^.]*\.\s*", re.I)
+
+
+def slitna_sammanhang(tidigare: list[str] | None) -> list[tuple[str, int]]:
+    """Situationsorden (ordstammar) i minst SLITNA_MIN_DF av kursens tidigare
+    uppgifter, vanligast först, med antal uppgifter."""
+    df: dict[str, int] = {}
+    fore: set[str] = set()
+    for t in tidigare or []:
+        mina = _situationsord(_inledning(_MARKERING_RE.sub("", str(t or ""))))
+        mina -= _SLITNA_STOPP
+        # Stam och deluppgifter står efter varandra (se situationsvakt).
+        for o in mina - fore:
+            df[o] = df.get(o, 0) + 1
+        fore = mina
+    return sorted(((o, k) for o, k in df.items() if k >= SLITNA_MIN_DF),
+                  key=lambda x: (-x[1], x[0]))[:SLITNA_MAX]
+
+
+def build_slitna_block(tidigare: list[str] | None, profil: str) -> str:
+    """Promptraden med de slitna sammanhangen, eller "" (provet, tom lista)."""
+    if profil not in OVNINGSPROFILER:
+        return ""
+    sl = slitna_sammanhang(tidigare)
+    if not sl:
+        return ""
+    return ("\nSAMMANHANG KURSEN REDAN HAFT FLERA GÅNGER (ordstam, antal "
+            "uppgifter): " + ", ".join(f"{o} ({k})" for o, k in sl) + ". "
+            "Klassen är trött på dem. Varje uppgift du skriver eller skriver om "
+            "får ett sammanhang som inte står här, också när uppgiften är av "
+            "samma sort.\n")
+
+
 def _raknade_fynd(exam: dict, *, avsnitt: list[dict] | None, antal: int | None,
                   delmoment: list[dict] | None, profil: str,
                   bokuppgifter: list[dict] | None = None,
@@ -15525,6 +15573,9 @@ def _generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # STRÄNG och prompten byte för byte densamma som förut. Det villkoret är
     # inte en optimering utan kassetteregeln: testernas databas är tom.
     variation = build_variation(tidigare)
+    # De slitna sammanhangen på övningspappret (build_slitna_block), samma
+    # kassetteregel: tom lista eller provet ger en tom sträng.
+    variation += build_slitna_block(tidigare, profil)
     # Kapitelramen (2026-09-06). Tom lista, None, eller ett enda avsnitt ger en
     # TOM STRÄNG och därmed en oförändrad prompt: samma kassetteregel som
     # variationen ovan.
@@ -16086,6 +16137,7 @@ def _varvsvakt(fore: dict, res: dict, *, model: str, llm, profil: str,
                niva_mal: dict | None, infor: dict | None, max_rounds: int,
                inriktning: str = "",
                referens: dict | None = None,
+               tidigare: list[str] | None = None,
                log_cb: Callable[[str], None] | None = None,
                steg_cb: Callable[[str], None] | None = None) -> dict:
     """Vakterna på varvets resultat, och EN låst lagningsrunda för det varvet
@@ -16119,6 +16171,15 @@ def _varvsvakt(fore: dict, res: dict, *, model: str, llm, profil: str,
                                          poang_tak=tak, referens=referens)}
     matt = dict(profil=profil, infor=infor, poang_tak=tak, referens=referens)
     raknade = _varvets_egna_fynd(fore_nycklar, exam, rorda, **matt)
+    # SITUATIONSVAKTEN PÅ VARVET (exam 259, 2026-10-14): genereringen körde den
+    # men omskrivningen inte, och minigrävaren kom in i ett varv. Bara fynd
+    # på uppgifter varvet rörde och som inte fanns före varvet.
+    if tidigare and profil in OVNINGSPROFILER:
+        fore_sit = {_fyndets_uppgift(f) for f in situationsvakt(fore, tidigare)}
+        raknade = raknade + [
+            f for f in situationsvakt(exam, tidigare)
+            if _fyndets_uppgift(f) in rorda
+            and _fyndets_uppgift(f) not in fore_sit]
     # ELEVLÄSAREN PÅ DE RÖRDA UPPGIFTERNA, på bladet inför provet (Rickards
     # ja 2026-10-11). Granskningen av bladen hittade tvetydigheter som ett
     # varv efter genereringen skrivit in (184:9, 183:9), och varvet kör bara
@@ -16314,6 +16375,7 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
                 niva_mal: dict | None = None,
                 infor: dict | None = None,
                 referens: dict | None = None,
+                tidigare: list[str] | None = None,
                 llm=llm_client.generate,
                 max_rounds: int = MAX_ROUNDS,
                 log_cb: Callable[[str], None] | None = None,
@@ -16335,9 +16397,12 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
     steg = steg_cb or (lambda _n: None)        # se generate_exam ovan
     steg("skriver")
     log("Uppdaterar provet …")
+    # Kursens slitna sammanhang (build_slitna_block): tom lista ger samma
+    # prompt som förut.
     candidate = _llm_round(
         build_refine_prompt(exam, instruction, nummer, mal, bok, historik,
-                            malen, inriktning, profil),
+                            malen, inriktning, profil)
+        + build_slitna_block(tidigare, profil),
         model, llm, profil=profil, log_cb=log_cb, etikett="Uppdaterar")
     if candidate is None:
         return {"exam": exam,
@@ -16415,6 +16480,7 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
     res = _varvsvakt(exam, res, model=model, llm=llm, profil=profil,
                      niva_mal=niva_mal, infor=infor, max_rounds=max_rounds,
                      inriktning=inriktning, referens=referens,
+                     tidigare=tidigare,
                      log_cb=log_cb, steg_cb=steg)
     # Poängen som önskemålet sa (se poangonske). Efter varvsvakten, så att
     # dess lagning inte flyttar poängen tillbaka efter att den satts.

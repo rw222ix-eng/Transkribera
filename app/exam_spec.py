@@ -1936,16 +1936,22 @@ KRAV_DEFAULT = {
 # ══ GRÄNS PER PROVTYP (Rickard 2026-10-14) ══
 # E-provet (andra omprovet, «Bara E») har bara E-uppgifter, och NP:s 26 % var
 # «alldeles för snällt» där: gränsen räknades som för ett blandat prov fast
-# varje poäng är en E-poäng. E-provet får därför en egen E-andel, en tredjedel
-# av totalpoängen. Vanliga prov står kvar på KRAV_DEFAULT. Det här ersätter
-# beslutet 2026-10-11 («NP:s gräns, samma som ett vanligt prov»).
+# varje poäng är en E-poäng. E-provet får därför en egen E-andel, hälften av
+# provets E-poäng (= totalpoängen), avrundat uppåt. Vanliga prov står kvar på
+# KRAV_DEFAULT. Det här ersätter beslutet 2026-10-11 («NP:s gräns, samma som
+# ett vanligt prov»).
+#
+# Varför hälften: på lärarens vanliga prov ligger E-gränsen på 60–90 % av
+# E-poängen (median ~78 %). En tredjedel (första försöket samma dag) lät
+# eleven missa två av tre E-uppgifter; två tredjedelar hade gjort sista
+# chansen lika sträng som provet den ersätter.
 #
 # Bara framåt: ett godkänt prov bär sina stämplade gränser (ExamDoc.granser,
 # rattning.granser), och de räknas inte om. Den nya andelen gäller papper som
 # stämplas efter ändringen.
 KRAV_PER_PROVTYP: dict[str, dict] = {
     "prov": {},
-    "e-prov": {"e_andel": Fraction(1, 3)},   # E: minst 33 % av totalpoängen
+    "e-prov": {"e_andel": Fraction(1, 2)},   # E: minst 50 % av totalpoängen
 }
 
 
