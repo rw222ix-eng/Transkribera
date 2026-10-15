@@ -22,8 +22,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Callable
 
-from app import (ci_utanfor, course_data, exam_spec, facitfigur, kursdomare,
-                 llm_client, niva_rubrik, np_vakter, rakneverk)
+from app import (ci_utanfor, course_data, exam_figures, exam_spec, facitfigur,
+                 kursdomare, llm_client, niva_rubrik, np_vakter, rakneverk)
 
 _LOG = logging.getLogger(__name__)
 
@@ -8086,8 +8086,19 @@ def _json_objekt(raw: str):
 
 def _parse_exam(raw: str) -> dict | None:
     data = _json_objekt(raw)
-    return (_rensa_forsattsbild(_rensa_toppnycklar(data))
+    return (_linjefonster(_rensa_forsattsbild(_rensa_toppnycklar(data)))
             if data is not None else None)
+
+
+def _linjefonster(exam):
+    """Varje linjär figur med sträcka och fönster ur uppgiftens egen text
+    (exam_figures.linjar_ur_text, exam 260 uppg 9). Här, där varje
+    modellsvar läses, så att generering, reparation och omskrivning ritar
+    samma graf. Annat än ett papper med uppgifter passerar."""
+    if isinstance(exam, dict) and isinstance(exam.get("uppgifter"), list):
+        for u in exam["uppgifter"]:
+            exam_figures.linjar_ur_text(u)
+    return exam
 
 
 # ── EN MENING PER RAD (lärarens dom 2026-09-23 kväll, exam 129) ──────────

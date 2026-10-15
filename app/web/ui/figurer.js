@@ -369,11 +369,15 @@ window.Figurer = (() => {
      definitionsmängden plus 8 % luft, så kurvan alltid fyller rutan. Därför
      klarar grafen alla fyra kvadranter: axlarna går genom origo var det än
      hamnar i rutan, och ligger nollan utanför fönstret står axeln i kanten. */
-  function grafFonster(fn, xlo, xhi, samples = 80) {
+  /* `stracka` [a, b] är _funktionsgrafs: kurvan bara på a ≤ x ≤ b, och
+     y-fönstret tar med nollan. */
+  function grafFonster(fn, xlo, xhi, stracka = null, samples = 80) {
     const xs = [], ys = [];
-    for (let i = 0; i <= samples; i++) xs.push(xlo + (xhi - xlo) * i / samples);
+    const [a, b] = stracka || [xlo, xhi];
+    for (let i = 0; i <= samples; i++) xs.push(a + (b - a) * i / samples);
     xs.forEach(x => ys.push(fn(x)));
     let ylo = Math.min(...ys), yhi = Math.max(...ys);
+    if (stracka) { ylo = Math.min(ylo, 0); yhi = Math.max(yhi, 0); }
     if (yhi - ylo < 1e-9) yhi = ylo + 1;
     const pad = (yhi - ylo) * 0.08;
     ylo -= pad;
@@ -416,8 +420,8 @@ window.Figurer = (() => {
     avsluta();
     return sjok;
   }
-  function funktionsgraf(fn, xlo, xhi) {
-    const L = grafFonster(fn, xlo, xhi);
+  function funktionsgraf(fn, xlo, xhi, stracka = null) {
+    const L = grafFonster(fn, xlo, xhi, stracka);
     const P = (x, y) => `(${r4(x)}, ${r4(y)})`;
     const rader = [];
     /* Rutnätet först, bakom allt: mellanlinjer ljusare, huvudlinjer vid ticksen
@@ -451,13 +455,18 @@ window.Figurer = (() => {
     /* Blå kurva, det enda färgade på pappret (förlagans \addplot[blue]). */
     klipp(L.punkter, BOXW, BOXH).forEach(s =>
       rader.push(`line(${s.map(p => P(p[0], p[1])).join(', ')}, stroke: (thickness: 1.8pt, paint: blue))`));
+    /* Sträckans ändpunkter hör till grafen: fyllda, i kurvans färg. */
+    if (stracka) [L.punkter[0], L.punkter[L.punkter.length - 1]].forEach(p =>
+      rader.push(`circle(${P(p[0], p[1])}, radius: 0.09, fill: blue, stroke: none)`));
     return rader.join('\n');
   }
-  /* Definitionsmängderna är exam_figures: linjär på [−1, 7], andragrad på
-     symmetrilinjen ± 4 (avrundad med Math.round), exponentialen på [−3, 3]. */
+  /* Definitionsmängderna är exam_figures: linjär på [−1, 7] eller sitt eget
+     fönster och sin sträcka (FigLinjar.fonster/.stracka, satta ur uppgiftens
+     text), andragrad på symmetrilinjen ± 4 (avrundad med Math.round),
+     exponentialen på [−3, 3]. */
   const parabelmitt = o => o.a ? Math.round(-o.b / (2 * o.a)) : 3;
   const GRAFER = {
-    linjar: o => [x => o.k * x + o.m, -1, 7],
+    linjar: o => [x => o.k * x + o.m, ...(o.fonster || [-1, 7]), o.stracka || null],
     andragrad: o => [x => o.a * x * x + o.b * x + o.c, parabelmitt(o) - 4, parabelmitt(o) + 4],
     exponential: o => [x => o.C * Math.pow(o.bas, x), -3, 3]
   };

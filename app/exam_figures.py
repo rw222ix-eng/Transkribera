@@ -9,6 +9,7 @@ placeringsregel)."""
 from __future__ import annotations
 
 import math
+import re
 
 from app import exam_spec
 
@@ -92,15 +93,23 @@ def _rutlinjer(lo: float, hi: float, skala, maj: list[float],
             and all(abs(skala(v) - m) > 1e-6 for m in maj)]
 
 
-def _funktionsgraf(fn, xlo: float, xhi: float, samples: int = 80) -> str:
+def _funktionsgraf(fn, xlo: float, xhi: float, samples: int = 80,
+                   stracka: tuple[float, float] | None = None) -> str:
     """Ritar en funktion i en FAST ruta (BOXW×BOXH): data mappas in, så
     koordinaten aldrig spränger TeX oavsett funktionens storlek. Kurvan
     klipps mot rutan; ticks sätts på runda datavärden. Ett TYDLIGT rutnät
     (minor + major) ligger bakom kurvan; y=f(x)-etiketten placeras i den
-    övre kant-region som ligger längst från kurvan."""
-    xs = [xlo + (xhi - xlo) * i / samples for i in range(samples + 1)]
+    övre kant-region som ligger längst från kurvan.
+
+    `stracka` (a, b) ritar kurvan bara på a ≤ x ≤ b, med fyllda ändpunkter,
+    och y-fönstret tar med nollan: grafen ska gå att läsa av mot axlarna, och
+    en x-axel i rutans kant när nollan ligger utanför hade pekat på fel tal."""
+    a, b = stracka or (xlo, xhi)
+    xs = [a + (b - a) * i / samples for i in range(samples + 1)]
     ys = [fn(x) for x in xs]
     ylo, yhi = min(ys), max(ys)
+    if stracka:
+        ylo, yhi = min(ylo, 0.0), max(yhi, 0.0)
     if yhi - ylo < 1e-9:
         yhi = ylo + 1
     pad = (yhi - ylo) * 0.08
@@ -173,6 +182,12 @@ def _funktionsgraf(fn, xlo: float, xhi: float, samples: int = 80) -> str:
         rf"\draw[blue,very thick] plot coordinates {{{pts}}};",
         r"\end{scope}",
     ]
+    # Sträckans ändpunkter hör till grafen och ritas fyllda, i kurvans färg
+    # (bokens 4202/4206). Utanför klippningen: en ändpunkt i rutans kant ska
+    # synas hel.
+    if stracka:
+        for x, y in ((xs[0], ys[0]), (xs[-1], ys[-1])):
+            rader.append(rf"\fill[blue] ({_f(X(x))},{_f(Y(y))}) circle (0.09);")
     # INGEN KURVETIKETT. Här satt förut ett «$y=f(x)$» som placerades i den
     # kantregion som låg längst från kurvan. Förlagans graf har ingen — och det
     # är rätt: uppgiftstexten säger redan vilken funktion det är («Grafen till
@@ -183,7 +198,110 @@ def _funktionsgraf(fn, xlo: float, xhi: float, samples: int = 80) -> str:
 
 
 def _linjar(f: "exam_spec.FigLinjar") -> str:
-    return _funktionsgraf(lambda x: f.k * x + f.m, -1, 7)
+    lo, hi = f.fonster or LINJEFONSTER
+    return _funktionsgraf(lambda x: f.k * x + f.m, lo, hi,
+                          stracka=f.stracka)
+
+
+# ── LINJENS FÖNSTER UR UPPGIFTENS TEXT (exam 260 uppg 9, 2026-10-16) ─────
+# «Sträckan går från punkten (−2, 5) till punkten (4, −1)» ritades på
+# −1 ≤ x ≤ 7 och klipptes vid x = −1. Modellen skriver bara k och m (figuren
+# är ett recept, och grammatiken har inte plats för fler fält), men uppgiften
+# säger alltid själv vad grafen ska visa: definitionsmängden står i stammen
+# eller i facit («$-2 \le x \le 4$»), punkterna i texten. Härifrån sätts
+# FigLinjar.stracka och .fonster, en gång när svaret läses
+# (exam_gen._parse_exam), så att pappret och skärmen ritar samma sak.
+LINJEFONSTER = (-1, 7)
+_TAL = r"([-−–]?\s*\d+(?:(?:[.,]|\{,\})\d+)?)"
+_LE = r"(?:\\le(?:q|qslant)?(?![a-zA-Z])|≤|<=)"
+_LT = r"(?:<(?!=)|\\lt(?![a-zA-Z]))"
+_INTERVALL_RE = re.compile(
+    _TAL + r"\s*(" + _LE + "|" + _LT + r")\s*(?<![\w(])x(?![\w(])\s*("
+    + _LE + "|" + _LT + r")\s*" + _TAL)
+_PUNKT_RE = re.compile(r"\(\s*" + _TAL + r"\s*[,;]\s*(?:\\[ ,;!:]\s*)*"
+                       + _TAL + r"\s*\)")
+
+
+def _tal(s: str) -> float:
+    return float(re.sub(r"\s+", "", s).replace("−", "-").replace("–", "-")
+                 .replace("{,}", ".").replace(",", "."))
+
+
+def _intervall(text: str) -> tuple[float, float, bool] | None:
+    """(a, b, slutet) ur första «a ≤ x ≤ b» i texten. `slutet` är False när
+    någon gräns är strikt: då ritas ingen sträcka med fyllda ändar."""
+    m = _INTERVALL_RE.search(text or "")
+    if not m:
+        return None
+    a, b = _tal(m.group(1)), _tal(m.group(4))
+    if not a < b:
+        return None
+    return a, b, not any(re.fullmatch(_LT, g) for g in (m.group(2), m.group(3)))
+
+
+def _punkter_x(texter: list[str]) -> list[float]:
+    return [_tal(m.group(1)) for t in texter for m in _PUNKT_RE.finditer(t or "")]
+
+
+def linjar_fonster(fig: dict, texter: list[str]) -> dict:
+    """FigLinjar som dict med `stracka` och `fonster` satta ur texterna, i
+    ordning: den första texten med ett intervall i x avgör sträckan, och
+    punkterna i alla texterna vidgar fönstret. Står inget i texterna som
+    ryms utanför −1 ≤ x ≤ 7 kommer figuren tillbaka orörd, byte för byte.
+    Satta fält rörs inte: en omskrivning som tar uppgiften ordagrant ur
+    originalet ska inte få ett nytt fönster."""
+    if (not isinstance(fig, dict) or fig.get("typ") != "linjar"
+            or fig.get("stracka") is not None or fig.get("fonster") is not None):
+        return fig
+    stracka = None
+    xs: list[float] = []
+    for t in texter:
+        iv = _intervall(t)
+        if iv:
+            if iv[2]:
+                stracka = (iv[0], iv[1])
+            xs += [iv[0], iv[1]]
+            break
+    xs += [x for x in _punkter_x(texter) if abs(x) <= _LINJE_XMAX]
+    if stracka:
+        lo = math.floor(min([stracka[0], 0.0] + xs)) - 1
+        hi = math.ceil(max([stracka[1], 0.0] + xs)) + 1
+    else:
+        lo = min(LINJEFONSTER[0], math.floor(min(xs, default=0)) - 1)
+        hi = max(LINJEFONSTER[1], math.ceil(max(xs, default=0)) + 1)
+    if (lo, hi) == LINJEFONSTER and not stracka:
+        return fig
+    if hi - lo > exam_spec._LINJEFONSTER_MAX:
+        return fig
+    ut = dict(fig, fonster=[lo, hi])
+    if stracka:
+        ut["stracka"] = list(stracka)
+    return ut
+
+
+_LINJE_XMAX = 18          # punkter längre ut än så är inte grafens
+
+
+def linjar_ur_text(uppgift: dict) -> dict:
+    """Uppgiften med varje linjär figur försedd med fönster (linjar_fonster).
+    En figur på en deluppgift läser deluppgiftens text och facit före
+    stammens; stammens figur läser stammen, deluppgifternas texter och sist
+    facit. Annat än en dict passerar."""
+    if not isinstance(uppgift, dict):
+        return uppgift
+    delar = [d for d in uppgift.get("deluppgifter") or [] if isinstance(d, dict)]
+    stam = [uppgift.get("text") or ""]
+    deltext = [d.get("text") or "" for d in delar]
+    facit = ([d.get("losning") or "" for d in delar]
+             + [uppgift.get("losning") or ""])
+    if isinstance(uppgift.get("figur"), dict):
+        uppgift["figur"] = linjar_fonster(uppgift["figur"],
+                                          stam + deltext + facit)
+    for d in delar:
+        if isinstance(d.get("figur"), dict):
+            d["figur"] = linjar_fonster(
+                d["figur"], [d.get("text") or "", d.get("losning") or ""] + stam)
+    return uppgift
 
 
 # PARABELN RITAS KRING SIN SYMMETRILINJE, inte på linjens −1 ≤ x ≤ 7. Prov 156

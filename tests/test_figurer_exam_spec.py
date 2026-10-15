@@ -27,6 +27,9 @@ pytestmark = pytest.mark.skipif(shutil.which("node") is None,
 EXEMPEL = [
     exam_spec.FigLinjar(typ="linjar", k=2, m=1),
     exam_spec.FigLinjar(typ="linjar", k=-3, m=4),
+    # Sträckan med fyllda ändpunkter (exam 260 uppg 9, bokens 4202/4206).
+    exam_spec.FigLinjar(typ="linjar", k=-1, m=3, fonster=(-3, 5),
+                        stracka=(-2, 4)),
     exam_spec.FigAndragrad(typ="andragrad", a=1, b=-4, c=3),
     exam_spec.FigAndragrad(typ="andragrad", a=-0.5, b=2, c=-6),
     exam_spec.FigExponential(typ="exponential", C=2, bas=1.5),
@@ -139,3 +142,95 @@ def test_nice_ticks_som_python():
                "data.map(([a, b]) => F.prov.niceTicks(a, b))))", fall)
     for (lo, hi), j in zip(fall, js):
         assert j == pytest.approx(exam_figures._nice_ticks(lo, hi)), (lo, hi)
+
+
+# ── Linjens sträcka och fönster (exam 260 uppg 9, 2026-10-16) ────────────
+
+def _uppg9() -> dict:
+    """Exam 260 v1254 uppgift 9, ordagrant: stammen säger ändpunkterna, a)
+    frågar efter definitionsmängden och facit säger den."""
+    return {
+        "text": ("Funktionen $f$ har en graf som är en sträcka.\n"
+                 "Figuren visar den räta linje som sträckan ligger på.\n"
+                 "Sträckan går från punkten $(-2,\\ 5)$ till punkten "
+                 "$(4,\\ -1)$.\nBåda ändpunkterna hör till grafen."),
+        "losning": "",
+        "figur": {"typ": "linjar", "k": -1, "m": 3},
+        "deluppgifter": [
+            {"text": "Ange definitionsmängden för $f$.",
+             "losning": "$-2 \\le x \\le 4$"},
+            {"text": "Ange värdemängden för $f$.",
+             "losning": "$-1 \\le f(x) \\le 5$"},
+        ],
+    }
+
+
+def test_strackan_las_ur_uppgiftens_text():
+    """Facit säger −2 ≤ x ≤ 4: sträckan ritas där, och fönstret tar med
+    båda ändarna och y-axeln. Förut −1 ≤ x ≤ 7, och (−2, 5) klipptes bort."""
+    fig = exam_figures.linjar_ur_text(_uppg9())["figur"]
+    assert fig["stracka"] == [-2, 4]
+    assert fig["fonster"][0] < -2 and fig["fonster"][1] > 4
+    f = exam_spec.FigLinjar(**fig)
+    tikz = exam_figures.render_figur(f)
+    # Två fyllda ändpunkter, i kurvans färg.
+    assert tikz.count(r"\fill[blue]") == 2
+    _xs, _ys, pts = _tikz_ticks(tikz)
+    # Kurvan börjar och slutar i ändpunkterna, inte i rutans kant.
+    x0 = exam_figures.BOXW / (f.fonster[1] - f.fonster[0])
+    assert pts[0][0] == pytest.approx((-2 - f.fonster[0]) * x0, abs=1e-3)
+    assert pts[-1][0] == pytest.approx((4 - f.fonster[0]) * x0, abs=1e-3)
+
+
+def test_strikt_olikhet_ger_inga_fyllda_andar():
+    u = _uppg9()
+    u["deluppgifter"][0]["losning"] = "$-2 < x \\le 4$"
+    fig = exam_figures.linjar_ur_text(u)["figur"]
+    assert "stracka" not in fig
+    assert fig["fonster"][0] <= -3          # punkten (−2, 5) syns ändå
+
+
+def test_punkterna_vidgar_fonstret_utan_strackan():
+    fig = exam_figures.linjar_fonster(
+        {"typ": "linjar", "k": 2, "m": 1},
+        ["Visa att punkten $(9,\\ 19)$ ligger på linjen."])
+    assert fig == {"typ": "linjar", "k": 2, "m": 1, "fonster": [-1, 10]}
+
+
+def test_linje_utan_intervall_och_punkter_ar_orord():
+    """Byte för byte som förut: inget fält läggs till, och pappret ritar
+    samma −1 ≤ x ≤ 7."""
+    fig = {"typ": "linjar", "k": 2, "m": 1}
+    assert exam_figures.linjar_fonster(fig, ["Rita grafen till $y = 2x + 1$."]) \
+        is fig
+    assert exam_figures.linjar_fonster(
+        fig, ["Punkten $(3,\\ 7)$ ligger på linjen."]) is fig
+
+
+def test_satt_fonster_rors_inte():
+    fig = {"typ": "linjar", "k": 1, "m": 0, "fonster": [-5, 5]}
+    assert exam_figures.linjar_fonster(fig, ["$0 \\le x \\le 2$"]) is fig
+
+
+def test_modellsvaret_far_strackan_nar_det_lases():
+    """exam_gen._parse_exam är vägen varje modellsvar går (generering,
+    reparation, omskrivning)."""
+    from app import exam_gen
+    raw = json.dumps({"titel": "t", "uppgifter": [_uppg9()]})
+    fig = exam_gen._parse_exam(raw)["uppgifter"][0]["figur"]
+    assert fig["stracka"] == [-2, 4]
+
+
+def test_strackan_star_inte_i_grammatiken():
+    """Schemat ligger 269 tecken under taket på ett tjugouppgifts 1b-prov.
+    Fälten sätts av appen och får inte kosta grammatiken ett tecken."""
+    sk = exam_spec.balanced_skeleton(10, "arbetsblad")
+    schema = json.dumps(exam_spec.to_response_format(10, sk))
+    assert '"stracka"' not in schema and '"fonster"' not in schema
+    assert '"linjar"' in schema
+
+
+def test_skarmen_ritar_strackans_andpunkter():
+    fig = exam_figures.linjar_ur_text(_uppg9())["figur"]
+    k = _node("process.stdout.write(JSON.stringify(F.kalla(data)))", fig)
+    assert k.count("fill: blue") == 2

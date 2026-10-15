@@ -275,10 +275,33 @@ class _Uppgiftsbas(_Model):
 _KOEFF = Annotated[float, Field(ge=-1e9, le=1e9)]
 
 
+_LINJEFONSTER_MAX = 40.0                 # bredaste x-fönster en linje får
+
+
 class FigLinjar(_Model):
     typ: Literal["linjar"]
     k: _KOEFF                             # riktningskoefficient
     m: _KOEFF                             # y-skärning
+    # STRÄCKAN OCH FÖNSTRET (NA26F exam 260 uppg 9, 2026-10-16). Linjen
+    # ritades alltid på −1 ≤ x ≤ 7, och uppgiften «sträckan går från (−2, 5)
+    # till (4, −1), ange definitionsmängden» (bokens 4202/4206) fick sin
+    # vänstra ände avklippt. Båda fälten SÄTTS AV APPEN ur uppgiftens egen
+    # text (exam_figures.linjar_ur_text) och står inte i grammatiken
+    # (_bygg_response_format poppar dem): schemat ligger 269 tecken under
+    # taket på ett tjugouppgifts 1b-prov, och uppgiften säger ändå redan
+    # intervallet och punkterna. `stracka` ritar bara [a, b] med fyllda
+    # ändpunkter, `fonster` är x-fönstret. Utan dem: −1 ≤ x ≤ 7 som förut.
+    stracka: tuple[_KOEFF, _KOEFF] | None = None
+    fonster: tuple[_KOEFF, _KOEFF] | None = None
+
+    @model_validator(mode="after")
+    def _kontrollera_intervall(self):
+        for namn in ("stracka", "fonster"):
+            v = getattr(self, namn)
+            if v is not None and not 0 < v[1] - v[0] <= _LINJEFONSTER_MAX:
+                raise ValueError(f"{namn} måste vara ett intervall a < b, "
+                                 f"högst {_LINJEFONSTER_MAX:g} brett")
+        return self
 
 
 class FigAndragrad(_Model):
@@ -935,6 +958,12 @@ def _bygg_response_format(antal: int | None = None,
     # modellen i det — och den skulle skriva ett plåtnummer den hittat på.
     if "Scen" in schema.get("$defs", {}):
         schema["$defs"]["Scen"]["properties"].pop("plat", None)
+    # LINJENS STRÄCKA OCH FÖNSTER likaså: appen läser dem ur uppgiftens text
+    # (exam_figures.linjar_ur_text), och grammatiken är byte för byte den
+    # som gick i väg innan fälten fanns.
+    if "FigLinjar" in schema.get("$defs", {}):
+        for falt in ("stracka", "fonster"):
+            schema["$defs"]["FigLinjar"]["properties"].pop(falt, None)
     if koder:
         item_def = schema["$defs"]["ExamItem"]
         item_def["properties"]["innehall"] = {
