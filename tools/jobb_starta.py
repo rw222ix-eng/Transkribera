@@ -29,7 +29,16 @@ while True:
         # sig självt: 24/9 väntade ett skript 47 minuter och 110 anrop på det.
         if e.code == 409 and kod != "godkant" and time.time() - start < 3600:
             print("409 upptaget, väntar 30 s", flush=True); time.sleep(30); continue
+        # 503 «gammal_kod»: servern under vakten byter till ny kod (app/web/kodvakt.py)
+        # och startar om när pågående jobb är klara. Vänta in den nya koden.
+        if e.code == 503 and kod == "gammal_kod" and time.time() - start < 3600:
+            print("503 gammal kod, servern startar om, väntar 15 s", flush=True); time.sleep(15); continue
         raise SystemExit(f"{e.code} {kropp_fel[:400]}")
+    except urllib.error.URLError as e:
+        # Några sekunder utan svar medan vakten startar om servern.
+        if time.time() - start < 120:
+            print(f"ingen server ({e.reason}), väntar 5 s", flush=True); time.sleep(5); continue
+        raise
     try:
         for rad in svar:
             t = rad.decode("utf-8", "replace").strip()

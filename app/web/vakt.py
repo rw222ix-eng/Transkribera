@@ -30,6 +30,7 @@ from pathlib import Path
 from urllib.request import urlopen
 
 from app import debug_log
+from app.dold_process import dold_process_kwargs
 from app.web import port as port_kalla
 
 KOD = Path(__file__).resolve().parent.parent.parent
@@ -52,13 +53,13 @@ def _port_ledig(port: int) -> bool:
 
 def _lever(pid: int) -> bool:
     ut = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"],
-                        capture_output=True, text=True)
+                        capture_output=True, text=True, **dold_process_kwargs())
     return str(pid) in ut.stdout
 
 
 def _dod(pid: int) -> None:
     subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
-                   capture_output=True)
+                   capture_output=True, **dold_process_kwargs())
 
 
 def _jobb_i_db(pid: int) -> int:
@@ -116,7 +117,6 @@ def vakta(port: int) -> int:
                      port, hus or "svarar inte som Transkribera")
         return 1
     miljo = dict(os.environ, TRANSKRIBERA_KODVAKT=str(os.getpid()))
-    flaggor = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     paus = 2.0
     logg.info("vakt: pid %s vaktar port %s", os.getpid(), port)
     while True:
@@ -126,7 +126,7 @@ def vakta(port: int) -> int:
                 [sys.executable, "-m", "app.web.vakt", "--barn",
                  "--port", str(port)],
                 cwd=str(KOD), env=miljo, stdout=ut, stderr=ut,
-                creationflags=flaggor)
+                **dold_process_kwargs())
         logg.info("vakt: server pid %s startad", barnet.pid)
         kod = barnet.wait()
         if kod == NY_KOD:
@@ -160,16 +160,17 @@ def _beskriv(hus: dict | None, port: int) -> str:
 
 def _starta_fristaende(port: int) -> None:
     """Vakten som egen process utan fönster, frikopplad från den som startar
-    den: en chatts skal eller en terminal som stängs tar den inte med sig."""
+    den: en chatts skal eller en terminal som stängs tar den inte med sig.
+    pythonw har ingen konsol; utbrytningen ur jobbobjektet är det som gör att
+    vakten överlever skalet som startade den."""
     pythonw = Path(sys.executable).with_name("pythonw.exe")
     exe = str(pythonw if pythonw.exists() else sys.executable)
-    bas = (getattr(subprocess, "DETACHED_PROCESS", 0)
-           | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+    bas = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
     utbrytning = 0x01000000          # CREATE_BREAKAWAY_FROM_JOB
     args = [exe, "-m", "app.web.vakt", "--port", str(port)]
     for flaggor in (bas | utbrytning, bas):
         try:
-            subprocess.Popen(args, cwd=str(KOD), creationflags=flaggor,
+            subprocess.Popen(args, cwd=str(KOD), **dold_process_kwargs(flaggor),
                              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                              stderr=subprocess.DEVNULL, close_fds=True)
             return

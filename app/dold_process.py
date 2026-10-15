@@ -23,9 +23,10 @@ import subprocess
 import sys
 
 
-def dold_process_kwargs() -> dict:
+def dold_process_kwargs(fler_flaggor: int = 0) -> dict:
     """Nyckelord till subprocess.run/Popen som håller konsolfönstret borta.
-    Tomt utanför Windows, där frågan inte finns."""
+    Tomt utanför Windows, där frågan inte finns. `fler_flaggor` läggs till
+    CREATE_NO_WINDOW (kodvaktens fristående start, app/web/vakt.py)."""
     if sys.platform != "win32":
         return {}
-    return {"creationflags": subprocess.CREATE_NO_WINDOW}
+    return {"creationflags": subprocess.CREATE_NO_WINDOW | fler_flaggor}

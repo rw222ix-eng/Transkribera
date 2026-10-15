@@ -30,6 +30,8 @@ import time
 from pathlib import Path
 from typing import Callable
 
+from app.dold_process import dold_process_kwargs
+
 # Koden, inte datat: create_app kan få en annan bas (testerna, exe-byggets mapp),
 # men frågan gäller vilken kod processen läste in.
 KOD = Path(__file__).resolve().parent.parent.parent
@@ -77,7 +79,8 @@ def head(repo: Path = KOD) -> str | None:
     # Något ovanligt (en ref mitt i en packning, ett trasigt HEAD): fråga git.
     try:
         ut = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"],
-                            capture_output=True, text=True, timeout=5)
+                            capture_output=True, text=True, timeout=5,
+                            **dold_process_kwargs())
         return ut.stdout.strip() or None
     except (OSError, subprocess.SubprocessError):
         return None
