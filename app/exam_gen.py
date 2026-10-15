@@ -2017,7 +2017,8 @@ def _skelett_plan(skeleton: list[dict], last: bool = True) -> str:
                 f"delas i {len(s['delar'])} deluppgifter: {delar_txt}")
             continue
         rader.append(f"{i}. {del_txt}{exam_spec.FORMAGA_NAMN[s['formaga']]} "
-                     f"({s['formaga']}), {s['typ']}, poäng {s['poang']}")
+                     f"({s['formaga']}), {s['typ']}, poäng {s['poang']}"
+                     f"{_lararens_rad(s)}")
     huvud = ("Uppgiftsplan — del, förmåga, typ och poäng är LÅSTA per uppgift "
              "(ändra dem inte); skriv en uppgift vars INNEHÅLL matchar varje rad: "
              if last else
@@ -2045,8 +2046,35 @@ def _skelett_plan(skeleton: list[dict], last: bool = True) -> str:
     return (huvud +
             "en R-rad avgör/motiverar ('Avgör om … Motivera.'), en K-rad "
             "förklarar med ord och representation ('Förklara/Redogör med ord och "
-            "graf …'), en rutin-rad kräver bara svar." + kortrad + "\n"
-            + "\n".join(rader))
+            "graf …'), en rutin-rad kräver bara svar." + kortrad
+            + _LARARENS_PLAN_RAD * any(_lararens_rad(s) for s in skeleton)
+            + "\n" + "\n".join(rader))
+
+
+# LÄRARENS PLAN PÅ RADERNA (NA26F 16/10, jobb 1919). Viktningsrutan sa «uppgift
+# 1–5 är 4.1 i ordningen E, E, C, C, A, uppgift 6–10 är 4.2 …», och modellen
+# lade 4.2 som uppgift 4 och två ekvationsuppgifter (bowling, klätterhall) som
+# 7 och 9. Planen läses av routes_exam (lararord.fokusplan) och står som
+# `avsnitt` och `niva` på skelettets rader. Raden nedan och suffixet per rad
+# finns BARA då: utan plan är uppgiftsplanen byte för byte den som spelades in.
+_LARARENS_PLAN_RAD = (
+    " Avsnitt och nivå på raderna är LÄRARENS PLAN: uppgiften övar just det "
+    "avsnittets innehåll, så som det står på bokens sidor för avsnittet, på "
+    "den nivån, och bär avsnittets nummer i fältet \"avsnitt\". Ett innehåll "
+    "som inte finns på avsnittets sidor hör inte hemma på raden, hur väl det "
+    "än passar momentet.")
+
+
+def _lararens_rad(s: dict) -> str:
+    """«, E-uppgift ur avsnitt 4.1» när raden bär lärarens plan, annars ""."""
+    niva, avs = s.get("niva"), s.get("avsnitt")
+    if niva and avs:
+        return f", {niva}-uppgift ur avsnitt {avs}"
+    if avs:
+        return f", ur avsnitt {avs}"
+    if niva:
+        return f", {niva}-uppgift"
+    return ""
 
 
 # ── ORIGINALITETEN, SAGD I UPPDRAGET ──────────────────────────────────────
@@ -5746,7 +5774,8 @@ def build_relevans_prompt(kort: list[dict], bokuppgifter: list[dict],
     # vara byte för byte den som spelades in (tests/kassetter), och en domare
     # som formulerar sig olika om samma fråga dömer olika.
     prov = profil == "prov"
-    papper = "ett prov" if prov else "ett grupparbetspapper"
+    papper = ("ett prov" if prov else "ett arbetsblad"
+              if profil == "arbetsblad" else "ett grupparbetspapper")
     var = ("i det kapitel provet gäller" if prov
            else "på de sidor klassen arbetar med")
     return (
@@ -8543,6 +8572,8 @@ def _validate(exam: dict, profil: str, koder: list[str] | None = None,
         errors = errors + exam_spec.validate_ci(doc, koder)
     if profil == "gruppuppgift":
         errors = errors + gruppvakter(exam)
+    if profil == "arbetsblad":
+        errors = errors + fokusfynd(exam, _LARARENS_AVSNITT.get())
     return doc, errors
 
 
@@ -8569,6 +8600,44 @@ _PROCENT_RE = re.compile(r"%|procent", re.I)
 _PARENTES_RE = re.compile(r"(?:\d|[a-zA-Z]|\)|[-−])\s*\(\s*[^()]*[a-zA-Z][^()]*\)")
 _LEKTIONEN_UTAN_PARENTES: contextvars.ContextVar[bool] = contextvars.ContextVar(
     "lektionen_utan_parentes", default=False)
+
+# LÄRARENS AVSNITT PER UPPGIFT (NA26F 16/10, jobb 1919), ur skelettets rader
+# (routes_exam, lararord.fokusplan). Sätts runt generate_exam som raden ovan,
+# så att varje runda som validerar bladet, också reparationerna och grindarna,
+# mäter mot hennes plan utan att planen trätts genom varje anrop.
+_LARARENS_AVSNITT: contextvars.ContextVar[list | None] = contextvars.ContextVar(
+    "lararens_avsnitt", default=None)
+
+
+def _avsnittsnr(v) -> str:
+    """«4.1» ur «4.1», «4.1 Koordinatsystemet» eller 4.1; tom sträng annars."""
+    m = re.match(r"\s*(\d{1,2})[.,](\d{1,2})", str(v or ""))
+    return f"{m.group(1)}.{m.group(2)}" if m else ""
+
+
+def fokusfynd(exam: dict, plan: list | None) -> list[dict]:
+    """Uppgifterna vars avsnitt inte är det lärarens plan satte på platsen.
+
+    Jobb 1919 lade 4.2 på uppgift 4, där planen sa 4.1. Uppgiften bär sitt
+    avsnitt i fältet `avsnitt`, och det är det som mäts: en uppgift utan
+    fältet fälls inte (fältet är frivilligt, och en vakt som fäller det
+    modellen inte måste skriva kostar rundor utan att laga något). Platser
+    planen inte säger något om mäts inte."""
+    if not plan or not isinstance(exam, dict):
+        return []
+    fel = []
+    for i, (u, ska) in enumerate(zip(exam.get("uppgifter") or [], plan), 1):
+        ska = _avsnittsnr(ska)
+        har = _avsnittsnr(u.get("avsnitt")) if isinstance(u, dict) else ""
+        if ska and har and har != ska:
+            fel.append(_err(
+                f"uppgift {i}", "fokusordning",
+                f"Uppgift {i} ska enligt lärarens plan öva avsnitt {ska}, men "
+                f"den övar avsnitt {har}. Skriv en ny uppgift {i} ur avsnitt "
+                f"{ska}, med det innehåll som står på bokens sidor för "
+                f"avsnittet, på samma nivå och med samma poäng, och skriv "
+                f"\"{ska}\" i fältet avsnitt. Ordningen är lärarens."))
+    return fel
 
 
 def lektionen_utan_parentes(bokuppgifter: list[dict] | None) -> bool:
@@ -15121,14 +15190,20 @@ def _bok_grind(res: dict, *, model: str, llm, profil: str,
                antal: int | None, koder: list[str] | None,
                niva_mal: dict | None, inriktning: str = "",
                max_rounds: int = EXTRA_BOKRUNDOR,
+               skeleton: list[dict] | None = None,
+               begriplighet: bool = True,
                log_cb: Callable[[str], None] | None = None) -> dict:
     """Relevans- och begriplighetsdomarna, med riktade extrarundor.
 
     Svaret är samma dict med `relevansfel` och `begriplighetsfel` ifyllda: tom
     lista när ingenting står kvar, annars en rad per uppgift med skälet.
 
-    Kallas BARA för gruppuppgiften (generate_exam) — måtten och prompterna är
-    hämtade ur lärarens dom om just den formen."""
+    Kallas för gruppuppgiften (generate_exam) — måtten och prompterna är
+    hämtade ur lärarens dom om just den formen. Och sedan 2026-10-15 för
+    ARBETSBLADET med lärarens remsa, bara relevansen (`begriplighet=False`):
+    jobb 1919 gav NA26F bowling och klätterhall, linjära ekvationer i text,
+    på ett blad om s. 142–154 där ingen sådan uppgift står. Bladet är
+    grammatiklåst, och då går skelettet med i omskrivningen (`skeleton`)."""
     log = log_cb or (lambda _m: None)
     exam = res.get("exam")
     if exam is None:
@@ -15136,10 +15211,13 @@ def _bok_grind(res: dict, *, model: str, llm, profil: str,
 
     def dom(e: dict) -> tuple[list[dict], list[dict]]:
         rel = doma_relevans(e, bokuppgifter, model=model, punkter=punkter,
-                            inriktning=inriktning, llm=llm, log_cb=log_cb)
+                            inriktning=inriktning, profil=profil, llm=llm,
+                            log_cb=log_cb)
         # De deterministiska vakterna först i listan: de är gratis, de är
         # säkra, och står de sist kan de falla utanför MAX_DOMAR_PROBLEM i en
         # reparationsprompt som redan är full av domarfynd.
+        if not begriplighet:
+            return rel, []
         beg = (begriplighetssignaler(e, profil)
                + doma_begriplighet(e, model=model, inriktning=inriktning,
                                    llm=llm, log_cb=log_cb))
@@ -15156,8 +15234,8 @@ def _bok_grind(res: dict, *, model: str, llm, profil: str,
         log(f"Rättar {len(nummer)} uppgift(er) mot boken "
             f"(extrarunda {varv + 1} av {max_rounds}) …")
         kandidat = _llm_round(build_repair_prompt(exam, fynd, profil),
-                              model, llm, antal, None, koder, profil=profil,
-                              log_cb=log_cb,
+                              model, llm, antal, skeleton, koder,
+                              profil=profil, log_cb=log_cb,
                               etikett=f"Rättar mot boken (extrarunda "
                                       f"{varv + 1} av {max_rounds}) —")
         if kandidat is None:
@@ -15192,8 +15270,9 @@ def _bok_grind(res: dict, *, model: str, llm, profil: str,
     # Fynden ska också stå kvar i fellistan — den är klientens `provFel`, och
     # ett fynd som bara syns i loggen försvinner när jobbet är över. Samma
     # regel som nivågrinden följer.
+    egna = ("relevans", "begriplighet") if begriplighet else ("relevans",)
     kvar = [e for e in (res.get("errors") or [])
-            if e.get("code") not in ("relevans", "begriplighet")]
+            if e.get("code") not in egna]
     res["errors"] = kvar + rel + beg
     return res
 
@@ -15376,9 +15455,13 @@ def generate_exam(*args, **kwargs) -> dict:
     token = _LEKTIONEN_UTAN_PARENTES.set(
         kwargs.get("profil") == "gruppuppgift"
         and lektionen_utan_parentes(kwargs.get("bokuppgifter")))
+    plan = [s.get("avsnitt") for s in kwargs.get("skeleton") or []
+            if isinstance(s, dict)]
+    token_plan = _LARARENS_AVSNITT.set(plan if any(plan) else None)
     try:
         return _generate_exam(*args, **kwargs)
     finally:
+        _LARARENS_AVSNITT.reset(token_plan)
         _LEKTIONEN_UTAN_PARENTES.reset(token)
 
 
@@ -15401,6 +15484,7 @@ def _generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                   grupp: dict | None = None, doma: bool = True,
                   illustration: bool = True,
                   bokuppgifter: list[dict] | None = None,
+                  bladets_bokuppgifter: list[dict] | None = None,
                   referensprov: dict | None = None,
                   inforprov: dict | None = None,
                   infor_nummer: list[int] | None = None,
@@ -15933,6 +16017,17 @@ def _generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                          bokuppgifter=bokuppgifter, punkter=punkter,
                          antal=antal, koder=koder, niva_mal=niva_mal,
                          inriktning=inriktning, log_cb=log_cb)
+    # ARBETSBLADET MED LÄRARENS REMSA får relevansdomaren (jobb 1919, NA26F
+    # 16/10: bowling och klätterhall på ett blad om koordinater och
+    # funktioner). Listan går BARA hit och inte in i prompten, som är byte
+    # för byte densamma. Utan remsa körs ingenting, som förut.
+    if (profil == "arbetsblad" and bladets_bokuppgifter
+            and res["exam"] is not None):
+        res = _bok_grind(res, model=model, llm=llm, profil=profil,
+                         bokuppgifter=bladets_bokuppgifter, punkter=punkter,
+                         antal=antal, koder=koder, niva_mal=niva_mal,
+                         inriktning=inriktning, skeleton=grammatik,
+                         begriplighet=False, log_cb=log_cb)
     # ── SLUTGRINDEN (2026-09-13, spår 9) ─────────────────────────────
     # SIST av alla rundor och FÖRE exemplen: de räknade vakterna körs om på
     # det papper läraren faktiskt får. Nivåsäkringen och facitjusteringen har

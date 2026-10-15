@@ -30,7 +30,8 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from app import (ci_profil, ci_utanfor, course_data, db, dokumentdiff,
                  exam_gen, exam_latex, exam_pdf, exam_spec, gpu_arbiter,
-                 llm_client, niva_rubrik, np_vakter, platar, spar, tryck)
+                 lararord, llm_client, niva_rubrik, np_vakter, platar, spar,
+                 tryck)
 # Egen rad och eget namn: modulen heter `kalibrering` och rutten som svarar med
 # den heter också det. Utan omdöpningen skuggar funktionen modulen inne i
 # create_router, och anropet blir ett rekursivt HTTP-lager djupt.
@@ -2070,6 +2071,36 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     antal, typ, delar=(typ == "prov" and delar),
                     mix=nivaval["mix"] if nivaval else None,
                     niva_mal=niva_mal, kurs=kurs, poang_tak=poang_tak)
+            # LÄRARENS PLAN I VIKTNINGSRUTAN (NA26F 16/10, jobb 1919): «uppgift
+            # 1–5 är 4.1 i ordningen E, E, C, C, A, uppgift 6–10 är 4.2 …».
+            # Rutan gick bara in som text, skelettet var redan låst, och bladet
+            # fick 4.2 som uppgift 4. Nu blir ordningen skelettet och avsnittet
+            # en rad i uppgiftsplanen och en vakt (exam_gen.fokusfynd).
+            # Lärarens nivåval i panelen vinner över nivåerna i rutan: det är
+            # det uttryckliga valet av vilka poäng bladet ska bära. Utan plan
+            # i rutan är allt som förut.
+            fokusplan = (lararord.fokusplan(body.get("fokus"), antal)
+                         if typ == "arbetsblad" else None)
+            fokus_logg = ""
+            if fokusplan:
+                plan_nivaer = [p["niva"] for p in fokusplan]
+                egen_ordning = all(plan_nivaer) and not nivaval
+                if egen_ordning:
+                    skelett = exam_spec.balanced_skeleton(
+                        antal, typ, delar=False, kurs=kurs,
+                        poang_tak=poang_tak, karaktarer=plan_nivaer)
+                elif skelett is None:
+                    skelett = exam_spec.balanced_skeleton(
+                        antal, typ, delar=False, kurs=kurs)
+                for slot, p in zip(skelett, fokusplan):
+                    if p["avsnitt"]:
+                        slot["avsnitt"] = p["avsnitt"]
+                    if egen_ordning:
+                        slot["niva"] = p["niva"]
+                fokus_logg = "Din plan: " + ", ".join(
+                    f"{i} {(p['avsnitt'] or '').strip()} "
+                    f"{p['niva'] if egen_ordning else ''}".strip()
+                    for i, p in enumerate(fokusplan, 1)) + "."
             memory = db.memory_for_prompt(conn, int(group_id), int(course_id)) \
                 if group_id else ""
             teman = db.exam_themes_for_prompt(conn, int(course_id))
@@ -2257,6 +2288,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 emit({"type": "log", "msg": infor_logg})
             if andra_omprov_logg:
                 emit({"type": "log", "msg": andra_omprov_logg})
+            if fokus_logg:
+                emit({"type": "log", "msg": fokus_logg})
             try:
                 if arbiter.ensure_llm() is None:
                     raise RuntimeError("Språkmodellen är inte installerad.")
@@ -2425,6 +2458,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     if typ == "gruppuppgift" else
                     routes_planning.bok_provuppgifter(db_file, body)
                     if typ == "prov" else [])
+                # ARBETSBLADET FÅR REMSAN TILL RELEVANSDOMAREN, och bara dit
+                # (jobb 1919, NA26F 16/10: bowling och klätterhall på ett blad
+                # om s. 142–154). Prompten är orörd, se raderna ovan.
+                bladets_bok = (routes_planning.bok_remsuppgifter(db_file, body)
+                               if typ == "arbetsblad" else [])
                 res = exam_gen.generate_exam(
                     kurs, klass or "klassen", punkter, model=_model_name(),
                     antal=antal, tid_min=tid_min, takt=takt, delar=delar,
@@ -2444,6 +2482,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     svart=svart_block, fokus=fokus_block,
                     inriktning=inriktning, profil=typ,
                     koder=koder, skeleton=skelett, niva_mal=niva_mal,
+                    bladets_bokuppgifter=bladets_bok,
                     riktat=riktat_block, grupp=grupp,
                     illustration=illustration,
                     # OMPROVETS ORIGINAL, som DOKUMENT och inte som id:

@@ -3056,13 +3056,29 @@ def _delindelning(slots: list[dict], delar: bool,
     return slots
 
 
+def _k_bort_fran_e(formagor: list[str], karaktarer: list[str]) -> None:
+    """Byt plats på förmågorna så att K inte står på en E-plats, när det går.
+    Närmaste C- eller A-plats med en annan förmåga tar K, och K:s plats tar
+    dess förmåga. Muterar `formagor`."""
+    for i, (f, kar) in enumerate(zip(formagor, karaktarer)):
+        if f != "K" or kar != "E":
+            continue
+        kandidater = sorted(
+            (j for j, (g, k) in enumerate(zip(formagor, karaktarer))
+             if k != "E" and g != "K"), key=lambda j: abs(j - i))
+        if kandidater:
+            j = kandidater[0]
+            formagor[i], formagor[j] = formagor[j], formagor[i]
+
+
 def balanced_skeleton(antal: int, profil: str = "prov",
                       delar: bool | None = None,
                       mix: tuple[float, float, float] | None = None,
                       niva_mal: dict | None = None,
                       kurs: str = "",
                       poang_tak: int | None = None,
-                      fyll: bool = True) -> list[dict]:
+                      fyll: bool = True,
+                      karaktarer: list[str] | None = None) -> list[dict]:
     """Deterministiskt balanserat skelett: {del, formaga, typ, poang} per
     uppgift, konstruerat så förmåge- OCH nivåbalans + ordningsregler uppfylls
     BY CONSTRUCTION. Grammatiken tvingar modellen till skelettet, så modellen
@@ -3102,12 +3118,22 @@ def balanced_skeleton(antal: int, profil: str = "prov",
     tidsvakt säger det rakt ut i stället för att skelettet tiger.
 
     Sist en liten sökning som flyttar enstaka poäng tills validate_balance och
-    validate_ordning är rena; den är ett skyddsnät, inte huvudmekanismen."""
+    validate_ordning är rena; den är ett skyddsnät, inte huvudmekanismen.
+
+    `karaktarer` är LÄRARENS ORDNING, en nivå per uppgift («E, E, C, C, A, E,
+    E, C, C, A», lararord.fokusplan). Den ersätter mixen och varvningen: varje
+    rad får sin nivå på sin plats, och förmågorna byter plats så att ingen
+    K-rad hamnar på en E-plats (ingen EK-poäng finns, och lyftet till C hade
+    brutit hennes ordning). Bara på ett platt papper, där ordningen är
+    pappersordningen; provets delar lägger sin egen ordning och tar inte emot
+    någon."""
     antal = max(1, antal)
     if delar is None:
         delar = profil == "prov"
     mix = mix or KARAKTARSMIX.get(profil, KARAKTARSMIX["prov"])
-    karaktarer = _karaktarsfoljd(antal, mix)
+    egen_ordning = bool(karaktarer) and not delar
+    karaktarer = (list(karaktarer) if egen_ordning
+                  else _karaktarsfoljd(antal, mix))
 
     # REN E (arbetsbladets «E-nivå» och provets «Bara E»): mixen ger bara
     # E-karaktärer OCH bandet stänger C och A helt, så det finns ingen plats för
@@ -3141,6 +3167,8 @@ def balanced_skeleton(antal: int, profil: str = "prov",
         rent = None                   # bandet är rent men mixen blandad
     form = np_form(profil, kurs, len(karaktarer))
     formagor = _formagefoljd(len(karaktarer), ordning, form)
+    if egen_ordning:
+        _k_bort_fran_e(formagor, karaktarer)
     # A-kortsvaren ställer sig sist i kortsvarsblocket, och blocket måste
     # BÖRJA med ett E-kortsvar (MIN_START_E, och ett kortsvar bär en nivå):
     # utan en enda E-rad i Begrepp eller Procedur (C/A-tunga nivåval) blir
@@ -3206,7 +3234,9 @@ def balanced_skeleton(antal: int, profil: str = "prov",
     # raden gör ingenting.
     _np_uppgiftsform(slots, form, len(karaktarer), delar, niva_mal)
 
-    slots = _delindelning(slots, delar, form)
+    # Lärarens ordning är pappersordningen: ingen varvning efter nivå.
+    if not egen_ordning:
+        slots = _delindelning(slots, delar, form)
 
     # Rutinuppgiften: validate_balance kräver EN i varje dokument (också i
     # gruppuppgiften — läraren ska kunna se att någon del går att svara på
