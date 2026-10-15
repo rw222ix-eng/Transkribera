@@ -2256,7 +2256,14 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # Variationsvakten faller av samma skäl och i samma två lägen: har
         # läraren PEKAT på ett papper som ska följas är «skriv inte något som
         # liknar det du gjort förut» en motsägande order.
-        if referens or forlaga_block:
+        # UTOM OMPROVET (TE26A:s omprov av 129, 15/10): panelens «Omprov»
+        # skickar originalet som förlaga, listan föll, och uppgift 7 blev
+        # tändstickorna ur NA26F:s prov 126, siffra för siffra, samma
+        # upprepning läraren fällde i 129 den 23/9. Omprovet följer
+        # originalets PLATSER (skelett_ur_prov, likvardighetsvakt), inte dess
+        # uppgifter: kursens alla papper, originalet med, är fortfarande
+        # förbrukade.
+        if (referens or forlaga_block) and referensprov is None:
             tidigare_uppgifter = []
         # PROVETS EGNA UPPGIFTER IN I UNDVIK-LISTAN, och det är hela
         # kopieringsskyddet. «Inför provet» säger åt modellen att skriva samma

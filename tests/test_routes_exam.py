@@ -2336,6 +2336,27 @@ def test_omprov_av_skickar_originalet_som_referensprov(client, monkeypatch):
     assert [u["typ"] for u in ref["uppgifter"]]
 
 
+def test_omprov_med_forlaga_behaller_kursens_undvik_lista(client, monkeypatch):
+    """TE26A:s omprov av 129 (15/10): panelen skickar originalet som förlaga,
+    förlagan tömde undvik-listan och tändstickorna ur prov 126 kom tillbaka
+    siffra för siffra. Omprovet följer originalets platser, inte kursens
+    gamla uppgifter. En vanlig förlaga utan `omprov_av` tömmer listan som
+    förut."""
+    calls = _stub_generate(monkeypatch)
+    gammalt, gid, cid = _godkant_prov(
+        client, titel="Prov 1 · kapitel 1", datum="2026-09-16",
+        klass="TE26A", kurs="Matematik, nivå 2b")
+    forlaga = {"typ": "Prov", "moment": "kapitel 1",
+               "uppgifter": [{"nr": 1, "p": 1, "t": "Lös ekvationen 2x = 6."}]}
+    bas = {"course_id": cid, "group_id": gid, "antal": 6,
+           "datum": "2026-10-05", "moment": "kapitel 1", "forlaga": forlaga}
+    _done(client.post("/api/exams/generate",
+                      json={**bas, "omprov_av": gammalt}))
+    assert calls[-1]["tidigare"], "omprovet fick ingen undvik-lista"
+    _done(client.post("/api/exams/generate", json=bas))
+    assert calls[-1]["tidigare"] == []
+
+
 def test_omprov_bara_e_arver_originalets_platser_som_e(client, monkeypatch):
     """Rickard 2026-10-11: «Bara E» med `omprov_av` ger originalets platser
     som E-uppgifter, inte nivåvalets eget skelett."""
