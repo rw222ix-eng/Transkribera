@@ -1668,6 +1668,156 @@ def test_diffvakt_slapper_igenom_hela_hogertavlan_fast_gissningen_kapas():
     assert res["board"] == omskriven
 
 
+# Jobb 1932 (NA26F 15/10, tavla 25bbeaa3bc87), lärarens mening ordagrant.
+BESTALLNING_1932 = (
+    "Gör om del 4 «Definitions- och värdemängd» så att det inte blir några "
+    "frågetecken om när en funktion har gränser. Del 1–3 står kvar. Får det "
+    "inte plats, lägg del 3 och 4 på en egen högertavla.\nDel 4 ska visa:\n"
+    "• Två korta rader: «Definitionsmängd: vilka x får jag sätta in?» och "
+    "«Värdemängd: vilka y kommer ut?». Och: «Skuggan av grafen på x-axeln och "
+    "på y-axeln».\n• Tre små grafer bredvid eller under varandra, var och en "
+    "med sina två svar under:\n  A) Hela linjen y = 5 − x, ritad över hela "
+    "grafens bredd med pilspetsar i båda ändar: «Alla tal» och «Alla tal».\n"
+    "  B) Samma linje men bara sträckan från (0, 5) till (6, −1) med två "
+    "fyllda ändpunkter, och streckade linjer från ändpunkterna in till båda "
+    "axlarna: «0 ≤ x ≤ 6» och «−1 ≤ f(x) ≤ 5».\n  C) Parabeln y = x², hela, "
+    "med vändpunkten (0, 0) markerad: «Alla tal» och «f(x) ≥ 0».\n• En "
+    "slutrad: «Gränsen på x kommer från sammanhanget eller från uppgiften. En "
+    "parabel vänder, så den har ett minsta värde ändå.»\nDuschen f(t) = 8t "
+    "med 0 ≤ t ≤ 10 och 0 ≤ f(t) ≤ 80 får stå kvar som exempel på en gräns "
+    "ur sammanhanget om det får plats, annars stryks den. Kort text, utan "
+    "räknare.")
+
+
+def _rad(text: str, rubrik: bool = False) -> dict:
+    sek = {"kind": "text", "text": text, "size": 22 if rubrik else 18}
+    if rubrik:
+        sek["weight"] = 700
+    return sek
+
+
+def _graf_1932() -> dict:
+    return {"kind": "graph", "width": 320, "height": 200, "xRange": [-4, 4],
+            "yRange": [0, 5], "axes": True,
+            "polygons": [{"pts": [[-2, 1], [2, 1], [2, 4]]}]}
+
+
+def _fyra_delar() -> dict:
+    """Tavlan före jobb 1932: fyra numrerade delar i två spalter, en graf
+    (i del 1)."""
+    m = lambda latex: {"kind": "math", "latex": latex}  # noqa: E731
+    del1 = [_rad("1. Avstånd mellan två punkter", True), _graf_1932(),
+            m(r"d = \sqrt{4^2 + 3^2} = 5"), _rad("Kateter: skillnad i x och i y")]
+    del2 = [_rad("2. En okänd koordinat", True), m(r"(1,-1),\ (7,y),\ d = 10"),
+            m(r"10^2 - 6^2 = 8^2"), _rad("Skillnaden i y är 8"),
+            m("y = 7"), m("y = -9"), _rad("Uppåt eller nedåt: två svar")]
+    del3 = [_rad("3. Vad är en funktion?", True), _rad("Dusch: 8 liter per minut"),
+            m("f(t) = 8t"), _rad("t = tid i minuter"), m("f(3) = 24"),
+            _rad("Tre minuter ger 24 liter")]
+    del4 = [_rad("4. Definitions- och värdemängd", True),
+            _rad("Duschen tar högst 10 minuter"),
+            m(r"\text{Definitionsmängd: } 0 \le t \le 10"),
+            m(r"\text{Värdemängd: } 0 \le f(t) \le 80")]
+    return {"title": "Avstånd och funktioner", "boards": [{
+        "name": "vanster", "width": 900, "height": 780, "sections": [
+            {"kind": "text", "text": "14:40–16:20"},
+            {"kind": "heading", "text": "Avstånd och funktioner"},
+            {"kind": "list", "items": ["Fem minuter här, sedan arbetsbladet"]},
+            {"kind": "divider"},
+            {"kind": "row", "children": [
+                {"kind": "col", "children": del1 + del2},
+                {"kind": "col", "children": del3 + del4}]}]}]}
+
+
+def _varvet_1932(fore: dict) -> dict:
+    """Det läraren bad om: del 3 och 4 flyttade till en egen högertavla, del 4
+    omskriven med tre grafer. Formen är den varv 1933 gav på samma
+    beställning (12 ändrade rutor)."""
+    efter = copy.deepcopy(fore)
+    spalter = efter["boards"][0]["sections"][4]["children"]
+    del1, del2 = spalter[0]["children"][:4], spalter[0]["children"][4:]
+    del3 = spalter[1]["children"][:6]
+    spalter[0]["children"], spalter[1]["children"] = del1, del2
+    del4 = [_rad("4. Definitions- och värdemängd", True),
+            _rad("Definitionsmängd: vilka x får jag sätta in?"),
+            _rad("Värdemängd: vilka y kommer ut?")]
+    grafer = [{"kind": "col", "children": [_rad(f"{b}"), _graf_1932(),
+                                           _rad("Alla tal")]}
+              for b in "ABC"]
+    efter["boards"].append({"name": "hoger", "width": 900, "height": 780,
+                            "sections": [
+        {"kind": "row", "children": [{"kind": "col", "children": del3},
+                                     {"kind": "col", "children": del4}]},
+        {"kind": "row", "children": grafer},
+        _rad("Gränsen på x kommer från sammanhanget.")]})
+    return efter
+
+
+def test_las_maltyper_kanner_igen_delarna():
+    assert lb.las_maltyper("gör om del 4").delar == (4,)
+    assert lb.las_maltyper("lägg del 3 och 4 på en egen tavla").delar == (3, 4)
+    assert lb.las_maltyper("Del 1–3 står kvar").delar == (1, 2, 3)
+    assert lb.las_maltyper("delen fyra är rörig").delar == (4,)
+    # Inga delar: «en del», deluppgifter och andelar.
+    assert not lb.las_maltyper("ta en del en gång till")
+    assert not lb.las_maltyper("deluppgift 3 är svår")
+    assert not lb.las_maltyper("andel 3 av 4")
+
+
+def test_diffvakt_ord_i_forbigaende_krymper_inte_en_hel_del():
+    """Jobb 1932: «Gör om del 4 …» nämnde «grafen» längre ner. Gissningen blev
+    tavlans enda graf, i del 1, varvet ändrade 14 rutor och kastades. Målet
+    är hela delen, och de delar beställningen själv nämner."""
+    fore = _fyra_delar()
+    gissning = lb.las_maltyper(BESTALLNING_1932)
+    assert gissning.sorter == ("figur",)          # ordet finns kvar …
+    assert gissning.delar[0] == 4                 # … men delen kommer först
+    assert set(gissning.delar) == {1, 2, 3, 4}
+
+    vagar = dict((v, n) for n, v in
+                 lb.gissade_malvagar(fore, gissning, tak=None))
+    spalt2 = "boards[0].sections[4].children[1].children"
+    # Del 4 är rubriken och de tre rutorna under den, hela vägen ner.
+    for i in range(6, 10):
+        assert vagar.get(f"{spalt2}[{i}]") == "del 4"
+    # Del 3 slutar vid del 4:s rubrik.
+    assert all(vagar.get(f"{spalt2}[{i}]") == "del 3" for i in range(6))
+    # Kapad lista till lappen: del 4 först, så den står kvar.
+    assert lb.gissade_malvagar(fore, gissning)[0] == (
+        "del 4", f"{spalt2}[6]")
+
+    varvet = _varvet_1932(fore)
+    assert len(lb.dokumentdiff.andrade_element("tavla", fore, varvet)) > 4
+    assert lb.diffvakt(fore, varvet, BESTALLNING_1932) == []
+
+    # Före lagningen: bara ordet «grafen» kändes igen, och samma varv kastades.
+    bara_grafen = lb.Malgissning(("figur",))
+    assert lb.gissade_malvagar(fore, bara_grafen) == [
+        ("figuren", "boards[0].sections[4].children[0].children[1]")]
+
+
+def test_diffvakt_biter_fortfarande_nar_delen_ar_liten_och_varvet_stort():
+    """Delen vidgar målet, den stänger inte av vakten: «byt grafen i del 4»
+    och ett varv som skriver om del 1, del 2 och agendan kastas som förut."""
+    fore = _fyra_delar()
+    slarv = copy.deepcopy(fore)
+    slarv["boards"][0]["sections"][2] = {"kind": "list", "items": ["x"]}
+    for spalt in slarv["boards"][0]["sections"][4]["children"][:1]:
+        for i in range(len(spalt["children"])):
+            spalt["children"][i] = _rad(f"omskriven {i}")
+    vagar = lb.diffvakt(fore, slarv, "byt grafen i del 4")
+    assert vagar and vagar[0][0] == "del 4"
+
+
+def test_diffvakt_star_stilla_nar_delen_inte_finns():
+    """«Lägg till en del 5» är ett tillägg, som ankaret i jobb 480."""
+    fore = _fyra_delar()
+    efter = copy.deepcopy(fore)
+    spalt = efter["boards"][0]["sections"][4]["children"][1]["children"]
+    spalt += [_rad("5. Ny del", True)] + [_rad(f"rad {i}") for i in range(8)]
+    assert lb.diffvakt(fore, efter, "lägg till en del 5 om grafen") == []
+
+
 def test_gissade_malvagar_ar_vagar_mal_laset_kan_anvanda():
     """Vägarna måste ha elementkartans form — annars fäller lappvakten dem och
     sammanfogningen hittar inget att hämta."""

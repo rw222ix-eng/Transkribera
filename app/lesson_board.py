@@ -7629,6 +7629,34 @@ _EXEMPEL_RE = re.compile(
     r"(?<!till )\bex(?:empel|\.)\s*(?:nr\.?|nummer)?\s*"
     r"(\d{1,2}|" + "|".join(_TALORD) + r")\b", re.IGNORECASE)
 
+# DELARNA (2026-10-15). Tavlans rubrikrader är numrerade, «4. Definitions- och
+# värdemängd», och läraren pekar ut dem så: «Gör om del 4 …». Jobb 1932: ordet
+# kändes inte igen, men «hela grafens bredd» längre ner i samma beställning
+# gjorde. Vakten låste varvet till tavlans enda graf, i del 1, och kastade en
+# omskrivning av hela del 4. En del är ett större mål än orden inne i den.
+# «del 3 och 4» och «del 1–3» räknas som listor. Bara siffror och två–tio:
+# «en del en gång till» är ingen del 1.
+_DELTAL = r"\d{1,2}|" + "|".join(o for o in _TALORD if o not in ("en", "ett"))
+_DEL_RE = re.compile(
+    rf"\bdel(?:en|arna)?\s+((?:{_DELTAL})(?:\s*(?:,|och|–|-|—)\s*(?:{_DELTAL}))*)\b",
+    re.IGNORECASE)
+
+
+def _deltal(ra: str) -> int:
+    return int(ra) if ra.isdigit() else _TALORD.get(ra, 0)
+
+
+def _las_delar(lag: str) -> list[int]:
+    """«del 4», «del 3 och 4», «del 1–3» → [4], [3, 4], [1, 2, 3]."""
+    ut: list[int] = []
+    for m in _DEL_RE.finditer(lag):
+        for led in re.split(r"\s*(?:,|och)\s*", m.group(1)):
+            tal = [_deltal(t) for t in re.split(r"\s*[–\-—]\s*", led) if t]
+            if len(tal) == 2 and 0 < tal[0] <= tal[1] <= tal[0] + 9:
+                tal = list(range(tal[0], tal[1] + 1))
+            ut += [n for n in tal if n and n not in ut]
+    return ut
+
 # Ordlistan är DELAD med klienten (granska.js MALORD) och måste hållas i takt:
 # lager 1 sätter målet självt av samma ord, lager 2 avvisar varvet av samma
 # ord, och glider de isär gissar de två lagren olika om samma mening.
@@ -7674,9 +7702,10 @@ class Malgissning:
     sorter: tuple[str, ...] = ()
     exempel: tuple[int, ...] = ()
     sidor: frozenset = frozenset()
+    delar: tuple[int, ...] = ()
 
     def __bool__(self) -> bool:
-        return bool(self.sorter or self.exempel)
+        return bool(self.sorter or self.exempel or self.delar)
 
 
 def las_maltyper(text: str) -> Malgissning:
@@ -7700,7 +7729,9 @@ def las_maltyper(text: str) -> Malgissning:
             nummer.append(n)
     if nummer:
         sidor.add("hoger")          # exemplen bor på högertavlan
-    return Malgissning(tuple(sorter), tuple(nummer), frozenset(sidor))
+    # Delarna sätter ingen sida: numreringen går över båda tavlorna.
+    return Malgissning(tuple(sorter), tuple(nummer), frozenset(sidor),
+                       tuple(_las_delar(lag)))
 
 
 def _brade_index(vag: str) -> int:
@@ -7777,12 +7808,31 @@ def _syskon_fore(rutor, vag: str, antal: int) -> list[str]:
 MAX_GISSADE = 12
 
 
-def gissade_malvagar(board: dict, gissning: Malgissning) -> list[tuple[str, str]]:
+def _delnummer(sek) -> int | None:
+    """Numret på en dels rubrikrad, «4. Definitions- och värdemängd» → 4.
+    Rubriken är en heading eller, inne i en col, en text med weight 700
+    (INSTRUCTION 8f). En vanlig textrad som råkar börja med en siffra är
+    ingen del."""
+    if not isinstance(sek, dict):
+        return None
+    if sek.get("kind") != "heading" and not (
+            sek.get("kind") == "text" and (sek.get("weight") or 0) >= 700):
+        return None
+    m = re.match(r"^\s*(\d{1,2})\.\s", _rutext(sek))
+    return int(m.group(1)) if m else None
+
+
+def gissade_malvagar(board: dict, gissning: Malgissning,
+                     tak: int | None = MAX_GISSADE) -> list[tuple[str, str]]:
     """(namn, JSON-väg) för de rutor meningen pekar ut — eller tom lista.
 
     Tom lista betyder «vi vet inte vad hon menade», och då gäller fail-open.
     Vägarna har elementkartans form, samma som `malvagar` ger, så lappvakten
-    och `sammanfoga_riktat_tavla` känner igen dem utan undantag."""
+    och `sammanfoga_riktat_tavla` känner igen dem utan undantag.
+
+    `tak` kapar listan för lappens prompt. Diffvakten frågar med tak=None:
+    kapningen är till för prompten, och en ruta efter den är lika mycket
+    innanför målet."""
     rutor = dokumentdiff.tavelrutor(board)
     toppen = [(eid, sek, vag) for eid, sek, vag in rutor if "." not in eid]
     ut: list[tuple[str, str]] = []
@@ -7809,6 +7859,20 @@ def gissade_malvagar(board: dict, gissning: Malgissning) -> list[tuple[str, str]
             if _ar_exempelrubrik(sek, n):
                 block(i, f"exempel {n}")
                 break
+    # En del är rubrikraden plus rutorna under den i samma flöde, till nästa
+    # dels rubrik. Delarna står ofta i en col, så alla rutor räknas, inte bara
+    # toppens. Före sorterna: kapas listan ska delen läraren nämnde stå kvar.
+    for n in gissning.delar:
+        for _eid, sek, vag in rutor:
+            if _delnummer(sek) != n:
+                continue
+            lagg(f"del {n}", vag)
+            for v2 in _syskon_efter(rutor, vag, len(rutor)):
+                syskon = next((s for _e, s, v in rutor if v == v2), None)
+                if _delnummer(syskon) is not None or _ar_exempelrubrik(syskon):
+                    break
+                lagg(f"del {n}", v2)
+            break
     for sort in gissning.sorter:
         if sort == "rubrik":
             for _eid, sek, vag in toppen:
@@ -7900,7 +7964,7 @@ def gissade_malvagar(board: dict, gissning: Malgissning) -> list[tuple[str, str]
                 if isinstance(sek, dict) and sek.get("kind") in ("math",
                                                                  "stack"):
                     lagg("formeln", vag)
-    return ut[:MAX_GISSADE]
+    return ut if tak is None else ut[:tak]
 
 
 # Taket för ett varv utan markering. Spåret 2026-09-06: median ETT ändrat
@@ -7939,6 +8003,9 @@ def diffvakt(board: dict, resultat: dict, instruction: str,
     # tillägg, och då gäller dagens väg. Samma fail-open som resten av vakten.
     saknade = [s for s in gissning.sorter
                if not gissade_malvagar(board, Malgissning((s,)))]
+    # Samma sak med en del: «lägg till en del 5» är ett tillägg.
+    saknade += [n for n in gissning.delar
+                if not gissade_malvagar(board, Malgissning(delar=(n,)))]
     if saknade:
         sag("Önskemålet ber om något tavlan inte har ännu — varvet får "
             "lägga till det utan lås.")
@@ -7946,7 +8013,11 @@ def diffvakt(board: dict, resultat: dict, instruction: str,
     # Vägarna slås upp i FÖRE-tavlan, de ändrade id:na i EFTER-tavlan: en ruta
     # som lagts till mitt i flyttar indexen. Därför jämförs vägar mot vägar,
     # och en ruta vi inte kan slå upp räknas som utanför målet.
-    malvagarna = [v for _n, v in vagar]
+    # Innanför prövas mot HELA gissningen, okapad (se `tak`). Jobb 1932: del
+    # 1–4 är 22 rutor, och med kapningen hade del 4 hamnat utanför sitt eget
+    # mål.
+    alla = gissade_malvagar(board, gissning, tak=None)
+    malvagarna = [v for _n, v in alla]
     eftervag = {eid: (dokumentdiff.tavelvag(resultat, eid) or "")
                 for eid in andrade}
     utanfor = [eid for eid in andrade if not _inom(eftervag[eid], malvagarna)]
@@ -7968,7 +8039,7 @@ def diffvakt(board: dict, resultat: dict, instruction: str,
                and _sidan(eftervag[eid]) not in gissning.sidor]
     # FÖR MYCKET. Ett önskemål som nämner tolv rutor får ändra tolv rutor —
     # taket följer alltså målets egen storlek när den är större än DIFFTAK.
-    for_manga = len(andrade) > max(DIFFTAK, len(vagar))
+    for_manga = len(andrade) > max(DIFFTAK, len(alla))
     if not felsida and not for_manga:
         return []
     namn = llm_client.uppradning(
