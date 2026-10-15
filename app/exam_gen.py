@@ -16177,7 +16177,12 @@ def varvsvakter(exam: dict, profil: str, *, infor: dict | None = None,
         return ovningsvakter(exam, prov=infor)
     fel = ci_utanfor.ci_vakt(exam, kurs, profil) + konsbalansvakt(exam)
     if profil == "prov":
-        return (fel + sprakvakt(exam) + a_nivavakt(exam) + forklaringsvakt(exam)
+        # Ordtaket med (TE26A:s omprov av 129, 15/10): elevläsarens «lägg
+        # till, stryk inte» tog uppgift 10 från 44 till 72 ord före frågan i
+        # ett varv, och varvet mätte bara språkvakten. Nu fäller varvet sitt
+        # eget tillägg och lagar det i samma runda.
+        return (fel + sprakvakt(exam) + ordvakt(exam)
+                + a_nivavakt(exam) + forklaringsvakt(exam)
                 + np_vakter.np_vakter(exam, kurs, poang_tak,
                                       poang_last=referens is not None)
                 + likvardighetsvakt(exam, referens))

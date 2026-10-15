@@ -2453,6 +2453,19 @@ def test_varvet_pa_omprovet_mater_likvardigheten():
                                   exam_gen.varvsvakter(nytt, "prov")}
 
 
+def test_varvet_pa_provet_mater_ordtaket():
+    """TE26A:s omprov av 129 (15/10): elevläsarens förtydligande tog uppgift
+    10 till 72 ord före frågan i ett varv, och varvet sa ingenting."""
+    nytt = copy.deepcopy(_exam_doc())
+    u = nytt["uppgifter"][0]
+    u.pop("deluppgifter", None)
+    u["text"] = ("Sara sätter in pengar på ett konto. " * 12
+                 + "Bestäm räntan.")
+    fynd = [f for f in exam_gen.varvsvakter(nytt, "prov")
+            if exam_gen.ORDVAKTENS_MARKE in f["message"]]
+    assert [f["path"] for f in fynd] == ["uppgift 1"]
+
+
 def test_okant_omprov_av_lamnar_prompten_som_den_var(client, monkeypatch):
     calls = _stub_generate(monkeypatch)
     r = client.post("/api/exams/generate", json={
