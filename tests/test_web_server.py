@@ -47,6 +47,10 @@ def test_okand_server_markerar_sin_egen_sida(client, monkeypatch):
 
 def test_appen_ser_ut_som_appen(client, monkeypatch):
     monkeypatch.setenv("TRANSKRIBERA_START", "app")
+    # En commit från en annan chatt mitt i körningen ger annars listen
+    # «GAMMAL KOD» (app/web/kodvakt.py).
+    from app.web import kodvakt
+    monkeypatch.setattr(kodvakt, "head", lambda repo=None: kodvakt.START)
     r = client.get("/")
     assert r.status_code == 200
     assert "hus-banderoll" not in r.text

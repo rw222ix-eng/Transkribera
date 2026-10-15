@@ -25,8 +25,9 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from app import (debug_log, gpu_arbiter, db, settings_store, backup,
                  calendar_google, kalender_ai, course_data, lasar_data,
                  claude_code, spar)
-from app.web import (Id64, _kropp, routes_bok, routes_elever, routes_exam,
-                     routes_jobb, routes_planning, routes_tryck)
+from app.web import (Id64, _kropp, kodvakt, routes_bok, routes_elever,
+                     routes_exam, routes_jobb, routes_planning, routes_tryck,
+                     sse)
 
 
 def _static_dir() -> Path:
@@ -94,9 +95,12 @@ def _hus(base: Path, request: Request | None = None) -> dict:
     port = request.url.port if request is not None else None
     if not port:
         port = os.environ.get("TRANSKRIBERA_PORT") or os.environ.get("PORT") or "?"
+    # `kod`: commiten servern startade på mot HEAD på disk (app/web/kodvakt.py).
+    # `aktiva`: jobb som kör i processen just nu — det vakten väntar ut.
     return {"lage": lage, "namn": _HUSNAMN.get(lage, "OKÄND SERVER"),
             "port": str(port), "pid": os.getpid(), "startad": _STARTAD,
-            "bas": str(base), "varna": lage not in _TYSTA}
+            "bas": str(base), "varna": lage not in _TYSTA,
+            "kod": kodvakt.lage(), "aktiva": sse.aktiva()}
 
 
 def _banderoll(sida: str, hus: dict) -> str:
@@ -107,12 +111,21 @@ def _banderoll(sida: str, hus: dict) -> str:
     `pointer-events: none` och kan därför aldrig svälja ett klick."""
     text = (f"{hus['namn']} · port {hus['port']} · pid {hus['pid']} · "
             f"startad {hus['startad']} · bas {hus['bas']}")
+    kod = hus.get("kod") or {}
+    # Gammal kod är skäl nog för listen även i appen själv (15/10: en hel dag
+    # på gårdagens kod utan att någon såg det).
+    rubrik = "INTE APPEN"
+    if not kod.get("aktuell", True):
+        rubrik = (f"GAMMAL KOD · servern kör {kod.get('start')}, "
+                  f"disken har {kod.get('disk')}")
+        if hus["varna"]:
+            rubrik += " · INTE APPEN"
     bit = (
         '<div id="hus-banderoll" style="position:fixed;left:0;right:0;top:0;'
         'z-index:2147483647;background:#1a1a1a;color:#fff;text-align:center;'
         'padding:4px 10px;pointer-events:none;letter-spacing:.03em;'
         'font:600 12px/1.5 ui-sans-serif,system-ui,sans-serif">'
-        f'INTE APPEN · {_escape(text)}</div>'
+        f'{_escape(rubrik)} · {_escape(text)}</div>'
         '<script>document.title = "⚠ " + '
         f'{json.dumps(hus["port"])} + " · " + document.title;</script>'
     )
@@ -266,6 +279,36 @@ def create_app(base_dir: Path | None = None,
                                "ms": int((time.monotonic() - borjan) * 1000)})
         return response
 
+    # 5) Kodvakten (app/web/kodvakt.py). Räknar anropen som pågår, så att
+    #    servern aldrig stänger mitt i ett, och nekar genereringar när HEAD
+    #    gått förbi koden processen läste in. Grinden gäller bara under vakten
+    #    (`python -m app.web.vakt`): utan vakt startar ingen om servern, och då
+    #    hade den nekat för alltid. Listen i sidan säger det ändå.
+    pagar = {"n": 0}
+    pagar_las = threading.Lock()
+
+    @app.middleware("http")
+    async def _kodvakt(request: Request, call_next):
+        if (kodvakt.vakt_aktiv() and kodvakt.grindad(request.method,
+                                                     request.url.path)
+                and kodvakt.gammal()):
+            return JSONResponse({"error": kodvakt.besked(sse.aktiva()),
+                                 "kod": "gammal_kod"}, status_code=503)
+        with pagar_las:
+            pagar["n"] += 1
+        try:
+            return await call_next(request)
+        finally:
+            with pagar_las:
+                pagar["n"] -= 1
+
+    def _aktiva() -> int:
+        # Strömmade svar räknas bara tills huvudet gått ut; jobben bakom dem
+        # räknar sse.aktiva().
+        with pagar_las:
+            return pagar["n"] + sse.aktiva()
+    app.state.aktiva = _aktiva
+
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     # Frontenden (app/web/ui) — designprojektet «Transkribera Design System»
@@ -319,7 +362,7 @@ def create_app(base_dir: Path | None = None,
         """
         if UI_READY:
             hus = _hus(base, request)
-            if hus["varna"]:
+            if hus["varna"] or not hus["kod"]["aktuell"]:
                 # Bara den okända servern betalar för läsningen — appen svarar
                 # med filen precis som förr.
                 return HTMLResponse(_banderoll(

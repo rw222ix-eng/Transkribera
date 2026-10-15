@@ -43,6 +43,24 @@ def _besked(e: Exception) -> str:
     return str(e)
 
 
+# Trådar som kör ett jobb just nu, av båda sorterna nedan. Kodvakten
+# (app/web/kodvakt.py) startar inte om servern förrän räknaren står på noll:
+# en omstart dödar trådarna, och jobbet är betalt.
+_aktiva = 0
+_aktiva_las = threading.Lock()
+
+
+def _rakna(steg: int) -> None:
+    global _aktiva
+    with _aktiva_las:
+        _aktiva += steg
+
+
+def aktiva() -> int:
+    with _aktiva_las:
+        return _aktiva
+
+
 def sse_response(job, request) -> StreamingResponse:
     """Kör `job(emit)` på en tråd och streama dess events som SSE.
 
@@ -90,8 +108,10 @@ def sse_response(job, request) -> StreamingResponse:
             debug_log.get_logger().exception("Web-jobb misslyckades")
             q.put({"type": "error", "message": _besked(e)})
         finally:
+            _rakna(-1)
             q.put(end)
 
+    _rakna(+1)
     threading.Thread(target=run, daemon=True).start()
 
     async def gen():
@@ -395,9 +415,11 @@ def jobb_response(job, request, *, typ: str, db_file, dokument_id=None,
         finally:
             with _avbrott_las:
                 _avbrott.pop(jobb_id, None)
+            _rakna(-1)
             q.put(end)
             conn.close()
 
+    _rakna(+1)
     threading.Thread(target=run, daemon=True).start()
 
     async def gen():
