@@ -168,6 +168,14 @@ _CI_MINSTA_ORD = 4
 # «andragradsuttryck» och «andragradsfunktioner» delar «andragrads», och det
 # är stammen momentet handlar om. Kortare gemensam början är en tillfällighet.
 _CI_STAM = 6
+# UTOM BÖJNINGEN (TE26A:s omprov av 129, 15/10): «formeln» mot rubriken
+# «Formler» och «mönstret» mot «Mönster» delar bara fyra, fem tecken, för
+# svenskan flyttar e:et. Märkningsvakten fällde därför uppgifter som nämnde
+# sin metod. Utan e:en blir de «formln»/«formlr» och «mönstrt»/«mönstr»:
+# minst fem gemensamma tecken som är hela det kortare ordet utom ett.
+# «formel»/«formen», «tecken»/«teckna» och «modeller»/«modern» är fortfarande
+# olika ord.
+_CI_BOJNING = 5
 
 
 def _ci_ord(text: str) -> set[str]:
@@ -175,19 +183,28 @@ def _ci_ord(text: str) -> set[str]:
     return {o for o in ren.split() if len(o) >= _CI_MINSTA_ORD}
 
 
+def _gemensam_borjan(a: str, b: str) -> int:
+    n = 0
+    for x, y in zip(a, b):
+        if x != y:
+            break
+        n += 1
+    return n
+
+
 def _ci_traff(momentord: set[str], punktord: set[str]) -> bool:
     for m in momentord:
         for p in punktord:
             if m == p:
                 return True
-            if len(m) >= _CI_STAM and len(p) >= _CI_STAM:
-                gemensam = 0
-                for a, b in zip(m, p):
-                    if a != b:
-                        break
-                    gemensam += 1
-                if gemensam >= _CI_STAM:
-                    return True
+            gemensam = _gemensam_borjan(m, p)
+            if len(m) >= _CI_STAM and len(p) >= _CI_STAM \
+                    and gemensam >= _CI_STAM:
+                return True
+            m_, p_ = m.replace("e", ""), p.replace("e", "")
+            if _gemensam_borjan(m_, p_) >= max(_CI_BOJNING,
+                                               min(len(m_), len(p_)) - 1):
+                return True
     return False
 
 

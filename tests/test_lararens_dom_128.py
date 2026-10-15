@@ -424,6 +424,11 @@ def test_samma_situation_fran_en_annan_klass_falls():
     # Ny sak och nya tal: tyst. Ingen historik: tyst (kassetteregeln).
     klossar["tabell"]["rader"] = [["Antal klossar", "1", "3", "6"]]
     assert exam_gen.situationsvakt(_prov(klossar), tidigare) == []
+    # Ensiffriga koefficienter i samma ordning är ingen upprepning (omprovet
+    # av 129, 15/10: 7x − 4 = 3x + 8 mot 7x + 4 = 3x + 24).
+    ekv = _u("Lös ekvationen $7x - 4 = 3x + 8$.", [1, 0, 0])
+    assert exam_gen.situationsvakt(
+        _prov(ekv), ["Lös ekvationen $7x + 4 = 3x + 24$."]) == []
     assert exam_gen.situationsvakt(_prov(u7), []) == []
     # Vanliga långa ord är ingen situation (generalrepetitionen fick
     # «eftersom» och «undersök» som samma situation).

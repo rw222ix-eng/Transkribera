@@ -14321,8 +14321,13 @@ def _talserie(text: str) -> list[str]:
 
 
 def _delar_serie(a: list[str], b: list[str], n: int = 3) -> bool:
+    """Tre tal i samma ordning, och minst ett av dem större än en siffra.
+    Ensiffriga koefficienter går igen överallt: «7x − 4 = 3x + 8» och
+    «7x + 4 = 3x + 24» delade 7, 4, 3 och fälldes som samma uppgift
+    (TE26A:s omprov av 129, 15/10), medan figurmönstret 4, 12, 24 står kvar."""
     serier = {tuple(b[i:i + n]) for i in range(len(b) - n + 1)}
-    return any(tuple(a[i:i + n]) in serier for i in range(len(a) - n + 1))
+    return any(s in serier and any(len(t) > 1 for t in s)
+               for s in (tuple(a[i:i + n]) for i in range(len(a) - n + 1)))
 
 
 def _uppgiftsblock(u: dict) -> str:

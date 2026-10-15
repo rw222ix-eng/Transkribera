@@ -185,6 +185,21 @@ def test_etiketten_som_facit_bekraftar_star_kvar():
     assert exam_gen.delmomentmarkning(_prov([u]), delmoment) == []
 
 
+def test_bojningen_av_rubrikens_ord_raknas():
+    """TE26A:s omprov av 129 (15/10): «formeln» fälldes mot «Formler» och
+    «mönstret» mot «Mönster», för svenskan flyttar e:et. Ett annat ord med
+    samma början är fortfarande ett annat ord."""
+    for rubrik, text in (("Formler", "Arean ges av formeln $A = 2b$."),
+                         ("Mönster och generella samband",
+                          "Figur 6 i mönstret har 33 prickar.")):
+        delmoment = [{"delmoment": rubrik, "sidor": "64–68", "lektioner": 1}]
+        u = _u(text=text, delmoment=rubrik)
+        assert exam_gen.delmomentmarkning(_prov([u]), delmoment) == [], rubrik
+    for rubrik, ordet in (("Formel", "formen"), ("Tecken", "teckna"),
+                          ("Modeller", "modern")):
+        assert not course_data.namner(ordet, course_data.ordstammar(rubrik))
+
+
 # ── 1d. CENTRALT INNEHÅLL ────────────────────────────────────────────────
 
 def test_den_kryssade_punkten_utan_uppgift_blir_ett_fynd():
