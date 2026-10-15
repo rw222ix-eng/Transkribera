@@ -7950,6 +7950,15 @@ def diffvakt(board: dict, resultat: dict, instruction: str,
     eftervag = {eid: (dokumentdiff.tavelvag(resultat, eid) or "")
                 for eid in andrade}
     utanfor = [eid for eid in andrade if not _inom(eftervag[eid], malvagarna)]
+    # EN HEL TAVLA ÄR SITT EGET MÅL (2026-10-15). «Skriv om högertavlan …»
+    # pekar ut tavlans alla rutor, men gissningen kapas vid MAX_GISSADE. Jobb
+    # 1921 och 1923 (TE26A, sinus/cosinus/tangens): tolv vägar räckte till a)
+    # och början av b), resten av högern räknades som utanför, varvet kastades
+    # och lappen skrev bara om de tolv. En ruta på den tavla meningen nämner
+    # är alltid innanför.
+    hela = {s for s in gissning.sorter if s in ("vanster", "hoger")}
+    utanfor = [eid for eid in utanfor
+               if not (eftervag[eid] and _sidan(eftervag[eid]) in hela)]
     if not utanfor:
         return []
     # FEL TAVLA. Säger meningen «exempel 3» och vänstertavlan ändrades är det

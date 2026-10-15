@@ -1646,6 +1646,28 @@ def test_diffvakt_slapper_igenom_ett_varv_som_holl_sig_innanfor():
     assert res["board"] == prydlig
 
 
+def test_diffvakt_slapper_igenom_hela_hogertavlan_fast_gissningen_kapas():
+    """«Skriv om högertavlan» får skriva om hela högern, också rutorna efter
+    MAX_GISSADE. Jobb 1921/1923: kapningen gjorde resten till «utanför», och
+    lappen skrev bara om a) och början av b)."""
+    doc = _tre_exempel()
+    hoger = doc["boards"][1]["columns"]
+    vagar = lb.gissade_malvagar(doc, lb.las_maltyper("högertavlan"))
+    alla = sum(len(k["sections"]) for k in hoger)
+    assert len(vagar) == min(alla, lb.MAX_GISSADE)
+    omskriven = copy.deepcopy(doc)
+    for k in omskriven["boards"][1]["columns"]:
+        for i, sek in enumerate(k["sections"]):
+            if sek.get("kind") == "text":
+                k["sections"][i] = {"kind": "text", "text": f"ny {i}"}
+    sista = omskriven["boards"][1]["columns"][-1]["sections"]
+    sista.append({"kind": "text", "text": "efter kapningen"})
+    llm, calls = _stub_llm([json.dumps(omskriven)])
+    res = lb.refine_board(doc, "skriv om högertavlan", model="m", llm=llm)
+    assert len(calls) == 1
+    assert res["board"] == omskriven
+
+
 def test_gissade_malvagar_ar_vagar_mal_laset_kan_anvanda():
     """Vägarna måste ha elementkartans form — annars fäller lappvakten dem och
     sammanfogningen hittar inget att hämta."""
