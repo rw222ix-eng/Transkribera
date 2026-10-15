@@ -215,6 +215,23 @@ def test_refine_svaret_bar_vad_som_faktiskt_andrades(client, monkeypatch):
     assert res["andrade"] == ["uppg1"]
 
 
+def test_refine_lagger_inte_till_bilder_pa_ett_papper_utan_bilder(client, monkeypatch):
+    """Exam 260 (2026-10-15): bladet genererades utan illustration, omskrivningen
+    skrev scener på uppgift 4 och 6, och plåtmatchningen satte en fyr på
+    campingkartan. Ett papper utan scen före varvet ska inte få någon efter."""
+    result, _ = _make_exam(client, monkeypatch)
+    assert not any(u.get("scen") for u in result["exam"]["uppgifter"])
+    updated = _exam_doc()
+    updated["uppgifter"][0]["scen"] = {
+        "begrepp": "avstånd på karta", "filnamn": "a-01-camping",
+        "scene": "SCENE. A quiet summer campsite seen from the side."}
+    monkeypatch.setattr(exam_gen, "refine_exam",
+                        lambda *a, **k: {"exam": updated, "errors": [], "rounds": 1})
+    res = _done(client.post(f"/api/exams/{result['id']}/refine",
+                            json={"message": "ordna om bladet"}))
+    assert all(u.get("scen") is None for u in res["exam"]["uppgifter"])
+
+
 def test_refine_som_inte_andrade_nagot_marker_ingenting(client, monkeypatch):
     """En tom lista är ett svar, inte ett saknat fält: ingenting på pappret ska
     målas rött för syns skull."""

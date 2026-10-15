@@ -2832,6 +2832,17 @@ def create_router(base: Path, arbiter) -> APIRouter:
                             res["exam"].get("titel") or ""):
                         res["exam"]["titel"] = exam_gen.omprovstitel(
                             res["exam"].get("titel"))
+                # Bildvalet överlever omskrivningen. refine_exam känner inte
+                # krysset «Plats för illustration», så modellen skrev scener på
+                # ett blad som genererats utan bilder, och plåtmatchningen satte
+                # en fyr på campingkartan (exam 260, 2026-10-15). Hade pappret
+                # ingen scen före varvet får det ingen efter.
+                if isinstance(res.get("exam"), dict) and not any(
+                        u.get("scen") for u in
+                        (view.get("exam") or {}).get("uppgifter") or []):
+                    for u in res["exam"].get("uppgifter") or []:
+                        if u.get("scen"):
+                            u["scen"] = None
                 # Plåtvalet överlever inte omskrivningen av sig självt:
                 # modellen skriver om hela dokumentet, och `scen.plat` står
                 # inte i grammatiken. Matchningen körs därför om — den är ren
