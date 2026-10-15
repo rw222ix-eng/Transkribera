@@ -455,9 +455,11 @@ window.Figurer = (() => {
     /* Blå kurva, det enda färgade på pappret (förlagans \addplot[blue]). */
     klipp(L.punkter, BOXW, BOXH).forEach(s =>
       rader.push(`line(${s.map(p => P(p[0], p[1])).join(', ')}, stroke: (thickness: 1.8pt, paint: blue))`));
-    /* Sträckans ändpunkter hör till grafen: fyllda, i kurvans färg. */
+    /* Sträckans ändpunkter hör till grafen: fyllda, i kurvans färg, och stora
+       som bokens 4202/4206. Med 0.09 syntes de knappt, och då läste eleven en
+       hel linje (Rickard 2026-10-15, exam 260 uppg 9). */
     if (stracka) [L.punkter[0], L.punkter[L.punkter.length - 1]].forEach(p =>
-      rader.push(`circle(${P(p[0], p[1])}, radius: 0.09, fill: blue, stroke: none)`));
+      rader.push(`circle(${P(p[0], p[1])}, radius: 0.16, fill: blue, stroke: none)`));
     return rader.join('\n');
   }
   /* Definitionsmängderna är exam_figures: linjär på [−1, 7] eller sitt eget

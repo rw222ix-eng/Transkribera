@@ -187,7 +187,7 @@ def _funktionsgraf(fn, xlo: float, xhi: float, samples: int = 80,
     # synas hel.
     if stracka:
         for x, y in ((xs[0], ys[0]), (xs[-1], ys[-1])):
-            rader.append(rf"\fill[blue] ({_f(X(x))},{_f(Y(y))}) circle (0.09);")
+            rader.append(rf"\fill[blue] ({_f(X(x))},{_f(Y(y))}) circle (0.16);")
     # INGEN KURVETIKETT. Här satt förut ett «$y=f(x)$» som placerades i den
     # kantregion som låg längst från kurvan. Förlagans graf har ingen — och det
     # är rätt: uppgiftstexten säger redan vilken funktion det är («Grafen till
