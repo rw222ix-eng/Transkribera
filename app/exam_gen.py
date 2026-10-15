@@ -6107,7 +6107,12 @@ def ordvakt(exam: dict) -> list[dict]:
                 f"uppgift {e['nr']} har {ord_} {ORDVAKTENS_MARKE} "
                 f"(taket är {ORD_FORE_FRAGAN}). Korta ned "
                 "till en situation och de tal som faktiskt behövs, och "
-                "ställ frågan tidigare." + BEHALL_PLANEN))
+                "ställ frågan tidigare."
+                # Raden efter frågan, som på bladet (_efter_fragan_rad):
+                # omprovet av 129 (15/10) stod på 49 ord i tre varv för att
+                # «Svara med minst en decimal.» gjorde frågan till bakgrund.
+                + _efter_fragan_rad(text, ord_, ORD_FORE_FRAGAN)
+                + BEHALL_PLANEN))
     return ut
 
 
