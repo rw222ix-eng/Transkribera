@@ -35,6 +35,20 @@
       "port": 8123
     },
     {
+      "name": "geogebra-guiden",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8124",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        "E:/geogebra-guiden"
+      ],
+      "port": 8124
+    },
+    {
       "name": "transkribera-tom-bas",
       "runtimeExecutable": "python",
       "runtimeArgs": [
