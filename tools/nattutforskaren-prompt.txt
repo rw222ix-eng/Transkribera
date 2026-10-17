@@ -16,6 +16,10 @@ Så här jobbar du:
   (browser_network_requests) efter VARJE sådant grepp. Ett rött fel i konsolen
   eller ett 4xx/5xx-svar som skärmen inte berättar om är ett fynd.
 * Ett fynd är något du SÅG. Skriv aldrig upp något du tror händer.
+* Tidsfälten i kalendern (Börjar och Slutar, «rulla för att ändra») är
+  skrivskyddade med flit och ändras med mushjulet (shift ger femton minuter).
+  Prova dem med page.mouse.wheel, aldrig fill, och skriv inte upp
+  skrivskyddet som ett fynd.
 
 Skriv resultatet som filer i din arbetskatalog (den är redan rätt katalog):
 
