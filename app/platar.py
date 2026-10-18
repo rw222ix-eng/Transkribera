@@ -295,6 +295,9 @@ _PREFIX_MIN = 7
 # ordet självt. Vid en halv föll «talföljd» mot a-17 på 3,0 av 4,0 nödvändiga —
 # alltså skrevs ett SCENE-stycke till en plåt som redan fanns målad.
 _PREFIX_VARDE = 0.75
+# Så mycket får två former av SAMMA ord skilja: -er, -en, -ar, -na, -et, -ans.
+# Samma gräns som _CI_BOJNING i exam_gen, av samma skäl.
+_BOJNING = 3
 
 
 def _prefixlangd(a: str, b: str) -> int:
@@ -304,6 +307,16 @@ def _prefixlangd(a: str, b: str) -> int:
             break
         n += 1
     return n
+
+
+def _ar_bojning(a: str, b: str) -> bool:
+    """Är det ena ordet det andra plus en ändelse?
+
+    «derivata»/«derivatans» och «talföljd»/«talföljder» är samma ord. Men
+    «potensekvation» och «potenser» delar bara de sju första tecknen: inget av
+    dem är början på det andra, och det är två olika begrepp."""
+    kort, lang = sorted((a, b), key=len)
+    return lang.startswith(kort) and len(lang) - len(kort) <= _BOJNING
 
 
 def _vikter(poster: list[dict]) -> dict[str, int]:
@@ -338,14 +351,29 @@ def poang(post: dict, begrepp: str, text: str = "",
           vikter: dict[str, int] | None = None) -> float:
     """Hur väl en plåt passar. Öppen för test — matchningen ska gå att mäta,
     inte bara att lita på."""
+    return _poang(post, begrepp, text, vikter)[0]
+
+
+def _poang(post: dict, begrepp: str, text: str = "",
+           vikter: dict[str, int] | None = None) -> tuple[float, bool]:
+    """(poäng, bär) — `bär` är om minst ett ord träffade som SAMMA ord:
+    exakt eller som en böjning av katalogens ord.
+
+    Lösa prefixträffar räknas som stöd men får aldrig ensamma ge en plåt.
+    Exam 265 (E-omprov TE26A, 18/10) uppgift 13 hade begreppet
+    «potensekvation regnvattentank» och fick a-21-stjarnhimmel på 4,5 poäng,
+    bara därför att «potense» i «potensekvation» och «potenser» delar sju
+    tecken. En tank under en stjärnhimmel."""
     vikter = vikter or _vikter([post])
     kat = _tokens(post["begrepp"])
     kat_set = set(kat)
     summa = 0.0
+    bar = False
     for kalla, vikt in ((begrepp, _VIKT_BEGREPP), (text, _VIKT_TEXT)):
         for t in set(_tokens(kalla)):
             if t in kat_set:
                 summa += vikter.get(t, 1) * vikt
+                bar = True
                 continue
             # Prefixträff räknas halvt: «derivata» mot «derivatans» är samma
             # sak, men gränsen är trubbig och ska inte ensam fälla avgörandet.
@@ -355,10 +383,11 @@ def poang(post: dict, begrepp: str, text: str = "",
             # träff) och skulle alltid få defaultvikten 1 — då spelade det
             # ingen roll om «andragradsekvation» pekade på en plåt eller på
             # fem.
-            traff = [vikter.get(k, 1) for k in kat_set
-                     if _prefixlangd(t, k) >= _PREFIX_MIN]
+            traff = [k for k in kat_set if _prefixlangd(t, k) >= _PREFIX_MIN]
             if traff:
-                summa += max(traff) * vikt * _PREFIX_VARDE
+                summa += max(vikter.get(k, 1) for k in traff) * vikt \
+                    * _PREFIX_VARDE
+                bar = bar or any(_ar_bojning(t, k) for k in traff)
     # HELA begreppssträngen ordagrant i katalogens rad — «exponentiell
     # tillväxt» mot a-16 — är ingen slump. Minst två ord krävs: ett ensamt
     # ord är ingen fras, och utan den regeln räckte ordet «area» i ett
@@ -368,7 +397,7 @@ def poang(post: dict, begrepp: str, text: str = "",
         nyckel = " ".join(nycklar)
         if f" {nyckel} " in f" {' '.join(kat)} ":
             summa += _FRASBONUS
-    return summa
+    return summa, bar
 
 
 def matcha(begrepp: str, text: str = "", *, base: Path | None = None,
@@ -392,7 +421,9 @@ def matcha(begrepp: str, text: str = "", *, base: Path | None = None,
     vikter = _vikter(kandidater)
     bast, bast_p = None, 0.0
     for p in kandidater:
-        v = poang(p, begrepp, text, vikter)
+        v, bar = _poang(p, begrepp, text, vikter)
+        if not bar:
+            continue
         # Strikt >: står två plåtar lika vinner den FÖRSTA i katalogen, och
         # katalogordningen är lärarens egen. Ett godtyckligt val mellan två
         # likvärdiga ängar ska åtminstone vara samma godtyckliga val i morgon.

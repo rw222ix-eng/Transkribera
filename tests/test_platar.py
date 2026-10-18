@@ -92,6 +92,34 @@ def test_matchningen_tiger_hellre_an_gissar(begrepp, text):
     assert platar.matcha(begrepp, text, poster=platar.spegel()) is None
 
 
+def test_ett_lost_prefix_bar_ingen_plat(tmp_path, monkeypatch):
+    """Exam 265 (E-omprov TE26A, 18/10) uppgift 13 fick en stjärnhimmel över
+    en regnvattentank. Scenfilen till a-21 säger «stora tal och potenser», och
+    «potensekvation» delar sju tecken med «potenser» — det räckte ensamt till
+    4,5 poäng. Två olika ord som börjar likadant är inget skäl för en bild."""
+    scen = tmp_path / "designsystem" / "platar"
+    scen.mkdir(parents=True)
+    (scen / "a-21-stjarnhimmel.txt").write_text(
+        "SCENE. A night sky over a meadow.\n\n"
+        "Intended use: stora tal och potenser, tiopotenser och prefix, "
+        "avstand och ljusar, koordinater i planet, logaritmisk skala.\n",
+        encoding="utf-8")
+    monkeypatch.setenv(platar.MILJOVARIABEL, str(tmp_path))
+    exam = {"uppgifter": [{
+        "text": "En kubformad tank samlar regnvatten från taket.\n"
+                "Tankens volym i liter ges av modellen: $V = s^{3}$, där $s$ "
+                "är kantens längd i dm.\nTanken rymmer 1 200 liter.\n\n"
+                "Bestäm kantens längd.",
+        "scen": {"begrepp": "potensekvation regnvattentank",
+                 "scene": "SCENE. …", "filnamn": "a-25-regnvattentank"}}]}
+    assert platar.matcha_exam(exam) == 0
+    assert exam["uppgifter"][0]["scen"].get("plat") is None
+    # En böjning av katalogens ord är samma ord och bär fortfarande.
+    assert platar.matcha("talföljd", "")["namn"] == "a-17-gardesgard-vinter"
+    assert platar.matcha("derivata", "En grusväg går över en kulle.")["namn"] \
+        == "a-06-backe-vag"
+
+
 def test_bara_spar_a_kan_matchas():
     poster = platar.spegel()
     assert any(p["spar"] == "b" for p in poster)
