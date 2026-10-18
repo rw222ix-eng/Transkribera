@@ -147,6 +147,17 @@ def _intervallminus(formel: str) -> str:
     return _INTERVALLMINUS_RE.sub(r"]\1{-}", formel)
 
 
+# «$(-3)^{2} \quad \square \quad -3^{2}$» (E-provet 265, 2026-10-18): rutan där
+# eleven skriver tecknet kommer ur amssymb, och dess typsnitt msam10 finns inte
+# i den offline-seedade Tectonic-cachen, så hela provet föll vid bygget. En ram
+# runt ett osynligt tal ritas med linjer och behöver inget typsnitt.
+_RUTA_RE = re.compile(r"\\(?:square|Box)(?![A-Za-z])")
+
+
+def _ruta(formel: str) -> str:
+    return _RUTA_RE.sub(r"\\fbox{\\phantom{0}}", formel)
+
+
 def escape_mixed(text: str, *, fet: bool = False) -> str:
     """Escapa text med inline-matte: allt utanför ``$…$`` escapas, matten
     bevaras oförändrad som ``\\( … \\)`` (modellen skriver LaTeX-matte där,
@@ -166,7 +177,7 @@ def escape_mixed(text: str, *, fet: bool = False) -> str:
             r"\1~\2", escape_latex(s)))
     for m in _MATH_SPLIT_RE.finditer(text):
         parts.append(_esc_text(text[pos:m.start()]))
-        matte = _exponentbrak(_intervallminus(m.group(1)))
+        matte = _ruta(_exponentbrak(_intervallminus(m.group(1))))
         formel = r"\pmb{" + matte + "}" if fet else matte
         parts.append(r"\(" + formel + r"\)")
         pos = m.end()
@@ -539,7 +550,7 @@ def _stycken(text: str, luft: bool = False,
             ut.append({"formel": False, "text": escape_mixed(rad)})
         elif m:
             ut.append({"formel": True,
-                       "text": _exponentbrak(_intervallminus(m.group(1)))})
+                       "text": _ruta(_exponentbrak(_intervallminus(m.group(1))))})
         else:
             ut.append({"formel": False, "text": escape_mixed(rad)})
             if _egen_rad(rad):

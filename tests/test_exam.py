@@ -4701,3 +4701,14 @@ def test_varvet_med_fel_poang_far_en_runda_och_annars_en_varning():
                                nummer=2, model="m", llm=llm)
     assert any("önskemålet sa [1, 0, 0]" in c["prompt"] for c in calls)
     assert "poangonske" in [e["code"] for e in res["errors"]]
+
+
+def test_rutan_ritas_utan_amssymb():
+    """E-provet 265 (2026-10-18): «$(-3)^{2} \\quad \\square \\quad -3^{2}$»
+    fällde bygget, msam10 finns inte i den offline-seedade cachen."""
+    from app import exam_latex
+    assert exam_latex.escape_mixed("Tecknet: $2 \\square 3$.") == \
+        "Tecknet: \\(2 \\fbox{\\phantom{0}} 3\\)."
+    st = exam_latex._stycken("$(-3)^{2} \\quad \\square \\quad -3^{2}$")
+    assert st[0]["formel"] and "\\square" not in st[0]["text"]
+    assert exam_latex._ruta("\\squared + \\Boxx") == "\\squared + \\Boxx"
