@@ -200,6 +200,23 @@ def test_refine_adds_version(client, monkeypatch):
     assert captured["mal"] == {"namn": "Sidhuvudet", "innehall": "Ma 1c · NA26F"}
 
 
+def test_refine_tar_lararens_nya_klockslag(client, monkeypatch):
+    """Exam 265 (2026-10-18): provet kortades till 90 minuter, men klockslagen
+    kom ur den gamla versionen. Skickas `klockslag` vinner det, annars står
+    den gamla tiden kvar som förut."""
+    result, _ = _make_exam(client, monkeypatch)
+
+    def fake_refine(exam, message, **_kw):
+        return {"exam": dict(_exam_doc(), klockslag=None), "errors": [], "rounds": 1}
+    monkeypatch.setattr(exam_gen, "refine_exam", fake_refine)
+    res = _done(client.post(f"/api/exams/{result['id']}/refine",
+                            json={"message": "korta", "klockslag": "15:15–16:45"}))
+    assert res["exam"]["klockslag"] == "15:15–16:45"
+    res = _done(client.post(f"/api/exams/{result['id']}/refine",
+                            json={"message": "byt ord"}))
+    assert res["exam"]["klockslag"] == "15:15–16:45"
+
+
 def test_refine_svaret_bar_vad_som_faktiskt_andrades(client, monkeypatch):
     """Markeringen ska inte längre gissas ur lärarens mening. Servern har båda
     versionerna och säger vilka element som skiljer sig — här: bara uppgift 1,

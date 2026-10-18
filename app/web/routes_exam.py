@@ -2685,6 +2685,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # när den bär minst två mål — högst sex, med fälten kapade som `mal`
         # kapas i prompten. Enkelmålsvägen blir därmed byte för byte som förut.
         malen = llm_client.flera_mal(body.get("malen")) or None
+        # LÄRARENS NYA KLOCKSLAG (exam 265, 2026-10-18): provet kortades från 120
+        # till 90 minuter, men klockslagen kom bara ur den gamla versionen och
+        # stod kvar på 15.15–17.15. Skickas fältet vinner det, annars som förut.
+        nytt_klockslag = (str(body["klockslag"]).strip()
+                          if isinstance(body.get("klockslag"), str) else None)
         # Bokdörren följer med omskrivningen som med genereringen: sidorna,
         # uppgiftsnumren och lärarens urval — och SAMMA urval som skrivningen
         # fick, annars byter modellen bok mitt i arbetspasset. Läser inga sidor.
@@ -2860,7 +2865,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # den version som låg framme.
                 _satt_lararens_datum(
                     res["exam"], view.get("datum"),
-                    (view.get("exam") or {}).get("klockslag") or "")
+                    nytt_klockslag if nytt_klockslag is not None
+                    else (view.get("exam") or {}).get("klockslag") or "")
                 # TAKTEN likaså, och av exakt samma skäl: den står inte i
                 # grammatiken, så ett omskrivningsvarv hade tappat lärarens
                 # minuter per poäng och pappret hade börjat räknas med husets.
