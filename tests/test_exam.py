@@ -4708,7 +4708,7 @@ def test_rutan_ritas_utan_amssymb():
     fällde bygget, msam10 finns inte i den offline-seedade cachen."""
     from app import exam_latex
     assert exam_latex.escape_mixed("Tecknet: $2 \\square 3$.") == \
-        "Tecknet: \\(2 \\fbox{\\phantom{0}} 3\\)."
+        "Tecknet: \\(2 \\mathrel{\\fbox{\\phantom{0}}} 3\\)."
     st = exam_latex._stycken("$(-3)^{2} \\quad \\square \\quad -3^{2}$")
     assert st[0]["formel"] and "\\square" not in st[0]["text"]
     assert exam_latex._ruta("\\squared + \\Boxx") == "\\squared + \\Boxx"

@@ -150,12 +150,14 @@ def _intervallminus(formel: str) -> str:
 # «$(-3)^{2} \quad \square \quad -3^{2}$» (E-provet 265, 2026-10-18): rutan där
 # eleven skriver tecknet kommer ur amssymb, och dess typsnitt msam10 finns inte
 # i den offline-seedade Tectonic-cachen, så hela provet föll vid bygget. En ram
-# runt ett osynligt tal ritas med linjer och behöver inget typsnitt.
+# runt ett osynligt tal ritas med linjer och behöver inget typsnitt. Rutan står
+# för ett jämförelsetecken, därför \mathrel: «□ −3²» får ett förtecken, inte
+# en subtraktion.
 _RUTA_RE = re.compile(r"\\(?:square|Box)(?![A-Za-z])")
 
 
 def _ruta(formel: str) -> str:
-    return _RUTA_RE.sub(r"\\fbox{\\phantom{0}}", formel)
+    return _RUTA_RE.sub(r"\\mathrel{\\fbox{\\phantom{0}}}", formel)
 
 
 def escape_mixed(text: str, *, fet: bool = False) -> str:
