@@ -4545,7 +4545,11 @@ def _uppgiftsstarter(secs: list) -> list[int]:
 def en_uppgift_per_kolumn(board: dict | None) -> dict | None:
     """Dela högerns kolumner så att varje uppgift står i en egen kolumn, när
     tavlan har högst fyra uppgifter och någon kolumn bär två. Idempotent, och
-    en tavla utan sådan kolumn kommer tillbaka orörd."""
+    en tavla utan sådan kolumn kommer tillbaka orörd.
+
+    En kolumn som blivit tom stryks också. Lappen kan bara ta bort rutor, inte
+    kolumner: när Rickard 18/10 strök uppgift c) ur dok 409 föll lappen som
+    pekade på hela kolumnen, och rutorna en och en lämnar en tom kolumn kvar."""
     if not isinstance(board, dict):
         return board
     board = copy.deepcopy(board)
@@ -4553,6 +4557,9 @@ def en_uppgift_per_kolumn(board: dict | None) -> dict | None:
         kol = tavla.get("columns") if isinstance(tavla, dict) else None
         if not isinstance(kol, list) or not kol:
             continue
+        if len(kol) > 1 and any(not (k or {}).get("sections") for k in kol):
+            kol = [k for k in kol if (k or {}).get("sections")] or kol[:1]
+            tavla["columns"] = kol
         starter = [_uppgiftsstarter((k or {}).get("sections") or []) for k in kol]
         if sum(map(len, starter)) > _MAX_UPPGIFTSKOLUMNER \
                 or all(len(s) <= 1 for s in starter):

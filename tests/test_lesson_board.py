@@ -1031,6 +1031,13 @@ def test_nivarubrik_mitt_i_kolumnen_foljer_med():
                    ["C-nivå", "c) Tre"], ["A-nivå", "d) Fyra"]]
 
 
+def test_tom_kolumn_stryks():
+    """Dok 409: c) togs bort ruta för ruta och lämnade sin kolumn tom."""
+    ut = lb.en_uppgift_per_kolumn(_hoger(["a) Ett"], ["b) Två"], [], ["d) Fyra"]))
+    kol = [[s["text"] for s in k["sections"]] for k in ut["boards"][1]["columns"]]
+    assert kol == [["a) Ett"], ["b) Två"], ["d) Fyra"]]
+
+
 def test_fem_uppgifter_och_rena_kolumner_star_kvar():
     fem = _hoger(["a) Ett", "b) Två"], ["c) Tre", "d) Fyra"], ["e) Fem"])
     assert lb.en_uppgift_per_kolumn(fem) == fem
