@@ -193,14 +193,84 @@ def formagor(rader: list[dict], varden: dict | None, niva: int) -> dict[str, int
     return ut
 
 
+# OMPROV ÖVER FLERA KAPITEL (Rickard 2026-10-18, exam 265): Edvin skrev ett
+# E-prov över kapitel 1 och 2 i stället för ett omprov per kapitel, och
+# «godkänt där ger godkänt på både kapitel ett och två». Ett omprov vars
+# momentrad spänner över två eller flera av klassens moment räknas därför på
+# VARJE moment, med de uppgifter som hör till det kapitlet: kapitel 1-delen
+# tävlar med kapitel 1-proven om att vara elevens bästa papper där, och
+# kapitel 2-delen med kapitel 2-proven. Pappret blir inget eget moment, och
+# varje poäng räknas en gång.
+_KAPITEL_RE = re.compile(r"(?<![\d.])(\d+)\.\d+")
+
+
+def kapitel(moment: str) -> frozenset[str]:
+    """Kapitlen en momentrad täcker: «1.1 Rötter · 2.3 Intervall» → {1, 2}."""
+    return frozenset(_KAPITEL_RE.findall(str(moment or "")))
+
+
+def _uppgiftskapitel(conn, papper: dict) -> dict[str, str]:
+    """Uppgiftsnummer → kapitel, ur uppgiftens `avsnitt` («1.2»). Pappret bär
+    det inte alltid, då läses provets JSON (provId)."""
+    uppg = list(papper.get("uppgifter") or [])
+    if not all(isinstance(u, dict) and u.get("avsnitt") for u in uppg) \
+            and papper.get("provId"):
+        rad = db.get_exam(conn, int(papper["provId"]))
+        uppg = list(((rad or {}).get("exam") or {}).get("uppgifter") or uppg)
+    ut = {}
+    for i, u in enumerate(uppg, 1):
+        avs = str((u or {}).get("avsnitt") or "") if isinstance(u, dict) else ""
+        if "." in avs:
+            ut[str(i)] = avs.split(".")[0].strip()
+    return ut
+
+
+def _kapitelrader(conn, p: dict, kap: frozenset[str]) -> list[dict]:
+    """Radernas delmängd som hör till kapitlen `kap` (utan kompensationen)."""
+    karta = _uppgiftskapitel(conn, p["papper"])
+    ut = []
+    for r in p["rader"]:
+        if r.get("grupp") or r.get("kompensation"):
+            continue
+        m = re.match(r"\d+", str(r["nyckel"]))
+        if m and karta.get(m.group(0)) in kap:
+            ut.append(r)
+    return ut
+
+
+def _delresultat(rader: list[dict], varden: dict) -> dict:
+    """Elevens E/C/A och total på en delmängd av raderna."""
+    s = [0, 0, 0]
+    for r in rader:
+        trip = rattning._elevtripel(varden.get(r["nyckel"]), r.get("peca") or [0, 0, 0])
+        s = [a + int(t or 0) for a, t in zip(s, trip)]
+    return {"e": s[0], "c": s[1], "a": s[2], "total": sum(s)}
+
+
 def bygg_vy(conn, klass: str) -> dict:
     gid = db.get_or_create_group(conn, klass)
     elever = db.list_elever(conn, gid)
     prov = prov_for_klass(conn, klass)
     moment: dict[str, list[int]] = {}
-    for i, p in enumerate(prov):
+    for p in prov:
         p["max"] = maxtripel(p["rader"])
-        moment.setdefault(p["moment"], []).append(i)
+    # Först de papper som är ett moment, sedan omproven som spänner över flera.
+    for p in prov:
+        p["delar_av"] = {}
+    for p in prov:
+        if not p["omprov"] or p["moment"] in moment:
+            continue
+        kap = kapitel(p["moment"])
+        tackta = [m for m in dict.fromkeys(q["moment"] for q in prov if not q["omprov"])
+                  if kapitel(m) and kapitel(m) <= kap and m != p["moment"]]
+        if len(tackta) >= 2:
+            p["delar_av"] = {m: _kapitelrader(conn, p, kapitel(m)) for m in tackta}
+    for i, p in enumerate(prov):
+        if not p["delar_av"]:
+            moment.setdefault(p["moment"], []).append(i)
+    # Varje moment får veta vilka papper över flera kapitel som tävlar där.
+    breda: dict[str, list[int]] = {m: [i for i, p in enumerate(prov) if m in p["delar_av"]]
+                                   for m in moment}
     # Momentets max för den som inte skrivit något: originalets, inte omprovets.
     std = {m: prov[next((i for i in ix if not prov[i]["omprov"]), ix[0])]["max"]
            for m, ix in moment.items()}
@@ -232,20 +302,27 @@ def bygg_vy(conn, klass: str) -> dict:
                                 "pil": b if b == "?" else pilbetyg(b, s["total"], p["granser"]),
                                 "del": dels, "k": k, "rader": per_rad})
         for m, ix in moment.items():
-            gjorda = [i for i in ix if rad["prov"][i]]
-            if not gjorda:
+            # Kandidaterna: momentets egna papper, hela, och kapitlets del av
+            # varje omprov över flera kapitel som eleven skrivit.
+            kandidater = [(i, rad["prov"][i], prov[i]["rader"], prov[i]["max"])
+                          for i in ix if rad["prov"][i]]
+            for i in breda[m]:
+                if rad["prov"][i]:
+                    delrader = prov[i]["delar_av"][m]
+                    kandidater.append((i, _delresultat(delrader, prov[i]["resultat"][e["id"]]),
+                                       delrader, maxtripel(delrader)))
+            if not kandidater:
                 rad["max"] = [a + b for a, b in zip(rad["max"], std[m])]
                 continue
             # Bästa pappret: högst total, vid lika det senaste (prov står i datumordning).
-            i = max(gjorda, key=lambda j: (rad["prov"][j]["total"], j))
-            res, p = rad["prov"][i], prov[i]
-            res["raknas"] = True
+            i, res, rader_m, max_m = max(kandidater, key=lambda k: (k[1]["total"], k[0]))
+            rad["prov"][i]["raknas"] = True
             rad["summa"] = [rad["summa"][0] + res["e"], rad["summa"][1] + res["c"],
                             rad["summa"][2] + res["a"]]
-            rad["max"] = [a + b for a, b in zip(rad["max"], p["max"])]
+            rad["max"] = [a + b for a, b in zip(rad["max"], max_m)]
             rad["skrivna"] += 1
             for niva, n in (("C", 1), ("A", 2)):
-                for f, x in formagor(p["rader"], p["resultat"][e["id"]], n).items():
+                for f, x in formagor(rader_m, prov[i]["resultat"][e["id"]], n).items():
                     rad["formagor"][niva][f] = rad["formagor"][niva].get(f, 0) + x
         rad["forslag"], rad["nasta"] = (slutbetyg(rad["summa"], rad["max"],
                                                   rad["formagor"]["A"])
@@ -304,7 +381,9 @@ def till_rader(vy: dict, uppgifter: bool = False) -> list[list]:
             nycklar = ([r["nyckel"] for r in prov["rader"] if r.get("nyckel") in prov["delar"]]
                        if uppgifter else [])
             if p is None:
-                annat = any(e["prov"][j] for j in vy["moment"][prov["moment"]])
+                ix = [j for m in (prov["delar_av"] or [prov["moment"]])
+                      for j in vy["moment"].get(m, [])]
+                annat = any(e["prov"][j] for j in ix)
                 tom = "" if annat else "skrev inte"
                 rad += [""] * (3 + prov["komp"]) + [tom] + [""] * 4 + [tom] + [""] * len(nycklar)
             else:

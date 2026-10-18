@@ -196,3 +196,46 @@ def test_del_a_och_b_ar_provets_avsnitt_och_varje_deluppgift_syns(conn):
     sam = kursvy.samling(conn)
     assert sam[0] == kursvy.SAMLING_RUBRIK
     assert sam[1][:2] == ["TE26A", "Ada"] and sam[1][4:12] == [1, 2, 1, 2, "", 2, 4, "E → C"]
+
+
+# ------------------------------------------- omprov över flera kapitel --
+
+def test_omprov_over_tva_kapitel_raknas_pa_vart_kapitel(conn):
+    """Rickard 2026-10-18 (exam 265): Edvins E-prov över kapitel 1 och 2
+    ersätter båda omproven, godkänt där ger godkänt på båda kapitlen. Varje
+    kapitels del tävlar med kapitlets egna prov, och poängen räknas en gång."""
+    gid = db.get_or_create_group(conn, "TE26A")
+    elever = {e["namn"]: e["id"] for e in db.save_elever(conn, gid, ["Ada", "Edvin"])}
+    kap2 = [{"nr": 1, "t": "Lös.", "p": 3, "peca": [2, 1, 0], "formaga": "P"},
+            {"nr": 2, "t": "Visa.", "p": 3, "peca": [0, 2, 1], "formaga": "R"}]
+    _prov(conn, "2026-09-16", UPPG_ORIGINAL, elever,
+          {"Ada": {"1": [4, 0, 0], "2": [0, 3, 1]}, "Edvin": {"1": [1, 0, 0], "2": [0, 0, 0]}})
+    _prov(conn, "2026-10-14", kap2, elever,
+          {"Ada": {"1": [2, 1, 0], "2": [0, 2, 0]}, "Edvin": {"1": [1, 0, 0], "2": [0, 0, 0]}},
+          moment="2.1 Ekvationer · 2.4 Olikheter")
+    eprov = [{"nr": 1, "t": "Förenkla.", "p": 3, "peca": [3, 0, 0], "formaga": "P", "avsnitt": "1.2"},
+             {"nr": 2, "t": "Lös.", "p": 2, "peca": [2, 0, 0], "formaga": "P", "avsnitt": "2.1"},
+             {"nr": 3, "t": "Ange.", "p": 1, "peca": [1, 0, 0], "formaga": "B", "avsnitt": "2.4"}]
+    _prov(conn, "2026-11-02", eprov, elever, {"Edvin": {"1": [3, 0, 0], "2": [2, 0, 0], "3": [0, 0, 0]}},
+          moment="1.1 Rötter · 1.2 Potenser · 2.1 Ekvationer · 2.4 Olikheter", variant="Omprov")
+    vy = kursvy.bygg_vy(conn, "TE26A")
+    assert len(vy["moment"]) == 2                       # inget eget moment
+    assert vy["kursmax"] == [6, 6, 2]                   # originalens
+    edvin = _elev(vy, "Edvin")
+    # kap 1: E-provets del 3/3 slår originalets 1; kap 2: delen 2/3 slår 1.
+    assert edvin["summa"] == [5, 0, 0] and edvin["max"] == [6, 0, 0]
+    assert edvin["skrivna"] == 2
+    assert [p and p["raknas"] for p in edvin["prov"]] == [False, False, True]
+    ada = _elev(vy, "Ada")                              # skrev inte E-provet
+    assert ada["summa"] == [6, 6, 1] and ada["skrivna"] == 2
+    rader = kursvy.till_rader(vy)
+    rub, per_namn = rader[0], {r[0]: r for r in rader[1:]}
+    betyg_e = rub.index(next(k for k in rub if k.endswith("2026-11-02) betyg")))
+    assert per_namn["Ada"][betyg_e] == ""                # inte «skrev inte»
+    assert per_namn["Edvin"][rub.index("Skrivna prov")] == "2 av 2"
+
+
+def test_kapitlen_ur_momentraden():
+    assert kursvy.kapitel("1.1 Rötter · 1.2 Potenser · 2.3 Intervall") == {"1", "2"}
+    assert kursvy.kapitel("4.1 Vektorer") == {"4"}
+    assert kursvy.kapitel("dokument 12") == frozenset()
