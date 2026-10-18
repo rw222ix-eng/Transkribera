@@ -995,6 +995,51 @@ def test_satt_tid_taler_trasig_tavla():
     assert lb.satt_tid({"boards": []}, "08:15") == {"boards": []}
 
 
+# ----------------------------------------------------- en_uppgift_per_kolumn --
+
+def _hoger(*kolumner):
+    def t(s):
+        return {"kind": "text", "text": s, "size": 21}
+    return {"boards": [{"name": "vanster", "sections": [t("a) står kvar")]},
+                       {"name": "hoger", "columns": [
+                           {"weight": 1, "sections": [t(s) for s in k]}
+                           for k in kolumner]}]}
+
+
+def test_fyra_uppgifter_far_var_sin_kolumn():
+    """TE26A 19/10 (dok 409): b) och c) i samma kolumn ritades i 95 %, grannarna
+    i 138 och 145 %. Nivårubriken följer med sin uppgift."""
+    ut = lb.en_uppgift_per_kolumn(_hoger(
+        ["Vilken metod?", "E-nivå", "a) Masten", "x² = 100"],
+        ["C-nivå", "b) Vajern", "Med räknare", "c) Vajern igen", "Med räknare"],
+        ["A-nivå", "d) Hur lång?"]))
+    kol = [[s["text"] for s in k["sections"]] for k in ut["boards"][1]["columns"]]
+    assert kol == [["Vilken metod?", "E-nivå", "a) Masten", "x² = 100"],
+                   ["C-nivå", "b) Vajern", "Med räknare"],
+                   ["c) Vajern igen", "Med räknare"],
+                   ["A-nivå", "d) Hur lång?"]]
+    assert all(k["weight"] == 1 for k in ut["boards"][1]["columns"])
+    assert ut["boards"][0] == _hoger([])["boards"][0]
+    assert lb.en_uppgift_per_kolumn(ut) == ut
+
+
+def test_nivarubrik_mitt_i_kolumnen_foljer_med():
+    ut = lb.en_uppgift_per_kolumn(_hoger(
+        ["E-nivå", "a) Ett", "b) Två"], ["C-nivå", "c) Tre", "A-nivå", "d) Fyra"]))
+    kol = [[s["text"] for s in k["sections"]] for k in ut["boards"][1]["columns"]]
+    assert kol == [["E-nivå", "a) Ett"], ["b) Två"],
+                   ["C-nivå", "c) Tre"], ["A-nivå", "d) Fyra"]]
+
+
+def test_fem_uppgifter_och_rena_kolumner_star_kvar():
+    fem = _hoger(["a) Ett", "b) Två"], ["c) Tre", "d) Fyra"], ["e) Fem"])
+    assert lb.en_uppgift_per_kolumn(fem) == fem
+    tre = _hoger(["a) Ett"], ["b) Två"], ["c) Tre"])
+    assert lb.en_uppgift_per_kolumn(tre) == tre
+    assert lb.en_uppgift_per_kolumn(None) is None
+    assert lb.en_uppgift_per_kolumn({}) == {}
+
+
 # -------------------------------------------------------------- satt_forra --
 
 def test_forra_gangen_ar_agendans_forsta_punkt():

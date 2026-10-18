@@ -4519,6 +4519,58 @@ def satt_tid(board: dict | None, starttid: str | None,
     return board
 
 
+# EN UPPGIFT PER KOLUMN. TE26A 19/10 (dok 409): fyra uppgifter i tre kolumner
+# gav b) och c) i samma kolumn, och motorns fit-pass skalar varje kolumn för
+# sig. Mittkolumnen ritades i 95 % och grannarna i 138 och 145 %, så b) och c)
+# gick knappt att läsa på tavlan. En omskrivning kunde inte rätta det: varvet
+# lappar rutor, det flyttar inga kolumner. Med högst fyra uppgifter får därför
+# varje uppgift en egen kolumn, deterministiskt. Fem uppgifter i fem kolumner
+# blir för smalt, där står modellens fördelning kvar.
+_MAX_UPPGIFTSKOLUMNER = 4
+
+
+def _uppgiftsstarter(secs: list) -> list[int]:
+    """Index där en uppgift börjar, med nivårubriken direkt före om den finns."""
+    ut = []
+    for i, s in enumerate(secs):
+        if isinstance(s, dict) and s.get("kind") == "text" \
+                and _DELMARKOR_RE.match(str(s.get("text") or "")):
+            fore = secs[i - 1] if i else None
+            ut.append(i - 1 if isinstance(fore, dict) and fore.get("kind") == "text"
+                      and str(fore.get("text") or "").strip() in _NIVARUBRIKER
+                      else i)
+    return ut
+
+
+def en_uppgift_per_kolumn(board: dict | None) -> dict | None:
+    """Dela högerns kolumner så att varje uppgift står i en egen kolumn, när
+    tavlan har högst fyra uppgifter och någon kolumn bär två. Idempotent, och
+    en tavla utan sådan kolumn kommer tillbaka orörd."""
+    if not isinstance(board, dict):
+        return board
+    board = copy.deepcopy(board)
+    for tavla in (board.get("boards") or [])[1:]:
+        kol = tavla.get("columns") if isinstance(tavla, dict) else None
+        if not isinstance(kol, list) or not kol:
+            continue
+        starter = [_uppgiftsstarter((k or {}).get("sections") or []) for k in kol]
+        if sum(map(len, starter)) > _MAX_UPPGIFTSKOLUMNER \
+                or all(len(s) <= 1 for s in starter):
+            continue
+        nya = []
+        for k, st in zip(kol, starter):
+            secs = (k or {}).get("sections") or []
+            # Allt före andra uppgiften (rubriken, första nivårubriken) hör
+            # till den första.
+            granser = [0] + st[1:] + [len(secs)]
+            for a, b in zip(granser, granser[1:]):
+                if secs[a:b]:
+                    nya.append({**{n: v for n, v in (k or {}).items()
+                                   if n != "sections"}, "sections": secs[a:b]})
+        tavla["columns"] = nya
+    return board
+
+
 # FÖRRA GÅNGEN. Lärarens dom 2026-09-23 över BA26B:s procenttavla: «Jag saknar
 # en koppling till föregående lektion, så att man kan binda ihop lektionerna
 # med varandra. Så att eleverna ser ett sammanhang.» Raden är lärarens, inte

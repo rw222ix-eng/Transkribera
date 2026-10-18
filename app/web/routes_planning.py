@@ -1478,7 +1478,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # Lektionstiden uppe till vänster är lärarens, inte modellens:
                 # den sätts deterministiskt EFTER valideringen, ur den
                 # starttid som redan följer med planeringen + schemats sluttid.
-                board = lesson_board.satt_tid(res["board"], starttid, sluttid)
+                board = lesson_board.satt_tid(
+                    lesson_board.en_uppgift_per_kolumn(res["board"]),
+                    starttid, sluttid)
                 # «Förra gången» likaså: kalenderns rubrik, inte modellens.
                 board = lesson_board.satt_forra(board, forra)
                 steg.na("sparar")
@@ -1665,7 +1667,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # Samma fråga som i refine nedan: ett avbrutet reparationsvarv
                 # får inte skriva över en tavla läraren hunnit skriva om sedan.
                 stoppa_om_avbrutet(emit)
-                st["board"] = lesson_board.satt_tid(res["board"] or st["board"],
+                st["board"] = lesson_board.satt_tid(
+                    lesson_board.en_uppgift_per_kolumn(res["board"] or st["board"]),
                                                     st.get("starttid"),
                                                     st.get("sluttid"))
                 # Förra gången följer samma väg. Omskrivningen (refine) rör
@@ -1692,7 +1695,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
         där kursen inte har implikation, och lektionstiden står först. ETT
         ställe, för svaret och originalet i diffen måste gå samma väg."""
         return lesson_board.satt_tid(
-            lesson_board.pilar_till_ger(board, st.get("course") or ""),
+            lesson_board.en_uppgift_per_kolumn(
+                lesson_board.pilar_till_ger(board, st.get("course") or "")),
             st.get("starttid"), st.get("sluttid"))
 
     @router.post("/api/planning/{pid}/refine")
