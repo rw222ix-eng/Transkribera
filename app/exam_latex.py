@@ -476,11 +476,16 @@ _DELRAD_RE = re.compile(r"^[a-h]\)\s")
 # (1) x + y = 96 (2) 55x + 85y = 6 180 Bestäm …», IndA prov 2, exam 215,
 # 2026-10-11): fyra uppgifter blev oläsliga.
 _EKVRAD_RE = re.compile(r"^\(\d+\)\s*\$[^$]+\$\s*[.,]?$")
+# En kort etikett med en formel, «Fjäder A: $y = 3x + 10$», är en rad i en
+# uppräkning (exam 266 uppg 2: tre fjädrar flöt ihop). Högst två ord före
+# kolonet, så att «Linjen L har ekvationen: $…$» flödar som förut. Spegel av
+# blad-bygg.js ETIKETTRAD.
+_ETIKETTRAD_RE = re.compile(r"^[A-ZÅÄÖ][^\s:$]*(?: [^\s:$]+)?:\s*\$[^$]+\$\s*[.,;]?$")
 
 
 def _egen_rad(text: str) -> bool:
     """Står raden på egen rad även i ett hopslaget stycke?"""
-    return bool(_EKVRAD_RE.match(text or ""))
+    return bool(_EKVRAD_RE.match(text or "") or _ETIKETTRAD_RE.match(text or ""))
 
 
 def _ihop(rader: list[str], forst_i_raden: bool) -> list[str]:

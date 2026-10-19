@@ -92,6 +92,12 @@ window.BladBygg = (() => {
   /* Ett ekvationssystems rader, «(1) $x + y = 96$», står var på sin rad
      (IndA prov 2, exam 215, 2026-10-11). Spegel av exam_latex._EKVRAD_RE. */
   const EKVRAD = /^\(\d+\)\s*\$[^$]+\$\s*[.,]?$/;
+  /* En kort etikett med en formel, «Fjäder A: $y = 3x + 10$», är en rad i en
+     uppräkning och står för sig som ekvationsraden (exam 266 uppg 2: tre
+     fjädrar flöt ihop till «… Fjäder A: y = 3x + 10 Fjäder B: …»). Högst två
+     ord före kolonet, så att «Linjen L har ekvationen: $…$» flödar som förut.
+     Spegel av exam_latex._ETIKETTRAD_RE. */
+  const ETIKETTRAD = /^[A-ZÅÄÖ][^\s:$]*(?: [^\s:$]+)?:\s*\$[^$]+\$\s*[.,;]?$/;
   const ihop = s => {
     const ut = [];
     let buf = [];
@@ -103,7 +109,7 @@ window.BladBygg = (() => {
         } else if (DELRAD.test(r) && buf.length) {
           ut.push(buf.join(' '));
           buf = [r];
-        } else if (EKVRAD.test(r)) {
+        } else if (EKVRAD.test(r) || ETIKETTRAD.test(r)) {
           if (buf.length) { ut.push(buf.join(' ')); buf = []; }
           ut.push(r);
         } else buf.push(r);
@@ -222,7 +228,7 @@ window.BladBygg = (() => {
     if (!t || !t.rubriker) return '';
     const rad = celler => `<tr>${celler.map(c => `<td>${mat(c)}</td>`).join('')}</tr>`;
     return `<table class="${klass}"><thead><tr>${
-      t.rubriker.map(r => `<th>${esc(r)}</th>`).join('')}</tr></thead><tbody>${
+      t.rubriker.map(r => `<th>${mat(r)}</th>`).join('')}</tr></thead><tbody>${
       (t.rader || []).map(rad).join('')}</tbody></table>`;
   }
   /* ── ETIKETTEN ÄR MATEMATIK, PRECIS SOM FRÅGAN ──

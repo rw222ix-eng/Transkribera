@@ -335,3 +335,18 @@ def test_bladet_far_provets_nya_vakter():
         assert k in exam_gen.OVNINGSKODER
     alla = {f["code"] for f in exam_gen.ovningsvakter(exam, prov=None)}
     assert {"doltkrav", "avrundning", "endastsvar"} <= alla
+
+
+def test_en_etikett_med_formel_star_pa_egen_rad():
+    """Exam 266 uppg 2: «Fjäder A: $y = 3x + 10$» flöt ihop med nästa fjäder."""
+    assert exam_latex._ihop(
+        ["Tre fjädrar töjs.", "Fjäder A: $y = 3x + 10$",
+         "Fjäder B: $y = 4x + 10$", "Linjen L har ekvationen: $y = 3x - 4$.",
+         "Bestäm k."], False) == [
+        "Tre fjädrar töjs.", "Fjäder A: $y = 3x + 10$",
+        "Fjäder B: $y = 4x + 10$",
+        "Linjen L har ekvationen: $y = 3x - 4$. Bestäm k."]
+    js = (UI / "blad-bygg.js").read_text(encoding="utf-8")
+    assert "EKVRAD.test(r) || ETIKETTRAD.test(r)" in js
+    # Tabellhuvudet är matematik som cellerna (exam 266 visade «$K$»).
+    assert "`<th>${mat(r)}</th>`" in js
