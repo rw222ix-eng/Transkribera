@@ -858,9 +858,9 @@ INSTRUCTION = (
     # svårt», «Taket lutar vinkeln v mot vågrätt … askonstigt ställd».
     # Orden står i språkvaktens lista (SVARA_ORD_PROV).
     "  • ORD SOM ELEVEN HAR: skriv inte «vågrät», «lodrät», «sluttar», «i "
-    "vågrät led» eller «i förhållande till». Skriv «lutar», «mätt längs "
-    "marken», «för varje 100 m bort», och säg åt vilket håll något rör sig "
-    "(«åt höger i bilden»).\n"
+    "vågrät led», «i förhållande till» eller «under rät vinkel». Skriv "
+    "«lutar», «mätt längs marken», «för varje 100 m bort», «skär L i en rät "
+    "vinkel», och säg åt vilket håll något rör sig («åt höger i bilden»).\n"
     # Samma granskning: «Vadå? Taket lutar och vinkeln mellan taket och
     # marken … Då tror eleverna att från den låga kanten ner till marken, där
     # är vinkeln», «Den här är svår att veta vad som menas med övre ände och
@@ -5378,6 +5378,9 @@ SVARA_ORD_PROV = {
     "lodrätt": "skriv «rakt upp» eller «rakt ner»",
     "lodräta": "skriv «rakt upp» eller «rakt ner»",
     "sluttar": "skriv «lutar»",
+    # NA26F-bladet 20/10 uppgift 4, «skär L under rät vinkel»: «låter
+    # konstigt, borde det inte stå i en rät vinkel» (Rickard 2026-10-19).
+    "under rät vinkel": "skriv «i en rät vinkel»",
     "i förhållande till": "säg vad som räknas ut med enkla ord, till exempel "
                           "«storleken av den resulterande vektorn»",
     # Samma kväll, A-bladets uppgift 9: «beräkna båtens fart rakt över ån»
