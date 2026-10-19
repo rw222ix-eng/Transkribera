@@ -2062,14 +2062,20 @@ _LARARENS_PLAN_RAD = (
     "avsnittets innehåll, så som det står på bokens sidor för avsnittet, på "
     "den nivån, och bär avsnittets nummer i fältet \"avsnitt\". Ett innehåll "
     "som inte finns på avsnittets sidor hör inte hemma på raden, hur väl det "
-    "än passar momentet.")
+    "än passar momentet. Står lärarens innehåll på raden är det uppgiftens "
+    "innehåll, och två rader med samma innehåll tar var sin del av det.")
 
 
 def _lararens_rad(s: dict) -> str:
     """«, E-uppgift ur avsnitt 4.1» när raden bär lärarens plan, annars ""."""
     niva, avs = s.get("niva"), s.get("avsnitt")
     if niva and avs:
-        return f", {niva}-uppgift ur avsnitt {avs}"
+        # Lärarens innehåll för nivån (lararord._nivatexter): 4.3 är hela
+        # Linjära samband, och exam 266 fick allmän form i stället för
+        # parallella linjer när raden bara sa avsnittet.
+        txt = s.get("lararinnehall")
+        return (f", {niva}-uppgift ur avsnitt {avs}"
+                + (f", lärarens innehåll: «{txt}»" if txt else ""))
     if avs:
         return f", ur avsnitt {avs}"
     if niva:

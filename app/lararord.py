@@ -111,6 +111,31 @@ def _nivaer(t: str) -> list[str]:
     return re.findall(r"[ECA]", m.group(1)) if m else []
 
 
+# INNEHÅLLET PER NIVÅ (NA26F 20/10, exam 266). Rutan sa «Uppgift 1–5 är 4.3
+# parallella och vinkelräta linjer …, ordning E, E, C, C, A. E: … parallella
+# (samma k). C: … parallell … vinkelrät … A: …», men planen bar bara «4.3», och
+# 4.3 är hela Linjära samband (s. 159–181). Del 1 fick allmän form och en
+# skärning på x-axeln och inte en enda parallell linje. Lärarens «E: …» är
+# radens innehåll och följer med på raden. Bara efter ordningen, så att
+# «ordning E, E, C, C, A: …» inte läses som A:s innehåll, och bara till
+# meningens slut.
+_NIVATEXT_RE = re.compile(
+    r"(?<![A-Za-zÅÄÖåäö0-9])([ECA]):\s*(.+?\.)(?=\s+[A-ZÅÄÖ]|\s*$)", re.S)
+MAX_NIVATEXT = 260
+
+
+def _nivatexter(t: str) -> dict[str, str]:
+    m = _ORDNING_RE.search(t)
+    if not m:
+        return {}
+    ut: dict[str, str] = {}
+    for n, txt in _NIVATEXT_RE.findall(t[m.end():]):
+        txt = " ".join(txt.split()).rstrip(".")
+        if n not in ut and txt:
+            ut[n] = txt[:MAX_NIVATEXT]
+    return ut
+
+
 def fokusplan(text, antal: int) -> list[dict] | None:
     """Lärarens plan per uppgift ur viktningsrutan: en lista med `antal`
     poster {"avsnitt": "4.1" | None, "niva": "E" | "C" | "A" | None}, eller
@@ -146,11 +171,14 @@ def fokusplan(text, antal: int) -> list[dict] | None:
         nv = _nivaer(bit)
         if len(nv) != till - fran + 1:
             nv = [None] * (till - fran + 1)
+        texter = _nivatexter(bit) if any(nv) else {}
         for j, n in zip(range(fran - 1, till), nv):
             if avs:
                 plan[j]["avsnitt"] = avs.group(1)
             if n:
                 plan[j]["niva"] = n
+                if texter.get(n):
+                    plan[j]["innehall"] = texter[n]
     if not any(p["avsnitt"] or p["niva"] for p in plan):
         return None
     return plan

@@ -270,3 +270,37 @@ def test_rutten_utan_plan_skickar_inget_eget_skelett(client, monkeypatch):
         "kurs": "Matematik, nivå 1c", "klass": "NA26F", "typ": "arbetsblad",
         "antal": 10, "fokus": "mest ur boken"})
     assert anrop == [None]
+
+
+# ─────────────────────────────────────────── innehållet per nivå (exam 266) ──
+
+# Rutan till exam 266 (NA26F 20/10). Planen bar bara «4.3», och del 1 fick
+# allmän form och en skärning på x-axeln i stället för parallella linjer.
+FOKUS_266 = (
+    "Bladet har två delar med fem uppgifter var. Uppgift 1–5 är 4.3 "
+    "parallella och vinkelräta linjer (s. 172 och 178–181), ordning E, E, C, "
+    "C, A. E: läsa av k och m i y = kx + m och avgöra vilka linjer som är "
+    "parallella (samma k). C: bestäm ekvationen för linjen som är vinkelrät "
+    "mot en given linje (k₁ · k₂ = −1). A: kräver både E och C. Uppgift 6–10 "
+    "är 4.4 potensfunktioner (s. 182–186), ordning E, E, C, C, A: y = k · xᵃ. "
+    "Utan räknare: alla tal går jämnt upp.")
+
+
+def test_nivans_innehall_foljer_planen():
+    plan = lararord.fokusplan(FOKUS_266, 10)
+    assert plan[0]["innehall"].startswith("läsa av k och m")
+    assert "parallella (samma k)" in plan[1]["innehall"]
+    assert "vinkelrät" in plan[3]["innehall"]
+    assert plan[4]["innehall"] == "kräver både E och C"
+    # «ordning …, A: y = k · xᵃ» är ingen nivåtext, och «Utan räknare:» inte A:s.
+    assert not any("innehall" in p for p in plan[5:])
+
+
+def test_raden_bar_lararens_innehall():
+    sk = _planskelett()
+    sk[1]["lararinnehall"] = "avgöra vilka linjer som är parallella"
+    rader = exam_gen._skelett_plan(sk).splitlines()[1:]
+    assert rader[1].endswith(
+        "E-uppgift ur avsnitt 4.1, lärarens innehåll: «avgöra vilka linjer "
+        "som är parallella»")
+    assert rader[0].endswith("E-uppgift ur avsnitt 4.1")

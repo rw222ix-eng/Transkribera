@@ -2097,6 +2097,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         slot["avsnitt"] = p["avsnitt"]
                     if egen_ordning:
                         slot["niva"] = p["niva"]
+                        # Lärarens «E: …» för nivån, se lararord._nivatexter.
+                        if p.get("innehall"):
+                            slot["lararinnehall"] = p["innehall"]
                 fokus_logg = "Din plan: " + ", ".join(
                     f"{i} {(p['avsnitt'] or '').strip()} "
                     f"{p['niva'] if egen_ordning else ''}".strip()
