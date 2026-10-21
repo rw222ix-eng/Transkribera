@@ -24,7 +24,19 @@ for (const id of ids) {
   await page.goto(BAS + '/', { waitUntil: 'load' });
   await page.waitForFunction(() => window.Dokument && window.API && window.API.pa
     && window.Kalender && window.Kalender.franServern(), null, { timeout: 60000, polling: 500 });
-  await page.waitForFunction(n => window.Dokument.sparade().some(v => v.id === n), id, { timeout: 60000, polling: 500 });
+  /* 2026-10-18: två chattar väntade här 60 s på ett dokument med status 'utkast' (409, 410). Ett utkast
+     finns inte bland sparade() och godkänns med utkast-godkann.mjs. Säg det i stället för att vänta.
+     2026-10-21: 15 s räckte inte. /api/dokument tog 38 s med 231 dokument och provjobb igång, och
+     dokument 425 (godkänt) fälldes två gånger mot de 11 som fanns före hämtningen. 90 s. */
+  const finns = await page.waitForFunction(n => window.Dokument.sparade().some(v => v.id === n), id, { timeout: 90000, polling: 500 })
+    .then(() => true, () => false);
+  if (!finns) {
+    const antal = await page.evaluate(() => window.Dokument.sparade().length);
+    console.log(`== dokument ${id} finns inte bland de ${antal} sparade dokumenten i appen. Är det ett utkast `
+      + `(dokument.status = 'utkast')? Godkänn det då med: node utkast-godkann.mjs [--utan-losningar]`);
+    process.exitCode = 1;
+    continue;
+  }
   await page.evaluate(() => document.fonts.ready);
   const info = await page.evaluate(n => {
     const s = window.Dokument.sparade(); const i = s.findIndex(v => v.id === n);
