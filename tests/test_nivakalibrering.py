@@ -748,6 +748,33 @@ def test_e_signalen_faller_inte_en_ren_rutinuppgift(text, losning):
     assert _e_fynd(text, losning=losning) == []
 
 
+def test_kvadreringsregeln_ar_e_i_kurs_2_men_c_i_kurs_1():
+    """Samordnaren 2026-10-22: E-signalen fällde (a + 2)² och x² − 49 som C,
+    men i Ma 2a står reglerna i kursens centrala innehåll (ALG-6), och
+    Rickards godkända papper har dem på E: prov 130 uppg 1a och 4a, E-provet
+    268 uppg 4. I 1c står de inte i innehållet och förblir C. Kursen är
+    papprets egen, och kriteriedomarens prompt följer samma regel."""
+    for text in ("Förenkla uttrycket $(a + 2)^2 - a(a - 4)$.",
+                 "Faktorisera uttrycket $(x + 7)(x - 7)$.",
+                 "Förenkla $(2x + 3)^2 - (2x + 3)(2x - 3)$."):
+        enheter = exam_gen.domarenheter(_exam([_uppg(1, (1, 0, 0),
+                                                     text=text)]))
+        for kurs in ("Matematik 2a", "Matematik, nivå 2a", "Matematik 2c"):
+            assert exam_gen.e_nivasignaler(enheter, _REN_E, kurs) == [], kurs
+        fynd = exam_gen.e_nivasignaler(enheter, _REN_E, "Matematik, nivå 1c")
+        assert [f["domd"] for f in fynd] == ["C"], text
+    # «visa att … för alla» är C i alla kurser.
+    enheter = exam_gen.domarenheter(_exam([_uppg(
+        1, (1, 0, 0), text="Visa att $(x+4)^2 - (x-4)^2 = 16x$ för alla $x$.")]))
+    assert exam_gen.e_nivasignaler(enheter, _REN_E, "Matematik 2a")
+    enheter = exam_gen.domarenheter(_exam([_uppg(1, (1, 0, 0))]))
+    gammal = exam_gen.build_kriterie_prompt(enheter)
+    assert exam_gen.build_kriterie_prompt(enheter, kurs="Matematik 1c") \
+        == gammal
+    tva = exam_gen.build_kriterie_prompt(enheter, kurs="Matematik 2a")
+    assert "kursens egna E-verktyg" in tva and "kursens egna" not in gammal
+
+
 def test_e_signalerna_galler_bara_rena_e_papper():
     """På ett blandat papper är kvadreringsregeln inte fel — där är det
     dubbeldomen som avgör var uppgiften hör hemma."""
@@ -763,8 +790,10 @@ def test_e_signalerna_galler_bara_rena_e_papper():
 
 def _ren_e_blad():
     """Ett arbetsblad som klarar E-bandet — och där uppgift 2 är den sortens
-    kvadreringsuppgift exam 51 var full av."""
-    return _exam([
+    kvadreringsuppgift exam 51 var full av. Kursen är okänd: i kurs 2 är
+    kvadreringsregeln E (_regler_ar_c), och i kurs 1 fälls den redan av
+    ci_utanfor, så nivåsignalen prövas där kursen inte avgör."""
+    return {**_exam([]), "kurs": "", "uppgifter": [
         {"del": None, "formaga": "B", "typ": "rutin", "poang": [2, 0, 0],
          "text": "Lös ekvationen $3x + 5 = 20$.", "losning": "$x = 5$.",
          "bedomning": "+1 E ansats\n+1 E rätt svar"},
@@ -772,7 +801,7 @@ def _ren_e_blad():
          "text": "Teckna $(x+2)^2 - x^2$ och förenkla uttrycket.",
          "losning": "$4x + 4$.",
          "bedomning": "+1 E utvecklar\n+1 E förenklar"},
-    ])
+    ]}
 
 
 def test_grinden_kor_extrarundorna_och_sager_ifran_nar_de_inte_racker():

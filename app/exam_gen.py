@@ -4466,13 +4466,25 @@ DOMAR_KRIT_SCHEMA = {
 }
 
 
-def build_kriterie_prompt(enheter: list[dict], *, skala: str = "") -> str:
+# Kurs 2 har kvadrerings- och konjugatregeln i sitt centrala innehåll, och
+# där är de E (se _regler_ar_c). Raden står bara i kurs 2:s prompt; utan kurs
+# och i kurs 1 är prompten byte för byte den gamla.
+_REGLER_KURS2 = (" I den här kursen (kurs 2) är kvadreringsregeln och "
+                 "konjugatregeln kursens egna E-verktyg: att utveckla "
+                 "$(a + 2)^2$ eller faktorisera $x^2 - 49$ är INTE ett ja här. "
+                 "Potenslagar och logaritmlagar räknas som förut.")
+
+
+def build_kriterie_prompt(enheter: list[dict], *, skala: str = "",
+                          kurs: str = "") -> str:
     """Kriteriedomarens prompt. Samma `skala` som den blinda domarens — båda
     ska mäta mot den rubrik dokumentet skrevs mot, annars är de inte två domar
-    om samma sak utan två svar på olika frågor."""
+    om samma sak utan två svar på olika frågor. `kurs` är papprets egen."""
     kort = [{"nr": e["nr"], **e["kort"]} for e in enheter]
-    lista = "\n".join(f"- {falt}: {fraga} (ja ⇒ minst {niva})"
-                      for falt, fraga, niva in KRITERIER)
+    tillagg = "" if _regler_ar_c(kurs) else _REGLER_KURS2
+    lista = "\n".join(
+        f"- {falt}: {fraga}{tillagg if falt == 'rakneregel' else ''} "
+        f"(ja ⇒ minst {niva})" for falt, fraga, niva in KRITERIER)
     return (
         (skala or niva_rubrik.build_niva_block()) + "\n\n"
         f"Du är {KRITERIEDOMARE}. Nedan står uppgifterna ur ett dokument, UTAN "
@@ -4620,7 +4632,7 @@ def avvikelser(enheter: list[dict], domar: dict[str, dict],
 
 
 def _fraga_domare(enheter: list[dict], *, model: str, llm, skala: str,
-                  krit: bool, log) -> tuple[dict[str, dict], bool]:
+                  krit: bool, log, kurs: str = "") -> tuple[dict[str, dict], bool]:
     """Ett domaranrop, plus EN omfrågan på de enheter domaren hoppade över.
 
     Returnerar ``(domar, kördes)``. ``kördes=False`` betyder att anropet FÖLL —
@@ -4638,7 +4650,8 @@ def _fraga_domare(enheter: list[dict], *, model: str, llm, skala: str,
 
     def anrop(rader: list[dict]) -> dict[str, dict]:
         return _parse_domar(llm(
-            model, bygg(rader, skala=skala),
+            model, (build_kriterie_prompt(rader, skala=skala, kurs=kurs)
+                    if krit else bygg(rader, skala=skala)),
             system=system,
             options={"temperature": 0.0},
             response_format={"type": "json_schema",
@@ -4700,7 +4713,7 @@ def niva_fynd(exam: dict, *, model: str, llm=llm_client.generate,
     if not ok:
         return [], False
     krit, ok = _fraga_domare(enheter, model=model, llm=llm, skala=skala,
-                             krit=True, log=log)
+                             krit=True, log=log, kurs=exam.get("kurs") or "")
     if not ok:
         return [], False
     domarnas = avvikelser(enheter, blind, krit)
@@ -4714,7 +4727,7 @@ def niva_fynd(exam: dict, *, model: str, llm=llm_client.generate,
                                   else None, log_cb=log_cb)
     np_nr = {f.get("nr") for f in np}
     return (np + [f for f in domarnas if f.get("nr") not in np_nr]
-            + e_nivasignaler(enheter, niva_mal)), True
+            + e_nivasignaler(enheter, niva_mal, exam.get("kurs") or "")), True
 
 
 def doma_nivaer(exam: dict, *, model: str, llm=llm_client.generate,
@@ -7519,15 +7532,30 @@ def _konjugat(text: str) -> bool:
     return False
 
 
-def e_nivasignaler(enheter: list[dict], niva_mal: dict | None) -> list[dict]:
+def _regler_ar_c(kurs: str) -> bool:
+    """Är kvadrerings- och konjugatregeln en C-omskrivning i kursen? I kurs 1
+    ja: reglerna står inte i 1c:s centrala innehåll, så en uppgift som kräver
+    dem ligger över E. I kurs 2 nej: G25-M2A-ALG-6 «Motivering och hantering
+    av konjugatregeln och kvadreringsreglerna» är kursens eget innehåll, och
+    Rickards godkända 2a-papper har dem på E (prov 130 uppg 1a $(a + 2)^2 -
+    a(a - 4)$ och 4a $x^2 - 49$, E-provet 268 uppg 4 $(2x + 3)^2 - (2x +
+    3)(2x - 3)$ på 2 E-p). Okänd kurs: som förut."""
+    niva = niva_rubrik.kursniva(kurs or "")
+    return not (niva and niva[0] == 2)
+
+
+def e_nivasignaler(enheter: list[dict], niva_mal: dict | None,
+                   kurs: str = "") -> list[dict]:
     """Nivåfynd som ingen modell behöver för att hittas. Tom lista när pappret
     inte är ett rent E-papper.
 
     Tar `enheter` och inte `exam` därför att grinden dömer om en delmängd, och
     en vakt som ändå läste hela pappret hade fällt uppgifter omskrivningen inte
-    fick röra."""
+    fick röra. `kurs` är papprets egen (exam["kurs"]); den avgör om
+    kvadrerings- och konjugatregeln räknas som C (_regler_ar_c)."""
     if not exam_spec.ren_e_band(niva_mal):
         return []
+    regler_c = _regler_ar_c(kurs)
     ut: list[dict] = []
     for e in enheter:
         if e["niva"] != "E":
@@ -7535,7 +7563,7 @@ def e_nivasignaler(enheter: list[dict], niva_mal: dict | None) -> list[dict]:
         nr = e["nr"]
         text = f"{e['kort'].get('stam', '')} {e['kort'].get('text', '')}"
         losning = e["kort"].get("losning", "") or ""
-        if _kvadrering(text) or _konjugat(text):
+        if regler_c and (_kvadrering(text) or _konjugat(text)):
             ut.append(_fynd(e, "C",
                             f"uppgift {nr} ger bara E-poäng men kräver "
                             "kvadreringsregeln eller konjugatregeln: en "
@@ -16678,7 +16706,9 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
     # inget besked om det önskemål hon just skickade.
     if res["exam"] is not None:
         rorda = set(andrade_uppgifter(exam, res["exam"]))
-        fynd = [f for f in e_nivasignaler(domarenheter(res["exam"]), niva_mal)
+        fynd = [f for f in e_nivasignaler(
+                    domarenheter(res["exam"]), niva_mal,
+                    res["exam"].get("kurs") or exam.get("kurs") or "")
                 if _uppgiftsnr(f.get("nr")) in rorda]
         res = _niva_grind({**res, "nivafynd": fynd, "nivamatt": True},
                           model=model, llm=llm, profil=profil, skala="",
