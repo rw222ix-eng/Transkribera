@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from app import exam_gen, exam_spec, np_vakter
+from app import elevlasare, exam_gen, exam_spec, np_vakter
 from app.web import routes_exam
 
 FIXTUR = Path(__file__).resolve().parent / "np" / "exam88.json"
@@ -355,6 +355,76 @@ def test_lasreglerna_ur_lararens_dom_over_118_och_119():
     dator = _prov([rad]) | {"hjalpmedel": "Del C med digitala verktyg "
                                           "(GeoGebra på datorn) och formelblad."}
     assert np_vakter.lasregelvakt(dator) == []
+
+
+def test_uteplatsen_i_prov_130_falls_for_gransen_och_mojliga():
+    """IndA prov 1 (exam 130 v801) uppgift 12, Rickard 2026-10-22: «ganska
+    dåligt oklart formulerad». Alla vakter tystnade. Nu två fynd: gränsen
+    «mellan … och …» och den abstrakta frågan om vilka antal som är möjliga.
+    Den omskrivna uppgiften passerar, och så gör beskrivningar med «mellan»
+    och «Bestäm alla möjliga värden på $k$»."""
+    uteplats = _u(
+        text="Skolan ska få en ny uteplats av kvadratiska stenplattor.\n"
+             "En plattsättare lägger plattorna i $n$ rader, och i varje rad "
+             "ligger $n + 5$ plattor.\nUteplatsen ska ha mellan $2\\,000$ och "
+             "$2\\,500$ plattor.\n\nVilka antal rader är möjliga?",
+        poang=(0, 0, 2), typ="problem", **{"del": "C"})
+    fel = np_vakter.lasregelvakt(_prov([uteplats]))
+    assert [f["code"] for f in fel] == ["lasregel", "lasregel"]
+    assert "minst 2 000 och högst 2 500" in fel[0]["message"]
+    assert "«mellan 2 000 och 2 500 …»" in fel[0]["message"]
+    assert "Ange alla svar" in fel[1]["message"]
+    # Fyndet står också i hela kedjan, där reparationen och Laga-knappen
+    # läser det.
+    assert "uppgift 1" in {f["path"] for f in np_vakter.np_vakter(
+        _prov([uteplats]), "Matematik 2a")}
+    ratt = _u(
+        text="En plattsättare lägger stenplattor till en uteplats i $n$ "
+             "rader, och i varje rad ligger $n + 5$ plattor.\nUteplatsen ska "
+             "ha minst 2 000 och högst 2 500 plattor.\n\nHur många rader kan "
+             "uteplatsen ha? Ange alla svar.")
+    beskrivning = _u(text="Hon surfar mellan 20 och 30 GB varje månad. "
+                          "Bestäm alla möjliga värden på $k$.")
+    assert np_vakter.lasregelvakt(_prov([ratt, beskrivning])) == []
+    # Andra former av samma två: talet under roten, bråket, «de värden som
+    # är möjliga» (prov 156 uppg. 16).
+    for text in ("Talet $\\sqrt{n}$ ligger mellan 5 och 6. Bestäm $n$.",
+                 "Finns det ett bråk med nämnaren 12 som ligger mellan 2/3 "
+                 "och 3/4?",
+                 "Bestäm de värden på $k$ som är möjliga."):
+        assert [f["code"] for f in np_vakter.lasregelvakt(
+            _prov([_u(text=text)]))] == ["lasregel"], text
+
+
+def test_avgor_och_forklara_varfor_falls():
+    """Rickard 2026-10-22 om omproven 267 och 268: «Avgör om X har rätt och
+    förklara varför» låter eleverna svara bara ja eller nej. Formen fälls,
+    «Avgör med en beräkning om …» passerar, och prompten visar inte längre
+    den gamla formen som förebild."""
+    fel = np_vakter.lasregelvakt(_prov([_u(
+        text="Nora påstår att ekvationen $x^2 + 9 = 0$ saknar lösning.\n\n"
+             "Avgör om Nora har rätt och förklara varför.")]))
+    assert [f["code"] for f in fel] == ["lasregel"]
+    assert "Avgör med en beräkning om" in fel[0]["message"]
+    assert np_vakter.lasregelvakt(_prov([_u(
+        text="Nora påstår att ekvationen $x^2 + 9 = 0$ saknar lösning.\n\n"
+             "Avgör med en beräkning om Nora har rätt.")])) == []
+    assert "Avgör om Nora har rätt och förklara varför" not in \
+        exam_gen.INSTRUCTION
+    assert "precis på en gräns" in exam_gen.INSTRUCTION
+    assert "precis på en gräns" in elevlasare.build_elevlasare_prompt([])
+
+
+def test_promptens_egna_exempel_klarar_gransregeln():
+    """Prompten visade «… som ligger mellan 2/3 och 3/4?» som förebild för en
+    villkorsmening inbyggd i frågan, och då hade generatorn lärt sig formen
+    vakten nu fäller. Exemplen i generatorn, elevläsaren och vaktens eget
+    råd säger «större än … men mindre än …»."""
+    for text in (exam_gen.INSTRUCTION, elevlasare.build_elevlasare_prompt([])):
+        assert "ligger mellan 2/3" not in text
+        assert "större än 2/3 men mindre än 3/4" in text
+    assert "minst 2 000 och högst 2 500" in exam_gen.INSTRUCTION
+    assert "Vilka antal rader är möjliga?" in exam_gen.INSTRUCTION
 
 
 def test_hela_domen_over_prov_88(exam88):

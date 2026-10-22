@@ -259,8 +259,29 @@ def build_elevlasare_prompt(enheter: list[dict], inriktning: str = "",
         "villkor («Täljaren ska vara ett heltal.»), en förklaring av ett ord "
         "hon kan («Moms är en skatt.») eller att ett tal kan vara vad som "
         "helst. Förtydligandet är då FRÅGAN omskriven med villkoret inbyggt "
-        "i vardagsord: «Finns det ett bråk med nämnaren 12 som ligger mellan "
-        "2/3 och 3/4?»\n"
+        "i vardagsord: «Finns det ett bråk med nämnaren 12 som är större än "
+        "2/3 men mindre än 3/4?»\n"
+        # IndA prov 1 (exam 130) uppgift 12, Rickard 2026-10-22: «oklart
+        # formulerad». Elevläsaren läste den som facit, för gränserna gav
+        # samma svar med eller utan likhet, och frågade aldrig om eleven
+        # förstod att svaret var flera tal. Samma regler räknas i
+        # np_vakter.lasregelvakt («granser», «mojliga»).
+        "- en gräns som eleven räknar mot och som går att läsa på två sätt: "
+        "«mellan 2 000 och 2 500» säger inte om 2 000 och 2 500 räknas med. "
+        "Det ger \"nej\" också när svaret råkar bli detsamma, för eleven vet "
+        "inte det innan hon räknat. Förtydligandet byter till «minst 2 000 "
+        "och högst 2 500».\n"
+        "- en fråga som har flera svar men inte säger det («Vilka antal rader "
+        "är möjliga?»): eleven svarar med ett tal eller vet inte vad som "
+        "räknas som svar. Förtydligandet frågar rakt och säger att svaren är "
+        "flera: «Hur många rader kan uteplatsen ha? Ange alla svar.»\n"
+        # Omprovet 267 uppgift 9 (2026-10-22): «Ella går med vinst om hon
+        # säljer 10 armband», och intäkten var precis lika med kostnaden.
+        "- ett facit som ligger precis på en gräns frågan hänger på: "
+        "intäkten lika med kostnaden när frågan är om det blir vinst, ett "
+        "värde lika med gränsen i «minst» eller «högst». Två elever svarar "
+        "ja och nej, och båda har räknat rätt. Förtydligandet byter ett tal "
+        "så att svaret hamnar tydligt på ena sidan.\n"
         "- en deluppgift där eleven inte ser vad hon ska svara utan att leta "
         "i stammen, eller där det deluppgiften behöver står någon annanstans\n"
         "- en likhet eller ett påstående som är fel men står som om det "

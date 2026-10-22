@@ -843,7 +843,8 @@ def doltkravvakt(exam: dict) -> list[dict]:
 #   «Täljaren ska vara ett heltal.»: «Det förstör mer än vad det hjälper,
 #     tror jag.» En villkorsmening som eleven måste hålla i huvudet medan hon
 #     läser vidare. Är villkoret självklart stryks det, behövs det byggs det
-#     in i frågan («Finns det ett bråk med nämnaren 12 som ligger mellan …?»).
+#     in i frågan («Finns det ett bråk med nämnaren 12 som är större än 2/3
+#     men mindre än 3/4?», sedan exam 130 utan «mellan», se _MELLAN_TAL_RE).
 #     Samma form i 6b: «Ingen platta får kapas. Plattans sida är ett helt
 #     antal centimeter och minst 10 cm.»
 #   «Ali ska lägga kvadratiska plattor»: «Vad då kvadratiska plattor? … Typ
@@ -912,6 +913,42 @@ _NUMRERAD_RE = re.compile(r"\(\s*1\s*\)")
 _HAKPARENTES_RE = re.compile(r"hakparentes", re.IGNORECASE)
 _EXEMPEL_RE = re.compile(r"exempel|skrivs\s", re.IGNORECASE)
 _DATORORD_RE = re.compile(r"digitalt?\s+verktyg|geogebra", re.IGNORECASE)
+# IndA prov 1 (exam 130) uppgift 12, A 2 p: «Uteplatsen ska ha mellan 2 000
+# och 2 500 plattor. Vilka antal rader är möjliga?» Rickard 2026-10-22: «ganska
+# dåligt oklart formulerad». Läraren hade fällt samma uppgift redan 2026-09-24
+# («Bestäm alla antal plattor som är möjliga.», regeln «EN SVÅR UPPGIFT ÄR SVÅR
+# I MATEMATIKEN» i exam_gen.INSTRUCTION), men regeln stod bara i prompten, och
+# omskrivningen fick tillbaka samma form med andra ord. 7 av 50 möjliga poäng,
+# och poängen gick till elever med 5 och 7 p totalt medan tvåan, trean och
+# fyran fick 0 (item-rest 0,17, provets lägsta med 2a). Två saker i texten:
+#   «mellan 2 000 och 2 500» säger inte om gränserna räknas med. En gräns
+#     eleven ska räkna mot skrivs «minst … och högst …», så finns bara en
+#     läsning. Bara när gränsen är ett villkor (ska, måste, får, ligger) eller
+#     står i frågan: «Hon surfar mellan 20 och 30 GB» är en beskrivning.
+#   «Vilka antal rader är möjliga?» frågar abstrakt efter möjligheter och
+#     säger inte att svaret är flera tal. Frågan ställs rakt med «kan» och
+#     säger att det finns flera svar. «Bestäm alla möjliga värden på k» står
+#     kvar: där säger «alla» det, och frågan gäller ett namngivet tal.
+# Rickard 2026-10-22 om omproven 267 och 268 (uppg 5a/5b och 5a/6b): «Avgör
+# om X har rätt och förklara varför» låter eleverna svara bara ja eller nej.
+_AVGOR_FORKLARA_RE = re.compile(
+    r"\bavgör\s+om\b[^.?!]{0,160}?\boch\s+förklara\s+varför\b",
+    re.IGNORECASE)
+_MELLAN_TAL_RE = re.compile(
+    r"\bmellan\s+-?\d[\d\s,./]*(?:\s*[^\s\d]+){0,2}?\s+och\s+-?\d"
+    r"(?:[\d,./]|\s(?=\d))*",
+    re.IGNORECASE)
+_GRANSVILLKOR_RE = re.compile(r"\b(?:ska|måste|får|ligger|ligga)\b|\?",
+                              re.IGNORECASE)
+_MOJLIGA_RE = re.compile(
+    r"\b(?:vilka|vilket|alla|de)\s+(?:\S+\s+){0,5}?(?:som\s+)?(?:är|blir)\s+"
+    r"möjlig[at]?\b|\bvilka\s+antal\b", re.IGNORECASE)
+
+
+def _matte_som_text(t: str) -> str:
+    """$2\\,000$ → 2 000, $6{,}5$ → 6,5: talen läses som eleven ser dem."""
+    t = _MATH_RE.sub(lambda m: m.group(1), str(t or ""))
+    return re.sub(r"\\[,;: ]|~", " ", t).replace("{,}", ",")
 
 
 def lasregelvakt(exam: dict) -> list[dict]:
@@ -944,8 +981,7 @@ def lasregelvakt(exam: dict) -> list[dict]:
         if _MODELLEN_STODER_RE.search(t):
             fynd(nr, "stoder", "«om modellen stöder påståendet» är krångligt. "
                  "Fråga om personen har rätt och säg vad eleven ska visa: "
-                 "«Avgör med en beräkning om … har rätt.» eller «Avgör om … "
-                 "har rätt och förklara varför.»")
+                 "«Avgör med en beräkning om … har rätt.»")
         if _TVA_EKVATIONER_RE.search(t) and not _NUMRERAD_RE.search(t):
             fynd(nr, "numrera", "två ekvationer utan nummer. Sätt (1) och (2) "
                  "till vänster om ekvationerna och hänvisa till numren i "
@@ -978,6 +1014,27 @@ def lasregelvakt(exam: dict) -> list[dict]:
                  "formen som adjektiv: «kvadratiska klinkerplattor», "
                  "«gipsskivor», «betongplattor». På ett yrkesprogram "
                  "yrkets eget ord.")
+        m = _AVGOR_FORKLARA_RE.search(t)
+        if m:
+            fynd(nr, "forklara", f"«{m.group(0)}» kan besvaras med ja eller "
+                 "nej. Säg att eleven ska räkna: «Avgör med en beräkning om "
+                 "… har rätt.»")
+        # Exam 130 uppgift 12, se blocket vid _MELLAN_TAL_RE.
+        for mening in _MENINGAR_RE.split(_matte_som_text(t)):
+            m = _MELLAN_TAL_RE.search(mening)
+            if m and _GRANSVILLKOR_RE.search(mening):
+                fynd(nr, "granser", f"«{m.group(0)} …» säger inte om "
+                     "gränserna räknas med, och eleven vet inte om talen själva "
+                     "är svar. Skriv gränsen så att den bara går att läsa på "
+                     "ett sätt: «minst 2 000 och högst 2 500 plattor» eller "
+                     "«fler än 2 000 men färre än 2 500 plattor».")
+                break
+        m = _MOJLIGA_RE.search(_matte_som_text(t))
+        if m:
+            fynd(nr, "mojliga", f"«{m.group(0)}» frågar abstrakt efter "
+                 "möjligheter och säger inte att svaret är flera tal. Fråga "
+                 "rakt efter saken med «kan» och säg att det finns flera svar: "
+                 "«Hur många rader kan uteplatsen ha? Ange alla svar.»")
         for mening in _MENINGAR_RE.split(_MATH_RE.sub("x", t)):
             mening = mening.strip()
             if not mening or "?" in mening:
@@ -994,7 +1051,7 @@ def lasregelvakt(exam: dict) -> list[dict]:
                      "villkoret självklart för eleven (en täljare är ett "
                      "heltal), stryk meningen. Behövs det, bygg in det i "
                      "frågan med vardagsord: «Finns det ett bråk med nämnaren "
-                     "12 som ligger mellan 2/3 och 3/4?»")
+                     "12 som är större än 2/3 men mindre än 3/4?»")
             else:
                 mf = _ORDFORKLARING_RE.match(mening)
                 if mf and mf.group(1).casefold() not in _INTE_ORD \

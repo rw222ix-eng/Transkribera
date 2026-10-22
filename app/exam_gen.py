@@ -774,6 +774,16 @@ INSTRUCTION = (
     "större», inte 0,8 m och 5,6 m²), och frågan gäller det enklaste svaret "
     "(«Hur många rader kan det vara?», inte «Bestäm alla antal plattor som "
     "är möjliga.»).\n"
+    # Exam 130 uppgift 12, Rickard 2026-10-22 («ganska dåligt oklart
+    # formulerad»): omskrivningen efter domen ovan blev «Uteplatsen ska ha
+    # mellan 2 000 och 2 500 plattor. Vilka antal rader är möjliga?». Vakten
+    # är np_vakter.lasregelvakt (reglerna «granser» och «mojliga»).
+    "  • EN GRÄNS SOM ELEVEN RÄKNAR MOT GÅR BARA ATT LÄSA PÅ ETT SÄTT: «minst "
+    "2 000 och högst 2 500 plattor» eller «fler än 2 000 men färre än 2 500 "
+    "plattor», aldrig «mellan 2 000 och 2 500», där eleven inte vet om "
+    "gränserna räknas med. Har frågan flera svar säger den det: «Hur många "
+    "rader kan uteplatsen ha? Ange alla svar.», aldrig «Vilka antal rader är "
+    "möjliga?».\n"
     # Samma dom, uppgift 3: «Svara exakt.» under x² + 2 000x + 999 999 = 0,
     # där svaren är −999 och −1 001. Raden fick eleven att leta efter rötter.
     "  • «Svara exakt.» står bara där svaret annars kunde avrundas (en rot, "
@@ -836,6 +846,11 @@ INSTRUCTION = (
     # del åt vänster och en framåt («man kan inte bara snacka om att han kör
     # vänster»). Det som höll var koordinatformen. Vakten för frasen står i
     # SVARA_ORD_PROV.
+    # Samma granskning, 267 uppgift 10: två givna linjära kostnadsuttryck som
+    # sätts lika (800 + 2s = 500 + 3s) stod som C 2 p. Det är ett steg.
+    "  • NIVÅN FÖLJER STEGEN: två givna linjära uttryck som sätts lika "
+    "(«800 + 2s = 500 + 3s») är en E-uppgift på nationella provet, aldrig C. "
+    "C kräver att eleven själv ställer upp uttrycken eller tar ett steg till.\n"
     "  • A-NIVÅN ÄR EN INSIKT, ALDRIG EN SVÅRARE TEXT. En uppgift som löses "
     "med samma metod som en C-uppgift i samma situation är en C-uppgift, hur "
     "krånglig formuleringen än är. A-poängen kommer av att eleven själv "
@@ -925,10 +940,20 @@ INSTRUCTION = (
     # Lärarens dom 2026-09-26, prov 129 uppgift 8a: «Avgör om Lea har räknat
     # rätt.» säger inte att eleven ska visa något, fast bedömningen kräver
     # 40⁵ ≠ 200. Hans ja gällde alla avgör-uppgifter i de fem proven.
-    "  • En avgör-fråga säger vad eleven ska visa. Kräver bedömningen en "
-    "beräkning står det «Avgör med en beräkning om Lea har räknat rätt.», "
-    "annars «Avgör om Nora har rätt och förklara varför.». Aldrig ett ensamt "
-    "«Avgör om … har rätt.».\n"
+    # Rickard 2026-10-22 (omproven 267 och 268): «Avgör om X har rätt och
+    # förklara varför» låter eleverna svara bara ja eller nej. Formen fälls
+    # av np_vakter.lasregelvakt (regeln «forklara»).
+    "  • En avgör-fråga säger vad eleven ska visa: «Avgör med en beräkning om "
+    "Lea har räknat rätt.» Aldrig ett ensamt «Avgör om … har rätt.» och "
+    "aldrig «Avgör om … har rätt och förklara varför.», som eleven besvarar "
+    "med ja eller nej.\n"
+    # Samma granskning, 267 uppgift 9: «Ella går med vinst om hon säljer 10
+    # armband», där intäkten 600 kr var precis lika med kostnaden 600 kr.
+    # Svaret hängde på om 0 kr räknas som vinst.
+    "  • Facit ligger aldrig precis på en gräns som frågan hänger på: inte "
+    "intäkten lika med kostnaden när frågan är om det blir vinst, inte ett "
+    "värde lika med gränsen i «minst»/«högst». Välj talen så att svaret är "
+    "tydligt på ena sidan.\n"
     # Lärarens dom 2026-09-23 (prov 126 uppgift 6a, «Exempel: 0,0035 m
     # skrivs 3,5·10⁻³ m i grundpotensform»): exemplet visade exakt det
     # E-poängen prövade. «Aldrig när poängen prövar formen», som NP.
@@ -975,7 +1000,7 @@ INSTRUCTION = (
     "ett tal kan vara vad som helst, ingen villkorsmening («Täljaren ska vara "
     "ett heltal.», «Ingen platta får kapas.»). Ett självklart villkor stryks, "
     "ett som behövs byggs in i frågan: «Finns det ett bråk med nämnaren 12 "
-    "som ligger mellan 2/3 och 3/4?»\n"
+    "som är större än 2/3 men mindre än 3/4?»\n"
     "  • ETT FORMBYTE PER E-POÄNG: enhetsbyte, prefix och grundpotensform är "
     "var sitt steg. Aldrig «skriv i meter och i grundpotensform» på 1 p.\n"
     "  • A-formerna står kvar, på klassens nivå. Utan algebra frågas det "
@@ -13299,8 +13324,7 @@ def bladets_formvakt(exam: dict) -> list[dict]:
                     f"uppgift {nr}", "provform",
                     f"uppgift {nr} slutar med ett ensamt «Avgör om … har rätt.». "
                     "Säg vad eleven ska visa: «Avgör med en beräkning om … har "
-                    "räknat rätt.» när bedömningen kräver en beräkning, annars "
-                    "«Avgör om … har rätt och förklara varför.»"))
+                    "räknat rätt.»"))
             if _SVARA_UTTRYCK.search(t):
                 ut.append(_err(
                     f"uppgift {nr}", "provform",
