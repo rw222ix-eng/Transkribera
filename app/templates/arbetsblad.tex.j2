@@ -1,111 +1,45 @@
-((# Arbetsbladsmall (Fas 5) — som provmallen men utan kravgränser, med
-    valfri poängvisning, gott om utrymme och facit på egen sida.
-    Fast preamble; Jinja-avgränsarna är parentesbaserade. #))
+((# ══════════ ARBETSBLADET I PROVETS FORM ══════════
+    Rickard 2026-10-22: bladen ska se ut som provet, «sett till typsnittet,
+    sett till mellanrummet mellan deluppgifter, hur uppgifter skrivs, vart
+    bilderna är, hur långa meningarna är». Det enda som skiljer: inget
+    försättsblad, inga poängangivelser, och facit följer med.
+
+    Mallen är därför prov.tex.j2 utan försättsbladet. Samma preamble i
+    förlagans läge (forlaga = true: exam-klassen, Computer Modern, 25 mm
+    marginaler, förlagans luft), samma \question och \part, samma
+    kravetikett, samma bildplacering och samma svarsrader. Poängen sätts
+    aldrig: \question och \part får inget poängargument, och då står inget i
+    marginalen. Uppgiftsvyn är densamma som provets (exam_latex._build_view),
+    så en malländring här fungerar också mot en server med äldre Python i
+    minnet: allt som läses nedan fanns i vyn innan bladet bytte form, och det
+    som kom senare frågas med «is defined».
+
+    Bladet var förut skärmens avritning (blad-bild.js). Den tas inte längre
+    emot för arbetsblad (routes_exam, skarmen_galler), så det här ÄR bladets
+    PDF. #))
 ((* set med_grafik = true *))
 ((* set med_svarsrad = true *))
+((* set forlaga = true *))
+((# Vändmärket som på provet: bladet har flera sidor, och den som gör en sida
+    ska veta att det finns mer. Facit ensamt är lärarens papper och får inget. #))
+((* set med_vand = not only_facit *))
+((* set sidhuvud = '' *))
 ((* include '_preamble.tex.j2' *))
+((# Inget sidhuvud. Provets huvud säger delen, och det stämmer där för att
+    varje del börjar på egen sida. Bladets delar följer på varandra, och
+    sidan där Del B börjar hade hetat «Del B» ovanför uppgift 6 och 7. #))
+\runningheader{}{}{}
+\norunningheadrule
 ((* import '_former.tex.j2' as former *))
 
-\begin{document}
-
-\begin{center}
-  {\LARGE\bfseries ((( titel )))}\\[2mm]
-  {\large ((* if only_facit *))Facit((* else *))Arbetsblad((* endif *)) — ((( kurs )))((* if klass *)) \; · \; ((( klass )))((* endif *))((* if elev *)) \; · \; ((( elev )))((* endif *))((* if datum *)) \; · \; ((( datum )))((* endif *))}
-\end{center}
-
-((# «Separat facit» i planeringen lovar ett lösningsblad läraren kan behålla —
-    och då hör uppgifterna inte hemma på det. only_facit släcker elevernas del
-    och lämnar facitbandet nedan, som då blir sida ett. Ingen egen mallfil, med
-    flit: sattes facit av två mallar skulle de glida isär, och det är precis den
-    sortens skillnad ingen upptäcker förrän klassen har papperet i handen.
-    utan_facit är spegelbilden: elevbladet UTAN facitbandet. Löftet i «Separat
-    facit» är ju att läraren behåller lösningarna — bar bladet dem ändå på
-    sista sidan fick eleverna dem dubbelt, och valet i planeringen var tomt. #))
-((* if not only_facit *))
-((# Instruktionsbandet är DOKUMENTETS när det är ifyllt (exam_spec
-    .instruktion) — samma regel som gruppuppgiftens notisruta och som skärmen
-    (blad-bygg.js ark). Skrev läraren om rutan i granskningen ska hennes text
-    stå här; tomt fält ger raden som förut. Facit-löftet står kvar i båda
-    grenarna: det är papprets eget besked om var lösningarna hamnar, inte en
-    del av arbetsregeln, och det ska inte kunna skrivas bort av misstag. #))
-\vspace{4mm}
-{\small ((* if instruktion *))((( instruktion )))((* else *))Öva i egen takt — uppgifterna blir svårare längre ner.((* endif *)) ((* if utan_facit *))Facit delas ut separat((* else *))Facit finns
-på sista sidan((* endif *))((* if visa_poang *)); poäng anges som totalpoäng((* endif *)).}
-
-\vspace{4mm}
-((* for del in delar *))
-((* for u in del.uppgifter *))
-((# \par avslutar poäng-raden ENDAST när visa_poang är sant — annars
-    finns ingen markör (tomt argument) och uppgiftstexten ska stå kvar på
-    samma rad som numret, precis som idag. Ett ovillkorligt \par skulle
-    flytta ned ALL text ett steg även när ingen markör renderas.
-    De två grenarna skrivs som HELA separata \begin{uppgift}-rader (inte
-    \par inuti en villkorstagg på samma rad som (* endif *)) — annars äter
-    trim_blocks radbrytningen efter taggen och \par glider ihop med
-    uppgiftstextens första ord till en odefinierad kontrollsekvens
-    (samma fälla som tidigare kraschade prov.tex.j2/bedomning.tex.j2). #))
-((* if visa_poang *))
-\begin{uppgift}{((( u.nummer )))}{((( u.poang_str )))}\par
-((* else *))
-\begin{uppgift}{((( u.nummer )))}{}
-((* endif *))
-((# Stammen i ETT stycke med frågan direkt efter, som på provet (Rickard
-    2026-09-25). «is defined»: den körande servern har Python i minnet och
-    läser mallen från disk, och en äldre vy saknar fältet. #))
-((( former.stycken(u.stycken_blad if u.stycken_blad is defined else u.stycken) )))
-((* if u.bild_fil *))\par\vspace{2mm}\begin{center}\includegraphics[width=0.72\linewidth,height=90mm,keepaspectratio]{((( u.bild_fil )))}\end{center}((* endif *))
-((* if u.figur_tex *))\par\vspace{2mm}\begin{center}((( u.figur_tex )))\end{center}((* endif *))
-((( former.kropp(u) )))
-((* if u.notis *))\notisruta{((( u.notis )))}((* endif *))
-((* if u.har_deluppgifter *))
-((* for d in u.deluppgifter *))
-((# Villkorligt \par som top-nivåns uppgift: markör → \par direkt efter;
-    tom markör (visa_poang=False) → INGET \par (annars trycks texten ned). #))
-((* if visa_poang *))
-\begin{deluppgift}{((( d.bokstav )))}{((( d.poang_str )))}\par
-((* else *))
-\begin{deluppgift}{((( d.bokstav )))}{}
-((* endif *))
-((( former.stycken(d.stycken) )))
-((( former.kropp(d) )))
-((* if d.notis *))\notisruta{((( d.notis )))}((* endif *))
-((* if d.flerval *))((* for alt in d.flerval *))\par\kryssruta\ ((( alt.bokstav ))): ((( alt.text )))((* endfor *))\par\vspace{2mm}((* elif d.svarsfalt *))((( former.falt(d.svarsfalt) )))((* elif d.endast_svar *))((* if d.enhet *))\svarsradmed{}{((( d.enhet )))}((* else *))\svarsrad((* endif *))((* else *))\par\vspace{((( d.utrymme_mm )))mm}((* endif *))
-\end{deluppgift}
-((* endfor *))
-((# Förälderns egna ifyllnadsrader står EFTER deluppgifterna: de är
-    svarsplatsen för hela uppgiften, och en svarsplats före frågan är en rad
-    ingen vet vad hon ska skriva på. #))
-((* if u.svarsfalt *))((( former.falt(u.svarsfalt) )))((* endif *))
-((* elif u.flerval *))
-((* for alt in u.flerval *))\par\kryssruta\ ((( alt.bokstav ))): ((( alt.text )))((* endfor *))\par\vspace{2mm}
-((* elif u.svarsfalt *))((( former.falt(u.svarsfalt) )))((* elif u.endast_svar *))((* if u.enhet *))\svarsradmed{}{((( u.enhet )))}((* else *))\svarsrad((* endif *))((* else *))\par\vspace{((( u.utrymme_mm )))mm}((* endif *))
-\end{uppgift}
-((* endfor *))
-((* endfor *))
-
-((* if not utan_facit *))
-\newpage
-((* endif *))
-((* endif *))
-((* if not utan_facit *))
-\delprovband{Facit}
-((# FACIT I BEDÖMNINGSANVISNINGENS FORM (Rickard 2026-09-25): svaret fett,
-    ett steg per rad, luft före nästa deluppgift och en linje mellan
-    uppgifterna, som bedomning.tex.j2. Inga poäng och ingen uppgiftstext.
-    Grupperna byggs i exam_latex._facit_vy; en äldre vy utan fältet får
-    förra facit, en rad per steg. #))
-((# Ett steg med förklaring står som \facitsteg: steget till vänster och
-    «← förklaring» till höger på samma höjd (Rickard 2026-09-26, samma form
-    som bedömningsanvisningens elevlösningar). #))
+((# Facit i bladfacitets form (Rickard 2026-09-26 och 2026-10-13): svaret i
+    ruta, ett steg per rad och «← förklaring» bredvid. Grupperna byggs i
+    exam_latex._facit_vy; en äldre vy bär stegen som strängar. #))
 ((* macro facitgrupp(g, namn) *))
 ((* if g.svar *))\facitsvar{((* if namn *))((( namn )))\enspace ((* endif *))((( g.svar )))}((* elif namn *))\bedsvar{((( namn )))}((* endif *))
 ((* for s in g.steg *))
-((# En äldre vy (servern har Python i minnet) bär stegen som strängar. #))
 ((* if s is string *))
 \noindent ((( s )))\par\nopagebreak
-((# Figurraden (app/facitfigur, lärarens dom 2026-10-02): tallinjen, brädan
-    eller procentstapeln som tikzpicture, förklaringen bredvid. `is defined`:
-    en äldre vy (gammal Python i minnet) saknar fältet. #))
 ((* elif s.figur is defined and s.figur *))
 \par\vspace{0.8mm}\noindent\begin{minipage}[c]{((* if s.not *))0.58((* else *))0.98((* endif *))\linewidth}
 ((( s.figur )))
@@ -119,13 +53,140 @@ på sista sidan((* endif *))((* if visa_poang *)); poäng anges som totalpoäng(
 ((* endif *))
 ((* endfor *))
 ((* endmacro *))
+
+((# Bladets rubrik i försättsbladets egen sättning: titeln stor och fet, en
+    underrad och förlagans 0,8 pt-linje. Försättsbladets övriga rader
+    (provtid, betygstabell, namnrader) hör till provet och står inte här. #))
+((* macro bladhuvud(underrad) *))
+\begin{center}
+  {\LARGE\bfseries ((( titel )))}\\[6pt]
+  {\large ((( underrad )))((* if klass *)) \textperiodcentered{} ((( klass )))((* endif *))((* if elev *)) \textperiodcentered{} ((( elev )))((* endif *))}
+\end{center}
+
+\vspace{4mm}
+\hrule height 0.8pt
+\vspace{6mm}
+((* endmacro *))
+
+\begin{document}
+
+((* if not only_facit *))
+((( bladhuvud('Arbetsblad \\textperiodcentered{} ' ~ kurs) )))
+((# Bladets instruktion är dokumentets (exam_spec.instruktion) när den är
+    ifylld, annars förvalet. Raden om facit är papprets eget besked om var
+    lösningarna finns. #))
+\noindent ((* if instruktion *))((( instruktion )))((* else *))Öva i egen takt. Uppgifterna blir svårare längre ner.((* endif *)) ((* if utan_facit *))Facit delas ut separat.((* else *))Facit finns på sista sidan.((* endif *))\par
+
+((* for del in delar *))
+((* if del.titelrad *))
+((# Delrubriken som på provet: «Del A: Räknare är inte tillåten», centrerad,
+    med linjen under. Ingen ny sida per del: provets delar delas ut för sig,
+    bladet är ett papper. \pfbehov håller rubriken ihop med första uppgiften. #))
+\pfbehov{40mm}
+\vspace{6mm}
+\begin{center}
+  {\Large\bfseries ((( del.titelrad )))\vphantom{gy}}
+\end{center}
+\vspace{2mm}
+\hrule height 0.5pt
+\vspace{6mm}
+((* else *))
+\vspace{2mm}
+((* endif *))
+
+\begin{questions}
+\setcounter{question}{((( del.forsta_nr_minus_ett )))}
+((* for u in del.uppgifter *))
+\pfbehov{((( u.behov_mm )))mm}
+
+\question \pfkrav{((( u.krav )))}\par
+((( former.stycken(u.stycken_fore) )))
+((( former.tabellbok(u.tabell) )))
+((( former.stycken(u.stycken_efter) )))
+((* if u.bild_fil and u.bild_fore_fragan *))
+\begin{center}
+  \includegraphics[width=0.7\textwidth]{((( u.bild_fil )))}
+\end{center}
+((* endif *))
+((( former.stycken(u.stycken_fraga) )))
+((* if u.bild_fil and not u.bild_fore_fragan *))
+\begin{center}
+  \includegraphics[width=0.7\textwidth]{((( u.bild_fil )))}
+\end{center}
+((* endif *))
+((* if u.figur_tex *))
+\vspace{4mm}
+\begin{center}
+((( u.figur_tex )))
+\end{center}
+\vspace{2mm}
+((* endif *))
+((( former.stegbok(u.stegtabell) )))((( former.rutor(u.svarsrutor) )))
+((* if u.notis *))\pftips{((( u.notis )))}
+((* endif *))
+((* if u.har_deluppgifter *))
+\begin{parts}
+((* for d in u.deluppgifter *))
+
+\part
+((( former.stycken(d.stycken) )))
+((* if d.bild_fil *))
+\begin{center}
+  \includegraphics[width=0.7\textwidth]{((( d.bild_fil )))}
+\end{center}
+((* endif *))
+((* if d.figur_tex *))
+\vspace{4mm}
+\begin{center}
+((( d.figur_tex )))
+\end{center}
+\vspace{2mm}
+((* endif *))
+((( former.tabellbok(d.tabell) )))((( former.stegbok(d.stegtabell) )))((( former.rutor(d.svarsrutor) )))
+((* if d.notis *))\pftips{((( d.notis )))}
+((* endif *))
+((* if d.flerval *))((* for alt in d.flerval *))\par\kryssruta\ ((( alt.bokstav ))): ((( alt.text )))((* endfor *))\par\vspace{2mm}
+((* elif d.svarsfalt_rad and u.svar_pa_pappret *))((( former.svarsrader(d.svarsfalt_rad) )))
+((* elif d.endast_svar and u.svar_pa_pappret *))((( former.svarsplats(d) )))
+((* endif *))
+((* endfor *))
+
+\end{parts}
+((* if u.svarsfalt_rad *))
+((( former.svarsrader(u.svarsfalt_rad) )))
+((* endif *))
+((* elif u.flerval *))
+((* for alt in u.flerval *))\par\kryssruta\ ((( alt.bokstav ))): ((( alt.text )))((* endfor *))\par\vspace{2mm}
+((* elif u.svarsfalt_rad *))((( former.svarsrader(u.svarsfalt_rad) )))
+((* elif u.endast_svar *))((( former.svarsplats(u) )))
+((* endif *))
+((* endfor *))
+
+\end{questions}
+((* endfor *))
+\par\nobreak\slutsida
+((* endif *))
+
+((* if not utan_facit *))
+((* if only_facit *))
+((( bladhuvud('Facit \\textperiodcentered{} ' ~ kurs) )))
+((* else *))
+\newpage
+\begin{center}
+  {\Large\bfseries Facit\vphantom{gy}}
+\end{center}
+\vspace{2mm}
+\hrule height 0.5pt
+\vspace{2mm}
+((* endif *))
+((# Uppgifterna tätare än på bladet, som i bedömningsanvisningen: en linje
+    delar dem, och luften på var sida om den räcker. #))
+\setlength{\pfuppgluft}{0pt}
 ((* set ns = namespace(forsta=true) *))
 ((* for del in delar *))
 ((* for u in del.uppgifter *))
-((# Linjen som \bedlinje ritar, men utan dess \pfbehov: det kommandot finns
-    bara i förlagans preamble, och arbetsbladet har inte den. #))
 ((* if not ns.forsta *))
-\par\nopagebreak\vspace{2.5mm}\noindent\textcolor{ink200}{\rule{\linewidth}{0.15mm}}\par
+\bedlinje
 ((* endif *))
 ((* set ns.forsta = false *))
 \begin{uppgift}{((( u.nummer )))}{}
@@ -136,7 +197,7 @@ på sista sidan((* endif *))((* if visa_poang *)); poäng anges som totalpoäng(
 ((* endif *))
 ((* for g in d.facit *))((( facitgrupp(g, g.namn or (d.bokstav ~ ')')) )))((* endfor *))
 ((* else *))
-\begin{deluppgift}{((( d.bokstav )))}{}((( d.losning_steg if d.losning_steg is defined else d.losning )))\end{deluppgift}
+\bedsvar{((( d.bokstav )))}((( d.losning_steg if d.losning_steg is defined else d.losning )))
 ((* endif *))
 ((* endfor *))
 ((* elif u.facit is defined *))
@@ -149,6 +210,7 @@ på sista sidan((* endif *))((* if visa_poang *)); poäng anges som totalpoäng(
 \end{uppgift}
 ((* endfor *))
 ((* endfor *))
+\par\nobreak\slutsida
 ((* endif *))
 
 \end{document}

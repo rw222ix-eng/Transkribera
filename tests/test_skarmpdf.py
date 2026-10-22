@@ -140,10 +140,10 @@ def test_bladen_blir_pdfen_och_tectonic_far_vara(client, monkeypatch):
     """Tre avritade blad in — en PDF på tre sidor ut, utan textlager.
 
     Och Tectonic rörs inte: sätts pappret om i LaTeX är det inte längre det
-    läraren såg. Mätt på ARBETSBLADET, för det är där formen bor på skärmen —
-    provet har en egen mall (lärarens förlaga) och sitt eget test nedan."""
+    läraren såg. Mätt på GRUPPUPPGIFTEN, för det är där formen bor på skärmen —
+    provet och arbetsbladet har provets mall och egna test nedan."""
     from pathlib import Path
-    result = _skriv(client, monkeypatch, typ="arbetsblad")
+    result = _skriv(client, monkeypatch, typ="gruppuppgift")
     byggda = _tectonic(monkeypatch)
 
     res = _done(client.post(f"/api/exams/{result['id']}/approve", json={
@@ -179,8 +179,8 @@ def test_utan_bilder_gar_allt_den_gamla_vagen(client, monkeypatch):
 def test_tomma_och_trasiga_bilder_faller_tillbaka_pa_latex(client, monkeypatch):
     """En data-URI som inte är en PNG får inte bli ett halvt papper. Beskedet
     går i loggen och LaTeX tar över — ett snarlikt papper är bättre än inget.
-    Mätt på arbetsbladet: provet går alltid LaTeX-vägen ändå."""
-    result = _skriv(client, monkeypatch, typ="arbetsblad")
+    Mätt på gruppuppgiften: provet och bladet går alltid LaTeX-vägen ändå."""
+    result = _skriv(client, monkeypatch, typ="gruppuppgift")
     byggda = _tectonic(monkeypatch)
     r = client.post(f"/api/exams/{result['id']}/approve", json={
         "blad": {"uppgift": ["data:image/png;base64,aGVq"]}})
@@ -195,7 +195,7 @@ def test_bilder_utan_pdfmotor_ger_anda_ett_papper(client, monkeypatch):
     """Tectonic behövs inte längre för elevernas ark. På en maskin utan motor
     — eller med en tom cache — fick läraren förut bara en .tex. Gäller de
     papper vars form bor på skärmen; provet sätts alltid i LaTeX."""
-    result = _skriv(client, monkeypatch, typ="arbetsblad")
+    result = _skriv(client, monkeypatch, typ="gruppuppgift")
     monkeypatch.setattr(exam_pdf, "engine_available", lambda: False)
     res = _done(client.post(f"/api/exams/{result['id']}/approve", json={
         "blad": {"uppgift": [_png()]}}))
@@ -226,6 +226,23 @@ def test_provet_satts_alltid_i_latex_aven_med_avritning(client, monkeypatch):
     # Stubben skriver sitt jobname i filen: pappret kom ur Tectonic.
     assert pdf.read_bytes().startswith(b"%PDF-1.5 Prov")
     assert any(not j.endswith(" - bedomning") for j in byggda), byggda
+
+
+def test_arbetsbladet_satts_i_provets_mall_aven_med_avritning(client, monkeypatch):
+    """Rickard 2026-10-22: bladen ska se ut som provet. Klienten ritar fortfarande
+    av bladet, men pappret sätts i arbetsblad.tex.j2, provets form utan
+    försättsblad och poäng."""
+    from pathlib import Path
+    result = _skriv(client, monkeypatch, typ="arbetsblad")
+    byggda = _tectonic(monkeypatch)
+    res = _done(client.post(f"/api/exams/{result['id']}/approve", json={
+        "blad": {"uppgift": [_png(), _png()]}}))
+    assert res["errors"] == []
+    pdf = Path(res["pdf"])
+    assert pdf.read_bytes().startswith(b"%PDF-1.5 ")
+    assert [j for j in byggda if not j.endswith(" - facit")], byggda
+    tex = Path(res["tex"]).read_text(encoding="utf-8")
+    assert r"\documentclass[12pt, a4paper, addpoints]{exam}" in tex
 
 
 def test_lararens_egna_bilder_foljer_med_till_mallen(client, monkeypatch):
@@ -325,24 +342,21 @@ def test_skraputforma_blad_ignoreras(client, monkeypatch):
 
 # ── Facit som egen fil ──────────────────────────────────────────────────
 
-def test_arbetsbladets_facit_blir_en_egen_bildfil(client, monkeypatch):
-    """Facitläget står inte framme på skärmen — växlaren visar arbetsbladet —
-    men det är ett eget papper och en egen fil. Ritas bara det som visas blir
-    facit-filen bladets kopia."""
+def test_arbetsbladets_facit_satts_i_mallen_aven_med_avritning(client, monkeypatch):
+    """Facit är ett eget papper och en egen fil. Sedan bladet sätts i provets
+    form (2026-10-22) kommer också den ur mallen: skärmens facitbilder tas
+    emot men används inte."""
     from pathlib import Path
     result = _skriv(client, monkeypatch, typ="arbetsblad")
-    _tectonic(monkeypatch)
+    byggda = _tectonic(monkeypatch)
     res = _done(client.post(f"/api/exams/{result['id']}/approve", json={
         "separat_facit": True,
         "blad": {"uppgift": [_png()], "facit": [_png(), _png()]}}))
-
     facit = tryck.facit_bredvid(Path(res["pdf"]))
-    assert facit is not None and _sidor(facit) == 2
-    assert _ar_bild(facit)
-    # Och rutten läraren klickar hämtar just den filen.
+    assert facit is not None and facit.read_bytes().startswith(b"%PDF-1.5 ")
+    assert any(j.endswith(" - facit") for j in byggda), byggda
     r = client.get(f"/api/exams/{result['id']}/facit")
     assert r.status_code == 200 and r.content.startswith(b"%PDF")
-    assert len(r.content) == facit.stat().st_size
 
 
 def test_facit_utan_bilder_satts_av_mallen_som_forut(client, monkeypatch):

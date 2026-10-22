@@ -3255,7 +3255,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # PROVET SÄTTS I LaTeX. Se kommentaren där avritningen tas
                 # emot: mallen är lärarens egen förlaga, och skärmen kan inte
                 # se ut som den. Övriga papper ritas av precis som förut.
-                skarmen_galler = typ != "prov"
+                # ARBETSBLADET OCKSÅ, sedan 2026-10-22 (Rickard: bladen ska
+                # se ut som provet). Dess mall är provets utan försättsblad
+                # och poäng, och avritningen av skärmen tas inte längre emot.
+                skarmen_galler = typ not in ("prov", "arbetsblad")
                 for round_ in range(exam_gen.MAX_LATEX_ROUNDS + 1):
                     doc, val_errors = exam_spec.validate_exam_json(exam, typ)
                     if doc is None:

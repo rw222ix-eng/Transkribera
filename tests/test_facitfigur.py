@@ -150,15 +150,16 @@ def test_latexfacit_ritar_tikz():
                            "losning": LOS_154_2})
     tex = exam_latex.render_arbetsblad(doc)
     assert "\\usepackage{tikz}" in tex and "pgfplots" not in tex
-    facit = tex[tex.index("\\delprovband{Facit}"):]
+    facit = tex[tex.index("\\bfseries Facit"):]
     assert facit.count("\\begin{tikzpicture}") == 2
     assert "minus betyder åt vänster" in facit
-    # Elevbladet utan facit laddar ingen tikz för figurernas skull.
-    assert "\\usepackage{tikz}" not in exam_latex.render_arbetsblad(
-        doc, utan_facit=True)
-    # Ett blad utan figurrader får samma tex som förut.
+    # Elevbladet utan facit har inga figurer. tikz laddas ändå, för
+    # vändmärket (provets form sedan 2026-10-22), men aldrig pgfplots.
+    utan = exam_latex.render_arbetsblad(doc, utan_facit=True)
+    assert "pgfplots" not in utan and "\\begin{tikzpicture}" not in utan
+    # Ett blad utan figurrader ritar ingen figur i facit.
     _exam, doc, _ = _blad({"text": "Beräkna $3 - 9$.", "losning": "$-6$"})
-    assert "\\usepackage{tikz}" not in exam_latex.render_arbetsblad(doc)
+    assert "\\begin{tikzpicture}" not in exam_latex.render_arbetsblad(doc)
 
 
 def test_mallen_tal_en_aldre_vy_utan_figur():

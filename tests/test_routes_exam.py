@@ -1095,7 +1095,6 @@ def test_facitfilen_ar_facit_ensamt_inte_hela_bladet(client, monkeypatch):
     blad = kropp(Path(res["tex"]).read_text(encoding="utf-8"))
     facit = kropp(next(Path(res["tex"]).parent.glob("* - facit.tex")
                        ).read_text(encoding="utf-8"))
-    assert r"\delprovband{Facit}" in facit
     assert r"{\large Facit" in facit and r"{\large Arbetsblad" in blad
     # Elevernas del är släckt: instruktionsraden, sidbrytningen och
     # svarsutrymmet hör till bladet, inte till lärarens lösningar.
@@ -1122,7 +1121,7 @@ def test_separat_facit_slacker_bandet_i_elevbladet(client, monkeypatch):
                             json={"separat_facit": True}))
     kropp = lambda t: t.split(r"\begin{document}", 1)[1]
     blad = kropp(Path(res["tex"]).read_text(encoding="utf-8"))
-    assert r"\delprovband{Facit}" not in blad
+    assert r"\bfseries Facit" not in blad
     # Instruktionsraden lovar inte längre något som inte finns i bladet.
     assert "sista sidan" not in blad and "delas ut separat" in blad
     for u in _exam_doc()["uppgifter"]:
@@ -1130,7 +1129,7 @@ def test_separat_facit_slacker_bandet_i_elevbladet(client, monkeypatch):
     # …och lösningarna finns kvar — men BARA i det separata facit-bladet.
     facit = kropp(next(Path(res["tex"]).parent.glob("* - facit.tex")
                        ).read_text(encoding="utf-8"))
-    assert r"\delprovband{Facit}" in facit
+    assert r"{\large Facit" in facit
     for u in _exam_doc()["uppgifter"]:
         for satt in _facitdelar(u):
             assert satt in facit, satt

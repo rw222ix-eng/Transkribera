@@ -13778,12 +13778,35 @@ def ovningsvakter(exam: dict, *, prov: dict | None = None,
     # Och ett uppdrag per deluppgift, inga enheter som bokstäver (granskningen
     # av bladen 2026-10-11).
     fel += uppdragsvakt(exam) + enhetsbokstavsvakt(exam)
+    # PROVETS TEXTVAKTER (Rickard 2026-10-22): bladet sätts i provets form,
+    # med provets kravetikett på varje uppgift, och ska vara «minst lika
+    # tydligt» som provet. Kravraden mot uppgiftens typ, inget blandat krav
+    # under samma uppmaning och provets ordtak för en deluppgift. Mäts utan
+    # räknarbeskedet, som appen själv sätter först i texten och som pappret
+    # sätter i delrubriken (exam_latex._blad_raknardelar).
+    # Provets ordvakt och förklaringsvakt står inte här. Textmängdvakten ovan
+    # har redan provets ordtak (30 på E, 40 annars), men räknar inte en
+    # förklaring efter frågan, och sådana förklaringar för svag svenska är
+    # tillåtna på bladet (Rickard 2026-10-11). Ordvakten fällde 60 uppgifter
+    # på 105 godkända blad för just dem.
+    ren = _utan_raknarmarken(exam)
+    fel += (kravradsvakt(ren) + blandat_krav_vakt(ren)
+            + deluppgiftsvakt(ren))
     # Scenvakten står INTE här: provkörningen på de femton bladen fällde
     # hälften av dem på ett begrepp som inte stod ordagrant i texten
     # («färgåtgång» om en vägg som ska målas), och en reparationsrunda skriver
     # om hela bladet.
     return (fel + radvakt(exam) + personvakt(exam)
             + forvaxlingsvakt(exam) + konsbalansvakt(exam))
+
+
+def _utan_raknarmarken(exam: dict) -> dict:
+    """En kopia av pappret utan räknarbeskedet först i uppgifterna."""
+    kopia = copy.deepcopy(exam) if isinstance(exam, dict) else {}
+    for u in kopia.get("uppgifter") or []:
+        if isinstance(u, dict) and isinstance(u.get("text"), str):
+            u["text"] = _RAKNARMARKE.sub("", u["text"]).lstrip()
+    return kopia
 
 
 def _delmoment_gemensamt(ny: str, gammal: str) -> bool:

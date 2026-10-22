@@ -1,7 +1,7 @@
 """Seedningsskriptet för Tectonic-cachen (PR 1)."""
 from pathlib import Path
 
-from app import exam_latex
+from app import exam_latex, exam_spec
 from tools import seed_tectonic_cache
 
 
@@ -103,11 +103,13 @@ def test_sonden_satter_glyfer_i_alla_mattestorlekar():
     tar ntxmi7/ntxsy7. ntxmi5/ntxsy5 väljs först under 6,3pt, alltså i
     \\small (notisrutan), och ingen seed hade dem före 2026-09-24.
 
-    Arbetsbladet och inte bedömningsanvisningen: den trycker inte längre
-    uppgiftstexten (NP:s form, lärarens dom 2026-09-23), och arbetsbladet är
-    den mall som sätter texten med newtx, alltså ntx-typsnitten ovan."""
-    tex = exam_latex.render_arbetsblad(
-        seed_tectonic_cache._representative_doc())
+    Gruppuppgiften: den är den enda mall som sätter texten med newtx, alltså
+    ntx-typsnitten ovan, sedan arbetsbladet fick provets form och Computer
+    Modern (2026-10-22). Bedömningsanvisningen trycker inte uppgiftstexten."""
+    doc = seed_tectonic_cache._representative_doc()
+    tex = exam_latex.render_gruppuppgift(doc.model_copy(update={
+        "grupp": exam_spec.GruppUpplagg(elever=4, langd_min=45,
+                                        redovisning="poster")}))
     assert r"x^{a \cdot \sqrt{b}}" in tex, \
         "symbolglyf i script-storlek (ntxsy7) seedas aldrig"
     assert r"y^{c^{d \cdot e}}" in tex, \

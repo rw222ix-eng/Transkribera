@@ -167,21 +167,21 @@ def test_ifyllnadsraderna_finns_pa_bade_uppgift_och_deluppgift():
     # lösningen, precis som den inte får en svarsrad.
     tex = _alla_tex(doc)
     # PROVET sätter raden som förlagans \svarsrad — samma linje som «Svar:»,
-    # men namngiven, och flera på samma rad delar bredden lika. Arbetsbladet
-    # har kvar sin egen \svarsfaltrad. Samma fält, två papper, två former.
+    # men namngiven. Arbetsbladet sätts i provets form sedan 2026-10-22 och
+    # sätter samma rad.
     assert r"\svarsrad{Ekvation:}" in tex["prov"], "provet saknar raden"
-    assert r"\svarsfaltrad{Ekvation}" in tex["arbetsblad"], "arbetsbladet saknar raden"
+    assert r"\svarsrad{Ekvation:}" in tex["arbetsblad"], "arbetsbladet saknar raden"
     # (Makrot självt står i den delade preamblen — det är ANROPET som räknas,
     # precis som för \svarsradmed.)
     assert r"\svarsfaltrad{Ekvation}" not in tex["bedomning"]
     assert r"\svarsrad{Ekvation:}" not in tex["bedomning"]
     # Uppgift 2 är ett PROBLEM och redovisas på lösblad. På provet får den
     # därför ingen svarsrad alls, inte ens en namngiven — kravet avgör
-    # (lärarens dom 2026-08-22). Arbetsbladet har inte den regeln och sätter
-    # sin egen rad som förut; det är två papper med två former.
+    # (lärarens dom 2026-08-22). Arbetsbladet har samma regel sedan det
+    # sattes i provets form (2026-10-22).
     assert tex["prov"].count(r"\svarsrad{Ekvation:}") == 1, \
         "deluppgiften i redovisningsuppgiften fick en svarsrad på provet"
-    assert tex["arbetsblad"].count(r"\svarsfaltrad{Ekvation}") == 2
+    assert tex["arbetsblad"].count(r"\svarsrad{Ekvation:}") == 1
 
 
 def test_ifyllnadsraden_star_efter_fragan_inte_fore():
@@ -204,13 +204,12 @@ def test_ifyllnadsraden_star_efter_fragan_inte_fore():
                      "losning": "…", "bedomning": "+2 C"}]})
     tex = _alla_tex(doc)
     # Facit har lösningen och därmed ingen svarsplats. Provet och arbetsbladet
-    # sätter raden i var sin form — provet som förlagans \svarsrad, bladet som
-    # sin egen \svarsfaltrad — men BÅDA efter frågan.
+    # sätter raden som förlagans \svarsrad, efter frågan.
     assert tex["prov"].index("Enas om ett värde") \
         < tex["prov"].index(r"\svarsrad{Valt värde:}"), \
         "provet sätter svarsplatsen före frågan"
     assert tex["arbetsblad"].index("Enas om ett värde") \
-        < tex["arbetsblad"].index(r"\svarsfaltrad{Valt"), \
+        < tex["arbetsblad"].index(r"\svarsrad{Valt värde:}"), \
         "arbetsbladet sätter svarsplatsen före frågan"
 
 
@@ -234,7 +233,7 @@ def test_formerna_satts_i_latex():
         t = tex[namn]
         assert "\\begin{tabular}" in t, f"{namn} saknar datatabellen"
         # Provet sätter stegtabellen i förlagans form (_former.stegbok).
-        steg = "\\stegruta{" if namn == "prov" else "\\begin{tabularx}"
+        steg = "\\stegruta{"
         assert steg in t, f"{namn} saknar stegtabellen"
         assert "\\svarsrutor{" in t, f"{namn} saknar kryssruteraden"
         assert "Randvinkelsatsen" in t and "Kordasatsen" in t
@@ -350,7 +349,8 @@ def test_tva_kolumner_ger_tva_elevers_losningar_sida_vid_sida():
     # Steg + två lösningar, var och en delad vid relationen + kryssrutekolumn.
     assert ("{c@{\\hspace{1.5em}}r@{}l@{\\hspace{2.5em}}r@{}l"
             "@{\\hspace{2.5em}}c}") in tex
-    assert "{lXXc}" in exam_latex.render_arbetsblad(doc)
+    assert ("{c@{\\hspace{1.5em}}r@{}l@{\\hspace{2.5em}}r@{}l"
+            "@{\\hspace{2.5em}}c}") in exam_latex.render_arbetsblad(doc)
 
 
 def test_provets_stegtabell_staller_likhetstecknen_under_varandra():

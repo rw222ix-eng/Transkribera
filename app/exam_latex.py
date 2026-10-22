@@ -2180,12 +2180,67 @@ def render_arbetsblad(doc: exam_spec.ExamDoc, visa_poang: bool = False,
     app/tryck.egna_bilder). Bladet fick dem aldrig: bara provet skickade dem
     vidare, och LaTeX-vägen tappade därför bilden så fort avritningen av
     skärmen inte kunde byggas. Sedan bildbeställningen nådde arbetsbladet
-    (2026-08-25) är det en riktig lucka och inte en teoretisk."""
+    (2026-08-25) är det en riktig lucka och inte en teoretisk.
+
+    Bladet sätts i provets form sedan 2026-10-22 (arbetsblad.tex.j2), och
+    räknarbeskedet blir då provets delrubrik i stället för första orden i
+    varje uppgift (_blad_raknardelar). `visa_poang` gör ingenting längre:
+    bladet bär inga poäng."""
+    blad, rubriker = _blad_raknardelar(doc)
+    vy = _build_view(blad, bilder, egna=egna_bilder)
+    if rubriker:
+        for d in vy["delar"]:
+            rubrik, titelrad = rubriker.get(d.get("_kod"), (None, None))
+            d["rubrik"] = escape_latex(rubrik) if rubrik else None
+            d["titelrad"] = escape_latex(titelrad) if titelrad else None
     return _environment().get_template("arbetsblad.tex.j2").render(
         visa_poang=visa_poang, dokumentkod=dokumentkod, only_facit=only_facit,
         utan_facit=utan_facit,
-        med_facitfigur=not utan_facit and _har_facitfigur(doc),
-        **_build_view(doc, bilder, egna=egna_bilder))
+        med_facitfigur=not utan_facit and _har_facitfigur(doc), **vy)
+
+
+# Räknarbeskedet som exam_gen.satt_raknarmarkering skriver först i bladets
+# uppgifter. Egen kopia av mönstret: exam_gen importerar den här modulen.
+_BLAD_RAKNARMARKE = re.compile(r"^\s*(Räknare tillåten|Utan räknare)\.\s*")
+
+
+def _blad_raknardelar(doc: exam_spec.ExamDoc
+                      ) -> tuple[exam_spec.ExamDoc, dict | None]:
+    """Bladet med räknarbeskedet som provets delar, och delarnas rubriker.
+
+    Provet säger räknaren EN gång, i delrubriken («Del A: Räknare är inte
+    tillåten»), och uppgiften börjar med sin text. Bladet bar beskedet först
+    i varje uppgift (exam_gen.satt_raknarmarkering, Rickard 2026-09-21), och
+    i provets form hade det varit en skillnad i hur uppgifterna skrivs
+    (Rickard 2026-10-22). Uppgifterna utan räknare blir därför del B (Del A
+    på pappret) och de med räknare del C, och beskedet stryks ur texten.
+
+    BARA när ordningen redan är provets: varje uppgift har ett besked, inga
+    delar är satta, och uppgifterna utan räknare står före dem med. Annars
+    hade numreringen på pappret blivit en annan än på skärmen och i facit,
+    och då står beskedet kvar i texten som förut. En enda grupp får rubriken
+    utan delnamn: «Del A» på ett blad utan Del B pekar på något som inte
+    finns."""
+    items = list(doc.uppgifter or [])
+    marken = [_BLAD_RAKNARMARKE.match(str(it.text or "")) for it in items]
+    if (not items or any(it.del_ for it in items)
+            or not all(marken)):
+        return doc, None
+    med = [m.group(1) == "Räknare tillåten" for m in marken]
+    if med != sorted(med):
+        return doc, None
+    nya = [it.model_copy(update={
+               "del_": "C" if ja else "B",
+               "text": _BLAD_RAKNARMARKE.sub("", str(it.text or ""), count=1)})
+           for it, ja in zip(items, med)]
+    tva = len(set(med)) == 2
+    rubriker = {
+        "B": ("Del A" if tva else None,
+              ("Del A: " if tva else "") + "Räknare är inte tillåten"),
+        "C": ("Del B" if tva else None,
+              ("Del B: " if tva else "") + "Räknare är tillåten"),
+    }
+    return doc.model_copy(update={"uppgifter": nya}), rubriker
 
 
 def _har_facitfigur(doc) -> bool:

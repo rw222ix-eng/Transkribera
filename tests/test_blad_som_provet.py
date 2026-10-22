@@ -83,13 +83,13 @@ def test_latexfacit_i_bedomningens_form():
              {"text": "Lös $x + 1 = 3$.", "poang": [1, 0, 0],
               "losning": "$x = 2$", "bedomning": "+1 E"}]})
     tex = exam_latex.render_arbetsblad(doc)
-    facit = tex[tex.index("\\delprovband{Facit}"):]
+    facit = tex[tex.index("\\bfseries Facit"):]
     assert "\\facitsvar{225~kr}" in facit or "\\facitsvar{225 kr}" in facit
     assert "\\noindent \\(P = 45 + 180\\)\\par" in facit
     assert "\\facitsvar{a)\\enspace \\(\\pmb{x = 4}\\)}" in facit
     assert "\\facitsvar{b)\\enspace \\(\\pmb{x = 2}\\)}" in facit
     # En linje mellan uppgifterna, ingen över den första.
-    assert facit.count("\\rule{\\linewidth}{0.15mm}") == 1
+    assert facit.count("\\bedlinje") == 1
     # Mallen tål en äldre vy utan fältet (servern har Python i minnet).
     text = (MALLAR / "arbetsblad.tex.j2").read_text(encoding="utf-8")
     assert "u.facit is defined" in text and "d.facit is defined" in text
@@ -119,7 +119,7 @@ def test_facitets_steg_far_en_forklaring_efter_pilen():
                         "losning": "$\\dfrac{x}{4}$\n$x^2 - 6x = x(x - 6)$ ← bryt ut $x$\n"
                                    "$36 \\cdot 2 = 72$"})
     tex = exam_latex.render_arbetsblad(doc)
-    facit = tex[tex.index("\\delprovband{Facit}"):]
+    facit = tex[tex.index("\\bfseries Facit"):]
     assert "\\facitsteg{\\(x^2 - 6x = x(x - 6)\\)}{bryt ut \\(x\\)}" in facit
     assert "\\noindent \\(36 \\cdot 2 = 72\\)\\par" in facit
     assert "\\newcommand{\\facitsteg}" in tex
@@ -350,3 +350,81 @@ def test_en_etikett_med_formel_star_pa_egen_rad():
     assert "EKVRAD.test(r) || ETIKETTRAD.test(r)" in js
     # Tabellhuvudet är matematik som cellerna (exam 266 visade «$K$»).
     assert "`<th>${mat(r)}</th>`" in js
+
+
+# ───────────────── bladet i provets LaTeX-mall (2026-10-22) ─────────────────
+# Rickard 2026-10-22: bladen ska se ut som provet, utan försättsblad och
+# poäng och med facit.
+
+
+def test_bladet_satts_i_provets_mall_utan_forsattsblad_och_poang():
+    _exam, doc = _blad({"text": "Beräkna $3 + 4$.", "losning": "$7$"},
+                       {"text": "Visa att $2 + 2 = 4$.", "typ": "redovisning",
+                        "poang": [0, 2, 0], "losning": "$4$"})
+    tex = exam_latex.render_arbetsblad(doc)
+    kropp = tex.split(r"\begin{document}", 1)[1]
+    assert r"\documentclass[12pt, a4paper, addpoints]{exam}" in tex
+    assert r"\question \pfkrav{Skriv bara svaret.}" in kropp
+    assert r"\question \pfkrav{Visa hur du räknar.}" in kropp
+    assert r"\question[" not in kropp and "Provtid" not in kropp
+    assert "Betyg" not in kropp and r"\textbf{Namn:}" not in kropp
+    # Svarsraden under kortsvaret, ingen under redovisningen (lösblad).
+    assert kropp.count(r"\svarsrad{Svar:}") == 1
+    assert r"\bfseries Facit" in kropp
+
+
+def test_raknarbeskedet_blir_provets_delrubrik():
+    _exam, doc = _blad(
+        {"text": "Utan räknare. Beräkna $3 + 4$.", "losning": "$7$"},
+        {"text": "Utan räknare. Beräkna $5 + 4$.", "losning": "$9$"},
+        {"text": "Räknare tillåten. Beräkna $3{,}7 \\cdot 4{,}1$.",
+         "losning": "$15{,}17$"})
+    tex = exam_latex.render_arbetsblad(doc)
+    assert "Del A: Räknare är inte tillåten" in tex
+    assert "Del B: Räknare är tillåten" in tex
+    assert "Utan räknare." not in tex and "Räknare tillåten." not in tex
+    # Numreringen löper vidare över delarna, som på provet.
+    assert r"\setcounter{question}{2}" in tex
+    # En enda grupp får rubriken utan delnamn.
+    _exam, doc = _blad({"text": "Utan räknare. Beräkna $3 + 4$.",
+                        "losning": "$7$"})
+    tex = exam_latex.render_arbetsblad(doc)
+    assert "{\\Large\\bfseries Räknare är inte tillåten" in tex
+    assert "Del A" not in tex
+
+
+def test_raknarbeskedet_star_kvar_nar_ordningen_inte_ar_provets():
+    """Med räknare före utan hade numreringen på pappret blivit en annan än
+    på skärmen och i facit."""
+    _exam, doc = _blad(
+        {"text": "Räknare tillåten. Beräkna $3{,}7 \\cdot 4{,}1$.",
+         "losning": "$15{,}17$"},
+        {"text": "Utan räknare. Beräkna $3 + 4$.", "losning": "$7$"})
+    tex = exam_latex.render_arbetsblad(doc)
+    assert "Räknare tillåten. Beräkna" in tex and "Del A" not in tex
+
+
+def test_bladmallen_tal_en_aldre_vy():
+    """Servern läser mallen från disk men har Python i minnet: mallen ska
+    sättas med vyn som den byggdes före 2026-10-22, utan delrubrikerna."""
+    _exam, doc = _blad({"text": "Utan räknare. Beräkna $3 + 4$.",
+                        "losning": "$7$"})
+    tex = exam_latex._environment().get_template("arbetsblad.tex.j2").render(
+        visa_poang=False, dokumentkod="", only_facit=False, utan_facit=False,
+        med_facitfigur=False, **exam_latex._build_view(doc, None))
+    assert r"\begin{questions}" in tex and "Utan räknare." in tex
+
+
+def test_bladet_far_provets_kravradsvakt_och_deluppgiftsvakt():
+    exam, _doc = _blad(
+        {"text": "Utan räknare. Beräkna $3 + 4$. Motivera ditt svar.",
+         "losning": "$7$"},
+        {"text": "En skola.", "typ": "problem", "poang": [0, 0, 0],
+         "bedomning": "", "losning": "",
+         "deluppgifter": [{"poang": [1, 0, 0], "bedomning": "+1 E",
+                           "losning": "$4$", "text": " ".join(["ord"] * 31)
+                           + " Beräkna antalet."}]})
+    koder = {f["code"] for f in exam_gen.ovningsvakter(exam)}
+    assert "kravrad" in koder
+    assert any(f["code"] == "begriplighet" and "1b" not in f["path"]
+               and "2a" in f["path"] for f in exam_gen.ovningsvakter(exam))

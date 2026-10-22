@@ -1231,11 +1231,11 @@ def test_preamble_definierar_layoutmakron():
     """Designsystemets layoutprimitiver ska finnas som makron, så att
     mallarna anropar dem i stället för att upprepa formateringen.
 
-    Mätt på ARBETSBLADET och inte på provet: provet lämnade designsystemet när
-    lärarens förlaga blev mall (exam-klassen, egna mått), medan arbetsbladet,
-    gruppuppgiften har kvar sin egen form."""
-    doc, _ = exam_spec.validate_exam_json(_exam())
-    tex = exam_latex.render_arbetsblad(doc)
+    Mätt på preamblen utan förlagan: provet lämnade designsystemet när
+    lärarens förlaga blev mall (exam-klassen, egna mått), och arbetsbladet
+    följde efter 2026-10-22. Gruppuppgiften har kvar sin egen form."""
+    tex = exam_latex._environment().get_template("_preamble.tex.j2").render(
+        med_grafik=True, med_svarsrad=True, sidhuvud="")
     assert r"\newcommand{\delprovband}" in tex
     assert r"\newenvironment{uppgift}" in tex
     assert r"\newcommand{\ramruta}" in tex
@@ -1422,10 +1422,10 @@ def test_deluppgifts_notis_renderas_i_prov_och_arbetsblad():
     prov = exam_latex.render_prov(doc)
     arbetsblad = exam_latex.render_arbetsblad(doc)
     bedomning = exam_latex.render_bedomning(doc)
-    # Provet sätter den som förlagans kursiva ledtråd, arbetsbladet som sin
-    # egen inramade ruta — samma fält, två papper, två former.
+    # Förlagans kursiva ledtråd på båda: arbetsbladet sätts i provets form
+    # sedan 2026-10-22.
     assert r"\pftips{Tänk på tecknet.}" in prov
-    assert r"\notisruta{Tänk på tecknet.}" in arbetsblad
+    assert r"\pftips{Tänk på tecknet.}" in arbetsblad
     # bedömningsanvisningen ska inte innehålla notisrutan
     assert r"\notisruta{Tänk på tecknet.}" not in bedomning
 
@@ -1462,7 +1462,7 @@ def test_bedomning_visar_flervalsfacit():
 def test_arbetsblad_facit_har_deluppgifternas_losningar():
     doc, _ = exam_spec.validate_exam_json(_exam_med_deluppgifter())
     tex = exam_latex.render_arbetsblad(doc)
-    assert r"\begin{deluppgift}{a}" in tex           # struktur på övningssidan
+    assert r"\begin{parts}" in tex and r"\part" in tex  # provets deluppgifter
     assert "Facit" in tex
 
 
@@ -2412,48 +2412,34 @@ def test_render_arbetsblad_has_facit_no_kravgranser():
     assert "Kravgränser" not in tex
     # facit = lösningarna, svaret fett som i bedömningsanvisningen (2026-09-25)
     assert r"\(\pmb{x = 2}\)" in tex
-    # Poäng dolda som standard. Kontrollen gäller RENDERADE poäng, inte
-    # makrots förekomst. Uppgiftsloopen anropar numera den delade
-    # uppgift-miljön (\begin{uppgift}{n}{poäng}) i stället för att skriva
-    # \poang{...} direkt i mallen — \poang{2p} som RÅ SUBSTRÄNG förekommer
-    # därför aldrig i den Python-renderade .tex-källan (bara efter att
-    # LaTeX expanderat miljön vid kompilering). Kontrollen görs i stället
-    # mot uppgift-miljöns andra argument, precis som provmallens
-    # motsvarande test (test_prov_anvander_layoutmakron).
-    assert r"\begin{uppgift}{1}{2p}" not in tex
-    tex_p = exam_latex.render_arbetsblad(doc, visa_poang=True)
-    assert r"\begin{uppgift}{1}{2p}" in tex_p
+    # Inga poäng på bladet (Rickard 2026-10-22), inte ens på begäran:
+    # \question och \part får inget poängargument.
+    for t_ in (tex, exam_latex.render_arbetsblad(doc, visa_poang=True)):
+        kropp = t_.split(r"\begin{document}", 1)[1]
+        assert r"\question[" not in kropp and r"\part[" not in kropp
 
 
 def test_arbetsblad_anvander_layoutmakron():
+    """Bladet i provets form (Rickard 2026-10-22): exam-klassens frågor,
+    kravetiketten, inget försättsblad och facit efter uppgifterna."""
     doc, _ = exam_spec.validate_exam_json(_exam())
     tex = exam_latex.render_arbetsblad(doc)
-    assert r"\begin{uppgift}{1}" in tex
-    # Sök i dokumentkroppen, inte i preambeln: \newcommand{\elevruta} i den
-    # delade _preamble.tex.j2 innehåller alltid substrängen "\elevruta",
-    # så en sökning i hela strängen skulle träffa preambeln även om
-    # mallen aldrig anropade makrot (jfr test_prov_anvander_layoutmakron).
+    assert r"\documentclass[12pt, a4paper, addpoints]{exam}" in tex
     kropp = tex.split(r"\begin{document}", 1)[1]
+    assert r"\begin{questions}" in kropp and r"\question \pfkrav{" in kropp
     assert r"\elevruta" not in kropp
-    assert "Kravgränser" not in tex
-    # facit finns kvar
+    assert "Kravgränser" not in tex and "Provtid" not in kropp
     assert "Facit" in tex
 
 
-def test_arbetsblad_utan_poang_ger_tomt_argument_inte_tom_parentes():
-    """visa_poang=False ska ge INGEN poängmarkör. Skickas \\relax eller ett
-    blanktecken skriver \\poang ut ett tomt parentespar i marginalen."""
+def test_arbetsblad_utan_poang_ger_ingen_markor():
+    """Facit sätter uppgifterna i uppgift-miljön med tomt poängargument: ett
+    \\relax eller ett blanktecken där hade skrivit en tom markör."""
     doc, _ = exam_spec.validate_exam_json(_exam())
-    tex = exam_latex.render_arbetsblad(doc, visa_poang=False)
+    tex = exam_latex.render_arbetsblad(doc)
     assert r"\begin{uppgift}{1}{}" in tex
-    # Sök i dokumentkroppen: \ramruta i preambeln innehåller alltid
-    # "...\fboxsep\relax}..." (dimexpr-uttrycket), så en sökning i hela
-    # strängen skulle träffa preambeln oavsett mallens innehåll.
     kropp = tex.split(r"\begin{document}", 1)[1]
     assert r"\relax}" not in kropp
-    # med poäng påslaget kommer markören tillbaka
-    med = exam_latex.render_arbetsblad(doc, visa_poang=True)
-    assert r"\begin{uppgift}{1}{3p}" in med
 
 
 def test_build_referens_numbers_and_instructs():
