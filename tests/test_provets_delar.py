@@ -733,6 +733,69 @@ def test_elevens_harledning_delas_vid_likhetstecknen():
     assert "<wbr>" not in kort
 
 
+def test_lang_summa_bryts_vid_plus_och_forklaringen_aldrig_mitt_i_ord():
+    """Nickies facit (dok 441, 2026-10-22), uppgift 10: «6 850 + 3 200 + 690 +
+    970 + 249 + 185 + 2 200» var en enda låda. Stegspalten tog hela bredden
+    och förklaringen bröts mitt i ord, «utgifte r». Ett led längre än 40
+    tecken delas också vid binärt plus och minus, och förklaringscellen
+    bryts bara mellan ord."""
+    summa = ("$6\\,850 + 3\\,200 + 690 + 970 + 249 + 185 + 2\\,200 "
+             "= 14\\,344$")
+    html = _losark([_uppg(p=2, f="$-244$", ut="rakna", bed="+2 E räknar",
+                          elever=[{"etikett": "2 p", "partier": [
+                              {"rader": [summa], "poang": [2, 0, 0],
+                               "dom": "rätt"}]}])], delB=0)
+    rad = html.split('<div class="loskannrad">')[1].split("</div>")[0]
+    assert rad.count('class="mat"') == 8, "summan delades inte vid plus"
+    assert 'data-tex="{}+ 3\\,200 "' in rad, "plus inleder nästa del, med vänsterled"
+    assert 'data-tex="{}= 14\\,344"' in rad
+    # Minus som tecken på talet delar inte, och korta led rörs inte.
+    tecken = _losark([_uppg(p=2, f="$-244$", ut="rakna", bed="+2 E räknar",
+                            elever=[{"etikett": "2 p", "partier": [
+                                {"rader": ["$14\\,100 - 14\\,344 = -244$"],
+                                 "poang": [2, 0, 0], "dom": "rätt"}]}])],
+                     delB=0)
+    trad = tecken.split('<div class="loskannrad">')[1].split("</div>")[0]
+    assert trad.count('class="mat"') == 1
+    lang = _losark([_uppg(p=2, f="$x$", ut="rakna", bed="+2 E räknar",
+                          elever=[{"etikett": "2 p", "partier": [
+                              {"rader": ["$V = -5 \\cdot 400 + 6\\,000 - 2\\,500 "
+                                         "- 1\\,000 \\cdot -3 + 17$"],
+                               "poang": [2, 0, 0], "dom": "rätt"}]}])], delB=0)
+    lrad = lang.split('<div class="loskannrad">')[1].split("</div>")[0]
+    assert "\\cdot -3" in lrad, "minus efter \\cdot är ett tecken"
+    assert 'data-tex="V "' in lrad and 'data-tex="{}= -5 \\cdot 400 "' in lrad
+    css = (UI / "losning.css").read_text(encoding="utf-8")
+    assert ("td.lofacitnot{padding-left:0;white-space:normal;text-align:left;"
+            "overflow-wrap:normal;word-break:normal") in css
+    assert "minmax(min(calc(130px * var(--fsk, 1)), 30%),1fr)" in css
+
+
+def test_bladfacitets_forklaring_haller_ihop_ord_med_bindestreck():
+    """Nedzads facit (dok 437, 2026-10-22), uppgift 10: «← använd pq-» och
+    «formeln» på var sin rad. Ett ord med bindestreck i förklaringen är en
+    nowrap-låda; formler och vanliga ord rörs inte."""
+    f = ("$244$ kr\n"
+         "$6\\,850 + 3\\,200 + 690 + 970 + 249 + 185 + 2\\,200 = 14\\,344$ "
+         "← lägg ihop alla utgifter\n"
+         "$x = 90 \\pm 10$ ← använd pq-formeln och lägg ihop x-termerna, $x-1$")
+    html = _kor_bladbygg(
+        "bb.arkfacit({typ:'Arbetsblad', moment:'budget'}, "
+        + json.dumps([{"nr": 1, "t": "Hur mycket saknas?", "f": f}],
+                     ensure_ascii=False) + ")")
+    noter = [n.split("</td>")[0] for n in html.split('<td class="lofacitnot"')[1:]]
+    assert len(noter) == 2
+    assert "← lägg ihop alla utgifter" in noter[0] and "loord" not in noter[0]
+    assert '<span class="loord">pq-formeln</span>' in noter[1]
+    # Skiljetecknet följer med ordet, så kommat aldrig hamnar ensamt.
+    assert '<span class="loord">x-termerna,</span>' in noter[1]
+    assert 'data-tex="x-1"' in noter[1], "formeln i förklaringen är matematik"
+    # Summan i steget delas vid plus, så stegspalten inte tar hela bredden.
+    assert html.count('data-tex="{}+ ') == 6
+    css = (UI / "losning.css").read_text(encoding="utf-8")
+    assert ".lofacitnot .loord{white-space:nowrap}" in css
+
+
 def test_svaret_bryter_ocksa():
     """Samma spalt, samma lådor: ett svar med hela härledningen i ett
     dollarpar är lika oböjligt som elevens. Varje led får sin egen \\pmb."""

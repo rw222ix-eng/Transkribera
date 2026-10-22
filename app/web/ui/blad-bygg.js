@@ -43,6 +43,36 @@ window.BladBygg = (() => {
       else if (c === '=' && djup === 0 && i > start) { ut.push(tex.slice(start, i)); start = i; }
     }
     ut.push(tex.slice(start));
+    return ut.filter(b => b.trim()).flatMap(b => (b.length > MATBRYT_TERM ? termer(b) : [b]));
+  }
+  /* Ett led som ensamt är längre än MATBRYT_TERM delas också vid plus och
+     minus på toppnivå (Nickies facit 2026-10-22: «6 850 + 3 200 + 690 + 970 +
+     249 + 185 + 2 200» var en enda låda, stegspalten tog hela bredden och
+     förklaringen bröts mitt i ord, «utgifte r»). Bara ett binärt tecken
+     delar: efter en siffra, en bokstav eller en stängd grupp. «= −244» och
+     «\cdot −3» är tecken på talet. Tecknet INLEDER nästa del, som `=`. */
+  const MATBRYT_TERM = 40;
+  function termer(led) {
+    const ut = [];
+    let djup = 0, start = 0, forra = '';
+    for (let i = 0; i < led.length; i++) {
+      const c = led[i];
+      if (c === '\\') {
+        /* \cdot, \pm: en operator, så ett minus efter är ett tecken. \, är
+           tusentalsluft inuti talet och ändrar inget. */
+        if (/[a-zA-Z]/.test(led[i + 1] || '')) { while (/[a-zA-Z]/.test(led[i + 1] || '')) i++; forra = 'op'; }
+        else i++;
+        continue;
+      }
+      if (/\s/.test(c)) continue;
+      if (c === '{' || c === '(' || c === '[') djup++;
+      else if (c === '}' || c === ')' || c === ']') djup--;
+      else if ((c === '+' || c === '-') && djup === 0 && i > start && /^[0-9a-zA-Z})\]]$/.test(forra)) {
+        ut.push(led.slice(start, i)); start = i;
+      }
+      forra = c;
+    }
+    ut.push(led.slice(start));
     return ut.filter(b => b.trim());
   }
   /* `fet` lindar varje led i KaTeX \pmb: bedömningsanvisningens svar står i
@@ -54,7 +84,7 @@ window.BladBygg = (() => {
        49 + 189= 238» (blad 133, 2026-09-24). Den tomma gruppen `{}` ger
        relationen ett vänsterled och därmed samma luft som i en hel formel. */
     const led = (bit.length > MATBRYT_MIN ? texled(bit) : [bit])
-      .map((b, k) => (k && /^\s*=/.test(b) ? `{}${b}` : b));
+      .map((b, k) => (k && /^\s*[=+-]/.test(b) ? `{}${b}` : b));
     return led.map(b => `<span class="mat" data-tex="${attr(fet ? `\\pmb{${b}}` : b)}"></span>`).join('<wbr>');
   }).join('');
   /* ── Tomraderna ──
@@ -2018,6 +2048,12 @@ window.BladBygg = (() => {
      kanten. Spalten är tabellens andra cell, så pilarna i en uppgift står
      under varandra; ett steg utan förklaring spänner över båda och trycker
      inte pilarna åt höger. */
+  /* Förklaringen bryts bara mellan ord. Ett ord med bindestreck hålls ihop
+     (Nedzads facit 2026-10-22: «använd pq-» / «formeln»); resten sköter
+     losning.css td.lofacitnot. Formlerna går som förut genom mat(). */
+  const notOrd = s => String(s == null ? '' : s).split('$').map((bit, i) =>
+    (i % 2 ? mat(`$${bit}$`)
+      : esc(bit).replace(/[^\s-]+(?:-[^\s-]+)+/g, o => `<span class="loord">${o}</span>`))).join('');
   function facitRader(grupper, bokstav) {
     return grupper.map((g, i) => {
       const bara = elevradDelar(g.svar)[0];
@@ -2032,7 +2068,7 @@ window.BladBygg = (() => {
           const steg = fig ? fig.html : matBryt(rad);
           const figur = fig && fig.figur ? ' data-figur=""' : '';
           return not
-            ? `<tr data-not=""><td class="lobedsteg"${figur}><span class="lofacitrad">${steg}</span></td><td class="lofacitnot"${figur}>← ${mat(not)}</td></tr>`
+            ? `<tr data-not=""><td class="lobedsteg"${figur}><span class="lofacitrad">${steg}</span></td><td class="lofacitnot"${figur}>← ${notOrd(not)}</td></tr>`
             : `<tr><td class="lobedsteg" colspan="2"${figur}>${steg}</td></tr>`;
         }).join('');
     }).join('');

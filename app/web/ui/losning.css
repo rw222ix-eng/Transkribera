@@ -225,12 +225,19 @@ $\dfrac{…}$
    båda spalterna; en spännande cell som korsar `1fr` räknas inte när
    spalten mäts, så ett långt svar trycker inte pilarna åt höger. */
 .lobed[data-facit]{display:block;table-layout:auto}
-.lobed[data-facit]>tbody{display:grid;grid-template-columns:fit-content(64%) minmax(0,1fr);column-gap:calc(22px * var(--fsk, 1));align-items:baseline}
+/* Förklaringen bryts bara mellan ord (Nickies facit 2026-10-22: «utgifte r»,
+   «utgifte rna»). `.lobed td` bär overflow-wrap:anywhere för stegens skull;
+   förklaringen tar tillbaka det normala, och spalten har ett golv på
+   130 px, så att ett brett steg inte trycker den till ett ord per rad.
+   Golvet är fast och inte min-content: ett spännande svar eller en figur
+   som korsar spalten ska inte kunna blåsa upp den. */
+.lobed[data-facit]>tbody{display:grid;grid-template-columns:fit-content(64%) minmax(min(calc(130px * var(--fsk, 1)), 30%),1fr);column-gap:calc(22px * var(--fsk, 1));align-items:baseline}
 .lobed[data-facit] tr{display:contents}
 .lobed[data-facit] td{padding:calc(2px * var(--fsk, 1)) 0;width:auto}
 .lobed[data-facit] td[colspan]{grid-column:1/-1}
-.lobed[data-facit] td.lofacitnot{padding-left:0;white-space:normal;text-align:left}
+.lobed[data-facit] td.lofacitnot{padding-left:0;white-space:normal;text-align:left;overflow-wrap:normal;word-break:normal;hyphens:manual}
 .lobed[data-facit] td[data-figur]{align-self:center}
+.lofacitnot .loord{white-space:nowrap}
 .lofacitrad{min-width:0;overflow-wrap:anywhere}
 .lofacitnot{font-size:calc(14px * var(--fsk, 1));line-height:1.35;color:#3A3835}
 /* SVARET I EN RUTA (Rickard 2026-10-13: «svaret ska vara framhävt»). Fetstil
