@@ -1682,6 +1682,29 @@ def _forsatt_vy(doc: exam_spec.ExamDoc, delar: list[dict],
     }
 
 
+def _med_triangel(it):
+    """Uppgiften med FigLinjar.triangel satt ur texten där den saknas
+    (exam_figures.linjar_triangel). Annars samma objekt."""
+    stam = [it.text or ""]
+    delar = list(it.deluppgifter or [])
+
+    def figur(f, texter):
+        if not isinstance(f, exam_spec.FigLinjar) or f.triangel or not f.fler:
+            return f
+        ny = exam_figures.linjar_triangel(f.model_dump(), texter)
+        return exam_spec.FigLinjar.model_validate(ny) if ny.get("triangel") else f
+
+    andrad = {}
+    f = figur(it.figur, stam + [d.text or "" for d in delar])
+    if f is not it.figur:
+        andrad["figur"] = f
+    nya = [d.model_copy(update={"figur": figur(d.figur, [d.text or ""] + stam)})
+           if d.figur is not None else d for d in delar]
+    if any(n.figur is not d.figur for n, d in zip(nya, delar)):
+        andrad["deluppgifter"] = nya
+    return it.model_copy(update=andrad) if andrad else it
+
+
 def _build_view(doc: exam_spec.ExamDoc,
                 bilder: dict[int, str] | None = None,
                 *, facit: bool = False,
@@ -1709,6 +1732,10 @@ def _build_view(doc: exam_spec.ExamDoc,
             nummer += 1
             # Linjernas namn i texten i figurens färger (exam_figures.
             # farga_namn). Bara elevens text, före all annan vy.
+            # Triangeln läses också här ur texten: ett papper som sparades
+            # innan fältet fanns, eller en uppgift som inte skrevs om, ska
+            # tryckas med sin skuggade triangel (prov 215 uppg 12).
+            it = _med_triangel(it)
             farger = exam_figures.namnfarger(it)
             if farger:
                 it = it.model_copy(update={

@@ -441,3 +441,22 @@ def test_triangeln_med_axeln_skuggas():
     assert sparad["figur"]["triangel"] == "x"
     # Parallella linjer bildar ingen triangel.
     assert exam_figures.triangelhorn((2, 1), (2, 5), "x") is None
+
+
+def test_sparat_papper_utan_triangelfalt_trycks_med_triangel():
+    """Prov 215 uppg 12 skrevs inte om efter att fältet kom; pappret läser
+    triangeln ur texten vid bygget."""
+    from app import exam_latex
+    it = exam_spec.ExamItem.model_validate({
+        "del": "C", "avsnitt": "2.3", "delmoment": "x", "formaga": "PL",
+        "typ": "problem", "poang": [1, 1, 0], "innehall": ["G25-M2A-ALG-1"],
+        "text": "Linjen $f$ har ekvationen $x + y = 6$ och linjen $g$ har "
+                "ekvationen $2x - y = 0$. Linjerna $f$ och $g$ bildar en "
+                "triangel tillsammans med $x$-axeln. Figuren visar linjerna "
+                "$f$ och $g$. Beräkna triangelns area.",
+        "losning": "12", "bedomning": "+1 E a\n+1 C b",
+        "figur": {"typ": "linjar", "k": -1, "m": 6, "namn": "f",
+                  "fler": [{"k": 2, "m": 0, "namn": "g"}]}})
+    assert exam_latex._med_triangel(it).figur.triangel == "x"
+    utan = it.model_copy(update={"text": "Figuren visar linjerna $f$ och $g$."})
+    assert exam_latex._med_triangel(utan) is utan
