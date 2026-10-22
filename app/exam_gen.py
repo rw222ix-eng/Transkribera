@@ -13013,14 +13013,52 @@ _KORTSVARETS_HINDER = ("deluppgifter", "scen", "figur", "bild", "tabell",
                        "elevlosningar", "utforlig")
 
 
-def _kortsvarets_uppmaning(u: object) -> tuple[str, str] | None:
-    """(verbet, uttrycket) för ett rent kortsvar som «Förenkla uttrycket:
-    $…$.», annars None. Räknarbeskedet först i texten räknas inte."""
+# EN TILLAGD MENING HINDRAR INTE (Theos blad, exam 285, 2026-10-22): uppgift 1
+# var «Förenkla uttrycket $(x + 3)^2 - x(x + 4)$.\nSkriv svaret utan
+# parenteser.» och uppgift 2 samma uppmaning utan meningen, och de stod kvar
+# var för sig. En kort anvisning efter uttrycket, utan matematik och utan
+# siffror («Svara exakt.», «Skriv svaret utan parenteser.»), följer med till
+# stammen i plural och gäller då alla deluppgifter (samordnaren 22/10: «gäller
+# den alla eller stryks»). En mening med tal eller formel är en annan uppgift.
+_RUTINDEL_HUVUD = re.compile(_RUTINDEL_RE.pattern.removesuffix(r"\s*$"),
+                             re.I)
+_TILLAGG_MENING = re.compile(r"[^.!?$\d]{3,80}?[.!]")
+_TILLAGG_PLURAL = ((r"\bsvaret\b", "svaren"), (r"\buttrycket\b", "uttrycken"),
+                   (r"\bekvationen\b", "ekvationerna"))
+
+
+def _kortsvarets_uppmaning(u: object) -> tuple[str, str, tuple[str, ...]] | None:
+    """(verbet, uttrycket, anvisningarna efter) för ett rent kortsvar som
+    «Förenkla uttrycket: $…$.», annars None. Räknarbeskedet först i texten
+    räknas inte."""
     if (not isinstance(u, dict) or u.get("typ") != "rutin"
             or any(u.get(k) for k in _KORTSVARETS_HINDER)):
         return None
-    m = _RUTINDEL_RE.match(_RAKNARMARKE.sub("", str(u.get("text") or "")))
-    return (m.group(1).lower(), m.group(2)) if m else None
+    text = _RAKNARMARKE.sub("", str(u.get("text") or ""))
+    m = _RUTINDEL_HUVUD.match(text)
+    if not m:
+        return None
+    rest, tillagg = text[m.end():].strip(), []
+    while rest:
+        t = _TILLAGG_MENING.match(rest)
+        if not t or len(t.group(0).split()) > 10 or len(tillagg) == 2:
+            return None
+        tillagg.append(" ".join(t.group(0).split()))
+        rest = rest[t.end():].strip()
+    return m.group(1).lower(), m.group(2), tuple(tillagg)
+
+
+def _samlad_stam(grupp: list) -> str:
+    """Stammen ur _RUTINSTAM och gruppens anvisningar i plural, en gång var."""
+    meningar = [_RUTINSTAM[grupp[0][1][0]]]
+    for _, traff in grupp:
+        for s in traff[2]:
+            for monster, ord_ in _TILLAGG_PLURAL:
+                s = re.sub(monster, ord_, s)
+            s = s[0].upper() + s[1:]
+            if s.lower() not in (x.lower() for x in meningar):
+                meningar.append(s)
+    return " ".join(meningar)
 
 
 def samla_kortsvar(exam: dict | None, prov: dict | None = None) -> bool:
@@ -13057,7 +13095,7 @@ def samla_kortsvar(exam: dict | None, prov: dict | None = None) -> bool:
         innehall: list = []
         for u, _ in grupp:
             innehall += [x for x in u.get("innehall") or [] if x not in innehall]
-        samlad.update(text=_RUTINSTAM[grupp[0][1][0]], poang=[0, 0, 0],
+        samlad.update(text=_samlad_stam(grupp), poang=[0, 0, 0],
                       losning="", bedomning="", typ="rutin")
         if innehall:
             samlad["innehall"] = innehall

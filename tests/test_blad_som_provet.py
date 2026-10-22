@@ -500,6 +500,41 @@ def test_lika_kortsvar_samlas_som_provet():
     assert not exam_gen.samla_kortsvar(exam)
 
 
+def test_kortsvar_med_en_tillagd_mening_samlas_och_meningen_hamnar_i_stammen():
+    """Theos blad (exam 285, jobb 2170, 2026-10-22): uppgift 1 hade en mening
+    efter uttrycket och uppgift 2 inget kolon, och de stod kvar var för sig.
+    Anvisningen gäller alla deluppgifter och står i stammen i plural."""
+    exam = {"hjalpmedel": "Räknare får användas på uppgift 3, men inte på "
+                          "uppgift 1 och 2.", "uppgifter": [
+        _kortsvar("Utan räknare. Förenkla uttrycket $(x + 3)^2 - x(x + 4)$.\n"
+                  "Skriv svaret utan parenteser.", poang=[2, 0, 0]),
+        _kortsvar("Utan räknare. Förenkla uttrycket $(x - 5)^2 - x(x - 7)$."),
+        _kortsvar("Räknare tillåten. Beräkna $3,4^2$.")]}
+    assert exam_gen.samla_kortsvar(exam)
+    forsta = exam["uppgifter"][0]
+    assert forsta["text"] == ("Förenkla uttrycken så långt som möjligt. "
+                              "Skriv svaren utan parenteser.")
+    assert [d["text"] for d in forsta["deluppgifter"]] == [
+        "$(x + 3)^2 - x(x + 4)$", "$(x - 5)^2 - x(x - 7)$"]
+    assert [d["poang"] for d in forsta["deluppgifter"]] == [[2, 0, 0], [1, 0, 0]]
+    assert len(exam["uppgifter"]) == 2
+    assert exam["hjalpmedel"] == ("Räknare får användas på uppgift 2, men "
+                                  "inte på uppgift 1.")
+    # Samma anvisning på båda står en gång.
+    tva = {"hjalpmedel": "", "uppgifter": [
+        _kortsvar("Lös ekvationen: $x^2 = 7$. Svara exakt."),
+        _kortsvar("Lös ekvationen $x^2 + 6 = 17$.\nSvara exakt.")]}
+    assert exam_gen.samla_kortsvar(tva)
+    assert tva["uppgifter"][0]["text"] == "Lös ekvationerna. Svara exakt."
+    # En mening med tal eller formel är en annan uppgift och hindrar.
+    for extra in ("Sätt in $x = 2$.", "Avrunda till 2 decimaler.",
+                  "Vad blir svaret om x är negativt?"):
+        hinder = {"hjalpmedel": "", "uppgifter": [
+            _kortsvar("Förenkla uttrycket: $(x + 1)^2$. " + extra),
+            _kortsvar("Förenkla uttrycket: $(x + 2)^2$.")]}
+        assert not exam_gen.samla_kortsvar(hinder), extra
+
+
 def test_kortsvar_med_bild_eller_annan_typ_samlas_inte():
     exam = {"hjalpmedel": "", "uppgifter": [
         _kortsvar("Lös ekvationen: $x^2 = 9$."),
