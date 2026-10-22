@@ -627,3 +627,18 @@ def test_metoden_vid_namn_kraver_redovisning():
                 "redovisning") == []
     assert fynd("Faktorisera uttrycket med konjugatregeln: $x^2 - 49$.") == []
     assert fynd("Bryt ut så mycket som möjligt ur uttrycket: $14x^2 - 21x$.") == []
+
+
+def test_uppgiften_far_deluppgiftens_kravrad():
+    """Theos blad 288 uppg 10 (2026-10-22): uppgiften «rutin» och b)
+    «redovisning» gav «Skriv bara svaret» över en pq-uppgift."""
+    exam = {"titel": "t", "kurs": "Matematik, nivå 2a", "uppgifter": [
+        {"text": "Veckovinsten i kr är $V = -2x^2 + 1\\,200x - 100\\,000$.",
+         "typ": "rutin", "poang": [0, 0, 0], "deluppgifter": [
+             {"text": "Skriv en ekvation som visar att vinsten är 60 000 kr.",
+              "typ": None, "poang": [1, 0, 0], "losning": "x"},
+             {"text": "Lös ekvationen från a).", "typ": "redovisning",
+              "poang": [1, 0, 0], "losning": "x"}]}]}
+    assert [f["path"] for f in exam_gen.kravradsvakt(exam)] == ["uppgift 1"]
+    exam["uppgifter"][0]["typ"] = "redovisning"
+    assert exam_gen.kravradsvakt(exam) == []

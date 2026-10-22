@@ -11221,6 +11221,23 @@ def kravradsvakt(exam: dict) -> list[dict]:
     «Visa hur du räknar», och nationella provet skriver «Bestäm … med
     hjälp av derivatans definition» utan ett ord om redovisning."""
     fel: list[dict] = []
+    # PAPPRET HAR EN KRAVRAD PER UPPGIFT, och den följer uppgiftens typ
+    # (exam_latex, «KRAVRADEN GÄLLER HELA UPPGIFTEN»). Theos blad 288 uppg 10
+    # (2026-10-22): uppgiften «rutin» och b) «redovisning», och pappret sa
+    # «Skriv bara svaret» över en pq-uppgift.
+    for i, u in enumerate(exam.get("uppgifter") or [], 1):
+        if not isinstance(u, dict) or (u.get("typ") or "") != "rutin":
+            continue
+        for j, d in enumerate(u.get("deluppgifter") or []):
+            if isinstance(d, dict) and (d.get("typ") or "rutin") != "rutin":
+                fel.append(_err(
+                    f"uppgift {i}", "kravrad",
+                    f"Uppgift {i} har typen «rutin», och då trycker pappret "
+                    "«Skriv bara svaret» över hela uppgiften, men deluppgift "
+                    f"{'abcdefgh'[j]}) har typen «{d.get('typ')}». Pappret har "
+                    "en kravrad per uppgift. Sätt uppgiftens typ till "
+                    f"\"{d.get('typ')}\". Behåll del, poäng och förmåga."))
+                break
     for e in domarenheter(exam):
         if (e.get("typ") or "") != "rutin":
             continue
