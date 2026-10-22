@@ -11516,16 +11516,25 @@ def provslots(exam: dict | None) -> list[dict]:
 
 
 OMPROV_SUFFIX = " (omprov)"
+# E-provets suffix. Rickard 2026-10-22 om exam 268: «Om det står uttryck och
+# andragradsekvationer omprov, då måste det framgå också om det är E-prov
+# eller inte.» Valrutan samma dag: «(omprov, E-nivå)».
+OMPROV_E_SUFFIX = " (omprov, E-nivå)"
 
 
-def omprovstitel(titel: str | None) -> str:
+def omprovstitel(titel: str | None, bara_e: bool = False) -> str:
     """Omprovets titel: originalets plus « (omprov)», en gång (Rickard
     2026-10-11: «Algebra och ekvationer (omprov)» för omprovet av 126).
-    Ett omprov av ett omprov får inte två suffix."""
+    Ett omprov av ett omprov får inte två suffix. Med bara_e (nivåvalet
+    «Bara E», exam_spec.ren_e_band) blir suffixet « (omprov, E-nivå)»,
+    och båda suffixen tas bort först så att valet kan bytas åt båda håll."""
     bas = str(titel or "").strip()
-    while bas.lower().endswith(OMPROV_SUFFIX.strip().lower()):
-        bas = bas[: -len(OMPROV_SUFFIX.strip())].rstrip()
-    return (bas + OMPROV_SUFFIX) if bas else OMPROV_SUFFIX.strip()
+    suffix = [OMPROV_SUFFIX.strip().lower(), OMPROV_E_SUFFIX.strip().lower()]
+    while any(bas.lower().endswith(x) for x in suffix):
+        x = next(x for x in suffix if bas.lower().endswith(x))
+        bas = bas[: -len(x)].rstrip()
+    ny = OMPROV_E_SUFFIX if bara_e else OMPROV_SUFFIX
+    return (bas + ny) if bas else ny.strip()
 
 
 def omprovsplan(exam: dict | None) -> list[tuple]:

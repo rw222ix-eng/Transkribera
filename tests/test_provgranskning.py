@@ -824,6 +824,18 @@ def test_omprovets_titel_ar_originalets_med_omprov():
         "Tal och uttryck (omprov)"
 
 
+def test_e_provets_titel_sager_e_niva():
+    """Rickard 2026-10-22 om exam 268: titeln ska säga att det är ett E-prov.
+    Suffixet byts åt båda håll och läggs aldrig dubbelt."""
+    t = "Uttryck och andragradsekvationer"
+    assert exam_gen.omprovstitel(t, bara_e=True) == t + " (omprov, E-nivå)"
+    assert exam_gen.omprovstitel(t + " (omprov)", bara_e=True) == \
+        t + " (omprov, E-nivå)"
+    assert exam_gen.omprovstitel(t + " (omprov, E-nivå)", bara_e=True) == \
+        t + " (omprov, E-nivå)"
+    assert exam_gen.omprovstitel(t + " (omprov, E-nivå)") == t + " (omprov)"
+
+
 def test_likvardigheten_jamfor_platsens_delmoment():
     """E-provet 222 (2026-10-11): plats 7 skulle pröva potenslagar och blev
     en linjär ekvation, med rätt poäng, typ och förmåga."""

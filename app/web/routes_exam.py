@@ -2571,7 +2571,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     # Titeln är originalets med « (omprov)» (Rickard
                     # 2026-10-11): modellen döpte 218 till något eget.
                     res["exam"]["titel"] = exam_gen.omprovstitel(
-                        referensprov.get("titel"))
+                        referensprov.get("titel"),
+                        exam_spec.ren_e_band(niva_mal))
                 # Hjälpmedelsraden är MODELLENS så länge läraren inte sagt
                 # något: den skiljer delarna åt med lärarens egna ord, och
                 # skärmen har läst dokumentets regel sedan blad.js planvalProv.
@@ -2882,11 +2883,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # Omprovets original likaså (ExamDoc.omprov_av).
                 if isinstance(res.get("exam"), dict) and omprov_id:
                     res["exam"]["omprov_av"] = omprov_id
-                    # … och titeln behåller sitt « (omprov)».
-                    if exam_gen.OMPROV_SUFFIX.strip() not in str(
-                            res["exam"].get("titel") or ""):
-                        res["exam"]["titel"] = exam_gen.omprovstitel(
-                            res["exam"].get("titel"))
+                    # … och titeln behåller sitt « (omprov)», eller
+                    # « (omprov, E-nivå)» på ett Bara E-prov. omprovstitel
+                    # är idempotent, så den körs varje varv.
+                    res["exam"]["titel"] = exam_gen.omprovstitel(
+                        res["exam"].get("titel"),
+                        exam_spec.ren_e_band(nivaval and nivaval["mal"]))
                 # Bildvalet överlever omskrivningen. refine_exam känner inte
                 # krysset «Plats för illustration», så modellen skrev scener på
                 # ett blad som genererats utan bilder, och plåtmatchningen satte
