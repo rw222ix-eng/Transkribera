@@ -1946,6 +1946,28 @@ def test_validate_variation_flaggar_upprepade():
     assert any(e["code"] == "variation" for e in errs)
 
 
+def test_validate_variation_laser_deluppgifternas_fragor():
+    """Prov 215, 2026-10-22: «Linjen $L$ har ekvationen …» och «Linjen $f$
+    har ekvationen …» som stammar, med helt olika frågor under, är inga
+    dubbletter."""
+    from types import SimpleNamespace as NS
+
+    def uppg(stam, fragor):
+        return NS(text=stam, deluppgifter=[NS(text=f) for f in fragor])
+    ett = uppg("Linjen $L$ har ekvationen $y = 4 - 2x$.",
+               ["Ange riktningskoefficienten för linjen $L$.",
+                "Ange en ekvation för en linje som är parallell med $L$."])
+    fem = uppg("Linjen $f$ har ekvationen $3x + y = 7$.",
+               ["Rita linjen $g$ i figuren. I vilken punkt skär linjerna "
+                "varandra?",
+                "Bestäm villkoren på $a$ och $b$ så att systemet saknar "
+                "lösning."])
+    assert exam_spec.validate_variation(NS(uppgifter=[ett, fem])) == []
+    # Samma frågor under samma stam fälls fortfarande.
+    assert any(e["code"] == "variation" for e in
+               exam_spec.validate_variation(NS(uppgifter=[ett, ett])))
+
+
 def test_validate_variation_slapper_distinkta():
     """Den kanoniska (distinkta) fixturen ska INTE flaggas."""
     doc, _ = exam_spec.validate_exam_json(_exam(), "prov")
@@ -3361,6 +3383,17 @@ def test_deluppgift_far_bara_egen_figur_eller_bild():
                           figur={"typ": "linjar", "k": 1, "m": 0})
 
 
+def test_provtiden_ar_klockslagets_langd():
+    """Omproven 267/268 (2026-10-22): «kl. 15.15–16.45 (70 minuter)». Står ett
+    spann är provtiden dess längd, och en ny provtid flyttar passets slut."""
+    assert exam_spec.klockslag_minuter("15:15–16:45") == 90
+    assert exam_spec.klockslag_minuter("15.15-16.25") == 70
+    assert exam_spec.klockslag_minuter("15:15") is None
+    assert exam_spec.klockslag_minuter(None) is None
+    assert exam_spec.klockslag_med_tid("15:15–16:25", 90) == "15:15–16:45"
+    assert exam_spec.klockslag_med_tid("15:15", 90) == "15:15"
+
+
 def test_klockslagen_ar_lararens_och_star_inte_i_grammatiken():
     """«Provtid: kl. 12.45–14.15 (90 minuter).» — förlagans form. Klockslagen
     kommer ur panelen (plan.js provNar), inte ur modellen, och står därför inte
@@ -4729,3 +4762,16 @@ def test_rutan_ritas_utan_amssymb():
     st = exam_latex._stycken("$(-3)^{2} \\quad \\square \\quad -3^{2}$")
     assert st[0]["formel"] and "\\square" not in st[0]["text"]
     assert exam_latex._ruta("\\squared + \\Boxx") == "\\squared + \\Boxx"
+
+
+def test_reparationen_bar_lararens_onskemal():
+    """Prov 215, 2026-10-22: rundan efter en riktad omskrivning ångrade
+    Rickards formulering i uppgift 5 fyra varv i rad."""
+    utan = exam_gen.build_repair_prompt(_exam(), [{"path": "x", "message": "y"}])
+    med = exam_gen.build_repair_prompt(_exam(), [{"path": "x", "message": "y"}],
+                                       onskemal="Skriv linjen $f$.")
+    assert "Lärarens önskemål" not in utan
+    assert "får inte ångras" in med and "«Skriv linjen $f$.»" in med
+    assert med.replace("Lärarens önskemål i den här omskrivningen gäller "
+                       "fortfarande och får inte ångras när problemen "
+                       "rättas:\n«Skriv linjen $f$.»\n", "") == utan

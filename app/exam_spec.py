@@ -4136,8 +4136,17 @@ def validate_variation(doc: ExamDoc, troskel: float = 0.8) -> list[dict]:
     """Flagga toppuppgifter med (nästan) identisk frågeformulering (Jaccard
     ≥ troskel på ordskelettet) — modellen upprepar annars samma frågetyp. En
     flagga per uppgift (mot den första den liknar). Körs bara på PROV (se
-    anroparen) — arbetsbladet får drilla samma frågetyp med flit."""
-    toks = [_skelett(u.text) for u in doc.uppgifter]
+    anroparen) — arbetsbladet får drilla samma frågetyp med flit.
+
+    DELUPPGIFTERNAS FRÅGOR RÄKNAS MED (prov 215, 2026-10-22). Stammen ensam
+    är ofta bara en presentation: «Linjen $L$ har ekvationen $y = 4 - 2x$.»
+    (uppgift 1) och «Linjen $f$ har ekvationen $3x + y = 7$.» (uppgift 5)
+    fick samma skelett när matten tagits bort, fast frågorna under dem är
+    helt olika. Fyndet drev omskrivningen bort från Rickards egen
+    formulering fyra varv i rad."""
+    toks = [_skelett(" ".join([u.text or ""] + [d.text or "" for d in
+                                                 u.deluppgifter or []]))
+            for u in doc.uppgifter]
     errors: list[dict] = []
     for i in range(len(toks)):
         if not toks[i]:
@@ -4233,6 +4242,114 @@ def validate_stam(doc: ExamDoc) -> list[dict]:
             "a), b) och c) delar (samma figur, samma funktion, samma "
             "ekvationstyp). Handlar de om olika saker ska de vara egna "
             "numrerade uppgifter."))
+    return errors
+
+
+# ── KLOCKSLAGET OCH PROVTIDEN ──────────────────────────────────────────
+# Lärarens dom 2026-10-22 över omproven 267/268: försättsbladet sa «kl.
+# 15.15–16.45 (70 minuter)». Minuterna kom ur originalprovet, klockslaget ur
+# omprovets pass, och ingen jämförde dem. «Vi måste rätta försättsbladen så
+# att de stämmer.» Står ett spann på pappret är det passet eleven skriver,
+# och provtiden är dess längd.
+_SPANN_RE = re.compile(
+    r"^\s*(\d{1,2})[:.](\d{2})\s*[–—-]\s*(\d{1,2})[:.](\d{2})\s*$")
+
+
+def klockslag_minuter(klockslag: str | None) -> int | None:
+    """Spannets längd i minuter, eller None när klockslaget inte är ett spann."""
+    m = _SPANN_RE.match(klockslag or "")
+    if not m:
+        return None
+    a, b, c, d = (int(x) for x in m.groups())
+    minuter = (c * 60 + d) - (a * 60 + b)
+    return minuter if minuter > 0 else None
+
+
+def klockslag_med_tid(klockslag: str | None, tid_min: int) -> str | None:
+    """Samma start, slutet flyttat så att spannet blir `tid_min` minuter.
+    Ett klockslag som inte är ett spann lämnas som det är."""
+    m = _SPANN_RE.match(klockslag or "")
+    if not m or not tid_min:
+        return klockslag
+    start = int(m.group(1)) * 60 + int(m.group(2))
+    slut = start + int(tid_min)
+    return f"{m.group(1)}:{m.group(2)}–{slut // 60:02d}:{slut % 60:02d}"
+
+
+# ── ETIKETTEN OCH DET OTYDLIGA «UTTRYCKET» ─────────────────────────────
+# Lärarens dom 2026-10-22 över E-provet 268. Stammarna «Ekvationerna nedan har
+# en obekant x.», «Uttrycket (x − 6)(x + 2) är av andra graden.» och
+# «Uppgiften handlar om kvadraten (2x + 3)².»: «det förvirrar mer än hjälper».
+# Samma dag om omprovet 267: «Ekvationerna är andragradsekvationer.» och
+# «Uttrycken innehåller produkter av två parenteser.» Meningen säger vad
+# uppgiften ÄR, och det ger eleven ingenting att räkna med.
+_ETIKETT_RE = re.compile(
+    r"\bär av (?:första|andra|tredje) graden\b"
+    r"|\bär (?:\w+ )?(?:andragrads|förstagrads)ekvation(?:er)?\b"
+    r"|\bhar (?:en|samma) obekant\b"
+    r"|\binnehåller (?:en )?(?:produkt(?:er)?|parenteser)\b"
+    r"|^uppgiften handlar om\b"
+    r"|^uttrycke[nt]\b[^.]*\bkan skrivas som (?:en )?produkt", re.I)
+# Samma dag, 268 uppgift 4b: «Förenkla uttrycket så långt som möjligt. Här
+# framgår inte vilket uttryck det är.» Ovanför stod två uttryck, stammens och
+# a):s. En deluppgift som bara säger «uttrycket» eller «ekvationen» är
+# entydig bara när ett enda uttryck står ovanför.
+_BARA_SYFTNING_RE = re.compile(
+    r"^(?:förenkla|lös|faktorisera|utveckla|beräkna|derivera)\s+"
+    r"(?:uttrycket|ekvationen)(?:\s+så\s+långt\s+som\s+möjligt)?\s*\.?$",
+    re.I)
+_FORMEL_RE = re.compile(r"\$([^$]+)\$")
+
+
+def _meningar(text: str) -> list[str]:
+    return [m.strip() for m in re.split(r"(?<=[.!?])\s+|\n+", text or "")
+            if m.strip()]
+
+
+def _syftbara(formler: set[str], ekvation: bool) -> set[str]:
+    """Formlerna som «ekvationen» (en likhet med en bokstav) eller «uttrycket»
+    (en bokstav och ett räknesätt, ingen likhet) kan syfta på. Talen «$80$»
+    och den ensamma «$x$» i en situation räknas inte."""
+    ut = set()
+    for f in formler:
+        if not re.search(r"[A-Za-z]", re.sub(r"\\[A-Za-z]+", "", f)):
+            continue
+        if ekvation and "=" in f:
+            ut.add(f)
+        elif not ekvation and "=" not in f and re.search(r"[-+−·*/^()]", f):
+            ut.add(f)
+    return ut
+
+
+def validate_etikett(doc: ExamDoc) -> list[dict]:
+    """En mening i stammen som bara etiketterar uppgiften, och en deluppgift
+    som säger «uttrycket» när två uttryck står ovanför. Mjuk som stamregeln:
+    ett problem i reparationsloopen, aldrig ett stopp för ett gammalt papper."""
+    errors: list[dict] = []
+    for i, it in enumerate(doc.uppgifter):
+        for mening in _meningar(it.text or ""):
+            if _ETIKETT_RE.search(mening):
+                errors.append(_err(
+                    f"uppgifter[{i}].text", "etikett",
+                    f"uppgift {i + 1}: «{mening}» säger bara vad uppgiften "
+                    "är, och det förvirrar eleven. Stryk meningen. Behövs en "
+                    "stam, skriv det deluppgifterna delar: uttrycket («Vi har "
+                    "uttrycket …»), situationen eller en gemensam uppmaning "
+                    "(«Lös ekvationerna.»)."))
+                break
+        ovanfor = {f.strip() for f in _FORMEL_RE.findall(it.text or "")}
+        for j, d in enumerate(it.deluppgifter or []):
+            text = (d.text or "").strip()
+            if _BARA_SYFTNING_RE.match(text) \
+                    and len(_syftbara(ovanfor, "ekvationen" in text.lower())) >= 2:
+                errors.append(_err(
+                    f"uppgifter[{i}].deluppgifter[{j}].text", "syftning",
+                    f"uppgift {i + 1}{chr(ord('a') + j)}: «{text}» säger inte "
+                    "vilket uttryck, och ovanför står flera. Skriv ut det: "
+                    "«Förenkla uttrycket $(2x + 3)^2 - (2x + 3)(2x - 3)$.» "
+                    "Bygger deluppgiften på en tidigare, säg det: «Nu har du "
+                    "utvecklat … i a).»"))
+            ovanfor |= {f.strip() for f in _FORMEL_RE.findall(text)}
     return errors
 
 
@@ -4374,6 +4491,7 @@ def validate_exam_json(data, profil: str = "prov",
         ]
     fel = validate_balance(doc, niva_mal=niva_mal, profil=profil)
     fel = fel + validate_stam(doc)
+    fel = fel + validate_etikett(doc)
     fel = fel + validate_tankstreck(doc)
     if profil == "arbetsblad":
         fel = fel + validate_facitfigurer(doc)

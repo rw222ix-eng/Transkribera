@@ -331,7 +331,7 @@ def test_poangreglerna_foljer_kurssteget():
     for k in _MATTA_KURSER:
         blk = niva_rubrik.build_np_matt_block(k)
         assert "Steg per poäng" in blk and "A-kortsvar 1 p för upp till" in blk, k
-        assert "Aldrig «med pq-formeln»" in blk, k
+        assert "«med algebraisk metod» skrivs aldrig" in blk, k
         assert "Kursens egna A-former:" in blk, k
 
 

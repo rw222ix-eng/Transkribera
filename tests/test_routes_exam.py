@@ -212,6 +212,8 @@ def test_refine_tar_lararens_nya_klockslag(client, monkeypatch):
     res = _done(client.post(f"/api/exams/{result['id']}/refine",
                             json={"message": "korta", "klockslag": "15:15–16:45"}))
     assert res["exam"]["klockslag"] == "15:15–16:45"
+    # Provtiden är spannets längd (omproven 267/268, 2026-10-22).
+    assert res["exam"]["tid_min"] == 90
     res = _done(client.post(f"/api/exams/{result['id']}/refine",
                             json={"message": "byt ord"}))
     assert res["exam"]["klockslag"] == "15:15–16:45"

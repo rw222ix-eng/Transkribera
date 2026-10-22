@@ -139,25 +139,27 @@ def test_k_reglerna_galler_bara_kurs_2():
 
 # ── 3. metodvakten ───────────────────────────────────────────────────────
 
-def test_uppgift_1b_2a_2b_foreskriver_metod(exam88):
-    """Lärarens dom: «med pq-formeln», «med kvadreringsregeln», «med
-    konjugatregeln». NP föreskriver aldrig metod i den räknarfria delen."""
-    fel = np_vakter.metodvakt(exam88)
-    assert _koder(fel, "metodvakt") == {"1b", "2a", "2b"}
-
-
-def test_tillatna_foreskrifter_passerar():
-    """Det som FINNS i NP: «med algebraisk metod», «använd formeln», «bryt
-    ut», «med hjälp av grafen». Verbet «Faktorisera» är en uppgift, inte en
-    föreskrift. Och Del C (med räknare) mäts inte."""
-    for text in ("Lös ekvationen $x^2 - 4 = 0$ med algebraisk metod.",
+def test_namngiven_metod_passerar(exam88):
+    """Lärarens dom 2026-10-22 (IndA-omproven) ersätter den från 2026-09-23:
+    metoden nämns vid namn när den krävs, också utan räknare. Prov 88:s
+    «med pq-formeln» (1b, 2a, 2b) fälls inte längre."""
+    assert np_vakter.metodvakt(exam88) == []
+    for text in ("Lös ekvationen med pq-formeln: $2x^2 - 3x - 7 = 0$.",
                  "Använd formeln och beräkna $y$.",
                  "Bryt ut största möjliga faktor ur $6x + 9$.",
                  "Lös $f(x) = 2$ med hjälp av grafen.",
                  "Faktorisera $x^2 - 9$."):
         assert np_vakter.metodvakt(_prov([_u(text=text)])) == [], text
-    c = _u(text="Lös $x^2 - 6x - 16 = 0$ med pq-formeln.", **{"del": "C"})
-    assert np_vakter.metodvakt(_prov([c])) == []
+
+
+def test_algebraisk_metod_falls_overallt():
+    """«Algebraisk metod» säger eleven ingenting (Rickard 2026-10-22: «här
+    måste vi vara tydliga med att de ska använda en viss metod»). Fälls i
+    båda delarna."""
+    for d in ("B", "C"):
+        u = _u(text="Lös ekvationen $x^2 - 4 = 0$ med algebraisk metod.",
+               **{"del": d})
+        assert _koder(np_vakter.metodvakt(_prov([u])), "metodvakt") == {"1"}
 
 
 # ── 4. parametervakten ───────────────────────────────────────────────────
@@ -435,7 +437,7 @@ def test_hela_domen_over_prov_88(exam88):
     per_kod = {}
     for f in fel:
         per_kod.setdefault(f["code"], set()).add(f["path"].split(" ", 1)[1])
-    assert per_kod["metodvakt"] == {"1b", "2a", "2b"}
+    assert "metodvakt" not in per_kod     # namngiven metod, domen 2026-10-22
     assert per_kod["stegvakt"] == {"9"}
     assert "7" in per_kod["poangform"]
     assert per_kod["kursvakt"] == {"12b"}
@@ -454,7 +456,7 @@ def test_fynden_gar_i_samma_reparationsrunda_som_de_gamla(exam88):
                                  delmoment=None, profil="prov",
                                  kurs=exam88["kurs"])
     koder = {f["code"] for f in fel}
-    assert {"stegvakt", "poangform", "metodvakt", "kursvakt", "familjvakt",
+    assert {"stegvakt", "poangform", "kursvakt", "familjvakt",
             "doltkrav"} <= koder
     blad = exam_gen._raknade_fynd(exam88, avsnitt=None, antal=12,
                                   delmoment=None, profil="arbetsblad",
@@ -469,13 +471,14 @@ def test_efterkontrollen_visar_fynden_med_nummer_och_atgard(exam88):
     markeras) och Laga-knappen en åtgärd per kod."""
     fynd = routes_exam._npfynd(exam88, "prov")
     assert fynd and all(f["kod"] in np_vakter.KODER for f in fynd)
-    assert {f["nr"] for f in fynd} >= {9, 7, 1, 2, 12, 11}
+    # 1 och 2 var metodfynd, och «med pq-formeln» är tillåten sedan 2026-10-22.
+    assert {f["nr"] for f in fynd} >= {9, 7, 12, 11}
     assert routes_exam._npfynd(exam88, "arbetsblad") == []
     for kod in np_vakter.KODER:
         assert kod in routes_exam._ATGARD, kod
     text = routes_exam.efterkontroll_instruktion(fynd)
     assert "Uppgift 9 ger 1 p" in text
-    assert "De gäller uppgift 1, 2, 6, 7, 9, 11 och 12." in text
+    assert "De gäller uppgift 6, 7, 9, 11 och 12." in text
 
 
 # ── skelettet: poängformen låses innan modellen skriver ─────────────────

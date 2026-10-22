@@ -467,6 +467,39 @@ def test_deluppgifter_utan_stam_falls():
         _doc("", figur={"typ": "linjar", "k": 2, "m": 1})) == []
 
 
+def test_etikettstam_och_otydligt_uttryck_falls():
+    """Lärarens dom 2026-10-22 (exam 268): stammar som bara säger vad
+    uppgiften är, och «Förenkla uttrycket.» när två uttryck står ovanför.
+    Godkända former står kvar: uttrycket som stam, en gemensam uppmaning och
+    «Förenkla uttrycket» när bara ett uttryck finns."""
+    d = {"poang": (1, 0, 0), "losning": "_", "bedomning": "_"}
+    def _doc(stam, *del_):
+        return exam_spec.ExamDoc(
+            titel="_", kurs="_", hjalpmedel="_",
+            uppgifter=[exam_spec.ExamItem(
+                formaga="B", typ="redovisning", poang=(0, 0, 0), text=stam,
+                deluppgifter=[exam_spec.SubItem(text=t, **d) for t in del_])])
+    def _koder(doc):
+        return [e["code"] for e in exam_spec.validate_etikett(doc)]
+    for stam in ("Ekvationerna nedan har en obekant $x$.",
+                 "Uttrycket $(x - 6)(x + 2)$ är av andra graden.",
+                 "Ekvationerna är andragradsekvationer.",
+                 "Uttrycken innehåller produkter av två parenteser.",
+                 "Uppgiften handlar om kvadraten $(2x + 3)^2$."):
+        assert _koder(_doc(stam, "Lös $x^2 = 4$.", "Lös $x^2 = 9$.")) \
+            == ["etikett"], stam
+    for stam in ("Vi har uttrycket $(x - 6)(x + 2)$.", "Lös ekvationerna.",
+                 "Liam och Alva gör var sitt påstående.",
+                 "Ekvationen $x^2 + 2x - 24 = 0$ har lösningen $x = 4$."):
+        assert _koder(_doc(stam, "Lös $x^2 = 4$.", "Lös $x^2 = 9$.")) == [], stam
+    assert _koder(_doc("Du ska förenkla uttrycket $(2x + 3)^2 - (2x + 3)(2x - 3)$.",
+                       "Utveckla $(2x + 3)^2$.",
+                       "Förenkla uttrycket så långt som möjligt.")) == ["syftning"]
+    assert _koder(_doc("Ett uttryck är $4(3x - 2) - 2(x - 9)$.",
+                       "Förenkla uttrycket så långt som möjligt.",
+                       "Beräkna värdet av uttrycket när $x = -3$.")) == []
+
+
 def test_deluppgift_som_hanvisar_till_a_behover_ingen_stam():
     """Lärarens dom 2026-10-22 (exam 268 uppg 4): b) som säger «i a)» håller
     ihop uppgiften, och en stam ovanför blir dubbel. Utan hänvisning fälls

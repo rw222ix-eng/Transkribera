@@ -205,8 +205,10 @@ def test_anvand_formeln_och_ar_en_metodforeskrift():
         "Använd formeln och bestäm den högsta fart som ger högst 45 m "
         "bromssträcka.", [0, 3, 0], typ="problem", del_="C")))
     assert any("«Använd formeln och»" in f["message"] for f in fel)
-    assert "«använd formeln»" not in exam_gen.INSTRUCTION.split(
-        "Tillåtet är bara")[1][:120]
+    # Metodregeln (sedan 2026-10-22 «METODEN NÄMNS VID NAMN») ger aldrig
+    # «använd formeln» som exempel.
+    assert "använd formeln" not in exam_gen.INSTRUCTION.split(
+        "METODEN NÄMNS VID NAMN")[1][:500].lower()
 
 
 def test_kursgransen_faller_konstanten_och_delbarheten_i_1a():

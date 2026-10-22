@@ -1102,9 +1102,10 @@ def build_np_matt_block(kurs: str) -> str:
         + ", " + NP_MOTIVERA_BRUK[steg],
         "- Metodföreskrift: "
         + ", ".join(f"{n} {_andel(met.get(n, {}))}" for n in NIVAER)
-        + ". Aldrig «med pq-formeln», «kvadreringsregeln» eller "
-        "«konjugatregeln». Det som finns: «med algebraisk metod» (E/C), "
-        "«använd formeln», «bryt ut», «med hjälp av grafen»."
+        + ". Lärarens regel (2026-10-22) går före NP: metoden nämns vid "
+        "namn när uppgiften kräver en viss metod («med pq-formeln», «genom "
+        "att bryta ut $x$», «med hjälp av grafen»), och «med algebraisk "
+        "metod» skrivs aldrig."
         + (" Aldrig föreskrift på A." if not met.get("A", {}).get("antal") else ""),
         "- Förtydligande mening i NP: "
         + ", ".join(f"{n} {_andel(fort.get(n, {}))}" for n in NIVAER)
@@ -1159,7 +1160,7 @@ ANKARE: list[dict[str, str]] = [
 
     # redovisning ---------------------------------------------------------
     {"kurs": "2", "typ": "redovisning", "niva": "E",
-     "text": "Lös ekvationen $x^2 + 10x + 21 = 0$ med algebraisk metod.",
+     "text": "Lös ekvationen $x^2 + 10x + 21 = 0$ med pq-formeln.",
      "varfor": "Metoden är utpekad. De två E-poängen är ansats (korrekt "
                "insättning) och slutförande med korrekt svar."},
     {"kurs": "2", "typ": "redovisning", "niva": "E",

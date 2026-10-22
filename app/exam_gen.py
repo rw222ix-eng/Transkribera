@@ -581,30 +581,66 @@ INSTRUCTION = (
     "för $x$ cm.' Den ska ge vägen in, aldrig svaret, och står bara på de "
     "flerstegsuppgifter där en elev annars fastnar redan på första steget, "
     "aldrig på fler än ungefär var tredje uppgift.\n"
-    # METODEN FÖRESKRIVS ALDRIG PÅ PROVET (samma dom, samma dag). NP-profilen
-    # (app/data/np_uppgiftsprofil.json) har noll «med pq-formeln» i 334
-    # enheter; det som finns är «med algebraisk metod» (E/C), «använd
-    # formeln», «bryt ut», «med hjälp av grafen». Måttblocket sa det redan,
-    # men mitt bland siffror; exam 116 skrev ändå «Använd kvadreringsregeln»
-    # och «Bestäm med pq-formeln». Här står det som en regel i det block
-    # som följer med i VARJE runda, också reparationerna (np_vakter.metodvakt
-    # fäller det som ändå slinker igenom).
-    # «Använd formeln» ströks ur de tillåtna 2026-09-23 kväll (exam 129
-    # uppgift 10: «Använd formeln och bestäm den högsta fart …» där formeln
-    # redan stod på raden ovanför). Står formeln i uppgiften är frågan nog.
-    "- METODEN FÖRESKRIVS ALDRIG PÅ PROVET: skriv inte «med pq-formeln», "
-    "«med kvadreringsregeln», «använd konjugatregeln», «använd formeln och», "
-    "«genom faktorisering» i en uppgiftstext. Eleven väljer metoden, det är "
-    "det som prövas. Tillåtet är bara «med algebraisk metod», «bryt ut» och "
-    "«med hjälp av grafen». På arbetsblad och gruppuppgift får metoden stå "
-    "i notisen, aldrig i frågan (på arbetsbladet; gruppuppgiften har ingen "
-    "notis).\n"
-    # Lärarens dom 2026-09-24 (exam 130 uppgift 6, del A utan verktyg):
-    # «det här med algebraisk metod kan man ju ta bort helt och hållet, för
-    # det är underförstått».
-    "  «med algebraisk metod» står bara i en del där digitala verktyg är "
-    "tillåtna. Utan verktyg är det underförstått: «Lös ekvationen: "
-    "$(x + 3)(2x - 1) = x^2 + 2x + 7$.»\n"
+    # METODEN NÄMNS VID NAMN NÄR DEN KRÄVS (Rickard 2026-10-22, IndA-omproven
+    # 267/268): «här måste vi vara tydliga med att de ska använda en viss
+    # metod, inte bara algebraisk metod. Det här måste vi alltså välja.» Och
+    # på frågan om det gäller också utan räknare: «Ja, överallt». Domen
+    # ersätter regeln från 2026-09-23/24 (exam 116, 129, 130) att metoden
+    # aldrig föreskrivs, som byggde på att NP-profilen har noll «med
+    # pq-formeln». «Algebraisk metod» säger eleven ingenting, och
+    # np_vakter.metodvakt fäller den nu i stället.
+    "- METODEN NÄMNS VID NAMN NÄR UPPGIFTEN KRÄVER EN VISS METOD: «Lös "
+    "ekvationen med pq-formeln: $2x^2 - 3x - 7 = 0$.», «… genom att bryta ut "
+    "$x$», «med hjälp av grafen». Skriv aldrig «med algebraisk metod», den "
+    "säger eleven ingenting. Kräver uppgiften ingen viss metod står ingen, "
+    "och eleven väljer: «Lös ekvationen: $(x + 3)(2x - 1) = x^2 + 2x + 7$.» "
+    "Gäller hela provet, också delen utan räknare.\n"
+    # STAMMEN BÄR DET DELUPPGIFTERNA DELAR (Rickard 2026-10-22, E-provet
+    # 268): «Ekvationerna nedan har en obekant x … det är onödig information
+    # och kommer förvirra eleverna mer än något annat», «Uttrycket (x − 6)(x
+    # + 2) är av andra graden … det förvirrar mer än hjälper», «Elias och Maja
+    # gör var sitt påstående … det förvirrar mer än det hjälper». En mening
+    # som bara säger vad uppgiften ÄR hjälper ingen. exam_spec.validate_etikett
+    # fäller den.
+    "- STAMMEN BÄR DET DELUPPGIFTERNA DELAR: uttrycket («Vi har uttrycket "
+    "$(x - 6)(x + 2)$.»), situationen, eller en gemensam uppmaning («Lös "
+    "ekvationerna.», «Avgör med en beräkning om personen har rätt.»). Aldrig "
+    "en mening som bara säger vad uppgiften är: inte «Ekvationerna nedan har "
+    "en obekant $x$.», «Uttrycket … är av andra graden.», «Uttrycken "
+    "innehåller produkter av två parenteser.», «Uppgiften handlar om …». "
+    "Har deluppgifterna inget gemensamt utom att b) bygger på a), står ingen "
+    "stam alls och b) säger det: «a) Börja med att utveckla $(2x + 3)^2$. b) "
+    "Nu har du utvecklat $(2x + 3)^2$ i a). Förenkla uttrycket $(2x + 3)^2 - "
+    "(2x + 3)(2x - 3)$.»\n"
+    # DELUPPGIFTEN SÄGER VILKET (samma dom, 268 uppgift 4b): «Förenkla
+    # uttrycket så långt som möjligt. Här framgår inte vilket uttryck det är
+    # … är det det uttrycket vi hade i A eller är det det uttrycket vi hade
+    # där uppe?» exam_spec.validate_etikett fäller «Förenkla uttrycket.» när
+    # två uttryck står ovanför.
+    "- EN DELUPPGIFT SOM SÄGER «UTTRYCKET» ELLER «EKVATIONEN» SKRIVER UT DET "
+    "när mer än ett uttryck står ovanför. Bygger den på en tidigare "
+    "deluppgift säger den det med orden: «lös ekvationen du fick i a)», «Nu "
+    "har du utvecklat … i a).» Upprepa uppgifterna eleven behöver i den "
+    "deluppgift där de används: «a) Deras sammanlagda lön i kr är $142t + "
+    "158(t + 4)$. Ställ upp en ekvation som visar att de tillsammans tjänar "
+    "5 432 kr.»\n"
+    # RAKT PÅ SAK (samma dom, 268 uppgift 7a och 12b): «Ställ upp en ekvation
+    # för x med hjälp av altanens area … Där är det bättre att skriva: Ställ
+    # upp en ekvation för altanens area istället. Bara så rakt på sak.»
+    "- FRÅGAN NÄMNER DET SOM SÖKS MED SITUATIONENS ORD: «Ställ upp en "
+    "ekvation för altanens area.», inte «Ställ upp en ekvation för $x$ med "
+    "hjälp av altanens area.» Sista frågan i en situation: «Hur många rader "
+    "av stolar finns i aulan?», inte «Hur många rader är det?»\n"
+    # VISA UTRÄKNINGEN (Rickard 2026-10-22, omprovet 267 uppgift 5b): «Här
+    # beskriver vi bara vad som händer. Det vore bra om vi visade en bild.
+    # Alltså en sån här liten uträkningsbild på vad vi menar med vad Alva gör.»
+    # Varje rad som är en ensam formel blir en displayformel på pappret
+    # (exam_latex), så stegen står under varandra.
+    "- EN PERSONS UTRÄKNING VISAS, DEN BESKRIVS INTE. Skriv stegen som "
+    "formler på egna rader: «Alva löser ekvationen $x^2 = 5x$ så här:\\n"
+    "$x^2 = 5x$\\n$\\frac{x^2}{x} = \\frac{5x}{x}$\\n$x = 5$\\nHon påstår "
+    "att $x = 5$ är den enda lösningen.» Aldrig «Alva delar båda leden med "
+    "$x$ och får $x = 5$.»\n"
     # SAMMANHANGET SKA GÅ ATT SE FRAMFÖR SIG (lärarens dom 2026-09-22, exam
     # 118 uppgift 10): «En robotcell målar detaljer. […] En körning avbryts
     # efter 600 minuter.» Hennes ord: jätteoklart, inte ens jag fattar det.
@@ -700,7 +736,7 @@ INSTRUCTION = (
     # («Timpriset kan vara vilket belopp som helst», exam 128). Förtydligandet
     # står EFTER frågan och säger vad som räknas som svar; se TEXTENS FORM.
     "- EN UPPGIFT UTAN SITUATION SOM FRÅGAR ALLMÄNT («det minsta värde som "
-    "uttrycket kan anta», «det största möjliga», «med algebraisk metod») får en "
+    "uttrycket kan anta», «det största möjliga») får en "
     "mening till, efter frågan, som säger med vanliga ord vad som räknas som "
     "svar: «Vilket är det minsta värde som x² + 6x kan få? Visa med en "
     "uträkning att inget värde är mindre.» Den säger VAD som söks, aldrig "
@@ -7924,7 +7960,7 @@ _DOKUMENTNAMN = {
 
 
 def build_repair_prompt(exam: dict, problems: list, profil: str = "prov",
-                        las: str = "") -> str:
+                        las: str = "", onskemal: str = "") -> str:
     """`las` är delmomentslåset (delmomentlas): raderna som säger vilka
     uppgifter som är ENDA bäraren av sitt delmoment och därför måste bära det
     vidare om de skrivs om. TOM STRÄNG lämnar prompten byte för byte den som
@@ -7952,6 +7988,14 @@ def build_repair_prompt(exam: dict, problems: list, profil: str = "prov",
         "minustecken och sidintervall (s. 34–36) är något annat och ska stå "
         "kvar.\n"
         f"{las}"
+        # LÄRARENS ÖNSKEMÅL FÖLJER MED (prov 215, 2026-10-22). Rundan efter
+        # en riktad omskrivning såg bara problemen och skrev uppgift 5 efter
+        # NP-förlagan igen, «ekvation (1)» i stället för Rickards «linjen
+        # $f$», fyra varv i rad. Tom sträng utanför omskrivningen: prompten
+        # är då byte för byte den som gick förut.
+        + (f"Lärarens önskemål i den här omskrivningen gäller fortfarande "
+           f"och får inte ångras när problemen rättas:\n«{onskemal}»\n"
+           if onskemal else "") +
         f"Skriv om HELA {det} som JSON med problemen åtgärdade — justera "
         "poäng eller byt enstaka uppgifter, ändra så lite som möjligt i "
         "övrigt. Svara med enbart JSON."
@@ -9088,7 +9132,8 @@ def _repair_until_valid(exam: dict | None, errors: list, *, model: str, llm,
                         riktning=None,
                         log_cb: Callable[[str], None] | None = None,
                         ignorera: frozenset = frozenset(),
-                        ignorera_koder: frozenset = frozenset()) -> dict:
+                        ignorera_koder: frozenset = frozenset(),
+                        onskemal: str = "") -> dict:
     """`ignorera` är felnycklar (_felnyckel) som inte ska räknas som fel i någon
     runda: det som var trasigt redan FÖRE en riktad omskrivning (refine_exam).
     Utan den hittade varje ny runda samma gamla fel igen och drev slingan
@@ -9104,7 +9149,8 @@ def _repair_until_valid(exam: dict | None, errors: list, *, model: str, llm,
         rounds_used += 1
         log(f"Justerar provet (runda {rounds_used} av {max_rounds}) — "
             f"{len(errors)} problem …")
-        candidate = _llm_round(build_repair_prompt(exam, errors, profil),
+        candidate = _llm_round(build_repair_prompt(exam, errors, profil,
+                                                   onskemal=onskemal),
                                model, llm, antal, skeleton, koder,
                                profil=profil, log_cb=log_cb,
                                etikett=f"Justerar provet (runda {rounds_used} "
@@ -11667,13 +11713,29 @@ def build_omprov(referens: dict | None) -> str:
             f"{s['niva'] or '–'}{vad}{delar}, {steg}")
     # E-provet (omprov_pa_e): platser som var C eller A är omräknade, och
     # modellen ska veta att nivån är lärarens val, inte en lättnad att rätta.
+    # Rickard 2026-10-22 om E-provet 268: «uppgift tio känns inte riktigt som
+    # en E-uppgift. För svårt.» och, när stegen väl var uppdelade, «C och D
+    # hänger ihop … bara för vi ska få ett extra poäng», men om uppgift 8
+    # (räkna vinsten, ställ upp, lös): «att dela upp det som vi har gjort, det
+    # är bra. Det blir mer naturligt.» Modellen ges, eleven löser, och en
+    # deluppgift är en fråga eleven förstår.
     e_prov = (
         "OMPROVET ÄR ETT E-PROV. Läraren har valt att eleven skriver om provet "
         "bara på E-nivå. Platser som i originalet gav C- eller A-poäng är "
         "omräknade: skriv där en E-uppgift på samma delmoment och med samma "
         "poäng, en grundläggande uppgift av den sort nationella provet ger "
-        "E-poäng för, med ett E-steg per poäng. Övriga platser är lika stora "
-        "som originalets.\n"
+        "E-poäng för. Övriga platser är lika stora som originalets.\n"
+        "E-STEGEN SKA VARA TYDLIGA. En problemuppgift på E ger eleven "
+        "modellen: ekvationen eller formeln står i uppgiften, eller i en egen "
+        "deluppgift som säger exakt vad som ska ställas upp («Ställ upp en "
+        "ekvation som visar att de tillsammans tjänar 5 432 kr.»). Att hitta "
+        "modellen själv är C. Varje deluppgift är EN fråga eleven förstår, och "
+        "den får ge 2 E när den kräver två rutinsteg. Dela där stegen är "
+        "naturliga (räkna ut ett värde, ställ upp ekvationen, lös den), men "
+        "dela aldrig bara för poängens skull: «Skriv ekvationen på formen "
+        "$x^2 + px + q = 0$» och «Lös ekvationen» är EN deluppgift, och «Lös "
+        "ekvationen» och «Hur bred är altanen?» är EN: «Ta reda på hur bred "
+        "altanen är genom att lösa ekvationen $x^2 + 3x - 28 = 0$.»\n"
         if any(s["omraknad"] for s in slots) else "")
     return (e_prov +
         "DET HÄR ÄR ETT OMPROV. Eleven skriver om ett prov hon redan har "
@@ -16655,7 +16717,8 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
                               profil=profil, niva_mal=niva_mal,
                               riktning=riktning, log_cb=log_cb,
                               ignorera=frozenset(fore),
-                              ignorera_koder=koder_som_varnar)
+                              ignorera_koder=koder_som_varnar,
+                              onskemal=instruction)
     # Gick målets ändring inte igenom grinden ens efter reparation lämnas
     # ORIGINALET tillbaka, med felen kvar i svaret. Ett halvt genomfört
     # önskemål på ett papper läraren tror är helt är värre än ett önskemål som

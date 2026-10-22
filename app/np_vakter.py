@@ -44,11 +44,13 @@ MÄTNINGEN VARJE REGEL BYGGER PÅ (kurs → siffra ur profilens `mall`):
    2-poängare (1a ×5, 1c ×6), så K-reglerna gäller BARA kurs 2. Samma regler
    ligger i exam_spec.balanced_skeleton, som låser poängen innan modellen
    skriver; vakten här är backstoppet för refine och canvas.
-3. metodvakt — «med pq-formeln/kvadreringsregeln/konjugatregeln» förekommer
-   ALDRIG (2a: 0 av 112; 2c: 0 av 74; 1a: 0 av 71; 1c: 0 av 77). Det som
-   finns är «med algebraisk metod» (2a ×3, 2c ×3), «använd formeln» (1a, 1c),
-   «bryt ut» (1a, 1c) och «med hjälp av grafen» (2a ×6). Mäts i
-   uppgiftstexten i den räknarfria delen.
+3. metodvakt — «med algebraisk metod» skrivs aldrig (Rickard 2026-10-22,
+   IndA-omproven: «här måste vi vara tydliga med att de ska använda en viss
+   metod, inte bara algebraisk metod»). Metoden nämns vid namn när den krävs,
+   också utan räknare. Domen ersätter NP-regeln från 2026-09-23: «med
+   pq-formeln» förekommer aldrig på NP (2a: 0 av 112; 2c: 0 av 74; 1a: 0 av
+   71; 1c: 0 av 77), medan «med algebraisk metod» gör det (2a ×3, 2c ×3).
+   Mäts i hela provet.
 4. parametervakt — bokstavskonstanter i stammen (utöver x, y, den okända och
    funktionsnamn). p90 per nivå, kortsvar/lösning: 2a E 0,4/0,5 · C 0/1,2 ·
    A 0/1,0; 2c E 0/0 · C 0/0,8 · A 1/1; 1c E 0/0 · C 0/0 · A 1/1; 1a E 2/0 ·
@@ -205,12 +207,10 @@ _GENERALISERING_RE = re.compile(
     r"\b(?:aldrig|alltid)\b",
     re.I)
 
-# Metodföreskriften (regel 3): formen «med/använd/genom <metod>». Verbet
-# «Faktorisera …» är en uppgift (E-form i kurs 1), inte en föreskrift.
-_METODFORESKRIFT_RE = re.compile(
-    r"(?<![\wåäö])(?:med|använd|genom|via)\s+(?:hjälp\s+av\s+)?"
-    r"(pq-formeln|kvadreringsreg(?:eln|lerna)|konjugatregeln"
-    r"|nollproduktmetoden|faktorisering)(?![\wåäö])", re.I)
+# Den vaga metoden (regel 3): «med algebraisk metod», «algebraiskt».
+_VAG_METOD_RE = re.compile(
+    r"(?<![\wåäö])(?:(?:med|genom|via)\s+(?:en\s+)?algebraisk\s+metod"
+    r"|algebraiskt)(?![\wåäö])", re.I)
 
 _MATH_RE = re.compile(r"\$([^$]+)\$")
 
@@ -505,23 +505,20 @@ def poangformvakt(exam: dict, kurs: str = "") -> list[dict]:
 # ── 3. METODVAKTEN ───────────────────────────────────────────────────────
 
 def metodvakt(exam: dict) -> list[dict]:
-    """«Lös … med pq-formeln» i den räknarfria delen: metoden ÄR det som
-    prövas, och NP skriver den aldrig ut."""
+    """«Lös … med algebraisk metod»: eleven vet inte vad som menas. Metoden
+    nämns vid namn, eller så står ingen (regel 3, lärarens dom 2026-10-22)."""
     fel: list[dict] = []
     for e in _enheter(exam):
-        if e.get("del") not in (None, "B"):
-            continue
-        m = _METODFORESKRIFT_RE.search(_text(e))
+        m = _VAG_METOD_RE.search(_text(e))
         if not m:
             continue
         fel.append(_err(
             f"uppgift {e['nr']}", "metodvakt",
-            f"Uppgift {e['nr']} föreskriver metoden («{m.group(0)}»). "
-            "Nationella provet föreskriver aldrig metod i den räknarfria "
-            "delen; det som förekommer är «med algebraisk metod», «bryt ut» "
-            "och «med hjälp av grafen». Stryk "
-            "metodangivelsen och låt eleven välja. Samma uppgift i övrigt, "
-            "samma poäng."))
+            f"Uppgift {e['nr']} säger «{m.group(0)}», och det säger eleven "
+            "ingenting. Kräver uppgiften en viss metod, skriv dess namn: «Lös "
+            "ekvationen med pq-formeln: …», «… genom att bryta ut $x$». Annars "
+            "stryk metodangivelsen och låt eleven välja. Samma uppgift i "
+            "övrigt, samma poäng."))
     return fel[:METOD_MAX_FYND]
 
 

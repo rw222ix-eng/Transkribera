@@ -1301,6 +1301,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
             exam["datum"] = (datum or "").strip() or None
             if klockslag is not None:
                 exam["klockslag"] = (klockslag or "").strip() or None
+            # Provtiden är spannets längd (exam_spec.klockslag_minuter):
+            # «kl. 15.15–16.45 (70 minuter)» stod på omproven 267/268.
+            minuter = exam_spec.klockslag_minuter(exam.get("klockslag"))
+            if minuter:
+                exam["tid_min"] = minuter
 
     def _peka_pa_versionen(exam_id: int, version) -> None:
         """Låt provet peka på den version klienten SER innan något byggs.
@@ -2874,10 +2879,16 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # Klockslagen överlever omskrivningen: modellen skriver om
                 # hela dokumentet och känner inte fältet, så tiden hämtas ur
                 # den version som låg framme.
+                # Ny provtid utan nytt klockslag flyttar passets slut, annars
+                # skriver spannet tillbaka den gamla tiden.
+                gammalt_klockslag = (view.get("exam") or {}).get("klockslag")
+                if ny_tid and nytt_klockslag is None:
+                    gammalt_klockslag = exam_spec.klockslag_med_tid(
+                        gammalt_klockslag, ny_tid)
                 _satt_lararens_datum(
                     res["exam"], view.get("datum"),
                     nytt_klockslag if nytt_klockslag is not None
-                    else (view.get("exam") or {}).get("klockslag") or "")
+                    else gammalt_klockslag or "")
                 # TAKTEN likaså, och av exakt samma skäl: den står inte i
                 # grammatiken, så ett omskrivningsvarv hade tappat lärarens
                 # minuter per poäng och pappret hade börjat räknas med husets.

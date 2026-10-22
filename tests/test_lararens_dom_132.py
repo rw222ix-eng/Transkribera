@@ -159,7 +159,7 @@ def test_domarna_star_i_instruktionen():
     assert "Varje deluppgift bär sin egen uppmaning: «a) Lös ekvationen:" in r
     assert "Uppmaningen och uttrycket står på samma rad" in r
     assert "«kan skrivas på formen», aldrig «i formen»" in r
-    assert "«med algebraisk metod» står bara i en del där digitala" in r
+    assert "Skriv aldrig «med algebraisk metod»" in r
     assert "«Svara exakt.» står bara där svaret annars kunde avrundas" in r
     assert "«ett företag i skolan», aldrig «ett UF-företag»" in r
     assert "En modell på E-nivå har enkla koefficienter" in r
