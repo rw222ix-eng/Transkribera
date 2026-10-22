@@ -337,6 +337,139 @@ for _niva in ("1a", "1b", "1c", "2a"):
 # där; i 1c används de inte (Rickard 2026-10-11).
 UTANFOR.setdefault("1c", []).extend([_KALKYL, _AMORTERINGSSUMMA])
 
+# ── OLIKHETER OCH RATIONELLA EKVATIONER I 2a (Rickard 2026-10-22) ─────────
+# IndA:s prov 215 (Ma 2a) hade i uppgift 8 stugan «6 000 kr delat lika, två
+# färre, 250 kr mer», med facit 6 000/(n − 2) − 6 000/n = 250 eller
+# np = 6 000 och (n − 2)(p + 250) = 6 000. GY25 Ma 2a har «linjära
+# ekvationssystem» (ALG-2) och andragradsekvationer (ALG-8), men ingen
+# ekvation med den okända i en nämnare och inget icke-linjärt system; de
+# står först i 3b och 3c. Olikheter står i 1a, 1b, 1c och 4, inte i 2a, 2b,
+# 2c, 3b eller 3c. Rickard: «om det inte är så att det framkommer i det
+# centrala innehållet så ska det inte vara med på provet. Punkt slut.»
+#
+# Snäva mönster, för godkända 2a-blad har v = s/t (blad 189, 224) och
+# k = (y₂ − y₁)/(x₂ − x₁):
+#   * en nämnare med en bokstav UTAN index och ett plus eller minus,
+#     \frac{6000}{n-2} eller 6000/(n − 2);
+#   * två parenteser med olika bokstäver gånger varandra = ett tal,
+#     (n − 2)(p + 250) = 6 000 (att utveckla (a + 2)(b − 3) står kvar);
+#   * en olikhet med räkning på en sida, 3x + 2 < 11 eller y > 2x + 1.
+#     En gräns med bokstaven ensam, x ≥ 0 eller 0 ≤ t ≤ 10, står kvar, och
+#     «olikhetstecken» mellan två tal (INSTRUCTION) fälls inte.
+_FRAC_NAMNARE = re.compile(r"\\[dt]?frac\s*\{(?:[^{}]|\{[^{}]*\})*\}\s*\{"
+                           r"((?:[^{}]|\{[^{}]*\})*)\}")
+_SNEDSTRECK_NAMNARE = re.compile(r"/\s*\(([^()]*)\)")
+_BOKSTAV_UTAN_INDEX = re.compile(r"(?<![A-Za-z\\])[A-Za-z](?![A-Za-z_])")
+_RATIONELLORD = re.compile(r"(?i:rationell\w*\s+ekvation\w*"
+                           r"|icke-linjär\w*\s+ekvationssystem\w*)")
+
+
+def _namnare_med_okand(namnare: str) -> bool:
+    n = _LATEXORD.sub(" ", namnare)
+    return bool(_BOKSTAV_UTAN_INDEX.search(n) and re.search(r"[+\-−]", n))
+
+
+# Ett ensamt bråk lika med ett tal eller en bokstav är en linjär ekvation i
+# förklädnad eller ett svar: k-formeln med en okänd koordinat,
+# (8 − a)/(a − 2) = 3 (blad 223:2), och lösningen x = (10 + 2b)/(a + 10) av
+# ett linjärt system med parametrar (blad 226:12). Båda står i ALG-1/ALG-2.
+_ATOM = re.compile(r"-?(?:[A-Za-z]|\d[\d,.]*)")
+
+
+def _ensamt_brak(stycke: str, brak: re.Match) -> bool:
+    led = stycke.split("=")
+    if len(led) != 2:
+        return False
+    for ena, andra in (led, led[::-1]):
+        if ena.strip() == brak.group(0).strip() or (
+                brak.group(0).startswith("/")
+                and re.fullmatch(r"[^=+\-−]*" + re.escape(brak.group(0)),
+                                 ena.strip())):
+            atom = re.sub(r"\\[A-Za-z]+|\\[,;:! ]|[{}~\s]", "", andra)
+            if _ATOM.fullmatch(atom):
+                return True
+    return False
+
+
+class _RationellEkvation:
+    """re-lik sökare: den okända i en nämnare, eller ett produktsystem."""
+
+    def search(self, text: str) -> _Traff | None:
+        text = str(text or "")
+        m = _RATIONELLORD.search(text)
+        if m:
+            return _Traff(m.group(0))
+        stycken = _MATTESTYCKE.findall(text) or [text]
+        for s in stycken:
+            if "=" not in s:
+                continue
+            for f in [*_FRAC_NAMNARE.finditer(s),
+                      *_SNEDSTRECK_NAMNARE.finditer(s)]:
+                if _namnare_med_okand(f.group(1)) and not _ensamt_brak(s, f):
+                    return _Traff(f.group(0).strip())
+            for par in _PARENTESPAR.finditer(s):
+                a = set(_BOKSTAV_UTAN_INDEX.findall(
+                    _LATEXORD.sub(" ", par.group(1))))
+                b = set(_BOKSTAV_UTAN_INDEX.findall(
+                    _LATEXORD.sub(" ", par.group(2))))
+                hl = re.match(r"\s*=\s*([^=]*)", s[par.end():])
+                tal = re.sub(r"\\[A-Za-z]+|\\[,;:! ]|[{}~\s]", "",
+                             hl.group(1)) if hl else ""
+                if a and b and not a & b and re.fullmatch(r"\d[\d,.]*", tal):
+                    return _Traff(par.group(0).strip())
+        return None
+
+
+_RATIONELL = (
+    "rationella ekvationer och icke-linjära ekvationssystem",
+    "ekvationer med den okända i en nämnare (6 000/(n − 2) − 6 000/n = 250) "
+    "och ekvationssystem som inte är linjära (np = 6 000 och "
+    "(n − 2)(p + 250) = 6 000). Formler som v = s/t och "
+    "k = (y₂ − y₁)/(x₂ − x₁) ingår",
+    _RationellEkvation())
+
+_OLIKHETSTECKEN = re.compile(r"[<>≤≥⩽⩾]|\\(?:leq?|geq?|leqslant|geqslant"
+                             r"|lt|gt)(?![A-Za-z])")
+_OLIKHETSORD = re.compile(r"(?i:(?<![\wåäö])olikhet(?!stecken)\w*)")
+_RAKNING_MED_BOKSTAV = re.compile(
+    r"\d\s*[A-Za-z]|[A-Za-z]\s*[+\-−·*/]|[+\-−·*/]\s*[A-Za-z]")
+
+
+class _Olikhet:
+    """re-lik sökare: ordet olikhet, eller en olikhet med räkning på en
+    sida. Bara i matten ($…$), så att «<» i vanlig text tiger."""
+
+    def search(self, text: str) -> _Traff | None:
+        text = str(text or "")
+        m = _OLIKHETSORD.search(text)
+        if m:
+            return _Traff(m.group(0))
+        for s in _MATTESTYCKE.findall(text):
+            if not _OLIKHETSTECKEN.search(s):
+                continue
+            for led in re.split(r"[,;=]|\\(?:quad|text)\b",
+                                _OLIKHETSTECKEN.sub("\0", s)):
+                if "\0" not in led:
+                    continue
+                for sida in led.split("\0"):
+                    ren = _LATEXORD.sub(" ", sida)
+                    if (_BOKSTAV_UTAN_INDEX.search(ren)
+                            and _RAKNING_MED_BOKSTAV.search(ren)):
+                        return _Traff(s.strip())
+        return None
+
+
+_OLIKHET = (
+    "olikheter",
+    "olikheter: att lösa eller ställa upp en olikhet (3x + 2 < 11, "
+    "y > 2x + 1) och ordet olikhet. Svara med en ekvation och en slutsats i "
+    "ord i stället («minst 13 biljetter»)",
+    _Olikhet())
+# Bara 2a: det är IndA:s kurs, och 2b och 2c har ännu ingen klass. Deras
+# prompt ska vara byte för byte den som gick förut (test_2c_har_inga_
+# strykningar); samma princip gäller dem när en klass läser dem.
+UTANFOR["2a"] += [_RATIONELL, _OLIKHET]
+
 # Det som bara ska gälla övningspapper, tills läraren sagt ja för proven.
 # Tom sedan kvadreringsreglerna flyttade till UTANFOR; mekanismen står kvar.
 BARA_OVNING: dict[str, list[tuple]] = {}

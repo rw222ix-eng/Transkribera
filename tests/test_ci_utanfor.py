@@ -459,3 +459,68 @@ def test_rantan_tills_lanet_ar_betalt_ar_en_summa():
         assert "summor" in _traffar(kurs, r"$150 + 140 + \ldots + 10 = 1\,200$")
         assert "summor" in _traffar(kurs, "150 + 140 + … + 10")
     assert _traffar("Matematik, nivå 1c", "$150 + 140 = 290$") == []
+
+
+RAT = "rationella ekvationer och icke-linjära ekvationssystem"
+KURS2A = "Matematik 2a"
+
+
+def test_stugan_i_prov_215_ar_utanfor_2a():
+    """Rickard 2026-10-22: «om det inte är så att det framkommer i det
+    centrala innehållet så ska det inte vara med på provet. Punkt slut.»
+    Prov 215 uppgift 8 (stugan, 6 000 kr delat lika) och blad 226:11."""
+    for t in (r"$\frac{6\,000}{n-2} - \frac{6\,000}{n} = 250$",
+              r"$(n - 2)(p + 250) = 6\,000$",
+              r"(2) $(p - 10)(n + 20) = 2\,400$",
+              r"$\frac{30}{v} - \frac{30}{v + a} = 0{,}5$",
+              "6000/(n − 2) − 6000/n = 250"):
+        assert RAT in _traffar(KURS2A, t), t
+    assert RAT not in _traffar("Matematik, nivå 3c",
+                               r"$\frac{6\,000}{n-2} - \frac{6\,000}{n} = 250$")
+
+
+def test_formler_och_linjara_brak_star_kvar_i_2a():
+    """v = s/t (blad 189, 224), k-formeln, en okänd koordinat i k-formeln
+    (blad 223:2), lösningen av ett linjärt system med parametrar (226:12),
+    och att utveckla två parenteser."""
+    for t in (r"$v = \frac{s}{t}$", r"$t = \frac{120}{v}$",
+              r"$k = \frac{y_2 - y_1}{x_2 - x_1}$",
+              r"$\tfrac{8 - a}{a - 2} = 3$",
+              r"$x = \tfrac{10 + 2b}{a + 10}$",
+              r"$(a + 2)(b - 3) = ab - 3a + 2b - 6$",
+              r"$(x + 3)(x - 2) = 0$",
+              r"$\frac{u}{12} + \frac{n}{24} = \frac{2}{3}$"):
+        assert RAT not in _traffar(KURS2A, t), t
+
+
+def test_olikheter_ar_utanfor_2a():
+    """GY25 har olikheter i 1a, 1b, 1c och 4. Prov 130:12 hade
+    $2\\,000 \\leq n(n + 5) \\leq 2\\,500$, blad 226:6 «Svara med olikheter»."""
+    for t in (r"$2\,000 \leq n(n + 5) \leq 2\,500$",
+              r"$3x + 2 < 11$", r"$y > 2x + 1$", r"$c - 9 > 0$",
+              "Lös olikheten.", "Svara med olikheter."):
+        assert "olikheter" in _traffar(KURS2A, t), t
+    assert "olikheter" not in _traffar("Matematik, nivå 1c", r"$3x + 2 < 11$")
+
+
+def test_granser_och_olikhetstecken_mellan_tal_star_kvar():
+    for t in (r"$x \ge 0$", r"$0 \le t \le 10$", r"$b \neq 15$",
+              "Skriv det olikhetstecken som gör påståendet sant.",
+              "Linjen skär y-axeln där y är större än 3 < tecknet.",
+              r"$m \neq 4$"):
+        assert "olikheter" not in _traffar(KURS2A, t), t
+
+
+def test_vakten_faller_prov_215_uppgift_8():
+    u = {"text": "Några vänner hyr en stuga för 6 000 kr. De delar lika på "
+                 "kostnaden. Två av vännerna kan inte följa med. Då måste var "
+                 "och en av de andra betala 250 kr mer. Hur många vänner var "
+                 "de från början?",
+         "losning": r"$np = 6\,000$ och $(n - 2)(p + 250) = 6\,000$ ger "
+                    r"$n^2 - 2n - 48 = 0$, $n = 8$",
+         "bedomning": "+1 A korrekt modell"}
+    fel = ci_utanfor.ci_vakt(_papper(u, kurs=KURS2A))
+    assert [f["path"] for f in fel] == ["uppgift 1"]
+    assert RAT in fel[0]["message"]
+    rad = ci_utanfor.build_utanfor(KURS2A)
+    assert "olikheter" in rad and "nämnare" in rad
