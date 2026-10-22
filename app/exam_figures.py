@@ -95,7 +95,8 @@ def _rutlinjer(lo: float, hi: float, skala, maj: list[float],
 
 def _funktionsgraf(fn, xlo: float, xhi: float, samples: int = 80,
                    stracka: tuple[float, float] | None = None,
-                   namn: str | None = None, fler=()) -> str:
+                   namn: str | None = None, fler=(),
+                   triangel: list[tuple[float, float]] | None = None) -> str:
     """Ritar en funktion i en FAST ruta (BOXW×BOXH): data mappas in, så
     koordinaten aldrig spränger TeX oavsett funktionens storlek. Kurvan
     klipps mot rutan; ticks sätts på runda datavärden. Ett TYDLIGT rutnät
@@ -145,42 +146,59 @@ def _funktionsgraf(fn, xlo: float, xhi: float, samples: int = 80,
         rader.append(rf"\draw[black!50,thin] ({_f(gx)},0)--({_f(gx)},{_f(BOXH)});")
     for gy in ymaj:
         rader.append(rf"\draw[black!50,thin] (0,{_f(gy)})--({_f(BOXW)},{_f(gy)});")
+    # ── SKALSIFFRORNA STÅR VID AXLARNA ────────────────────────────────
+    # Rickard 2026-10-22, prov 215 uppgift 4, 5 och 12: «skalan på x-axeln
+    # måste stå vid x-axeln … precis som man brukar göra, skriva skalstrecken
+    # precis bredvid axlarna». Siffrorna stod under rutans nederkant och till
+    # vänster om dess vänsterkant, långt från en axel mitt i rutan.
+    #
+    # Den första domen (2026-08-22) gäller fortfarande: siffrans vita platta
+    # bet av axellinjen, och «-5» stod ovanpå kurvan. Därför står siffran en
+    # bit från axeln (_UT), så att plattan aldrig når linjen, och den ritas
+    # FÖRE axlarna och kurvorna: plattan döljer bara rutnätet, och kurvan går
+    # ovanpå en siffra i stället för att brytas av den. Ligger nollan utanför
+    # fönstret står axeln i rutans kant, och siffrorna hamnar som förut.
+    _UT = 0.14                            # luft mellan axel och siffra (cm)
+    for xt, gx in zip(xticks, xmaj):
+        if abs(xt) < 1e-9:
+            continue
+        rader.append(rf"\node[below,fill=white,inner sep=1pt] at "
+                     rf"({_f(gx)},{_f(y0 - _UT)}) {{\footnotesize {_flabel(xt)}}};")
+    for yt, gy in zip(yticks, ymaj):
+        if abs(yt) < 1e-9:
+            continue
+        rader.append(rf"\node[left,fill=white,inner sep=1pt] at "
+                     rf"({_f(x0 - _UT)},{_f(gy)}) {{\footnotesize {_flabel(yt)}}};")
     rader += [
         # INGEN RAM. Förlagan sätter `axis lines = center`: axlarna går genom
         # origo och det finns ingen låda runt rutnätet. Ramen ritades förut med
         # black!65 och gjorde grafen till ett diagram i en ruta i stället för
         # ett koordinatsystem.
-        rf"\draw[->] (0,{_f(y0)})--({_f(BOXW + 0.3)},{_f(y0)}) node[right]{{$x$}};",
-        rf"\draw[->] ({_f(x0)},0)--({_f(x0)},{_f(BOXH + 0.3)}) node[above]{{$y$}};",
+        #
+        # TJOCKA AXLAR (Rickard 2026-10-22): «Axlarna är ju nästan lika smala
+        # som koordinatsystemets skuggade linjer. … axlarna behöver bli
+        # tjockare. Detta gäller alla koordinatsystem framöver.» 1,2 pt mot
+        # rutnätets 0,4 pt.
+        rf"\draw[->,line width=1.2pt] (0,{_f(y0)})--({_f(BOXW + 0.3)},{_f(y0)}) "
+        rf"node[right]{{$x$}};",
+        rf"\draw[->,line width=1.2pt] ({_f(x0)},0)--({_f(x0)},{_f(BOXH + 0.3)}) "
+        rf"node[above]{{$y$}};",
     ]
-    # ── TICK-ETIKETTERNA LIGGER UTANFÖR AXLARNA ───────────────────────
-    # Lärarens dom över den första skarpa renderingen (2026-08-22): «2 4 6»
-    # stod PÅ x-axeln och «-5»/«-10» ovanpå y-axeln, med «-5» dessutom rakt
-    # över kurvan. Etiketterna satt vid axeln (som `axis lines = center` ger)
-    # med en vit platta bakom sig, och plattan bet av axellinjen på fem
-    # ställen — en avläsningsuppgift där man inte kan följa axeln.
-    #
-    # Nu står SIFFRORNA utanför ritrutan, som i förlagans pgfplots-recept:
-    # x-talen under rutans nederkant, y-talen till vänster om dess vänsterkant.
-    # STRECKEN sitter kvar på axeln, så det syns var axeln korsar; rutnätet är
-    # det som binder ihop strecket med siffran. Ingen vit platta behövs, och
-    # ingen etikett kan längre hamna ovanpå kurvan.
-    _UT = 0.18                            # luft mellan ruta och siffra (cm)
     for xt, gx in zip(xticks, xmaj):
-        if abs(xt) < 1e-9:
-            continue
-        rader.append(rf"\draw ({_f(gx)},{_f(y0 - 0.08)})--({_f(gx)},{_f(y0 + 0.08)});")
-        rader.append(rf"\node[below] at ({_f(gx)},{_f(-_UT)}) "
-                     rf"{{\footnotesize {_flabel(xt)}}};")
+        if abs(xt) >= 1e-9:
+            rader.append(rf"\draw[line width=1pt] ({_f(gx)},{_f(y0 - 0.1)})--"
+                         rf"({_f(gx)},{_f(y0 + 0.1)});")
     for yt, gy in zip(yticks, ymaj):
-        if abs(yt) < 1e-9:
-            continue
-        rader.append(rf"\draw ({_f(x0 - 0.08)},{_f(gy)})--({_f(x0 + 0.08)},{_f(gy)});")
-        rader.append(rf"\node[left] at ({_f(-_UT)},{_f(gy)}) "
-                     rf"{{\footnotesize {_flabel(yt)}}};")
+        if abs(yt) >= 1e-9:
+            rader.append(rf"\draw[line width=1pt] ({_f(x0 - 0.1)},{_f(gy)})--"
+                         rf"({_f(x0 + 0.1)},{_f(gy)});")
     pts = " ".join(f"({_f(X(x))},{_f(Y(y))})" for x, y in zip(xs, ys))
+    rader.append(rf"\begin{{scope}}\clip (0,0) rectangle ({_f(BOXW)},{_f(BOXH)});")
+    # Triangeln uppgiften frågar om, skuggad under linjerna (FigLinjar.triangel).
+    if triangel:
+        horn = "--".join(f"({_f(X(x))},{_f(Y(y))})" for x, y in triangel)
+        rader.append(rf"\fill[yellow!50,opacity=0.85] {horn}--cycle;")
     rader += [
-        rf"\begin{{scope}}\clip (0,0) rectangle ({_f(BOXW)},{_f(BOXH)});",
         # BLÅ KURVA — lärarens förlaga sätter sin graf med
         # \addplot[blue, very thick], och det är den kurvan hon känner igen.
         # Rutnätet är grått, axlarna svarta; kurvan är det enda färgade på
@@ -196,6 +214,19 @@ def _funktionsgraf(fn, xlo: float, xhi: float, samples: int = 80,
         rader.append(rf"\draw[{_LINJEFARG[i % len(_LINJEFARG)]},very thick] "
                      rf"plot coordinates {{{pf}}};")
     rader.append(r"\end{scope}")
+    # «triangeln» står i triangeln när den ryms, annars bredvid med en pil.
+    if triangel:
+        bx = [X(x) for x, _y in triangel]
+        by = [Y(y) for _x, y in triangel]
+        cx, cy = sum(bx) / 3, sum(by) / 3
+        if max(by) - min(by) >= 1.2 and max(bx) - min(bx) >= 2.6:
+            rader.append(rf"\node[font=\small] at ({_f(cx)},{_f(cy)}) {{triangeln}};")
+        else:
+            lx = min(cx + 1.8, BOXW - 1.0)
+            ly = min(max(by) + 1.0, BOXH - 0.4)
+            rader.append(rf"\node[font=\small,fill=white,inner sep=1pt] (tri) at "
+                         rf"({_f(lx)},{_f(ly)}) {{triangeln}};")
+            rader.append(rf"\draw[->,thick] (tri)--({_f(cx)},{_f(cy)});")
     kurvor = ([(namn, list(zip(xs, ys)))] if namn else []) + [
         (n, list(zip(xsf, yv))) for (_f2, n), yv in zip(fler, yfler)]
     for i, (n, pkt) in enumerate(kurvor):
@@ -241,8 +272,11 @@ def _namnplats(pkt, X, Y, i: int):
 def _linjar(f: "exam_spec.FigLinjar") -> str:
     lo, hi = f.fonster or LINJEFONSTER
     fler = [((lambda x, l=l: l.k * x + l.m), l.namn) for l in f.fler or []]
+    horn = (triangelhorn((f.k, f.m), (f.fler[0].k, f.fler[0].m), f.triangel)
+            if f.triangel and f.fler else None)
     return _funktionsgraf(lambda x: f.k * x + f.m, lo, hi,
-                          stracka=f.stracka, namn=f.namn, fler=fler)
+                          stracka=f.stracka, namn=f.namn, fler=fler,
+                          triangel=horn)
 
 
 # ── LINJENS FÖNSTER UR UPPGIFTENS TEXT (exam 260 uppg 9, 2026-10-16) ─────
@@ -421,6 +455,102 @@ def linjar_namn(fig: dict, texter: list[str]) -> dict:
     return ut
 
 
+def linjar_triangel(fig: dict, texter: list[str]) -> dict:
+    """FigLinjar som dict med `triangel` satt när texten säger att linjerna
+    bildar en triangel med en axel. Egen funktion, inte en del av
+    linjar_namn: ett papper vars linjer redan har namn ska också få sin
+    triangel. Satt fält rörs inte."""
+    if (not isinstance(fig, dict) or fig.get("typ") != "linjar"
+            or fig.get("triangel") is not None or not fig.get("fler")):
+        return fig
+    axel = _triangelaxel(texter)
+    try:
+        horn = axel and triangelhorn(
+            (float(fig["k"]), float(fig["m"])),
+            (float(fig["fler"][0]["k"]), float(fig["fler"][0]["m"])), axel)
+    except (KeyError, TypeError, ValueError, IndexError):
+        return fig
+    if not horn:
+        return fig
+    ut = dict(fig, triangel=axel)
+    # Hörnen ska synas: fönstret vidgas till dem som till texternas punkter
+    # (linjar_fonster).
+    lo, hi = ut.get("fonster") or LINJEFONSTER
+    xlo = min(lo, math.floor(min(p[0] for p in horn)) - 1)
+    xhi = max(hi, math.ceil(max(p[0] for p in horn)) + 1)
+    if (xlo, xhi) != (lo, hi) and xhi - xlo <= exam_spec._LINJEFONSTER_MAX:
+        ut["fonster"] = [xlo, xhi]
+    return ut
+
+
+_TRIANGEL_RE = re.compile(r"[^.?!\n]*triangel[^.?!\n]*", re.I)
+_AXEL_RE = re.compile(r"\$?\s*([xy])\s*\$?-axeln")
+
+
+def _triangelaxel(texter: list[str]) -> str | None:
+    """"x" eller "y" när en mening om en triangel nämner den axeln."""
+    for t in texter:
+        for mening in _TRIANGEL_RE.findall(t or ""):
+            m = _AXEL_RE.search(mening)
+            if m:
+                return m.group(1)
+    return None
+
+
+def triangelhorn(l1: tuple[float, float], l2: tuple[float, float],
+                 axel: str) -> list[tuple[float, float]] | None:
+    """Hörnen i triangeln som linjerna y = kx + m bildar med axeln, eller
+    None när de inte bildar någon (parallella, eller en linje längs axeln)."""
+    (k1, m1), (k2, m2) = l1, l2
+    if abs(k1 - k2) < 1e-12:
+        return None
+    xs = (m2 - m1) / (k1 - k2)
+    topp = (xs, k1 * xs + m1)
+    if axel == "x":
+        if abs(k1) < 1e-12 or abs(k2) < 1e-12:
+            return None
+        a, b = (-m1 / k1, 0.0), (-m2 / k2, 0.0)
+    else:
+        a, b = (0.0, m1), (0.0, m2)
+    horn = [topp, a, b]
+    if abs((a[0] - topp[0]) * (b[1] - topp[1])
+           - (b[0] - topp[0]) * (a[1] - topp[1])) < 1e-9:
+        return None
+    return horn
+
+
+def namnfarger(uppgift) -> dict[str, str]:
+    """{namn: färg} för de namngivna linjerna i uppgiftens figurer (stammens
+    och deluppgifternas), i samma färger som figuren ritar dem. Tar ExamItem
+    eller dict."""
+    def falt(o, n):
+        return o.get(n) if isinstance(o, dict) else getattr(o, n, None)
+    figurer = [falt(uppgift, "figur")] + [
+        falt(d, "figur") for d in (falt(uppgift, "deluppgifter") or [])]
+    farger: dict[str, str] = {}
+    for fig in figurer:
+        if fig is None or falt(fig, "typ") != "linjar" or not falt(fig, "namn"):
+            continue
+        farger.setdefault(falt(fig, "namn"), _LINJEFARG[0])
+        for i, l in enumerate(falt(fig, "fler") or [], 1):
+            if falt(l, "namn"):
+                farger.setdefault(falt(l, "namn"), _LINJEFARG[i % len(_LINJEFARG)])
+    return farger
+
+
+# ── NAMNET I TEXTEN HAR LINJENS FÄRG (Rickard 2026-10-22, prov 215 uppg 5, 12)
+# «Linjen f har ekvationen … Det ser ut som att det är en svart färg, den
+# bokstaven f. Men i sådana fall ska den bli lila.» Och i 12: «Bokstaven g ska
+# vara grön också.» Bara ett namn som står ensamt i sitt matteblock («$f$»)
+# färgas; «$f(x)$» eller «$g = 2$» är inte linjens namn.
+def farga_namn(text: str | None, farger: dict[str, str]) -> str | None:
+    if not text or not farger:
+        return text
+    return re.sub(r"\$\s*([a-zA-Z])\s*\$",
+                  lambda m: (rf"${{\color{{{farger[m.group(1)]}}}{m.group(1)}}}$"
+                             if m.group(1) in farger else m.group(0)), text)
+
+
 def linjar_ur_text(uppgift: dict) -> dict:
     """Uppgiften med varje linjär figur försedd med fönster (linjar_fonster).
     En figur på en deluppgift läser deluppgiftens text och facit före
@@ -434,16 +564,16 @@ def linjar_ur_text(uppgift: dict) -> dict:
     facit = ([d.get("losning") or "" for d in delar]
              + [uppgift.get("losning") or ""])
     if isinstance(uppgift.get("figur"), dict):
-        uppgift["figur"] = linjar_namn(
+        uppgift["figur"] = linjar_triangel(linjar_namn(
             linjar_fonster(uppgift["figur"], stam + deltext + facit),
-            stam + deltext)
+            stam + deltext), stam + deltext)
     for d in delar:
         if isinstance(d.get("figur"), dict):
-            d["figur"] = linjar_namn(
+            d["figur"] = linjar_triangel(linjar_namn(
                 linjar_fonster(d["figur"],
                                [d.get("text") or "", d.get("losning") or ""]
                                + stam),
-                [d.get("text") or ""] + stam)
+                [d.get("text") or ""] + stam), [d.get("text") or ""] + stam)
     return uppgift
 
 

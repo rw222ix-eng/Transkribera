@@ -1707,6 +1707,17 @@ def _build_view(doc: exam_spec.ExamDoc,
         vy_items = []
         for it in items:
             nummer += 1
+            # Linjernas namn i texten i figurens färger (exam_figures.
+            # farga_namn). Bara elevens text, före all annan vy.
+            farger = exam_figures.namnfarger(it)
+            if farger:
+                it = it.model_copy(update={
+                    "text": exam_figures.farga_namn(it.text, farger),
+                    "deluppgifter": [
+                        d.model_copy(update={
+                            "text": exam_figures.farga_namn(d.text, farger)})
+                        for d in it.deluppgifter] if it.deluppgifter else
+                    it.deluppgifter})
             agg = exam_spec.uppg_poang(it)
             bild_fil = ((egna or {}).get(nummer)
                         or ((bilder or {}).get(it.bild) if it.bild else None))

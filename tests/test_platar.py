@@ -393,22 +393,27 @@ def test_kortsvaren_kryssas_inte_pa_pappret():
     assert utan.count(r"\svarsrad{Svar:}") == 2
 
 
-def test_tick_etiketterna_ligger_utanfor_axlarna():
-    """LÄRARENS DOM 2026-08-22 om den första skarpa grafen: «2 4 6» stod PÅ
-    x-axeln och «-5»/«-10» ovanpå y-axeln, den senare rakt över kurvan.
-    Siffrorna ligger nu utanför ritrutan; strecken sitter kvar på axeln."""
+def test_tick_etiketterna_star_vid_axlarna_utan_att_bita_av_dem():
+    """Rickard 2026-10-22 (prov 215): siffrorna ska stå «precis bredvid
+    axlarna», inte vid rutans kant. Den första domen (2026-08-22) gäller
+    ändå: den vita plattan bakom siffran bet av axellinjen och «-5» stod
+    ovanpå kurvan. Siffran står därför en bit från axeln och ritas före
+    axlarna och kurvan."""
     tikz = exam_figures.render_figur(
         exam_spec.FigAndragrad(typ="andragrad", a=-1, b=6, c=-5))
-    assert "fill=white" not in tikz, \
-        "den vita plattan bakom siffran bet av axellinjen"
-    # Varje etikett står på negativ koordinat, alltså utanför rutan (0..BOX).
-    rader = [r for r in tikz.splitlines() if r.startswith(r"\node[below] at")
-             or r.startswith(r"\node[left] at")]
-    assert rader, "inga tick-etiketter alls"
-    for rad in rader:
-        koord = rad.split("at (")[1].split(")")[0].split(",")
-        utanfor = koord[1] if "below" in rad else koord[0]
-        assert float(utanfor) < 0, rad
+    rader = tikz.splitlines()
+    etiketter = [i for i, r in enumerate(rader) if r.startswith(r"\node[below,fill=white")
+                 or r.startswith(r"\node[left,fill=white")]
+    assert etiketter, "inga tick-etiketter alls"
+    axel = next(i for i, r in enumerate(rader) if r.startswith(r"\draw[->"))
+    kurva = next(i for i, r in enumerate(rader) if "plot coordinates" in r)
+    assert max(etiketter) < axel < kurva
+    # x-axeln och y-axeln: var de korsar rutan.
+    x_axel = rader[axel].split("(0,")[1].split(")")[0]
+    for i in etiketter:
+        koord = rader[i].split("at (")[1].split(")")[0].split(",")
+        if "below" in rader[i]:
+            assert float(koord[1]) == pytest.approx(float(x_axel) - 0.14)
 
 
 # ── Rutterna ──────────────────────────────────────────────────────────

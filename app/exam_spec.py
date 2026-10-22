@@ -309,6 +309,12 @@ class FigLinjar(_Model):
     # texten säger att figuren visar («Figuren visar linjerna $f$ och $g$»).
     namn: str | None = Field(default=None, max_length=3)
     fler: list[FigLinje] | None = Field(default=None, max_length=3)
+    # TRIANGELN ÄR SKUGGAD (Rickard 2026-10-22, prov 215 uppg 12): «det måste
+    # tydligare vara markerat i koordinatsystemet vilken triangel det är vi
+    # pratar om». "x" eller "y": triangeln som linjen och fler[0] bildar med
+    # den axeln. Sätts av appen när texten säger «bildar en triangel
+    # tillsammans med $x$-axeln» (exam_figures.linjar_triangel).
+    triangel: Literal["x", "y"] | None = None
 
     @model_validator(mode="after")
     def _kontrollera_intervall(self):
@@ -978,7 +984,7 @@ def _bygg_response_format(antal: int | None = None,
     # (exam_figures.linjar_ur_text), och grammatiken är byte för byte den
     # som gick i väg innan fälten fanns.
     if "FigLinjar" in schema.get("$defs", {}):
-        for falt in ("stracka", "fonster", "namn", "fler"):
+        for falt in ("stracka", "fonster", "namn", "fler", "triangel"):
             schema["$defs"]["FigLinjar"]["properties"].pop(falt, None)
         schema["$defs"].pop("FigLinje", None)
     if koder:

@@ -437,7 +437,7 @@ window.Figurer = (() => {
     }
     return null;
   }
-  function funktionsgraf(fn, xlo, xhi, stracka = null, namn = null, fler = []) {
+  function funktionsgraf(fn, xlo, xhi, stracka = null, namn = null, fler = [], triangel = null) {
     const L = grafFonster(fn, xlo, xhi, stracka, 80, fler);
     const P = (x, y) => `(${r4(x)}, ${r4(y)})`;
     const rader = [];
@@ -450,25 +450,31 @@ window.Figurer = (() => {
     rutLinjer(L.ylo, L.yhi, L.Y, L.ymaj, BOXH).forEach(g => rader.push(`line(${P(0, g)}, ${P(BOXW, g)}, ${tunn})`));
     L.xmaj.forEach(g => rader.push(`line(${P(g, 0)}, ${P(g, BOXH)}, ${grov})`));
     L.ymaj.forEach(g => rader.push(`line(${P(0, g)}, ${P(BOXW, g)}, ${grov})`));
-    rader.push(`line(${P(0, L.y0)}, ${P(BOXW + 0.3, L.y0)}, mark: (end: "straight"))`);
-    rader.push(`content(${P(BOXW + 0.3, L.y0)}, anchor: "west", padding: 0.1)[$x$]`);
-    rader.push(`line(${P(L.x0, 0)}, ${P(L.x0, BOXH + 0.3)}, mark: (end: "straight"))`);
-    rader.push(`content(${P(L.x0, BOXH + 0.3)}, anchor: "south", padding: 0.1)[$y$]`);
-    /* Siffrorna står UTANFÖR rutan (under och till vänster), strecken på axeln.
-       Nollan skrivs inte ut. */
-    const UT = 0.18;
+    /* Siffrorna står VID axlarna, en bit ifrån så att den vita plattan inte
+       når linjen, och ritas före axlarna och kurvorna (exam_figures, Rickard
+       2026-10-22). Nollan skrivs inte ut. */
+    const UT = 0.14;
     L.xticks.forEach((v, i) => {
-      if (Math.abs(v) < 1e-9) return;
-      const g = L.xmaj[i];
-      rader.push(`line(${P(g, L.y0 - 0.08)}, ${P(g, L.y0 + 0.08)})`);
-      rader.push(`content(${P(g, -UT)}, anchor: "north")[${etikett(v)}]`);
+      if (Math.abs(v) >= 1e-9) rader.push(`content(${P(L.xmaj[i], L.y0 - UT)}, anchor: "north", frame: "rect", fill: white, stroke: none, padding: 0.04)[${etikett(v)}]`);
     });
     L.yticks.forEach((v, i) => {
-      if (Math.abs(v) < 1e-9) return;
-      const g = L.ymaj[i];
-      rader.push(`line(${P(L.x0 - 0.08, g)}, ${P(L.x0 + 0.08, g)})`);
-      rader.push(`content(${P(-UT, g)}, anchor: "east")[${etikett(v)}]`);
+      if (Math.abs(v) >= 1e-9) rader.push(`content(${P(L.x0 - UT, L.ymaj[i])}, anchor: "east", frame: "rect", fill: white, stroke: none, padding: 0.04)[${etikett(v)}]`);
     });
+    /* Tjocka axlar, 1,2 pt mot rutnätets 0,5 pt (Rickard 2026-10-22). */
+    const axel = 'stroke: (thickness: 1.2pt)';
+    rader.push(`line(${P(0, L.y0)}, ${P(BOXW + 0.3, L.y0)}, mark: (end: "straight"), ${axel})`);
+    rader.push(`content(${P(BOXW + 0.3, L.y0)}, anchor: "west", padding: 0.1)[$x$]`);
+    rader.push(`line(${P(L.x0, 0)}, ${P(L.x0, BOXH + 0.3)}, mark: (end: "straight"), ${axel})`);
+    rader.push(`content(${P(L.x0, BOXH + 0.3)}, anchor: "south", padding: 0.1)[$y$]`);
+    const streck = 'stroke: (thickness: 1pt)';
+    L.xticks.forEach((v, i) => {
+      if (Math.abs(v) >= 1e-9) rader.push(`line(${P(L.xmaj[i], L.y0 - 0.1)}, ${P(L.xmaj[i], L.y0 + 0.1)}, ${streck})`);
+    });
+    L.yticks.forEach((v, i) => {
+      if (Math.abs(v) >= 1e-9) rader.push(`line(${P(L.x0 - 0.1, L.ymaj[i])}, ${P(L.x0 + 0.1, L.ymaj[i])}, ${streck})`);
+    });
+    /* Triangeln uppgiften frågar om, skuggad under linjerna (FigLinjar.triangel). */
+    if (triangel) rader.push(`line(${triangel.map(p => P(L.X(p[0]), L.Y(p[1]))).join(', ')}, close: true, fill: rgb(255, 240, 128), stroke: none)`);
     /* Blå kurva, det enda färgade på pappret (förlagans \addplot[blue]). */
     const farg0 = namn ? LINJEFARG[0] : 'blue';
     klipp(L.punkter, BOXW, BOXH).forEach(s =>
@@ -482,6 +488,17 @@ window.Figurer = (() => {
     /* Sträckans ändpunkter hör till grafen: fyllda, i kurvans färg, och stora
        som bokens 4202/4206. Med 0.09 syntes de knappt, och då läste eleven en
        hel linje (Rickard 2026-10-15, exam 260 uppg 9). */
+    if (triangel) {
+      const bx = triangel.map(p => L.X(p[0])), by = triangel.map(p => L.Y(p[1]));
+      const cx = (bx[0] + bx[1] + bx[2]) / 3, cy = (by[0] + by[1] + by[2]) / 3;
+      if (Math.max(...by) - Math.min(...by) >= 1.2 && Math.max(...bx) - Math.min(...bx) >= 2.6) {
+        rader.push(`content(${P(cx, cy)})[triangeln]`);
+      } else {
+        const lx = Math.min(cx + 1.8, BOXW - 1), ly = Math.min(Math.max(...by) + 1, BOXH - 0.4);
+        rader.push(`line(${P(lx, ly)}, ${P(cx, cy)}, mark: (end: "straight"), stroke: (thickness: 0.8pt))`);
+        rader.push(`content(${P(lx, ly)}, frame: "rect", fill: white, stroke: none, padding: 0.04)[triangeln]`);
+      }
+    }
     if (stracka) [L.punkter[0], L.punkter[L.punkter.length - 1]].forEach(p =>
       rader.push(`circle(${P(p[0], p[1])}, radius: 0.16, fill: blue, stroke: none)`));
     return rader.join('\n');
@@ -496,8 +513,18 @@ window.Figurer = (() => {
     andragrad: o => [x => o.a * x * x + o.b * x + o.c, parabelmitt(o) - 4, parabelmitt(o) + 4],
     exponential: o => [x => o.C * Math.pow(o.bas, x), -3, 3]
   };
+  /* triangelhorn: exam_figures.triangelhorn, hörnen linjerna bildar med axeln. */
+  function triangelhorn(k1, m1, k2, m2, axel) {
+    if (Math.abs(k1 - k2) < 1e-12) return null;
+    const xs = (m2 - m1) / (k1 - k2), topp = [xs, k1 * xs + m1];
+    if (axel === 'x' && (Math.abs(k1) < 1e-12 || Math.abs(k2) < 1e-12)) return null;
+    const a = axel === 'x' ? [-m1 / k1, 0] : [0, m1], b = axel === 'x' ? [-m2 / k2, 0] : [0, m2];
+    const yta = (a[0] - topp[0]) * (b[1] - topp[1]) - (b[0] - topp[0]) * (a[1] - topp[1]);
+    return Math.abs(yta) < 1e-9 ? null : [topp, a, b];
+  }
   const linjar = o => funktionsgraf(...GRAFER.linjar(o), o.namn || null,
-    (o.fler || []).map(l => ({ namn: l.namn, fn: x => l.k * x + l.m })));
+    (o.fler || []).map(l => ({ namn: l.namn, fn: x => l.k * x + l.m })),
+    o.triangel && o.fler && o.fler.length ? triangelhorn(o.k, o.m, o.fler[0].k, o.fler[0].m, o.triangel) : null);
   const andragrad = o => funktionsgraf(...GRAFER.andragrad(o));
   const exponential = o => funktionsgraf(...GRAFER.exponential(o));
 

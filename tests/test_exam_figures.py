@@ -7,6 +7,7 @@ KRAV_TECTONIC=1 (som i CI) FALLER de i stället. På en maskin utan seedad
 Tectonic gick sviten annars grön utan att ett enda figurpåstående prövats, och
 en grön svit som inte bevisar något är värre än en röd. Grinden bor i
 tests/conftest.py."""
+import re
 from pathlib import Path
 
 import pytest
@@ -378,3 +379,65 @@ def test_utan_namn_ar_figuren_som_forut():
     assert u["figur"] == {"typ": "linjar", "k": 0.5, "m": -1}
     tex = exam_figures.render_figur(exam_spec.FigLinjar.model_validate(u["figur"]))
     assert "\\draw[blue,very thick]" in tex and "scale=1.5" not in tex
+
+
+def test_axlarna_ar_tjocka_och_siffrorna_star_vid_dem():
+    """Rickard 2026-10-22, prov 215 uppg 4, 5, 12: axlarna var lika smala som
+    rutnätet, och skalsiffrorna stod vid rutans kant långt från axeln."""
+    tex = exam_figures.render_figur(exam_spec.FigLinjar(typ="linjar", k=0.5, m=-1))
+    assert tex.count(r"\draw[->,line width=1.2pt]") == 2
+    sx = exam_figures.BOXW / 8
+    # x = 2 ligger 3 enheter från fönstrets vänsterkant (−1).
+    m = re.search(r"\\node\[below,fill=white,inner sep=1pt\] at \(([\d.]+),([-\d.e]+)\) "
+                  r"\{\\footnotesize 2\}", tex)
+    assert m and float(m.group(1)) == pytest.approx(3 * sx)
+    assert float(m.group(2)) > 0          # under x-axeln, inte under rutan
+    m = re.search(r"\\node\[left,fill=white,inner sep=1pt\] at \(([-\d.e]+),[\d.]+\) "
+                  r"\{\\footnotesize 1\}", tex)
+    assert m and float(m.group(1)) == pytest.approx(sx - 0.14)
+    # Siffrorna ritas före axlarna och kurvan, så att plattan bara döljer
+    # rutnätet.
+    assert tex.index("footnotesize 2") < tex.index(r"\draw[->,line width")
+    assert tex.index("footnotesize 2") < tex.index("plot coordinates")
+
+
+def test_linjens_namn_i_texten_har_figurens_farg():
+    """Rickard 2026-10-22: «den bokstaven f … ska bli lila», «g ska vara grön»."""
+    u = {"text": "Linjen $f$ har ekvationen $x + y = 6$ och linjen $g$ har "
+                 "ekvationen $2x - y = 0$.\nFiguren visar linjerna $f$ och $g$.",
+         "figur": {"typ": "linjar", "k": -1, "m": 6}}
+    exam_figures.linjar_ur_text(u)
+    farger = exam_figures.namnfarger(u)
+    assert farger == {"f": "violet", "g": "green!60!black"}
+    ut = exam_figures.farga_namn("Linjen $f$ och $g$, $f(x)$ och $g = 2$.", farger)
+    assert ut == ("Linjen ${\\color{violet}f}$ och ${\\color{green!60!black}g}$, "
+                  "$f(x)$ och $g = 2$.")
+    # Utan namngivna linjer: texten orörd.
+    assert exam_figures.namnfarger({"text": "x", "figur": {"typ": "linjar",
+                                                           "k": 1, "m": 0}}) == {}
+
+
+def test_triangeln_med_axeln_skuggas():
+    """Rickard 2026-10-22, prov 215 uppg 12: «det måste tydligare vara markerat
+    i koordinatsystemet vilken triangel det är vi pratar om»."""
+    u = {"text": "Linjen $f$ har ekvationen $x + y = 6$ och linjen $g$ har "
+                 "ekvationen $2x - y = 0$. Linjerna $f$ och $g$ bildar en "
+                 "triangel tillsammans med $x$-axeln. Figuren visar linjerna "
+                 "$f$ och $g$. Beräkna triangelns area.",
+         "figur": {"typ": "linjar", "k": -1, "m": 6}}
+    exam_figures.linjar_ur_text(u)
+    assert u["figur"]["triangel"] == "x"
+    assert exam_figures.triangelhorn((-1, 6), (2, 0), "x") == [
+        (2.0, 4.0), (6.0, 0.0), (0.0, 0.0)]
+    tex = exam_figures.render_figur(exam_spec.FigLinjar.model_validate(u["figur"]))
+    assert r"\fill[yellow!50" in tex and "{triangeln}" in tex
+    # Skuggan ligger under linjerna.
+    assert tex.index(r"\fill[yellow!50") < tex.index("plot coordinates")
+    # Redan namngivna linjer (ett sparat papper) får också sin triangel.
+    sparad = {"text": u["text"], "figur": {"typ": "linjar", "k": -1, "m": 6,
+                                           "namn": "f", "fler": [
+                                               {"k": 2, "m": 0, "namn": "g"}]}}
+    exam_figures.linjar_ur_text(sparad)
+    assert sparad["figur"]["triangel"] == "x"
+    # Parallella linjer bildar ingen triangel.
+    assert exam_figures.triangelhorn((2, 1), (2, 5), "x") is None

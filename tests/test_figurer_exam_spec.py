@@ -93,12 +93,13 @@ def test_tavlans_triangel_ar_orord():
 
 
 def _tikz_ticks(tikz: str):
+    # Siffrorna står vid axlarna (Rickard 2026-10-22), inte vid rutans kant.
     xs = [(float(g), lbl) for g, lbl in re.findall(
-        r"\\node\[below\] at \(([-\d.e+]+),-0\.18\) \{\\footnotesize ([^}]*)\}",
-        tikz)]
+        r"\\node\[below,fill=white,inner sep=1pt\] at \(([-\d.e+]+),[-\d.e+]+\) "
+        r"\{\\footnotesize ([^}]*)\}", tikz)]
     ys = [(float(g), lbl) for g, lbl in re.findall(
-        r"\\node\[left\] at \(-0\.18,([-\d.e+]+)\) \{\\footnotesize ([^}]*)\}",
-        tikz)]
+        r"\\node\[left,fill=white,inner sep=1pt\] at \([-\d.e+]+,([-\d.e+]+)\) "
+        r"\{\\footnotesize ([^}]*)\}", tikz)]
     plot = re.search(r"plot coordinates \{(.*?)\};", tikz).group(1)
     pts = [tuple(map(float, p.split(",")))
            for p in re.findall(r"\(([^)]*)\)", plot)]
@@ -234,3 +235,11 @@ def test_skarmen_ritar_strackans_andpunkter():
     fig = exam_figures.linjar_ur_text(_uppg9())["figur"]
     k = _node("process.stdout.write(JSON.stringify(F.kalla(data)))", fig)
     assert k.count("fill: blue") == 2
+
+
+def test_triangeln_skuggas_ocksa_pa_skarmen():
+    fig = {"typ": "linjar", "k": -1, "m": 6, "namn": "f", "triangel": "x",
+           "fler": [{"k": 2, "m": 0, "namn": "g"}]}
+    k = _node("process.stdout.write(JSON.stringify(F.kalla(data)))", fig)
+    assert "close: true" in k and "[triangeln]" in k
+    assert k.index("close: true") < k.index("paint: rgb") or "paint: violet" in k
