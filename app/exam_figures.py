@@ -202,9 +202,11 @@ def _funktionsgraf(fn, xlo: float, xhi: float, samples: int = 80,
         plats = _namnplats(pkt, X, Y, i)
         if plats:
             farg = _LINJEFARG[i % len(_LINJEFARG)]
-            rader.append(rf"\node[{farg},fill=white,inner sep=1.5pt,"
+            # scale, inte \large\boldsymbol: Tectonics cache har inte fet
+            # cmbx i 14,4 pt, och provet kompilerade inte (215 v1383).
+            rader.append(rf"\node[{farg},fill=white,inner sep=1pt,scale=1.5,"
                          rf"above left] at ({_f(plats[0])},{_f(plats[1])}) "
-                         rf"{{\large$\boldsymbol{{{n}}}$}};")
+                         rf"{{${n}$}};")
     # Sträckans ändpunkter hör till grafen och ritas fyllda, i kurvans färg
     # (bokens 4202/4206). Utanför klippningen: en ändpunkt i rutans kant ska
     # synas hel.

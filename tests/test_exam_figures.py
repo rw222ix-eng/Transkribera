@@ -362,7 +362,7 @@ def test_namngivna_linjer_i_figuren():
     assert u["figur"]["fler"] == [{"k": 2.0, "m": 0.0, "namn": "g"}]
     tex = exam_figures.render_figur(exam_spec.FigLinjar.model_validate(u["figur"]))
     assert "\\draw[violet,very thick]" in tex and "green!60!black" in tex
-    assert "\\boldsymbol{f}" in tex and "\\boldsymbol{g}" in tex
+    assert "{$f$}" in tex and "{$g$}" in tex and "scale=1.5" in tex
     u5 = {"text": "Linjen $f$ har ekvationen $2x + y = 5$.",
           "deluppgifter": [{"text": "Figuren visar linjen $f$.\nLinjen $g$ har "
                                     "ekvationen $y = x - 1$. Rita linjen $g$.",
@@ -377,4 +377,4 @@ def test_utan_namn_ar_figuren_som_forut():
     exam_figures.linjar_ur_text(u)
     assert u["figur"] == {"typ": "linjar", "k": 0.5, "m": -1}
     tex = exam_figures.render_figur(exam_spec.FigLinjar.model_validate(u["figur"]))
-    assert "\\draw[blue,very thick]" in tex and "boldsymbol" not in tex
+    assert "\\draw[blue,very thick]" in tex and "scale=1.5" not in tex
