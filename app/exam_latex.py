@@ -2187,12 +2187,19 @@ def render_arbetsblad(doc: exam_spec.ExamDoc, visa_poang: bool = False,
     varje uppgift (_blad_raknardelar). `visa_poang` gör ingenting längre:
     bladet bär inga poäng."""
     blad, rubriker = _blad_raknardelar(doc)
+    besked: dict[int, str] = {}
+    if not rubriker:
+        blad, besked = _blad_raknarbesked(doc)
     vy = _build_view(blad, bilder, egna=egna_bilder)
     if rubriker:
         for d in vy["delar"]:
             rubrik, titelrad = rubriker.get(d.get("_kod"), (None, None))
             d["rubrik"] = escape_latex(rubrik) if rubrik else None
             d["titelrad"] = escape_latex(titelrad) if titelrad else None
+    for d in vy["delar"]:
+        for u in d["uppgifter"]:
+            if u["nummer"] in besked:
+                u["krav"] = f"{escape_latex(besked[u['nummer']])} {u['krav']}"
     return _environment().get_template("arbetsblad.tex.j2").render(
         visa_poang=visa_poang, dokumentkod=dokumentkod, only_facit=only_facit,
         utan_facit=utan_facit,
@@ -2241,6 +2248,33 @@ def _blad_raknardelar(doc: exam_spec.ExamDoc
               ("Del B: " if tva else "") + "Räknare är tillåten"),
     }
     return doc.model_copy(update={"uppgifter": nya}), rubriker
+
+
+def _blad_raknarbesked(doc: exam_spec.ExamDoc
+                       ) -> tuple[exam_spec.ExamDoc, dict[int, str]]:
+    """Räknarbeskedet i kursivraden när bladet inte kan få provets delar.
+
+    Uppgifterna står i en ordning där räknaren växlar (Nickies blad, exam
+    284: uppgift 4 med räknare bland 1 till 7 utan). Delar hade flyttat
+    uppgiften, och då hade pappret och skärmen numrerat olika. Beskedet
+    lämnar i stället uppgiftstexten och står först i kravetiketten under
+    numret, «Utan räknare. Skriv bara svaret.», så att uppgiften börjar med
+    sin text som på provet. Bara när inga delar är satta: då är numret
+    platsen i listan. {nummer: besked}."""
+    items = list(doc.uppgifter or [])
+    if not items or any(it.del_ for it in items):
+        return doc, {}
+    besked: dict[int, str] = {}
+    nya = []
+    for nr, it in enumerate(items, 1):
+        m = _BLAD_RAKNARMARKE.match(str(it.text or ""))
+        if m:
+            besked[nr] = f"{m.group(1)}."
+            it = it.model_copy(update={"text": str(it.text)[m.end():]})
+        nya.append(it)
+    if not besked:
+        return doc, {}
+    return doc.model_copy(update={"uppgifter": nya}), besked
 
 
 def _har_facitfigur(doc) -> bool:

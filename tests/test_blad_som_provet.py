@@ -401,7 +401,28 @@ def test_raknarbeskedet_star_kvar_nar_ordningen_inte_ar_provets():
          "losning": "$15{,}17$"},
         {"text": "Utan räknare. Beräkna $3 + 4$.", "losning": "$7$"})
     tex = exam_latex.render_arbetsblad(doc)
-    assert "Räknare tillåten. Beräkna" in tex and "Del A" not in tex
+    assert "Del A" not in tex
+    # Beskedet står i kursivraden under numret, inte i uppgiftstexten.
+    assert r"\pfkrav{Räknare tillåten. Skriv bara svaret.}" in tex
+    assert r"\pfkrav{Utan räknare. Skriv bara svaret.}" in tex
+    assert "Räknare tillåten. Beräkna" not in tex
+
+
+def test_nya_blad_ordnas_utan_raknare_forst():
+    """Vid genereringen (exam_gen.ordna_raknardelar): stegringen står kvar
+    inom varje grupp, och räknarraden räknas om efter den nya ordningen."""
+    prov = {"uppgifter": [
+        {"del": "B", "typ": "rutin", "poang": [1, 0, 0], "text": "a"},
+        {"del": "C", "typ": "rutin", "poang": [1, 0, 0], "text": "b"}]}
+    exam = {"hjalpmedel": "", "uppgifter": [
+        {"text": "u1", "drillar": 1}, {"text": "u2", "drillar": 2},
+        {"text": "u3", "drillar": 1}, {"text": "u4", "drillar": 2}]}
+    assert exam_gen.ordna_raknardelar(exam, prov)
+    assert [u["text"] for u in exam["uppgifter"]] == ["u1", "u3", "u2", "u4"]
+    assert not exam_gen.ordna_raknardelar(exam, prov)
+    assert exam_gen.satt_raknarrad_ur_provet(exam, prov)
+    assert exam["hjalpmedel"] == ("Räknare får användas på uppgift 3 och 4, "
+                                  "men inte på uppgift 1 och 2.")
 
 
 def test_bladmallen_tal_en_aldre_vy():

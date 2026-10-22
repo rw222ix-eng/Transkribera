@@ -12922,6 +12922,36 @@ def raknarrad(beslut: dict[int, bool]) -> str:
             f"uppgift {_och(nej)}.")
 
 
+def ordna_raknardelar(exam: dict | None, prov: dict | None) -> bool:
+    """Bladets uppgifter utan räknare först, som provets delar. Sant när
+    något flyttades.
+
+    Bladet sätts i provets form (Rickard 2026-10-22), och provet säger
+    räknaren i delrubriken: «Del A: Räknare är inte tillåten» och sedan «Del
+    B: Räknare är tillåten». Det går bara när bladets uppgifter står i den
+    ordningen (exam_latex._blad_raknardelar). Nickies blad (exam 284) hade
+    räknaruppgiften 4 mitt bland uppgifterna utan räknare och fick inga
+    delar. Ordningen inom varje grupp står kvar, så stegringen gör det.
+
+    BARA VID GENERERINGEN. Lärarens bilder i canvas nycklas på uppgiftens
+    nummer, och ett blad som redan har dem får inte byta ordning i ett
+    omskrivningsvarv."""
+    if not isinstance(exam, dict) or not prov:
+        return False
+    uppgifter = exam.get("uppgifter")
+    if (not isinstance(uppgifter, list)
+            or not all(isinstance(u, dict) for u in uppgifter)):
+        return False
+    beslut = raknarbeslut_ur_provet(exam, prov)
+    if not beslut:
+        return False
+    ordning = sorted(range(len(uppgifter)), key=lambda i: beslut[i + 1])
+    if ordning == list(range(len(uppgifter))):
+        return False
+    exam["uppgifter"] = [uppgifter[i] for i in ordning]
+    return True
+
+
 def satt_raknarrad_ur_provet(exam: dict | None, prov: dict | None) -> bool:
     """Skriv bladets hjälpmedelsrad ur provets delar. Sant när raden sattes.
     Markeringarna i uppgifterna skrivs sedan av satt_raknarmarkering."""
@@ -13305,8 +13335,10 @@ def bladets_npvakter(exam: dict) -> list[dict]:
     # vakterna som hade fällt dem kördes bara på provet. «Vi ska kunna
     # förlita oss på generatorn.» Kursvakten och parametervakten mäter
     # innehållet, inte provets poängform, och gäller därför bladet lika.
+    # Metodvakten också (Rickard 2026-10-22): «med algebraisk metod» stod på
+    # Sajads blad (exam 282) uppgift 9.
     return (np_vakter.doltkravvakt(exam) + np_vakter.avrundningsvakt(exam)
-            + np_vakter.endastsvarvakt(exam)
+            + np_vakter.endastsvarvakt(exam) + np_vakter.metodvakt(exam)
             + np_vakter.parametervakt(exam, kurs)
             + np_vakter.kursvakt(exam, kurs))
 
@@ -16177,7 +16209,13 @@ def _generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
             fraga_for_sig(r.get("exam"))
         # BLADETS RÄKNARRAD UR PROVETS DELAR (Rickards dom 2026-09-24), före
         # markeringen som läser den. Utan valt prov skriver modellen raden.
+        # Uppgifterna utan räknare först, som provets delar (2026-10-22).
+        # Före raden, som räknas ur den nya ordningen; varningarna med
+        # räknade koder räknas om nedan.
         if inforprov and profil == "arbetsblad":
+            if ordna_raknardelar(r.get("exam"), inforprov):
+                log("Ordningen: uppgifterna utan räknare först, som på "
+                    "provet.")
             satt_raknarrad_ur_provet(r.get("exam"), inforprov)
         ovningspappret_stadat(r.get("exam"), profil)
         # ── UTANFÖR KURSEN, SIST AV ALLT (app/ci_utanfor.py) ─────────────
