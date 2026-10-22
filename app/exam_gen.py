@@ -1122,6 +1122,19 @@ INSTRUCTION = (
     '"figur": {"typ": "andragrad", "a": 1, "b": -4, "c": 3}. En uppgift kan ha '
     "figur ELLER bild, aldrig både. Använd figur där den prövar avläsning "
     "eller tolkning; referera den i texten (t.ex. 'Figuren visar …').\n"
+    # Rickard 2026-10-22 (prov 215 uppg 5 och 12): «Vadå linje ett? Det
+    # framgår inte tydligt i bilden vad som är linje ett.» Två linjer ska
+    # heta något i en mening och synas i figuren med namn
+    # (exam_figures.linjar_namn läser texten). (1) och (2) är bara
+    # ekvationssystemets numrering, och då står de som ett system.
+    "  • LINJER HAR NAMN. Två linjer i samma uppgift heter $f$ och $g$ i en "
+    "mening: «Linjen $f$ har ekvationen $x + y = 6$ och linjen $g$ har "
+    "ekvationen $2x - y = 0$.», aldrig «linje (1)» och aldrig två "
+    "ekvationsrader under varandra när det inte är ett ekvationssystem. "
+    "Figurens k och m är linjen $f$:s, och «Figuren visar linjerna $f$ och "
+    "$g$.» ritar båda med namn och var sin färg. En linje eleven själv ska "
+    "rita nämns inte efter «Figuren visar». Handlar uppgiften om "
+    "skärningspunkter eller ytan mellan linjer, ge den en figur.\n"
     # ── BILDSTÖDET: EN BESTÄLLNING, INTE EN BILD ──────────────────────
     # Läraren: «Skit i nyckeln, ingen API. Prompt bara, så skapar jag bilden
     # med min prenumeration.» Modellen skriver alltså en beställning i HENNES

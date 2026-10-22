@@ -483,6 +483,35 @@ _EKVRAD_RE = re.compile(r"^\(\d+\)\s*\$[^$]+\$\s*[.,]?$")
 _ETIKETTRAD_RE = re.compile(r"^[A-ZÅÄÖ][^\s:$]*(?: [^\s:$]+)?:\s*\$[^$]+\$\s*[.,;]?$")
 
 
+# ETT EKVATIONSSYSTEM HAR KLAMMER (Rickard 2026-10-22, prov 215 uppg 9 och
+# 10): «ett ekvationssystem har vi en … stor båge till vänster för att
+# symbolisera att det är ett ekvationssystem. Och sen har man ettan och
+# tvåan till höger om ekvationerna … inte till vänster som vi har nu.» Två
+# eller fler ekvationsrader i följd blir en displayformel med \begin{cases}
+# och numret till höger. En ensam rad, «(1) $u + n = 12$» i ett påbörjat
+# system, står kvar som den skrivs. Spegel av blad-bygg.js systemRader.
+_EKVRAD_DELAR_RE = re.compile(r"^\((\d+)\)\s*\$([^$]+)\$\s*[.,]?$")
+
+
+def _systemrader(rader: list[str]) -> list[str]:
+    ut: list[str] = []
+    i = 0
+    while i < len(rader):
+        j = i
+        while j < len(rader) and _EKVRAD_DELAR_RE.match(rader[j].strip()):
+            j += 1
+        if j - i >= 2:
+            delar = [_EKVRAD_DELAR_RE.match(r.strip()) for r in rader[i:j]]
+            ut.append("$\\begin{cases} " + " \\\\ ".join(
+                f"{m.group(2).strip()} & ({m.group(1)})" for m in delar)
+                + " \\end{cases}$")
+            i = j
+        else:
+            ut.append(rader[i])
+            i += 1
+    return ut
+
+
 def _egen_rad(text: str) -> bool:
     """Står raden på egen rad även i ett hopslaget stycke?"""
     return bool(_EKVRAD_RE.match(text or "") or _ETIKETTRAD_RE.match(text or ""))
@@ -541,7 +570,7 @@ def _stycken(text: str, luft: bool = False,
     2026-09-25, exam 126 9a: «På Pizzeria Roma kostar en pizza 108 kr.
     Bestäm pizzans diameter.» på samma rad, luft först före b). En rad som
     bara är en formel står kvar som displayformel."""
-    rader = str(text or "").replace("\r\n", "\n").split("\n")
+    rader = _systemrader(str(text or "").replace("\r\n", "\n").split("\n"))
     if ihop:
         rader = _ihop(rader, forst_i_raden)
         luft = False

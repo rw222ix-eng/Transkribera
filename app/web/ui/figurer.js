@@ -371,12 +371,17 @@ window.Figurer = (() => {
      hamnar i rutan, och ligger nollan utanför fönstret står axeln i kanten. */
   /* `stracka` [a, b] är _funktionsgrafs: kurvan bara på a ≤ x ≤ b, och
      y-fönstret tar med nollan. */
-  function grafFonster(fn, xlo, xhi, stracka = null, samples = 80) {
+  function grafFonster(fn, xlo, xhi, stracka = null, samples = 80, fler = []) {
     const xs = [], ys = [];
     const [a, b] = stracka || [xlo, xhi];
     for (let i = 0; i <= samples; i++) xs.push(a + (b - a) * i / samples);
     xs.forEach(x => ys.push(fn(x)));
-    let ylo = Math.min(...ys), yhi = Math.max(...ys);
+    /* De andra namngivna linjerna (FigLinjar.fler) över hela fönstret, med i
+       y-fönstret (exam_figures._funktionsgraf). */
+    const xsf = [];
+    for (let i = 0; i <= samples; i++) xsf.push(xlo + (xhi - xlo) * i / samples);
+    const yfler = fler.map(l => xsf.map(l.fn));
+    let ylo = Math.min(...ys, ...yfler.flat()), yhi = Math.max(...ys, ...yfler.flat());
     if (stracka) { ylo = Math.min(ylo, 0); yhi = Math.max(yhi, 0); }
     if (yhi - ylo < 1e-9) yhi = ylo + 1;
     const pad = (yhi - ylo) * 0.08;
@@ -390,7 +395,8 @@ window.Figurer = (() => {
       x0: xlo <= 0 && 0 <= xhi ? X(0) : 0,
       y0: ylo <= 0 && 0 <= yhi ? Y(0) : 0,
       xmaj: xticks.map(X), ymaj: yticks.map(Y), X, Y,
-      punkter: xs.map((x, i) => [X(x), Y(ys[i])])
+      punkter: xs.map((x, i) => [X(x), Y(ys[i])]),
+      fler: fler.map((l, k) => ({ namn: l.namn, punkter: xsf.map((x, i) => [X(x), Y(yfler[k][i])]) }))
     };
   }
   /* Kurvan klipps mot rutan (pappret: \clip). Fönstret är satt efter kurvan,
@@ -420,8 +426,19 @@ window.Figurer = (() => {
     avsluta();
     return sjok;
   }
-  function funktionsgraf(fn, xlo, xhi, stracka = null) {
-    const L = grafFonster(fn, xlo, xhi, stracka);
+  /* Namngivna linjer: lila f, grön g (Rickard 2026-10-22), som pappret. */
+  const LINJEFARG = ['rgb("#8b00c9")', 'rgb("#269926")', 'rgb("#e67a00")'];
+  function namnplats(pkt, i) {
+    for (let j = 0; j < 14; j++) {
+      const andel = 0.9 - 0.2 * i - 0.05 * j;
+      if (andel < 0.05 || andel > 0.95) continue;
+      const [x, y] = pkt[Math.round(andel * (pkt.length - 1))];
+      if (y >= 0.1 * BOXH && y <= 0.88 * BOXH && x >= 0.12 * BOXW) return [x, y];
+    }
+    return null;
+  }
+  function funktionsgraf(fn, xlo, xhi, stracka = null, namn = null, fler = []) {
+    const L = grafFonster(fn, xlo, xhi, stracka, 80, fler);
     const P = (x, y) => `(${r4(x)}, ${r4(y)})`;
     const rader = [];
     /* Rutnätet först, bakom allt: mellanlinjer ljusare, huvudlinjer vid ticksen
@@ -453,8 +470,15 @@ window.Figurer = (() => {
       rader.push(`content(${P(-UT, g)}, anchor: "east")[${etikett(v)}]`);
     });
     /* Blå kurva, det enda färgade på pappret (förlagans \addplot[blue]). */
+    const farg0 = namn ? LINJEFARG[0] : 'blue';
     klipp(L.punkter, BOXW, BOXH).forEach(s =>
-      rader.push(`line(${s.map(p => P(p[0], p[1])).join(', ')}, stroke: (thickness: 1.8pt, paint: blue))`));
+      rader.push(`line(${s.map(p => P(p[0], p[1])).join(', ')}, stroke: (thickness: 1.8pt, paint: ${farg0}))`));
+    L.fler.forEach((l, i) => klipp(l.punkter, BOXW, BOXH).forEach(s =>
+      rader.push(`line(${s.map(p => P(p[0], p[1])).join(', ')}, stroke: (thickness: 1.8pt, paint: ${LINJEFARG[(i + 1) % LINJEFARG.length]}))`)));
+    [...(namn ? [{ namn, punkter: L.punkter }] : []), ...L.fler].forEach((l, i) => {
+      const p = namnplats(l.punkter, i);
+      if (p) rader.push(`content(${P(p[0], p[1])}, anchor: "south-east", padding: 0.08)[#text(fill: ${LINJEFARG[i % LINJEFARG.length]}, size: 1.2em)[$bold(${l.namn})$]]`);
+    });
     /* Sträckans ändpunkter hör till grafen: fyllda, i kurvans färg, och stora
        som bokens 4202/4206. Med 0.09 syntes de knappt, och då läste eleven en
        hel linje (Rickard 2026-10-15, exam 260 uppg 9). */
@@ -472,7 +496,8 @@ window.Figurer = (() => {
     andragrad: o => [x => o.a * x * x + o.b * x + o.c, parabelmitt(o) - 4, parabelmitt(o) + 4],
     exponential: o => [x => o.C * Math.pow(o.bas, x), -3, 3]
   };
-  const linjar = o => funktionsgraf(...GRAFER.linjar(o));
+  const linjar = o => funktionsgraf(...GRAFER.linjar(o), o.namn || null,
+    (o.fler || []).map(l => ({ namn: l.namn, fn: x => l.k * x + l.m })));
   const andragrad = o => funktionsgraf(...GRAFER.andragrad(o));
   const exponential = o => funktionsgraf(...GRAFER.exponential(o));
 

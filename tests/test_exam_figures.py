@@ -321,4 +321,60 @@ def test_ekvationssystemets_rader_star_var_for_sig():
          "(2) $55x + 85y = 6\\,180$\n\nBestäm hur många sallader kaféet sålde.")
     for st in (exam_latex._ihop_stycken(exam_latex._stycken(t, luft=True)),
                exam_latex._stycken(t, ihop=True)):
-        assert [s["text"][:3] for s in st] == ["För", "(1)", "(2)", "Bes"]
+        assert [s["text"][:3] for s in st] == ["För", "\\be", "Bes"]
+        system = st[1]
+        assert system["formel"]
+        # Klammer till vänster och numret till höger (Rickard 2026-10-22).
+        assert system["text"].startswith("\\begin{cases}")
+        assert "x + y = 96 & (1)" in system["text"]
+        assert "& (2)" in system["text"]
+
+
+def test_en_ensam_ekvationsrad_far_ingen_klammer():
+    """Prov 215 uppg 14: ett påbörjat system, «(1) $u + n = 12$»."""
+    from app import exam_latex
+    t = "Ekvationssystemet är påbörjat:\n(1) $u + n = 12$\n\nBestäm tiden."
+    st = exam_latex._stycken(t, luft=True)
+    assert [s["text"][:3] for s in st] == ["Ekv", "(1)", "Bes"]
+    assert "cases" not in "".join(s["text"] for s in st)
+
+
+def test_linjens_ekvation_ur_texten():
+    le = exam_figures.linjens_ekvation
+    assert le("2x + y = 5") == (-2.0, 5.0)
+    assert le("x - 2y = 6") == (0.5, -3.0)
+    assert le("y = 4 − 2x") == (-2.0, 4.0)
+    assert le("y = \\frac{1}{2}x - 1") == (0.5, -1.0)
+    assert le("y = 0{,}5x + 3") == (0.5, 3.0)
+    assert le("6x + ay = b") is None
+    assert le("x = 3") is None
+
+
+def test_namngivna_linjer_i_figuren():
+    """Rickard 2026-10-22, prov 215 uppg 12: linjerna heter något i en
+    mening och syns i figuren med namn. Uppg 5a: linjen eleven ska rita
+    ritas inte."""
+    u = {"text": "Linjen $f$ har ekvationen $x + y = 6$ och linjen $g$ har "
+                 "ekvationen $2x - y = 0$.\nFiguren visar linjerna $f$ och $g$.",
+         "figur": {"typ": "linjar", "k": -1, "m": 6}}
+    exam_figures.linjar_ur_text(u)
+    assert u["figur"]["namn"] == "f"
+    assert u["figur"]["fler"] == [{"k": 2.0, "m": 0.0, "namn": "g"}]
+    tex = exam_figures.render_figur(exam_spec.FigLinjar.model_validate(u["figur"]))
+    assert "\\draw[violet,very thick]" in tex and "green!60!black" in tex
+    assert "\\boldsymbol{f}" in tex and "\\boldsymbol{g}" in tex
+    u5 = {"text": "Linjen $f$ har ekvationen $2x + y = 5$.",
+          "deluppgifter": [{"text": "Figuren visar linjen $f$.\nLinjen $g$ har "
+                                    "ekvationen $y = x - 1$. Rita linjen $g$.",
+                            "figur": {"typ": "linjar", "k": -2, "m": 5}}]}
+    exam_figures.linjar_ur_text(u5)
+    assert u5["deluppgifter"][0]["figur"] == {"typ": "linjar", "k": -2, "m": 5,
+                                              "namn": "f"}
+
+
+def test_utan_namn_ar_figuren_som_forut():
+    u = {"text": "Figuren visar en rät linje.", "figur": {"typ": "linjar", "k": 0.5, "m": -1}}
+    exam_figures.linjar_ur_text(u)
+    assert u["figur"] == {"typ": "linjar", "k": 0.5, "m": -1}
+    tex = exam_figures.render_figur(exam_spec.FigLinjar.model_validate(u["figur"]))
+    assert "\\draw[blue,very thick]" in tex and "boldsymbol" not in tex

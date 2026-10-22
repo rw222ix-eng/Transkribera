@@ -98,10 +98,29 @@ window.BladBygg = (() => {
      ord före kolonet, så att «Linjen L har ekvationen: $…$» flödar som förut.
      Spegel av exam_latex._ETIKETTRAD_RE. */
   const ETIKETTRAD = /^[A-ZÅÄÖ][^\s:$]*(?: [^\s:$]+)?:\s*\$[^$]+\$\s*[.,;]?$/;
+  /* Två eller fler ekvationsrader i följd är ett ekvationssystem: klammer till
+     vänster och numret till höger (Rickard 2026-10-22, prov 215). Spegel av
+     exam_latex._systemrader. */
+  const EKVDELAR = /^\((\d+)\)\s*\$([^$]+)\$\s*[.,]?$/;
+  const systemRader = rader => {
+    const ut = [];
+    for (let i = 0; i < rader.length;) {
+      let j = i;
+      while (j < rader.length && EKVDELAR.test(rader[j])) j++;
+      if (j - i >= 2) {
+        ut.push('$\\begin{cases} ' + rader.slice(i, j).map(r => {
+          const m = r.match(EKVDELAR);
+          return `${m[2].trim()} & (${m[1]})`;
+        }).join(' \\\\ ') + ' \\end{cases}$');
+        i = j;
+      } else ut.push(rader[i++]);
+    }
+    return ut;
+  };
   const ihop = s => {
     const ut = [];
     let buf = [];
-    String(s == null ? '' : s).split('\n').map(r => r.trim()).filter(Boolean)
+    systemRader(String(s == null ? '' : s).split('\n').map(r => r.trim()).filter(Boolean))
       .forEach(r => {
         if (ENSAM_FORMEL.test(r) && (ut.length || buf.length)) {
           if (buf.length) { ut.push(buf.join(' ')); buf = []; }

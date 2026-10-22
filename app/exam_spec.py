@@ -278,6 +278,13 @@ _KOEFF = Annotated[float, Field(ge=-1e9, le=1e9)]
 _LINJEFONSTER_MAX = 40.0                 # bredaste x-fönster en linje får
 
 
+class FigLinje(_Model):
+    """En linje till i en linjär figur, med namn (FigLinjar.fler)."""
+    k: _KOEFF
+    m: _KOEFF
+    namn: str = Field(min_length=1, max_length=3)
+
+
 class FigLinjar(_Model):
     typ: Literal["linjar"]
     k: _KOEFF                             # riktningskoefficient
@@ -293,6 +300,15 @@ class FigLinjar(_Model):
     # ändpunkter, `fonster` är x-fönstret. Utan dem: −1 ≤ x ≤ 7 som förut.
     stracka: tuple[_KOEFF, _KOEFF] | None = None
     fonster: tuple[_KOEFF, _KOEFF] | None = None
+    # NAMNGIVNA LINJER (Rickard 2026-10-22, prov 215 uppg 5 och 12): «Det
+    # framgår inte tydligt i bilden vad som är linje ett», och två linjer i
+    # samma uppgift ska stå i figuren med namn och var sin färg. Också de här
+    # SÄTTS AV APPEN ur texten (exam_figures.linjar_namn): `namn` är
+    # bokstaven vid figurens linje när texten säger «linjen $f$ har
+    # ekvationen …» med samma k och m, och `fler` är de andra linjerna som
+    # texten säger att figuren visar («Figuren visar linjerna $f$ och $g$»).
+    namn: str | None = Field(default=None, max_length=3)
+    fler: list[FigLinje] | None = Field(default=None, max_length=3)
 
     @model_validator(mode="after")
     def _kontrollera_intervall(self):
@@ -962,8 +978,9 @@ def _bygg_response_format(antal: int | None = None,
     # (exam_figures.linjar_ur_text), och grammatiken är byte för byte den
     # som gick i väg innan fälten fanns.
     if "FigLinjar" in schema.get("$defs", {}):
-        for falt in ("stracka", "fonster"):
+        for falt in ("stracka", "fonster", "namn", "fler"):
             schema["$defs"]["FigLinjar"]["properties"].pop(falt, None)
+        schema["$defs"].pop("FigLinje", None)
     if koder:
         item_def = schema["$defs"]["ExamItem"]
         item_def["properties"]["innehall"] = {

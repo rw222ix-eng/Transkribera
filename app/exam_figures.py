@@ -94,7 +94,8 @@ def _rutlinjer(lo: float, hi: float, skala, maj: list[float],
 
 
 def _funktionsgraf(fn, xlo: float, xhi: float, samples: int = 80,
-                   stracka: tuple[float, float] | None = None) -> str:
+                   stracka: tuple[float, float] | None = None,
+                   namn: str | None = None, fler=()) -> str:
     """Ritar en funktion i en FAST ruta (BOXW×BOXH): data mappas in, så
     koordinaten aldrig spränger TeX oavsett funktionens storlek. Kurvan
     klipps mot rutan; ticks sätts på runda datavärden. Ett TYDLIGT rutnät
@@ -107,7 +108,12 @@ def _funktionsgraf(fn, xlo: float, xhi: float, samples: int = 80,
     a, b = stracka or (xlo, xhi)
     xs = [a + (b - a) * i / samples for i in range(samples + 1)]
     ys = [fn(x) for x in xs]
-    ylo, yhi = min(ys), max(ys)
+    # De andra namngivna linjerna (FigLinjar.fler) ritas över hela fönstret
+    # och tas med i y-fönstret, så att skärningen syns.
+    xsf = [xlo + (xhi - xlo) * i / samples for i in range(samples + 1)]
+    yfler = [[f(x) for x in xsf] for f, _n in fler]
+    ylo = min([min(ys)] + [min(v) for v in yfler])
+    yhi = max([max(ys)] + [max(v) for v in yfler])
     if stracka:
         ylo, yhi = min(ylo, 0.0), max(yhi, 0.0)
     if yhi - ylo < 1e-9:
@@ -179,9 +185,26 @@ def _funktionsgraf(fn, xlo: float, xhi: float, samples: int = 80,
         # \addplot[blue, very thick], och det är den kurvan hon känner igen.
         # Rutnätet är grått, axlarna svarta; kurvan är det enda färgade på
         # pappret och syns därför även i en trött kopiator.
-        rf"\draw[blue,very thick] plot coordinates {{{pts}}};",
-        r"\end{scope}",
+        rf"\draw[{_LINJEFARG[0] if namn else 'blue'},very thick] "
+        rf"plot coordinates {{{pts}}};",
     ]
+    # NAMNGIVNA LINJER: lila f, grön g (Rickard 2026-10-22). Namnet står vid
+    # linjen i linjens färg, så att det går att läsa också i en kopiator som
+    # tappar färgen.
+    for i, ((_f2, n), yv) in enumerate(zip(fler, yfler), 1):
+        pf = " ".join(f"({_f(X(x))},{_f(Y(y))})" for x, y in zip(xsf, yv))
+        rader.append(rf"\draw[{_LINJEFARG[i % len(_LINJEFARG)]},very thick] "
+                     rf"plot coordinates {{{pf}}};")
+    rader.append(r"\end{scope}")
+    kurvor = ([(namn, list(zip(xs, ys)))] if namn else []) + [
+        (n, list(zip(xsf, yv))) for (_f2, n), yv in zip(fler, yfler)]
+    for i, (n, pkt) in enumerate(kurvor):
+        plats = _namnplats(pkt, X, Y, i)
+        if plats:
+            farg = _LINJEFARG[i % len(_LINJEFARG)]
+            rader.append(rf"\node[{farg},fill=white,inner sep=1.5pt,"
+                         rf"above left] at ({_f(plats[0])},{_f(plats[1])}) "
+                         rf"{{\large$\boldsymbol{{{n}}}$}};")
     # Sträckans ändpunkter hör till grafen och ritas fyllda, i kurvans färg
     # (bokens 4202/4206). Utanför klippningen: en ändpunkt i rutans kant ska
     # synas hel.
@@ -197,10 +220,27 @@ def _funktionsgraf(fn, xlo: float, xhi: float, samples: int = 80,
     return "\n".join(rader)
 
 
+_LINJEFARG = ("violet", "green!60!black", "orange!90!black")
+
+
+def _namnplats(pkt, X, Y, i: int):
+    """Var namnet står: på linjen långt till höger, inne i rutan med luft
+    till kanten. Linje nummer i flyttas åt vänster så att två namn inte
+    hamnar på varandra."""
+    for andel in [0.9 - 0.2 * i - 0.05 * j for j in range(14)]:
+        if not 0.05 <= andel <= 0.95:
+            continue
+        x, y = pkt[round(andel * (len(pkt) - 1))]
+        if 0.1 * BOXH <= Y(y) <= 0.88 * BOXH and 0.12 * BOXW <= X(x):
+            return X(x), Y(y)
+    return None
+
+
 def _linjar(f: "exam_spec.FigLinjar") -> str:
     lo, hi = f.fonster or LINJEFONSTER
+    fler = [((lambda x, l=l: l.k * x + l.m), l.namn) for l in f.fler or []]
     return _funktionsgraf(lambda x: f.k * x + f.m, lo, hi,
-                          stracka=f.stracka)
+                          stracka=f.stracka, namn=f.namn, fler=fler)
 
 
 # ── LINJENS FÖNSTER UR UPPGIFTENS TEXT (exam 260 uppg 9, 2026-10-16) ─────
@@ -282,6 +322,103 @@ def linjar_fonster(fig: dict, texter: list[str]) -> dict:
 _LINJE_XMAX = 18          # punkter längre ut än så är inte grafens
 
 
+# ── NAMNGIVNA LINJER UR TEXTEN (Rickard 2026-10-22, prov 215 uppg 5, 12) ──
+# «Vadå linje ett? Det framgår inte tydligt i bilden vad som är linje ett.»
+# Och uppgift 12, två linjer och x-axeln som bildar en triangel: linjerna
+# ska heta något i en mening, och figuren ska visa dem. Modellen skriver
+# fortfarande bara k och m för EN linje (grammatiken), och texten säger
+# resten: «Linjen $f$ har ekvationen $2x + y = 5$» namnger, och «Figuren
+# visar linjerna $f$ och $g$» säger vilka som ritas. Linjen eleven själv
+# ska rita (5a, «Rita linjen $g$») nämns inte efter «Figuren visar» och
+# ritas därför inte.
+_NAMNEKV_RE = re.compile(
+    r"\$([a-zA-Z])\$\s*(?::|har\s+ekvationen|med\s+ekvationen|ges\s+av)\s*"
+    r"\$([^$]*=[^$]*)\$")
+_VISAR_RE = re.compile(r"[Ff]iguren\s+visar[^.?!\n]*")
+_NAMN_I_TEXT_RE = re.compile(r"\$([a-zA-Z])\$")
+_BRAK_RE = re.compile(r"\\[dt]?frac\{([\d.]+)\}\{([\d.]+)\}")
+_TERM_RE = re.compile(r"([+-]?)(\(?[\d.]+(?:/[\d.]+)?\)?)?\*?([xy])?")
+
+
+def _led(uttryck: str) -> tuple[float, float, float] | None:
+    """Ett leds koefficienter (x, y, konstant), eller None om det inte är
+    ett linjärt uttryck i x och y."""
+    ax = ay = c = 0.0
+    pos = 0
+    while pos < len(uttryck):
+        m = _TERM_RE.match(uttryck, pos)
+        if not m or m.end() == pos or not (m.group(2) or m.group(3)):
+            return None
+        tal = (m.group(2) or "").strip("()")
+        try:
+            v = (float(tal.split("/")[0]) / float(tal.split("/")[1])
+                 if "/" in tal else float(tal) if tal else 1.0)
+        except (ValueError, ZeroDivisionError):
+            return None
+        v = -v if m.group(1) == "-" else v
+        if m.group(3) == "x":
+            ax += v
+        elif m.group(3) == "y":
+            ay += v
+        else:
+            c += v
+        pos = m.end()
+    return ax, ay, c
+
+
+def linjens_ekvation(tex: str) -> tuple[float, float] | None:
+    """(k, m) ur «y = 4 − 2x», «2x + y = 5» eller «x − 2y = 6», None för
+    allt annat (en lodrät linje, en kurva, en okänd konstant)."""
+    s = _BRAK_RE.sub(lambda m: f"({m.group(1)}/{m.group(2)})", tex)
+    s = (s.replace("{,}", ".").replace("−", "-").replace("\\cdot", "*")
+         .replace("\\left", "").replace("\\right", ""))
+    s = re.sub(r"\\[,;:! ]|\s", "", s).replace(",", ".")
+    if s.count("=") != 1:
+        return None
+    v, h = (_led(d) for d in s.split("="))
+    if v is None or h is None:
+        return None
+    ax, ay, c = v[0] - h[0], v[1] - h[1], v[2] - h[2]
+    if abs(ay) < 1e-12:
+        return None
+    return -ax / ay, -c / ay
+
+
+def linjar_namn(fig: dict, texter: list[str]) -> dict:
+    """FigLinjar som dict med `namn` och `fler` satta ur texterna. Står inget
+    namn på figurens egen linje kommer figuren tillbaka orörd. Satta fält
+    rörs inte."""
+    if (not isinstance(fig, dict) or fig.get("typ") != "linjar"
+            or fig.get("namn") is not None or fig.get("fler") is not None):
+        return fig
+    ekv: dict[str, tuple[float, float]] = {}
+    for t in texter:
+        for m in _NAMNEKV_RE.finditer(t or ""):
+            km = linjens_ekvation(m.group(2))
+            if km and m.group(1) not in ekv:
+                ekv[m.group(1)] = km
+    try:
+        k, mm = float(fig["k"]), float(fig["m"])
+    except (KeyError, TypeError, ValueError):
+        return fig
+    egen = next((n for n, (kk, m2) in ekv.items()
+                 if abs(kk - k) < 1e-6 and abs(m2 - mm) < 1e-6), None)
+    if egen is None:
+        return fig
+    visas: list[str] = []
+    for t in texter:
+        for mening in _VISAR_RE.findall(t or ""):
+            for n in _NAMN_I_TEXT_RE.findall(mening):
+                if n != egen and n in ekv and n not in visas:
+                    visas.append(n)
+    ut = dict(fig, namn=egen)
+    fler = [{"k": ekv[n][0], "m": ekv[n][1], "namn": n} for n in visas
+            if (ekv[n][0], ekv[n][1]) != (k, mm)][:3]
+    if fler:
+        ut["fler"] = fler
+    return ut
+
+
 def linjar_ur_text(uppgift: dict) -> dict:
     """Uppgiften med varje linjär figur försedd med fönster (linjar_fonster).
     En figur på en deluppgift läser deluppgiftens text och facit före
@@ -295,12 +432,16 @@ def linjar_ur_text(uppgift: dict) -> dict:
     facit = ([d.get("losning") or "" for d in delar]
              + [uppgift.get("losning") or ""])
     if isinstance(uppgift.get("figur"), dict):
-        uppgift["figur"] = linjar_fonster(uppgift["figur"],
-                                          stam + deltext + facit)
+        uppgift["figur"] = linjar_namn(
+            linjar_fonster(uppgift["figur"], stam + deltext + facit),
+            stam + deltext)
     for d in delar:
         if isinstance(d.get("figur"), dict):
-            d["figur"] = linjar_fonster(
-                d["figur"], [d.get("text") or "", d.get("losning") or ""] + stam)
+            d["figur"] = linjar_namn(
+                linjar_fonster(d["figur"],
+                               [d.get("text") or "", d.get("losning") or ""]
+                               + stam),
+                [d.get("text") or ""] + stam)
     return uppgift
 
 
