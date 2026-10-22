@@ -11194,6 +11194,18 @@ _REDOVISNINGSUPPMANING_RE = re.compile(
     r"(?<![\wåäö])(motivera|förklara|redovisa|visa hur|beskriv hur"
     r"|visa dina beräkningar|visa ditt tillvägagångssätt)(?![\wåäö])",
     re.IGNORECASE)
+# METODEN VID NAMN ÄR EN REDOVISNING (Rickard 2026-10-22, Kaspers blad 289
+# uppg 9: «Bestäm med pq-formeln vilka priser …» under «Skriv bara svaret»).
+# Metoden står i texten för att den ska synas (minnet metoden-vid-namn,
+# 3d46f09), och ett svar utan räkning visar ingen metod. pq-formeln och en
+# ekvation som ska lösas genom att bryta ut (nollproduktmetoden) gäller.
+# «Faktorisera … med konjugatregeln» och «Bryt ut …» gäller inte: där är
+# svaret självt formen, och provet 175 uppg 5 är godkänt som rutin.
+_METOD_REDOVISNING_RE = re.compile(
+    r"(?<![\wåäö])(?:med\s+(?:hjälp\s+av\s+)?pq-formeln"
+    r"|nollproduktmetoden"
+    r"|(?:lös|löser|bestäm)[^.?!\n]{0,60}?genom\s+att\s+bryta\s+ut)"
+    r"(?![\wåäö])", re.IGNORECASE)
 
 
 def kravradsvakt(exam: dict) -> list[dict]:
@@ -11214,6 +11226,17 @@ def kravradsvakt(exam: dict) -> list[dict]:
             continue
         text = f"{e['kort'].get('stam', '')} {e['kort'].get('text', '')}"
         m = _REDOVISNINGSUPPMANING_RE.search(_rentext(text))
+        metod = None if m else _METOD_REDOVISNING_RE.search(_rentext(text))
+        if metod:
+            fel.append(_err(
+                f"uppgift {e['nr']}", "kravrad",
+                f"Uppgift {e['nr']} har typen «rutin», och då trycker pappret "
+                "«Skriv bara svaret» på den, men texten namnger metoden («"
+                f"{metod.group(0)}»), och den syns bara i en räkning. Sätt "
+                "typen till \"redovisning\" så att pappret säger «Visa hur du "
+                "räknar». Metoden står kvar i texten. Behåll del, poäng och "
+                "förmåga."))
+            continue
         if not m:
             continue
         fel.append(_err(

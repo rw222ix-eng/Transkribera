@@ -610,3 +610,20 @@ def test_bladet_visar_inget_raknat_exempel():
         "Till exempel är $\\vec{a} = (3,\\ 6)$ parallell med $\\vec{w}$.",
     ):
         assert fynd(t) == [], t
+
+
+def test_metoden_vid_namn_kraver_redovisning():
+    """Rickard 2026-10-22, Kaspers blad 289 uppg 9: «Bestäm med pq-formeln
+    …» stod under «Skriv bara svaret». En faktorisering med konjugatregeln
+    är svaret självt och får vara rutin."""
+    def fynd(t, typ="rutin"):
+        exam = {"titel": "t", "kurs": "Matematik, nivå 2a", "uppgifter": [
+            {"text": t, "typ": typ, "poang": [1, 0, 0], "losning": "x"}]}
+        return [f["code"] for f in exam_gen.kravradsvakt(exam)]
+    assert fynd("Vinsten är $V = -p^2 + 400p - 30\\,000$. Bestäm med "
+                "pq-formeln vilka priser som ger vinsten 7 500 kr.") == ["kravrad"]
+    assert fynd("Lös ekvationen genom att bryta ut $x$: $2x^2 = 14x$.") == ["kravrad"]
+    assert fynd("Lös ekvationen med pq-formeln: $x^2 - 2x - 15 = 0$.",
+                "redovisning") == []
+    assert fynd("Faktorisera uttrycket med konjugatregeln: $x^2 - 49$.") == []
+    assert fynd("Bryt ut så mycket som möjligt ur uttrycket: $14x^2 - 21x$.") == []
