@@ -642,3 +642,29 @@ def test_uppgiften_far_deluppgiftens_kravrad():
     assert [f["path"] for f in exam_gen.kravradsvakt(exam)] == ["uppgift 1"]
     exam["uppgifter"][0]["typ"] = "redovisning"
     assert exam_gen.kravradsvakt(exam) == []
+
+
+def test_insattningsvakt_kraver_det_givna_vardet_forst():
+    """Rickard 2026-10-23, Williams blad exam 292 uppg 9: facit började med
+    «$x^2 - 400x + 37\\,500 = 0$», och steget «sätt V = 7 500» saknades."""
+    text = ("Räknare tillåten. En biltvätt tar $x$ kr för en tvätt.\nVinsten i "
+            "kr per dag är:\n$V = -x^2 + 400x - 30\\,000$\nBestäm med "
+            "pq-formeln vilka priser som ger vinsten 7 500 kr per dag.")
+    pq = "\n$x = 200 \\pm \\sqrt{40\\,000 - 37\\,500} = 200 \\pm 50$ ← använd pq-formeln"
+    def fynd(losning):
+        exam = {"titel": "t", "kurs": "Matematik, nivå 2a", "uppgifter": [
+            {"text": text, "typ": "redovisning", "poang": [2, 0, 0],
+             "losning": losning}]}
+        return exam_gen.insattningsvakt(exam)
+    fel = fynd("150 och 250\n$x^2 - 400x + 37\\,500 = 0$ ← dra bort 7 500" + pq)
+    assert [f["code"] for f in fel] == ["facit_insattning"]
+    assert "7500" in fel[0]["message"] and "V" in fel[0]["message"]
+    assert fynd("150 och 250\n$-x^2 + 400x - 30\\,000 = 7\\,500$ ← sätt V = 7 500"
+                "\n$x^2 - 400x + 37\\,500 = 0$ ← dra bort 7 500" + pq) == []
+    # Formelns indata insatt och uträknat (exam 278 uppg 8): inget fynd.
+    exam = {"uppgifter": [{"text": "Vinsten i kr en dag är $V = -3x^2 + 240x - "
+                           "2\\,700$, där $x$ är priset i kr.\nBeräkna vinsten "
+                           "när en bukett kostar 50 kr.",
+                           "losning": "$1\\,800$\n$V = -3 \\cdot 2\\,500 + "
+                           "12\\,000 - 2\\,700$ ← sätt in $x = 50$"}]}
+    assert exam_gen.insattningsvakt(exam) == []

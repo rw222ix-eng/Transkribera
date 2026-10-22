@@ -11104,6 +11104,60 @@ def raknat_exempelvakt(exam: dict) -> list[dict]:
     return fel[:FORKLARING_MAX_FYND]
 
 
+# DET GIVNA VÄRDET SÄTTS IN FÖRST (Rickard 2026-10-23, Williams blad exam 292
+# uppg 9): «$V = -x^2 + 400x - 30\,000$ … vilka priser som ger vinsten 7 500
+# kr». Facit började med «$x^2 - 400x + 37\,500 = 0$ ← dra bort 7 500», och
+# steget där V blir 7 500 fanns inte. Eleven ser aldrig var 37 500 kommer
+# ifrån. Uppgiften ger en formel för en storhet och frågar när storheten har
+# ett värde: första räknesteget i facit bär det värdet.
+_FORMEL_RE = re.compile(r"\$\s*([A-Za-z])(?:\(([a-z])\))?\s*=\s*([^$=]*[a-z][^$=]*)\$")
+_VARDEFRAGA_RE = re.compile(r"\b(?:ger|blir|är|når|lika med)\b|=", re.I)
+_NOLLED_RE = re.compile(r"=\s*0\s*\$$")
+
+
+def _talen(s: str) -> set[str]:
+    return set(_TAL_RE.findall(_normaltal(s)))
+
+
+def insattningsvakt(exam: dict) -> list[dict]:
+    """Ett facit som inte börjar med att sätta in uppgiftens givna värde i
+    formeln. Noll anrop."""
+    fel: list[dict] = []
+    for e in rakneverk.enheter(exam):
+        text = str(e["text"] or "")
+        formler = list(_FORMEL_RE.finditer(text))
+        rader = [r for r in str(e["losning"] or "").split("\n") if r.strip()]
+        if not formler or len(rader) < 2:
+            continue
+        sista = formler[-1]
+        fraga = text[sista.end():]
+        if not _VARDEFRAGA_RE.search(fraga):
+            continue
+        i_formeln = _talen(sista.group(0))
+        givna = _talen(fraga) - i_formeln
+        if not givna:
+            continue
+        steg = next((r for r in rader[1:]
+                     if _MATTE_RE.search(exam_spec.elevrad_delar(r)[0])), "")
+        matten = _MATTE_RE.findall(exam_spec.elevrad_delar(steg)[0])
+        # Bara när första steget redan är ekvationen «… = 0»: värdet har
+        # flyttats över utan att ha stått i formeln. Sätter facit i stället in
+        # x och räknar ut V («$V = -3 \cdot 2\,500 + …$», exam 278 uppg 8) är
+        # värdet formelns indata, och då försvinner talet med rätta.
+        if not matten or not _NOLLED_RE.search(matten[0]) or givna & _talen(" ".join(matten)):
+            continue
+        varde = sorted(givna, key=len)[-1]
+        namn = sista.group(1) + (f"({sista.group(2)})" if sista.group(2) else "")
+        fel.append(_err(
+            f"uppgift {e['nr']}", "facit_insattning",
+            f"Uppgift {e['nr']}: facit börjar inte med att sätta in det givna "
+            f"värdet {varde} i formeln för {namn}. Första steget efter svaret "
+            f"är formeln med värdet insatt, till exempel «$… = {varde}$ ← sätt "
+            f"{namn} = {varde}», och sedan stegen som står där nu. Ändra bara "
+            "facit, inte uppgiften."))
+    return fel
+
+
 def a_nivavakt(exam: dict) -> list[dict]:
     """A-poäng som inte kräver en insikt.
 
@@ -14067,7 +14121,8 @@ def ovningsvakter(exam: dict, *, prov: dict | None = None,
     # på 105 godkända blad för just dem.
     ren = _utan_raknarmarken(exam)
     fel += (kravradsvakt(ren) + blandat_krav_vakt(ren)
-            + deluppgiftsvakt(ren) + raknat_exempelvakt(ren))
+            + deluppgiftsvakt(ren) + raknat_exempelvakt(ren)
+            + insattningsvakt(ren))
     # Scenvakten står INTE här: provkörningen på de femton bladen fällde
     # hälften av dem på ett begrepp som inte stod ordagrant i texten
     # («färgåtgång» om en vägg som ska målas), och en reparationsrunda skriver

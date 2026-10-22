@@ -333,3 +333,33 @@ def test_en_frisk_flervalsfraga_rors_inte():
 def test_svaret_skrivs_med_svenskt_decimalkomma():
     assert rakneverk.formatera(rakneverk.tolka("18.75"), "$x$") == "$18{,}75$"
     assert rakneverk.formatera(rakneverk.tolka("12"), "12") == "12"
+
+
+# ── Nej-svaret nämner alla lösningar (Rickard 2026-10-23, exam 295 uppg 6) ──
+_LEO = ("Utan räknare. Leo påstår att ekvationen $x^2 - 3x - 10 = 0$ har "
+        "lösningarna $x = 5$ och $x = 2$.\nAvgör med en beräkning om Leo har rätt.")
+_LEO_STEG = ("\n$5^2 - 3 \\cdot 5 - 10 = 0$ ← sätt in $x = 5$"
+             "\n$2^2 - 3 \\cdot 2 - 10 = -12$ ← blir inte 0")
+
+
+def test_nej_svar_som_tappar_en_losning_fälls():
+    fynd, stat = rakneverk.granska_nej_svar(
+        "6", _LEO, "Nej, bara $x = 5$ är en lösning." + _LEO_STEG)
+    assert stat["motbevisade"] == 1
+    assert fynd[0]["code"] == rakneverk.KOD
+    assert "$x = -2$" in fynd[0]["message"] and "$x = 5$" in fynd[0]["message"]
+    # Och hela räkneverket ser det.
+    exam = _exam([{"text": _LEO, "losning": "Nej, bara $x = 5$ är en lösning." + _LEO_STEG}])
+    assert any("ekvationen har lösningarna" in f["message"]
+               for f in rakneverk.granska(exam)["fel"])
+
+
+@pytest.mark.parametrize("svar", [
+    "Nej, lösningarna är $x = 5$ och $x = -2$.",
+    "Nej, även $x = -2$ är en lösning.",      # pekar ut roten som tappades
+    "Nej.",                                    # sant, nämner inga rötter
+    "Ja, båda är lösningar.",
+])
+def test_nej_svar_som_är_sant_står_kvar(svar):
+    fynd, _ = rakneverk.granska_nej_svar("6", _LEO, svar + _LEO_STEG)
+    assert fynd == []

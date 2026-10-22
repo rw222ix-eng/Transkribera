@@ -520,6 +520,66 @@ def granska_rot(nr: str, text: str, losning: str) -> tuple[list[dict], dict]:
     return fynd, stat
 
 
+# NEJ-SVARET NÄMNER ALLA LÖSNINGAR (Rickard 2026-10-23, Nickies blad exam 295
+# uppg 6): «Leo påstår att $x^2 - 3x - 10 = 0$ har lösningarna $x = 5$ och
+# $x = 2$», och rutan sa «Nej, bara $x = 5$ är en lösning.» Ekvationen har
+# också $x = -2$, så svaret i rutan var fel fast varje led stämde. Här är det
+# inget medvetet bortval som i granska_rot: ett Nej på ett påstående om
+# lösningarna som nämner rötter ska nämna ALLA. Ett Nej utan rötter («Nej.»)
+# står kvar, det är sant. Så gör ett Nej som pekar ut roten påståendet
+# tappade: «Nej, även $x = 0$ är en lösning.» (Rickards godkända omprov 267
+# och 268 uppg 5, blad 141, 186, 276, 277).
+_NEJ_RE = re.compile(r"^\s*nej\b", re.I)
+_TILLAGG_RE = re.compile(r"\b(?:även|också|dessutom|saknas|fattas)\b", re.I)
+_MAX_ROTTER = 4
+
+
+def _losningar(sym, rest) -> list | None:
+    """Ekvationens reella lösningar, eller None när de inte går att räkna."""
+    v = verktyg()
+    try:
+        ut = [r for r in v["sympy"].solve(rest, sym) if r.is_real]
+    except Exception:                                   # noqa: BLE001
+        return None
+    return ut if 0 < len(ut) <= _MAX_ROTTER else None
+
+
+def granska_nej_svar(nr: str, text: str, losning: str) -> tuple[list[dict], dict]:
+    """Nämner ett Nej-svar om en ekvations lösningar alla lösningar?"""
+    stat = {"verifierade": 0, "motbevisade": 0, "otolkbara": 0}
+    svar = (str(losning or "").strip().split("\n") or [""])[0]
+    if (not tillgangligt() or not _NEJ_RE.match(svar) or _TILLAGG_RE.search(svar)
+            or not _EKVATIONSORD.search(text or "")):
+        return [], stat
+    namnda = _rotpastaenden(svar)
+    if not namnda:
+        return [], stat
+    fynd: list[dict] = []
+    for e in (_ekvation(tolka(s)) for s in mattesegment(text)[:_MAX_SEGMENT]):
+        if e is None:
+            continue
+        sym, rest = e
+        egna = [vd for namn, _s, vd in namnda if namn == _basnamn(sym.name)]
+        losn = _losningar(sym, rest) if egna else None
+        if losn is None:
+            stat["otolkbara"] += bool(egna)
+            continue
+        saknas = [r for r in losn if not any(lika_tal(r, vd, 1e-9) for vd in egna)]
+        if not saknas:
+            stat["verifierade"] += 1
+            continue
+        stat["motbevisade"] += 1
+        alla = " och ".join(f"${sym.name} = {formatera(r)}$" for r in losn)
+        fynd.append(_err(
+            f"uppgift {nr}", KOD,
+            f"uppgift {nr}: facit svarar «{_kort(svar, 60)}», men ekvationen "
+            f"har lösningarna {alla}. Ett Nej-svar på ett påstående om "
+            "lösningarna nämner ALLA lösningar, till exempel «Nej, "
+            f"lösningarna är {alla}.» Ändra bara svarsraden i facit, inte "
+            "uppgiften."))
+    return fynd, stat
+
+
 def _satt_in(uttryck, sym, varde):
     try:
         return uttryck.subs({sym: varde})
@@ -585,7 +645,8 @@ def granska(exam: dict) -> dict:
             continue
         stat["enheter"] += 1
         for f, s in (granska_kedjor(e["nr"], losning),
-                     granska_rot(e["nr"], e["text"], losning)):
+                     granska_rot(e["nr"], e["text"], losning),
+                     granska_nej_svar(e["nr"], e["text"], losning)):
             fynd += f
             for k, n in s.items():
                 stat[k] += n
