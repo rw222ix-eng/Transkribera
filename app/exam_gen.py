@@ -8653,6 +8653,70 @@ def delfragor_till_deluppgifter(exam: dict | None, profil: str) -> list[dict]:
     return fel
 
 
+# SVARSFÄLTEN HÖR TILL DELUPPGIFTERNA (prov 215 v1388, uppgift 5). Modellen
+# lade «Svar $x =$», «Svar $y =$», «Svar $a =$», «Svar $b$:» på stammen. Mallen
+# sätter stammens fält efter sista deluppgiften (prov.tex.j2), så alla fyra
+# hamnade under b) och a) fick ett tomt «Svar:». Ingen vakt såg det: fältet är
+# tillåtet på stammen, för en rad som gäller hela uppgiften. Är varje
+# deluppgift kortsvar utan egna fält flyttas fälten hit: ett per del när de är
+# lika många, annars efter bokstaven («Svar a) …») eller variabeln som delens
+# lösning bestämmer («$x = 2$»). Går ett fält inte att placera blir det ett
+# fynd i reparationsrundan.
+SVARSFALTKOD = "svarsfalt_pa_stammen"
+_FALTVARIABEL = re.compile(r"\$\s*\\?([a-zA-Z])\s*(?:=|\\neq|\$)")
+
+
+def _faltets_del(falt: str, delar: list[dict]) -> int | None:
+    """Indexet för den deluppgift fältet hör till, eller None."""
+    m = re.match(r"^\s*(?:svar\s*)?\(?([a-h])\)", falt, re.I)
+    if m:
+        k = ord(m.group(1).lower()) - ord("a")
+        return k if k < len(delar) else None
+    m = _FALTVARIABEL.search(falt)
+    if not m:
+        return None
+    v = re.escape(m.group(1))
+    traff = [k for k, d in enumerate(delar)
+             if re.search(rf"(?<![\w\\]){v}\s*(?:=|\\neq|≠)",
+                          str(d.get("losning") or ""))]
+    return traff[0] if len(traff) == 1 else None
+
+
+def svarsfalt_till_delarna(exam: dict | None) -> list[dict]:
+    """Stammens svarsfält flyttade till deluppgifterna, på plats (provet).
+    Returnerar fynden för fält som inte gick att placera."""
+    if not isinstance(exam, dict):
+        return []
+    fel: list[dict] = []
+    for i, u in enumerate(exam.get("uppgifter") or []):
+        if not isinstance(u, dict):
+            continue
+        delar = [d for d in (u.get("deluppgifter") or []) if isinstance(d, dict)]
+        falt = [str(f) for f in (u.get("svarsfalt") or []) if str(f).strip()]
+        if len(delar) < 2 or not falt:
+            continue
+        if any((d.get("typ") or u.get("typ")) != "rutin" or d.get("svarsfalt")
+               for d in delar):
+            continue
+        if len(falt) == len(delar):
+            plats = list(range(len(delar)))
+        else:
+            plats = [_faltets_del(f, delar) for f in falt]
+        if None in plats:
+            fel.append(_err(
+                f"uppgifter[{i}].svarsfalt", SVARSFALTKOD,
+                f"uppgift {i + 1} har svarsfälten {falt} på stammen, men "
+                "varje deluppgift är kortsvar. På pappret hamnar då alla fält "
+                "under sista deluppgiften. Lägg svarsfalt på varje deluppgift "
+                "med just de svar den frågar efter, och inga på stammen."))
+            continue
+        for f, k in zip(falt, plats):
+            delar[k].setdefault("svarsfalt", []).append(
+                _BOKSTAVSPREFIX.sub("", f) or "Svar")
+        u.pop("svarsfalt", None)
+    return fel
+
+
 def _validate(exam: dict, profil: str, koder: list[str] | None = None,
               niva_mal: dict | None = None):
     """validate_exam_json + variationskontroll (BARA prov) + CI-taggningen.
@@ -8677,8 +8741,10 @@ def _validate(exam: dict, profil: str, koder: list[str] | None = None,
     # uppgiftsbasen, så modellen kan sätta det var som helst — på provet blir
     # det en svarsplats som säger emot uppgiftens egen kravrad. Tyst rättelse,
     # av samma skäl som sorteringen ovan.
+    faltfel: list[dict] = []
     if profil == "prov":
         exam_spec.rensa_svarsfalt(exam)
+        faltfel = svarsfalt_till_delarna(exam)
     # DELFRÅGORNA I STAMMEN BLIR DELUPPGIFTER, på övningspappren (lärarens
     # dom 2026-10-02, se DELFRAGEKOD). Före valideringen: det är de nya
     # deluppgifterna balansen och stammen ska räknas på. Det som inte gick
@@ -8689,7 +8755,7 @@ def _validate(exam: dict, profil: str, koder: list[str] | None = None,
     # utan_egen_bokstav). Tyst rättelse, som sorteringen ovan.
     exam_spec.stryk_delbokstaver(exam)
     doc, errors = exam_spec.validate_exam_json(exam, profil, niva_mal)
-    errors = errors + delfel
+    errors = errors + delfel + faltfel
     if doc is not None and profil == "prov":
         errors = errors + exam_spec.validate_variation(doc)
     if doc is not None:
