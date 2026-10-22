@@ -467,6 +467,26 @@ def test_deluppgifter_utan_stam_falls():
         _doc("", figur={"typ": "linjar", "k": 2, "m": 1})) == []
 
 
+def test_deluppgift_som_hanvisar_till_a_behover_ingen_stam():
+    """Lärarens dom 2026-10-22 (exam 268 uppg 4): b) som säger «i a)» håller
+    ihop uppgiften, och en stam ovanför blir dubbel. Utan hänvisning fälls
+    den stamlösa uppgiften som förut."""
+    d = {"poang": (1, 0, 0), "losning": "_", "bedomning": "_"}
+    def _doc(a, b):
+        return exam_spec.ExamDoc(
+            titel="_", kurs="_", hjalpmedel="_",
+            uppgifter=[exam_spec.ExamItem(
+                formaga="B", typ="redovisning", poang=(0, 0, 0), text="",
+                deluppgifter=[exam_spec.SubItem(text=a, **d),
+                              exam_spec.SubItem(text=b, **d)])])
+    assert exam_spec.validate_stam(_doc(
+        "Börja med att utveckla $(2x + 3)^2$.",
+        "Nu har du utvecklat $(2x + 3)^2$ i a). Förenkla uttrycket "
+        "$(2x + 3)^2 - (2x + 3)(2x - 3)$.")) == []
+    assert [e["code"] for e in exam_spec.validate_stam(_doc(
+        "Utveckla $(2x + 3)^2$.", "Förenkla uttrycket."))] == ["stam"]
+
+
 # ── Canvas ────────────────────────────────────────────────────────────
 # Frontenden är samma filer som Claude Design-projektet och har ingen egen
 # svit; kontraktet mot backenden låses därför här, i källan. Testet fångar det

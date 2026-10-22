@@ -2694,6 +2694,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # stod kvar på 15.15–17.15. Skickas fältet vinner det, annars som förut.
         nytt_klockslag = (str(body["klockslag"]).strip()
                           if isinstance(body.get("klockslag"), str) else None)
+        # LÄRARENS NYA PROVTID, av samma skäl (exam 267/268, 2026-10-22):
+        # omproven ärvde 70 minuter från prov 130 men skrivs 15.15–16.45, och
+        # försättsbladet sa «(70 minuter)» om ett 90-minuterspass.
+        try:
+            ny_tid = int(body["tid_min"]) if body.get("tid_min") else None
+        except (TypeError, ValueError):
+            ny_tid = None
         # Bokdörren följer med omskrivningen som med genereringen: sidorna,
         # uppgiftsnumren och lärarens urval — och SAMMA urval som skrivningen
         # fick, annars byter modellen bok mitt i arbetspasset. Läser inga sidor.
@@ -2877,6 +2884,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 gammal_takt = (view.get("exam") or {}).get("takt")
                 if isinstance(res.get("exam"), dict) and gammal_takt:
                     res["exam"]["takt"] = gammal_takt
+                if isinstance(res.get("exam"), dict) and ny_tid:
+                    res["exam"]["tid_min"] = ny_tid
                 # Provkopplingen likaså (ExamDoc.infor_prov).
                 if isinstance(res.get("exam"), dict) and infor_id:
                     res["exam"]["infor_prov"] = infor_id

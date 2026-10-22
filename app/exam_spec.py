@@ -4162,6 +4162,26 @@ def validate_ci(doc: ExamDoc, koder: list[str] | None) -> list[dict]:
     return errors
 
 
+# «i a)», «från a)», «deluppgift a)»: en deluppgift som pekar på en tidigare.
+_HANVISNING = re.compile(r"\b(?:i|från|ur|deluppgift)\s+([a-h])\)", re.I)
+
+
+def _bygger_pa_tidigare(deluppgifter) -> bool:
+    """Sant när varje deluppgift efter den första pekar på en tidigare. Då är
+    det hänvisningen som håller ihop dem, och en stam ovanför vore dubbel.
+    LÄRARENS DOM 2026-10-22 (exam 268 uppg 4): «Du ska förenkla uttrycket …»
+    ovanför a) «Utveckla …» och b) «Förenkla uttrycket …» blev dubbelt och
+    otydligt; b) ska i stället säga «Nu har du utvecklat … i a)»."""
+    if len(deluppgifter) < 2:
+        return False
+    for j, d in enumerate(deluppgifter[1:], 1):
+        tidigare = {chr(ord("a") + k) for k in range(j)}
+        if not any(m.group(1).lower() in tidigare
+                   for m in _HANVISNING.finditer(d.text or "")):
+            return False
+    return True
+
+
 def validate_stam(doc: ExamDoc) -> list[dict]:
     """En uppgift med deluppgifter måste ha något som HÅLLER IHOP dem.
 
@@ -4188,7 +4208,7 @@ def validate_stam(doc: ExamDoc) -> list[dict]:
         harstam = bool((it.text or "").strip())
         harfigur = it.figur is not None or it.bild is not None \
             or it.tabell is not None or it.stegtabell is not None
-        if harstam or harfigur:
+        if harstam or harfigur or _bygger_pa_tidigare(it.deluppgifter):
             continue
         errors.append(_err(
             f"uppgifter[{i}].text", "stam",

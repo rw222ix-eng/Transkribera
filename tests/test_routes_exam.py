@@ -217,6 +217,22 @@ def test_refine_tar_lararens_nya_klockslag(client, monkeypatch):
     assert res["exam"]["klockslag"] == "15:15–16:45"
 
 
+def test_refine_tar_lararens_nya_provtid(client, monkeypatch):
+    """Exam 267/268 (2026-10-22): omproven ärvde 70 minuter men skrivs
+    15.15–16.45. Skickas `tid_min` vinner det över modellens."""
+    result, _ = _make_exam(client, monkeypatch)
+
+    def fake_refine(exam, message, **_kw):
+        return {"exam": dict(_exam_doc(), tid_min=70), "errors": [], "rounds": 1}
+    monkeypatch.setattr(exam_gen, "refine_exam", fake_refine)
+    res = _done(client.post(f"/api/exams/{result['id']}/refine",
+                            json={"message": "rätta provtiden", "tid_min": 90}))
+    assert res["exam"]["tid_min"] == 90
+    res = _done(client.post(f"/api/exams/{result['id']}/refine",
+                            json={"message": "byt ord"}))
+    assert res["exam"]["tid_min"] == 70
+
+
 def test_refine_svaret_bar_vad_som_faktiskt_andrades(client, monkeypatch):
     """Markeringen ska inte längre gissas ur lärarens mening. Servern har båda
     versionerna och säger vilka element som skiljer sig — här: bara uppgift 1,
