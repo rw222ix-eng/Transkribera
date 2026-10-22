@@ -1683,16 +1683,18 @@ def _forsatt_vy(doc: exam_spec.ExamDoc, delar: list[dict],
 
 
 def _med_triangel(it):
-    """Uppgiften med FigLinjar.triangel satt ur texten där den saknas
-    (exam_figures.linjar_triangel). Annars samma objekt."""
+    """Uppgiften med FigLinjar.triangel och .skiss satta ur texten där de
+    saknas (exam_figures.linjar_triangel, linjar_skiss). Annars samma objekt."""
     stam = [it.text or ""]
     delar = list(it.deluppgifter or [])
 
     def figur(f, texter):
-        if not isinstance(f, exam_spec.FigLinjar) or f.triangel or not f.fler:
+        if not isinstance(f, exam_spec.FigLinjar):
             return f
-        ny = exam_figures.linjar_triangel(f.model_dump(), texter)
-        return exam_spec.FigLinjar.model_validate(ny) if ny.get("triangel") else f
+        gammal = f.model_dump()
+        ny = exam_figures.linjar_skiss(
+            exam_figures.linjar_triangel(gammal, texter), texter)
+        return exam_spec.FigLinjar.model_validate(ny) if ny != gammal else f
 
     andrad = {}
     f = figur(it.figur, stam + [d.text or "" for d in delar])

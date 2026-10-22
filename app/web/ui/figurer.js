@@ -437,8 +437,11 @@ window.Figurer = (() => {
     }
     return null;
   }
-  function funktionsgraf(fn, xlo, xhi, stracka = null, namn = null, fler = [], triangel = null) {
+  function funktionsgraf(fn, xlo, xhi, stracka = null, namn = null, fler = [], triangel = null, skiss = false) {
     const L = grafFonster(fn, xlo, xhi, stracka, 80, fler);
+    /* Skiss utan skala (FigLinjar.skiss, Rickard 2026-10-22): bara axlar och
+       linjer, inget rutnät, inga skalstreck och inga siffror. */
+    if (skiss) { L.xticks = []; L.yticks = []; L.xmaj = []; L.ymaj = []; }
     const P = (x, y) => `(${r4(x)}, ${r4(y)})`;
     const rader = [];
     /* Rutnätet först, bakom allt: mellanlinjer ljusare, huvudlinjer vid ticksen
@@ -446,8 +449,8 @@ window.Figurer = (() => {
        origo, som i lärarens förlaga. */
     const tunn = 'stroke: (thickness: 0.5pt, paint: luma(180))';
     const grov = 'stroke: (thickness: 0.6pt, paint: luma(128))';
-    rutLinjer(L.xlo, L.xhi, L.X, L.xmaj, BOXW).forEach(g => rader.push(`line(${P(g, 0)}, ${P(g, BOXH)}, ${tunn})`));
-    rutLinjer(L.ylo, L.yhi, L.Y, L.ymaj, BOXH).forEach(g => rader.push(`line(${P(0, g)}, ${P(BOXW, g)}, ${tunn})`));
+    if (!skiss) rutLinjer(L.xlo, L.xhi, L.X, L.xmaj, BOXW).forEach(g => rader.push(`line(${P(g, 0)}, ${P(g, BOXH)}, ${tunn})`));
+    if (!skiss) rutLinjer(L.ylo, L.yhi, L.Y, L.ymaj, BOXH).forEach(g => rader.push(`line(${P(0, g)}, ${P(BOXW, g)}, ${tunn})`));
     L.xmaj.forEach(g => rader.push(`line(${P(g, 0)}, ${P(g, BOXH)}, ${grov})`));
     L.ymaj.forEach(g => rader.push(`line(${P(0, g)}, ${P(BOXW, g)}, ${grov})`));
     /* Siffrorna står VID axlarna, en bit ifrån så att den vita plattan inte
@@ -524,7 +527,8 @@ window.Figurer = (() => {
   }
   const linjar = o => funktionsgraf(...GRAFER.linjar(o), o.namn || null,
     (o.fler || []).map(l => ({ namn: l.namn, fn: x => l.k * x + l.m })),
-    o.triangel && o.fler && o.fler.length ? triangelhorn(o.k, o.m, o.fler[0].k, o.fler[0].m, o.triangel) : null);
+    o.triangel && o.fler && o.fler.length ? triangelhorn(o.k, o.m, o.fler[0].k, o.fler[0].m, o.triangel) : null,
+    !!o.skiss);
   const andragrad = o => funktionsgraf(...GRAFER.andragrad(o));
   const exponential = o => funktionsgraf(...GRAFER.exponential(o));
 

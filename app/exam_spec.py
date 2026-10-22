@@ -315,6 +315,12 @@ class FigLinjar(_Model):
     # den axeln. Sätts av appen när texten säger «bildar en triangel
     # tillsammans med $x$-axeln» (exam_figures.linjar_triangel).
     triangel: Literal["x", "y"] | None = None
+    # SKISS UTAN SKALA (Rickard 2026-10-22, prov 215 uppg 12): «Egentligen är
+    # ju den ganska enkel att lösa nu med bilden … fyra är höjden och basen är
+    # sex». Med rutnät och skalsiffror läses svaret av. True ritar axlarna och
+    # linjerna utan rutnät, skalstreck och siffror. Sätts av appen när texten
+    # säger att figuren är en skiss (exam_figures.linjar_skiss).
+    skiss: bool | None = None
 
     @model_validator(mode="after")
     def _kontrollera_intervall(self):
@@ -984,7 +990,7 @@ def _bygg_response_format(antal: int | None = None,
     # (exam_figures.linjar_ur_text), och grammatiken är byte för byte den
     # som gick i väg innan fälten fanns.
     if "FigLinjar" in schema.get("$defs", {}):
-        for falt in ("stracka", "fonster", "namn", "fler", "triangel"):
+        for falt in ("stracka", "fonster", "namn", "fler", "triangel", "skiss"):
             schema["$defs"]["FigLinjar"]["properties"].pop(falt, None)
         schema["$defs"].pop("FigLinje", None)
     if koder:

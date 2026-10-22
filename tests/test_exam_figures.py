@@ -460,3 +460,25 @@ def test_sparat_papper_utan_triangelfalt_trycks_med_triangel():
     assert exam_latex._med_triangel(it).figur.triangel == "x"
     utan = it.model_copy(update={"text": "Figuren visar linjerna $f$ och $g$."})
     assert exam_latex._med_triangel(utan) is utan
+
+
+def test_skiss_utan_skala():
+    """Rickard 2026-10-22, prov 215 uppg 12: med rutnät och skalsiffror läses
+    höjden 4 och basen 6 av. En skiss har bara axlar och linjer."""
+    u = {"text": "Linjen $f$ har ekvationen $x + y = 6$ och linjen $g$ har "
+                 "ekvationen $2x - y = 0$. Linjerna $f$ och $g$ bildar en "
+                 "triangel tillsammans med $x$-axeln. Figuren visar en skiss "
+                 "av linjerna $f$ och $g$. Beräkna triangelns area.",
+         "figur": {"typ": "linjar", "k": -1, "m": 6}}
+    exam_figures.linjar_ur_text(u)
+    assert u["figur"]["skiss"] is True and u["figur"]["triangel"] == "x"
+    tex = exam_figures.render_figur(exam_spec.FigLinjar.model_validate(u["figur"]))
+    assert "black!30" not in tex and "black!50" not in tex
+    assert "footnotesize" not in tex and "line width=1pt" not in tex
+    assert r"\fill[yellow!50" in tex and "plot coordinates" in tex
+    # Utan ordet skiss: rutnätet står kvar.
+    vanlig = {"text": "Figuren visar linjen.", "figur": {"typ": "linjar", "k": 1, "m": 0}}
+    exam_figures.linjar_ur_text(vanlig)
+    assert "skiss" not in vanlig["figur"]
+    assert "black!30" in exam_figures.render_figur(
+        exam_spec.FigLinjar.model_validate(vanlig["figur"]))

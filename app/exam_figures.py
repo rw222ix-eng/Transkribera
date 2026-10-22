@@ -96,7 +96,8 @@ def _rutlinjer(lo: float, hi: float, skala, maj: list[float],
 def _funktionsgraf(fn, xlo: float, xhi: float, samples: int = 80,
                    stracka: tuple[float, float] | None = None,
                    namn: str | None = None, fler=(),
-                   triangel: list[tuple[float, float]] | None = None) -> str:
+                   triangel: list[tuple[float, float]] | None = None,
+                   skiss: bool = False) -> str:
     """Ritar en funktion i en FAST ruta (BOXW×BOXH): data mappas in, så
     koordinaten aldrig spränger TeX oavsett funktionens storlek. Kurvan
     klipps mot rutan; ticks sätts på runda datavärden. Ett TYDLIGT rutnät
@@ -105,7 +106,10 @@ def _funktionsgraf(fn, xlo: float, xhi: float, samples: int = 80,
 
     `stracka` (a, b) ritar kurvan bara på a ≤ x ≤ b, med fyllda ändpunkter,
     och y-fönstret tar med nollan: grafen ska gå att läsa av mot axlarna, och
-    en x-axel i rutans kant när nollan ligger utanför hade pekat på fel tal."""
+    en x-axel i rutans kant när nollan ligger utanför hade pekat på fel tal.
+
+    `skiss` (FigLinjar.skiss) ritar bara axlarna och kurvorna: inget
+    rutnät, inga skalstreck och inga siffror."""
     a, b = stracka or (xlo, xhi)
     xs = [a + (b - a) * i / samples for i in range(samples + 1)]
     ys = [fn(x) for x in xs]
@@ -130,17 +134,17 @@ def _funktionsgraf(fn, xlo: float, xhi: float, samples: int = 80,
 
     x0 = X(0) if xlo <= 0 <= xhi else 0.0
     y0 = Y(0) if ylo <= 0 <= yhi else 0.0
-    xticks = _nice_ticks(xlo, xhi)
-    yticks = _nice_ticks(ylo + pad, yhi - pad)
+    xticks = [] if skiss else _nice_ticks(xlo, xhi)
+    yticks = [] if skiss else _nice_ticks(ylo + pad, yhi - pad)
     xmaj = [X(t) for t in xticks]
     ymaj = [Y(t) for t in yticks]
 
     rader = [r"\begin{tikzpicture}[line join=round]"]
     # Tydligt rutnät (helt synligt, ingen svag ton): minorlinjer på halva
     # tickavståndet + majorlinjer vid de etiketterade ticksen, bakom allt annat.
-    for gx in _rutlinjer(xlo, xhi, X, xmaj, BOXW):
+    for gx in [] if skiss else _rutlinjer(xlo, xhi, X, xmaj, BOXW):
         rader.append(rf"\draw[black!30,thin] ({_f(gx)},0)--({_f(gx)},{_f(BOXH)});")
-    for gy in _rutlinjer(ylo, yhi, Y, ymaj, BOXH):
+    for gy in [] if skiss else _rutlinjer(ylo, yhi, Y, ymaj, BOXH):
         rader.append(rf"\draw[black!30,thin] (0,{_f(gy)})--({_f(BOXW)},{_f(gy)});")
     for gx in xmaj:
         rader.append(rf"\draw[black!50,thin] ({_f(gx)},0)--({_f(gx)},{_f(BOXH)});")
@@ -276,7 +280,7 @@ def _linjar(f: "exam_spec.FigLinjar") -> str:
             if f.triangel and f.fler else None)
     return _funktionsgraf(lambda x: f.k * x + f.m, lo, hi,
                           stracka=f.stracka, namn=f.namn, fler=fler,
-                          triangel=horn)
+                          triangel=horn, skiss=bool(f.skiss))
 
 
 # ── LINJENS FÖNSTER UR UPPGIFTENS TEXT (exam 260 uppg 9, 2026-10-16) ─────
@@ -483,6 +487,19 @@ def linjar_triangel(fig: dict, texter: list[str]) -> dict:
     return ut
 
 
+def linjar_skiss(fig: dict, texter: list[str]) -> dict:
+    """FigLinjar som dict med `skiss` satt när en mening om figuren säger att
+    den är en skiss («Figuren visar en skiss av linjerna $f$ och $g$»).
+    Satt fält rörs inte."""
+    if (not isinstance(fig, dict) or fig.get("typ") != "linjar"
+            or fig.get("skiss") is not None):
+        return fig
+    if any(_SKISS_RE.search(t or "") for t in texter):
+        return dict(fig, skiss=True)
+    return fig
+
+
+_SKISS_RE = re.compile(r"figur[^.?!\n]*\bskiss|\bskiss[^.?!\n]*figur", re.I)
 _TRIANGEL_RE = re.compile(r"[^.?!\n]*triangel[^.?!\n]*", re.I)
 _AXEL_RE = re.compile(r"\$?\s*([xy])\s*\$?-axeln")
 
@@ -564,16 +581,17 @@ def linjar_ur_text(uppgift: dict) -> dict:
     facit = ([d.get("losning") or "" for d in delar]
              + [uppgift.get("losning") or ""])
     if isinstance(uppgift.get("figur"), dict):
-        uppgift["figur"] = linjar_triangel(linjar_namn(
+        uppgift["figur"] = linjar_skiss(linjar_triangel(linjar_namn(
             linjar_fonster(uppgift["figur"], stam + deltext + facit),
-            stam + deltext), stam + deltext)
+            stam + deltext), stam + deltext), stam + deltext)
     for d in delar:
         if isinstance(d.get("figur"), dict):
-            d["figur"] = linjar_triangel(linjar_namn(
+            d["figur"] = linjar_skiss(linjar_triangel(linjar_namn(
                 linjar_fonster(d["figur"],
                                [d.get("text") or "", d.get("losning") or ""]
                                + stam),
-                [d.get("text") or ""] + stam), [d.get("text") or ""] + stam)
+                [d.get("text") or ""] + stam), [d.get("text") or ""] + stam),
+                [d.get("text") or ""] + stam)
     return uppgift
 
 
