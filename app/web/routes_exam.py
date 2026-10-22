@@ -3554,6 +3554,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         arbiter.release_llm(llm)
                         llm = None
                     exam = fix["exam"]
+                    # Saknat typsnitt i cachen: samma papper kompileras inte
+                    # bättre en gång till, och fix_latex rör det inte. Felet
+                    # säger hur cachen seedas.
+                    if any(e.get("code") == "typsnitt" for e in fix["errors"]):
+                        errors = fix["errors"]
+                        break
 
                 steg.na("sparar")
                 conn = db.connect(db_file)

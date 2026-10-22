@@ -423,6 +423,18 @@ def _representative_doc() -> exam_spec.ExamDoc:
                 losning=r"Vinkeln är $v = 40^\circ$.",
                 bedomning=r"+1 E för korrekt avläsning av vinkeln.",
             ),
+            exam_spec.ExamItem(
+                # ENHETEN I FACITS FETA SVARSRUTA. «m²» escapas till
+                # \textsuperscript{2}, och i \facitsvar står den i fetstil på
+                # en mindre grad: ec-lmbx8. Ingen annan rad drar in den, så
+                # bladen 291 och 292 (2026-10-22, «x² + 5x + 6 m²») föll på
+                # «Font T1/lmr/bx/n/8=ec-lmbx8 not loadable» vid godkännandet.
+                del_="C", formaga="B", typ="rutin", poang=(1, 0, 0),
+                text=r"En kvadrat har sidan 3 cm. Beräkna arean.",
+                losning="$9$ cm²\n$3 \\cdot 3 = 9$ ← multiplicera sidorna",
+                bedomning=r"+1 E korrekt svar, 9 cm².",
+                enhet="cm²",
+            ),
         ],
     )
 

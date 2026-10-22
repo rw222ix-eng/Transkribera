@@ -8,7 +8,11 @@ avritning för det, så det här ger samma PDF som appens knapp. Gruppuppgiftens
 PDF är fortfarande skärmens avritning (blad-bild.js): godkänn den med
 e2e/godkann-avritat.mjs, som trycker på appens egen knapp.
 
-Användning: python tools/dokument_godkann.py <dokument_id>
+Användning: python tools/dokument_godkann.py <dokument_id> [--aldre]
+
+--aldre: dokumentets provVersion gäller fast provet har en nyare version, och
+pekaren flyttas tillbaka (aldre_version i approve). 291 och 292 2026-10-22: en
+fixrunda hade skrivit om bladen, och den rätta versionen var dokumentets.
 """
 import json, sqlite3, sys, urllib.request
 from pathlib import Path
@@ -22,7 +26,7 @@ def anrop(vag, metod, kropp, timeout=120):
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.read().decode("utf-8")
 
-def main(dok_id):
+def main(dok_id, aldre=False):
     c = sqlite3.connect(DB)
     v = json.loads(c.execute("select data from dokument_versioner where dokument_id=? order by version desc limit 1", (dok_id,)).fetchone()[0])
     v["id"] = dok_id
@@ -32,6 +36,7 @@ def main(dok_id):
     kropp = {
         "separat_facit": v.get("typ") in ("Arbetsblad", "Gruppuppgift") and (v.get("inst") or {}).get("facit") != "Facit i bladet",
         "version": v.get("provVersion"),
+        "aldre_version": aldre,
         "blad": None,
         "bilder": v.get("bilder") or {},
         # Pilarna och måtten på bilderna (tryck.rita_bildlager).
@@ -61,4 +66,4 @@ def main(dok_id):
     print("dokument", dok_id, "exam", exam_id, "pdf:", v["pdf"], "| tex:", v["tex"])
 
 if __name__ == "__main__":
-    main(int(sys.argv[1]))
+    main(int(sys.argv[1]), "--aldre" in sys.argv[2:])

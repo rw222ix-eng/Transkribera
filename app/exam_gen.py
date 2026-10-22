@@ -17218,6 +17218,9 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
     return res
 
 
+_TYPSNITT_SAKNAS_RE = re.compile(r"Font \S+ (?:at \S+ )?not loadable")
+
+
 def fix_latex(exam: dict, error_log: str, *, model: str,
               profil: str = "prov",
               llm=llm_client.generate,
@@ -17236,6 +17239,19 @@ def fix_latex(exam: dict, error_log: str, *, model: str,
         return {"exam": exam, "errors": [{"path": "latex", "code": "kompilering",
                                           "message": error_log}],
                 "rounds": rounds_used}
+    # Ett typsnitt som saknas i Tectonic-cachen är cachens fel, inte pappret.
+    # Modellen fick förut hela bladet att «rätta» och skrev om allt: 291 och
+    # 292 (2026-10-22) tappade facits förklaringar, instruktionen och
+    # infor_prov, och 291 fick tillbaka en uppgift läraren strukit. Pappret
+    # står kvar orört, och felet säger vad som ska göras.
+    if _TYPSNITT_SAKNAS_RE.search(error_log or ""):
+        log("Ett typsnitt saknas i Tectonic-cachen — pappret skrivs inte om.")
+        return {"exam": exam, "errors": [{
+                    "path": "latex", "code": "typsnitt",
+                    "message": "Ett typsnitt saknas i Tectonic-cachen. Seeda den "
+                               "med nät på (python -m tools.seed_tectonic_cache) "
+                               "och godkänn igen.\n" + error_log}],
+                "rounds": max_rounds}
     log("Rättar LaTeX-fel i provet …")
     candidate = _llm_round(build_latexfix_prompt(exam, error_log), model, llm,
                            profil=profil, log_cb=log_cb,

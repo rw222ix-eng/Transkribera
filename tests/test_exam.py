@@ -2357,6 +2357,20 @@ def test_fix_latex_rounds_cap():
     assert len(calls) == 1
 
 
+def test_fix_latex_skriver_inte_om_pappret_nar_ett_typsnitt_saknas():
+    """291 och 292 (2026-10-22): ec-lmbx8 saknades i cachen, och modellen
+    skrev om hela bladet. Felet är cachens, så pappret står kvar."""
+    llm, calls = _stub_llm([json.dumps(_exam())])
+    ex = _exam()
+    res = exam_gen.fix_latex(
+        ex, "error: blad.tex:480: Font T1/lmr/bx/n/8=ec-lmbx8 at 8.0pt not "
+            "loadable: Metric (TFM) file or installed font not found",
+        model="m", llm=llm)
+    assert res["exam"] is ex and calls == []
+    assert res["errors"][0]["code"] == "typsnitt"
+    assert "seed_tectonic_cache" in res["errors"][0]["message"]
+
+
 # ------------------------------------------------------ Fas 5: arbetsblad --
 
 def _arbetsblad() -> dict:
