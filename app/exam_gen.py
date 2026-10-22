@@ -567,20 +567,18 @@ INSTRUCTION = (
     # lärarens egen förlaga, samtidigt som a_nivavakt (2026-09-19) fällde
     # varje tips: prompten och vakten sa emot varandra, och reparations-
     # rundorna gick runt i cirkel (tre tips kvar på exam 116). Nationella
-    # provet trycker aldrig tips, och metoden är det som prövas. Ledtråden
-    # är kvar för arbetsbladet och gruppuppgiften, där eleven sitter utan
-    # lärare (build_uppdrag ber om den uttryckligen).
-    "- notis: PÅ PROVET LÄMNAS FÄLTET TOMT, på varje uppgift och deluppgift: "
+    # provet trycker aldrig tips, och metoden är det som prövas.
+    # INGA TIPS PÅ ARBETSBLADET HELLER (Rickard 2026-10-22, «Ta bort
+    # tipsen»): bladet skrivs som provet, och förklaringen hör hemma i
+    # facit. Ledtråden som stod här för bladet är struken; stryk_tips gör
+    # samma sak deterministiskt när modellen ändå skriver en.
+    "- notis: FÄLTET LÄMNAS TOMT, på varje uppgift och deluppgift: "
     "nationella provet trycker aldrig tips eller ledtrådar, och metoden är "
     # Gemener på «arbetsblad» och «gruppuppgift» med flit: kassettväljaren
     # (tests/fejk.py _VAL) lägger i bladets band på VERSALT «ARBETSBLAD».
-    "det som prövas. Ett prov med «Tips:» avvisas. Gruppuppgiften är skriven "
-    "som provet och lämnar också fältet tomt. På arbetsblad: EN kort "
-    "ledtråd till uppgiften eller deluppgiften, satt i "
-    "kursiv på egen rad under frågan: 'Tips: Gör en skiss och kalla bredden "
-    "för $x$ cm.' Den ska ge vägen in, aldrig svaret, och står bara på de "
-    "flerstegsuppgifter där en elev annars fastnar redan på första steget, "
-    "aldrig på fler än ungefär var tredje uppgift.\n"
+    "det som prövas. Ett prov med «Tips:» avvisas. Gruppuppgiften och "
+    "arbetsblad är skrivna som provet och lämnar också fältet tomt: "
+    "förklaringen hör hemma i facit, aldrig under frågan.\n"
     # METODEN NÄMNS VID NAMN NÄR DEN KRÄVS (Rickard 2026-10-22, IndA-omproven
     # 267/268): «här måste vi vara tydliga med att de ska använda en viss
     # metod, inte bara algebraisk metod. Det här måste vi alltså välja.» Och
@@ -2013,9 +2011,9 @@ def build_riktat(elev: str, syfte: str, punkter: list[dict]) -> str:
             "behärskar punkterna nedan och ska STÖTTAS. Börja på en nivå hon "
             "säkert klarar och bygg uppåt i små steg: en igenkännbar "
             "standarduppgift först, sedan samma sak med en variation, sedan en "
-            "tillämpning. Tyngdpunkten ligger på E- och C-nivå. Skriv ut "
-            "metoden i uppgiftens notis när ett steg är lätt att fastna på — "
-            "hon sitter ensam med bladet, utan lärare bredvid sig.")
+            "tillämpning. Tyngdpunkten ligger på E- och C-nivå. Hon sitter "
+            "ensam med bladet, så skriv ut metoden steg för steg i facit — "
+            "aldrig som tips under frågan, bladet har inga tips.")
     return (uppdrag + "\n"
             "Punkterna, med hur stor andel av poängen hon tagit på dem "
             "tidigare:\n" + (rader or "- (ingen mätning ännu)") + "\n"
@@ -2307,6 +2305,35 @@ def build_sprak_blad(inriktning: str = "") -> str:
         f"{yrke}"
         "Ett förtydligande som hjälper eleven får stå kvar: det är orden som "
         "ska bli enkla, inte texten som ska bli kortare.\n")
+
+
+# BLADET SKRIVS SOM PROVET (Rickard 2026-10-22, Kaspers blad 277): «Har du
+# använt provgeneratorn som mall då eller? Till hur uppgifterna skrivs så att
+# de ska bli enkla att förstå. Det känns som där som på vissa ställen, men
+# inte på andra ställen.» Uppgift 3 («Ett rektangulärt fönster har arean i
+# dm²: $10x^2 + 15x$. Dess höjd är $5x$ dm.») var «lite otydlig», uppgift 4
+# (sovrummet och garderoben, «Skriv en ekvation med $x$ och lös den.»)
+# «jätteflummig». INSTRUCTION delas redan med provet; det här är provets
+# regler från omproven 267/268 som bara stod i omprovets block (E-stegen,
+# build_omprov) eller som provet har i sina vakter, sagda till bladet.
+BLAD_SOM_PROVET = (
+    "BLADET SKRIVS SOM PROVET (lärarens dom 2026-10-22): varje uppgift ska "
+    "vara lika lätt att förstå som en uppgift på hans prov.\n"
+    "- Det som är givet står som på provet, storheten först och värdet med "
+    "enhet: «Ett rektangulärt fönster har höjden $5x$ dm och arean $(10x^2 + "
+    "15x)$ dm².» Aldrig «arean i dm²: …» eller ett uttryck utan att det står "
+    "vad det är.\n"
+    "- Situationen går att se framför sig, och inget lämnas att gissa: vad "
+    "som räknas med, vad som är okänt och vad $x$ står för står i texten.\n"
+    "- Frågan nämner det som söks med situationens ord: «Hur långt är "
+    "sovrummet?», «Bestäm ett uttryck för fönstrets bredd.» En fråga per "
+    "deluppgift, och ingen mening som bara säger vad uppgiften är.\n"
+    "- E-STEGEN ÄR TYDLIGA. En problemuppgift som ger E-poäng ger eleven "
+    "modellen: ekvationen eller formeln står i uppgiften, eller i en egen "
+    "deluppgift som säger exakt vad som ska ställas upp («Ställ upp en "
+    "ekvation för golvets area.»). Att hitta modellen själv är C. Dela där "
+    "stegen är naturliga (ställ upp ekvationen, lös den), aldrig bara för "
+    "att få fler frågor.\n")
 
 
 ORIGINALITET_UR_BOKEN = (
@@ -3613,7 +3640,7 @@ def ovningspappret_stadat(exam: dict | None, profil: str) -> dict | None:
     # Efter markeringen: i exam 256 var stammen BARA förklaringen, och en tom
     # stam får inte bli kvar. Med «Utan räknare.» först går den att stryka.
     stryk_forklarande_stam(exam, profil)
-    stryk_grupptips(exam, profil)
+    stryk_tips(exam, profil)
     stryk_gruppbilder(exam, profil)
     return exam
 
@@ -3698,9 +3725,12 @@ def rutinlista_i_stammen(exam: dict | None, profil: str) -> bool:
 # du tagit hänsyn till hur mina egna prov är skrivna?» Proven har inga
 # tipsrutor, och gruppuppgiften skrivs som provet. Prompten ber om tomt
 # fält; strykningen här håller när modellen ändå skriver ett.
-def stryk_grupptips(exam: dict | None, profil: str) -> bool:
-    """Töm `notis` på gruppuppgiftens uppgifter och deluppgifter."""
-    if not isinstance(exam, dict) or profil != "gruppuppgift":
+# Arbetsbladet också sedan 2026-10-22 (Rickard: «Ta bort tipsen»), när
+# bladet sattes i provets form. arbetsblad.tex.j2 ritar ingen notis heller,
+# så äldre blad med tips byggs utan dem.
+def stryk_tips(exam: dict | None, profil: str) -> bool:
+    """Töm `notis` på övningspapprets uppgifter och deluppgifter."""
+    if not isinstance(exam, dict) or profil not in OVNINGSPROFILER:
         return False
     andrat = False
     for u in exam.get("uppgifter") or []:
@@ -4116,6 +4146,7 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
         # prompt, egna block så att provets står orörd.
         block.append(DELFRAGOR_BLAD)
         block.append(build_sprak_blad(inriktning))
+        block.append(BLAD_SOM_PROVET)
         # Lärarens illustrationskryss (se BILD_PA/BILD_AV).
         block.append(BILD_PA if illustration else BILD_AV)
         # «Stigande svårighet» stod här förut, och det är en instruktion utan
@@ -12964,6 +12995,87 @@ def satt_raknarrad_ur_provet(exam: dict | None, prov: dict | None) -> bool:
     return True
 
 
+# KORTSVAREN SAMLAS SOM PÅ PROVET (Rickard 2026-10-22, «Samla som provet»).
+# Prov 268 uppgift 2 har «Lös ekvationerna.» i stammen och bara ekvationen i
+# a), b) och c). Kaspers blad (exam 277) hade «Förenkla uttrycket: …» som
+# uppgift 1 och som uppgift 2, var för sig. Intilliggande kortsvar med samma
+# uppmaning och samma räknarbesked blir EN uppgift med deluppgifter, i
+# rutinlista_i_stammens form: stammen ur _RUTINSTAM, poängen och facit i
+# deluppgifterna. Bara rena kortsvar (typ rutin, bara text): en bild, tabell
+# eller figur hör till sin egen uppgift.
+#
+# BARA VID GENERERINGEN, som ordna_raknardelar: numren flyttar sig, och
+# lärarens bilder i canvas nycklas på dem. Den samlade uppgiften behåller den
+# första uppgiftens `drillar`, fältet rymmer bara ett nummer.
+_SAMLA_MAX = 4
+_KORTSVARETS_HINDER = ("deluppgifter", "scen", "figur", "bild", "tabell",
+                       "stegtabell", "svarsrutor", "alternativ", "svarsfalt",
+                       "elevlosningar", "utforlig")
+
+
+def _kortsvarets_uppmaning(u: object) -> tuple[str, str] | None:
+    """(verbet, uttrycket) för ett rent kortsvar som «Förenkla uttrycket:
+    $…$.», annars None. Räknarbeskedet först i texten räknas inte."""
+    if (not isinstance(u, dict) or u.get("typ") != "rutin"
+            or any(u.get(k) for k in _KORTSVARETS_HINDER)):
+        return None
+    m = _RUTINDEL_RE.match(_RAKNARMARKE.sub("", str(u.get("text") or "")))
+    return (m.group(1).lower(), m.group(2)) if m else None
+
+
+def samla_kortsvar(exam: dict | None, prov: dict | None = None) -> bool:
+    """Lika kortsvar i rad → en uppgift med a), b), c). Sant när något
+    samlades. Hjälpmedelsraden skrivs om på de nya numren."""
+    if not isinstance(exam, dict):
+        return False
+    uppgifter = exam.get("uppgifter")
+    if (not isinstance(uppgifter, list)
+            or not all(isinstance(u, dict) for u in uppgifter)):
+        return False
+    beslut = _uppgiftens_beslut(exam, prov)
+    ut: list[dict] = []
+    nya_beslut: dict[int, bool | None] = {}
+    i = 0
+    while i < len(uppgifter):
+        grupp = [(uppgifter[i], _kortsvarets_uppmaning(uppgifter[i]))]
+        while (grupp[0][1] and i + len(grupp) < len(uppgifter)
+               and len(grupp) < _SAMLA_MAX):
+            nasta = uppgifter[i + len(grupp)]
+            traff = _kortsvarets_uppmaning(nasta)
+            if (not traff or traff[0] != grupp[0][1][0]
+                    or beslut.get(i + len(grupp) + 1) != beslut.get(i + 1)):
+                break
+            grupp.append((nasta, traff))
+        nya_beslut[len(ut) + 1] = beslut.get(i + 1)
+        i += len(grupp)
+        if len(grupp) < 2:
+            ut.append(grupp[0][0])
+            continue
+        forsta = grupp[0][0]
+        samlad = {k: v for k, v in forsta.items()
+                  if k not in ("text", "losning", "bedomning", "notis", "enhet")}
+        innehall: list = []
+        for u, _ in grupp:
+            innehall += [x for x in u.get("innehall") or [] if x not in innehall]
+        samlad.update(text=_RUTINSTAM[grupp[0][1][0]], poang=[0, 0, 0],
+                      losning="", bedomning="", typ="rutin")
+        if innehall:
+            samlad["innehall"] = innehall
+        samlad["deluppgifter"] = [
+            {"poang": list(u.get("poang") or [0, 0, 0]), "text": traff[1],
+             "losning": u.get("losning") or "",
+             "bedomning": u.get("bedomning") or "", "typ": "rutin",
+             **{k: u[k] for k in ("formaga", "enhet") if u.get(k)}}
+            for u, traff in grupp]
+        ut.append(samlad)
+    if len(ut) == len(uppgifter):
+        return False
+    exam["uppgifter"] = ut
+    if len(beslut) >= len(uppgifter) and None not in nya_beslut.values():
+        exam["hjalpmedel"] = raknarrad(nya_beslut)
+    return True
+
+
 def _uppgiftens_beslut(exam: dict, prov: dict | None) -> dict[int, bool]:
     """Räknarbesluten på det papper som ligger, också när provet saknas:
     då läses bladets egen rad."""
@@ -16216,6 +16328,13 @@ def _generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
             if ordna_raknardelar(r.get("exam"), inforprov):
                 log("Ordningen: uppgifterna utan räknare först, som på "
                     "provet.")
+        # Lika kortsvar under en uppmaning (samla_kortsvar), efter ordningen
+        # så att grupperna står i rad och före raden, som räknas på de nya
+        # numren. Också på blad utan valt prov.
+        if profil == "arbetsblad" and samla_kortsvar(r.get("exam"), inforprov):
+            log("Kortsvaren: lika uppmaningar samlade som a), b), c), som på "
+                "provet.")
+        if inforprov and profil == "arbetsblad":
             satt_raknarrad_ur_provet(r.get("exam"), inforprov)
         ovningspappret_stadat(r.get("exam"), profil)
         # ── UTANFÖR KURSEN, SIST AV ALLT (app/ci_utanfor.py) ─────────────

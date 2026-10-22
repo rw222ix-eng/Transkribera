@@ -1422,10 +1422,10 @@ def test_deluppgifts_notis_renderas_i_prov_och_arbetsblad():
     prov = exam_latex.render_prov(doc)
     arbetsblad = exam_latex.render_arbetsblad(doc)
     bedomning = exam_latex.render_bedomning(doc)
-    # Förlagans kursiva ledtråd på båda: arbetsbladet sätts i provets form
-    # sedan 2026-10-22.
+    # Förlagans kursiva ledtråd på provet. Arbetsbladet ritar inga tips
+    # sedan 2026-10-22 (Rickard: «Ta bort tipsen»).
     assert r"\pftips{Tänk på tecknet.}" in prov
-    assert r"\pftips{Tänk på tecknet.}" in arbetsblad
+    assert "Tänk på tecknet." not in arbetsblad
     # bedömningsanvisningen ska inte innehålla notisrutan
     assert r"\notisruta{Tänk på tecknet.}" not in bedomning
 
@@ -2518,9 +2518,9 @@ def test_prompt_beskriver_strukturkomponenterna():
     # signaler ska finnas kvar (deluppgifter, flerval, notis)
     assert "pedagogiskt" in txt
     assert "sparsamt" in txt        # flerval
-    # notisen är numera förlagans kursiva ledtråd, och måttfullheten står som
-    # ett tak i stället för som ordet «sällan»
-    assert "var tredje uppgift" in txt
+    # notisen lämnas tom på alla papper sedan 2026-10-22: provet, gruppuppgiften
+    # och arbetsbladet (Rickard: «Ta bort tipsen»)
+    assert "FÄLTET LÄMNAS TOMT" in txt and "arbetsblad" in txt
     # flerval får inte kombineras med deluppgifter — förbudet ska stå i prompten
     assert "aldrig på en uppgift som redan har deluppgifter" in txt
 

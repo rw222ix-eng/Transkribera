@@ -1856,9 +1856,11 @@ def test_som_pa_provet_inga_tips_luft_fore_fragan_och_ingen_mening_i_facit():
     skrivna?» Exam 256 hade tipsrutor och en meningsrad i facit."""
     ex = {"uppgifter": [{"text": "Hugo och Sara bygger.", "notis": "Tips: Pröva.",
                          "deluppgifter": [{"text": "a", "notis": "Tips: Slå ihop."}]}]}
-    assert exam_gen.stryk_grupptips(ex, "gruppuppgift")
+    assert exam_gen.stryk_tips(ex, "gruppuppgift")
     assert not ex["uppgifter"][0]["notis"] and not ex["uppgifter"][0]["deluppgifter"][0]["notis"]
-    assert not exam_gen.stryk_grupptips({"uppgifter": [{"notis": "Tips"}]}, "arbetsblad")
+    # Arbetsbladet också sedan 2026-10-22 («Ta bort tipsen»), provet rörs inte.
+    assert exam_gen.stryk_tips({"uppgifter": [{"notis": "Tips"}]}, "arbetsblad")
+    assert not exam_gen.stryk_tips({"uppgifter": [{"notis": "Tips"}]}, "prov")
     gamla = ["Ali har fel.", "$x + (x + 2) = 2x + 2$ ← lägg ihop x-termerna",
              "$2x$ och $2$ kan inte slås ihop till $4x$."]
     assert any("mening utan pil" in f for f in exam_gen.bladfacit_fynd("\n".join(gamla), True))

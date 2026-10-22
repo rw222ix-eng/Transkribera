@@ -14,6 +14,10 @@
     minnet: allt som läses nedan fanns i vyn innan bladet bytte form, och det
     som kom senare frågas med «is defined».
 
+    Inga tips (Rickard 2026-10-22, «Ta bort tipsen»): provet trycker inga, och
+    `notis` ritas därför inte, så att äldre blad med en ledtråd också byggs
+    utan den. exam_gen.stryk_tips tömmer fältet vid genereringen.
+
     Bladet var förut skärmens avritning (blad-bild.js). Den tas inte längre
     emot för arbetsblad (routes_exam, skarmen_galler), så det här ÄR bladets
     PDF. #))
@@ -71,7 +75,11 @@
 \begin{document}
 
 ((* if not only_facit *))
-((( bladhuvud('Arbetsblad \\textperiodcentered{} ' ~ kurs) )))
+((# Nivån i rubriken när bladet bara ger poäng på en nivå (Rickard
+    2026-10-22: «Jag vet inte vilken nivå det är»), exam_latex._blad_niva.
+    «is defined»: en server med äldre Python i minnet skickar den inte. #))
+((* set nivarad = (' på ' ~ blad_niva) if blad_niva is defined and blad_niva else '' *))
+((( bladhuvud('Arbetsblad' ~ nivarad ~ ' \\textperiodcentered{} ' ~ kurs) )))
 ((# Bladets instruktion är dokumentets (exam_spec.instruktion) när den är
     ifylld, annars förvalet. Raden om facit är papprets eget besked om var
     lösningarna finns. #))
@@ -124,8 +132,6 @@
 \vspace{2mm}
 ((* endif *))
 ((( former.stegbok(u.stegtabell) )))((( former.rutor(u.svarsrutor) )))
-((* if u.notis *))\pftips{((( u.notis )))}
-((* endif *))
 ((* if u.har_deluppgifter *))
 \begin{parts}
 ((* for d in u.deluppgifter *))
@@ -145,8 +151,6 @@
 \vspace{2mm}
 ((* endif *))
 ((( former.tabellbok(d.tabell) )))((( former.stegbok(d.stegtabell) )))((( former.rutor(d.svarsrutor) )))
-((* if d.notis *))\pftips{((( d.notis )))}
-((* endif *))
 ((* if d.flerval *))((* for alt in d.flerval *))\par\kryssruta\ ((( alt.bokstav ))): ((( alt.text )))((* endfor *))\par\vspace{2mm}
 ((* elif d.svarsfalt_rad and u.svar_pa_pappret *))((( former.svarsrader(d.svarsfalt_rad) )))
 ((* elif d.endast_svar and u.svar_pa_pappret *))((( former.svarsplats(d) )))

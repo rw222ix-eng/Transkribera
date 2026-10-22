@@ -449,3 +449,93 @@ def test_bladet_far_provets_kravradsvakt_och_deluppgiftsvakt():
     assert "kravrad" in koder
     assert any(f["code"] == "begriplighet" and "1b" not in f["path"]
                and "2a" in f["path"] for f in exam_gen.ovningsvakter(exam))
+
+
+def test_bladet_ritar_inga_tips():
+    """Rickard 2026-10-22: «Ta bort tipsen». Mallen ritar ingen notis, så att
+    äldre blad med en ledtråd byggs utan den, och genereringen tömmer
+    fältet (exam_gen.stryk_tips)."""
+    exam, doc = _blad({"text": "Utan räknare. Beräkna $3 + 4$.",
+                       "losning": "$7$", "notis": "Tips: Räkna på fingrarna."})
+    assert "fingrarna" not in exam_latex.render_arbetsblad(doc)
+    assert exam_gen.stryk_tips(exam, "arbetsblad")
+    assert exam["uppgifter"][0]["notis"] is None
+
+
+def _kortsvar(text, **extra):
+    return dict({"typ": "rutin", "poang": [1, 0, 0], "formaga": "P",
+                 "text": text, "losning": "$1$", "bedomning": "+1 E"}, **extra)
+
+
+def test_lika_kortsvar_samlas_som_provet():
+    """Rickard 2026-10-22: «Samla som provet». Kaspers blad (exam 277) hade
+    «Förenkla uttrycket: …» som uppgift 1 och 2; provet 268 skriver
+    «Lös ekvationerna.» och bara ekvationen i a), b) och c)."""
+    exam = {"hjalpmedel": "Räknare får användas på uppgift 4, men inte på "
+                          "uppgift 1, 2 och 3.", "uppgifter": [
+        _kortsvar("Utan räknare. Förenkla uttrycket: $(x + 3)^2 - x(x + 2)$.",
+                  drillar=1, innehall=["A"]),
+        _kortsvar("Förenkla uttrycket: $(x - 5)^2 - x(x - 4)$.",
+                  drillar=4, innehall=["A", "B"], poang=[2, 0, 0]),
+        _kortsvar("Faktorisera uttrycket: $x^2 - 49$."),
+        _kortsvar("Förenkla uttrycket: $3x + 2x$.")]}
+    assert exam_gen.samla_kortsvar(exam)
+    forsta = exam["uppgifter"][0]
+    assert forsta["text"] == "Förenkla uttrycken så långt som möjligt."
+    assert forsta["poang"] == [0, 0, 0] and forsta["drillar"] == 1
+    assert forsta["innehall"] == ["A", "B"]
+    assert [d["text"] for d in forsta["deluppgifter"]] == [
+        "$(x + 3)^2 - x(x + 2)$", "$(x - 5)^2 - x(x - 4)$"]
+    assert forsta["deluppgifter"][1]["poang"] == [2, 0, 0]
+    # Faktorisera bryter raden, och uppgift 4 har ett annat räknarbesked.
+    assert len(exam["uppgifter"]) == 3
+    assert exam["hjalpmedel"] == ("Räknare får användas på uppgift 3, men "
+                                  "inte på uppgift 1 och 2.")
+    doc, fel = exam_spec.validate_exam_json(
+        dict(exam, titel="t", kurs="Matematik, nivå 2a", klass="IndA"),
+        "arbetsblad")
+    assert doc is not None, fel
+    tex = exam_latex.render_arbetsblad(doc)
+    assert "Förenkla uttrycken så långt som möjligt." in tex
+    assert not exam_gen.samla_kortsvar(exam)
+
+
+def test_kortsvar_med_bild_eller_annan_typ_samlas_inte():
+    exam = {"hjalpmedel": "", "uppgifter": [
+        _kortsvar("Lös ekvationen: $x^2 = 9$."),
+        _kortsvar("Lös ekvationen: $x^2 = 16$.", scen={"begrepp": "x"}),
+        _kortsvar("Lös ekvationen: $x^2 = 25$.", typ="redovisning"),
+        _kortsvar("Lös ekvationen: $x^2 = 36$.")]}
+    assert not exam_gen.samla_kortsvar(exam)
+
+
+def test_bladets_prompt_har_provets_formuleringsregler():
+    """Rickard 2026-10-22 om blad 277: «Har du använt provgeneratorn som mall
+    då eller?» E-stegen och provets sätt att ge storheter står i bladets
+    prompt, inte i provets."""
+    blad = exam_gen.build_prompt("Ma2b", "SA23", [], profil="arbetsblad")
+    prov = exam_gen.build_prompt("Ma2b", "SA23", [], profil="prov")
+    assert exam_gen.BLAD_SOM_PROVET in blad
+    assert exam_gen.BLAD_SOM_PROVET not in prov
+    assert "E-STEGEN ÄR TYDLIGA" in blad
+
+
+def test_nivan_star_i_bladets_rubrik():
+    """«Jag vet inte vilken nivå det är» (Rickard 2026-10-22): ett blad med
+    bara E-poäng heter «Arbetsblad på E-nivå», ett blandat blad får ingen."""
+    _exam, doc = _blad({"text": "Beräkna $3 + 4$.", "losning": "$7$"})
+    assert "Arbetsblad på E-nivå" in exam_latex.render_arbetsblad(doc)
+    _exam, doc = _blad({"text": "Beräkna $3 + 4$.", "losning": "$7$"},
+                       {"text": "Beräkna $5 + 4$.", "losning": "$9$",
+                        "poang": [0, 1, 0], "bedomning": "+1 C"})
+    tex = exam_latex.render_arbetsblad(doc)
+    assert "Arbetsblad \\textperiodcentered{}" in tex and "-nivå" not in tex
+
+
+def test_platen_star_pa_bladet_som_pa_provet():
+    """Kaspers blad 277 (2026-10-22): «det finns ju ingen bilder». Lärarens
+    bild och plåten (egna_bilder, nycklade på numret) sätts som på provet."""
+    _exam, doc = _blad({"text": "Ett fönster. Beräkna $3 + 4$.",
+                        "losning": "$7$"})
+    tex = exam_latex.render_arbetsblad(doc, egna_bilder={1: "egen-01.png"})
+    assert r"\includegraphics[width=0.7\textwidth]{egen-01.png}" in tex

@@ -2202,8 +2202,20 @@ def render_arbetsblad(doc: exam_spec.ExamDoc, visa_poang: bool = False,
                 u["krav"] = f"{escape_latex(besked[u['nummer']])} {u['krav']}"
     return _environment().get_template("arbetsblad.tex.j2").render(
         visa_poang=visa_poang, dokumentkod=dokumentkod, only_facit=only_facit,
-        utan_facit=utan_facit,
+        utan_facit=utan_facit, blad_niva=_blad_niva(doc),
         med_facitfigur=not utan_facit and _har_facitfigur(doc), **vy)
+
+
+# NIVÅN I RUBRIKEN (Rickard 2026-10-22, Kaspers blad 277): «Är det ett
+# e-prov eller? … Jag vet inte vilken nivå det är.» Provet säger det i sin
+# titel («(omprov, E-nivå)»). Läses ur poängen: bladet bär dem fast pappret
+# inte visar dem, och ett blad med poäng på flera nivåer får ingen rad.
+def _blad_niva(doc: exam_spec.ExamDoc) -> str | None:
+    """«E-nivå», «C-nivå» eller «A-nivå» när alla poäng ligger på en nivå."""
+    nivaer = {i for u in doc.uppgifter
+              for p in [u.poang] + [d.poang for d in u.deluppgifter or []]
+              for i, v in enumerate(p) if v}
+    return f"{'ECA'[nivaer.pop()]}-nivå" if len(nivaer) == 1 else None
 
 
 # Räknarbeskedet som exam_gen.satt_raknarmarkering skriver först i bladets
