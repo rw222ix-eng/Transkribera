@@ -3430,6 +3430,23 @@ def test_forsattsbladets_rubrik_far_plats_med_kursen():
     assert vy2["underrad"] is None
 
 
+def test_forsattsbladets_rubrik_kapas_aldrig():
+    """Rickard 2026-10-22 om «Prov Andragradsuttryck och ekvationer…»:
+    «Varför är det tre punkter här för?» Ellipsen strök «(omprov)». På
+    försättsbladet bryts en lång titel i stället till en andra rad."""
+    doc = exam_spec.ExamDoc(
+        titel="Andragradsuttryck och ekvationer (omprov)",
+        kurs="Matematik, nivå 2a", tid_min=70, hjalpmedel="Räknare.",
+        uppgifter=[exam_spec.ExamItem(formaga="P", typ="rutin",
+                                      poang=(1, 0, 0), text="_",
+                                      losning="_", bedomning="_")])
+    vy = exam_latex._forsatt_vy(doc, [])
+    assert vy["titelrad"] == "Prov Andragradsuttryck och ekvationer (omprov)"
+    assert vy["underrad"].startswith("Matematik 2a")
+    # Sidhuvudet (som inte trycks) kapar fortfarande, det har delrutan bredvid.
+    assert vy["sidhuvud"].endswith(r"\ldots{}")
+
+
 # ══════════════ BEDÖMNINGSTRAPPAN ══════════════
 #
 # Lärarens granskning av det skarpa provet 2026-08-23: «på fleruppgifter

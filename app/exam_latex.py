@@ -1455,14 +1455,20 @@ def _kort_kurs(kurs: str) -> str:
     return _KURSNIVA_RE.sub(" ", str(kurs or "").strip()).strip()
 
 
-def _provrubrik(titel: str, kurs: str, tak: int = _RUBRIK_TAK) -> str:
+def _provrubrik(titel: str, kurs: str, tak: int = _RUBRIK_TAK,
+                kapa: bool = True) -> str:
     """«Prov <moment> – <kurs>», byggd så att den ryms i `tak` tecken.
 
     KURSEN FALLER FÖRE MOMENTET. Ryms inte båda stryks kursen — den står ändå
     på försättsbladet, i provtabellen och på varje delsida — och först när
     momentet ensamt är för långt kapas det med ellips. Omvänd ordning gav
     «Prov Derivata och… – Matematik 3c» i sidhuvudet: kursen kvar, momentet
-    avhugget, och momentet är det enda som skiljer det här provet från nästa."""
+    avhugget, och momentet är det enda som skiljer det här provet från nästa.
+
+    `kapa=False` är försättsbladets: där får ett för långt moment bryta till
+    en andra rad i stället. Rickard 2026-10-22 om «Prov Andragradsuttryck och
+    ekvationer…» (omprovet, 41 tecken): «Varför är det tre punkter här för?»
+    Kapningen tog bort just «(omprov)», det som skiljer pappret från provet."""
     moment = _PROV_PREFIX_RE.sub("", str(titel or "").strip())
     kurs = _kort_kurs(kurs)
     if kurs:
@@ -1478,6 +1484,8 @@ def _provrubrik(titel: str, kurs: str, tak: int = _RUBRIK_TAK) -> str:
     rum = tak - len("Prov ") - len(svans)
     if len(moment) > rum:        # kursen får gå innan momentet kapas
         svans, rum = "", tak - len("Prov ")
+    if not kapa:
+        return f"Prov {moment}{svans}"
     return f"Prov {_korta(moment, max(4, rum))}{svans}"
 
 
@@ -1522,7 +1530,7 @@ def _forsatt_vy(doc: exam_spec.ExamDoc, delar: list[dict],
     känner igen pappret på."""
     # «Prov Kapitel 2 – Matematik 2c» — förlagans rubrik, BYGGD ur momentet och
     # kursen i stället för hopklistrad ur modellens titel. Se _provrubrik.
-    titelrad = _provrubrik(doc.titel, doc.kurs, _FORSATT_TAK)
+    titelrad = _provrubrik(doc.titel, doc.kurs, _FORSATT_TAK, kapa=False)
     under = []
     # Rymdes kursen inte i rubriken står den här i stället. Förlagans underrad
     # är bara «Klass: NA25» — och den ser precis så ut så länge titeln är kort
