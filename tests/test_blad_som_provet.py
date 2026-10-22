@@ -574,3 +574,39 @@ def test_platen_star_pa_bladet_som_pa_provet():
                         "losning": "$7$"})
     tex = exam_latex.render_arbetsblad(doc, egna_bilder={1: "egen-01.png"})
     assert r"\includegraphics[width=0.7\textwidth]{egen-01.png}" in tex
+
+
+def test_bladet_visar_inget_raknat_exempel():
+    """Rickard 2026-10-22, «Ta bort tipsen»: elevläsarens lagning skrev in
+    metoden färdigräknad på IndA:s E-blad (exam 287, 290, 292, 293). En
+    svarsmall, en lösning att granska, ett påstående med exempel och givna
+    data står kvar."""
+    def fynd(t):
+        exam = {"titel": "t", "kurs": "Matematik, nivå 2a", "uppgifter": [
+            {"text": t, "typ": "rutin", "poang": [1, 0, 0], "losning": "x"}]}
+        return [f["code"] for f in exam_gen.raknat_exempelvakt(exam)]
+    for t in (
+        "Skriv uttrycket som två parenteser gånger varandra: $x^2 - 16$.\n"
+        "Gör på samma sätt som i exemplet:\n$x^2 - 9 = (x + 3)(x - 3)$",
+        "Skriv uttrycket $x^2 - 36$ som två parenteser gånger varandra.\n"
+        "Så här ser det ut för ett annat uttryck: $x^2 - 25 = (x + 5)(x - 5)$.",
+        "Faktorisera uttrycket med konjugatregeln: $x^2 - 64$.\nDet är samma "
+        "form som när du skriver $x^2 + 3x = x(x + 3)$.",
+        "Bryt ut så mycket som möjligt ur uttrycket: $14x^2 - 21x$.\nSvaret "
+        "ska vara ett tal och $x$ gånger en parentes, så här:\n"
+        "$10x^2 + 15x = 5x(2x + 3)$",
+        "Exempel: $4x + 8 = 4(x + 2)$\nBryt ut så mycket som möjligt: $6x + 9$.",
+    ):
+        assert fynd(t) == ["raknat_exempel"], t
+    for t in (
+        "Skriv $x^2 - 81$ som två parenteser gånger varandra.\n"
+        "$x^2 - 81 = (\\ldots)(\\ldots)$",
+        "Nora löser ekvationen $3x^2 = 12x$ så här:\n$\\frac{3x^2}{x} = "
+        "\\frac{12x}{x}$\n$x = 4$\nAvgör med en beräkning om Nora har rätt.",
+        "Han påstår att svaret alltid är delbart med 4.\nExempel: $7 \\cdot 9 "
+        "+ 1 = 64 = 16 \\cdot 4$\nUndersök om han har rätt.",
+        "Lösningarna till ekvationen kan skrivas så här: $x = 2{,}5 \\pm "
+        "\\sqrt{4{,}25}$\nBestäm talet $q$.",
+        "Till exempel är $\\vec{a} = (3,\\ 6)$ parallell med $\\vec{w}$.",
+    ):
+        assert fynd(t) == [], t

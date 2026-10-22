@@ -11050,6 +11050,60 @@ def forklaringsvakt(exam: dict) -> list[dict]:
     return fel[:FORKLARING_MAX_FYND]
 
 
+# DET RÄKNADE EXEMPLET PÅ BLADET (Rickard 2026-10-22, Kaspers blad 277: «Ta
+# bort tipsen»). Förklaringsvakten ovan gäller bara provet, eftersom bladet
+# får förklara ett ord för svag svenska. Men elevläsarens lagning skrev in
+# hela metoden färdigräknad på de omgenererade IndA-bladen: «Gör på samma
+# sätt som i exemplet: $x^2 - 9 = (x + 3)(x - 3)$» till $x^2 - 16$ (exam 292
+# uppg 6), «Så här ser det ut för ett annat uttryck: …» (293 uppg 5), «Det
+# är samma form som när du skriver $x^2 + 3x = x(x + 3)$» (287 uppg 6) och
+# «så här: $10x^2 + 15x = 5x(2x + 3)$» (290 uppg 2). Det är ett tips, och
+# provet har inga. En svarsmall med ? eller … där svaret ska stå är inget
+# räknat exempel och står kvar, liksom en persons lösning som eleven ska
+# granska («Nora löser ekvationen $3x^2 = 12x$ så här: …»).
+# Och ett exempel som visar vad en persons påstående betyder (exam 195: «Han
+# påstår att svaret alltid är delbart med 4. Exempel: $7 \cdot 9 + 1 = 64$»),
+# givna data («Lösningarna kan skrivas så här: $x = 2{,}5 \pm \sqrt{4{,}25}$»,
+# exam 220) och ett ord som förklaras («Till exempel är $\vec{a} = (3,\ 6)$
+# parallell med …», exam 216). Mätt på de 195 godkända papperen 2026-10-22:
+# bara exam 282 fälls, Sajads gamla blad med «Exempel: $4x + 8 = 4(x + 2)$».
+_RAKNAT_EXEMPEL_RE = re.compile(
+    r"(?<![\wåäö])(?:exempel\s*:|i exemplet|så här|samma sätt|samma form"
+    r"|annat uttryck|en annan uppgift)[^.?!\n$]{0,60}:?\s*\$([^$]*=[^$]*)\$",
+    re.IGNORECASE)
+_GRANSKAD_LOSNING_RE = re.compile(
+    r"(?<![\wåäö])(?:löser|löste|räknar|räknade|har löst|har räknat"
+    r"|bestämmer|förenklar|förenklade|skrivas|skrivs)"
+    r"(?![\wåäö])[^.?!\n]*$", re.IGNORECASE)
+_PASTAENDE_RE = re.compile(r"(?<![\wåäö])påst(?:år|od|ående)", re.IGNORECASE)
+_SVARSPLATS_RE = re.compile(r"\?|\\l?dots|…")
+
+
+def raknat_exempelvakt(exam: dict) -> list[dict]:
+    """Ett färdigräknat exempel i bladets uppgiftstext. Noll anrop."""
+    fel: list[dict] = []
+    for e in domarenheter(exam):
+        kort = e["kort"]
+        t = f"{kort.get('stam', '')}\n{kort.get('text', '')}"
+        if _PASTAENDE_RE.search(t):
+            continue
+        for m in _RAKNAT_EXEMPEL_RE.finditer(t):
+            if _SVARSPLATS_RE.search(m.group(1)):
+                continue
+            fore = t[:m.start()].rsplit("\n", 1)[-1]
+            if _GRANSKAD_LOSNING_RE.search(fore):
+                continue
+            fel.append(_err(
+                f"uppgift {e['nr']}", "raknat_exempel",
+                f"Uppgift {e['nr']} visar ett färdigräknat exempel («"
+                f"{m.group(0)[:70]}»). Det är ett tips, och provet har inga "
+                "exempel eller tips (Rickard 2026-10-22). Stryk exemplet och "
+                "meningen som för in det. Lägg inte till något annat exempel "
+                "eller någon svarsform. Samma uppgift, samma tal, samma poäng."))
+            break
+    return fel[:FORKLARING_MAX_FYND]
+
+
 def a_nivavakt(exam: dict) -> list[dict]:
     """A-poäng som inte kräver en insikt.
 
@@ -13973,7 +14027,7 @@ def ovningsvakter(exam: dict, *, prov: dict | None = None,
     # på 105 godkända blad för just dem.
     ren = _utan_raknarmarken(exam)
     fel += (kravradsvakt(ren) + blandat_krav_vakt(ren)
-            + deluppgiftsvakt(ren))
+            + deluppgiftsvakt(ren) + raknat_exempelvakt(ren))
     # Scenvakten står INTE här: provkörningen på de femton bladen fällde
     # hälften av dem på ett begrepp som inte stod ordagrant i texten
     # («färgåtgång» om en vägg som ska målas), och en reparationsrunda skriver
@@ -16623,7 +16677,7 @@ def varvsvakter(exam: dict, profil: str, *, infor: dict | None = None,
     # En mening per rad på alla papper utom provet (se _raknade_fynd), och
     # fackorden med exempel på arbetsbladet (lärarens dom 2026-10-02).
     if profil == "arbetsblad":
-        fel = fel + facktermsvakt(exam)
+        fel = fel + facktermsvakt(exam) + raknat_exempelvakt(exam)
     return fel + radvakt(exam)
 
 
