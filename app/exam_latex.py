@@ -502,7 +502,11 @@ def _systemrader(rader: list[str]) -> list[str]:
             j += 1
         if j - i >= 2:
             delar = [_EKVRAD_DELAR_RE.match(r.strip()) for r in rader[i:j]]
-            ut.append("$\\begin{cases} " + " \\\\ ".join(
+            # Bråk i raderna (BA26B:s C-blad inför prov 175): utan luft
+            # skrevs första radens nämnare ovanpå andra radens täljare.
+            brak = any("frac" in m.group(2) for m in delar)
+            ut.append("$\\begin{cases} " + (" \\\\[1.2ex] " if brak
+                                              else " \\\\ ").join(
                 f"{m.group(2).strip()} & ({m.group(1)})" for m in delar)
                 + " \\end{cases}$")
             i = j
@@ -510,6 +514,34 @@ def _systemrader(rader: list[str]) -> list[str]:
             ut.append(rader[i])
             i += 1
     return ut
+
+
+# FORMELN EFTER KOLON STÅR PÅ EGEN RAD (BA26B:s C-blad inför prov 175,
+# 2026-10-23). «… ges av formeln: $n = \dfrac{O \cdot h}{5}$» satte bråket i
+# löptexten, och nästa rad «$O$ är rummets omkrets …» slogs ihop med den.
+# Förlagan (prov 175 uppgift 6) skriver «… räknas ut med formeln» och
+# formeln centrerad under. En likhet sist på en rad som slutar på kolon blir
+# därför en egen formelrad, och meningen före står kvar med sitt kolon.
+_KOLONFORMEL_RE = re.compile(r"^(.*\S:)\s*(\$[^$]*=[^$]*\$)\s*\.?$")
+
+
+def _kolonformler(rader: list[str]) -> list[str]:
+    ut: list[str] = []
+    for rad in rader:
+        m = _KOLONFORMEL_RE.match(rad.strip())
+        if m:
+            ut += [m.group(1), m.group(2)]
+        else:
+            ut.append(rad)
+    return ut
+
+
+# BRÅKET I LÖPTEXTEN (samma blad, uppgift 3): «… ur formeln $A =
+# \dfrac{(a + b) \cdot h}{2}$ och får olika svar.» Ett \dfrac i en textrad är
+# högre än radavståndet, och nämnaren skrevs ovanpå raden under. I en
+# textrad blir det \frac; displayformlerna behåller sitt \dfrac.
+def _textbrak(rad: str) -> str:
+    return rad.replace("\\dfrac", "\\frac")
 
 
 def _egen_rad(text: str) -> bool:
@@ -570,7 +602,8 @@ def _stycken(text: str, luft: bool = False,
     2026-09-25, exam 126 9a: «På Pizzeria Roma kostar en pizza 108 kr.
     Bestäm pizzans diameter.» på samma rad, luft först före b). En rad som
     bara är en formel står kvar som displayformel."""
-    rader = _systemrader(str(text or "").replace("\r\n", "\n").split("\n"))
+    rader = _kolonformler(_systemrader(
+        str(text or "").replace("\r\n", "\n").split("\n")))
     if ihop:
         rader = _ihop(rader, forst_i_raden)
         luft = False
@@ -588,7 +621,7 @@ def _stycken(text: str, luft: bool = False,
             ut.append({"formel": True,
                        "text": _ruta(_exponentbrak(_intervallminus(m.group(1))))})
         else:
-            ut.append({"formel": False, "text": escape_mixed(rad)})
+            ut.append({"formel": False, "text": escape_mixed(_textbrak(rad))})
             if _egen_rad(rad):
                 ut[-1]["egen_rad"] = True
         ut[-1]["luft"] = luft and tom

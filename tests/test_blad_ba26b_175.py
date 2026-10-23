@@ -51,3 +51,33 @@ def test_ingen_enhet_efter_ett_uttryck():
         "kr", "Priset räknas ut med en formel.\nVad kostar 4 timmar?") == "kr"
     # Ett led står kvar.
     assert exam_latex._enhet_for("$P =$", fraga) == "$P =$"
+
+
+def test_formeln_efter_kolon_star_pa_egen_rad():
+    """C-bladet, uppgift 6: formeln i löptexten och nästa rad ihopslagen."""
+    st = exam_latex._stycken(
+        "Antalet rullar tapet ges av formeln: $n = \\dfrac{O \\cdot h}{5}$\n"
+        "$O$ är rummets omkrets.\nHur långa är väggarna?", ihop=True)
+    assert [s["formel"] for s in st] == [False, True, False]
+    assert st[0]["text"].endswith("formeln:")
+    assert "dfrac" in st[1]["text"]
+    # Ett kolon före ett tal eller en lista rörs inte.
+    st = exam_latex._stycken("Priserna är: $45$ kr och $60$ kr.", ihop=True)
+    assert [s["formel"] for s in st] == [False]
+
+
+def test_brak_i_lopande_text_blir_litet():
+    """C-bladet, uppgift 3: \\dfrac i en mening skrev över raden under."""
+    st = exam_latex._stycken(
+        "Saga löser ut $b$ ur formeln $A = \\dfrac{(a + b) \\cdot h}{2}$ och "
+        "får ett svar.", ihop=True)
+    assert "dfrac" not in st[0]["text"] and "frac" in st[0]["text"]
+
+
+def test_ekvationssystem_med_brak_far_luft():
+    """C-bladet, uppgift 5: nämnaren skrevs ovanpå nästa rads täljare."""
+    rad = exam_latex._systemrader(["(1) $\\dfrac{x + 6}{2} = 5$",
+                                   "(2) $\\dfrac{3x - a}{4} = x$"])[0]
+    assert "\\\\[1.2ex]" in rad
+    rad = exam_latex._systemrader(["(1) $x + y = 5$", "(2) $x - y = 1$"])[0]
+    assert "[1.2ex]" not in rad
