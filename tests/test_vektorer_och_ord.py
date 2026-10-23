@@ -122,3 +122,14 @@ def test_mobilkranen_23_oktober():
     assert g.vardagsvakt(kana) == []
     assert any("mobilkran" in f["message"] for f in g.sprakvakt(kran))
     assert "Aldrig en maskin" in g.BLAD_SOM_PROVET
+
+
+def test_inga_poang_i_bladets_facit():
+    """Blad 308 uppgift 7 (2026-10-23): «Svaret 160 ger ingen poäng» i facit."""
+    ex = {"uppgifter": [{"text": "x", "losning": "$157$\n$h = 800 \\cdot \\sin 11{,}31°$\nSvaret 160 ger ingen poäng"},
+                        {"text": "y", "losning": "$v \\approx 21{,}2°$\n21° godtas"}]}
+    assert g.stryk_poang_i_facit(ex, "arbetsblad")
+    assert ex["uppgifter"][0]["losning"] == "$157$\n$h = 800 \\cdot \\sin 11{,}31°$"
+    assert ex["uppgifter"][1]["losning"].endswith("21° godtas")
+    prov = {"uppgifter": [{"text": "x", "losning": "Svaret 160 ger ingen poäng"}]}
+    assert not g.stryk_poang_i_facit(prov, "prov")

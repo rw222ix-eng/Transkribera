@@ -3646,6 +3646,7 @@ def ovningspappret_stadat(exam: dict | None, profil: str) -> dict | None:
     # stam får inte bli kvar. Med «Utan räknare.» först går den att stryka.
     stryk_forklarande_stam(exam, profil)
     stryk_tips(exam, profil)
+    stryk_poang_i_facit(exam, profil)
     stryk_gruppbilder(exam, profil)
     return exam
 
@@ -3742,6 +3743,30 @@ def stryk_tips(exam: dict | None, profil: str) -> bool:
         for x in [u] + list(u.get("deluppgifter") or []) if isinstance(u, dict) else []:
             if isinstance(x, dict) and x.get("notis"):
                 x["notis"] = None
+                andrat = True
+    return andrat
+
+
+# INGA POÄNG I BLADETS FACIT (Rickard 2026-10-22: bladet har inga
+# poängangivelser). Blad 308 uppgift 7 bar facitraden «Svaret 160 ger ingen
+# poäng», bedömningens språk i elevens facit. Raden stryks; «21° godtas» står
+# kvar, den säger vilket svar som räknas som rätt.
+_POANGRAD_RE = re.compile(r"(?i)(?<![\wåäö])poäng\w*")
+
+
+def stryk_poang_i_facit(exam: dict | None, profil: str) -> bool:
+    """Stryk facitrader som talar om poäng på övningspappret."""
+    if not isinstance(exam, dict) or profil not in OVNINGSPROFILER:
+        return False
+    andrat = False
+    for u in exam.get("uppgifter") or []:
+        for x in [u] + list(u.get("deluppgifter") or []) if isinstance(u, dict) else []:
+            los = x.get("losning") if isinstance(x, dict) else None
+            if not isinstance(los, str) or not _POANGRAD_RE.search(los):
+                continue
+            kvar = [r for r in los.split("\n") if not _POANGRAD_RE.search(r)]
+            if any(r.strip() for r in kvar):
+                x["losning"] = "\n".join(kvar)
                 andrat = True
     return andrat
 
