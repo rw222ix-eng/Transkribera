@@ -793,6 +793,24 @@ def _dela_uppgiften(stycken: list[dict], har_tabell: bool
     return fore, efter, fraga
 
 
+# BILDEN FÖRE FRÅGAN ÄVEN UTAN LUFT (blad 311 uppgift 1, 2026-10-23): utan
+# tom rad före frågan blev stycken_fraga tom, och plåten hamnade mellan
+# «Vilket ekvationssystem …?» och kryssrutorna. Har uppgiften svarsplats
+# under frågan och en bild, flyttas en sista mening som är en fråga till
+# frågedelen, så att bilden står före den.
+def _fragan_ur_sista_meningen(vy: dict) -> None:
+    if (not vy.get("bild_fil") or vy.get("stycken_fraga")
+            or not (vy.get("flerval") or vy.get("svarsfalt_rad")
+                    or vy.get("endast_svar"))):
+        return
+    bas = vy["stycken_efter"] or vy["stycken_fore"]
+    if (len(vy.get("stycken") or []) > 1 and bas
+            and str(bas[-1].get("text") or "").rstrip().endswith("?")):
+        vy["stycken_fraga"] = [dict(bas.pop())]
+        if bas:
+            bas[-1] = dict(bas[-1], par_efter=True)
+
+
 # Etiketten på en ifyllnadsrad får kolon — men bara när den inte redan slutar
 # på ett skiljetecken som bär samma funktion. Modellen skriver fält som
 # «$(-4)^2 =$», och «$(-4)^2 =$:» är inte en etikett, det är ett skrivfel.
@@ -1991,6 +2009,7 @@ def _build_view(doc: exam_spec.ExamDoc,
             (item_vy["stycken_fore"], item_vy["stycken_efter"],
              item_vy["stycken_fraga"]) = _dela_uppgiften(
                 item_vy["stycken"], bool(item_vy.get("tabell")))
+            _fragan_ur_sista_meningen(item_vy)
             item_vy["bild_fore_fragan"] = bool(
                 item_vy["stycken_fraga"]
                 and (item_vy.get("flerval") or item_vy.get("svarsfalt_rad")

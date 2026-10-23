@@ -258,3 +258,22 @@ def test_domarna_star_i_instruktionen():
     assert "en hel rulle med 50 m kabel, som kostar 620 kr.»" in r
     assert "högst 80 tecken" in r
     assert "«Hos firma B betalar man bara ett pris per dag.», aldrig" in r
+
+
+def test_bilden_star_fore_fragan_utan_luft():
+    """Blad 311:1 (2026-10-23): utan tom rad före frågan stod plåten mellan
+    frågan och kryssrutorna."""
+    st = exam_latex._stycken("Tabellen visar två beställningar.\nEn burk "
+                             "kostar $t$ kr.\nVilket ekvationssystem "
+                             "beskriver beställningarna?", luft=True)
+    fore, efter, fraga = exam_latex._dela_uppgiften(st, True)
+    vy = {"stycken": st, "stycken_fore": fore, "stycken_efter": efter,
+          "stycken_fraga": fraga, "bild_fil": "b.png", "flerval": [1, 2]}
+    exam_latex._fragan_ur_sista_meningen(vy)
+    assert [s["text"] for s in vy["stycken_fraga"]] == [
+        "Vilket ekvationssystem beskriver beställningarna?"]
+    # Utan bild eller utan svarsplats rörs ingenting.
+    vy2 = {"stycken": st, "stycken_fore": fore, "stycken_efter": efter,
+           "stycken_fraga": [], "flerval": [1, 2]}
+    exam_latex._fragan_ur_sista_meningen(vy2)
+    assert vy2["stycken_fraga"] == []
