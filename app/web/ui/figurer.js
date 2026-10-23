@@ -341,11 +341,11 @@ window.Figurer = (() => {
     }
     return ut;
   }
-  /* _rutlinjer: en mellanlinje per heltal när axeln rymmer högst 24 enheter
+  /* _rutlinjer: en mellanlinje per heltal när axeln rymmer högst 30 enheter
      (exam_figures.ENHETER_MAX), annars minorLinjer. */
   function rutLinjer(lo, hi, skala, maj, boxMax) {
     const a = Math.ceil(lo - 1e-9), b = Math.floor(hi + 1e-9);
-    if (b - a > 24 || b < a) return minorLinjer(maj, boxMax);
+    if (b - a > 30 || b < a) return minorLinjer(maj, boxMax);
     const ut = [];
     for (let v = a; v <= b; v++) {
       const g = skala(v);

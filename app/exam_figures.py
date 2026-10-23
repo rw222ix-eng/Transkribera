@@ -79,7 +79,10 @@ def _minor(maj: list[float], box_max: float) -> list[float]:
 # y-ticksen stod var femte enhet, mellanlinjerna på 2,5, och skärningen (2, 1)
 # låg mellan två linjer. Ryms axeln på högst ENHETER_MAX enheter går
 # mellanlinjerna vid varje heltal, så eleven kan rita och läsa av punkter.
-ENHETER_MAX = 24
+# 30 sedan blad 310 uppgift 11 (2026-10-23): y = 3x − 2 på −1 ≤ x ≤ 7 tar
+# 26 enheter med luften, fick linjer på 2,5, och facits (0, −2) och (1, 1)
+# gick inte att läsa av. 8 cm på 30 enheter är 2,7 mm per ruta.
+ENHETER_MAX = 30
 
 
 def _rutlinjer(lo: float, hi: float, skala, maj: list[float],

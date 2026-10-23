@@ -482,3 +482,12 @@ def test_skiss_utan_skala():
     assert "skiss" not in vanlig["figur"]
     assert "black!30" in exam_figures.render_figur(
         exam_spec.FigLinjar.model_validate(vanlig["figur"]))
+
+
+def test_linje_med_26_enheter_far_en_linje_per_heltal():
+    """Blad 310:11 (2026-10-23): y = 3x − 2 på −1 ≤ x ≤ 7 fick y-linjer på
+    2,5, och facits avläsning (0, −2), (1, 1) låg mellan linjerna."""
+    tikz = exam_figures._funktionsgraf(lambda x: 3 * x - 2, -1, 7)
+    ylinjer = re.findall(r"\\draw\[black!30,thin\] \(0,([\d.]+)\)", tikz)
+    # −6 … 20 med luften: en linje per heltal utom de fem märkta.
+    assert len(ylinjer) >= 20
