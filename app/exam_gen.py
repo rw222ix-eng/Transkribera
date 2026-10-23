@@ -12142,6 +12142,9 @@ _TVETYDIGA_NAMN = frozenset((
 # Uppgiftens första mening bär sakerna men också verben och vardagsorden. De
 # här är inte en situation, hur ovanliga de än är i kursens papper.
 _SAMMANHANG_STOPP = frozenset((
+    # Prepositioner ur scenens begrepp, som läses från fyra bokstäver: «stöd
+    # till ungt träd» lånade «till» från provet (blad 308:5, 2026-10-23).
+    "till", "från", "över", "under", "utan", "efter", "mellan", "genom",
     "byggda", "byggd", "bygger", "byggt", "består", "behöver", "använder",
     "innehåller", "handlar", "sparar", "lastar", "startar", "börjar",
     "planerar", "tänker", "undrar", "beskriver", "beskrivs", "gäller",
