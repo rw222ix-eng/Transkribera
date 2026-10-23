@@ -680,13 +680,20 @@ def _stapeldiagram(f: "exam_spec.FigStapeldiagram") -> str:
     # noll (försvar på djupet — receptet ska aldrig kunna krascha i ren Python).
     topp = max(f.varden)
     scale = H / topp if topp > 0 else 1.0
+    # Avståndet mellan staplarna växer med den längsta etiketten (blad 301
+    # uppg. 9, 2026-10-23): en cm räckte inte, och «Fotboll» och «Simning»
+    # skrevs ihop till «FotbollSimning». Ett tecken i \footnotesize är ungefär
+    # 0,17 cm. Taket håller diagrammet inom papprets 13 cm.
+    n = len(f.varden)
+    langst = max((len(str(k)) for k in f.kategorier), default=0)
+    s = min(max(1.0, 0.17 * langst + 0.35), 12.0 / max(n, 1))
     rader = [
         r"\begin{tikzpicture}[line join=round]",
         # Ingen axeletikett. «antal» stod här fast, och NA26F prov 3 (exam
         # 219, 2026-10-11) fick «antal» på ett diagram över busskortets pris i
         # kr och ett över insamlade kronor. Stammen säger vad staplarna visar.
         rf"\draw[->] (0,0)--(0,{_f(H + 0.6)});",
-        rf"\draw[->] (0,0)--({_f(len(f.varden) + 0.6)},0) node[right]{{ }};",
+        rf"\draw[->] (0,0)--({_f(s * n + 0.6)},0) node[right]{{ }};",
     ]
     for yt in _nice_ticks(0, max(f.varden)):
         if yt <= 0:
@@ -694,9 +701,10 @@ def _stapeldiagram(f: "exam_spec.FigStapeldiagram") -> str:
         rader.append(rf"\draw (0.08,{_f(yt * scale)})--(-0.08,{_f(yt * scale)}) "
                      rf"node[left]{{\footnotesize {_flabel(yt)}}};")
     for i, (kat, v) in enumerate(zip(f.kategorier, f.varden)):
+        mitt = 0.5 + s * (i + 0.5)
         rader.append(rf"\filldraw[fill=gray!20,draw=black] "
-                     rf"({_f(0.7 + i)},0) rectangle ({_f(1.3 + i)},{_f(v * scale)});")
-        rader.append(rf"\node[below] at ({_f(1.0 + i)},0) "
+                     rf"({_f(mitt - 0.3)},0) rectangle ({_f(mitt + 0.3)},{_f(v * scale)});")
+        rader.append(rf"\node[below] at ({_f(mitt)},0) "
                      rf"{{\footnotesize {escape_latex(kat)}}};")
     rader.append(r"\end{tikzpicture}")
     return "\n".join(rader)

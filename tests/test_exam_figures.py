@@ -501,3 +501,21 @@ def test_koordinatsystemets_hojd_raknas_ur_figuren():
     assert exam_latex._figur_mm(tex) >= 90
     assert exam_latex._figur_mm(r"\begin{tikzpicture}[scale=2](0,0)--(0,1)"
                                 r"\end{tikzpicture}") == exam_latex._MM_FIGUR
+
+
+def test_stapeldiagrammets_langa_etiketter_krockar_inte():
+    """Blad 301 uppg. 9 (2026-10-23): «Fotboll» och «Simning» en cm isär
+    skrevs ihop. Mitten på grannstaplarna står minst en etikettbredd isär."""
+    import re
+    from app import exam_figures, exam_spec
+    f = exam_spec.FigStapeldiagram(typ="stapeldiagram",
+                                   kategorier=["Fotboll", "Simning", "Dans", "Gym"],
+                                   varden=[35, 15, 20, 30])
+    mitt = [float(x) for x in re.findall(r"\\node\[below\] at \(([\d.]+),0\)",
+                                         exam_figures._stapeldiagram(f))]
+    assert len(mitt) == 4
+    assert min(b - a for a, b in zip(mitt, mitt[1:])) >= 0.17 * 7
+    # Korta etiketter står som förut, en cm isär.
+    kort = exam_spec.FigStapeldiagram(typ="stapeldiagram", kategorier=["A", "B"],
+                                      varden=[1, 2])
+    assert "at (1,0)" in exam_figures._stapeldiagram(kort)
