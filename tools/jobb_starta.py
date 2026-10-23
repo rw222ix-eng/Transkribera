@@ -34,10 +34,12 @@ while True:
         if e.code == 503 and kod == "gammal_kod" and time.time() - start < 3600:
             print("503 gammal kod, servern startar om, väntar 15 s", flush=True); time.sleep(15); continue
         raise SystemExit(f"{e.code} {kropp_fel[:400]}")
-    except urllib.error.URLError as e:
-        # Några sekunder utan svar medan vakten startar om servern.
-        if time.time() - start < 120:
-            print(f"ingen server ({e.reason}), väntar 5 s", flush=True); time.sleep(5); continue
+    except (urllib.error.URLError, ConnectionError) as e:
+        # Några sekunder utan svar medan vakten startar om servern. Den gamla
+        # servern kan också stänga anslutningen mitt i svaret (WinError 10053,
+        # 2026-10-23: fem väntande anrop dog när vakten bytte kod).
+        if time.time() - start < 3600:
+            print(f"ingen server ({getattr(e, 'reason', e)}), väntar 5 s", flush=True); time.sleep(5); continue
         raise
     try:
         for rad in svar:
