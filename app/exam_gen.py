@@ -15390,7 +15390,20 @@ def _infor_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
     if ovning:
         log("Inför provet: " + ", ".join(sorted({f["code"] for f in ovning}))
             + f" på {len({f['path'] for f in ovning})} ställen, lagar …")
-    kandidat = _llm_round(build_repair_prompt(exam, fel + errors, profil),
+    # FÖRBUDET FÖLJER MED IN I LAGNINGEN (BA26B:s A-blad inför prov 175,
+    # 2026-10-23, jobb 2268). Rundan skrev om fyra uppgifter så att de övade
+    # provets «Det gäller att $y = 2x + 3$» och «$3x + y = 20$», och alla fyra
+    # blev linjer och funktioner, kapitlet efter provets. Lagningsprompten såg
+    # bara fynden, aldrig listan genereringen fick (build_forbjudet), och
+    # inget räknade om förbudet på det nya pappret. Nu står listan i
+    # prompten, och en omskrivning som för in en förbjuden metod på en
+    # uppgift som inte hade den kastas: det gamla pappret står kvar och
+    # fynden visas.
+    listor = _ramens_listor(ram)
+    forbud = build_forbjudet(listor["forbjudna"], listor["delmoment"],
+                             listor["avsnitt"])
+    kandidat = _llm_round(build_repair_prompt(exam, fel + errors, profil,
+                                              f"{forbud}\n" if forbud else ""),
                           model, llm, antal, skeleton, koder, profil=profil,
                           log_cb=log_cb,
                           etikett=f"Justerar {pappret} (runda {rounds_used + 1} "
@@ -15398,6 +15411,16 @@ def _infor_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
     rounds_used += 1
     if kandidat is None:
         return {"exam": exam, "errors": errors + fel, "rounds": rounds_used}
+    if forbud:
+        fore = {f["path"] for f in forbudsvakt(
+            exam, listor["delmoment"], listor["forbjudna"], listor["avsnitt"])}
+        nya_forbud = [f for f in forbudsvakt(
+            kandidat, listor["delmoment"], listor["forbjudna"],
+            listor["avsnitt"]) if f["path"] not in fore]
+        if nya_forbud:
+            log(f"Inför provet: omskrivningen förde in {len(nya_forbud)} "
+                "förbjudna metoder, behåller bladet som det var.")
+            return {"exam": exam, "errors": errors + fel, "rounds": rounds_used}
     _doc, nya = _validate(kandidat, profil, koder, niva_mal)
     if nya and not errors:
         return {"exam": exam, "errors": fel, "rounds": rounds_used}

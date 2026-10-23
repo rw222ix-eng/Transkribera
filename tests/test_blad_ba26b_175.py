@@ -81,3 +81,36 @@ def test_ekvationssystem_med_brak_far_luft():
     assert "\\\\[1.2ex]" in rad
     rad = exam_latex._systemrader(["(1) $x + y = 5$", "(2) $x - y = 1$"])[0]
     assert "[1.2ex]" not in rad
+
+
+def test_lagningen_far_forbudet_och_kastar_en_ny_forbjuden_metod():
+    """A-bladet, jobb 2268: inför-passets runda skrev om fyra uppgifter till
+    linjer och funktioner, och ingen räknade förbudet efteråt."""
+    import copy
+    import json
+    from tests.test_blad_ur_provet import _blad, _prov_1c
+    blad = _blad()
+    ram = {"forbjudna": [{"metod": "Grafer och funktioner",
+                          "sidor": "158–170"}],
+           "delmoment": [{"delmoment": "Linjära ekvationer"}]}
+    linje = copy.deepcopy(blad)
+    linje["uppgifter"][0]["text"] = ("Linjen $f$ har ekvationen $y = 2x + 1$. "
+                                    "Bestäm skärningspunkten med $y = 5$.")
+    prompter = []
+
+    def llm(model, prompt, **k):
+        prompter.append(prompt)
+        if "elevläsare" in prompt:
+            return json.dumps({"domar": [{
+                "nr": "3", "omskrivning": "Jag ska rita en graf.",
+                "forstar": "nej", "avvikelse": "Facit löser en ekvation.",
+                "fortydligande": "Skriv att ekvationen ska lösas."}]})
+        return json.dumps(linje)
+
+    res = exam_gen._infor_pass(
+        blad, [], model="", llm=llm, profil="arbetsblad", antal=7,
+        skeleton=None, nummer=[1, 2, 3, 4, 5, 6, 7], rounds_used=1,
+        max_rounds=5, prov=_prov_1c(), ram=ram, doma=True)
+    rundor = [p for p in prompter if "Problem att åtgärda" in p]
+    assert rundor and "METODER SOM INTE FÅR KRÄVAS" in rundor[0]
+    assert res["exam"]["uppgifter"][0]["text"] == blad["uppgifter"][0]["text"]
