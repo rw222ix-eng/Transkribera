@@ -616,3 +616,13 @@ def test_formerna_kompilerar_och_star_i_pdfen(tmp_path):
             # Enheten står på svarsraden — och svarsraden finns bara här.
             assert "laddpunkter" in text, f"{namn}: enheten saknas"
             assert "Elevlösning" not in text, f"{namn} tryckte lärarens papper"
+
+
+def test_gradtecknet_i_matten_blir_circ():
+    """Blad 308 (2026-10-23): «$30°$» i tabellens rubrik och «$\\cos 52°$» på
+    egen rad trycktes utan grader, TeX tappar ° i matteläge."""
+    assert exam_latex.escape_mixed("$30°$ och $v$") == r"\(30^{\circ}\) och \(v\)"
+    st = exam_latex._stycken("Elias räknar så här:\n$h = 45 \\cdot \\cos 52°$")
+    assert st[1]["formel"] and st[1]["text"] == r"h = 45 \cdot \cos 52^{\circ}"
+    # I löptexten står graden som förut.
+    assert "textdegree" in exam_latex.escape_mixed("lutar 38° mot marken")

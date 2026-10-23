@@ -160,6 +160,13 @@ def _ruta(formel: str) -> str:
     return _RUTA_RE.sub(r"\\mathrel{\\fbox{\\phantom{0}}}", formel)
 
 
+# «$30°$» i tabellens rubrik och «$\cos 52°$» (blad 308, 2026-10-23): ett
+# gradtecken i matteläge har inget typsnitt där, och TeX släppte det tyst, så
+# tabellen visade 30 37 45 53 utan grader. I matten är graden \circ upphöjt.
+def _grader(formel: str) -> str:
+    return formel.replace("°", r"^{\circ}")
+
+
 def escape_mixed(text: str, *, fet: bool = False) -> str:
     """Escapa text med inline-matte: allt utanför ``$…$`` escapas, matten
     bevaras oförändrad som ``\\( … \\)`` (modellen skriver LaTeX-matte där,
@@ -179,7 +186,7 @@ def escape_mixed(text: str, *, fet: bool = False) -> str:
             r"\1~\2", escape_latex(s)))
     for m in _MATH_SPLIT_RE.finditer(text):
         parts.append(_esc_text(text[pos:m.start()]))
-        matte = _ruta(_exponentbrak(_intervallminus(m.group(1))))
+        matte = _grader(_ruta(_exponentbrak(_intervallminus(m.group(1)))))
         formel = r"\pmb{" + matte + "}" if fet else matte
         parts.append(r"\(" + formel + r"\)")
         pos = m.end()
@@ -619,7 +626,8 @@ def _stycken(text: str, luft: bool = False,
             ut.append({"formel": False, "text": escape_mixed(rad)})
         elif m:
             ut.append({"formel": True,
-                       "text": _ruta(_exponentbrak(_intervallminus(m.group(1))))})
+                       "text": _grader(_ruta(_exponentbrak(
+                           _intervallminus(m.group(1)))))})
         else:
             ut.append({"formel": False, "text": escape_mixed(_textbrak(rad))})
             if _egen_rad(rad):
