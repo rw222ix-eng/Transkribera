@@ -101,6 +101,11 @@ _LATEX_SPECIALS = {
     "¾": r"{\normalfont\textthreequarters}",   # ¾
     "²": r"\textsuperscript{2}",    # ²
     "³": r"\textsuperscript{3}",    # ³
+    # «använd tan⁻¹» i facitets förklaring (blad 308, 2026-10-23) trycktes
+    # som «tanź»: Latin Modern har inga upphöjda ⁻ och ¹ i textläge.
+    "⁻": r"\textsuperscript{\textendash}",  # ⁻ (mattens minus kräver msam5)
+    "¹": r"\textsuperscript{1}",    # ¹
+    "⁰": r"\textsuperscript{0}",    # ⁰
     " ": "~",                       # hårt mellanslag
 }
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")

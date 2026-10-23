@@ -626,3 +626,9 @@ def test_gradtecknet_i_matten_blir_circ():
     assert st[1]["formel"] and st[1]["text"] == r"h = 45 \cdot \cos 52^{\circ}"
     # I löptexten står graden som förut.
     assert "textdegree" in exam_latex.escape_mixed("lutar 38° mot marken")
+
+
+def test_upphojt_minus_ett_i_facitets_forklaring():
+    """Blad 308 (2026-10-23): «använd tan⁻¹» trycktes som «tanź»."""
+    assert exam_latex.escape_latex("använd tan⁻¹") == \
+        r"använd tan\textsuperscript{\textendash}\textsuperscript{1}"
