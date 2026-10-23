@@ -14074,6 +14074,7 @@ _FACKMENING = re.compile(r"[^.!?\n]+[.!?]?")
 # ringen. En mening med matte som säger att den är exemplet godtas.
 _EXEMPELMENING_RE = re.compile(
     r"(?<![\wåäö])(exempel|som i|t\.\s?ex)(?![\wåäö])", re.IGNORECASE)
+_FRAGAR_ORDET_RE = re.compile(r"(?:Ange|Bestäm|Beräkna)\s+")
 
 
 def _fackord_utan_exempel(text) -> list[str]:
@@ -14097,6 +14098,15 @@ def _fackord_utan_exempel(text) -> list[str]:
         # 12 % höjs med 2 procentenheter». Ett ensamt tal («i 2 decimaler»)
         # är det inte.
         exempel = "§" in mening or len(re.findall(r"\d+", mening)) >= 2
+        # Frågan efter själva ordet («Ange förändringsfaktorn.») är det
+        # uppgiften prövar, och provet skriver den så (blad 301 inför prov
+        # 219, 2026-10-23). Ett exempel där är svaret, och bladet har inga
+        # tips (Rickard 2026-10-22). «Ange skillnaden i procentenheter.»
+        # fälls som förut.
+        fragat = _FRAGAR_ORDET_RE.match(mening.strip())
+        if fragat:
+            har = [n for n in har
+                   if not _FACKORD_RE[n].match(mening.strip(), fragat.end())]
         if not exempel and not ("§" in nasta and _EXEMPELMENING_RE.search(nasta)):
             ut += [n for n in har if n not in ut and n not in visade]
         if exempel:

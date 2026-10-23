@@ -269,6 +269,18 @@ def test_ett_visat_fackord_behover_inget_nytt_exempel():
         "Ange skillnaden i procentenheter.\nRäntan går från 10 % till 12 %.")
 
 
+def test_fragan_efter_ordet_ar_inget_fackord_utan_exempel():
+    """Blad 301 inför prov 219 (2026-10-23): provet frågar «Ange
+    förändringsfaktorn.», och vakten tvingade bladet att förklara svaret."""
+    u = _uppg("En biograf ändrar priset.", (0, 0, 0), deluppgifter=[
+        _del("Priset höjs med 40 %.\nAnge förändringsfaktorn.", (1, 0, 0))])
+    assert exam_gen.facktermsvakt(_blad(u)) == []
+    assert exam_gen._fackord_utan_exempel("Bestäm förändringsfaktorn.") == []
+    # Ordet som redskap i frågan fälls som förut.
+    assert exam_gen._fackord_utan_exempel(
+        "Ange svaret med förändringsfaktorn.")
+
+
 def test_raden_om_vad_bokstaven_betyder_ar_inget_faktum():
     """Blad 231:4 (2026-10-11): radlängden delade «…, där $t$ är tiden …» i
     två meningar, och textmängdvakten fällde stammen för tre meningar."""
