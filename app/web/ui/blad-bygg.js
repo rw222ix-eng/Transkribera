@@ -1520,6 +1520,9 @@ window.BladBygg = (() => {
      Ett svar i fall («$0 < a < 1$: … . $a = 1$: lika. …», TE26A A-bladet dok
      275, 13/10) delas aldrig vid punkten: rutan visade bara första fallet. */
   const ORSAK = /^,?\s+(eftersom|för att)\s+/;
+  /* «för få för att visa …» är ett mått, ingen orsak (blad 301 uppg. 11b,
+     2026-10-23). Spegel av exam_latex._FOR_ADJ_RE. */
+  const FOR_ADJ = /(^|[^\wåäö])för\s+[\wåäö]+$/i;
   function delaSvaret(rad) {
     const s = rad.replace(/^\s*svar\s*:\s*/i, '');
     let iMat = false, fall = false;
@@ -1531,7 +1534,8 @@ window.BladBygg = (() => {
         return [s.slice(0, i).trimEnd(), s.slice(i + 1).trim()];
       }
       const m = ORSAK.exec(s.slice(i));
-      if ((s[i] === ',' || s[i] === ' ') && m && i > 0) {
+      if ((s[i] === ',' || s[i] === ' ') && m && i > 0
+          && !(m[1] === 'för att' && FOR_ADJ.test(s.slice(0, i)))) {
         return [s.slice(0, i).trimEnd(), versal(m[1]) + ' ' + s.slice(i + m[0].length).trim()];
       }
     }

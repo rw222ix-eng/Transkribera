@@ -704,3 +704,13 @@ def test_regeln_som_exempel_pa_bladet_fills():
     exam, _ = _blad({"text": "Priset höjs med 40 %. Ange förändringsfaktorn.",
                      "losning": "$1{,}40$"})
     assert exam_gen.raknat_exempelvakt(exam) == []
+
+
+def test_for_fa_for_att_delar_inte_svaret():
+    """Blad 301 uppg. 11b (2026-10-23): «för få för att visa …» är ett mått,
+    ingen orsak. Rutan fick bara «Tre elever är för få»."""
+    from app.exam_latex import _dela_svaret
+    hel = "Tre elever är för få för att visa vad gymnasieelever gör."
+    assert _dela_svaret(hel) == (hel, "")
+    # En riktig orsak delas som förut.
+    assert _dela_svaret("Nej, för att 5 är udda") == ("Nej", "För att 5 är udda")

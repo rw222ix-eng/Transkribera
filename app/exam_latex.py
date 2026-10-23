@@ -1172,6 +1172,10 @@ def _svaret(losning: str | None, enhet: str | None = None) -> str:
 # Spegel av blad-bygg.js facitGrupper.
 _DELSTART_RE = re.compile(r"^([a-h])\)\s*")
 _ORSAK_RE = re.compile(r",?\s+(eftersom|för att)\s+")
+# «för få för att visa …» är ingen orsak utan ett mått (blad 301 uppg. 11b,
+# 2026-10-23): rutan fick «Tre elever är för få» och raden under «För att
+# visa vad gymnasieelever gör.» Spegel av blad-bygg.js FOR_ADJ.
+_FOR_ADJ_RE = re.compile(r"(?<![\wåäö])för\s+[\wåäö]+$", re.I)
 
 
 def _losrader(text: str | None) -> list[str]:
@@ -1206,7 +1210,8 @@ def _dela_svaret(rad: str) -> tuple[str, str]:
                 and not _FORKORTNING.search(s[:i])):
             return s[:i].rstrip(), s[i + 1:].strip()
         m = _ORSAK_RE.match(s, i)
-        if c in ", " and m and i > 0:
+        if (c in ", " and m and i > 0 and not (m.group(1) == "för att"
+                                                and _FOR_ADJ_RE.search(s[:i]))):
             rest = s[m.end():].strip()
             return s[:i].rstrip(), m.group(1).capitalize() + " " + rest
     return s, ""
