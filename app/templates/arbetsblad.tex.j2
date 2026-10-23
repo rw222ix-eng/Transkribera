@@ -91,8 +91,11 @@
     med linjen under. Ingen ny sida per del: provets delar delas ut för sig,
     bladet är ett papper. \pfbehov håller rubriken ihop med första uppgiften. #))
 ((# Rubriken begär plats för sig själv OCH första uppgiften: annars stod
-    «Del B» ensam sist på sidan (dok 436, 438, 440, 2026-10-22). #))
-\pfbehov{((( (del.uppgifter[0].behov_mm if del.uppgifter else 0) + 30 )))mm}
+    «Del B» ensam sist på sidan (dok 436, 438, 440, 2026-10-22). Rubriken
+    själv tar ~33 mm (luft, centers marginaler, linjen, listans början):
+    med 30 mm fick rubriken plats men inte uppgiften, och «Del B» stod ändå
+    ensam (dok 346, 2026-10-23). #))
+\pfbehov{((( (del.uppgifter[0].behov_mm if del.uppgifter else 0) + 42 )))mm}
 \vspace{6mm}
 \begin{center}
   {\Large\bfseries ((( del.titelrad )))\vphantom{gy}}
