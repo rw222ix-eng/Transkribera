@@ -13039,14 +13039,29 @@ def _drilltackningsfel(uppgifter: list[dict], valda: list[int],
 def _samma_sak(a: str, b: str) -> bool:
     """Samma sak, också i sammansättning: «säckar» och «sandsäckar», «betong»
     och «betongplatta». Den kortare delen måste ha fem bokstäver, annars blir
-    varje ord med samma ändelse samma sak."""
-    for x in {_normal(a), _normal(_ordstam(a.casefold()))}:
-        for y in {_normal(b), _normal(_ordstam(b.casefold()))}:
+    varje ord med samma ändelse samma sak.
+
+    Huvudordet sist får ha fyra (blad 311:6, 2026-10-23): «ljuset» och provets
+    «stearinljus» är samma sak, men _ordstam lämnar korta ord orörda. Den
+    bestämda formen strippas därför också, och en sammansättning som SLUTAR
+    på ett fyrbokstavsord är det ordet (svenskans huvudord står sist)."""
+    def former(o: str) -> set[str]:
+        o = o.casefold()
+        ut = {_normal(o), _normal(_ordstam(o))}
+        for s in ("arna", "erna", "orna", "et", "en", "na"):
+            if o.endswith(s) and len(o) - len(s) >= 4:
+                ut.add(_normal(o[:-len(s)]))
+                break
+        return ut
+    for x in former(a):
+        for y in former(b):
             if x == y:
                 return True
             kort, lang = sorted((x, y), key=len)
             if len(kort) >= 5 and (lang.endswith(kort)
                                    or lang.startswith(kort)):
+                return True
+            if len(kort) == 4 and len(lang) >= 8 and lang.endswith(kort):
                 return True
     return False
 

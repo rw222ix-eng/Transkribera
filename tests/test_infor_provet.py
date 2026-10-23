@@ -1017,3 +1017,16 @@ def test_radbrytningen_avslutar_en_mening():
     fynd = [f for f in exam_gen.sprakvakt({"uppgifter": [u]})
             if "uppmaning" in f["message"]]
     assert fynd == []
+
+
+def test_kort_huvudord_i_sammansattning_ar_samma_sak():
+    """Blad 311:6 (2026-10-23): «Det röda ljuset brinner ner» gick igenom
+    fast provet har «stearinljus». Huvudordet står sist i en svensk
+    sammansättning, och den bestämda formen räknas till ordet."""
+    assert exam_gen._samma_sak("ljuset", "stearinljus")
+    assert exam_gen._samma_sak("ljusen", "stearinljus")
+    assert exam_gen._samma_sak("släpvagn", "slapvagn")
+    # Ett fyrbokstavsord först i ordet är bara en förled.
+    assert not exam_gen._samma_sak("ljus", "ljusstake")
+    assert exam_gen._samma_sak("torg", "torget")
+    assert not exam_gen._samma_sak("hyra", "kortare")
