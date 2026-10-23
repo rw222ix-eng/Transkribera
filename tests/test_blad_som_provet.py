@@ -668,3 +668,24 @@ def test_insattningsvakt_kraver_det_givna_vardet_forst():
                            "losning": "$1\\,800$\n$V = -3 \\cdot 2\\,500 + "
                            "12\\,000 - 2\\,700$ ← sätt in $x = 50$"}]}
     assert exam_gen.insattningsvakt(exam) == []
+
+
+def test_omskrivningen_av_bladet_ser_provets_namn():
+    """Blad 302 (2026-10-23): «byt Leo mot ett namn som inte står på provet»
+    gav Noah, som stod på prov 219. Refine-prompten har nu provets namn när
+    bladet övar inför ett prov, och är som förut utan provet."""
+    exam, _ = _blad({"text": "Leo lånar 8 000 kr. Hur stor är räntan?",
+                     "losning": "$400$ kr"})
+    prov = {"uppgifter": [{"text": "Noah köper en cykel för 4 000 kr."}]}
+    promptar = []
+
+    def llm(model, prompt, **_k):
+        promptar.append(prompt)
+        return "inte json"
+
+    for infor in (prov, None):
+        exam_gen.refine_exam(exam, "byt namnet", model="m", nummer=1,
+                             profil="arbetsblad", infor=infor, llm=llm)
+    assert "ANDRA NAMN OCH ANDRA SAMMANHANG ÄN PROVET" in promptar[0]
+    assert "Noah" in promptar[0]
+    assert "ANDRA NAMN" not in promptar[1]

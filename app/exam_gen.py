@@ -17104,10 +17104,17 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
     log("Uppdaterar provet …")
     # Kursens slitna sammanhang (build_slitna_block): tom lista ger samma
     # prompt som förut.
+    # Bladet inför provet får genereringens regel om provets namn också här
+    # (blad 302, 2026-10-23: «byt Leo mot ett namn som inte står på provet»
+    # gav Noah, och «Saga och Hugo» gav Maja och Liam, alla fyra från prov
+    # 219). Modellen såg aldrig provets namn i omskrivningen. Utan provet är
+    # prompten som förut.
+    namnregel = (_andra_namn_och_sammanhang(provets_namn_och_sammanhang(infor))
+                 if infor and profil == "arbetsblad" else "")
     candidate = _llm_round(
         build_refine_prompt(exam, instruction, nummer, mal, bok, historik,
                             malen, inriktning, profil)
-        + build_slitna_block(tidigare, profil),
+        + build_slitna_block(tidigare, profil) + namnregel,
         model, llm, profil=profil, log_cb=log_cb, etikett="Uppdaterar")
     if candidate is None:
         return {"exam": exam,
