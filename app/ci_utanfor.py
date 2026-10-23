@@ -144,8 +144,11 @@ _ANDRAGRADSORD = re.compile(r"(?i:andragradsfunktion\w*|andragradskurv\w*"
 # eller radslut. Inte n: R(n) = n² + n är mönstrets formel för figur n
 # (godkända blad 112), och den står i 1c. Och inte ett y mitt i en produkt,
 # «3xy · 2x = 6x²y» (blad 142).
+# Decimalkommat {,} hör till högerledet: «h(x) = -0{,}5x^2 + 4x» (blad 305:3,
+# 2026-10-23) klipptes vid kommat till «-0{» och gick igenom.
 _FUNKTIONSDEF = re.compile(
-    r"(?<![\w\\}^)])(?:[a-zA-Z]\s*\(\s*([a-mo-z])\s*\)|y)\s*=\s*([^$=,;\n]+)")
+    r"(?<![\w\\}^)])(?:[a-zA-Z]\s*\(\s*([a-mo-z])\s*\)|y)\s*=\s*"
+    r"((?:\{,\}|[^$=,;\n])+)")
 _KVADRAT_I = r"(?:\^\s*\{?\s*2\s*\}?|²)"
 
 

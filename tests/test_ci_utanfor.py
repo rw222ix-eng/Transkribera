@@ -540,3 +540,11 @@ def test_vakten_faller_prov_215_uppgift_8():
     assert RAT in fel[0]["message"]
     rad = ci_utanfor.build_utanfor(KURS2A)
     assert "olikheter" in rad and "nämnare" in rad
+
+
+def test_andragradsfunktion_med_decimalkomma():
+    """Blad 305:3 (NA26F inför prov 156, 2026-10-23): $h(x) = -0{,}5x^2 + 4x$
+    klipptes vid {,} och gick igenom. Potensfunktionen med decimal står kvar."""
+    k = "Matematik, nivå 1c"
+    assert "andragradsfunktioner" in _traffar(k, r"$h(x) = -0{,}5x^2 + 4x$")
+    assert _traffar(k, r"$f(x) = 0{,}5x^2$") == []
