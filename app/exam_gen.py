@@ -2325,6 +2325,11 @@ BLAD_SOM_PROVET = (
     "vad det är.\n"
     "- Situationen går att se framför sig, och inget lämnas att gissa: vad "
     "som räknas med, vad som är okänt och vad $x$ står för står i texten.\n"
+    "- Situationen är något eleven ser i vardagen: en stege mot en vägg, en "
+    "ramp, en rutschkana, en trappa, ett tak, en backe. Aldrig en maskin "
+    "eleven inte står bredvid (mobilkran, klaffbro), och måtten sägs som "
+    "eleven ser dem: «Stegen når 3,5 m upp på väggen.», aldrig «toppen är "
+    "3,5 m högre än dess nedre ände».\n"
     "- Frågan nämner det som söks med situationens ord: «Hur långt är "
     "sovrummet?», «Bestäm ett uttryck för fönstrets bredd.» En fråga per "
     "deluppgift, och ingen mening som bara säger vad uppgiften är.\n"
@@ -5541,6 +5546,45 @@ def vektornamnvakt(exam: dict) -> list[dict]:
     return ut
 
 
+# ── EN SITUATION ELEVEN KÄNNER IGEN (Rickard 2026-10-23, blad 304 uppg 8) ──
+# «En mobilkran har en rak arm som är 38,0 m lång. Armens topp är 26,5 m
+# högre än dess nedre ände.» Hans dom: «jättekonstigt skrivet … jättedåligt
+# exempel … bara något konkret skulle det vara.» Två saker går att räkna:
+# maskiner eleverna aldrig står bredvid, och ändar som beskrivs i stället
+# för att visas («dess nedre ände», «den fria änden»). Samma matematik med
+# en stege, en ramp eller en rutschkana läser alla.
+_OKONKRET_RE = re.compile(
+    r"(?i)(?<![\wåäö])(?:mobilkran|lyftkran|byggkran|tornkran|kranarm|"
+    r"klaffbro|skylift)\w*|"
+    r"(?:dess|sin)\s+(?:nedre|övre|fria|lägsta|högsta)\s+ände|"
+    r"fria\s+änden|"
+    r"armens\s+(?:topp|spets|ände)")
+
+
+def vardagsvakt(exam: dict) -> list[dict]:
+    """Situationer eleven inte känner igen, eller ändar som beskrivs
+    omständligt, i uppgiftens text (inte i facit). En per uppgift."""
+    ut: list[dict] = []
+    for i, u in enumerate(exam.get("uppgifter") or [], 1):
+        if not isinstance(u, dict):
+            continue
+        texter = [str(u.get("text") or "")] + [
+            str(d.get("text") or "") for d in (u.get("deluppgifter") or [])
+            if isinstance(d, dict)]
+        m = next((m for m in map(_OKONKRET_RE.search, texter) if m), None)
+        if m:
+            ut.append(_err(
+                f"uppgift {i}", "begriplighet",
+                f"uppgift {i} bygger på «{m.group(0)}», en situation eleven "
+                f"inte känner igen eller en omständlig beskrivning: "
+                f"{SPRAKVAKTENS_MARKE}. Välj något eleven ser i vardagen, en "
+                "stege mot en vägg, en ramp, en rutschkana, en trappa, ett tak "
+                "eller en backe, och säg måtten som eleven ser dem: «Stegen "
+                "är 4,0 m lång och når 3,5 m upp på väggen.» Samma matematik "
+                "och samma svar." + BEHALL_PLANEN))
+    return ut
+
+
 # ── SVARSFORM UR ETT ANNAT KAPITEL (samma granskning, uppgift 5) ──────────
 # «Svara med ett intervall» på ett prov om vektorer: intervall är kapitel 2.
 # Provets delmoment är ramen; nämner ingen av dem intervall eller olikheter
@@ -5675,6 +5719,8 @@ def sprakvakt(exam: dict) -> list[dict]:
                 fynd(f"skriver «{ord_}»: {SPRAKVAKTENS_MARKE}. {rad}.")
     # Vektorer med namn (Rickard 2026-10-08), på provet och på bladet.
     ut += vektornamnvakt(exam)
+    # Och en situation eleven känner igen (Rickard 2026-10-23).
+    ut += vardagsvakt(exam)
     return ut
 
 

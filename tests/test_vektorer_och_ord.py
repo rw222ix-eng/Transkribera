@@ -103,3 +103,22 @@ def test_a_bladets_batuppgift_8_oktober():
     assert not any("fart rakt över" in f["message"] for f in g.sprakvakt(ny))
     for rad in ("A-NIVÅN ÄR EN INSIKT", "BARA VERKTYG KLASSEN HAR", "SÄG VILKEN VEKTOR SOM MENAS"):
         assert rad in g.INSTRUCTION
+
+
+def test_mobilkranen_23_oktober():
+    """E-bladet inför prov 163 (exam 304), uppgift 8 och 11, ordagrant.
+    Rickard: «jättedåligt exempel … bara något konkret skulle det vara.»"""
+    kran = _prov({"text": "Räknare tillåten. En mobilkran har en rak arm som är 38,0 m lång.\n"
+                          "Armens topp är 26,5 m högre än dess nedre ände.\n"
+                          "Beräkna vinkeln $v$ som armen lutar mot marken."})
+    bro = _prov({"text": "Räknare tillåten. En klaffbro är 24 m lång.\nAli påstår att vinkeln "
+                         "dubblas om den fria änden lyfts 16 m i stället för 8 m."})
+    # Prov 163 uppgift 12 och blad 167 uppgift 3, båda godkända: konkreta.
+    kana = _prov({"text": "Rutschkanan på en lekplats är rak och 3,2 m lång.\n"
+                          "Den övre änden är 1,9 m över marken."},
+                 {"text": "Rutschkanans nedre ände sitter 0,30 m över marken."})
+    assert _koder(g.vardagsvakt(kran)) == ["uppgift 1"]
+    assert _koder(g.vardagsvakt(bro)) == ["uppgift 1"]
+    assert g.vardagsvakt(kana) == []
+    assert any("mobilkran" in f["message"] for f in g.sprakvakt(kran))
+    assert "Aldrig en maskin" in g.BLAD_SOM_PROVET
