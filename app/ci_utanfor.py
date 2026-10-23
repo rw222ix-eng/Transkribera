@@ -300,7 +300,18 @@ _SUMMA = (
         # Facit som lägger ihop en följd: «150 + 140 + \ldots + 10» (blad
         # 228:3, NA26F inför prov 219, 2026-10-11). Uppgiftstexten nämnde
         # varken summa eller amortering.
-        r"|\+\s*(?:\\[lc]dots|…|\.\.\.)\s*\+"))
+        r"|\+\s*(?:\\[lc]dots|…|\.\.\.)\s*\+"
+        # Lika stora insättningar som växer olika länge (blad 297:11, NA26F
+        # inför prov 156, 2026-10-23): «Leo sätter in lika mycket pengar … i
+        # början av varje år», facit x · 1,03³ + x · 1,03² + x · 1,03 + x = S.
+        # Texten sade varken summa eller amortering. Samma förändringsfaktor
+        # med två exponenter i en summa, eller insättningar varje period.
+        r"|(?P<faktor>\d+\{?[,.]\}?\d+)\s*\^\s*\{?\d+\}?\s*\+[^$=]{0,40}?"
+        r"(?P=faktor)\s*\^"
+        r"|(?i:(?:sätter|satte|betalar|betalade)\s+in\s+(?:lika\s+mycket|"
+        r"samma\s+belopp|\$?\d[\d\s]*\$?\s*kr)[^.?\n]{0,60}?"
+        r"(?:varje|i\s+början\s+av\s+varje|i\s+slutet\s+av\s+varje)\s+"
+        r"(?:år|månad|vecka|kvartal))"))
 # Räntan sammanlagt över en hel amortering är en summa för hand. I Ma 1a står
 # den i det centrala innehållet med kalkylprogram (G25-M1A-DIG-1, Rickard
 # 2026-10-11: «kolla Ma 1a:s centrala innehåll»), så den fälls bara i 1c, där

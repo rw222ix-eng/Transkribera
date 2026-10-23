@@ -461,7 +461,23 @@ def test_rantan_tills_lanet_ar_betalt_ar_en_summa():
     assert _traffar("Matematik, nivå 1c", "$150 + 140 = 290$") == []
 
 
-RAT = "rationella ekvationer och icke-linjära ekvationssystem"
+def test_lika_stora_insattningar_ar_en_summa():
+    """Blad 297:11 (NA26F inför prov 156, 2026-10-23): «Leo sätter in lika
+    mycket pengar på ett sparkonto i början av varje år», facit
+    $x \\cdot 1{,}03^3 + x \\cdot 1{,}03^2 + x \\cdot 1{,}03 + x = S$."""
+    k = "Matematik, nivå 1c"
+    assert "summor" in _traffar(k, "Leo sätter in lika mycket pengar på ett "
+                                   "sparkonto i början av varje år.")
+    assert "summor" in _traffar(k, "Ida sätter in 500 kr varje månad.")
+    assert "summor" in _traffar(
+        k, r"$x \cdot 1{,}03^3 + x \cdot 1{,}03^2 + x \cdot 1{,}03 + x = S$")
+    # En insättning som växer, potenslagar och potenser med heltalsbas står.
+    assert _traffar(k, "Leo sätter in 5 000 kr på ett sparkonto.") == []
+    assert _traffar(k, r"$1{,}05^2 \cdot 1{,}05^3 = 1{,}05^5$") == []
+    assert _traffar(k, r"$2^3 + 2^2 = 12$") == []
+
+
+RAT ="rationella ekvationer och icke-linjära ekvationssystem"
 KURS2A = "Matematik 2a"
 
 
