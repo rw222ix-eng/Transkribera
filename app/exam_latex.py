@@ -887,6 +887,27 @@ def _ar_led(enhet) -> bool:
     return str(enhet or "").strip().rstrip("$ ").endswith("=")
 
 
+# BA26B:s E-blad inför prov 175 (2026-10-23): «Skriv ett uttryck för vad allt
+# kostar tillsammans.» fick «Svar: ________ kr». Svaret är uttrycket $129n +
+# 85$, och en enhet efter linjen ber eleven räkna fram ett tal. Söks ett
+# uttryck eller en formel står ingen enhet på raden; ett led står kvar.
+_UTTRYCK_SOKS_RE = re.compile(
+    r"\b(?:ett|vilket|nytt|förenklat)\s+uttryck\b|\bsom (?:ett )?uttryck i\b"
+    r"|\b(?:en|vilken|ny)\s+formel\b", re.I)
+
+
+def _enhet_for(enhet, text) -> str | None:
+    """`enhet`, utom när uppgiften söker ett uttryck eller en formel och
+    fältet är en enhet och inte ett led. Bara frågan räknas, alltså sista
+    meningen: «Priset räknas ut med en formel.» i stammen söker inget."""
+    meningar = [m for m in re.split(r"(?<=[.!?])\s+|\n+", str(text or ""))
+                if m.strip()]
+    if enhet and not _ar_led(enhet) and meningar \
+            and _UTTRYCK_SOKS_RE.search(meningar[-1]):
+        return None
+    return enhet
+
+
 # ── BEDÖMNINGSANVISNINGEN I NATIONELLA PROVETS FORM ──────────────────────
 # Lärarens dom 2026-09-23: «Hela bedömningsanvisningen skulle vi kunna bygga
 # mycket tydligare … lik det som finns på nationella proven. För just nu känns
@@ -1383,6 +1404,7 @@ def _enhet_vy(*, poang, typ, formaga, text, losning, bedomning,
              svarsfalt=None, facit=False, deluppgift=False):
     """Delad vy för ett löv och för en deluppgift."""
     flerval, ratt_bokstav = _flerval_vy(alternativ, ratt_alternativ)
+    enhet = _enhet_for(enhet, text)
     return {
         "enhet": escape_mixed(enhet) if enhet and not _ar_led(enhet) else None,
         # LEDET STÅR FÖRE LINJEN, ENHETEN EFTER. Fältet `enhet` bär båda

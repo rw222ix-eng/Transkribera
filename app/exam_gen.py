@@ -14684,8 +14684,14 @@ _METODSTAMMAR = ("ekvation", "olikhet", "funktion", "sannolikhet",
 # «känns lite utanför kursen». Det är andragradsfunktionernas «Största och
 # minsta värde» (Origo 2a 3.2, s. 144), men ordet funktion stod inte i
 # uppgiften. Är stammen förbjuden är dess begrepp det också.
+# BA26B:s A-blad inför prov 175 (2026-10-23): «Linjen $f$ har ekvationen
+# $y = a(x - 3)$ … Bestäm skärningspunkten» stod bredvid en uppgift med ordet
+# funktion, och bara den fälldes. Linjen och skärningspunkten är kapitlet
+# Grafer och funktioner (Ma 5000+ 1a s. 158–170) lika mycket som ordet.
 _METODBEGREPP = {"funktion": ("minsta värde", "största värde", "extrempunkt",
-                              "maximipunkt", "minimipunkt", "symmetrilinje")}
+                              "maximipunkt", "minimipunkt", "symmetrilinje",
+                              "skärningspunkt", "räta linje", "linjen $",
+                              "f(x)")}
 # BOKSTÄVERNA (samma dom, exam 128 uppgift 3 och generalrepetitionen samma
 # natt). Läraren valde A-formen «UTAN bokstäver, eftersom klassen inte läst
 # algebra än», och den skarpa omkörningen skrev ändå «En fisk väger m kg …

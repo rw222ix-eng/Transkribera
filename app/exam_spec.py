@@ -4302,6 +4302,13 @@ _ETIKETT_RE = re.compile(
     r"|\binnehåller (?:en )?(?:produkt(?:er)?|parenteser)\b"
     r"|^uppgiften handlar om\b"
     r"|^uttrycke[nt]\b[^.]*\bkan skrivas som (?:en )?produkt", re.I)
+# BA26B:s E-blad inför prov 175 (2026-10-23): «En takränna sätts ihop av 3 m
+# långa rännor … Du behöver inte rännornas längd i räkningen.» Ett tal eleven
+# inte ska använda, och en mening som säger det. Båda ska bort: KOM RAKT PÅ
+# SAK (exam_gen), «jätteonödig information» (dom 2026-09-23).
+_ONODIG_RE = re.compile(
+    r"^du behöver inte\b[^.]*\b(?:i räkningen|för att (?:lösa|räkna|svara))",
+    re.I)
 # Samma dag, 268 uppgift 4b: «Förenkla uttrycket så långt som möjligt. Här
 # framgår inte vilket uttryck det är.» Ovanför stod två uttryck, stammens och
 # a):s. En deluppgift som bara säger «uttrycket» eller «ekvationen» är
@@ -4348,6 +4355,14 @@ def validate_etikett(doc: ExamDoc) -> list[dict]:
                     "stam, skriv det deluppgifterna delar: uttrycket («Vi har "
                     "uttrycket …»), situationen eller en gemensam uppmaning "
                     "(«Lös ekvationerna.»)."))
+                break
+            if _ONODIG_RE.search(mening):
+                errors.append(_err(
+                    f"uppgifter[{i}].text", "etikett",
+                    f"uppgift {i + 1}: «{mening}» säger att något i texten "
+                    "inte behövs. Stryk meningen och det onödiga talet eller "
+                    "villkoret, så att uppgiften bara säger det eleven "
+                    "räknar med."))
                 break
         ovanfor = {f.strip() for f in _FORMEL_RE.findall(it.text or "")}
         for j, d in enumerate(it.deluppgifter or []):
