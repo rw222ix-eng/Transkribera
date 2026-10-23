@@ -352,6 +352,8 @@ def test_elevlasaren_laser_bladet_med_svag_svenska():
     assert "SVAG SVENSKA" in p
     assert "Skriv hela längden som ett enda bråk utan heltal framför." in p
     assert "Klassen går Bygg och anläggning" in p
+    # Ordet uppgiften prövar förklaras inte (blad 301, 2026-10-23).
+    assert "Utom när ordet är det uppgiften prövar" in p
     # Ordvalet fäller fortfarande aldrig i sig.
     assert "aldrig \"nej\" att ordvalet skiljer sig" in p
     assert p.endswith("Svara med enbart JSON.")

@@ -169,6 +169,14 @@ def _svag_svenska(profil: str, inriktning: str) -> str:
         "- ett fackord (nämnare, täljare, blandad form, bråkform, "
         "procentenhet, andel, term, faktor) står utan att uppgiften visar "
         "vad det betyder med ett exempel i matte\n"
+        # Utom ordet uppgiften prövar (blad 301 inför prov 219, 2026-10-23):
+        # «Ange förändringsfaktorn.» fick «Förändringsfaktorn är talet i
+        # rutan: nya priset = □ · gamla priset.», alltså svaret förklarat.
+        # Provet skriver frågan utan förklaring, och bladet har inga tips
+        # (Rickard 2026-10-22, se blad-i-provets-form).
+        "  Utom när ordet är det uppgiften prövar («Ange "
+        "förändringsfaktorn.», «Skriv bråket i blandad form.»): eleven ska "
+        "kunna ordet, och en förklaring av det är ett tips om svaret.\n"
         "- en instruktion BESKRIVER med ord hur svaret ska se ut i stället "
         "för att visa det. Lärarens exempel: «Skriv längderna som bråk med "
         "nämnaren 4. Skriv hela längden som ett enda bråk utan heltal "
