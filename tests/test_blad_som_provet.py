@@ -689,3 +689,18 @@ def test_omskrivningen_av_bladet_ser_provets_namn():
     assert "ANDRA NAMN OCH ANDRA SAMMANHANG ÄN PROVET" in promptar[0]
     assert "Noah" in promptar[0]
     assert "ANDRA NAMN" not in promptar[1]
+
+
+def test_regeln_som_exempel_pa_bladet_fills():
+    """Blad 301:1a (2026-10-23): «Exempel: när ett pris höjs med 10 %,
+    gångrar man det gamla priset med 1,10.» hade inget $…=…$ och gick igenom."""
+    for tips in ("Exempel: när ett pris höjs med 10 %, gångrar man det gamla "
+                 "priset med 1,10.\nPriset höjs med 40 %. Ange förändringsfaktorn.",
+                 "När ett pris höjs med 10 % är förändringsfaktorn $1{,}10$.\n"
+                 "Priset höjs med 40 %. Ange förändringsfaktorn."):
+        exam, _ = _blad({"text": tips, "losning": "$1{,}40$"})
+        assert [f["code"] for f in exam_gen.raknat_exempelvakt(exam)] == [
+            "raknat_exempel"], tips
+    exam, _ = _blad({"text": "Priset höjs med 40 %. Ange förändringsfaktorn.",
+                     "losning": "$1{,}40$"})
+    assert exam_gen.raknat_exempelvakt(exam) == []

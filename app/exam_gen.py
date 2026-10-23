@@ -11123,6 +11123,17 @@ _GRANSKAD_LOSNING_RE = re.compile(
     r"(?![\wåäö])[^.?!\n]*$", re.IGNORECASE)
 _PASTAENDE_RE = re.compile(r"(?<![\wåäö])påst(?:år|od|ående)", re.IGNORECASE)
 _SVARSPLATS_RE = re.compile(r"\?|\\l?dots|…")
+# Regeln som exempel UTAN räknat $…=…$ (blad 301:1a och 8a, NA26F inför prov
+# 219, 2026-10-23): «Exempel: när ett pris höjs med 10 %, gångrar man det
+# gamla priset med 1,10.» och första versionens «När ett pris höjs med 10 % är
+# förändringsfaktorn $1{,}10$.». En rad som börjar med «Exempel:» och har ett
+# tal, eller en prisregel med förändringsfaktorn. Bland bladen i basen fälls
+# också 103:10 och 113:8 (intervallets skrivsätt som exempel, september).
+_EXEMPELRAD_RE = re.compile(
+    r"(?im)^\s*(?:till\s+)?exempel\s*:\s*\S[^\n]*\d"
+    r"|(?i:(?<![\wåäö])när\s+(?:ett|en|priset|värdet)\b[^.?\n]{0,40}"
+    r"(?:höjs|sänks|ökar|minskar)\s+med\s+\$?\d+[^.?\n]{0,40}"
+    r"(?:förändringsfaktorn|gångrar\s+man|multiplicerar\s+man))")
 
 
 def raknat_exempelvakt(exam: dict) -> list[dict]:
@@ -11132,6 +11143,16 @@ def raknat_exempelvakt(exam: dict) -> list[dict]:
         kort = e["kort"]
         t = f"{kort.get('stam', '')}\n{kort.get('text', '')}"
         if _PASTAENDE_RE.search(t):
+            continue
+        regel = _EXEMPELRAD_RE.search(t)
+        if regel:
+            fel.append(_err(
+                f"uppgift {e['nr']}", "raknat_exempel",
+                f"Uppgift {e['nr']} visar regeln med ett exempel («"
+                f"{regel.group(0)[:70]}»). Det är ett tips, och provet har "
+                "inga exempel eller tips (Rickard 2026-10-22). Stryk meningen. "
+                "Lägg inte till något annat exempel eller någon förklaring. "
+                "Samma uppgift, samma tal, samma poäng."))
             continue
         for m in _RAKNAT_EXEMPEL_RE.finditer(t):
             if _SVARSPLATS_RE.search(m.group(1)):
