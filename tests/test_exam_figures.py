@@ -491,3 +491,13 @@ def test_linje_med_26_enheter_far_en_linje_per_heltal():
     ylinjer = re.findall(r"\\draw\[black!30,thin\] \(0,([\d.]+)\)", tikz)
     # −6 … 20 med luften: en linje per heltal utom de fem märkta.
     assert len(ylinjer) >= 20
+
+
+def test_koordinatsystemets_hojd_raknas_ur_figuren():
+    """Blad 311:11 (2026-10-23): grafen räknades som 60 mm och hamnade ensam
+    på sidan efter texten. Ett 8 cm rutnät med axlar behöver minst 90 mm."""
+    from app import exam_latex
+    tex = exam_figures._funktionsgraf(lambda x: 2.5 * x + 10, -1, 7)
+    assert exam_latex._figur_mm(tex) >= 90
+    assert exam_latex._figur_mm(r"\begin{tikzpicture}[scale=2](0,0)--(0,1)"
+                                r"\end{tikzpicture}") == exam_latex._MM_FIGUR

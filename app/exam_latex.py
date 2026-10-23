@@ -671,6 +671,23 @@ _MM_TABELLRAD, _TECKEN_PER_RAD, BEHOV_TAK_MM = 7.5, 85, 200
 _MM_STEGTABELL, _MM_STEG, _MM_STEG_BRAK = 16.0, 9.0, 15.0
 
 
+# FIGURENS HÖJD UR DESS KOORDINATER (blad 311 uppgift 11, 2026-10-23): ett
+# koordinatsystem är 8 cm rutnät plus axelpilar och skalsiffror, men räknades
+# som 60 mm, och texten stod sist på sidan med grafen ensam på nästa. TikZ-
+# koordinaterna är centimeter; ett tikzpicture med egen skala mäts inte.
+_TIKZ_PUNKT_RE = re.compile(r"\((-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)\)")
+_MM_FIGUR_LUFT = 16.0       # 4 + 2 mm luft, axelpil, skalsiffror under
+
+
+def _figur_mm(tex: str) -> float:
+    if re.search(r"\\begin\{tikzpicture\}\[[^\]]*scale", tex):
+        return _MM_FIGUR
+    ys = [float(m.group(2)) for m in _TIKZ_PUNKT_RE.finditer(tex)]
+    if not ys:
+        return _MM_FIGUR
+    return max(_MM_FIGUR, (max(ys) - min(ys)) * 10 + _MM_FIGUR_LUFT)
+
+
 def _behov_mm(vy: dict, *, del_: bool = False) -> int:
     """Uppgiftens (eller deluppgiftens) ungefärliga höjd på pappret i mm."""
     mm = 0.0 if del_ else _MM_HUVUD
@@ -684,7 +701,7 @@ def _behov_mm(vy: dict, *, del_: bool = False) -> int:
     if vy.get("bild_fil"):
         mm += _MM_BILD
     if vy.get("figur_tex"):
-        mm += _MM_FIGUR
+        mm += _figur_mm(vy["figur_tex"])
     if vy.get("tabell"):
         mm += 10 + _MM_TABELLRAD * (1 + len(vy["tabell"].get("rader") or []))
     # Stegtabellen räknades inte alls, och exam 126 uppgift 10 (fyra steg,
@@ -2008,6 +2025,11 @@ def _build_view(doc: exam_spec.ExamDoc,
             # förstöra den) — mallen renderar den oescapad.
             item_vy["figur_tex"] = (exam_figures.render_figur(it.figur)
                                     if it.figur is not None else None)
+            # Höjden räknades ovan innan figuren fanns, och uppgiftens graf
+            # kom aldrig med: blad 311 uppgift 11 (2026-10-23) stod sist på
+            # sidan och grafen ensam på nästa.
+            if item_vy.get("figur_tex") and "behov_mm" in item_vy:
+                item_vy["behov_mm"] = _behov_mm(item_vy)
             vy_items.append(item_vy)
         # Förlagans delrubrik är EN mening: «Del A – Digitala verktyg är inte
         # tillåtna». Räknaren är det enda som skiljer delarna åt på pappret, så
