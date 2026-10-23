@@ -14841,9 +14841,13 @@ def forbudsvakt(exam: dict, delmoment: list[dict] | None,
             if s in namn and s not in haft:
                 forbud.setdefault(s, f)
 
+    # Ett begrepp som står i det klassen haft är inget förbud, fast stammen
+    # är det (blad 310:6, 2026-10-23): «räta linje» hör till funktionerna
+    # senare i boken, men provet 215 har avsnittet «Räta linjens ekvation».
     def traff(text: str, s: str) -> str | None:
         return next((o for o in (s,) + _METODBEGREPP.get(s, ())
-                     if o in text), None)
+                     if o in text and (o == s or o.rstrip(" $") not in haft)),
+                    None)
     algebra = algebra_forbjuden(forbjudna, delmoment, avsnitt)
     if not forbud and not algebra:
         return []

@@ -1030,3 +1030,20 @@ def test_kort_huvudord_i_sammansattning_ar_samma_sak():
     assert not exam_gen._samma_sak("ljus", "ljusstake")
     assert exam_gen._samma_sak("torg", "torget")
     assert not exam_gen._samma_sak("hyra", "kortare")
+
+
+def test_begrepp_i_provets_avsnitt_ar_inget_forbud():
+    """Blad 310:6 (2026-10-23): «räta linjer» fälldes som funktionskapitlet,
+    fast prov 215:s avsnitt heter «Räta linjens ekvation»."""
+    prov = {"titel": "Linjer", "kurs": "Matematik, nivå 2a", "hjalpmedel": "-",
+            "uppgifter": [{"del": "B", "formaga": "B", "typ": "rutin",
+                           "poang": [1, 0, 0], "losning": "x",
+                           "bedomning": "+1 E rätt",
+                           "text": "Tabellen visar ekvationerna för tre räta "
+                                   "linjer. Ange riktningskoefficienterna."}]}
+    forbjudna = [{"metod": "Vad är en funktion?", "sidor": "126–132"}]
+    avsnitt = [{"rubrik": "2.2 Räta linjens ekvation"}]
+    assert exam_gen.forbudsvakt(prov, [], forbjudna, avsnitt) == []
+    # Utan avsnittet är linjen funktionernas begrepp, som förut.
+    assert [f["code"] for f in exam_gen.forbudsvakt(prov, [], forbjudna)] \
+        == ["forbudsvakt"]
