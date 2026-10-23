@@ -664,6 +664,20 @@ def test_avrunda_vid_hogsta_varde_falls():
     assert _koder(np_vakter.avrundningsvakt(_prov([v])), "avrundning") == {"1"}
 
 
+def test_lika_med_avrundat_svar_falls():
+    """310:9: «Vid hur många kWh blir priset lika? Svara i hela kWh.» med
+    facit x ≈ 17,9: vid 18 kWh är priserna inte lika."""
+    u = _u("Vid hur många kWh blir priset lika? Svara i hela kWh.",
+           losning="18\n$1{,}4x = 25$\n$x \\approx 17{,}9$")
+    assert _koder(np_vakter.avrundningsvakt(_prov([u])), "avrundning") == {"1"}
+    # Exakt heltal i facit: likheten gäller, inget fynd.
+    u["losning"] = "18\n$1{,}4x = 25{,}2$\n$x = 18$"
+    assert np_vakter.avrundningsvakt(_prov([u])) == []
+    u = _u("Från hur många hela kWh är Station Syd billigast?",
+           losning="18\n$x \\approx 17{,}9$")
+    assert np_vakter.avrundningsvakt(_prov([u])) == []
+
+
 def test_endast_svar_bedoms_pa_svaret():
     """126:2b: «Endast svar krävs» och raden «+1 E faktoriserar, förkortar
     och svarar 5»."""

@@ -1070,6 +1070,13 @@ _GRANSVARDE_RE = re.compile(
     r"|färst|max(?:imal)?|min(?:imal)?)(?![\wåäö])", re.I)
 _AVRUNDA_RE = re.compile(r"avrunda", re.I)
 _SIFFRORS_RE = re.compile(r"siffrors noggrannhet", re.I)
+# Exam 310 uppgift 9 (2026-10-23): «Vid hur många kWh blir priset lika? Svara
+# i hela kWh.» med facit x ≈ 17,9 och svaret 18. Vid 18 kWh är priserna inte
+# lika. En likhet som bara gäller för ett närmevärde ska frågas som ett
+# villkor («Från hur många hela kWh är Syd billigast?»).
+_LIKA_RE = re.compile(r"(?<![\wåäö])(?:lika|samma)(?![\wåäö])", re.I)
+_SVARA_HELA_RE = re.compile(r"svara i hela|avrunda", re.I)
+_UNGEFAR_RE = re.compile(r"\\approx|≈")
 AVRUNDNING_MAX_FYND = 3
 
 
@@ -1085,6 +1092,16 @@ def avrundningsvakt(exam: dict) -> list[dict]:
                 "som bryter villkoret (33,97 blir 34 fast 33 är högst). Skriv "
                 "i stället vilken form svaret ska ha, t.ex. «Svara i hela "
                 "km/h.», och låt facit vara det värde som uppfyller villkoret."))
+        elif (_LIKA_RE.search(text) and _SVARA_HELA_RE.search(text)
+              and _UNGEFAR_RE.search(e["kort"].get("losning") or "")):
+            fel.append(_err(
+                f"uppgift {nr}", "avrundning",
+                f"Uppgift {nr} frågar när två storheter blir lika och ber om "
+                "ett avrundat svar, men likheten gäller bara för ett "
+                "närmevärde: för det avrundade talet är de inte lika. Fråga "
+                "i stället efter ett villkor, t.ex. «Från hur många hela kWh "
+                "är … billigast?», och låt facit vara det första heltal som "
+                "uppfyller det."))
         elif _SIFFRORS_RE.search(text):
             fel.append(_err(
                 f"uppgift {nr}", "avrundning",
