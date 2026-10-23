@@ -45,6 +45,10 @@
 ((# Vektorpilen (Rickard 2026-10-03): \vec var för liten. Samma pil som
     skärmen (matte.js vektorpil): \overrightarrow på fast höjd. #))
 \renewcommand{\vec}[1]{\overrightarrow{\vphantom{b}#1}}
+((# Pilen är högre än radavståndet räknar med: på en radbörjan nuddade den
+    raden ovanför (exam 304 uppg 3 och 7, 2026-10-23). Med gränsen får en
+    rad med pil luft, andra rader står som förut. #))
+\setlength{\lineskiplimit}{2.5pt}\setlength{\lineskip}{3pt}
 ((* if forlaga is defined and forlaga *))
 ((# Förlagans egen sättyta: 25 mm runt om (595,28 − 2·70,87 pt = 453,5 pt
     textbredd, exakt lärarens). #))
