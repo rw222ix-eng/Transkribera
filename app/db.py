@@ -2721,6 +2721,51 @@ def ar_omprov(conn: sqlite3.Connection, exam_id: int) -> bool:
     return rad is not None
 
 
+_UPPGNYCKEL_RE = _re.compile(r"^uppg(\d+)$")
+
+
+def egna_bildnummer(conn: sqlite3.Connection, exam_id: int) -> set[int]:
+    """Uppgifterna där läraren lagt en egen bild i provets dokument.
+
+    Bilden bor i dokumentets `bilder` («uppg8» → data-URL), aldrig i provets
+    JSON, och refine visste inget om den: omprovet 264 (2026-10-24) hade
+    kajakbilden på uppgift 8 men `scen` utan `plat`, och plåtmatchningen satte
+    «a-24-marknadsstand» där. Varvet som markören står på räknas, och bara
+    dokument med samma klass och datum som provet läses: json_extract över
+    alla dokumentens versioner tog 28 s (blobbarna bär plåtarna), så här
+    under en sekund."""
+    rad = conn.execute("SELECT group_id, datum FROM exams WHERE id = ?",
+                       (int(exam_id),)).fetchone()
+    if rad is None:
+        return set()
+    nycklar: set[str] = set()
+    if _har_json1(conn):
+        try:
+            for r in conn.execute(
+                    "SELECT je.key AS nyckel FROM dokument d "
+                    "JOIN dokument_versioner v ON v.dokument_id = d.id "
+                    "AND v.version = d.markor, json_each(v.data, '$.bilder') je "
+                    "WHERE d.group_id IS ? AND d.datum IS ? "
+                    "AND json_valid(v.data) "
+                    "AND CAST(json_extract(v.data, '$.provId') AS INTEGER) = ? "
+                    "AND je.value LIKE 'data:%'",
+                    (rad["group_id"], rad["datum"], int(exam_id))).fetchall():
+                nycklar.add(str(r["nyckel"]))
+        except sqlite3.Error:
+            nycklar = set()
+    else:
+        for r in conn.execute(
+                "SELECT id, markor FROM dokument WHERE group_id IS ? "
+                "AND datum IS ?", (rad["group_id"], rad["datum"])).fetchall():
+            blob = _dokument_blob(conn, r["id"], r["markor"])
+            if str(blob.get("provId") or "") != str(exam_id):
+                continue
+            nycklar |= {k for k, v in (blob.get("bilder") or {}).items()
+                        if isinstance(v, str) and v.startswith("data:")}
+    return {int(m.group(1)) for k in nycklar
+            if (m := _UPPGNYCKEL_RE.match(k))}
+
+
 def omprov_till(conn: sqlite3.Connection, exam_id: int) -> list[dict]:
     """Godkända omprov på provet `exam_id`, som provets JSON.
 

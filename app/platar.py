@@ -467,7 +467,8 @@ def matcha_exam(exam: dict, *, base: Path | None = None) -> int:
     return traffar
 
 
-def behall_platval(fore: dict, efter: dict) -> int:
+def behall_platval(fore: dict, efter: dict,
+                   egna: set[int] | frozenset[int] | None = None) -> int:
     """För över ``scen.plat`` från pappret före ett omskrivningsvarv.
 
     Fältet står inte i grammatiken, så varje uppgift modellen skriver om
@@ -483,7 +484,13 @@ def behall_platval(fore: dict, efter: dict) -> int:
     samma plats när antalet uppgifter är oförändrat. Har antalet ändrats får
     en omskriven uppgift med ny scen inget arv, för platsen pekar då på en
     annan uppgift. Bara ett satt värde förs över, "" medräknat. None lämnas
-    till matcha_exam. Returnerar antalet uppgifter som fick ett annat värde."""
+    till matcha_exam. Returnerar antalet uppgifter som fick ett annat värde.
+
+    `egna` är uppgiftsnumren (1-baserade, i `fore`) där läraren lagt en egen
+    bild i dokumentet (db.egna_bildnummer). Där blir None ett "": omprovet 264
+    (2026-10-24) hade kajakbilden på uppgift 8 och `scen` utan `plat`, och
+    efter varvet satte matcha_exam «a-24-marknadsstand». Hennes bild vinner
+    ändå i PDF:en, men plåten hamnade i provets data och i efterkontrollen."""
     if not isinstance(fore, dict) or not isinstance(efter, dict):
         return 0
     a = [u if isinstance(u, dict) else {} for u in fore.get("uppgifter") or []]
@@ -527,9 +534,11 @@ def behall_platval(fore: dict, efter: dict) -> int:
     andrade = 0
     for j, i in par.items():
         fore_scen, efter_scen = a[i].get("scen"), b[j].get("scen")
-        if not isinstance(fore_scen, dict) or not isinstance(efter_scen, dict):
+        if not isinstance(efter_scen, dict):
             continue
-        plat = fore_scen.get("plat")
+        plat = fore_scen.get("plat") if isinstance(fore_scen, dict) else None
+        if plat is None and i + 1 in (egna or ()):
+            plat = ""
         if plat is None:
             continue
         if efter_scen.get("plat") != plat:

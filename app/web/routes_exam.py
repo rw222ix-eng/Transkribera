@@ -2655,13 +2655,15 @@ def create_router(base: Path, arbiter) -> APIRouter:
     # -------------------------------------------------------------- refine --
 
     def _stadat_som_varvet(exam: dict | None, typ: str,
-                           infor: dict | None) -> dict | None:
+                           infor: dict | None,
+                           egna: set[int] | None = None) -> dict | None:
         """En KOPIA av originalet genom samma deterministiska pass som varvets
         svar går igenom, i samma ordning: räknarraden ur provet
         (exam_gen.refine_exam), övningspapprets band och räknarmärken
-        (ovningspappret_stadat) och plåtmatchningen (i jobbet nedan). Diffen
-        jämför sedan städat mot städat, och det appens regler ändrade på ett
-        äldre papper räknas inte som varvets ändring.
+        (ovningspappret_stadat) och plåtmatchningen (i jobbet nedan), med
+        lärarens egna bilder (`egna`) som "" före den. Diffen jämför sedan
+        städat mot städat, och det appens regler ändrade på ett äldre papper
+        räknas inte som varvets ändring.
 
         Originalet rörs aldrig: det är lärarens version i basen, och ett varv
         som kastas ska lämna skärmen som den var."""
@@ -2671,6 +2673,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         if infor and typ == "arbetsblad":
             exam_gen.satt_raknarrad_ur_provet(ren, infor)
         exam_gen.ovningspappret_stadat(ren, typ)
+        platar.behall_platval(exam, ren, egna=egna)
         platar.matcha_exam(ren, base=base)
         return ren
 
@@ -2742,6 +2745,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
         conn = db.connect(db_file)
         try:
             view = db.get_exam(conn, exam_id)
+            # Uppgifterna med lärarens egen bild i dokumentet får ingen
+            # reservplåt efter varvet (omprovet 264:8, 2026-10-24; se
+            # platar.behall_platval).
+            egen_bild_nr = db.egna_bildnummer(conn, exam_id) if view else set()
         finally:
             conn.close()
         if view is None or view.get("exam") is None:
@@ -2924,10 +2931,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
                             u["scen"] = None
                 # Plåtvalet står inte i grammatiken, och refine_exam för
                 # därför över `scen.plat` från uppgiften före varvet
-                # (platar.behall_platval), lärarens "" medräknat. Matchningen
-                # här fyller bara det som saknar val: en ny uppgift eller en
-                # som aldrig matchats. Den är ren ordmatchning och kostar
-                # ingenting.
+                # (platar.behall_platval), lärarens "" medräknat. En uppgift
+                # med hennes egen bild i dokumentet räknas som "" här.
+                # Matchningen fyller bara det som saknar val: en ny uppgift
+                # eller en som aldrig matchats. Den är ren ordmatchning och
+                # kostar ingenting.
+                platar.behall_platval(view["exam"], res["exam"],
+                                      egna=egen_bild_nr)
                 platar.matcha_exam(res["exam"], base=base)
                 # ── SA HON ÅT OSS ATT SLUTA? ─────────────────────
                 # Raden fanns förr för att fråga om NÅGON LYSSNADE: mellan
@@ -2983,7 +2993,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 typ_ut = newview.get("typ") or "prov"
                 svar["andrade"] = [] if newview is view else (
                     dokumentdiff.andrade_element(
-                        typ_ut, _stadat_som_varvet(view["exam"], typ_ut, infor),
+                        typ_ut, _stadat_som_varvet(view["exam"], typ_ut, infor,
+                                                   egen_bild_nr),
                         newview.get("exam")))
                 # Utfallet till spåret: ihop med `onske`-raden ovan säger de
                 # «bad om X, fick Y ändrat» — det är det paret rapporten

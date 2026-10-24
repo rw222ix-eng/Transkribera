@@ -992,6 +992,31 @@ def test_platvalet_foljer_uppgiften_nar_antalet_andras():
     assert "plat" not in efter["uppgifter"][2]["scen"]
 
 
+def test_lararens_egen_bild_far_ingen_reservplat():
+    """Omprovet 264 (2026-10-24): uppgift 8 hade kajakbilden i dokumentet och
+    `scen` utan `plat`, och efter varvet satte matcha_exam
+    «a-24-marknadsstand». En egen bild räknas som "", också när uppgiften
+    flyttat ett steg."""
+    fore = {"uppgifter": [
+        {"text": "Uppgift ett.", "scen": _hagescen("a-30-ett", plat="")},
+        {"text": "Kajaken.", "scen": _hagescen("a-27-hage")},
+        {"text": "Utan egen bild.", "scen": _hagescen("a-27-hage")}]}
+    efter = json.loads(json.dumps(fore))
+    efter["uppgifter"].insert(0, {"text": "Ny uppgift."})
+    efter["uppgifter"][2]["text"] = "Kajaken, omskriven."
+    assert platar.behall_platval(fore, efter, egna={2}) == 1
+    assert efter["uppgifter"][2]["scen"]["plat"] == ""
+    platar.matcha_exam(efter)
+    assert efter["uppgifter"][2]["scen"]["plat"] == ""
+    # Utan egen bild matchas som förut.
+    assert efter["uppgifter"][3]["scen"]["plat"] == "a-19-hage-flod"
+    # Lärarens satta plåt vinner över markeringen.
+    fore["uppgifter"][1]["scen"]["plat"] = "a-07-flod-bat"
+    efter = json.loads(json.dumps(fore))
+    platar.behall_platval(fore, efter, egna={2})
+    assert efter["uppgifter"][1]["scen"]["plat"] == "a-07-flod-bat"
+
+
 def test_ingen_np_typ_ar_ett_uttryckligt_forebildsnummer():
     """Prov 126 uppgift 6 och 7: NP saknar typ för grundpotensform med prefix
     och för mönster på den nivån. Modellen skriver då NP_TYP_NR0, och vakten

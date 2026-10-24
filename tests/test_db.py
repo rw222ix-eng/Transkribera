@@ -1,3 +1,5 @@
+import pytest
+
 from app import db
 
 
@@ -635,6 +637,28 @@ def test_satt_dokument_granser_traffar_bara_provets_egna_papper(tmp_path):
     assert "granser" not in db.get_dokument(conn, utan["id"])["dokument"]
     assert db.get_dokument(
         conn, annat["id"])["dokument"]["granser"]["E"]["minst"] == 6
+
+
+@pytest.mark.parametrize("json1", [True, False])
+def test_egna_bildnummer_laser_provets_dokument(tmp_path, monkeypatch, json1):
+    """Omprovet 264 (2026-10-24): kajakbilden låg i dokumentets `bilder` på
+    uppgift 8, och refine satte en reservplåt där. Bara provets egna dokument
+    och bara data-URL:er räknas."""
+    monkeypatch.setattr(db, "_json1", json1)
+    conn = _conn(tmp_path)
+    cid = db.get_or_create_course(conn, "Ma1c")
+    gid = db.get_or_create_group(conn, "TE26A")
+    ex = db.create_exam(conn, exam=_mini_exam(), course_id=cid, group_id=gid,
+                        datum="2026-11-02")
+    bild = "data:image/png;base64,AAAA"
+    papper = {"typ": "Prov", "klass": "TE26A", "datum": "2026-11-02"}
+    db.create_dokument(conn, dokument=dict(
+        papper, provId=ex["id"],
+        bilder={"forsatt": bild, "uppg8": bild, "uppg3": "/api/x"}))
+    db.create_dokument(conn, dokument=dict(
+        papper, provId=ex["id"] + 1, bilder={"uppg5": bild}))
+    assert db.egna_bildnummer(conn, ex["id"]) == {8}
+    assert db.egna_bildnummer(conn, ex["id"] + 99) == set()
 
 
 def test_stampla_granser_skrivs_over_bara_pa_begaran(tmp_path):
