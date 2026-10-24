@@ -661,6 +661,31 @@ def test_egna_bildnummer_laser_provets_dokument(tmp_path, monkeypatch, json1):
     assert db.egna_bildnummer(conn, ex["id"] + 99) == set()
 
 
+def test_titeln_foljer_pappret(tmp_path):
+    """Omprovet 222 (2026-10-24): E-regeln gjorde pappret till «(omprov,
+    E-nivå)», men exams.titel stod kvar på «(omprov)»."""
+    conn = _conn(tmp_path)
+    cid = db.get_or_create_course(conn, "Ma1c")
+    ex = db.create_exam(conn, exam=_mini_exam("Tal (omprov)"), course_id=cid)
+    forsta = ex["current_version"]
+    ny = db.add_exam_version(conn, ex["id"], _mini_exam("Tal (omprov, E-nivå)"))
+    assert ny["titel"] == "Tal (omprov, E-nivå)"
+    assert conn.execute("SELECT titel FROM exams WHERE id = ?",
+                        (ex["id"],)).fetchone()[0] == "Tal (omprov, E-nivå)"
+    assert db.list_exams(conn)[0]["titel"] == "Tal (omprov, E-nivå)"
+    # Ångra följer med, och en version utan titel låter raden stå.
+    assert db.set_current_exam_version(conn, ex["id"], forsta)["titel"] == \
+        "Tal (omprov)"
+    db.add_exam_version(conn, ex["id"], dict(_mini_exam(), titel=""))
+    assert conn.execute("SELECT titel FROM exams WHERE id = ?",
+                        (ex["id"],)).fetchone()[0] == "Tal (omprov)"
+    # En gammal rad som aldrig följde läses som pappret.
+    conn.execute("UPDATE exams SET titel = 'Gammal' WHERE id = ?", (ex["id"],))
+    db.add_exam_version(conn, ex["id"], _mini_exam("Ny"))
+    conn.execute("UPDATE exams SET titel = 'Gammal' WHERE id = ?", (ex["id"],))
+    assert db.get_exam(conn, ex["id"])["titel"] == "Ny"
+
+
 def test_stampla_granser_skrivs_over_bara_pa_begaran(tmp_path):
     """Regeln «ett skrivet prov äger sina gränser» skyddar pappret mot att
     APPEN ändrar sig. Läraren är undantaget, och hon måste be om det."""

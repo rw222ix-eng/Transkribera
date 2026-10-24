@@ -3336,7 +3336,24 @@ def _exam_view(conn: sqlite3.Connection, row) -> dict:
         d["exam"] = json.loads(cur["exam_json"]) if cur and cur["exam_json"] else None
     except (TypeError, ValueError):
         d["exam"] = None
+    # Radens titel är pappret som det står nu, också på en rad skriven innan
+    # add_exam_version började följa med (se _papperets_titel).
+    d["titel"] = _papperets_titel(d["exam"]) or d.get("titel")
     return d
+
+
+def _papperets_titel(exam) -> str | None:
+    """Titeln i provets JSON, eller None när den saknas.
+
+    TITELN FÖLJER PAPPRET (omprovet 222, 2026-10-24). exams.titel skrevs bara
+    när provet skapades, och pappret bytte namn efteråt utan att raden följde:
+    E-regeln gjorde 222 till «(omprov, E-nivå)» medan listan sa «(omprov)»,
+    och nivåbladen 91–113 och omskrivningarna 152, 170 och 171 stod med sina
+    första titlar. Raden följer nu aktuell version (add_exam_version,
+    set_current_exam_version) och läses som pappret (_exam_view)."""
+    if not isinstance(exam, dict):
+        return None
+    return str(exam.get("titel") or "").strip() or None
 
 
 def underlag_bild_path(underlag: str | None, bild) -> str | None:
@@ -3444,8 +3461,9 @@ def add_exam_version(conn: sqlite3.Connection, exam_id: int,
         "INSERT INTO exam_versions (exam_id, version, exam_json, created_at) "
         "VALUES (?, ?, ?, ?)",
         (exam_id, nxt, json.dumps(exam, ensure_ascii=False), _now()))
-    conn.execute("UPDATE exams SET current_version = ?, updated_at = ? WHERE id = ?",
-                 (cur.lastrowid, _now(), exam_id))
+    conn.execute("UPDATE exams SET current_version = ?, updated_at = ?, "
+                 "titel = COALESCE(?, titel) WHERE id = ?",
+                 (cur.lastrowid, _now(), _papperets_titel(exam), exam_id))
     _sync_exam_items(conn, exam_id, exam, underlag)
     conn.commit()
     return get_exam(conn, exam_id)
@@ -3564,12 +3582,13 @@ def set_current_exam_version(conn: sqlite3.Connection, exam_id: int,
         return None
     if rad["current_version"] == version_id:
         return get_exam(conn, exam_id)
-    conn.execute("UPDATE exams SET current_version = ?, updated_at = ? "
-                 "WHERE id = ?", (version_id, _now(), exam_id))
     try:
         exam = json.loads(rad["exam_json"]) if rad["exam_json"] else None
     except (TypeError, ValueError):
         exam = None
+    conn.execute("UPDATE exams SET current_version = ?, updated_at = ?, "
+                 "titel = COALESCE(?, titel) WHERE id = ?",
+                 (version_id, _now(), _papperets_titel(exam), exam_id))
     if isinstance(exam, dict):
         _sync_exam_items(conn, exam_id, exam, rad["underlag"])
     conn.commit()
