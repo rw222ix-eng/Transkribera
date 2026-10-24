@@ -32,6 +32,7 @@ på en maskin där E: inte finns.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import sys
@@ -464,6 +465,77 @@ def matcha_exam(exam: dict, *, base: Path | None = None) -> int:
             tagna.add(träff["namn"])
             traffar += 1
     return traffar
+
+
+def behall_platval(fore: dict, efter: dict) -> int:
+    """För över ``scen.plat`` från pappret före ett omskrivningsvarv.
+
+    Fältet står inte i grammatiken, så varje uppgift modellen skriver om
+    kommer tillbaka utan det, och matcha_exam satte då en reservplåt där
+    läraren valt en annan eller ingen alls. Rättningen av 156, 163 och 175
+    (2026-10-24): 156:14 och 175:6 hade "" och fick «a-03-tall-skugga» och
+    «a-06-backe-vag». Godkännandet stämplar sedan dokumentets val i provet
+    (db.stampla_platval), och efterkontrollen fällde uppgiften för en plåt
+    läraren aldrig valt.
+
+    Uppgiften före varvet hittas i tre steg, och varje uppgift före används
+    en gång: samma uppgift (plåten borträknad), sedan samma scen, sedan
+    samma plats när antalet uppgifter är oförändrat. Har antalet ändrats får
+    en omskriven uppgift med ny scen inget arv, för platsen pekar då på en
+    annan uppgift. Bara ett satt värde förs över, "" medräknat. None lämnas
+    till matcha_exam. Returnerar antalet uppgifter som fick ett annat värde."""
+    if not isinstance(fore, dict) or not isinstance(efter, dict):
+        return 0
+    a = [u if isinstance(u, dict) else {} for u in fore.get("uppgifter") or []]
+    b = [u if isinstance(u, dict) else {} for u in efter.get("uppgifter") or []]
+
+    def utan_plat(scen):
+        if not isinstance(scen, dict):
+            return scen
+        return {k: v for k, v in scen.items() if k != "plat"}
+
+    def kanon(u):
+        return json.dumps({**u, "scen": utan_plat(u.get("scen"))},
+                          ensure_ascii=False, sort_keys=True, default=str)
+
+    def scenkanon(u):
+        scen = u.get("scen")
+        if not isinstance(scen, dict):
+            return None
+        return json.dumps(utan_plat(scen), ensure_ascii=False, sort_keys=True,
+                          default=str)
+
+    par: dict[int, int] = {}                  # index efter → index före
+    lediga = set(range(len(a)))
+    for nyckel in (kanon, scenkanon):
+        fore_nycklar = {i: nyckel(u) for i, u in enumerate(a)}
+        for j, u in enumerate(b):
+            if j in par:
+                continue
+            k = nyckel(u)
+            if k is None:
+                continue
+            i = next((i for i in sorted(lediga) if fore_nycklar[i] == k), None)
+            if i is not None:
+                par[j] = i
+                lediga.discard(i)
+    if len(a) == len(b):
+        for j in range(len(b)):
+            if j not in par and j in lediga:
+                par[j] = j
+                lediga.discard(j)
+    andrade = 0
+    for j, i in par.items():
+        fore_scen, efter_scen = a[i].get("scen"), b[j].get("scen")
+        if not isinstance(fore_scen, dict) or not isinstance(efter_scen, dict):
+            continue
+        plat = fore_scen.get("plat")
+        if plat is None:
+            continue
+        if efter_scen.get("plat") != plat:
+            efter_scen["plat"] = plat
+            andrade += 1
+    return andrade
 
 
 # ── TRYCKVÄGEN ────────────────────────────────────────────────────────

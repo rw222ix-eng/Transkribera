@@ -17024,8 +17024,8 @@ def _rorda_uppgifter(fore: dict, efter: dict) -> set[int]:
     Inte andrade_uppgifter: den läser bara det bedömningspasset läser, och
     ett tips i `notis` (prov 88 uppgift 6 och 11) hade inte räknats som en
     ändring. Plåten räknas bort, den står inte i grammatiken och faller ur
-    varje omskriven uppgift utan att modellen valt det (platar.matcha_exam
-    sätter den igen i rutten)."""
+    varje omskriven uppgift utan att modellen valt det (refine_exam för
+    tillbaka den sist, platar.behall_platval)."""
     def kanon(u):
         if not isinstance(u, dict):
             return None
@@ -17508,6 +17508,14 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
         if infor and profil == "arbetsblad":
             satt_raknarrad_ur_provet(res.get("exam"), infor)
         ovningspappret_stadat(res.get("exam"), profil)
+    # ── LÄRARENS PLÅTVAL ÖVERLEVER VARVET (2026-10-24) ───────────────
+    # `scen.plat` står inte i grammatiken och föll ur varje omskriven
+    # uppgift, och rutten matchade då en reservplåt i stället för lärarens
+    # val (156:14 och 175:6 hade "" och fick en plåt). Se
+    # platar.behall_platval. Bara None matchas sedan i rutten.
+    if isinstance(res.get("exam"), dict) and res["exam"] is not exam:
+        from app import platar                  # plåtvalet bor där
+        platar.behall_platval(exam, res["exam"])
     return res
 
 

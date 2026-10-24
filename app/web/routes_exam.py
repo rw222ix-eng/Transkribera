@@ -2922,10 +2922,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     for u in res["exam"].get("uppgifter") or []:
                         if u.get("scen"):
                             u["scen"] = None
-                # Plåtvalet överlever inte omskrivningen av sig självt:
-                # modellen skriver om hela dokumentet, och `scen.plat` står
-                # inte i grammatiken. Matchningen körs därför om — den är ren
-                # ordmatchning och kostar ingenting.
+                # Plåtvalet står inte i grammatiken, och refine_exam för
+                # därför över `scen.plat` från uppgiften före varvet
+                # (platar.behall_platval), lärarens "" medräknat. Matchningen
+                # här fyller bara det som saknar val: en ny uppgift eller en
+                # som aldrig matchats. Den är ren ordmatchning och kostar
+                # ingenting.
                 platar.matcha_exam(res["exam"], base=base)
                 # ── SA HON ÅT OSS ATT SLUTA? ─────────────────────
                 # Raden fanns förr för att fråga om NÅGON LYSSNADE: mellan

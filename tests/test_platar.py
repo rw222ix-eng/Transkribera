@@ -925,6 +925,73 @@ def test_matchningen_lagger_inte_tillbaka_en_bortvald_plat():
     assert exam["uppgifter"][1]["scen"]["plat"] == "a-19-hage-flod"
 
 
+def _hagescen(filnamn="a-25-hage", **plat):
+    return {"begrepp": "optimering inhägnad",
+            "scene": "SCENE. A wooden fence along a slow river, a meadow "
+                     "inside it, morning light from the side.",
+            "filnamn": filnamn, **plat}
+
+
+@pytest.mark.parametrize("nummer", [None, [4, 5]])
+def test_omskrivningen_behaller_lararens_platval(nummer):
+    """Rättningen av 156, 163 och 175 (2026-10-24): refine tappade `scen.plat`
+    på uppgifterna den skrev om, och rutten matchade en reservplåt. 156:14
+    och 175:6 hade "" och fick «a-03-tall-skugga» och «a-06-backe-vag». Nu
+    följer "" och ett satt namn med varvet, och bara None matchas."""
+    from tests.test_exam import _exam
+    from tests.test_varvsvakt import _llm
+    fore = _exam()
+    fore["uppgifter"][3]["scen"] = _hagescen(plat="")
+    fore["uppgifter"][4]["scen"] = _hagescen("a-26-flod",
+                                             plat="a-01-kastparabel")
+    fore["uppgifter"][5]["scen"] = _hagescen("a-27-hage")
+    # Modellen skriver om uppgift 4 och 5 och känner inte fältet.
+    varv = json.loads(json.dumps(fore))
+    for u in varv["uppgifter"]:
+        if u.get("scen"):
+            u["scen"].pop("plat", None)
+    varv["uppgifter"][3]["text"] = ("En rektangulär hage har omkretsen 80 m. "
+                                    "Bestäm de mått som maximerar arean. "
+                                    "Motivera ditt svar.")
+    varv["uppgifter"][4]["text"] = ("En population beskrivs av $N(t) = 300 "
+                                    "\\cdot 1{,}04^t$. Bestäm när populationen "
+                                    "har fördubblats.")
+    llm, _calls = _llm(varv)
+    res = exam_gen.refine_exam(fore, "byt talen", nummer=nummer, model="m",
+                               llm=llm)
+    efter = res["exam"]
+    assert efter is not fore
+    assert efter["uppgifter"][3]["text"] == varv["uppgifter"][3]["text"]
+    # Rutten matchar efter varvet (routes_exam, refine).
+    platar.matcha_exam(efter)
+    assert efter["uppgifter"][3]["scen"]["plat"] == ""
+    assert efter["uppgifter"][4]["scen"]["plat"] == "a-01-kastparabel"
+    assert efter["uppgifter"][5]["scen"]["plat"] == "a-19-hage-flod"
+
+
+def test_platvalet_foljer_uppgiften_nar_antalet_andras():
+    """En struken uppgift flyttar upp resten: valet följer uppgiften, inte
+    platsen. En ny uppgift och en omskriven med ny scen får inget arv, för
+    platsen pekar då på en annan uppgift."""
+    fore = {"uppgifter": [
+        {"text": "Uppgift ett.", "scen": _hagescen("a-30-ett", plat="")},
+        {"text": "Uppgift två.", "scen": _hagescen("a-31-tva",
+                                                   plat="a-07-flod-bat")},
+        {"text": "Uppgift tre.", "scen": _hagescen("a-32-tre",
+                                                   plat="a-09-jarnvag")},
+        {"text": "Uppgift fyra.", "scen": _hagescen("a-33-fyra", plat="")}]}
+    efter = {"uppgifter": [
+        {"text": "Uppgift två.", "scen": _hagescen("a-31-tva")},
+        # Ny text, samma scen: samma uppgift omskriven.
+        {"text": "Uppgift tre, omskriven.", "scen": _hagescen("a-32-tre")},
+        # Ny text och ny scen på fyras plats: inget arv.
+        {"text": "Uppgift fyra, ny.", "scen": _hagescen("a-34-ny")}]}
+    assert platar.behall_platval(fore, efter) == 2
+    assert efter["uppgifter"][0]["scen"]["plat"] == "a-07-flod-bat"
+    assert efter["uppgifter"][1]["scen"]["plat"] == "a-09-jarnvag"
+    assert "plat" not in efter["uppgifter"][2]["scen"]
+
+
 def test_ingen_np_typ_ar_ett_uttryckligt_forebildsnummer():
     """Prov 126 uppgift 6 och 7: NP saknar typ för grundpotensform med prefix
     och för mönster på den nivån. Modellen skriver då NP_TYP_NR0, och vakten
