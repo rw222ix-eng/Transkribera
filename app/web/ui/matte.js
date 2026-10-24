@@ -98,9 +98,13 @@
      I svensk intervallnotation öppnar «]», så minuset är ett tecken: {-}.
      Samma rättelse i LaTeX (exam_latex._intervallminus). */
   const INTERVALL = s => s.replace(/\](\s*)-/g, ']$1{-}');
+  /* «(-3)^{2} \qquad -3^{2}»: luften är ingen atom, så minuset efter den
+     blev en subtraktion (omprovet 265 uppg 7a, 2026-10-24). Efter \quad och
+     \qquad börjar ett nytt uttryck. Spegel av exam_latex._QUADMINUS_RE. */
+  const QUADMINUS = s => s.replace(/(\\q?quad)(?![A-Za-z])(\s*)-/g, '$1$2{-}');
   const rendera = (el, tex, grotesk) => {
     if (!tex || !tex.trim()) return;
-    const t = INTERVALL(tex);
+    const t = QUADMINUS(INTERVALL(tex));
     katex.render(grotesk ? '\\sf ' + ETT_TECKEN(t) : t, el, { throwOnError: false, displayMode: false });
   };
 

@@ -4764,6 +4764,38 @@ def test_rutan_ritas_utan_amssymb():
     assert exam_latex._ruta("\\squared + \\Boxx") == "\\squared + \\Boxx"
 
 
+def test_formeln_forst_i_deluppgiften_far_sin_punkt():
+    """Omprovet 267 uppg 2a, 2026-10-24: «3x² + 4 = 64 Svara exakt.»"""
+    from app import exam_latex
+    st = exam_latex._stycken("$3x^2 + 4 = 64$\nSvara exakt.",
+                             forst_i_raden=True, ihop=True)
+    assert [s["text"] for s in st] == ["\\(3x^2 + 4 = 64\\). Svara exakt."]
+    st = exam_latex._stycken("$x^{2} + 1 \\qquad 0$\nDet ska gälla för alla "
+                             "tal $x$.", forst_i_raden=True, ihop=True)
+    assert st[0]["text"].startswith("\\(x^{2} + 1 \\qquad 0\\). Det ska")
+    # Liten bokstav fortsätter meningen, och en ensam formel rörs inte.
+    assert exam_latex._ihop(["$x = 2$", "och $y = 3$."], True) == [
+        "$x = 2$ och $y = 3$."]
+    assert exam_latex._ihop(["$x = 2$"], True) == ["$x = 2$"]
+    js = (Path(__file__).resolve().parents[1] / "app" / "web" / "ui"
+          / "blad-bygg.js").read_text(encoding="utf-8")
+    assert "ENSAM_FORMEL.test(buf[buf.length - 1])" in js
+
+
+def test_minus_efter_qquad_ar_ett_fortecken():
+    """Omprovet 265 uppg 7a, 2026-10-24: «(−3)²  − 3²» lästes som subtraktion."""
+    from app import exam_latex
+    assert exam_latex.escape_mixed("$(-3)^{2} \\qquad -3^{2}$") == \
+        "\\((-3)^{2} \\qquad {-}3^{2}\\)"
+    st = exam_latex._stycken("$(-3)^{2} \\quad -3^{2}$")
+    assert st[0]["formel"] and st[0]["text"] == "(-3)^{2} \\quad {-}3^{2}"
+    # Ett minus mellan två termer och kommandon som bara börjar på quad rörs inte.
+    assert exam_latex._forteckenminus("a - b \\quadrat -c") == "a - b \\quadrat -c"
+    js = (Path(__file__).resolve().parents[1] / "app" / "web" / "ui"
+          / "matte.js").read_text(encoding="utf-8")
+    assert "QUADMINUS(INTERVALL(tex))" in js
+
+
 def test_reparationen_bar_lararens_onskemal():
     """Prov 215, 2026-10-22: rundan efter en riktad omskrivning ångrade
     Rickards formulering i uppgift 5 fyra varv i rad."""

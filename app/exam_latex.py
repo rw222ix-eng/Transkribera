@@ -152,6 +152,17 @@ def _intervallminus(formel: str) -> str:
     return _INTERVALLMINUS_RE.sub(r"]\1{-}", formel)
 
 
+# «$(-3)^{2} \qquad -3^{2}$» (omprovet 265 uppg 7a, 2026-10-24): luften är
+# ingen atom, så TeX såg «)²» före minuset och satte en subtraktion med luft på
+# båda sidor. Efter \quad och \qquad börjar ett nytt uttryck, och minuset är
+# ett förtecken. Samma rättelse på skärmen (matte.js QUADMINUS).
+_QUADMINUS_RE = re.compile(r"(\\q?quad)(?![A-Za-z])(\s*)-")
+
+
+def _forteckenminus(formel: str) -> str:
+    return _intervallminus(_QUADMINUS_RE.sub(r"\1\2{-}", formel))
+
+
 # «$(-3)^{2} \quad \square \quad -3^{2}$» (E-provet 265, 2026-10-18): rutan där
 # eleven skriver tecknet kommer ur amssymb, och dess typsnitt msam10 finns inte
 # i den offline-seedade Tectonic-cachen, så hela provet föll vid bygget. En ram
@@ -191,7 +202,7 @@ def escape_mixed(text: str, *, fet: bool = False) -> str:
             r"\1~\2", escape_latex(s)))
     for m in _MATH_SPLIT_RE.finditer(text):
         parts.append(_esc_text(text[pos:m.start()]))
-        matte = _grader(_ruta(_exponentbrak(_intervallminus(m.group(1)))))
+        matte = _grader(_ruta(_exponentbrak(_forteckenminus(m.group(1)))))
         formel = r"\pmb{" + matte + "}" if fet else matte
         parts.append(r"\(" + formel + r"\)")
         pos = m.end()
@@ -580,7 +591,13 @@ def _egen_rad(text: str) -> bool:
 
 def _ihop(rader: list[str], forst_i_raden: bool) -> list[str]:
     """Textraderna hopslagna till en rad per stycke; formelrader för sig.
-    Står uttrycket först på en deluppgift är det text (se _stycken)."""
+    Står uttrycket först på en deluppgift är det text (se _stycken).
+
+    FORMELN FÖRST OCH SEDAN EN MENING (omprovet 267 uppg 2a, 2026-10-24):
+    «$3x^2 + 4 = 64$» och «Svara exakt.» klistrades ihop utan punkt till
+    «3x² + 4 = 64 Svara exakt.», och 265:7c blev «x² + 1 □ 0 Det ska gälla
+    …». Börjar raden efter formeln med versal är den en ny mening, och
+    formeln får sin punkt. Spegel av blad-bygg.js ihop."""
     ut: list[str] = []
     buf: list[str] = []
     for rad in (r.strip() for r in rader):
@@ -601,6 +618,8 @@ def _ihop(rader: list[str], forst_i_raden: bool) -> list[str]:
                 buf = []
             ut.append(rad)
         else:
+            if buf and _ENSAM_FORMEL_RE.match(buf[-1]) and rad[:1].isupper():
+                buf[-1] += "."
             buf.append(rad)
     if buf:
         ut.append(" ".join(buf))
@@ -649,7 +668,7 @@ def _stycken(text: str, luft: bool = False,
         elif m:
             ut.append({"formel": True,
                        "text": _grader(_ruta(_exponentbrak(
-                           _intervallminus(m.group(1)))))})
+                           _forteckenminus(m.group(1)))))})
         else:
             ut.append({"formel": False, "text": escape_mixed(_textbrak(rad))})
             if _egen_rad(rad):

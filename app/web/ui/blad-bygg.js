@@ -161,7 +161,14 @@ window.BladBygg = (() => {
         } else if (EKVRAD.test(r) || ETIKETTRAD.test(r)) {
           if (buf.length) { ut.push(buf.join(' ')); buf = []; }
           ut.push(r);
-        } else buf.push(r);
+        } else {
+          /* Formeln först och sedan en mening får sin punkt (omprovet 267
+             uppg 2a, 2026-10-24). Spegel av exam_latex._ihop. */
+          if (buf.length && ENSAM_FORMEL.test(buf[buf.length - 1]) && /^[A-ZÅÄÖ]/.test(r)) {
+            buf[buf.length - 1] += '.';
+          }
+          buf.push(r);
+        }
       });
     if (buf.length) ut.push(buf.join(' '));
     /* «2 000» får inte brytas mellan raderna nu när texten flödar
