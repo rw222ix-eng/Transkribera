@@ -201,15 +201,18 @@ def test_uppmaningen_ar_inget_namn():
 
 
 def test_bladets_ordtak_ar_textmangdvakten():
-    """Blad 221:9 (IndA inför prov 215): ett ekvationssystem med decimaler.
-    Ordvakten räknar «$1{,}2x$» som tre ord, textmängdvakten som ett. Bladets
-    efterkontroll mäter som skrivningen, med textmängdvakten."""
-    u = _uppg("Räknare tillåten. Linjerna (1) och (2) skär varandra.\n"
-              "(1) $1{,}2x + 0{,}5y = 4{,}6$\n(2) $0{,}8x - 0{,}5y = 1{,}4$",
-              poang=(0, 0, 0), deluppgifter=[_del(
-                  "Hugo adderar ekvationerna och får $2x = 3{,}2$.\n"
-                  "Avgör om Hugo har räknat rätt och förklara varför.")])
-    exam = _blad(u)
+    """Bladets efterkontroll mäter som skrivningen, med textmängdvakten. Till
+    2026-10-24 var fallet blad 221:9, där ordvakten räknade «$1{,}2x$» som tre
+    ord. Nu räknar ordvakten formeln som ett ord men hela uppgiften, och den
+    hade fällt förklaringen efter frågan på blad 223:6, som bladet får ha
+    (Rickard 2026-10-11)."""
+    fraga = ("Linjen $L$ är parallell med linjen $2{,}4x - 1{,}6y + 4 = 0$.\n"
+             "$L$ och linjen $y = -x + 4$ skär $x$-axeln i samma punkt.\n"
+             "Bestäm ekvationen för $L$ i allmän form.")
+    forkl = ("\nI allmän form står alla termer i vänsterledet och 0 i "
+             "högerledet.\nEtt exempel på allmän form är $5x - 2y + 7 = 0$.")
+    exam = _blad(_uppg(fraga + forkl, (0, 3, 0)))
+    assert exam_gen._ord_i_uppgiften(fraga + forkl) == 42
     assert exam_gen.ordvakt(exam)
     marke = exam_gen.ORDVAKTENS_MARKE
     assert any(marke in f["text"] for f in routes_exam._sprakfynd(exam, "prov"))

@@ -5429,11 +5429,35 @@ def _ord_fore_fragan(text: str) -> int:
     return len(" ".join(meningar[:-1]).split()) if len(meningar) > 1 else 0
 
 
+# Mellanslaget i «1 100 kr»: ett tal, inte två ord.
+_TUSENTALSGLAPP = re.compile(r"(?<=\d)\s(?=\d{3}(?!\d))")
+
+
+def _ord_i_uppgiften(text: str) -> int:
+    """Alla ord i uppgiften, som eleven läser dem: stammen, deluppgiften,
+    frågan och raderna efter den.
+
+    Provets ordtak sedan 2026-10-24. Rickards gräns är 40 ord per uppgift,
+    stam plus deluppgift (10/10), och _ord_fore_fragan räknade bara fram till
+    sista meningen: TE26A prov 3 uppg 10 (44 ord) och BA26B prov 2 uppg 9c
+    (51) gick igenom. Ett uttryck i $…$ är ett ord, som när eleven läser.
+    _rentext gör «$m = 2{,}7s^{3}$» till sex ord och «$\\vec{a} = (2,\\ 1)$»
+    till fem, och då fälls en kort vektoruppgift för sina formler. Ett
+    uttryck som sitter ihop med ordet bredvid («m$^3$», «$x$-axeln») hör
+    till det ordet. Appens räknarmärke först i texten räknas inte."""
+    t = _RAKNARMARKE.sub("", str(text or "").lstrip())
+    t = re.sub(r"\$[^$]*\$", "X", t)
+    t = _TUSENTALSGLAPP.sub("", re.sub(r"\\[a-zA-Z]+", " ", t))
+    return len([w for w in t.split() if re.search(r"\w", w)])
+
+
 # ORDVAKTENS EGET MÄRKE i meddelandet. Koden «begriplighet» delas med
 # begriplighetsdomaren, och slutgrinden måste kunna skilja dem åt: den räknar
 # om ordvaktens fynd och ska INTE kasta domarens (se _raknas_om). Märket står
 # i en konstant och inte som en sträng på två ställen, för då glider de isär.
-ORDVAKTENS_MARKE = "ord förutsättning innan frågan kommer"
+# Före 2026-10-24 «ord förutsättning innan frågan kommer», då vakten bara
+# räknade orden före sista meningen.
+ORDVAKTENS_MARKE = "ord i hela uppgiften"
 
 # SPRÅKVAKTEN: det i «svenskan var för svår» som går att räkna. Läraren efter
 # prov 81 (2026-09-16): klassen förstod inte uppgift 6 — «summan av de tre
@@ -6284,33 +6308,38 @@ def build_begriplighet_prompt(kort: list[dict], inriktning: str = "",
 # lämnar uppgift 6b (40) och uppgift 10 (32) i fred: en vakt som fäller halva
 # provet blir en vakt läraren slutar tro på. Elevläsaren tar de övriga
 # kraven, som inte går att räkna: läser eleven uppgiften som facit gör?
+# Siffrorna ovan är orden före frågan. Sedan 2026-10-24 räknar ordvakten hela
+# uppgiften (_ord_i_uppgiften), och taket 40 är Rickards gräns från 10/10.
+# Bladen mäts med samma tak men på orden före frågan (textmangdvakt).
 ORD_FORE_FRAGAN = 40
 
 
 def ordvakt(exam: dict) -> list[dict]:
-    """Provets ordtak: högst ORD_FORE_FRAGAN ord före frågan, per enhet.
+    """Provets ordtak: högst ORD_FORE_FRAGAN ord i hela uppgiften, per enhet.
 
     Egen funktion sedan 2026-10-11 så att efterkontrollen kan köra den
     (routes_exam._sprakfynd). NA26F prov 3 (exam 219) uppgift 15 fick 43 ord
     av en omskrivning, och efterkontrollen sa ingenting: den körde bara
-    språkvakten. Rickard 10/10: «max fyrtio ord per uppgift»."""
+    språkvakten. Rickard 10/10: «max fyrtio ord per uppgift».
+
+    En deluppgift räknas med sin stam, eftersom eleven läser båda. Frågan
+    och raderna efter den räknas också (2026-10-24, _ord_i_uppgiften)."""
     ut: list[dict] = []
     for e in domarenheter(exam):
         kort = e["kort"]
         text = f"{kort.get('stam', '')} {kort.get('text', '')}".strip()
-        ord_ = _ord_fore_fragan(text)
+        ord_ = _ord_i_uppgiften(text)
         if ord_ > ORD_FORE_FRAGAN:
+            stam = " med stammen" if str(kort.get("stam") or "").strip() else ""
             ut.append(_err(
                 f"uppgift {e['nr']}", "begriplighet",
-                f"uppgift {e['nr']} har {ord_} {ORDVAKTENS_MARKE} "
-                f"(taket är {ORD_FORE_FRAGAN}). Korta ned "
-                "till en situation och de tal som faktiskt behövs, och "
-                "ställ frågan tidigare."
-                # Raden efter frågan, som på bladet (_efter_fragan_rad):
-                # omprovet av 129 (15/10) stod på 49 ord i tre varv för att
-                # «Svara med minst en decimal.» gjorde frågan till bakgrund.
-                + _efter_fragan_rad(text, ord_, ORD_FORE_FRAGAN)
-                + BEHALL_PLANEN))
+                f"uppgift {e['nr']} har {ord_} {ORDVAKTENS_MARKE}{stam} "
+                f"(taket är {ORD_FORE_FRAGAN}, en formel räknas som ett ord). "
+                "Korta ned till en situation och de tal som faktiskt behövs. "
+                "Frågan och raderna efter den räknas med: stryk det som står "
+                "två gånger, förklaringar av det texten redan säger och "
+                "meningar som bilden visar, och skriv in krav som «Svara med "
+                "minst en decimal.» i frågan." + BEHALL_PLANEN))
     return ut
 
 
@@ -16035,8 +16064,8 @@ SLUTRUNDOR = 1
 # * `delmomenttackning` bärs av både räkningen (path «uppgifter») och
 #   delmomentsdomarens metodfynd (path «uppgift 7»). Domaren körs inte här,
 #   och hans fynd ska stå kvar.
-# * `begriplighet` bärs av både ordvakten (deterministisk, mätt på orden före
-#   frågan) och begriplighetsdomaren. Samma sak: domarens fynd står kvar.
+# * `begriplighet` bärs av både ordvakten (deterministisk, mätt på hela
+#   uppgiftens ord) och begriplighetsdomaren. Samma sak: domarens fynd står kvar.
 def _raknas_om(fel: dict) -> bool:
     kod, path = fel.get("code"), str(fel.get("path") or "")
     # De räknade vakternas egna koder. Alla utom delmomenttackning och

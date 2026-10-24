@@ -504,10 +504,11 @@ def _sprakfynd(exam: dict, typ: str, blad: bool = False) -> list[dict]:
 
     Ordtaket bara på provet. Bladets ordtak är textmängdvakten (30 ord, ett
     decimaltal är ett ord, i _ovningsfynd), samma som skrivningen
-    och omskrivningen mäter. Ordvakten räknar «$1{,}2x$» som tre ord och fällde
-    blad 221:9 (IndA inför prov 215, 2026-10-11) på ett ekvationssystem med
-    decimaler som textvakten släppte. Rickard 11/10: bladen får dessutom gå
-    över 40 ord med förklaringar för svag svenska."""
+    och omskrivningen mäter. Ordvakten räknade till 2026-10-24 «$1{,}2x$» som
+    tre ord och fällde blad 221:9 (IndA inför prov 215, 2026-10-11) på ett
+    ekvationssystem med decimaler som textvakten släppte. Rickard 11/10:
+    bladen får dessutom gå över 40 ord med förklaringar för svag svenska, och
+    ordvakten räknar sedan 24/10 hela uppgiften, förklaringarna med."""
     if typ != "prov":
         return []
     try:
@@ -517,10 +518,11 @@ def _sprakfynd(exam: dict, typ: str, blad: bool = False) -> list[dict]:
         return []
     # Ordtaket med eget fynd per uppgift (exam 219 uppgift 15, 2026-10-11):
     # efterkontrollen körde bara språkvakten, och 43 ord före frågan stod kvar
-    # utan ett ord. Meddelandet är vaktens eget, med taket i klartext.
+    # utan ett ord. Meddelandet är vaktens eget, med taket i klartext. Sedan
+    # 2026-10-24 räknar vakten hela uppgiften, frågan med.
     ord_ut = [_fynd("begriplighet", f["message"][0].upper() + f["message"][1:]
                     .split(". Korta ned")[0] + ". Korta ned till de tal som "
-                    "behövs och ställ frågan tidigare.",
+                    "behövs och stryk det som står två gånger.",
                     _uppgiftsnr(f.get("path", "")))
               for f in ordfel]
     # Vaktens meddelanden är skrivna TILL MODELLEN («Skriv vad eleven ska

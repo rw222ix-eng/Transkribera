@@ -2498,12 +2498,15 @@ def test_varvet_pa_provet_mater_ordtaket():
     fynd = [f for f in exam_gen.varvsvakter(nytt, "prov")
             if exam_gen.ORDVAKTENS_MARKE in f["message"]]
     assert [f["path"] for f in fynd] == ["uppgift 1"]
-    # Raden efter frågan gör frågan till bakgrund, och fyndet säger det
-    # (omprovet av 129 stod på 49 ord i tre varv för den raden).
-    u["text"] = ("Sara sätter in pengar på ett konto. " * 7
-                 + "Bestäm räntan per år. Svara med minst en decimal.")
+    # Raden efter frågan räknas med (omprovet av 129 stod på 49 ord i tre
+    # varv för den raden), och sedan 2026-10-24 räknas hela uppgiften: 33 ord
+    # före frågan och 42 i allt.
+    u["text"] = ("Sara sätter in pengar på ett konto. " * 4
+                 + "Hon tar inte ut något. Bestäm räntan per år. "
+                 "Svara med minst en decimal.")
     msg = exam_gen.ordvakt(nytt)[0]["message"]
-    assert "«Svara med minst en decimal.» står efter den" in msg
+    assert "uppgift 1 har 42 ord i hela uppgiften" in msg
+    assert "skriv in krav som «Svara med minst en decimal.» i frågan" in msg
 
 
 def test_okant_omprov_av_lamnar_prompten_som_den_var(client, monkeypatch):

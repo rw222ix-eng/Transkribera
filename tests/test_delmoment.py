@@ -915,16 +915,75 @@ def _stenhuggeri():
 
 
 def test_vakten_matter_hur_mycket_text_som_star_fore_fragan():
-    """Det mätbara i lärarens «väldigt mycket information». Taket är satt så
-    att uppgift 11 (42 ord) faller och uppgift 9 (38) klaras av domaren i
-    stället: en vakt som fäller halva provet blir en vakt hon slutar tro på."""
-    fel = exam_gen.begriplighetssignaler(_stenhuggeri(), "prov")
+    """Det mätbara i lärarens «väldigt mycket information». Taket sattes 13/9
+    så att uppgift 11 (42 ord före frågan) föll och uppgift 9 (38) klarades.
+    Sedan 2026-10-24 räknas hela uppgiften med formeln som ett ord, Rickards
+    gräns på 40 ord: kaféet har 42 och faller, stenhuggeriet har 40 och ligger
+    på gränsen. Där tar elevläsaren vid."""
+    fel = exam_gen.begriplighetssignaler(_kafe(), "prov")
     assert len(fel) == 1 and fel[0]["code"] == "begriplighet"
     assert f"taket är {exam_gen.ORD_FORE_FRAGAN}" in fel[0]["message"]
-    assert exam_gen.begriplighetssignaler(_kafe(), "prov") == []
+    assert "uppgift 1 har 42 ord i hela uppgiften " in fel[0]["message"]
+    assert exam_gen.begriplighetssignaler(_stenhuggeri(), "prov") == []
     # En kort uppgift går fri, och gruppuppgiftens egna mått rörs inte.
     assert exam_gen.begriplighetssignaler(_prov(), "prov") == []
-    assert exam_gen.begriplighetssignaler(_stenhuggeri(), "arbetsblad") == []
+    assert exam_gen.begriplighetssignaler(_kafe(), "arbetsblad") == []
+
+
+def _linbanan():
+    """TE26A prov 3 (exam 163 v940) uppgift 10, ordagrant: 36 ord före
+    frågan och 44 i hela uppgiften."""
+    return {"titel": "Prov", "uppgifter": [{
+        "del": "C", "poang": [2, 0, 0], "typ": "resonemang", "formaga": "R",
+        "text": ("I en äventyrspark går en linbana från en plattform ner till "
+                 "marken.\nVajern är spänd rakt och är 42 m lång.\nPlattformen "
+                 "är 8,5 m hög.\nSaga påstår att vajern lutar mer än 10° mot "
+                 "marken.\n\nAvgör med en beräkning om Saga har rätt."),
+        "losning": "…"}]}
+
+
+def _staketet():
+    """BA26B prov 2 (exam 175 v836) uppgift 9, ordagrant: c) har 38 ord före
+    frågan och 51 med stammen. a) och b) håller sig under taket."""
+    return {"titel": "Prov", "uppgifter": [{
+        "del": "C", "poang": [0, 0, 0], "typ": "rutin", "formaga": "M",
+        "text": ("Tuva-Li bygger ett staket av stolpar och brädor.\nMellan två "
+                 "stolpar sitter alltid 3 brädor.\nTabellen visar antalet "
+                 "stolpar och brädor i tre staket."),
+        "deluppgifter": [
+            {"poang": [1, 0, 0], "losning": "…", "text": (
+                "Hur många brädor behövs till ett staket med 10 stolpar?")},
+            {"poang": [0, 1, 0], "losning": "…", "text": (
+                "Skriv en formel för antalet brädor $b$ när staketet har $s$ "
+                "stolpar.")},
+            {"poang": [0, 0, 1], "losning": "…", "text": (
+                "Ett annat staket byggs på samma sätt, men med $k$ brädor "
+                "mellan två stolpar.\n\nSkriv en formel för antalet brädor $b$ "
+                "när det staketet har $s$ stolpar.")}]}]}
+
+
+def test_ordvakten_raknar_hela_uppgiften():
+    """Rickard 2026-10-24: gränsen är 40 ord i hela uppgiften, stam plus
+    deluppgift. Vakten räknade bara fram till sista meningen, och 163:10 och
+    175:9c gick igenom granskningen samma dag."""
+    for exam, nr, ord_ in ((_linbanan(), "1", 44), (_staketet(), "1c", 51)):
+        fel = exam_gen.ordvakt(exam)
+        assert [f["path"] for f in fel] == [f"uppgift {nr}"]
+        assert f"uppgift {nr} har {ord_} {exam_gen.ORDVAKTENS_MARKE}" in fel[0]["message"]
+        assert all(exam_gen._raknas_om(f) for f in fel)
+    assert "med stammen" in exam_gen.ordvakt(_staketet())[0]["message"]
+    assert "med stammen" not in exam_gen.ordvakt(_linbanan())[0]["message"]
+
+
+def test_ordvakten_raknar_formeln_som_ett_ord():
+    """«$\\vec{a} = (2,\\ 1)$» är ett ord för eleven, inte fem. Räknarmärket
+    som appen sätter först räknas inte, och «1 100» är ett tal."""
+    assert exam_gen._ord_i_uppgiften(
+        "Vektorerna är $\\vec{a} = (2,\\ 1)$ och $\\vec{b} = (t,\\ 3)$.") == 5
+    assert exam_gen._ord_i_uppgiften("Räknare tillåten. Beräkna $x$.") == 2
+    assert exam_gen._ord_i_uppgiften("Var och en betalar 1 100 kr.") == 6
+    assert exam_gen._ord_i_uppgiften("Emil har 4,0 m$^3$ betong.") == 5
+    assert exam_gen._ord_i_uppgiften("Skär $x$-axeln.") == 2
 
 
 def _kvadratsumman():
@@ -959,8 +1018,8 @@ def test_sprakvakten_faller_rakneord_i_varandra_och_pa_varandra_foljande():
         "Kvadrera varje tal. Lägg ihop de tre kvadraterna och förenkla.")
     assert exam_gen.begriplighetssignaler(fri, "prov") == []
     assert exam_gen.begriplighetssignaler(_kvadratsumman(), "gruppuppgift") == []
-    # Ordvaktens fynd (uppgift 11) står kvar som förut.
-    assert len(exam_gen.begriplighetssignaler(_stenhuggeri(), "prov")) == 1
+    # Ordvaktens fynd står kvar bredvid språkvaktens (kaféet, uppgift 9).
+    assert len(exam_gen.begriplighetssignaler(_kafe(), "prov")) == 1
 
 
 def _med_text(text: str) -> dict:
@@ -1089,7 +1148,11 @@ def test_de_tre_domarna_gar_i_samma_reparationsprompt():
                                                       "cm.»"}]})
     llm, anrop = _stub_llm([delmomentdom, relevansdom, elevdom,
                             json.dumps(_stenhuggeri())])
-    res = exam_gen._tackning_pass(_stenhuggeri(), [], model="m", llm=llm,
+    # Stenhuggeriet har 40 ord och ligger på ordtaket sedan 2026-10-24, då
+    # vakten började räkna hela uppgiften. Tre ord till fäller det.
+    lang = _stenhuggeri()
+    lang["uppgifter"][0]["deluppgifter"][0]["text"] += " Svara i cm."
+    res = exam_gen._tackning_pass(lang, [], model="m", llm=llm,
                                   profil="prov", antal=1, skeleton=None,
                                   avsnitt=[], delmoment=_delmoment(),
                                   forbjudna=_forbjudna(),
@@ -1100,7 +1163,7 @@ def test_de_tre_domarna_gar_i_samma_reparationsprompt():
     reparationen = anrop[3]["prompt"]
     assert "potensekvationer" in reparationen         # metoden utanför
     assert "annan sort" in reparationen or "förebild" in reparationen
-    assert "ord förutsättning" in reparationen        # den mätta vakten
+    assert exam_gen.ORDVAKTENS_MARKE in reparationen  # den mätta vakten
     assert "två läsningar" in reparationen            # begriplighetsdomen
     assert res["rounds"] == 2
 
