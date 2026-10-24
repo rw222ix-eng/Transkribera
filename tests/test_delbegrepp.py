@@ -84,6 +84,71 @@ def test_tyst_utan_punkten():
     assert exam_gen.grafisk_digitalvakt(prov, [TRI1]) == []
 
 
+# Ma 2a: DIG-1 och ALG-2 kryssade tillsammans kräver GeoGebra (Rickard
+# 2026-10-24, IndA prov 2, exam 215).
+DIG2A = "G25-M2A-DIG-1"
+SYS2A = "G25-M2A-ALG-2"
+
+
+def test_ma2a_paret_kraver_geogebra():
+    assert exam_gen.kraver_geogebra([SYS2A, DIG2A])
+    assert not exam_gen.kraver_geogebra([SYS2A])
+    assert not exam_gen.kraver_geogebra([DIG2A])
+    # 2b har samma två punkter men inget beslut.
+    assert not exam_gen.kraver_geogebra(["G25-M2B-ALG-1", "G25-M2B-DIG-1"])
+
+
+def test_ma2a_system_utan_datordel_fälls():
+    prov = _prov(
+        _u("Linjen $g$ har ekvationen $y = 2x$. Rita linjen $g$ i figuren.",
+           "", [1, 0, 0], del_="B", kod=SYS2A, figur={"typ": "graf"}),
+        _u("Lös ekvationssystemet med substitutionsmetoden.", "", [2, 0, 0],
+           kod=SYS2A),
+        hjalpmedel="Formelblad på hela provet, räknare bara på del C.")
+    fel = exam_gen.grafisk_digitalvakt(prov, [SYS2A, DIG2A])
+    assert _koder(fel) == ["geogebra"] and fel[0]["path"] == "hjalpmedel"
+    assert "ekvationssystem" in fel[0]["message"]
+    assert "f(x) = a" not in fel[0]["message"]
+
+
+def test_ma2a_datordel_utan_geogebrauppgift_fälls():
+    prov = _prov(
+        _u("Lös ekvationssystemet med substitutionsmetoden.", "", [2, 0, 0],
+           kod=SYS2A),
+        hjalpmedel=("Del B: formelblad. Del C: räknare, formelblad och "
+                    "GeoGebra på datorn."))
+    fel = exam_gen.grafisk_digitalvakt(prov, [SYS2A, DIG2A])
+    assert [f["path"] for f in fel] == ["uppgifter"]
+    assert "linjärt ekvationssystem" in fel[0]["message"]
+
+
+def test_ma2a_som_prov_215_tyst():
+    prov = _prov(
+        _u("Linjen $g$ har ekvationen $y = 2x$. Rita linjen $g$ i figuren. "
+           "I vilken punkt skär linjerna varandra?", "", [1, 0, 0], del_="B",
+           kod=SYS2A, figur={"typ": "graf"}),
+        _u("UF-företaget har kostnaden $y = 4\\,000 + 35x$ och intäkten "
+           "$y = 120x$. Lös ekvationssystemet grafiskt i GeoGebra.", "",
+           [2, 0, 0], kod=DIG2A),
+        hjalpmedel=("Del B: formelblad. Del C: räknare, formelblad och "
+                    "GeoGebra på datorn."))
+    assert exam_gen.digitala_delar(prov) == {"C"}
+    assert exam_gen.grafisk_digitalvakt(prov, [SYS2A, DIG2A]) == []
+    # Samma rad med papprets namn: Del B på pappret är del C.
+    prov["hjalpmedel"] = ("Del A: formelblad. Del B: räknare, formelblad och "
+                          "GeoGebra på datorn.")
+    assert exam_gen.digitala_delar(prov) == {"C"}
+    assert exam_gen.grafisk_digitalvakt(prov, [SYS2A, DIG2A]) == []
+
+
+def test_ma2a_promptblocket_ar_systemet():
+    block = exam_gen.build_delbegrepp([SYS2A, DIG2A], "prov")
+    assert "ekvationssystem" in block and "GeoGebra" in block
+    assert "f(x) = a" not in block
+    assert exam_gen.build_delbegrepp([SYS2A], "prov") == ""
+    assert "f(x) = a" in exam_gen.build_delbegrepp([ALG3], "prov")
+
+
 def test_promptblocket_bara_med_utlosande_punkt():
     assert exam_gen.build_delbegrepp(["G25-M1C-ALG-1"], "prov") == ""
     block = exam_gen.build_delbegrepp([TRI1, ALG3], "prov")

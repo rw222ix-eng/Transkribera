@@ -160,6 +160,23 @@ def test_delrubriken_i_pdf_foljer_lararens_val():
         "Formelblad", "Digitala verktyg och formelblad")
 
 
+def test_delens_egen_lista_med_komma():
+    """Prov 215 (Rickard 2026-10-24): «Del C: räknare, formelblad och GeoGebra
+    på datorn.» Kommat delade klausulen, och del C blev bara «räknare»."""
+    h215 = ("Del B: formelblad. Del C: räknare, formelblad och GeoGebra på "
+            "datorn.")
+    assert exam_latex._verktyget_i_delen(h215, "C") == "digitala verktyg"
+    assert exam_latex._digitala_i_delen(h215, "B") is None
+    assert exam_latex._hjalpmedel_i_delen(h215, "C") == \
+        "Räknare, formelblad och GeoGebra på datorn."
+    # En mening som nämner två delar delas vid kommat som förut.
+    tva = "Del C med räknare, del B utan räknare."
+    assert exam_latex._digitala_i_delen(tva, "C") is True
+    assert exam_latex._digitala_i_delen(tva, "B") is False
+    tex = exam_latex.render_prov(_doc(h215))
+    assert r"Del B: Digitala verktyg är tillåtna" in tex
+
+
 def test_verktyget_fore_delnamnet_lases_ocksa():
     """Exam 119 (2026-09-22): modellen skrev «Formelblad på hela provet,
     räknare bara på del C.» Verktyget står FÖRE delnamnet, och delen fick

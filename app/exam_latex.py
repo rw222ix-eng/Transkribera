@@ -298,6 +298,14 @@ def _klausul(hjalpmedel: str | None, del_kod: str) -> str | None:
     # del C sin granne del B:s klausul och trodde att räknaren var förbjuden.
     text = str(hjalpmedel)
     vill = namn.split()[-1] if _DELNAMN_REDAN_RE.search(text) else del_kod
+    # DELENS EGEN MENING när den börjar med delnamnet och inte nämner någon
+    # annan del: «Del C: räknare, formelblad och GeoGebra på datorn.» (prov
+    # 215, Rickard 2026-10-24). Kommat delade den förut, och del C blev bara
+    # «räknare».
+    for mening in re.split(r"[.;]", text):
+        delar = _DEL_I_BIT_RE.findall(mening)
+        if delar == [vill] and _DEL_FORST_RE.match(mening):
+            return mening
     # HELA SATSDELEN, inte bara texten efter delnamnet: modellen skriver
     # «Formelblad på hela provet, räknare bara på del C.» (exam 119,
     # 2026-09-22), och där står verktyget FÖRE «del C». Satsdelen går till
@@ -310,6 +318,9 @@ def _klausul(hjalpmedel: str | None, del_kod: str) -> str | None:
 
 
 _DEL_I_BIT_RE = re.compile(r"\b[Dd]el\s+([A-D])\b")
+_DEL_FORST_RE = re.compile(r"\s*[Dd]el\s+[A-D]\b")
+# «Del C: …»: läraren har skrivit delens hjälpmedel som en egen lista.
+_EGEN_LISTA_RE = re.compile(r"\s*[Dd]el\s+[A-D]\s*:\s*(\S.*)", re.DOTALL)
 
 
 def _digitala_i_delen(hjalpmedel: str | None, del_kod: str) -> bool | None:
@@ -359,6 +370,12 @@ def _hjalpmedel_i_delen(hjalpmedel: str | None, del_kod: str) -> str | None:
     tillatet = _digitala_i_delen(hjalpmedel, del_kod)
     if tillatet is None:
         return None
+    # Lärarens egen lista står ordagrant: «Del C: räknare, formelblad och
+    # GeoGebra på datorn.» blir «Räknare, formelblad och GeoGebra på datorn.»
+    lista = _EGEN_LISTA_RE.match(_klausul(hjalpmedel, del_kod) or "")
+    if lista:
+        rad = lista.group(1).strip()
+        return rad[:1].upper() + rad[1:] + "."
     formelblad = bool(_FORMELBLAD_RE.search(str(hjalpmedel or "")))
     if tillatet:
         verktyg = _verktyget_i_delen(hjalpmedel, del_kod)
@@ -2369,11 +2386,20 @@ def _blad_raknardelar(doc: exam_spec.ExamDoc
                "text": _BLAD_RAKNARMARKE.sub("", str(it.text or ""), count=1)})
            for it, ja in zip(items, med)]
     tva = len(set(med)) == 2
+    # GeoGebra i räknardelen (Rickard 2026-10-24, blad 310 och 311 inför prov
+    # 215): delrubriken säger verktyget när en uppgift där ber om det.
+    geogebra = any(
+        ja and re.search(r"geogebra", " ".join(
+            [str(it.text or "")]
+            + [str(d.text or "") for d in it.deluppgifter or []]), re.I)
+        for it, ja in zip(items, med))
+    tillaten = ("Räknare och GeoGebra är tillåtna" if geogebra
+                else "Räknare är tillåten")
     rubriker = {
         "B": ("Del A" if tva else None,
               ("Del A: " if tva else "") + "Räknare är inte tillåten"),
         "C": ("Del B" if tva else None,
-              ("Del B: " if tva else "") + "Räknare är tillåten"),
+              ("Del B: " if tva else "") + tillaten),
     }
     return doc.model_copy(update={"uppgifter": nya}), rubriker
 

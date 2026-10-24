@@ -10975,13 +10975,46 @@ _EKVATION_RE = re.compile(r"ekvation|lös|skär|när\b|= ?\d", re.IGNORECASE)
 GRAFISK_MAX_FYND = 3
 # Hjälpmedlet del C får när punkten är kryssad (routes_exam, generate).
 GRAFISK_HJALPMEDEL = "Digitala verktyg och formelblad"
+# Ma 2a saknar punkten om grafiska metoder, men DIG-1 («digitala verktyg …
+# till exempel vid ekvationslösning») och ALG-2 (linjära ekvationssystem)
+# kryssade tillsammans är samma krav: boken löser systemen grafiskt i GeoGebra
+# (Origo 2a s. 102, uppg. 2306) och lektionen om det har dator. Rickard
+# 2026-10-24 över IndA prov 2 (exam 215). Ma 2b och 2c har samma två punkter
+# men inget beslut, så paret gäller bara 2a.
+_GRAFISKA_SYSTEM = (("G25-M2A-DIG-1", "G25-M2A-ALG-2"),)
 
 
-def kraver_geogebra(koder: list[str] | None) -> bool:
-    """Är en kryssad punkt de grafiska metoderna för att lösa ekvationer?"""
+def _grafisk_punkt(koder: list[str] | None) -> bool:
     etiketter = course_data.kodtexter()
     return any(_GRAFISK_CI_RE.search(etiketter.get(str(k)) or "")
                for k in (koder or []))
+
+
+def _grafiska_system(koder: list[str] | None) -> bool:
+    valda = {str(k) for k in (koder or [])}
+    return any(set(par) <= valda for par in _GRAFISKA_SYSTEM)
+
+
+def kraver_geogebra(koder: list[str] | None) -> bool:
+    """Är en kryssad punkt de grafiska metoderna för att lösa ekvationer,
+    eller är Ma 2a:s par kryssat (_GRAFISKA_SYSTEM)?"""
+    return _grafisk_punkt(koder) or _grafiska_system(koder)
+
+
+def _geogebra_krav(koder: list[str] | None) -> dict[str, str]:
+    """Vakttextens delar: ekvationen f(x) = a när punkten om grafiska
+    metoder är kryssad (orden som förut), annars 2a:s ekvationssystem."""
+    if _grafisk_punkt(koder) or not _grafiska_system(koder):
+        return {"kryssat": "Grafisk ekvationslösning är kryssad",
+                "gors": "och den gör eleverna i GeoGebra på datorn",
+                "kort": "en ekvation",
+                "vad": "en ekvation av typen f(x) = a"}
+    return {"kryssat": "Linjära ekvationssystem och digitala verktyg är "
+                       "kryssade",
+            "gors": "och eleverna löser systemen grafiskt i GeoGebra på "
+                    "datorn",
+            "kort": "ett ekvationssystem",
+            "vad": "ett linjärt ekvationssystem"}
 
 
 def digitala_delar(exam: dict) -> set[str]:
@@ -10991,16 +11024,23 @@ def digitala_delar(exam: dict) -> set[str]:
     ut: set[str] = set()
     stycken = re.split(r"(?=\bDel\s+[A-Z]\b)", text)
     delade = [s for s in stycken if re.match(r"Del\s+[A-Z]\b", s)]
+    # Papprets namn, som eleven ser dem: «Del A» finns inte internt, så en rad
+    # som nämner den säger Del A för del B och Del B för del C
+    # (exam_latex._delnamn_visning). Rickard 2026-10-24: «del A och del B är
+    # det ju».
+    papper = bool(re.search(r"\bDel\s+A\b", text))
     for s in delade:
         if _DIGITALT_RE.search(s) and not _UTAN_DIGITALT_RE.search(s):
-            ut.add(s.split()[1])
+            # Bokstaven utan kolon: «Del C: räknare …» (prov 215) är del C.
+            bokstav = re.match(r"Del\s+([A-Z])\b", s).group(1)
+            ut.add(chr(ord(bokstav) + 1) if papper else bokstav)
     if not delade and har_digital_del(exam):
         ut.add("*")
     return ut
 
 
 def grafisk_digitalvakt(exam: dict, koder: list[str] | None) -> list[dict]:
-    """De tre reglerna ovan. Tyst utan punkten."""
+    """De tre reglerna ovan. Tyst utan punkten och utan 2a:s par."""
     if not kraver_geogebra(koder):
         return []
     uppgifter = [u for u in ((exam or {}).get("uppgifter") or [])
@@ -11008,15 +11048,15 @@ def grafisk_digitalvakt(exam: dict, koder: list[str] | None) -> list[dict]:
     if not uppgifter:
         return []
     digitala = digitala_delar(exam)
+    krav = _geogebra_krav(koder)
     fel: list[dict] = []
     if not digitala:
         fel.append(_err(
             "hjalpmedel", "geogebra",
-            "Grafisk ekvationslösning är kryssad, och den gör eleverna i "
-            "GeoGebra på datorn: de har ingen grafräknare. Provet har ingen "
-            "del med digitala verktyg. Skriv del C med digitala verktyg "
-            "(GeoGebra på datorn) och formelblad, och låt en uppgift där be "
-            "eleven lösa en ekvation av typen f(x) = a grafiskt i GeoGebra."))
+            f"{krav['kryssat']}, {krav['gors']}: de har ingen grafräknare. "
+            "Provet har ingen del med digitala verktyg. Skriv del C med "
+            "digitala verktyg (GeoGebra på datorn) och formelblad, och låt en "
+            f"uppgift där be eleven lösa {krav['vad']} grafiskt i GeoGebra."))
     else:
         def _digital(u: dict) -> bool:
             return "*" in digitala or str(u.get("del") or "") in digitala
@@ -11027,9 +11067,9 @@ def grafisk_digitalvakt(exam: dict, koder: list[str] | None) -> list[dict]:
             var = f"del {del_[0]}" if del_ else "provet"
             fel.append(_err(
                 "uppgifter", "geogebra",
-                "Grafisk ekvationslösning är kryssad men ingen uppgift ber "
-                f"eleven lösa en ekvation i GeoGebra. Byt ut en uppgift i {var} "
-                "mot en där eleven löser en ekvation av typen f(x) = a "
+                f"{krav['kryssat']} men ingen uppgift ber eleven lösa "
+                f"{krav['kort']} i GeoGebra. Byt ut en uppgift i {var} "
+                f"mot en där eleven löser {krav['vad']} "
                 "grafiskt i GeoGebra (en modell ur ett sammanhang går bra) och "
                 "redovisar hur. Uppgiften säger «GeoGebra». Samma del och "
                 "samma poäng."))
@@ -11072,7 +11112,7 @@ def build_delbegrepp(koder: list[str] | None, profil: str) -> str:
             "sinus finns. Inget BEGREPP får prövas bara på A-nivå: "
             + ", ".join(namn for _k, namn, _d, n in begrepp if n)
             + " ska ge minst en E- eller C-poäng.")
-    if profil == "prov" and kraver_geogebra(koder):
+    if profil == "prov" and _grafisk_punkt(koder):
         rader.append(
             "GRAFISK EKVATIONSLÖSNING GÖRS I GEOGEBRA på datorn: eleverna har "
             "ingen grafräknare. Minst en uppgift i delen med digitala verktyg "
@@ -11080,6 +11120,15 @@ def build_delbegrepp(koder: list[str] | None, profil: str) -> str:
             "GeoGebra och säger «GeoGebra». En del utan verktyget får bara be "
             "eleven läsa av en graf som står i figuren. "
             + _GEOGEBRA_TILL + ".")
+    elif profil == "prov" and _grafiska_system(koder):
+        rader.append(
+            "LINJÄRA EKVATIONSSYSTEM LÖSES OCKSÅ GRAFISKT I GEOGEBRA på "
+            "datorn: eleverna har ingen grafräknare. Minst en uppgift i delen "
+            "med digitala verktyg ber eleven lösa ett linjärt ekvationssystem "
+            "ur ett sammanhang grafiskt i GeoGebra, med en skärningspunkt som "
+            "har decimaler, och säger «GeoGebra». En del utan verktyget får "
+            "bara be eleven rita en linje i ett givet koordinatsystem eller "
+            "läsa av en graf som står i figuren. " + _GEOGEBRA_TILL + ".")
     return "\n".join(rader)
 
 

@@ -393,6 +393,18 @@ def test_raknarbeskedet_blir_provets_delrubrik():
     assert "Del A" not in tex
 
 
+def test_geogebra_i_raknardelen_star_i_delrubriken():
+    """Blad 310 och 311 inför prov 215 (Rickard 2026-10-24): räknardelen har
+    en uppgift i GeoGebra, och rubriken säger det."""
+    _exam, doc = _blad(
+        {"text": "Utan räknare. Beräkna $3 + 4$.", "losning": "$7$"},
+        {"text": "Räknare tillåten. Lös ekvationssystemet grafiskt i "
+                 "GeoGebra.", "losning": "$(2{,}5;\\ 3)$"})
+    tex = exam_latex.render_arbetsblad(doc)
+    assert "Del B: Räknare och GeoGebra är tillåtna" in tex
+    assert "Del A: Räknare är inte tillåten" in tex
+
+
 def test_raknarbeskedet_star_kvar_nar_ordningen_inte_ar_provets():
     """Med räknare före utan hade numreringen på pappret blivit en annan än
     på skärmen och i facit."""
