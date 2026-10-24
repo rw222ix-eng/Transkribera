@@ -14890,6 +14890,14 @@ _METODBEGREPP = {"funktion": ("minsta värde", "största värde", "extrempunkt",
                               "maximipunkt", "minimipunkt", "symmetrilinje",
                               "skärningspunkt", "räta linje", "linjen $",
                               "f(x)")}
+# SKÄRNINGSPUNKTEN HÖR OCKSÅ TILL EKVATIONSSYSTEMET (IndA prov 215 och
+# bladen inför, 2026-10-24). I Ma 2a är lösningen till ett linjärt
+# ekvationssystem linjernas skärningspunkt (Origo 2a kap 2, «Grafisk lösning
+# av ekvationssystem», s. 100–104), och vakten fällde ordet för «Vad är en
+# funktion?» (s. 126). Har klassen haft ekvationssystem är begreppet deras.
+# BA26B:s A-blad inför 175 hade bara linjära ekvationer och fälls som förut,
+# liksom funktionernas övriga begrepp och ordet funktion.
+_BEGREPP_HAFT_GENOM = {"skärningspunkt": ("ekvationssystem",)}
 # BOKSTÄVERNA (samma dom, exam 128 uppgift 3 och generalrepetitionen samma
 # natt). Läraren valde A-formen «UTAN bokstäver, eftersom klassen inte läst
 # algebra än», och den skarpa omkörningen skrev ändå «En fisk väger m kg …
@@ -14959,7 +14967,10 @@ def forbudsvakt(exam: dict, delmoment: list[dict] | None,
     # senare i boken, men provet 215 har avsnittet «Räta linjens ekvation».
     def traff(text: str, s: str) -> str | None:
         return next((o for o in (s,) + _METODBEGREPP.get(s, ())
-                     if o in text and (o == s or o.rstrip(" $") not in haft)),
+                     if o in text and (o == s or (
+                         o.rstrip(" $") not in haft
+                         and not any(k in haft for k in
+                                     _BEGREPP_HAFT_GENOM.get(o, ()))))),
                     None)
     algebra = algebra_forbjuden(forbjudna, delmoment, avsnitt)
     if not forbud and not algebra:

@@ -26,6 +26,27 @@ def test_linjen_och_skarningspunkten_ar_funktionernas_begrepp():
         delmoment, forbjudna) == []
 
 
+def test_skarningspunkten_hor_till_ekvationssystemet_i_2a():
+    """IndA prov 215 (2026-10-24): «skärningspunkt» fälldes för «Vad är en
+    funktion?» (s. 126), fast grafisk lösning av ekvationssystem (s. 100–104)
+    läser av just skärningspunkten."""
+    forbjudna = [{"metod": "Vad är en funktion?", "sidor": "126"}]
+    avsnitt = [{"etikett": "2.3", "titel": "Grafisk lösning av "
+                "ekvationssystem"}]
+    text = ("Rita linjerna $y = 4\\,000 + 35x$ och $y = 120x$ i GeoGebra.\n"
+            "Ange skärningspunkten och tolka den.")
+    assert exam_gen.forbudsvakt(_prov(text), [], forbjudna, avsnitt) == []
+    # Funktionernas egna begrepp och ordet funktion fälls som förut.
+    fel = exam_gen.forbudsvakt(_prov(
+        "Bestäm det minsta värde som $x^2 - 4x$ kan få.",
+        "Funktionen $f$ har grafen nedan. Bestäm skärningspunkten."),
+        [], forbjudna, avsnitt)
+    assert [f["path"] for f in fel] == ["uppgift 1", "uppgift 2"]
+    # Utan ekvationssystem är skärningspunkten funktionernas, som på BA26B.
+    assert exam_gen.forbudsvakt(_prov(text), [], forbjudna, [
+        {"etikett": "2.1", "titel": "Linjära ekvationer"}]) != []
+
+
 def test_mening_om_onodigt_tal_falls():
     """E-bladet, uppgift 7: «Du behöver inte rännornas längd i räkningen.»"""
     def _koder(text):
